@@ -1,0 +1,11 @@
+ALTER TABLE employees
+    ADD COLUMN IF NOT EXISTS salary_frequency VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS monthly_salary NUMERIC(14,2),
+    ADD COLUMN IF NOT EXISTS pan_number VARCHAR(10),
+    ADD COLUMN IF NOT EXISTS aadhaar_number VARCHAR(12),
+    ADD COLUMN IF NOT EXISTS uan_number VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS esi_number VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS bank_ifsc_code VARCHAR(11),
+    ADD COLUMN IF NOT EXISTS bank_name VARCHAR(120),
+    ADD COLUMN IF NOT EXISTS bank_branch_name VARCHAR(150);

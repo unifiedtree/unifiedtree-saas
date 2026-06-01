@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unifiedtree-backend
+  namespace: unifiedtree
+  labels:
+    app: unifiedtree-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: unifiedtree-backend
+  template:
+    metadata:
+      labels:
+        app: unifiedtree-backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/unifiedtree/backend:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: unifiedtree-config
+            - secretRef:
+                name: unifiedtree-secrets
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: unifiedtree
+spec:
+  selector:
+    app: unifiedtree-backend
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP

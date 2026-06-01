@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@unifiedtree/design-system": ["../../packages/design-system/src/index.ts"],
+      "@unifiedtree/design-system/*": ["../../packages/design-system/src/*"],
+      "@unifiedtree/sdk": ["../../packages/sdk/src/index.ts"],
+      "@unifiedtree/sdk/*": ["../../packages/sdk/src/*"],
+      "@unifiedtree/ui-kit": ["../../packages/ui-kit/src/index.ts"],
+      "@unifiedtree/ui-kit/*": ["../../packages/ui-kit/src/*"]
+    }
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}

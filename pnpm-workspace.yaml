@@ -1,0 +1,8 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "platform/shared"
+  - "platform/infrastructure"
+
+allowBuilds:
+  esbuild: true

@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1.4
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@latest --activate
+WORKDIR /app
+
+FROM base AS development
+EXPOSE 3001
+CMD ["pnpm", "dev", "--host"]
+
+FROM base AS deps
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/ packages/
+COPY apps/platform/package.json apps/platform/
+RUN pnpm install --frozen-lockfile
+
+FROM deps AS builder
+COPY apps/platform/ apps/platform/
+RUN pnpm --filter platform build
+
+FROM nginx:alpine AS production
+COPY --from=builder /app/apps/platform/dist /usr/share/nginx/html
+COPY docker/nginx/spa.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80

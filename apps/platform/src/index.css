@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg-primary:   #fbf8f3;
+  --color-bg-secondary: #f3faf7;
+  --color-bg-card:      #ffffff;
+  --color-border:       rgba(15, 110, 86, 0.12);
+  --color-text-primary: #0b1f1a;
+  --color-text-secondary: #4b6962;
+  --color-brand:        #0f6e56;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(15, 110, 86, 0.22); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(15, 110, 86, 0.42); }
+
+::selection { background: #35c98a; color: #053024; }
+
+.text-gradient {
+  background: linear-gradient(135deg, #0a5240 0%, #0f6e56 45%, #35c98a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-peach {
+  background: linear-gradient(135deg, #0f6e56 0%, #f97316 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(15, 110, 86, 0.10);
+}
+
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(72px);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.btn-press {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, background-color 0.2s ease;
+}
+.btn-press:active { transform: scale(0.97); }

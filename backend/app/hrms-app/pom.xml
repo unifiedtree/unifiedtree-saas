@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.unifiedtree</groupId>
+        <artifactId>unifiedtree-backend</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <groupId>com.hrms</groupId>
+    <artifactId>hrms-app</artifactId>
+    <name>HRMS Application</name>
+
+    <dependencies>
+        <!-- Active UnifiedTree HRMS/Attendance release modules -->
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-core</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-auth</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-tenant</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-employee</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-attendance</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-leave</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-letters</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-notification</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-api</artifactId></dependency>
+
+        <!-- New canonical platform/shared modules -->
+        <dependency><groupId>com.unifiedtree</groupId><artifactId>shared-security</artifactId></dependency>
+        <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-settings</artifactId></dependency>
+        <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-rbac</artifactId></dependency>
+        <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-saas</artifactId></dependency>
+        <dependency><groupId>com.unifiedtree</groupId><artifactId>attendance-face</artifactId></dependency>
+
+        <!-- Runtime -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+        </dependency>
+
+        <!-- Quartz scheduler for background jobs -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-quartz</artifactId>
+        </dependency>
+
+        <!-- Apache POI for bulk XLSX import/export -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <!--
+                Surefire runs unit tests (*Test.java / *Tests.java) during `mvn test`.
+                Failsafe runs integration tests (*IT.java) during `mvn verify`.
+                Splitting the two keeps the default build fast and Docker-free:
+                  mvn clean install   -> unit tests only, no Docker required
+                  mvn verify          -> unit + Testcontainers integration tests
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*IT.java</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <includes>
+                        <include>**/*IT.java</include>
+                    </includes>
+                    <environmentVariables>
+                        <DOCKER_HOST>tcp://127.0.0.1:2375</DOCKER_HOST>
+                    </environmentVariables>
+                    <argLine>-DDOCKER_HOST=tcp://127.0.0.1:2375 -Dapi.version=1.44</argLine>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <from>
+                        <image>eclipse-temurin:21-jre-alpine</image>
+                    </from>
+                    <to>
+                        <image>hrms-platform:${project.version}</image>
+                    </to>
+                    <container>
+                        <jvmFlags>
+                            <jvmFlag>-XX:+UseContainerSupport</jvmFlag>
+                            <jvmFlag>-XX:MaxRAMPercentage=75.0</jvmFlag>
+                        </jvmFlags>
+                        <ports><port>8080</port></ports>
+                    </container>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

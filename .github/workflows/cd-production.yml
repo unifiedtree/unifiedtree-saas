@@ -1,0 +1,60 @@
+name: CD — Production
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (tag name)'
+        required: true
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://unifiedtree.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version || github.ref }}
+
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Deploy to production (Blue-Green)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /opt/unifiedtree
+            export VERSION=${{ steps.version.outputs.VERSION }}
+            # Pull new images
+            docker compose -f deployments/docker-compose.yml \
+              -f deployments/docker-compose.prod.yml pull
+            # Rolling update — backend first, then frontends
+            docker compose -f deployments/docker-compose.yml \
+              -f deployments/docker-compose.prod.yml up -d backend
+            sleep 30
+            # Health check before updating frontends
+            curl -f http://localhost:8080/actuator/health || exit 1
+            docker compose -f deployments/docker-compose.yml \
+              -f deployments/docker-compose.prod.yml up -d
+            docker image prune -f
+
+      - name: Smoke tests
+        run: |
+          sleep 20
+          curl -f https://unifiedtree.com || exit 1
+          curl -f https://api.unifiedtree.com/actuator/health || exit 1
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          generate_release_notes: true

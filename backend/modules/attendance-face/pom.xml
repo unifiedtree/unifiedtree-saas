@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.unifiedtree</groupId>
+        <artifactId>unifiedtree-backend</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>attendance-face</artifactId>
+    <name>UnifiedTree Attendance - Face Verification (canonical)</name>
+    <description>
+        Canonical face enrollment + face verification for attendance
+        punch-in. Talks to a separate Python FastAPI worker for the
+        actual detection / embedding / liveness work; this Spring
+        module owns the canonical persistence (attendance.face_*),
+        encryption of embeddings at rest, RBAC, audit, and rate
+        limiting. NEVER stores raw face images here.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.unifiedtree</groupId>
+            <artifactId>shared-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.unifiedtree</groupId>
+            <artifactId>platform-rbac</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+    </dependencies>
+</project>

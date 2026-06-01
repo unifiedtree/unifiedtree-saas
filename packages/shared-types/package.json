@@ -1,0 +1,15 @@
+{
+  "name": "@erp/types",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ERP Platform — Shared TypeScript Type Definitions",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

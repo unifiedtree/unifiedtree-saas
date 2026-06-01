@@ -1,0 +1,34 @@
+# Test-time overrides for the canonical integration test.
+# Pulled in implicitly when -Dspring.profiles.active=it is used; the test
+# class also sets these via @TestPropertySource so this file is mostly a
+# safety net.
+spring:
+  kafka:
+    bootstrap-servers: ""
+  flyway:
+    locations: classpath:db/canonical
+    table: flyway_schema_history_canonical
+    schemas: public
+    default-schema: public
+    baseline-on-migrate: true
+    baseline-version: "0"
+    validate-on-migrate: false
+
+unifiedtree:
+  security:
+    rls:
+      enabled: true
+
+hrms:
+  kafka:
+    enabled: false
+  face-recognition:
+    enabled: false
+  attendance:
+    geofence-enforce: false
+
+logging:
+  level:
+    org.flywaydb: INFO
+    org.hibernate.SQL: WARN
+    com.unifiedtree.security: DEBUG

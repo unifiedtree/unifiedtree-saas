@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: unifiedtree
+  labels:
+    app.kubernetes.io/name: unifiedtree
+    environment: production

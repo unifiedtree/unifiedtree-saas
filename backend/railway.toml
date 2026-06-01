@@ -1,0 +1,33 @@
+# Railway service config -- UnifiedTree backend.
+#
+# In the Railway dashboard for this service:
+#   Source Repo       = github.com/SRC-ORGanisation/SaasWeb
+#   Root Directory    = backend
+#   Config File Path  = railway.toml          (relative to Root Directory)
+#
+# Required runtime env vars (set in Railway -> Variables):
+#   DB_URL                          jdbc:postgresql://<host>:<port>/<db>
+#   DB_USERNAME                     ut_app          (NOT the owner role)
+#   DB_PASSWORD                     <ut_app secret>
+#   UNIFIEDTREE_JWT_SECRET          >= 32 chars random
+#   UNIFIEDTREE_ALLOWED_ORIGINS     https://app.unifiedtree.com,...
+#
+# First-deploy only (remove after bootstrap log line appears):
+#   UNIFIEDTREE_BOOTSTRAP_ENABLED=true
+#   UNIFIEDTREE_BOOTSTRAP_TENANT_SUBDOMAIN=<your-tenant>
+#   UNIFIEDTREE_BOOTSTRAP_ADMIN_EMAIL=<admin@your-domain>
+#   UNIFIEDTREE_BOOTSTRAP_ADMIN_PASSWORD=<long random>
+#
+# Migrations are NOT run by this service. Run them once per release via a
+# separate one-shot job (see RAILWAY_DEPLOYMENT.md sec.3) as ut_migrator.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/api/actuator/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+numReplicas = 1

@@ -1,0 +1,8 @@
+aws_region        = "us-east-1"
+environment       = "staging"
+domain_name       = "unifiedtree.com"
+db_instance_class = "db.t3.medium"
+redis_node_type   = "cache.t3.micro"
+eks_node_count    = 2
+eks_node_type     = "t3.large"
+# db_password is sensitive — set via TF_VAR_db_password env variable

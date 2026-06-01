@@ -1,0 +1,44 @@
+# Maven build outputs - rebuilt inside the image
+**/target/
+**/.mvn/wrapper/maven-wrapper.jar
+
+# Local environment files - NEVER ship into an image
+.env
+.env.*
+!.env.example
+
+# Logs and runtime artifacts
+*.log
+*.pid
+.railway-*
+logs/
+
+# IDE / editor metadata
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local Docker volumes
+docker-volumes/
+
+# Tests output
+surefire-reports/
+failsafe-reports/
+
+# Documentation that doesn't belong in the runtime image
+*.md
+docs/
+
+# Git metadata
+.git/
+.gitignore
+.github/

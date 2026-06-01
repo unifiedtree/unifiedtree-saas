@@ -1,0 +1,71 @@
+name: Canonical Integration Tests
+
+# Focused gate for all canonical IT classes.
+# Each class spins up its own Testcontainers Postgres (no external services needed).
+# Covers: AttendanceFlowIT (5) + LeaveFlowIT (5) + AuditControllerIT (5) + LetterFlowIT (8) = 23 tests.
+# Target runtime: under 8 minutes from push to green checkmark.
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'backend/modules/hrms-attendance/**'
+      - 'backend/modules/hrms-leave/**'
+      - 'backend/modules/hrms-letters/**'
+      - 'backend/app/hrms-api/src/main/java/com/hrms/api/attendance/**'
+      - 'backend/app/hrms-api/src/main/java/com/hrms/api/leave/**'
+      - 'backend/app/hrms-api/src/main/java/com/hrms/api/audit/**'
+      - 'backend/app/hrms-api/src/main/java/com/hrms/api/letters/**'
+      - 'backend/app/hrms-app/src/test/java/com/hrms/app/AttendanceFlowIT.java'
+      - 'backend/app/hrms-app/src/test/java/com/hrms/app/LeaveFlowIT.java'
+      - 'backend/app/hrms-app/src/test/java/com/hrms/audit/AuditControllerIT.java'
+      - 'backend/app/hrms-app/src/test/java/com/hrms/letters/LetterFlowIT.java'
+      - 'backend/app/hrms-app/src/main/resources/db/canonical/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+
+concurrency:
+  group: canonical-it-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  canonical-it:
+    name: Canonical IT (23 tests)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+
+      - name: Build all modules (skip tests)
+        working-directory: backend
+        run: |
+          mvn -B install -DskipTests \
+            -pl "modules/hrms-attendance,modules/hrms-leave,modules/hrms-letters,app/hrms-api,app/hrms-app" \
+            -am
+
+      - name: Run canonical integration tests
+        working-directory: backend
+        run: |
+          mvn -B -pl app/hrms-app test \
+            -Dtest="AttendanceFlowIT,LeaveFlowIT,AuditControllerIT,LetterFlowIT" \
+            -Dsurefire.failIfNoSpecifiedTests=false
+        env:
+          # Testcontainers detects Docker socket automatically on ubuntu-latest.
+          # Disable Ryuk to avoid permission issues on restricted runners.
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+
+      - name: Publish test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-canonical-it
+          path: backend/app/hrms-app/target/surefire-reports/
+          retention-days: 7

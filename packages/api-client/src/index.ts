@@ -1,0 +1,5 @@
+export { apiClient, ApiError, default as ApiClient } from './ApiClient'
+export { hrmsApi } from './endpoints/hrms'
+export type { Employee } from './endpoints/hrms'
+export { crmApi } from './endpoints/crm'
+export { accountsApi } from './endpoints/accounts'

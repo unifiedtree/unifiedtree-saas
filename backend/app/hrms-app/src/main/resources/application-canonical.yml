@@ -1,0 +1,83 @@
+# =============================================================================
+# 'canonical' profile - new UnifiedTree modular schemas with RLS
+# Activate with: SPRING_PROFILES_ACTIVE=canonical
+# Expects an empty Postgres database. Flyway builds platform/auth/rbac/org/
+# hrms/attendance/leave_mgmt/settings/audit schemas from scratch.
+# =============================================================================
+spring:
+  flyway:
+    enabled: true
+    # SMOKE profile additionally loads classpath:db/dev-seed which seeds the
+    # demo tenant + admin/reader users with a known password. The
+    # canonical-prod profile overrides this back to canonical-only so no
+    # known-credential rows ever land in production databases.
+    locations: classpath:db/canonical,classpath:db/dev-seed
+    schemas: public
+    default-schema: public
+    table: flyway_schema_history_canonical
+    baseline-on-migrate: true
+    baseline-version: "0"
+    baseline-description: "canonical-schema-baseline"
+    validate-on-migrate: false
+    out-of-order: true
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        # Canonical entities each set @Table(schema=...) explicitly, so no
+        # default_schema is needed.
+        default_schema: ''
+    open-in-view: false
+
+unifiedtree:
+  security:
+    rls:
+      enabled: true
+    # SMOKE-TEST ONLY: accept X-Tenant-ID header for tenant resolution.
+    # Refused by CanonicalSecurityConfig's PostConstruct guard if any
+    # production-ish profile (canonical-prod, prod, staging, uat) is active.
+    allow-tenant-header: true
+
+  jwt:
+    # SMOKE-TEST default. CanonicalProdSecurityConfig refuses to load with
+    # this value; production must override via UNIFIEDTREE_JWT_SECRET.
+    secret: "smoke-test-only-do-not-use-in-production-32+chars"
+    issuer: unifiedtree
+    access-ttl-minutes: 15
+    refresh-ttl-days: 7
+
+  # SMOKE-TEST defaults for the face module. canonical-prod overrides
+  # every value via env vars. The encryption key below is base64 of a
+  # deterministic dev string and IS NOT a secret. Production deploys
+  # MUST set UNIFIEDTREE_FACE_ENCRYPTION_KEY to a real random 32 bytes.
+  face:
+    enabled: true
+    worker-url: ${UNIFIEDTREE_FACE_WORKER_URL:http://localhost:8091}
+    worker-timeout-ms: 1500
+    # Hard pass-floor for the SINGLE best match across enrolled templates.
+    # SFace produces tight in-class scores so 0.85 corresponds to ~0.70 raw
+    # cosine, which is well above the inter-class distribution.
+    match-threshold: 0.85
+    # Best-vs-mean gap. Mean across all enrolled templates must be
+    # >= match-threshold - match-mean-gap (default 0.05 -> mean >= 0.80
+    # at T=0.85). Catches the "one lucky angle" attack from a stranger.
+    match-mean-gap: 0.05
+    # Quorum slack: an enrolled template "agrees" if its score is
+    # >= match-threshold - match-template-gap.
+    match-template-gap: 0.04
+    # Minimum number of agreeing templates needed for a PASS. With 5
+    # enrolled angles, default 4 means a stranger must fool the model
+    # on 4 of 5 different poses.
+    match-quorum: 4
+    min-quality: 0.60
+    require-liveness: true
+    # Phase-1 liveness is heuristic. Tighten as soon as a real anti-spoof
+    # ONNX is wired (see worker/app/liveness.py).
+    liveness-threshold: 0.35
+    lockout-failure-count: 5
+    model-name: sface
+    model-version: sface-1.0
+    raw-image-retention-days: 7
+    encryption-key: "ZGV2LW9ubHktZG8tbm90LXVzZS1pbi1wcm9kdWN0aW9uISE="

@@ -1,0 +1,86 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+      target: development
+    container_name: unifiedtree-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://postgres:5432/unifiedtree
+      DB_USERNAME: nexus
+      DB_PASSWORD: nexus
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BROKERS: kafka:29092
+      JWT_SECRET: dev-secret-key-minimum-256-bits-long-for-jwt-signing
+    volumes:
+      - ../backend:/app
+      - maven_repo:/root/.m2
+    ports:
+      - "8080:8080"
+    networks:
+      - unifiedtree-net
+
+  website:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.website
+      target: development
+    container_name: unifiedtree-website
+    volumes:
+      - ../apps/website:/app
+      - node_modules_website:/app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:8080
+    networks:
+      - unifiedtree-net
+
+  platform:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.platform
+      target: development
+    container_name: unifiedtree-platform
+    volumes:
+      - ../apps/platform:/app
+      - node_modules_platform:/app/node_modules
+    ports:
+      - "3001:3001"
+    environment:
+      VITE_API_URL: http://localhost:8080
+    networks:
+      - unifiedtree-net
+
+  admin:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.admin
+      target: development
+    container_name: unifiedtree-admin
+    volumes:
+      - ../apps/admin:/app
+      - node_modules_admin:/app/node_modules
+    ports:
+      - "3002:3002"
+    environment:
+      VITE_API_URL: http://localhost:8080
+    networks:
+      - unifiedtree-net
+
+volumes:
+  maven_repo:
+  node_modules_website:
+  node_modules_platform:
+  node_modules_admin:

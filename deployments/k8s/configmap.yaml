@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unifiedtree-config
+  namespace: unifiedtree
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  SERVER_PORT: "8080"
+  REDIS_PORT: "6379"
+  STORAGE_PROVIDER: "s3"
+  S3_REGION: "us-east-1"
+  LOG_LEVEL: "INFO"

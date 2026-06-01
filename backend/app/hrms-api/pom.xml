@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.unifiedtree</groupId>
+        <artifactId>unifiedtree-backend</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <groupId>com.hrms</groupId>
+    <artifactId>hrms-api</artifactId>
+    <name>HRMS API</name>
+    <description>REST controllers for UnifiedTree HRMS and SaaS onboarding.</description>
+
+    <dependencies>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-core</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-auth</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-tenant</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-employee</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-attendance</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-leave</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-letters</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-notification</artifactId></dependency>
+        <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-settings</artifactId></dependency>
+        <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-rbac</artifactId></dependency>
+        <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-audit</artifactId></dependency>
+        <dependency><groupId>com.unifiedtree</groupId><artifactId>shared-security</artifactId></dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+    </dependencies>
+</project>

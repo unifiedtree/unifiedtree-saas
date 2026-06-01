@@ -1,0 +1,82 @@
+# =============================================================================
+# 'canonical-prod' profile - production-grade JWT auth on top of canonical
+# Activate with: SPRING_PROFILES_ACTIVE=canonical,canonical-prod
+#
+# Differences from plain 'canonical':
+#  - X-Tenant-ID header is REFUSED. Tenant identity comes only from signed JWT.
+#  - JWT secret must come from env var UNIFIEDTREE_JWT_SECRET (>= 32 chars).
+#  - CanonicalSecurityConfig (smoke) refuses to load. CanonicalProdSecurityConfig
+#    activates with @EnableMethodSecurity.
+# =============================================================================
+spring:
+  flyway:
+    # Production NEVER loads db/dev-seed. Explicitly override so a forgotten
+    # dependency or build artifact change cannot leak demo users into prod.
+    locations: classpath:db/canonical
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: ''
+
+unifiedtree:
+  security:
+    rls:
+      enabled: true
+    # Header fallback DISABLED. JWT-only.
+    allow-tenant-header: false
+
+  cors:
+    # PRODUCTION must set this. Empty/missing -> the canonical-prod CORS
+    # config rejects every cross-origin request (fail-safe). Comma-separated
+    # list, no wildcards. Example:
+    #   UNIFIEDTREE_ALLOWED_ORIGINS=https://app.unifiedtree.com,https://admin.unifiedtree.com
+    allowed-origins: ${UNIFIEDTREE_ALLOWED_ORIGINS:}
+    # Controlled wildcard patterns for tenant subdomains. Use this for
+    # https://company1.unifiedtree.com, https://src.unifiedtree.com, etc.
+    # Example:
+    #   UNIFIEDTREE_ALLOWED_ORIGIN_PATTERNS=https://*.unifiedtree.com
+    allowed-origin-patterns: ${UNIFIEDTREE_ALLOWED_ORIGIN_PATTERNS:}
+    # JWT bearer flow does NOT need credentials=true. Only set to true if
+    # introducing a cookie-session flow in addition.
+    allow-credentials: ${UNIFIEDTREE_CORS_ALLOW_CREDENTIALS:false}
+
+  jwt:
+    # MUST be set in the environment in production. The fallback below is
+    # intentionally invalid (too short) so a misconfigured deploy refuses to
+    # start, rather than running with a known weak secret.
+    secret: ${UNIFIEDTREE_JWT_SECRET:CHANGE_ME}
+    issuer: ${UNIFIEDTREE_JWT_ISSUER:unifiedtree}
+    access-ttl-minutes:  ${UNIFIEDTREE_JWT_ACCESS_TTL_MIN:15}
+    refresh-ttl-days:    ${UNIFIEDTREE_JWT_REFRESH_TTL_DAYS:7}
+
+  # ---------------------------------------------------------------------
+  # Face verification (canonical attendance.face_* + Python worker)
+  # ---------------------------------------------------------------------
+  face:
+    enabled:              ${UNIFIEDTREE_FACE_ENABLED:true}
+    worker-url:           ${UNIFIEDTREE_FACE_WORKER_URL:http://localhost:8091}
+    worker-timeout-ms:    ${UNIFIEDTREE_FACE_WORKER_TIMEOUT_MS:1500}
+    # Identity match floor. SFace mapped 0.85 corresponds to roughly raw
+    # cosine 0.70 - a high-security default for attendance punch-in.
+    match-threshold:      ${UNIFIEDTREE_FACE_MATCH_THRESHOLD:0.85}
+    # Best-vs-mean gap: across all enrolled templates the arithmetic mean
+    # must be >= match-threshold - this value. Defends against single-angle
+    # lucky matches by impostors.
+    match-mean-gap:       ${UNIFIEDTREE_FACE_MATCH_MEAN_GAP:0.05}
+    # Quorum: how loose an enrolled template can score and still "agree".
+    match-template-gap:   ${UNIFIEDTREE_FACE_MATCH_TEMPLATE_GAP:0.04}
+    # Number of agreeing templates required for PASS. With 5 enrolled
+    # angles, default 4 forces a stranger to fool the model on 4 of 5.
+    match-quorum:         ${UNIFIEDTREE_FACE_MATCH_QUORUM:4}
+    min-quality:          ${UNIFIEDTREE_FACE_MIN_QUALITY:0.60}
+    require-liveness:     ${UNIFIEDTREE_FACE_REQUIRE_LIVENESS:true}
+    liveness-threshold:   ${UNIFIEDTREE_FACE_LIVENESS_THRESHOLD:0.35}
+    lockout-failure-count: ${UNIFIEDTREE_FACE_LOCKOUT_FAILURES:5}
+    model-name:           ${UNIFIEDTREE_FACE_MODEL_NAME:sface}
+    model-version:        ${UNIFIEDTREE_FACE_MODEL_VERSION:sface-1.0}
+    raw-image-retention-days: ${UNIFIEDTREE_FACE_RAW_RETENTION_DAYS:7}
+    # 32-byte AES-GCM key, base64. App refuses to start if missing.
+    # Generate with: openssl rand -base64 32
+    encryption-key:       ${UNIFIEDTREE_FACE_ENCRYPTION_KEY:}

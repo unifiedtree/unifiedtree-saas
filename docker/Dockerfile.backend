@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1.4
+FROM eclipse-temurin:21-jdk-alpine AS base
+WORKDIR /app
+RUN apk add --no-cache maven
+
+FROM base AS development
+CMD ["mvn", "spring-boot:run", "-pl", "app/erp-app", "-am"]
+
+FROM base AS builder
+COPY backend/pom.xml .
+COPY backend/platform/ platform/
+COPY backend/modules/ modules/
+COPY backend/services/ services/
+COPY backend/app/ app/
+RUN mvn -B dependency:go-offline
+RUN mvn -B clean package -DskipTests -pl app/erp-app -am
+
+FROM eclipse-temurin:21-jre-alpine AS production
+WORKDIR /app
+RUN addgroup -S nexus && adduser -S nexus -G nexus
+COPY --from=builder /app/app/erp-app/target/*.jar app.jar
+RUN chown nexus:nexus app.jar
+USER nexus
+EXPOSE 8080
+ENTRYPOINT ["java", \
+  "-XX:+UseContainerSupport", \
+  "-XX:MaxRAMPercentage=75", \
+  "-XX:+UseG1GC", \
+  "-Djava.security.egd=file:/dev/./urandom", \
+  "-jar", "app.jar"]

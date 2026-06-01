@@ -1,0 +1,7 @@
+{
+  "name": "@erp/shared-hooks",
+  "version": "2.0.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "peerDependencies": { "react": "^18.0.0" }
+}

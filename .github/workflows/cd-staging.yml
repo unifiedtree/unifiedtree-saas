@@ -1,0 +1,48 @@
+name: CD — Staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+env:
+  ENVIRONMENT: staging
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.unifiedtree.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd /opt/unifiedtree
+            git pull origin develop
+            export VERSION=sha-${{ github.sha }}
+            docker compose -f deployments/docker-compose.yml \
+              -f deployments/docker-compose.prod.yml pull
+            docker compose -f deployments/docker-compose.yml \
+              -f deployments/docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f
+
+      - name: Health check
+        run: |
+          sleep 30
+          curl -f https://staging-api.unifiedtree.com/actuator/health || exit 1
+
+      - name: Notify Slack
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {"text": "Staging deploy ${{ job.status }}: ${{ github.sha }}"}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

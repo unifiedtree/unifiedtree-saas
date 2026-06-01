@@ -1,0 +1,12 @@
+{
+  "name": "@erp/configs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ERP Platform — Shared Configurations (Tailwind, ESLint, TypeScript)",
+  "main": "./index.js",
+  "exports": {
+    "./tailwind": "./tailwind.preset.js",
+    "./eslint": "./eslint.js",
+    "./tsconfig": "./tsconfig.app.json"
+  }
+}

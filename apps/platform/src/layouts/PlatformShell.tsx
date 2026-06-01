@@ -1,0 +1,441 @@
+import React, { useState, useEffect } from 'react'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  LayoutDashboard, Users, Calendar, Clock, Building2, ClipboardList,
+  BarChart3, Settings, LogOut, Menu, X, ChevronRight, ChevronDown,
+  UserCircle2, ShieldAlert, FileBarChart2, FileText, Bell, Search, Hexagon,
+  TrendingUp, CreditCard, Package, ShoppingCart, HelpCircle, Briefcase, UserCheck, Star, Receipt, DollarSign, Lock, Sprout
+} from 'lucide-react'
+import { useAuthStore as useSdkStore, useAnyPermission, P } from '@unifiedtree/sdk'
+import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
+import { clsx } from 'clsx'
+import { toast } from 'sonner'
+
+const SIDEBAR_KEY = 'ut.sidebar.collapsed'
+
+interface NavItemDef {
+  key: string
+  label: string
+  icon: React.ReactNode
+  path?: string
+  module?: string
+  children?: { label: string; path: string; icon: React.ReactNode }[]
+}
+
+const NAV_ITEMS: NavItemDef[] = [
+  { key: 'dashboard', label: 'Overview', icon: <LayoutDashboard size={18} />, path: '/' },
+  { key: 'analytics', label: 'Analytics', icon: <BarChart3 size={18} />, path: '/analytics' },
+]
+
+const MODULE_ITEMS: NavItemDef[] = [
+  {
+    key: 'hrms', label: 'HRMS Core', icon: <Users size={18} />, module: 'hrms',
+    children: [
+      { label: 'Directory', path: '/hrms/employees', icon: <UserCheck size={15} /> },
+      { label: 'Organization', path: '/hrms/organization', icon: <Building2 size={15} /> },
+      { label: 'Attendance', path: '/hrms/attendance', icon: <Clock size={15} /> },
+      { label: 'Leave', path: '/hrms/leave', icon: <Calendar size={15} /> },
+      { label: 'Self Service', path: '/hrms/ess', icon: <UserCircle2 size={15} /> },
+      { label: 'Onboarding', path: '/hrms/onboarding', icon: <ClipboardList size={15} /> },
+      { label: 'Reports', path: '/hrms/reports', icon: <FileBarChart2 size={15} /> },
+    ],
+  },
+  {
+    key: 'crm', label: 'CRM', icon: <TrendingUp size={18} />, module: 'crm',
+    children: [
+      { label: 'Leads', path: '/crm/leads', icon: <Star size={15} /> },
+      { label: 'Customers', path: '/crm/customers', icon: <Users size={15} /> },
+      { label: 'Deals', path: '/crm/deals', icon: <Briefcase size={15} /> },
+    ],
+  },
+  {
+    key: 'accounts', label: 'Accounts', icon: <DollarSign size={18} />, module: 'accounts',
+    children: [
+      { label: 'Invoices', path: '/accounts/invoices', icon: <FileText size={15} /> },
+      { label: 'Payments', path: '/accounts/payments', icon: <CreditCard size={15} /> },
+      { label: 'Expenses', path: '/accounts/expenses', icon: <Receipt size={15} /> },
+    ],
+  },
+  { key: 'payroll', label: 'Payroll', icon: <CreditCard size={18} />, path: '/payroll', module: 'payroll' },
+  {
+    key: 'projects', label: 'Projects', icon: <Package size={18} />, module: 'projects',
+    children: [
+      { label: 'All Projects', path: '/projects', icon: <Package size={15} /> },
+      { label: 'Task Board', path: '/projects/board', icon: <ClipboardList size={15} /> },
+    ],
+  },
+  { key: 'inventory',   label: 'Inventory',   icon: <Building2 size={18} />,     path: '/inventory',   module: 'inventory' },
+  { key: 'procurement', label: 'Procurement', icon: <ShoppingCart size={18} />,  path: '/procurement', module: 'procurement' },
+  {
+    key: 'helpdesk', label: 'Helpdesk', icon: <HelpCircle size={18} />, module: 'helpdesk',
+    children: [
+      { label: 'Tickets', path: '/helpdesk/tickets', icon: <ClipboardList size={15} /> },
+    ],
+  },
+]
+
+const PLATFORM_ITEMS: NavItemDef[] = [
+  { key: 'users',    label: 'Users & Access', icon: <Users size={18} />,        path: '/users' },
+  { key: 'roles',    label: 'Roles & Perms',  icon: <ShieldAlert size={18} />,  path: '/roles' },
+  { key: 'audit',    label: 'Audit Logs',     icon: <Bell size={18} />,         path: '/audit-logs' },
+  { key: 'settings', label: 'Settings',       icon: <Settings size={18} />,     path: '/settings' },
+]
+
+export function PlatformShell() {
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const logout = useSdkStore(s => s.logout)
+  const user = useSdkStore(s => s.user)
+
+  const hasModule = useLocalAuthStore((s) => s.hasModule)
+  const isAdmin = user?.roles?.includes('COMPANY_ADMIN') || user?.roles?.includes('SUPER_ADMIN')
+
+  // Filter modules based on roles
+  const filteredModules = MODULE_ITEMS.map(module => {
+    if (module.key === 'hrms') {
+      return {
+        ...module,
+        children: module.children?.filter(child => {
+          if (child.label === 'Reports' || child.label === 'Organization' || child.label === 'Directory') {
+            return isAdmin
+          }
+          return true
+        })
+      }
+    }
+    return module
+  }).filter(module => {
+    if (module.key === 'payroll') {
+      return isAdmin
+    }
+    return true
+  })
+
+  const [openModules, setOpenModules] = useState<string[]>(() => {
+    const activeModule = filteredModules.find(m => m.children?.some(c => location.pathname.startsWith(c.path)))
+    return activeModule ? [activeModule.key] : []
+  })
+
+  const [showLockedDropdown, setShowLockedDropdown] = useState(false)
+
+  const toggleModule = (key: string) => {
+    setOpenModules((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key])
+  }
+
+  // Separate active and locked modules
+  const activeModules = filteredModules.filter(m => hasModule(m.module ?? ''))
+  const lockedModules = filteredModules.filter(m => !hasModule(m.module ?? ''))
+  
+  const displayedLocked = lockedModules.slice(0, 2)
+  const hiddenLocked = lockedModules.slice(2)
+
+  const renderModuleItem = (item: NavItemDef, active: boolean) => {
+    if (collapsed) {
+      return (
+        <NavLink
+          key={item.key}
+          to={item.path ?? (item.children?.[0]?.path ?? '/')}
+          className={({ isActive }) => clsx(
+            'flex w-11 h-11 mx-auto items-center justify-center rounded-xl px-3 py-2.5 transition-all',
+            !active && 'opacity-50 grayscale',
+            isActive && active ? 'bg-[#0F6E56]/10 text-[#0F6E56]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+          )}
+          title={item.label}
+          onClick={(e) => {
+            if (!active) {
+              e.preventDefault()
+              toast.error('Module Locked', { description: `The ${item.label} module is not purchased.` })
+            }
+          }}
+        >
+          {item.icon}
+        </NavLink>
+      )
+    }
+
+    if (item.children && active) {
+      const isOpen = openModules.includes(item.key)
+      const hasActiveChild = item.children.some((c) => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
+      return (
+        <div key={item.key}>
+          <button
+            onClick={() => toggleModule(item.key)}
+            className={clsx(
+              'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
+              hasActiveChild ? 'bg-slate-50 text-[#0F6E56]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            )}
+          >
+            <span className={hasActiveChild ? "text-[#0F6E56]" : "text-slate-400"}>{item.icon}</span>
+            <span className="flex-1 text-left">{item.label}</span>
+            {isOpen ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
+          </button>
+          {isOpen && (
+            <div className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l-2 border-slate-100 pl-3">
+              {item.children.map((child) => (
+                <NavLink
+                  key={child.path}
+                  to={child.path}
+                  className={({ isActive }) => clsx(
+                    'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-all',
+                    isActive ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-bold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                  )}
+                >
+                  {child.icon}
+                  {child.label}
+                </NavLink>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <NavLink
+        key={item.key}
+        to={item.path ?? '/'}
+        className={({ isActive }) => clsx(
+          'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
+          !active ? 'cursor-default text-slate-400 hover:bg-slate-50' : isActive
+            ? 'bg-[#0F6E56]/10 text-[#0F6E56]'
+            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+        )}
+        onClick={(e) => {
+          if (!active) {
+            e.preventDefault()
+            toast.error('Module Locked', { description: `The ${item.label} module is not purchased for this workspace.` })
+          }
+        }}
+        title={collapsed ? item.label : undefined}
+      >
+        <span className={clsx(active ? (location.pathname === item.path ? "text-[#0F6E56]" : "text-slate-400") : "text-slate-300")}>{item.icon}</span>
+        {!collapsed && <span className="flex-1">{item.label}</span>}
+        {!collapsed && !active && <Lock size={12} className="text-slate-300" />}
+      </NavLink>
+    )
+  }
+
+  const sidebarContent = (
+    <div className="flex h-full flex-col bg-white border-r border-slate-200 z-30 transition-all duration-300">
+      {/* Logo Area */}
+      <div className={clsx("flex h-16 shrink-0 items-center border-b border-slate-100 transition-all", collapsed ? "justify-center px-2" : "justify-start px-6")}>
+        <img 
+          src="/UnifiedTreeLogo.png" 
+          alt="UnifiedTree Logo" 
+          className={clsx("object-contain", collapsed ? "w-8 h-8" : "h-8 w-auto max-w-[200px]")} 
+        />
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1 scrollbar-hide">
+        
+        {/* Workspace Main */}
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.key}
+            to={item.path!}
+            end={item.path === '/'}
+            className={({ isActive }) => clsx(
+              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
+              isActive
+                ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-semibold'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+              collapsed && 'justify-center px-0 w-11 h-11 mx-auto'
+            )}
+            title={collapsed ? item.label : undefined}
+          >
+            <span className={clsx(location.pathname === item.path ? "text-[#0F6E56]" : "text-slate-400 group-hover:text-[#0F6E56] transition-colors")}>{item.icon}</span>
+            {!collapsed && <span>{item.label}</span>}
+          </NavLink>
+        ))}
+
+        {!collapsed && (
+          <p className="px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
+            Modules
+          </p>
+        )}
+        {collapsed && <div className="w-8 h-px bg-slate-200 mx-auto my-4" />}
+
+        {/* Render Active Modules First */}
+        {activeModules.map(m => renderModuleItem(m, true))}
+
+        {/* Divider if we have locked modules */}
+        {lockedModules.length > 0 && !collapsed && (
+          <div className="w-full h-px bg-slate-100 my-4" />
+        )}
+
+        {/* Render 2 Locked Modules */}
+        {displayedLocked.map(m => renderModuleItem(m, false))}
+
+        {/* Locked Modules Accordion */}
+        {!collapsed && hiddenLocked.length > 0 && (
+          <div className="mt-1">
+            <button
+              onClick={() => setShowLockedDropdown(!showLockedDropdown)}
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <Hexagon size={18} className="text-slate-400" />
+                <span>Other Locked Modules</span>
+              </div>
+              <ChevronDown size={14} className={clsx("transition-transform text-slate-400", showLockedDropdown && "rotate-180")} />
+            </button>
+            <AnimatePresence>
+              {showLockedDropdown && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden mt-1"
+                >
+                  <div className="space-y-1">
+                    {hiddenLocked.map(m => renderModuleItem(m, false))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {!collapsed && (
+          <p className="px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
+            Platform Admin
+          </p>
+        )}
+        {collapsed && <div className="w-8 h-px bg-slate-200 mx-auto my-4" />}
+
+        {PLATFORM_ITEMS.map((item) => (
+          <NavLink
+            key={item.key}
+            to={item.path!}
+            className={({ isActive }) => clsx(
+              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
+              isActive
+                ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-semibold'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+              collapsed && 'justify-center px-0 w-11 h-11 mx-auto'
+            )}
+            title={collapsed ? item.label : undefined}
+          >
+            <span className={clsx(location.pathname === item.path ? "text-[#0F6E56]" : "text-slate-400 group-hover:text-[#0F6E56] transition-colors")}>{item.icon}</span>
+            {!collapsed && <span>{item.label}</span>}
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* User Profile & Logout */}
+      <div className="border-t border-slate-100 p-4 bg-slate-50">
+        {!collapsed && user && (
+          <div className="flex items-center gap-3 px-3 py-2.5 mb-2 rounded-xl bg-white border border-slate-200 hover:border-[#0F6E56]/30 transition-colors cursor-pointer shadow-sm">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0F6E56]/10 text-sm font-bold text-[#0F6E56]">
+              {(user.firstName?.[0] ?? '?').toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-900">
+                {user.firstName} {user.lastName}
+              </p>
+              <p className="truncate text-[11px] font-medium text-slate-500">{user.email}</p>
+            </div>
+          </div>
+        )}
+        <button
+          onClick={logout}
+          className={clsx(
+            'flex w-full items-center gap-3 rounded-xl py-2.5 text-sm font-medium text-slate-600 hover:bg-rose-50 hover:text-rose-600 transition-colors group',
+            collapsed ? 'justify-center px-0 w-11 h-11 mx-auto' : 'px-3'
+          )}
+          title="Log out"
+        >
+          <LogOut size={18} className="text-slate-400 group-hover:text-rose-500 group-hover:scale-110 transition-all" />
+          {!collapsed && <span>Sign out</span>}
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-[#F8FAFC] font-sans selection:bg-[#0F6E56]/15 selection:text-[#0F6E56]">
+      {/* Desktop Sidebar */}
+      <aside
+        className={clsx(
+          'hidden md:block shrink-0 transition-all duration-300 relative',
+          collapsed ? 'w-[80px]' : 'w-[280px]'
+        )}
+      >
+        {sidebarContent}
+        {/* Collapse Toggle */}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="absolute -right-3 top-20 flex h-6 w-6 items-center justify-center rounded-full bg-white border border-slate-200 text-slate-400 shadow-sm hover:text-slate-700 hover:border-slate-300 transition-all z-40"
+        >
+          <ChevronRight size={14} className={clsx('transition-transform duration-300', !collapsed && 'rotate-180')} />
+        </button>
+      </aside>
+
+      {/* Mobile Sidebar */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileOpen(false)}
+              className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm md:hidden"
+            />
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 z-50 w-[280px] md:hidden"
+            >
+              {sidebarContent}
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Main Content */}
+      <main className="flex min-w-0 flex-1 flex-col relative overflow-hidden">
+        {/* Top Header */}
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 backdrop-blur-md px-4 sm:px-8 z-10">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg md:hidden"
+            >
+              <Menu size={20} />
+            </button>
+            
+            {/* Global Search */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors w-64 focus-within:ring-2 focus-within:ring-[#0F6E56]/20 focus-within:border-[#0F6E56]/50">
+              <Search size={14} className="text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Search everywhere... (?K)" 
+                className="bg-transparent border-none outline-none text-sm w-full placeholder:text-slate-400 text-slate-900"
+              />
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <button className="relative p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors">
+              <Bell size={18} />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 border-2 border-white" />
+            </button>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <div className="flex-1 overflow-auto relative z-0">
+          <div className="absolute inset-0 bg-[url('/grid-bg.svg')] bg-repeat opacity-[0.03] pointer-events-none" />
+          <Outlet />
+        </div>
+      </main>
+    </div>
+  )
+}
