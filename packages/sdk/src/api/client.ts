@@ -62,7 +62,11 @@ export function createApiClient(): AxiosInstance {
       ? (import.meta as unknown as { env: Record<string, string> }).env.VITE_API_BASE_URL ?? '/api'
       : '/api';
 
-  const instance = axios.create({ baseURL, withCredentials: true });
+  // No global `withCredentials` — JWT in Authorization header doesn't need it,
+  // and turning it on forces every CORS preflight to require the backend
+  // `Access-Control-Allow-Credentials: true` header. The refresh-token call
+  // opts in per-request below because it relies on the HttpOnly cookie.
+  const instance = axios.create({ baseURL });
 
   // ── Request interceptor ────────────────────────────────────────────────────
   instance.interceptors.request.use(config => {

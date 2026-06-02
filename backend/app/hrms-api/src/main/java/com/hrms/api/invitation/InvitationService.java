@@ -135,7 +135,7 @@ public class InvitationService {
         token.setCreatedBy(actorId);
         tokenRepo.save(token);
 
-        // Build invite URL: uses tenantSlug.localhost:3001 for dev, tenantSlug.ionora.app for prod
+        // Build invite URL: uses tenantSlug.localhost:3001 for dev, tenantSlug.unifiedtree.com for prod
         String inviteUrl = buildUrl(tenantSlug, "/accept-invite?token=" + rawToken);
 
         // Send email

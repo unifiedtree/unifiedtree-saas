@@ -114,6 +114,11 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const set = (key: string, value: string) => setForm((p) => ({ ...p, [key]: value }))
 
   const handleSubmit = async () => {
+    // Double-submit guard: even if the disabled-prop briefly flickers between
+    // mutations completing and the modal unmounting, refuse to fire a second
+    // request. Without this, an over-eager second click on a stale form
+    // produces a duplicate that the backend rejects with 422.
+    if (createEmp.isPending || updateEmp.isPending) return
     if (!form.firstName.trim() || !form.email.trim()) {
       toast('First name and email are required', 'error')
       return
