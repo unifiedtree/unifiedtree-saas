@@ -16,6 +16,26 @@ export const P = {
   HRMS_EMPLOYEE_DOCUMENT_READ:     'hrms.employee.document.read',
   HRMS_EMPLOYEE_DOCUMENT_UPLOAD:   'hrms.employee.document.upload',
   HRMS_EMPLOYEE_IMPORT:            'hrms.employee.import',
+  HRMS_EMPLOYEE_INVITE:            'hrms.employee.invite',
+
+  // ── HRMS: Probation ───────────────────────────────────────────────────────
+  HRMS_PROBATION_CONFIG_READ:      'hrms.probation.config.read',
+  HRMS_PROBATION_CONFIG_UPDATE:    'hrms.probation.config.update',
+  HRMS_PROBATION_REMINDERS_READ:   'hrms.probation.reminders.read',
+
+  // ── Payroll (config foundation) ───────────────────────────────────────────
+  PAYROLL_SETTINGS_READ:           'payroll.settings.read',
+  PAYROLL_SETTINGS_UPDATE:         'payroll.settings.update',
+  PAYROLL_COMPONENTS_READ:         'payroll.components.read',
+  PAYROLL_COMPONENTS_MANAGE:       'payroll.components.manage',
+  PAYROLL_STRUCTURE_READ:          'payroll.structure.read',
+  PAYROLL_STRUCTURE_READ_SELF:     'payroll.structure.read.self',
+  PAYROLL_STRUCTURE_MANAGE:        'payroll.structure.manage',
+  PAYROLL_RUNS_READ:               'payroll.runs.read',
+  PAYROLL_RUNS_MANAGE:             'payroll.runs.manage',
+  PAYROLL_RUNS_LOCK:               'payroll.runs.lock',
+  PAYROLL_PAYSLIP_READ_SELF:       'payroll.payslip.read.self',
+  PAYROLL_PT_SLABS_READ:           'payroll.pt_slabs.read',
 
   // ── HRMS: Org ──────────────────────────────────────────────────────────────
   HRMS_DEPARTMENT_READ:            'hrms.department.read',
@@ -128,6 +148,10 @@ export const P = {
   PLATFORM_USER_WRITE:             'platform.user.write',
   PLATFORM_MODULE_MANAGE:          'platform.module.manage',
   PLATFORM_BILLING_READ:           'platform.billing.read',
+
+  // ── Workspace (Users & Access) ───────────────────────────────────────────
+  WORKSPACE_USERS_READ:            'workspace.users.read',
+  WORKSPACE_USERS_MANAGE:          'workspace.users.manage',
 
   // ── Tenant ────────────────────────────────────────────────────────────────
   TENANT_USER_INVITE:              'tenant.user.invite',

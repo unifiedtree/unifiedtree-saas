@@ -1,18 +1,38 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Users, Calendar, Clock, Building2, ClipboardList,
   BarChart3, Settings, LogOut, Menu, X, ChevronRight, ChevronDown,
   UserCircle2, ShieldAlert, FileBarChart2, FileText, Bell, Search, Hexagon,
-  TrendingUp, CreditCard, Package, ShoppingCart, HelpCircle, Briefcase, UserCheck, Star, Receipt, DollarSign, Lock, Sprout
+  TrendingUp, CreditCard, Package, ShoppingCart, HelpCircle, Briefcase,
+  UserCheck, Star, Receipt, DollarSign, Lock,
 } from 'lucide-react'
-import { useAuthStore as useSdkStore, useAnyPermission, P } from '@unifiedtree/sdk'
+import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
 import { toast } from 'sonner'
 
 const SIDEBAR_KEY = 'ut.sidebar.collapsed'
+
+// Priority order: used for landing redirect and role badge display
+const ROLE_PRIORITY = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER', 'EMPLOYEE'] as const
+type PlatformRole = typeof ROLE_PRIORITY[number]
+
+const ROLE_LABELS: Record<PlatformRole | string, string> = {
+  SUPER_ADMIN:  'Super Admin',
+  HR_MANAGER:   'HR Manager',
+  FINANCE_LEAD: 'Finance Lead',
+  DEPT_MANAGER: 'Dept Manager',
+  EMPLOYEE:     'Employee',
+}
+
+interface NavChild {
+  label: string
+  path: string
+  icon: React.ReactNode
+  visibleForRoles?: string[]
+}
 
 interface NavItemDef {
   key: string
@@ -20,37 +40,164 @@ interface NavItemDef {
   icon: React.ReactNode
   path?: string
   module?: string
-  children?: { label: string; path: string; icon: React.ReactNode }[]
+  visibleForRoles?: string[]
+  children?: NavChild[]
 }
 
+// ─── Top-level nav (above modules) ────────────────────────────────────────────
 const NAV_ITEMS: NavItemDef[] = [
-  { key: 'dashboard', label: 'Overview', icon: <LayoutDashboard size={18} />, path: '/' },
-  { key: 'analytics', label: 'Analytics', icon: <BarChart3 size={18} />, path: '/analytics' },
+  {
+    key: 'dashboard',
+    label: 'Overview',
+    icon: <LayoutDashboard size={18} />,
+    path: '/dashboard',
+    visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'],
+  },
+  {
+    key: 'analytics',
+    label: 'Analytics',
+    icon: <BarChart3 size={18} />,
+    path: '/analytics',
+    visibleForRoles: ['SUPER_ADMIN'],
+  },
+  {
+    key: 'myworkspace',
+    label: 'My Workspace',
+    icon: <UserCircle2 size={18} />,
+    path: '/me',
+    visibleForRoles: ['EMPLOYEE'],
+  },
+  {
+    key: 'myteam',
+    label: 'My Team',
+    icon: <Users size={18} />,
+    path: '/team',
+    visibleForRoles: ['DEPT_MANAGER'],
+  },
 ]
 
+// ─── Module items (subscription-gated + role-tuned) ───────────────────────────
 const MODULE_ITEMS: NavItemDef[] = [
   {
-    key: 'hrms', label: 'HRMS Core', icon: <Users size={18} />, module: 'hrms',
+    key: 'hrms',
+    label: 'HRMS Core',
+    icon: <Users size={18} />,
+    module: 'hrms',
     children: [
-      { label: 'Directory', path: '/hrms/employees', icon: <UserCheck size={15} /> },
-      { label: 'Organization', path: '/hrms/organization', icon: <Building2 size={15} /> },
-      { label: 'Attendance', path: '/hrms/attendance', icon: <Clock size={15} /> },
-      { label: 'Leave', path: '/hrms/leave', icon: <Calendar size={15} /> },
-      { label: 'Self Service', path: '/hrms/ess', icon: <UserCircle2 size={15} /> },
-      { label: 'Onboarding', path: '/hrms/onboarding', icon: <ClipboardList size={15} /> },
-      { label: 'Reports', path: '/hrms/reports', icon: <FileBarChart2 size={15} /> },
+      {
+        label: 'Directory',
+        path: '/hrms/employees',
+        icon: <UserCheck size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER'],
+      },
+      {
+        label: 'Organization',
+        path: '/hrms/organization',
+        icon: <Building2 size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
+      },
+      {
+        label: 'Attendance',
+        path: '/hrms/attendance',
+        icon: <Clock size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'DEPT_MANAGER'],
+      },
+      {
+        label: 'My Attendance',
+        path: '/hrms/attendance',
+        icon: <Clock size={15} />,
+        visibleForRoles: ['EMPLOYEE'],
+      },
+      {
+        label: 'Leave',
+        path: '/hrms/leave',
+        icon: <Calendar size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'DEPT_MANAGER'],
+      },
+      {
+        label: 'My Leave',
+        path: '/hrms/leave',
+        icon: <Calendar size={15} />,
+        visibleForRoles: ['EMPLOYEE'],
+      },
+      {
+        label: 'Onboarding',
+        path: '/hrms/onboarding',
+        icon: <ClipboardList size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
+      },
+      {
+        label: 'My Onboarding',
+        path: '/hrms/onboarding/instances',
+        icon: <ClipboardList size={15} />,
+        visibleForRoles: ['EMPLOYEE'],
+      },
+      {
+        label: 'Letters',
+        path: '/hrms/letters/templates',
+        icon: <FileText size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
+      },
+      {
+        label: 'My Letters',
+        path: '/hrms/letters/generated',
+        icon: <FileText size={15} />,
+        visibleForRoles: ['EMPLOYEE'],
+      },
+      {
+        label: 'My Payslips',
+        path: '/me/payslips',
+        icon: <Receipt size={15} />,
+        visibleForRoles: ['EMPLOYEE'],
+      },
+      {
+        label: 'Reports',
+        path: '/hrms/reports',
+        icon: <FileBarChart2 size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER'],
+      },
+      {
+        label: 'Settings',
+        path: '/hrms/settings',
+        icon: <Settings size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
+      },
+      {
+        label: 'Payroll Settings',
+        path: '/hrms/payroll/settings',
+        icon: <CreditCard size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'FINANCE_LEAD'],
+      },
+      {
+        label: 'Salary Components',
+        path: '/hrms/payroll/components',
+        icon: <Receipt size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'FINANCE_LEAD'],
+      },
+      {
+        label: 'Payroll Runs',
+        path: '/hrms/payroll/runs',
+        icon: <Receipt size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'FINANCE_LEAD', 'HR_MANAGER'],
+      },
     ],
   },
   {
-    key: 'crm', label: 'CRM', icon: <TrendingUp size={18} />, module: 'crm',
+    key: 'crm',
+    label: 'CRM',
+    icon: <TrendingUp size={18} />,
+    module: 'crm',
     children: [
-      { label: 'Leads', path: '/crm/leads', icon: <Star size={15} /> },
+      { label: 'Leads',     path: '/crm/leads',     icon: <Star size={15} /> },
       { label: 'Customers', path: '/crm/customers', icon: <Users size={15} /> },
-      { label: 'Deals', path: '/crm/deals', icon: <Briefcase size={15} /> },
+      { label: 'Deals',     path: '/crm/deals',     icon: <Briefcase size={15} /> },
     ],
   },
   {
-    key: 'accounts', label: 'Accounts', icon: <DollarSign size={18} />, module: 'accounts',
+    key: 'accounts',
+    label: 'Accounts',
+    icon: <DollarSign size={18} />,
+    module: 'accounts',
     children: [
       { label: 'Invoices', path: '/accounts/invoices', icon: <FileText size={15} /> },
       { label: 'Payments', path: '/accounts/payments', icon: <CreditCard size={15} /> },
@@ -59,27 +206,34 @@ const MODULE_ITEMS: NavItemDef[] = [
   },
   { key: 'payroll', label: 'Payroll', icon: <CreditCard size={18} />, path: '/payroll', module: 'payroll' },
   {
-    key: 'projects', label: 'Projects', icon: <Package size={18} />, module: 'projects',
+    key: 'projects',
+    label: 'Projects',
+    icon: <Package size={18} />,
+    module: 'projects',
     children: [
-      { label: 'All Projects', path: '/projects', icon: <Package size={15} /> },
-      { label: 'Task Board', path: '/projects/board', icon: <ClipboardList size={15} /> },
+      { label: 'All Projects', path: '/projects',       icon: <Package size={15} /> },
+      { label: 'Task Board',   path: '/projects/board', icon: <ClipboardList size={15} /> },
     ],
   },
-  { key: 'inventory',   label: 'Inventory',   icon: <Building2 size={18} />,     path: '/inventory',   module: 'inventory' },
-  { key: 'procurement', label: 'Procurement', icon: <ShoppingCart size={18} />,  path: '/procurement', module: 'procurement' },
+  { key: 'inventory',   label: 'Inventory',   icon: <Building2 size={18} />,    path: '/inventory',   module: 'inventory' },
+  { key: 'procurement', label: 'Procurement', icon: <ShoppingCart size={18} />, path: '/procurement', module: 'procurement' },
   {
-    key: 'helpdesk', label: 'Helpdesk', icon: <HelpCircle size={18} />, module: 'helpdesk',
+    key: 'helpdesk',
+    label: 'Helpdesk',
+    icon: <HelpCircle size={18} />,
+    module: 'helpdesk',
     children: [
       { label: 'Tickets', path: '/helpdesk/tickets', icon: <ClipboardList size={15} /> },
     ],
   },
 ]
 
+// ─── Platform admin items ──────────────────────────────────────────────────────
 const PLATFORM_ITEMS: NavItemDef[] = [
-  { key: 'users',    label: 'Users & Access', icon: <Users size={18} />,        path: '/users' },
-  { key: 'roles',    label: 'Roles & Perms',  icon: <ShieldAlert size={18} />,  path: '/roles' },
-  { key: 'audit',    label: 'Audit Logs',     icon: <Bell size={18} />,         path: '/audit-logs' },
-  { key: 'settings', label: 'Settings',       icon: <Settings size={18} />,     path: '/settings' },
+  { key: 'users',    label: 'Users & Access', icon: <Users size={18} />,       path: '/users',      visibleForRoles: ['SUPER_ADMIN'] },
+  { key: 'roles',    label: 'Roles & Perms',  icon: <ShieldAlert size={18} />, path: '/roles',      visibleForRoles: ['SUPER_ADMIN'] },
+  { key: 'audit',    label: 'Audit Logs',     icon: <Bell size={18} />,        path: '/audit-logs', visibleForRoles: ['SUPER_ADMIN'] },
+  { key: 'settings', label: 'Settings',       icon: <Settings size={18} />,    path: '/settings',   visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'] },
 ]
 
 export function PlatformShell() {
@@ -90,47 +244,49 @@ export function PlatformShell() {
   const logout = useSdkStore(s => s.logout)
   const user = useSdkStore(s => s.user)
 
-  const hasModule = useLocalAuthStore((s) => s.hasModule)
-  const isAdmin = user?.roles?.includes('COMPANY_ADMIN') || user?.roles?.includes('SUPER_ADMIN')
+  const hasModule = useLocalAuthStore(s => s.hasModule)
+  const userRoles: string[] = user?.roles ?? []
 
-  // Filter modules based on roles
-  const filteredModules = MODULE_ITEMS.map(module => {
-    if (module.key === 'hrms') {
-      return {
-        ...module,
-        children: module.children?.filter(child => {
-          if (child.label === 'Reports' || child.label === 'Organization' || child.label === 'Directory') {
-            return isAdmin
-          }
-          return true
-        })
-      }
-    }
-    return module
-  }).filter(module => {
-    if (module.key === 'payroll') {
-      return isAdmin
-    }
+  // Primary role for filtering and badge display
+  const primaryRole = (ROLE_PRIORITY as readonly string[]).find(r => userRoles.includes(r)) ?? null
+
+  // Filter a nav item by visibleForRoles
+  function isVisible(item: { visibleForRoles?: string[] }): boolean {
+    if (!item.visibleForRoles || item.visibleForRoles.length === 0) return true
+    if (!primaryRole) return false
+    return item.visibleForRoles.includes(primaryRole)
+  }
+
+  // Visible top-level nav items
+  const visibleNavItems = NAV_ITEMS.filter(isVisible)
+
+  // For module items: filter children by role visibility, then decide if the group shows
+  const visibleModuleItems = MODULE_ITEMS.map(m => ({
+    ...m,
+    children: m.children?.filter(isVisible),
+  })).filter(m => {
+    if (m.children) return (m.children.length > 0)
     return true
   })
 
-  const [openModules, setOpenModules] = useState<string[]>(() => {
-    const activeModule = filteredModules.find(m => m.children?.some(c => location.pathname.startsWith(c.path)))
-    return activeModule ? [activeModule.key] : []
-  })
+  const activeModules   = visibleModuleItems.filter(m => hasModule(m.module ?? ''))
+  const lockedModules   = visibleModuleItems.filter(m => !hasModule(m.module ?? ''))
+  const displayedLocked = lockedModules.slice(0, 2)
+  const hiddenLocked    = lockedModules.slice(2)
 
+  const visiblePlatformItems = PLATFORM_ITEMS.filter(isVisible)
+  const showPlatformSection  = visiblePlatformItems.length > 0
+
+  const [openModules, setOpenModules] = useState<string[]>(() => {
+    const active = visibleModuleItems.find(m => m.children?.some(c => location.pathname.startsWith(c.path)))
+    return active ? [active.key] : []
+  })
   const [showLockedDropdown, setShowLockedDropdown] = useState(false)
 
-  const toggleModule = (key: string) => {
-    setOpenModules((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key])
-  }
+  const toggleModule = (key: string) =>
+    setOpenModules(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
 
-  // Separate active and locked modules
-  const activeModules = filteredModules.filter(m => hasModule(m.module ?? ''))
-  const lockedModules = filteredModules.filter(m => !hasModule(m.module ?? ''))
-  
-  const displayedLocked = lockedModules.slice(0, 2)
-  const hiddenLocked = lockedModules.slice(2)
+  // ─── Render helpers ────────────────────────────────────────────────────────
 
   const renderModuleItem = (item: NavItemDef, active: boolean) => {
     if (collapsed) {
@@ -141,10 +297,10 @@ export function PlatformShell() {
           className={({ isActive }) => clsx(
             'flex w-11 h-11 mx-auto items-center justify-center rounded-xl px-3 py-2.5 transition-all',
             !active && 'opacity-50 grayscale',
-            isActive && active ? 'bg-[#0F6E56]/10 text-[#0F6E56]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+            isActive && active ? 'bg-[#0F6E56]/10 text-[#0F6E56]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
           )}
           title={item.label}
-          onClick={(e) => {
+          onClick={e => {
             if (!active) {
               e.preventDefault()
               toast.error('Module Locked', { description: `The ${item.label} module is not purchased.` })
@@ -158,29 +314,33 @@ export function PlatformShell() {
 
     if (item.children && active) {
       const isOpen = openModules.includes(item.key)
-      const hasActiveChild = item.children.some((c) => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
+      const hasActiveChild = item.children.some(c =>
+        location.pathname === c.path || location.pathname.startsWith(c.path + '/'),
+      )
       return (
         <div key={item.key}>
           <button
             onClick={() => toggleModule(item.key)}
             className={clsx(
               'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
-              hasActiveChild ? 'bg-slate-50 text-[#0F6E56]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              hasActiveChild ? 'bg-slate-50 text-[#0F6E56]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
             )}
           >
-            <span className={hasActiveChild ? "text-[#0F6E56]" : "text-slate-400"}>{item.icon}</span>
+            <span className={hasActiveChild ? 'text-[#0F6E56]' : 'text-slate-400'}>{item.icon}</span>
             <span className="flex-1 text-left">{item.label}</span>
-            {isOpen ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
+            {isOpen
+              ? <ChevronDown size={14} className="text-slate-400" />
+              : <ChevronRight size={14} className="text-slate-400" />}
           </button>
           {isOpen && (
             <div className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l-2 border-slate-100 pl-3">
-              {item.children.map((child) => (
+              {item.children.map(child => (
                 <NavLink
-                  key={child.path}
+                  key={child.path + child.label}
                   to={child.path}
                   className={({ isActive }) => clsx(
                     'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-all',
-                    isActive ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-bold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                    isActive ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-bold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
                   )}
                 >
                   {child.icon}
@@ -201,53 +361,67 @@ export function PlatformShell() {
           'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
           !active ? 'cursor-default text-slate-400 hover:bg-slate-50' : isActive
             ? 'bg-[#0F6E56]/10 text-[#0F6E56]'
-            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
         )}
-        onClick={(e) => {
+        onClick={e => {
           if (!active) {
             e.preventDefault()
-            toast.error('Module Locked', { description: `The ${item.label} module is not purchased for this workspace.` })
+            toast.error('Module Locked', { description: `The ${item.label} module is not purchased.` })
           }
         }}
         title={collapsed ? item.label : undefined}
       >
-        <span className={clsx(active ? (location.pathname === item.path ? "text-[#0F6E56]" : "text-slate-400") : "text-slate-300")}>{item.icon}</span>
+        <span className={clsx(active ? (location.pathname === item.path ? 'text-[#0F6E56]' : 'text-slate-400') : 'text-slate-300')}>
+          {item.icon}
+        </span>
         {!collapsed && <span className="flex-1">{item.label}</span>}
         {!collapsed && !active && <Lock size={12} className="text-slate-300" />}
       </NavLink>
     )
   }
 
+  // ─── Role badge ────────────────────────────────────────────────────────────
+  const roleLabel    = primaryRole ? (ROLE_LABELS[primaryRole] ?? primaryRole) : null
+  const extraRoles   = userRoles.filter(r => r !== primaryRole && (ROLE_LABELS[r] !== undefined)).length
+  const roleBadgeText = roleLabel
+    ? (extraRoles > 0 ? `${roleLabel} +${extraRoles}` : roleLabel)
+    : null
+
+  // ─── Sidebar content ───────────────────────────────────────────────────────
   const sidebarContent = (
     <div className="flex h-full flex-col bg-white border-r border-slate-200 z-30 transition-all duration-300">
-      {/* Logo Area */}
-      <div className={clsx("flex h-16 shrink-0 items-center border-b border-slate-100 transition-all", collapsed ? "justify-center px-2" : "justify-start px-6")}>
-        <img 
-          src="/UnifiedTreeLogo.png" 
-          alt="UnifiedTree Logo" 
-          className={clsx("object-contain", collapsed ? "w-8 h-8" : "h-8 w-auto max-w-[200px]")} 
+      {/* Logo */}
+      <div className={clsx('flex h-16 shrink-0 items-center border-b border-slate-100 transition-all', collapsed ? 'justify-center px-2' : 'justify-start px-6')}>
+        <img
+          src="/UnifiedTreeLogo.png"
+          alt="UnifiedTree Logo"
+          className={clsx('object-contain', collapsed ? 'w-8 h-8' : 'h-8 w-auto max-w-[200px]')}
         />
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1 scrollbar-hide">
-        
-        {/* Workspace Main */}
-        {NAV_ITEMS.map((item) => (
+
+        {/* Top-level nav (Overview / My Workspace / My Team) */}
+        {visibleNavItems.map(item => (
           <NavLink
             key={item.key}
             to={item.path!}
-            end={item.path === '/'}
+            end={item.path === '/dashboard' || item.path === '/me' || item.path === '/team'}
             className={({ isActive }) => clsx(
               'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
               isActive
                 ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-semibold'
                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-              collapsed && 'justify-center px-0 w-11 h-11 mx-auto'
+              collapsed && 'justify-center px-0 w-11 h-11 mx-auto',
             )}
             title={collapsed ? item.label : undefined}
           >
-            <span className={clsx(location.pathname === item.path ? "text-[#0F6E56]" : "text-slate-400 group-hover:text-[#0F6E56] transition-colors")}>{item.icon}</span>
+            <span className={clsx(
+              location.pathname === item.path ? 'text-[#0F6E56]' : 'text-slate-400 group-hover:text-[#0F6E56] transition-colors',
+            )}>
+              {item.icon}
+            </span>
             {!collapsed && <span>{item.label}</span>}
           </NavLink>
         ))}
@@ -259,18 +433,14 @@ export function PlatformShell() {
         )}
         {collapsed && <div className="w-8 h-px bg-slate-200 mx-auto my-4" />}
 
-        {/* Render Active Modules First */}
         {activeModules.map(m => renderModuleItem(m, true))}
 
-        {/* Divider if we have locked modules */}
         {lockedModules.length > 0 && !collapsed && (
           <div className="w-full h-px bg-slate-100 my-4" />
         )}
 
-        {/* Render 2 Locked Modules */}
         {displayedLocked.map(m => renderModuleItem(m, false))}
 
-        {/* Locked Modules Accordion */}
         {!collapsed && hiddenLocked.length > 0 && (
           <div className="mt-1">
             <button
@@ -281,7 +451,7 @@ export function PlatformShell() {
                 <Hexagon size={18} className="text-slate-400" />
                 <span>Other Locked Modules</span>
               </div>
-              <ChevronDown size={14} className={clsx("transition-transform text-slate-400", showLockedDropdown && "rotate-180")} />
+              <ChevronDown size={14} className={clsx('transition-transform text-slate-400', showLockedDropdown && 'rotate-180')} />
             </button>
             <AnimatePresence>
               {showLockedDropdown && (
@@ -300,36 +470,43 @@ export function PlatformShell() {
           </div>
         )}
 
-        {!collapsed && (
-          <p className="px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
-            Platform Admin
-          </p>
-        )}
-        {collapsed && <div className="w-8 h-px bg-slate-200 mx-auto my-4" />}
-
-        {PLATFORM_ITEMS.map((item) => (
-          <NavLink
-            key={item.key}
-            to={item.path!}
-            className={({ isActive }) => clsx(
-              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
-              isActive
-                ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-semibold'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-              collapsed && 'justify-center px-0 w-11 h-11 mx-auto'
+        {showPlatformSection && (
+          <>
+            {!collapsed && (
+              <p className="px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
+                Platform Admin
+              </p>
             )}
-            title={collapsed ? item.label : undefined}
-          >
-            <span className={clsx(location.pathname === item.path ? "text-[#0F6E56]" : "text-slate-400 group-hover:text-[#0F6E56] transition-colors")}>{item.icon}</span>
-            {!collapsed && <span>{item.label}</span>}
-          </NavLink>
-        ))}
+            {collapsed && <div className="w-8 h-px bg-slate-200 mx-auto my-4" />}
+            {visiblePlatformItems.map(item => (
+              <NavLink
+                key={item.key}
+                to={item.path!}
+                className={({ isActive }) => clsx(
+                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
+                  isActive
+                    ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-semibold'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+                  collapsed && 'justify-center px-0 w-11 h-11 mx-auto',
+                )}
+                title={collapsed ? item.label : undefined}
+              >
+                <span className={clsx(
+                  location.pathname === item.path ? 'text-[#0F6E56]' : 'text-slate-400 group-hover:text-[#0F6E56] transition-colors',
+                )}>
+                  {item.icon}
+                </span>
+                {!collapsed && <span>{item.label}</span>}
+              </NavLink>
+            ))}
+          </>
+        )}
       </nav>
 
-      {/* User Profile & Logout */}
+      {/* User profile + role badge + sign out */}
       <div className="border-t border-slate-100 p-4 bg-slate-50">
         {!collapsed && user && (
-          <div className="flex items-center gap-3 px-3 py-2.5 mb-2 rounded-xl bg-white border border-slate-200 hover:border-[#0F6E56]/30 transition-colors cursor-pointer shadow-sm">
+          <div className="flex items-center gap-3 px-3 py-2.5 mb-2 rounded-xl bg-white border border-slate-200 shadow-sm">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0F6E56]/10 text-sm font-bold text-[#0F6E56]">
               {(user.firstName?.[0] ?? '?').toUpperCase()}
             </div>
@@ -337,7 +514,11 @@ export function PlatformShell() {
               <p className="truncate text-sm font-semibold text-slate-900">
                 {user.firstName} {user.lastName}
               </p>
-              <p className="truncate text-[11px] font-medium text-slate-500">{user.email}</p>
+              {roleBadgeText && (
+                <span className="inline-block mt-0.5 rounded-full bg-[#0F6E56]/10 px-2 py-0.5 text-[10px] font-semibold text-[#0F6E56] leading-tight">
+                  {roleBadgeText}
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -345,7 +526,7 @@ export function PlatformShell() {
           onClick={logout}
           className={clsx(
             'flex w-full items-center gap-3 rounded-xl py-2.5 text-sm font-medium text-slate-600 hover:bg-rose-50 hover:text-rose-600 transition-colors group',
-            collapsed ? 'justify-center px-0 w-11 h-11 mx-auto' : 'px-3'
+            collapsed ? 'justify-center px-0 w-11 h-11 mx-auto' : 'px-3',
           )}
           title="Log out"
         >
@@ -362,13 +543,16 @@ export function PlatformShell() {
       <aside
         className={clsx(
           'hidden md:block shrink-0 transition-all duration-300 relative',
-          collapsed ? 'w-[80px]' : 'w-[280px]'
+          collapsed ? 'w-[80px]' : 'w-[280px]',
         )}
       >
         {sidebarContent}
-        {/* Collapse Toggle */}
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={() => {
+            const next = !collapsed
+            setCollapsed(next)
+            localStorage.setItem(SIDEBAR_KEY, String(next))
+          }}
           className="absolute -right-3 top-20 flex h-6 w-6 items-center justify-center rounded-full bg-white border border-slate-200 text-slate-400 shadow-sm hover:text-slate-700 hover:border-slate-300 transition-all z-40"
         >
           <ChevronRight size={14} className={clsx('transition-transform duration-300', !collapsed && 'rotate-180')} />
@@ -410,19 +594,23 @@ export function PlatformShell() {
             >
               <Menu size={20} />
             </button>
-            
-            {/* Global Search */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors w-64 focus-within:ring-2 focus-within:ring-[#0F6E56]/20 focus-within:border-[#0F6E56]/50">
               <Search size={14} className="text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search everywhere... (?K)" 
+              <input
+                type="text"
+                placeholder="Search everywhere... (?K)"
                 className="bg-transparent border-none outline-none text-sm w-full placeholder:text-slate-400 text-slate-900"
               />
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3">
+            {/* Role badge in header (visible on mobile where sidebar is hidden) */}
+            {roleBadgeText && (
+              <span className="hidden sm:inline-flex rounded-full bg-[#0F6E56]/10 px-2.5 py-1 text-xs font-semibold text-[#0F6E56]">
+                {roleBadgeText}
+              </span>
+            )}
             <button className="relative p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors">
               <Bell size={18} />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 border-2 border-white" />

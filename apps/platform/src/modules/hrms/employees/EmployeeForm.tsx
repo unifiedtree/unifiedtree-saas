@@ -1,10 +1,13 @@
 import React, { useState } from 'react'
-import { X, ChevronRight } from 'lucide-react'
+import { X, ChevronRight, Send } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
+import { useAuthStore } from '@unifiedtree/sdk'
+import { P } from '@unifiedtree/sdk'
 import { useCreateWorkforceEmployee, useUpdateWorkforceEmployee, type WorkforceEmployee } from '../api/useWorkforce'
 import { useCompanies, useDepartments, useDesignations, useBranches, useGrades, useEmploymentTypes, useShifts } from '../api/useOrg'
 import { useTemplates } from '../onboarding/api/useOnboarding'
+import { sendInvite } from './api/useInvitation'
 
 type FormStep = 'basic' | 'system' | 'work' | 'identity' | 'bank' | 'address' | 'emergency'
 
@@ -58,6 +61,8 @@ interface EmployeeFormProps {
 export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, onSuccess }) => {
   const { toast } = useToast()
   const isEdit = !!employee
+  const canInvite = useAuthStore(s => s.permissions.has(P.HRMS_EMPLOYEE_INVITE))
+  const [sendInvitation, setSendInvitation] = useState(true)
   const createEmp = useCreateWorkforceEmployee()
   const updateEmp = useUpdateWorkforceEmployee()
 
@@ -166,7 +171,16 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           emergencyContactPhone: form.emergencyContactPhone || undefined,
           onboardingTemplateId: form.onboardingTemplateId || undefined,
         })
-        toast('Employee created', 'success')
+        if (!isEdit && sendInvitation && canInvite) {
+          try {
+            await sendInvite(result.id)
+            toast(`Employee created and invitation sent to ${result.email}`, 'success')
+          } catch {
+            toast('Employee created (invitation email failed — resend from their profile)', 'warning')
+          }
+        } else {
+          toast('Employee created', 'success')
+        }
         onSuccess?.(result)
       }
       onClose()
@@ -408,13 +422,27 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               Next <ChevronRight size={14} />
             </button>
           ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={isPending}
-              className="flex-1 py-2.5 bg-[#0F6E56] hover:bg-[#0A5240] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
-            >
-              {isPending ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Employee'}
-            </button>
+            <div className="flex-1 flex flex-col gap-2">
+              {!isEdit && canInvite && (
+                <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={sendInvitation}
+                    onChange={e => setSendInvitation(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded accent-[#0F6E56]"
+                  />
+                  <Send size={11} className="text-[#0F6E56]" />
+                  Send invitation email
+                </label>
+              )}
+              <button
+                onClick={handleSubmit}
+                disabled={isPending}
+                className="w-full py-2.5 bg-[#0F6E56] hover:bg-[#0A5240] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
+              >
+                {isPending ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Employee'}
+              </button>
+            </div>
           )}
         </div>
       </div>

@@ -7,7 +7,8 @@ import { useEmployeeDirectory } from './api/useWorkforce'
 import { useCompanies } from './api/useOrg'
 import { useLeaveOverview } from './api/useLeave'
 import { useMonthlyStats } from './api/useAttendance'
-import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
+import { useAuthStore as useSdkStore, usePermission, P } from '@unifiedtree/sdk'
+import { UpcomingProbations } from './probation/UpcomingProbations'
 
 export const HrmsDashboard: React.FC = () => {
   const navigate = useNavigate()
@@ -25,6 +26,7 @@ export const HrmsDashboard: React.FC = () => {
   const pendingLeaves = leaveOverview?.pendingApprovals ?? 0
 
   const isAdmin = user?.roles?.includes('COMPANY_ADMIN') || user?.roles?.includes('SUPER_ADMIN')
+  const canSeeProbation = usePermission(P.HRMS_EMPLOYEE_READ)
 
   const quickActions = [
     ...(isAdmin ? [
@@ -76,6 +78,9 @@ export const HrmsDashboard: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Upcoming probations */}
+      {canSeeProbation && <UpcomingProbations />}
 
       {/* Recent employees */}
       {recentEmployees.length > 0 && (

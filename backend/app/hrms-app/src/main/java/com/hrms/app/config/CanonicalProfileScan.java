@@ -47,6 +47,9 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         // letters module
         "com.hrms.letters",
 
+        // payroll module (seeder @Service; LopCalculator is a pure POJO, not scanned)
+        "com.hrms.payroll.service",
+
         // canonical REST controllers
         "com.hrms.api.workforce",
         "com.hrms.api.settings",
@@ -58,6 +61,11 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.attendance",
         "com.hrms.api.leave",
         "com.hrms.api.letters",
+        "com.hrms.api.invitation",
+        "com.hrms.api.mail",
+        "com.hrms.api.access",
+        "com.hrms.api.probation",
+        "com.hrms.api.payroll",
 
         // app-layer: reports, bulk import, jobs
         "com.hrms.app.reports",
@@ -77,7 +85,8 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.unifiedtree.settings.entity",
         "com.unifiedtree.auth.entity",
         "com.unifiedtree.rbac.entity",
-        "com.unifiedtree.audit.entity"
+        "com.unifiedtree.audit.entity",
+        "com.hrms.api.invitation"
 })
 @EnableJpaRepositories(basePackages = {
         "com.hrms.employee.workforce.repository",
@@ -88,7 +97,8 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.unifiedtree.settings.repository",
         "com.unifiedtree.auth.repository",
         "com.unifiedtree.rbac.repository",
-        "com.unifiedtree.audit.repository"
+        "com.unifiedtree.audit.repository",
+        "com.hrms.api.invitation"
 })
 public class CanonicalProfileScan {
 }

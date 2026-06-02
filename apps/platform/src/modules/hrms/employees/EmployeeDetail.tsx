@@ -7,7 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Edit3, UserCheck, AlertTriangle, LogOut,
   Mail, Phone, Calendar, Briefcase, Building2, MapPin,
-  Plus, Trash2, Eye, EyeOff,
+  Plus, Trash2, Eye, EyeOff, Send, CheckCircle2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useForm } from 'react-hook-form'
@@ -21,6 +21,10 @@ import {
 import { Can, P, usePermission } from '@unifiedtree/sdk'
 import { toast } from 'sonner'
 import { useWorkforceEmployee, useUpdateWorkforceEmployee, useConfirmEmployee, useStartNotice, useExitEmployee } from '../api/useWorkforce'
+import { useExtendProbation } from '../api/useProbation'
+import {
+  useEmployeeStructure, useStructureHistory, useUpsertStructure, useSalaryComponents,
+} from '../api/usePayroll'
 import type { EmploymentType } from '../api/useWorkforce'
 import { useCompanies, useDepartments, useDesignations, useBranches, useGrades, useEmploymentTypes, useShifts } from '../api/useOrg'
 import {
@@ -37,6 +41,7 @@ import type {
   EmployeeEducation, EmployeeExperience, EmployeeDependent, EmergencyContact,
 } from '../api/useEmployeeProfile'
 import { EmployeeForm } from './EmployeeForm'
+import { sendInvite, resendInvite } from './api/useInvitation'
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -204,6 +209,65 @@ function ActionModal({
   )
 }
 
+// ── Account card (invitation status) ──────────────────────────────────────────
+
+function AccountCard({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmployee>['data']> }) {
+  const canInvite = usePermission(P.HRMS_EMPLOYEE_INVITE)
+  const [busy, setBusy] = useState(false)
+  const status = emp.employmentStatus ?? 'DRAFT'
+
+  const doSend = async (resend: boolean) => {
+    setBusy(true)
+    try {
+      if (resend) {
+        await resendInvite(emp.id)
+        toast.success('Invitation resent')
+      } else {
+        await sendInvite(emp.id)
+        toast.success(`Invitation sent to ${emp.email}`)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send invitation')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <SectionCard title="Account">
+      {status === 'ACTIVE' ? (
+        <div className="flex items-center gap-2 py-2">
+          <CheckCircle2 size={16} className="text-emerald-500" />
+          <span className="text-sm font-medium text-emerald-600">Account active</span>
+        </div>
+      ) : status === 'INVITED' ? (
+        <div className="space-y-3 py-1">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+            <span className="text-sm text-[#64748B]">Invitation sent — awaiting acceptance</span>
+          </div>
+          {canInvite && (
+            <Button size="sm" variant="secondary" leftIcon={<Send size={13} />}
+              loading={busy} onClick={() => doSend(true)}>
+              Resend invitation
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3 py-1">
+          <p className="text-sm text-[#64748B]">No login account yet. Send an invitation so this employee can set a password and log in.</p>
+          {canInvite && (
+            <Button size="sm" leftIcon={<Send size={13} />}
+              loading={busy} onClick={() => doSend(false)}>
+              Send invitation
+            </Button>
+          )}
+        </div>
+      )}
+    </SectionCard>
+  )
+}
+
 // ── Tab: Overview ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ emp, departments, designations, branches, companies }: {
@@ -221,6 +285,7 @@ function OverviewTab({ emp, departments, designations, branches, companies }: {
 
   return (
     <div className="grid md:grid-cols-2 gap-4">
+      <AccountCard emp={emp} />
       <SectionCard title="Contact">
         <InfoRow icon={Mail}     label="Work Email"  value={emp.email} />
         <InfoRow icon={Phone}    label="Phone"       value={emp.phone} />
@@ -1058,6 +1123,123 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
   )
 }
 
+// ── Tab: Salary (payroll structure) ───────────────────────────────────────────
+
+function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: string }) {
+  const { data: structure, isLoading } = useEmployeeStructure(employeeId)
+  const { data: history = [] } = useStructureHistory(employeeId)
+  const { data: components = [] } = useSalaryComponents()
+  const upsert = useUpsertStructure()
+  const [open, setOpen] = useState(false)
+  const [ctc, setCtc] = useState('')
+  const [effFrom, setEffFrom] = useState(new Date().toISOString().split('T')[0])
+  const [taxRegime, setTaxRegime] = useState<'OLD' | 'NEW'>('NEW')
+  const [pfApplicable, setPfApplicable] = useState(true)
+  const [lines, setLines] = useState<Record<string, string>>({})
+
+  const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+  const ctcComponents = components.filter(c => c.category === 'EARNING')
+
+  const openEdit = () => {
+    setCtc(structure ? String(structure.ctcAnnual) : '')
+    setLines({})
+    setOpen(true)
+  }
+
+  const save = () => {
+    if (!ctc || Number(ctc) <= 0) { toast.error('Enter a valid annual CTC'); return }
+    upsert.mutate({
+      employeeId, ctcAnnual: Number(ctc), effectiveFrom: effFrom, taxRegime, pfApplicable,
+      components: Object.entries(lines).filter(([, v]) => v).map(([componentId, v]) => ({ componentId, monthlyAmount: Number(v) })),
+    }, {
+      onSuccess: () => { toast.success('Salary structure saved'); setOpen(false) },
+      onError: (e) => toast.error((e as Error).message || 'Failed to save structure'),
+    })
+  }
+
+  if (isLoading) return <CardSkeleton />
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-[#334155]">Current Salary Structure</h3>
+        <Can code={P.PAYROLL_STRUCTURE_MANAGE}>
+          <Button size="sm" onClick={openEdit}>{structure ? 'Revise structure' : 'Add structure'}</Button>
+        </Can>
+      </div>
+
+      {!structure ? (
+        <EmptyState variant="first-run" title="No salary structure" description="Define this employee's salary structure to enable payroll." />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-white border border-[#E2E8F0] rounded-xl p-3"><p className="text-xs text-[#64748B]">Annual CTC</p><p className="text-lg font-bold text-[#0F172A]">{inr(structure.ctcAnnual)}</p></div>
+            <div className="bg-white border border-[#E2E8F0] rounded-xl p-3"><p className="text-xs text-[#64748B]">Monthly</p><p className="text-lg font-bold text-[#0F172A]">{inr(structure.ctcMonthly)}</p></div>
+            <div className="bg-white border border-[#E2E8F0] rounded-xl p-3"><p className="text-xs text-[#64748B]">Tax regime</p><p className="text-lg font-bold text-[#0F172A]">{structure.taxRegime}</p></div>
+            <div className="bg-white border border-[#E2E8F0] rounded-xl p-3"><p className="text-xs text-[#64748B]">PF status</p><p className="text-sm font-bold text-[#0F172A]">{structure.pfApplicable ? structure.pfStatus : 'N/A'}</p></div>
+          </div>
+          {structure.lines.length > 0 && (
+            <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-slate-50 text-left text-xs font-bold text-slate-500 uppercase tracking-wider"><th className="px-4 py-2.5">Component</th><th className="px-4 py-2.5">Monthly</th><th className="px-4 py-2.5">Annual</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {structure.lines.map(l => (
+                    <tr key={l.componentId}><td className="px-4 py-2.5 text-slate-800">{l.componentName}</td><td className="px-4 py-2.5">{inr(l.monthlyAmount)}</td><td className="px-4 py-2.5 text-slate-500">{inr(l.monthlyAmount * 12)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {history.length > 1 && (
+        <div>
+          <h3 className="text-sm font-bold text-[#334155] mb-2">History</h3>
+          <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead><tr className="bg-slate-50 text-left text-xs font-bold text-slate-500 uppercase tracking-wider"><th className="px-4 py-2.5">Effective</th><th className="px-4 py-2.5">CTC</th><th className="px-4 py-2.5">Status</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {history.map(h => (
+                  <tr key={h.id}><td className="px-4 py-2.5">{format(new Date(h.effectiveFrom), 'd MMM yyyy')}</td><td className="px-4 py-2.5">{inr(h.ctcAnnual)}</td><td className="px-4 py-2.5">{h.isCurrent ? <Badge tone="success">Current</Badge> : <Badge tone="default">Past</Badge>}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {open && (
+        <Drawer open={open} onOpenChange={(o) => !o && setOpen(false)} title="Salary structure">
+          <div className="space-y-4">
+            <Field label="Annual CTC (₹)" required><Input type="number" value={ctc} onChange={(e) => setCtc(e.target.value)} /></Field>
+            <Field label="Effective from"><Input type="date" value={effFrom} onChange={(e) => setEffFrom(e.target.value)} /></Field>
+            <Field label="Tax regime">
+              <select value={taxRegime} onChange={(e) => setTaxRegime(e.target.value as 'OLD' | 'NEW')} className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm">
+                <option value="NEW">New regime</option><option value="OLD">Old regime</option>
+              </select>
+            </Field>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} className="h-4 w-4 rounded accent-[#0F6E56]" /> PF applicable
+            </label>
+            {ctcComponents.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Monthly component amounts</p>
+                {ctcComponents.map(c => (
+                  <Field key={c.id} label={c.name}>
+                    <Input type="number" value={lines[c.id] ?? ''} onChange={(e) => setLines(p => ({ ...p, [c.id]: e.target.value }))} placeholder="0" />
+                  </Field>
+                ))}
+              </div>
+            )}
+            <Button className="w-full" loading={upsert.isPending} onClick={save}>Save structure</Button>
+          </div>
+        </Drawer>
+      )}
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export const EmployeeDetail: React.FC = () => {
@@ -1076,13 +1258,16 @@ export const EmployeeDetail: React.FC = () => {
 
   const canReadIdentity = usePermission(P.HRMS_EMPLOYEE_IDENTITY_READ)
   const canReadBank     = usePermission(P.HRMS_EMPLOYEE_BANK_READ)
+  const canReadSalary   = usePermission(P.PAYROLL_STRUCTURE_READ)
 
+  const extendMutation = useExtendProbation()
   const [showEdit,     setShowEdit]     = useState(false)
-  const [modal,        setModal]        = useState<'confirm' | 'notice' | 'exit' | null>(null)
+  const [modal,        setModal]        = useState<'confirm' | 'notice' | 'exit' | 'extend' | null>(null)
   const [confirmDate,  setConfirmDate]  = useState(new Date().toISOString().split('T')[0])
   const [noticeStart,  setNoticeStart]  = useState(new Date().toISOString().split('T')[0])
   const [lastDay,      setLastDay]      = useState('')
   const [reason,       setReason]       = useState('')
+  const [extendDate,   setExtendDate]   = useState('')
 
   if (isLoading) {
     return (
@@ -1147,6 +1332,19 @@ export const EmployeeDetail: React.FC = () => {
       setModal(null)
     } catch { toast.error('Failed to exit employee') }
   }
+
+  const handleExtend = async () => {
+    if (!extendDate) { toast.error('New probation end date is required'); return }
+    try {
+      await extendMutation.mutateAsync({ employeeId: emp.id, newEndDate: extendDate })
+      toast.success('Probation extended')
+      setModal(null)
+    } catch (e) { toast.error((e as Error).message || 'Failed to extend probation') }
+  }
+
+  const probationDays = emp.probationEndDate
+    ? Math.ceil((new Date(emp.probationEndDate).getTime() - Date.now()) / 86_400_000)
+    : null
 
   return (
     <div className="space-y-5">
@@ -1220,6 +1418,42 @@ export const EmployeeDetail: React.FC = () => {
         </Can>
       </div>
 
+      {/* Probation banner */}
+      {emp.employmentStatus === 'PROBATION' && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
+              <Calendar size={17} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-amber-900">
+                {emp.probationEndDate
+                  ? probationDays != null && probationDays >= 0
+                    ? `Probation ends in ${probationDays} day${probationDays === 1 ? '' : 's'}`
+                    : 'Probation period has ended'
+                  : 'Probation end date not set'}
+              </p>
+              {emp.probationEndDate && (
+                <p className="text-xs text-amber-700 mt-0.5">{format(new Date(emp.probationEndDate), 'd MMMM yyyy')}</p>
+              )}
+            </div>
+          </div>
+          <Can code={P.HRMS_EMPLOYEE_WRITE}>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setModal('confirm')} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors">
+                Confirm as permanent
+              </button>
+              <button onClick={() => { setExtendDate(emp.probationEndDate ?? ''); setModal('extend') }} className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-bold transition-colors">
+                Extend
+              </button>
+              <button onClick={() => setModal('notice')} className="px-3 py-1.5 rounded-lg bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition-colors">
+                Begin exit
+              </button>
+            </div>
+          </Can>
+        </div>
+      )}
+
       {/* Profile tabs */}
       <Tabs defaultValue="overview">
         <TabsList>
@@ -1228,6 +1462,7 @@ export const EmployeeDetail: React.FC = () => {
           <TabsTrigger value="work">Work</TabsTrigger>
           {canReadIdentity && <TabsTrigger value="identity">Identity</TabsTrigger>}
           {canReadBank     && <TabsTrigger value="bank">Bank</TabsTrigger>}
+          {canReadSalary   && <TabsTrigger value="salary">Salary</TabsTrigger>}
           <TabsTrigger value="education">Education</TabsTrigger>
           <TabsTrigger value="experience">Experience</TabsTrigger>
           <TabsTrigger value="dependents">Dependents</TabsTrigger>
@@ -1260,6 +1495,12 @@ export const EmployeeDetail: React.FC = () => {
             </TabsContent>
           )}
 
+          {canReadSalary && (
+            <TabsContent value="salary">
+              <SalaryTab employeeId={emp.id} companyId={emp.companyId} />
+            </TabsContent>
+          )}
+
           <TabsContent value="education">
             <EducationTab employeeId={emp.id} />
           </TabsContent>
@@ -1288,6 +1529,15 @@ export const EmployeeDetail: React.FC = () => {
           <div>
             <label className="block text-xs text-[#64748B] mb-1.5">Confirmation Date</label>
             <input type="date" value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500" />
+          </div>
+        </ActionModal>
+      )}
+
+      {modal === 'extend' && (
+        <ActionModal title="Extend Probation" description="Set a new probation end date for this employee." confirm="Extend Probation" onConfirm={handleExtend} onClose={() => setModal(null)} isLoading={extendMutation.isPending}>
+          <div>
+            <label className="block text-xs text-[#64748B] mb-1.5">New Probation End Date *</label>
+            <input type="date" value={extendDate} onChange={(e) => setExtendDate(e.target.value)} className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500" />
           </div>
         </ActionModal>
       )}

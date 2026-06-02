@@ -104,6 +104,10 @@ public class CanonicalProdSecurityConfig {
                     "/actuator/health",
                     "/actuator/info",
                     "/v1/canonical-auth/login",
+                    // Invitation + password reset flows — token IS the auth
+                    "/v1/auth/accept-invite",
+                    "/v1/auth/forgot-password",
+                    "/v1/auth/reset-password",
                     // SaaS portal: customer signup + workspace lookup (com.unifiedtree.saas)
                     "/v1/public/signup-request",
                     "/v1/public/subdomains/check",

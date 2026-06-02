@@ -29,7 +29,7 @@ public class SettingsController {
 
     // -- HR configuration ----------------------------------------------------
     @GetMapping("/hr-configuration")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN') or hasAuthority('settings.read')")
     public HrConfigResponse getHrConfig(@RequestParam UUID companyId) {
         return hrConfig.getOrDefault(companyId);
     }

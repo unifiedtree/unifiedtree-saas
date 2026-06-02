@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { Link } from 'react-router-dom'
 import { ArrowRight, Eye, EyeOff, Lock, Mail, Users } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { apiJson, AuthResponse, currentSubdomain, WorkspaceStatus } from '@/core/api/client'
@@ -22,9 +23,9 @@ export const LoginPage: React.FC = () => {
   const [searchParams] = useSearchParams()
   const loginWithCredentials = useSdkStore((state) => state.loginWithCredentials)
 
-  const [email,       setEmail]       = useState(searchParams.get('email') || '')
+  const [email,       setEmail]       = useState(searchParams.get('email') || 'admin@unifiedtree.demo')
   const [password,    setPassword]    = useState('')
-  const [workspace,   setWorkspace]   = useState(searchParams.get('tid') || searchParams.get('workspace') || '')
+  const [workspace,   setWorkspace]   = useState(searchParams.get('tid') || searchParams.get('workspace') || 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
   const [showPwd,     setShowPwd]     = useState(false)
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
@@ -193,7 +194,7 @@ export const LoginPage: React.FC = () => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Password
               </label>
-              <a href="#" className="text-xs font-semibold text-[#0F6E56] hover:underline">Forgot password?</a>
+              <Link to="/forgot-password" className="text-xs font-semibold text-[#0F6E56] hover:underline">Forgot password?</Link>
             </div>
             <div className="relative">
               <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />

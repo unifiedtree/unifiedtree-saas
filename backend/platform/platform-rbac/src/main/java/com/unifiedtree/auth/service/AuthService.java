@@ -152,6 +152,16 @@ public class AuthService {
             roleCodes, permissions);
     }
 
+    /** Issue a session for a user that just activated via invitation/password reset. */
+    @Transactional
+    public LoginResponse issueSessionForActivatedUser(UUID userId, UUID tenantId) {
+        TenantContext.setTenantId(tenantId);
+        com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+        UserCredentials creds = credentialsRepo.findById(userId)
+            .orElseThrow(() -> new BusinessRuleException("User not found", "USER_NOT_FOUND"));
+        return issueSession(creds, tenantId);
+    }
+
     @Transactional(readOnly = true)
     public MeResponse currentUser() {
         UUID userId = TenantContext.getUserId();

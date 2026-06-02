@@ -203,7 +203,7 @@ public class WorkforceController {
 
     // -- Workforce directory (employees) -------------------------------------
     @GetMapping("/employees")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER') or hasAuthority('hrms.employee.read')")
     public PageResponse<WorkforceEmployeeResponse> directory(
             @RequestParam(required = false) UUID companyId,
             @RequestParam(required = false) UUID departmentId,
@@ -216,7 +216,7 @@ public class WorkforceController {
     }
 
     @GetMapping("/employees/{id}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER') or hasAuthority('hrms.employee.read')")
     public WorkforceEmployeeResponse getEmployee(@PathVariable UUID id) {
         return employees.get(id);
     }

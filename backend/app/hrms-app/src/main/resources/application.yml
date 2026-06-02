@@ -80,11 +80,11 @@ spring:
   mail:
     host: ${SMTP_HOST:localhost}
     port: ${SMTP_PORT:1025}
-    username: ${SMTP_USERNAME:}
-    password: ${SMTP_PASSWORD:}
+    username: ${SMTP_USER:${SMTP_USERNAME:}}
+    password: ${SMTP_PASS:${SMTP_PASSWORD:}}
     properties:
       mail.smtp.auth: ${SMTP_AUTH:false}
-      mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
+      mail.smtp.starttls.enable: ${SMTP_TLS:${SMTP_STARTTLS:false}}
 
 server:
   port: ${PORT:8080}
@@ -160,6 +160,15 @@ hrms:
 
 unifiedtree:
   base-domain: ${UNIFIEDTREE_BASE_DOMAIN:unifiedtree.com}
+
+  mail:
+    # Provider selector: 'smtp' (default — Mailpit/Gmail) or 'brevo' (REST API).
+    provider: ${MAIL_PROVIDER:smtp}
+    from-email: ${MAIL_FROM_EMAIL:noreply@unifiedtree.com}
+    from-name:  ${MAIL_FROM_NAME:UnifiedTree}
+    # Base URL the invitation/reset links point at. Dev: plain localhost:3001.
+    # Prod: scheme+domain; tenant subdomain is prepended per-tenant.
+    invite-url-base: ${INVITE_URL_BASE:http://localhost:3001}
 
 app:
   pii:

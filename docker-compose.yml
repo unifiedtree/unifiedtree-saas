@@ -1,0 +1,21 @@
+# ── Local dev: Postgres only (Kafka + Redis are disabled in canonical profile) ─
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: saas-web-postgres
+    environment:
+      POSTGRES_DB: unifiedtree_hrms
+      POSTGRES_USER: unifiedtree
+      POSTGRES_PASSWORD: unifiedtree
+    ports:
+      - "5432:5432"
+    volumes:
+      - saas_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unifiedtree -d unifiedtree_hrms"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  saas_postgres_data:

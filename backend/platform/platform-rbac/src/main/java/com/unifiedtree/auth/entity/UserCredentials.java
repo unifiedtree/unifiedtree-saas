@@ -51,4 +51,7 @@ public class UserCredentials extends BaseEntity {
 
     @Column(name = "password_updated_at")
     private OffsetDateTime passwordUpdatedAt;
+
+    @Column(name = "invited_at")
+    private OffsetDateTime invitedAt;
 }
