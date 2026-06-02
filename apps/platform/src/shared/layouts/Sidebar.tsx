@@ -116,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
         </div>
         {!collapsed && (
           <div className="ml-3 overflow-hidden">
-            <span className="font-display text-base text-brand-900">Ionora</span>
+            <span className="font-display text-base text-brand-900">UnifiedTree</span>
             {tenant && (
               <div className="mt-0.5 flex items-center gap-1.5">
                 <span className={clsx('rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider', planColors[tenant.planType] ?? planColors.STARTER)}>

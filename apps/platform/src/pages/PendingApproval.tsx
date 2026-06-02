@@ -30,7 +30,7 @@ export const PendingApproval: React.FC = () => {
             aria-hidden="true"
             className="h-10 w-10 rounded-xl bg-[#0F6E56] object-contain p-1.5"
           />
-          <span className="text-2xl font-black tracking-tight text-[#0A5240]">Ionora</span>
+          <span className="text-2xl font-black tracking-tight text-[#0A5240]">UnifiedTree</span>
         </div>
         <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
           <Clock size={34} />
@@ -39,7 +39,7 @@ export const PendingApproval: React.FC = () => {
           Workspace pending approval
         </p>
         <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-950">
-          Ionora administrator approval is required.
+          UnifiedTree administrator approval is required.
         </h1>
         <p className="mt-4 text-lg leading-8 text-slate-600">
           Your workspace has been reserved, but module dashboards remain locked until the administrator approves
@@ -49,7 +49,7 @@ export const PendingApproval: React.FC = () => {
         <div className="mt-8 rounded-2xl border border-[#DCEBE8] bg-[#F7FBFA] p-5">
           <p className="text-xs font-black uppercase tracking-wide text-[#64748B]">Workspace</p>
           <p className="mt-1 text-xl font-black text-[#0A5240]">
-            {status ? `${status.subdomain}.ionora.app` : 'Loading workspace...'}
+            {status ? `${status.subdomain}.unifiedtree.com` : 'Loading workspace...'}
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>

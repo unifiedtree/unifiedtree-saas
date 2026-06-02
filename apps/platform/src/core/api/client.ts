@@ -32,7 +32,7 @@ export type WorkspaceStatus = {
 
 export function currentSubdomain() {
   const host = window.location.hostname.toLowerCase()
-  for (const suffix of ['.localhost', '.ionora.app', '.unifiedtree.com']) {
+  for (const suffix of ['.localhost', '.unifiedtree.com']) {
     if (host.endsWith(suffix)) {
       const subdomain = host.slice(0, -suffix.length)
       return subdomain.includes('.') ? '' : subdomain

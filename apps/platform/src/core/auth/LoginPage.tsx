@@ -36,7 +36,6 @@ export const LoginPage: React.FC = () => {
     if (!subdomain) return 'Workspace login'
     const host = window.location.hostname.toLowerCase()
     if (host.endsWith('.localhost')) return `${subdomain}.localhost`
-    if (host.endsWith('.ionora.app')) return `${subdomain}.ionora.app`
     return `${subdomain}.unifiedtree.com`
   }, [subdomain])
 

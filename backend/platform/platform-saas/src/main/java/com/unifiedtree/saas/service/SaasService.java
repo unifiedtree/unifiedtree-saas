@@ -64,7 +64,7 @@ public class SaasService {
             "payments", "checkout", "auth", "login", "signup", "register",
             "account", "accounts", "console", "control", "internal", "test",
             "staging", "stage", "dev", "demo", "sandbox", "preview", "vercel",
-            "railway", "root", "unifiedtree", "ionora", "webhook", "webhooks",
+            "railway", "root", "unifiedtree", "webhook", "webhooks",
             "ws", "socket", "vpn", "git", "ci", "cd", "ops", "noc", "sec");
 
     private final JdbcTemplate jdbc;

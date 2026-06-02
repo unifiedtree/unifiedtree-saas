@@ -283,7 +283,7 @@ const IntegrationsTab: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <p className="text-[#64748B] text-sm mb-4">Connect external tools and services to extend Ionora functionality.</p>
+      <p className="text-[#64748B] text-sm mb-4">Connect external tools and services to extend UnifiedTree functionality.</p>
       {integrations.map(({ key, name, desc, logo }) => (
         <div key={key} className="flex items-center justify-between p-4 bg-white border border-[#E2E8F0]/40 rounded-xl">
           <div className="flex items-center gap-4">
