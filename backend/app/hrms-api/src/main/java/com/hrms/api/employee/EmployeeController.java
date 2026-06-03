@@ -196,7 +196,19 @@ public class EmployeeController {
         if (roles == null || roles.isEmpty()) {
             return List.of();
         }
-        return roles.stream().map(Role::valueOf).toList();
+        // The canonical-prod JWT may carry workspace roles like "OWNER" that are
+        // not present in the legacy hrms Role enum. Silently skip unknowns so a
+        // single unrecognised role string does not crash the whole handler.
+        return roles.stream()
+                .map(name -> {
+                    try {
+                        return Role.valueOf(name);
+                    } catch (IllegalArgumentException ex) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     private boolean hasAnyRole(List<Role> roles, EnumSet<Role> candidates) {
