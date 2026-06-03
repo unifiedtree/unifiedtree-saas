@@ -19,9 +19,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * Letter flow integration tests — 8 tests proving template CRUD, generation,
+ * Letter flow integration tests — 10 tests proving template CRUD, generation,
  * tenant isolation, self-service access control, unresolved merge fields,
- * email invocation, and void lifecycle.
+ * email invocation, void lifecycle, HTML preview (apiText path), and PDF
+ * download (apiBlob path).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = HrmsApplication.class)
 @ActiveProfiles({"canonical", "canonical-prod"})
@@ -29,6 +30,10 @@ import static org.mockito.Mockito.*;
 @TestPropertySource(properties = {
         "spring.flyway.locations=classpath:db/canonical,classpath:db/dev-seed",
         "unifiedtree.jwt.secret=integration-test-only-jwt-secret-must-be-32-plus-chars",
+        // 32-byte base64 key so the attendance-face EmbeddingCipher bean initialises
+        // without depending on a UNIFIEDTREE_FACE_ENCRYPTION_KEY env var being present
+        "unifiedtree.face.encryption-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+        "unifiedtree.face.enabled=false",
         "spring.kafka.bootstrap-servers=",
         "hrms.kafka.enabled=false",
         "hrms.face-recognition.enabled=false",
@@ -296,5 +301,66 @@ class LetterFlowIT extends AbstractIntegrationTest {
                 .body(Map.class);
 
         assertThat(detail.get("status")).isEqualTo("VOID");
+    }
+
+    // ── 9. Template preview returns rendered HTML (frontend apiText path) ─────
+    // Confirms the preview endpoint returns text/html (not JSON), which is why the
+    // frontend must use apiText(), not apiJson() — apiJson would JSON.parse the HTML.
+    @Test @Order(9)
+    void previewTemplateReturnsRenderedHtml() {
+        assertThat(TEMPLATE_ID).as("template must be created in test 1").isNotNull();
+
+        var resp = http().post()
+                .uri("/v1/letters/templates/" + TEMPLATE_ID + "/preview")
+                .header("Authorization", "Bearer " + adminToken())
+                .header("Content-Type", "application/json")
+                .body(Map.of("employeeId", EMP_ID.toString()))
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(resp.getStatusCode().value()).as("preview → 200").isEqualTo(200);
+        assertThat(String.valueOf(resp.getHeaders().getContentType()))
+                .as("preview returns HTML")
+                .contains("text/html");
+        assertThat(resp.getBody())
+                .as("merge fields are resolved in the rendered preview")
+                .contains("Dear")
+                .doesNotContain("{{employee.firstName}}");
+    }
+
+    // ── 10. Generated-letter PDF download (frontend apiBlob path) ────────────
+    // Confirms the PDF endpoint returns application/pdf bytes at /v1/... (the path
+    // the fixed apiBlob() helper requests — no more double /api/api).
+    @Test @Order(10)
+    void downloadGeneratedLetterPdf() {
+        assertThat(TEMPLATE_ID).as("template must be created in test 1").isNotNull();
+        when(pdfRenderer.render(any())).thenReturn("PDF-BYTES".getBytes());
+
+        // Generate a fresh letter (the test-2 letter was voided in test 8).
+        Map<String, Object> genReq = new HashMap<>();
+        genReq.put("templateId", TEMPLATE_ID);
+        genReq.put("employeeId", EMP_ID.toString());
+        genReq.put("sendImmediately", false);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> letter = http().post()
+                .uri("/v1/letters/generate")
+                .header("Authorization", "Bearer " + adminToken())
+                .header("Content-Type", "application/json")
+                .body(genReq)
+                .retrieve()
+                .body(Map.class);
+        String letterId = (String) letter.get("id");
+
+        var resp = http().get()
+                .uri("/v1/letters/generated/" + letterId + "/pdf")
+                .header("Authorization", "Bearer " + adminToken())
+                .retrieve()
+                .toEntity(byte[].class);
+
+        assertThat(resp.getStatusCode().value()).as("pdf download → 200").isEqualTo(200);
+        assertThat(String.valueOf(resp.getHeaders().getContentType()))
+                .as("pdf download returns application/pdf")
+                .contains("application/pdf");
+        assertThat(resp.getBody()).as("pdf body is non-empty").isNotEmpty();
     }
 }

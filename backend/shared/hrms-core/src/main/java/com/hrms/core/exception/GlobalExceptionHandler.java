@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -68,6 +69,22 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handle(NoResourceFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of(404, "NOT_FOUND", "The requested resource was not found"));
+    }
+
+    /**
+     * Malformed request body — invalid JSON, an unknown enum value, a wrong field
+     * type, etc. This is a CLIENT error (400), not a server error: mapping it here
+     * keeps it out of 500 error-rate alerting/dashboards (otherwise the catch-all
+     * below would log it as an "Unhandled exception" and return 500).
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handle(HttpMessageNotReadableException ex) {
+        Throwable cause = ex.getMostSpecificCause();
+        String detail = cause != null ? cause.getMessage() : ex.getMessage();
+        log.warn("Malformed request body: {}", detail);
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of(400, "INVALID_REQUEST",
+                        detail != null ? detail : "Request body is malformed or contains an invalid value"));
     }
 
     @ExceptionHandler(Exception.class)

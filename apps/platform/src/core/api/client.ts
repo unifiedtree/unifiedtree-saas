@@ -41,20 +41,29 @@ export function currentSubdomain() {
   return ''
 }
 
-export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  // Token is held in-memory by the SDK — never read from localStorage
+/**
+ * Auth + tenant headers shared by every request helper.
+ * Token is held in-memory by the SDK — never read from localStorage. In dev
+ * mode (canonical profile) Spring Security doesn't parse the JWT, so
+ * TenantContext is populated via the X-Tenant-ID header instead.
+ */
+function authHeaders(): Record<string, string> {
   const token = getAccessToken()
   const tenantSubdomain = currentSubdomain()
-  // In dev mode (canonical profile) Spring Security doesn't parse the JWT, so
-  // TenantContext is populated via the X-Tenant-ID header instead.
   const tenantId = useAuthStore.getState().tenant?.id
+  return {
+    ...(tenantSubdomain ? { 'X-Tenant-Subdomain': tenantSubdomain } : {}),
+    ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
+
+export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...(tenantSubdomain ? { 'X-Tenant-Subdomain': tenantSubdomain } : {}),
-      ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...authHeaders(),
       ...(init.headers || {}),
     },
   })
@@ -68,4 +77,56 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
   }
 
   return data as T
+}
+
+/**
+ * Like {@link apiJson} but returns the raw response body as text — for endpoints
+ * that return non-JSON (e.g. the letter preview, which returns rendered HTML).
+ */
+export async function apiText(path: string, init: RequestInit = {}): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+      ...(init.headers || {}),
+    },
+  })
+
+  const text = await response.text()
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`
+    if (text) {
+      try {
+        const data = JSON.parse(text)
+        message = data?.message || data?.error || data?.detail || message
+      } catch {
+        /* non-JSON error body — keep the status message */
+      }
+    }
+    throw new Error(message)
+  }
+
+  return text
+}
+
+/**
+ * Like {@link apiJson} but returns a Blob — for binary downloads (e.g. letter PDFs).
+ * Carries the same auth + tenant headers; no JSON Content-Type is forced.
+ */
+export async function apiBlob(path: string, init: RequestInit = {}): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      ...authHeaders(),
+      ...(init.headers || {}),
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}`)
+  }
+
+  return response.blob()
 }

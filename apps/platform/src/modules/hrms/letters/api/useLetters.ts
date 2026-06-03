@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiJson } from '@/core/api/client'
+import { apiJson, apiText, apiBlob } from '@/core/api/client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -154,11 +154,10 @@ export function useMergeFieldsCatalogue() {
 export function usePreviewTemplate() {
   return useMutation({
     mutationFn: ({ templateId, employeeId, overrides }: { templateId: string; employeeId: string; overrides?: Record<string, string> }) =>
-      fetch(`${import.meta.env.VITE_API_BASE_URL ?? ''}/api/v1/letters/templates/${templateId}/preview`, {
+      apiText(`/v1/letters/templates/${templateId}/preview`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
         body: JSON.stringify({ employeeId, overrides }),
-      }).then(r => r.text()),
+      }),
   })
 }
 
@@ -228,22 +227,12 @@ export function useMyLetters(page = 0) {
 
 // ── PDF download helper ───────────────────────────────────────────────────────
 
-export function downloadLetterPdf(letterId: string, filename?: string) {
-  const token = localStorage.getItem('accessToken')
-  const base  = import.meta.env.VITE_API_BASE_URL ?? ''
-  fetch(`${base}/api/v1/letters/generated/${letterId}/pdf`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-    .then(r => {
-      if (!r.ok) throw new Error('PDF download failed')
-      return r.blob()
-    })
-    .then(blob => {
-      const url = URL.createObjectURL(blob)
-      const a   = document.createElement('a')
-      a.href    = url
-      a.download = filename ?? `letter-${letterId}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
-    })
+export async function downloadLetterPdf(letterId: string, filename?: string) {
+  const blob = await apiBlob(`/v1/letters/generated/${letterId}/pdf`)
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = filename ?? `letter-${letterId}.pdf`
+  a.click()
+  URL.revokeObjectURL(url)
 }

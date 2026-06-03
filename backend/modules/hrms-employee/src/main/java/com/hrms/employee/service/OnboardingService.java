@@ -46,13 +46,26 @@ public class OnboardingService {
 
     @Transactional(readOnly = true)
     public List<OnboardingTemplate> listTemplates(UUID companyId) {
-        return templateRepo.findByCompanyIdAndActiveTrueOrderByNameAsc(companyId);
+        // companyId is optional: when omitted, return every active template for the
+        // current tenant (RLS already scopes the query to this tenant).
+        List<OnboardingTemplate> templates = companyId != null
+                ? templateRepo.findByCompanyIdAndActiveTrueOrderByNameAsc(companyId)
+                : templateRepo.findByActiveTrueOrderByNameAsc();
+        // Initialise the lazy tasks collection inside the transaction so the
+        // controller can serialize it — open-in-view is disabled in the canonical
+        // profiles, so a lazy proxy would otherwise fail at JSON serialization.
+        templates.forEach(t -> t.getTasks().size());
+        return templates;
     }
 
     @Transactional(readOnly = true)
     public OnboardingTemplate getTemplate(UUID id) {
-        return templateRepo.findById(id)
+        OnboardingTemplate template = templateRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("OnboardingTemplate", id));
+        // Init lazy tasks inside the tx — open-in-view is disabled in the canonical
+        // profiles. Also covers updateTemplate(), which loads via this method.
+        template.getTasks().size();
+        return template;
     }
 
     @Transactional
@@ -118,6 +131,9 @@ public class OnboardingService {
 
         log.info("Created onboarding instance {} for employee {} with {} tasks",
                 instance.getId(), employeeId, tasks.size());
+        // Init lazy instanceTasks so the controller can serialize the returned
+        // entity (open-in-view disabled in the canonical profiles).
+        instance.getInstanceTasks().size();
         return instance;
     }
 
@@ -174,8 +190,13 @@ public class OnboardingService {
 
     @Transactional(readOnly = true)
     public OnboardingInstance getInstanceForEmployee(UUID employeeId) {
-        return instanceRepo.findByEmployeeIdAndStatus(employeeId, "IN_PROGRESS")
+        OnboardingInstance instance = instanceRepo.findByEmployeeIdAndStatus(employeeId, "IN_PROGRESS")
                 .orElse(null);
+        // Init lazy instanceTasks inside the tx (open-in-view disabled in prod).
+        if (instance != null) {
+            instance.getInstanceTasks().size();
+        }
+        return instance;
     }
 
     @Transactional(readOnly = true)

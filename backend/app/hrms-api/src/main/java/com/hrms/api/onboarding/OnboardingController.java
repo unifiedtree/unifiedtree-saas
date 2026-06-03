@@ -37,9 +37,9 @@ public class OnboardingController {
     // ── Templates ─────────────────────────────────────────────────────────
 
     @GetMapping("/templates")
-    @Operation(summary = "List active onboarding templates for a company")
+    @Operation(summary = "List active onboarding templates (optionally filtered by company)")
     @PreAuthorize("@perm.check('hrms.onboarding.template.read')")
-    public List<OnboardingTemplate> listTemplates(@RequestParam UUID companyId) {
+    public List<OnboardingTemplate> listTemplates(@RequestParam(required = false) UUID companyId) {
         return onboardingService.listTemplates(companyId);
     }
 

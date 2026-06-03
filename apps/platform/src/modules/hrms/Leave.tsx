@@ -174,8 +174,8 @@ function ApplyTab() {
           className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary"
         >
           <option value="FULL_DAY">Full Day</option>
-          <option value="FIRST_HALF">Half Day (Morning)</option>
-          <option value="SECOND_HALF">Half Day (Afternoon)</option>
+          <option value="HALF_DAY_MORNING">Half Day (Morning)</option>
+          <option value="HALF_DAY_AFTERNOON">Half Day (Afternoon)</option>
         </select>
       </div>
 

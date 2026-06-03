@@ -12,6 +12,9 @@ public interface OnboardingTemplateRepository extends JpaRepository<OnboardingTe
 
     List<OnboardingTemplate> findByCompanyIdAndActiveTrueOrderByNameAsc(UUID companyId);
 
+    /** All active templates for the current tenant (RLS-scoped) when no company filter is given. */
+    List<OnboardingTemplate> findByActiveTrueOrderByNameAsc();
+
     List<OnboardingTemplate> findByCompanyIdAndDesignationIdAndActiveTrueOrderByNameAsc(
             UUID companyId, UUID designationId);
 

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 
 export type LeaveApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'ESCALATED'
-export type LeaveDuration = 'FULL_DAY' | 'HALF_DAY' | 'FIRST_HALF' | 'SECOND_HALF'
+export type LeaveDuration = 'FULL_DAY' | 'HALF_DAY_MORNING' | 'HALF_DAY_AFTERNOON'
 
 export interface LeaveTypeResponse {
   id: string
@@ -123,6 +123,7 @@ export function useLeaveDecision() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'approvals'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'my'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'balances'] })
     },
   })
 }
