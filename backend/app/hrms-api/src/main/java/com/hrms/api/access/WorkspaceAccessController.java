@@ -63,5 +63,13 @@ public class WorkspaceAccessController {
         return service.inviteUser(TenantContext.getTenantId(), UUID.fromString(jwt.getSubject()), req);
     }
 
+    /** Re-send the invitation email to an invited user who lost the original. */
+    @PostMapping("/users/{userId}/invite/resend")
+    @PreAuthorize("hasAuthority('workspace.users.manage')")
+    public InvitationService.InvitationResult resendInvite(@PathVariable UUID userId,
+                                                           @AuthenticationPrincipal Jwt jwt) {
+        return service.resendInvite(TenantContext.getTenantId(), userId, UUID.fromString(jwt.getSubject()));
+    }
+
     public record AssignRoleRequest(String roleCode) {}
 }

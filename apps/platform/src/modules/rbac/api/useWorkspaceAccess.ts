@@ -87,6 +87,19 @@ export function useInviteWorkspaceUser() {
   })
 }
 
+/** Re-send the invitation email to an invited user (e.g. the original was deleted). */
+export function useResendWorkspaceInvite() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: string) =>
+      apiJson<{ sent: boolean; expiresAt: string }>(`/v1/workspace/users/${userId}/invite/resend`, {
+        method: 'POST',
+        body: '{}',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: USERS_KEY }),
+  })
+}
+
 /** Display name with email-username fallback when no employee name exists. */
 export function workspaceUserDisplayName(
   u: Pick<WorkspaceUser, 'firstName' | 'lastName' | 'email'>,

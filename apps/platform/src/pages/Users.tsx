@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Send } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Can, P } from '@unifiedtree/sdk'
 import { Badge, Avatar, EmptyState, TableSkeleton } from '@unifiedtree/ui-kit'
+import { useToast } from '@/shared/hooks/useToast'
 import {
-  useWorkspaceUsers, workspaceUserDisplayName, groupRolesByModule,
+  useWorkspaceUsers, useResendWorkspaceInvite, workspaceUserDisplayName, groupRolesByModule,
   type WorkspaceUser, type WorkspaceUserStatus,
 } from '@/modules/rbac/api/useWorkspaceAccess'
 import { ManageAccessDrawer } from './users/ManageAccessDrawer'
@@ -39,10 +40,19 @@ function RolesCell({ user }: { user: WorkspaceUser }) {
 }
 
 const UsersInner: React.FC = () => {
+  const { toast } = useToast()
   const { data: users = [], isLoading, isError } = useWorkspaceUsers()
+  const resend = useResendWorkspaceInvite()
   const [searchTerm, setSearchTerm] = useState('')
   const [inviteOpen, setInviteOpen] = useState(false)
   const [manageUser, setManageUser] = useState<WorkspaceUser | null>(null)
+
+  const handleResend = (user: WorkspaceUser) => {
+    resend.mutate(user.userId, {
+      onSuccess: () => toast(`Invitation resent to ${user.email}`, 'success'),
+      onError: (e) => toast((e as Error).message || 'Failed to resend invitation', 'error'),
+    })
+  }
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
@@ -130,12 +140,24 @@ const UsersInner: React.FC = () => {
                     <td className="px-6 py-4"><StatusBadge status={user.status} /></td>
                     <td className="px-6 py-4 text-right">
                       <Can code={P.WORKSPACE_USERS_MANAGE}>
-                        <button
-                          onClick={() => setManageUser(user)}
-                          className="px-3 py-1.5 text-xs font-bold text-[#0F6E56] hover:bg-[#0F6E56]/10 rounded-lg transition-colors"
-                        >
-                          Manage access
-                        </button>
+                        <div className="inline-flex items-center justify-end gap-1">
+                          {user.status === 'INVITED' && (
+                            <button
+                              onClick={() => handleResend(user)}
+                              disabled={resend.isPending && resend.variables === user.userId}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#0F6E56] hover:bg-[#0F6E56]/10 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              <Send size={12} />
+                              {resend.isPending && resend.variables === user.userId ? 'Sending…' : 'Resend invite'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setManageUser(user)}
+                            className="px-3 py-1.5 text-xs font-bold text-[#0F6E56] hover:bg-[#0F6E56]/10 rounded-lg transition-colors"
+                          >
+                            Manage access
+                          </button>
+                        </div>
                       </Can>
                     </td>
                   </tr>

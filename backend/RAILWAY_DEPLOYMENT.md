@@ -118,6 +118,7 @@ Set these on the Railway service running the Spring app:
 | `DB_PASSWORD`                                   |   yes    | (long random)                                  | |
 | `UNIFIEDTREE_JWT_SECRET`                        |   yes    | 32+ characters                                 | `openssl rand -base64 48` |
 | `UNIFIEDTREE_ALLOWED_ORIGINS`                   |   yes    | `https://app.unifiedtree.com`                  | Comma-separated; no `*` |
+| `INVITE_URL_BASE`                               |   yes    | `https://unifiedtree.com`                      | Base URL in invite/reset emails. WITHOUT this, links point at `localhost:3001`. Tenant subdomain is prepended automatically |
 | `UNIFIEDTREE_JWT_ISSUER`                        |    no    | `unifiedtree`                                  | |
 | `UNIFIEDTREE_JWT_ACCESS_TTL_MIN`                |    no    | `15`                                           | |
 | `UNIFIEDTREE_JWT_REFRESH_TTL_DAYS`              |    no    | `7`                                            | |

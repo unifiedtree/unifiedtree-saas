@@ -228,6 +228,28 @@ public class WorkspaceAccessService {
         }
     }
 
+    /**
+     * Re-send the invitation email to an existing, not-yet-activated workspace
+     * user — used when the original invite was lost or deleted. Invalidates the
+     * previous token and issues a fresh one. Routes to the employee-backed flow
+     * when the credential has an hrms.employees record, otherwise the
+     * credential-only flow. Refuses users who have already set a password.
+     */
+    @Transactional
+    public InvitationService.InvitationResult resendInvite(UUID tenantId, UUID userId, UUID actorId) {
+        bindTenant(tenantId);
+        UserCredentials creds = credRepo.findById(userId)
+            .orElseThrow(() -> new BusinessRuleException("User not found", "USER_NOT_FOUND"));
+        if (creds.isActive()) {
+            throw new BusinessRuleException(
+                "This user has already activated their account.", "ALREADY_ACTIVE");
+        }
+        if (creds.getEmployeeId() != null) {
+            return invitationService.resendInvitation(creds.getEmployeeId(), tenantId, actorId);
+        }
+        return invitationService.sendInviteToCredential(userId, tenantId, actorId);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private void bindTenant(UUID tenantId) {

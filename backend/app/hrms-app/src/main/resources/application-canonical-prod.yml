@@ -21,6 +21,13 @@ spring:
         default_schema: ''
 
 unifiedtree:
+  # Invitation / password-reset email links. In production these MUST point at
+  # the public frontend, never localhost. InvitationService.buildUrl prepends the
+  # tenant subdomain, e.g. https://{slug}.unifiedtree.com/accept-invite?token=...
+  # Set INVITE_URL_BASE if the platform frontend is hosted on a different domain.
+  mail:
+    invite-url-base: ${INVITE_URL_BASE:https://${UNIFIEDTREE_BASE_DOMAIN:unifiedtree.com}}
+
   security:
     rls:
       enabled: true
