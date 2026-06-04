@@ -120,9 +120,22 @@ public class AccountService {
     public WorkspaceSessionResponse createWorkspaceSession(Jwt accountJwt, UUID tenantId) {
         UUID accountId = requireAccountId(accountJwt);
         WorkspaceMembership membership = loadMembership(accountId, tenantId);
-        LoginResponse session = auth.issueWorkspaceSession(tenantId, membership.authUserId());
-        WorkspaceSummary workspace = workspaceForMembership(membership);
-        return new WorkspaceSessionResponse(session, workspace);
+
+        // Set tenant context BEFORE calling issueWorkspaceSession() so that
+        // the @Transactional proxy on AuthService obtains a connection with the
+        // correct SET LOCAL app.tenant_id already applied. Without this, the
+        // connection is leased before TenantContext is populated, RLS hides all
+        // rows, and findById returns empty → "Workspace account not found".
+        TenantContext.setTenantId(tenantId);
+        com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+        try {
+            LoginResponse session = auth.issueWorkspaceSession(tenantId, membership.authUserId());
+            WorkspaceSummary workspace = workspaceForMembership(membership);
+            return new WorkspaceSessionResponse(session, workspace);
+        } finally {
+            TenantContext.clear();
+            com.hrms.core.tenant.TenantContext.clear();
+        }
     }
 
     public WorkspaceSummary currentWorkspace(Jwt tenantJwt) {
