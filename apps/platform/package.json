@@ -9,7 +9,17 @@
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx",
     "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report",
+    "e2e:smoke": "playwright test smoke",
+    "e2e:super-admin": "playwright test --project=super-admin",
+    "e2e:hr-manager": "playwright test --project=hr-manager",
+    "e2e:dept-manager": "playwright test --project=dept-manager",
+    "e2e:finance-lead": "playwright test --project=finance-lead",
+    "e2e:employee": "playwright test --project=employee"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -38,6 +48,7 @@
     "zustand": "^4.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

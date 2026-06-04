@@ -76,7 +76,9 @@ public class WorkspaceAccessService {
     public record WorkspaceUserDto(
         UUID userId, String email, UUID employeeId,
         String firstName, String lastName, String status,
-        OffsetDateTime lastLoginAt, List<RoleDto> roles) {}
+        OffsetDateTime lastLoginAt, List<RoleDto> roles,
+        // Latest invitation email delivery state: PENDING | SENT | FAILED | null (never invited)
+        String invitationSendStatus, String lastSendError) {}
 
     public record AssignableRoleDto(
         String roleCode, String displayName, String module, boolean moduleActive) {}
@@ -94,9 +96,17 @@ public class WorkspaceAccessService {
         List<Map<String, Object>> rows = jdbc.queryForList("""
             SELECT uc.id, uc.email, uc.employee_id, uc.is_active, uc.invited_at,
                    uc.password_hash, uc.last_login_at,
-                   e.first_name, e.last_name
+                   e.first_name, e.last_name,
+                   it.send_status, it.last_send_error
               FROM auth.user_credentials uc
               LEFT JOIN hrms.employees e ON e.id = uc.employee_id
+              LEFT JOIN LATERAL (
+                  SELECT t.send_status, t.last_send_error
+                    FROM auth.invitation_tokens t
+                   WHERE t.user_id = uc.id AND t.purpose = 'INVITATION'
+                   ORDER BY t.created_at DESC
+                   LIMIT 1
+              ) it ON TRUE
              ORDER BY uc.email
             """);
 
@@ -119,7 +129,8 @@ public class WorkspaceAccessService {
             out.add(new WorkspaceUserDto(
                 userId, (String) r.get("email"), (UUID) r.get("employee_id"),
                 (String) r.get("first_name"), (String) r.get("last_name"),
-                status, toOdt(r.get("last_login_at")), roles));
+                status, toOdt(r.get("last_login_at")), roles,
+                (String) r.get("send_status"), (String) r.get("last_send_error")));
         }
         return out;
     }

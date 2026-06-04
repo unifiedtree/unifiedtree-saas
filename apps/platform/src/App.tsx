@@ -90,9 +90,14 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/settings"  element={<Settings />} />
-        <Route path="/users"     element={<Users />} />
-        <Route path="/roles"     element={<Roles />} />
-        <Route path="/audit-logs" element={<AuditLogs />} />
+        {/* Platform-admin pages. These were previously reachable by direct URL for any
+            authenticated user (the sidebar hid them by role, and the backend 403'd the
+            data fetch — so a non-admin saw a broken "failed to load" page rather than a
+            clean denial). Guard them on the same permission the page's data requires so
+            non-admins get "Access Restricted" up front. (super-admin holds all three.) */}
+        <Route path="/users"      element={<RouteGuard anyOf={[P.WORKSPACE_USERS_READ]}><Users /></RouteGuard>} />
+        <Route path="/roles"      element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE]}><Roles /></RouteGuard>} />
+        <Route path="/audit-logs" element={<RouteGuard anyOf={[P.AUDIT_READ]}><AuditLogs /></RouteGuard>} />
         <Route path="/files"     element={<Files />} />
 
         {/* Employee self-service landing */}

@@ -58,10 +58,12 @@ public class ReportService {
                     SUM(CASE WHEN e.employment_status = 'TERMINATED' THEN 1 ELSE 0 END) AS terminations,
                     ROUND(
                         COUNT(*) * 100.0 / NULLIF(
+                            -- MAX() wraps the outer column so the correlated subquery is valid
+                            -- under GROUP BY (the raw e.date_of_termination is not a grouped column).
                             (SELECT COUNT(*) FROM hrms.employees
                              WHERE company_id = e.company_id
-                               AND date_of_joining <= e.date_of_termination
-                               AND (date_of_termination IS NULL OR date_of_termination > e.date_of_termination)
+                               AND date_of_joining <= MAX(e.date_of_termination)
+                               AND (date_of_termination IS NULL OR date_of_termination > MAX(e.date_of_termination))
                             ), 0
                         ), 2
                     )                                                    AS attrition_pct
@@ -85,11 +87,11 @@ public class ReportService {
                     d.name                                               AS department,
                     COUNT(ar.id)                                         AS present_days,
                     SUM(CASE WHEN ar.attendance_status = 'LATE' THEN 1 ELSE 0 END) AS late_days,
-                    ROUND(AVG(ar.working_hours)::numeric, 2)             AS avg_hours,
+                    ROUND(AVG(ar.work_hours)::numeric, 2)                AS avg_hours,
                     SUM(ar.overtime_minutes)                             AS total_overtime_mins
                 FROM hrms.employees e
                 LEFT JOIN hrms.departments d ON d.id = e.department_id
-                LEFT JOIN hrms.attendance_records ar
+                LEFT JOIN attendance.records ar
                     ON ar.employee_id = e.id
                    AND ar.attendance_date BETWEEN ? AND ?
                 WHERE e.company_id = ?
@@ -115,9 +117,9 @@ public class ReportService {
                     lb.pending,
                     lb.carry_forward,
                     (lb.total_entitlement + lb.carry_forward - lb.used - lb.pending) AS available
-                FROM hrms.leave_balances lb
+                FROM leave_mgmt.leave_balances lb
                 JOIN hrms.employees e  ON e.id = lb.employee_id
-                JOIN hrms.leave_types lt ON lt.id = lb.leave_type_id
+                JOIN leave_mgmt.leave_types lt ON lt.id = lb.leave_type_id
                 LEFT JOIN hrms.departments d ON d.id = e.department_id
                 WHERE e.company_id = ?
                   AND lb.year = ?
@@ -139,7 +141,7 @@ public class ReportService {
                     ar.attendance_date,
                     ar.late_by_minutes,
                     ar.check_in_at
-                FROM hrms.attendance_records ar
+                FROM attendance.records ar
                 JOIN hrms.employees e ON e.id = ar.employee_id
                 LEFT JOIN hrms.departments d ON d.id = e.department_id
                 WHERE e.company_id = ?

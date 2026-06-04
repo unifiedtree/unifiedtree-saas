@@ -80,7 +80,11 @@ export function Field({ label, required, hint, error, children, className }: Fie
   const child = React.cloneElement(children, {
     id,
     'aria-describedby': describedBy,
-    invalid: !!error,
+    // Use the standard aria attribute, and only pass `invalid` when true so a
+    // literal `invalid={false}` never reaches a native DOM element (React warns
+    // about non-boolean attributes). ui-kit inputs read `invalid` for styling.
+    'aria-invalid': error ? true : undefined,
+    invalid: error ? true : undefined,
     ...children.props,
   } as React.HTMLAttributes<HTMLElement>);
 

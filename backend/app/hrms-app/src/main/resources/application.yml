@@ -85,6 +85,11 @@ spring:
     properties:
       mail.smtp.auth: ${SMTP_AUTH:false}
       mail.smtp.starttls.enable: ${SMTP_TLS:${SMTP_STARTTLS:false}}
+      # Bound every stage of the SMTP exchange so an unreachable/unresponsive mail
+      # server fails fast (≈8s) instead of hanging on the OS socket default (30s+).
+      mail.smtp.connectiontimeout: ${SMTP_CONNECTION_TIMEOUT:8000}
+      mail.smtp.timeout: ${SMTP_READ_TIMEOUT:8000}
+      mail.smtp.writetimeout: ${SMTP_WRITE_TIMEOUT:8000}
 
 server:
   port: ${PORT:8080}

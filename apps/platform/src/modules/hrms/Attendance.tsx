@@ -114,8 +114,10 @@ function PunchWidget() {
                 await checkIn.mutateAsync({ checkInMethod: 'WEB', ...geo })
                 toast('Checked in successfully', 'success')
               }
-            } catch {
-              toast('Failed to punch attendance', 'error')
+            } catch (err) {
+              // Surface the backend's actual message (e.g. "Already checked in
+              // today") instead of a generic failure.
+              toast((err as Error)?.message || 'Failed to punch attendance', 'error')
             }
           }}
           disabled={isPending}

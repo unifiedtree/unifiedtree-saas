@@ -178,10 +178,12 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
         })
         if (!isEdit && sendInvitation && canInvite) {
           try {
+            // The invite endpoint returns as soon as the token is created; the email
+            // is sent asynchronously (best-effort), so this no longer blocks on SMTP.
             await sendInvite(result.id)
-            toast(`Employee created and invitation sent to ${result.email}`, 'success')
+            toast(`Employee created. Invitation email queued for ${result.email}.`, 'success')
           } catch {
-            toast('Employee created (invitation email failed — resend from their profile)', 'warning')
+            toast('Employee created (could not queue invitation — resend from Users & Access)', 'warning')
           }
         } else {
           toast('Employee created', 'success')
@@ -302,9 +304,16 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               </Field>
               <Field label="Branch">
                 <Sel value={form.branchId} onChange={(e) => set('branchId', e.target.value)}>
-                  <option value="">Select branch</option>
+                  <option value="">
+                    {branches.length === 0 ? 'No branches configured — set up in Organization' : 'Select branch'}
+                  </option>
                   {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </Sel>
+                {branches.length === 0 && (
+                  <p className="mt-1 text-xs text-slate-600">
+                    Add branches under <a href="/hrms/organization" className="text-[#0F6E56] hover:underline">Organization → Branches</a>
+                  </p>
+                )}
               </Field>
               <Field label="Employment Type">
                 {employmentTypes.length > 0 ? (
@@ -315,13 +324,18 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     ))}
                   </Sel>
                 ) : (
-                  <Sel value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)}>
-                    <option value="FULL_TIME">Full Time</option>
-                    <option value="PART_TIME">Part Time</option>
-                    <option value="CONTRACT">Contract</option>
-                    <option value="INTERN">Intern</option>
-                    <option value="APPRENTICE">Apprentice</option>
-                  </Sel>
+                  <>
+                    <Sel value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)}>
+                      <option value="FULL_TIME">Full Time</option>
+                      <option value="PART_TIME">Part Time</option>
+                      <option value="CONTRACT">Contract</option>
+                      <option value="INTERN">Intern</option>
+                      <option value="CONSULTANT">Consultant</option>
+                    </Sel>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Using defaults — add custom types under <a href="/hrms/organization" className="text-[#0F6E56] hover:underline">Organization → Employment Types</a>
+                    </p>
+                  </>
                 )}
               </Field>
               <Field label="Grade">

@@ -13,7 +13,7 @@ const INDIAN_DEFAULTS = [
   {
     name: 'Privilege Leave',
     code: 'PL',
-    category: 'PRIVILEGE',
+    category: 'EARNED',
     annualEntitlement: 18,
     maxConsecutiveDays: 15,
     isCarryForwardAllowed: true,
@@ -118,14 +118,15 @@ function AddDrawer({ companyId, onClose }: AddDrawerProps) {
                 onChange={(e) => set('category', e.target.value)}
                 className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500 transition-colors"
               >
-                <option value="PRIVILEGE">Privilege</option>
+                <option value="EARNED">Earned / Privilege</option>
                 <option value="SICK">Sick</option>
                 <option value="CASUAL">Casual</option>
                 <option value="MATERNITY">Maternity</option>
                 <option value="PATERNITY">Paternity</option>
                 <option value="COMPENSATORY">Compensatory</option>
                 <option value="BEREAVEMENT">Bereavement</option>
-                <option value="OTHER">Other</option>
+                <option value="UNPAID">Unpaid</option>
+                <option value="STUDY">Study</option>
               </select>
             </div>
           </div>

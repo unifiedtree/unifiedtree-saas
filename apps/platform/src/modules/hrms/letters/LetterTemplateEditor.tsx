@@ -7,6 +7,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { useToast } from '@/shared/hooks/useToast'
+import { useCompanies } from '@/modules/hrms/api/useOrg'
 import { CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import {
   useLetterTemplate,
@@ -289,6 +290,7 @@ export const LetterTemplateEditor: React.FC = () => {
   const isNew = id === 'new'
 
   const { data: existing, isLoading, error } = useLetterTemplate(isNew ? '' : (id ?? ''))
+  const { data: companies = [] } = useCompanies()
   const createMut = useCreateTemplate()
   const updateMut = useUpdateTemplate(isNew ? '' : (id ?? ''))
 
@@ -300,7 +302,9 @@ export const LetterTemplateEditor: React.FC = () => {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      // StarterKit ships its own Link; disable it so our configured Link below
+      // isn't a duplicate (TipTap warns on duplicate extension names).
+      StarterKit.configure({ link: false }),
       Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: 'Start writing the letter body…' }),
     ],
@@ -329,7 +333,13 @@ export const LetterTemplateEditor: React.FC = () => {
     const bodyHtml = editor?.getHTML() ?? ''
     try {
       if (isNew) {
-        const created = await createMut.mutateAsync({ name: name.trim(), type, subject: subject.trim(), bodyHtml, active: true })
+        const companyId = companies[0]?.id
+        if (!companyId) {
+          toast('Create a company first (Organization → Companies)', 'error')
+          setSaving(false)
+          return
+        }
+        const created = await createMut.mutateAsync({ companyId, name: name.trim(), type, subject: subject.trim(), bodyHtml, active: true })
         toast('Template created', 'success')
         setSavedId(created.id)
         navigate('/hrms/letters/templates', { replace: true })

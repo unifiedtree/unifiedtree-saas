@@ -1,0 +1,9 @@
+# Playwright
+/test-results/
+/playwright-report/
+/e2e/.auth/*.json
+/blob-report/
+/playwright/.cache/
+
+# Dark-theme audit artifacts (screenshots)
+/audit-screenshots/

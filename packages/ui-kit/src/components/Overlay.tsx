@@ -72,20 +72,16 @@ export function Modal({
                   className,
                 )}
               >
-                {(title || description) && (
-                  <div className="mb-4">
-                    {title && (
-                      <Dialog.Title className="text-base font-semibold text-[var(--text-primary)]">
-                        {title}
-                      </Dialog.Title>
-                    )}
-                    {description && (
-                      <Dialog.Description className="mt-1 text-sm text-[var(--text-tertiary)]">
-                        {description}
-                      </Dialog.Description>
-                    )}
-                  </div>
-                )}
+                {/* Title + Description always render (sr-only when absent) so
+                    Radix never warns about a missing accessible name/description. */}
+                <div className={cn(title || description ? 'mb-4' : '')}>
+                  <Dialog.Title className={cn('text-base font-semibold text-[var(--text-primary)]', !title && 'sr-only')}>
+                    {title ?? 'Dialog'}
+                  </Dialog.Title>
+                  <Dialog.Description className={cn('mt-1 text-sm text-[var(--text-tertiary)]', !description && 'sr-only')}>
+                    {description ?? title ?? 'Dialog content'}
+                  </Dialog.Description>
+                </div>
                 {children}
                 <Dialog.Close className="absolute right-4 top-4 rounded-md p-1 text-[var(--text-tertiary)] hover:bg-[var(--interactive-ghost-hover)] hover:text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]">
                   <X size={16} aria-hidden="true" />
@@ -138,11 +134,10 @@ export function Drawer({ open, onOpenChange, title, children, className }: Drawe
                 )}
               >
                 <div className="flex items-center justify-between border-b border-[var(--border-default)] px-6 py-4">
-                  {title && (
-                    <Dialog.Title className="text-base font-semibold text-[var(--text-primary)]">
-                      {title}
-                    </Dialog.Title>
-                  )}
+                  <Dialog.Title className={cn('text-base font-semibold text-[var(--text-primary)]', !title && 'sr-only')}>
+                    {title ?? 'Panel'}
+                  </Dialog.Title>
+                  <Dialog.Description className="sr-only">{title ?? 'Panel content'}</Dialog.Description>
                   <Dialog.Close className="rounded-md p-1 text-[var(--text-tertiary)] hover:bg-[var(--interactive-ghost-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]">
                     <X size={16} />
                     <span className="sr-only">Close</span>

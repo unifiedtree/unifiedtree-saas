@@ -115,7 +115,7 @@ const workSchema = z.object({
   designationId:      z.string().optional(),
   branchId:           z.string().optional(),
   reportingManagerId: z.string().optional(),
-  employmentType:     z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'APPRENTICE']).optional(),
+  employmentType:     z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT']).optional(),
   ctcAnnual:          z.coerce.number().positive().optional(),
 })
 

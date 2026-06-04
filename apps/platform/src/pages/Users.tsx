@@ -141,16 +141,26 @@ const UsersInner: React.FC = () => {
                     <td className="px-6 py-4 text-right">
                       <Can code={P.WORKSPACE_USERS_MANAGE}>
                         <div className="inline-flex items-center justify-end gap-1">
-                          {user.status === 'INVITED' && (
-                            <button
-                              onClick={() => handleResend(user)}
-                              disabled={resend.isPending && resend.variables === user.userId}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#0F6E56] hover:bg-[#0F6E56]/10 rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              <Send size={12} />
-                              {resend.isPending && resend.variables === user.userId ? 'Sending…' : 'Resend invite'}
-                            </button>
-                          )}
+                          {user.status === 'INVITED' && (() => {
+                            const sending = resend.isPending && resend.variables === user.userId
+                            const failed = user.invitationSendStatus === 'FAILED'
+                            const queued = user.invitationSendStatus === 'PENDING'
+                            const label = sending || queued ? 'Sending…' : failed ? 'Retry invitation' : 'Resend invitation'
+                            return (
+                              <button
+                                onClick={() => handleResend(user)}
+                                disabled={sending || queued}
+                                title={failed && user.lastSendError ? user.lastSendError : undefined}
+                                className={clsx(
+                                  'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors disabled:opacity-50',
+                                  failed ? 'text-rose-600 hover:bg-rose-50' : 'text-[#0F6E56] hover:bg-[#0F6E56]/10',
+                                )}
+                              >
+                                <Send size={12} />
+                                {label}
+                              </button>
+                            )
+                          })()}
                           <button
                             onClick={() => setManageUser(user)}
                             className="px-3 py-1.5 text-xs font-bold text-[#0F6E56] hover:bg-[#0F6E56]/10 rounded-lg transition-colors"

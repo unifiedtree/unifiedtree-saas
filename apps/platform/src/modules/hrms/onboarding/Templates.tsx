@@ -9,19 +9,31 @@ import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
 import { useTemplates, useCreateTemplate } from './api/useOnboarding'
 import type { OnboardingTemplate } from './api/useOnboarding'
+import { useCompanies } from '../api/useOrg'
 
 // ── Create drawer ──────────────────────────────────────────────────────────────
 
 function CreateTemplateDrawer({ onClose }: { onClose: () => void }) {
   const create = useCreateTemplate()
+  const { data: companies = [] } = useCompanies()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [companyId, setCompanyId] = useState('')
+
+  // Default to the first company once the list loads (auto-picks when there's only one).
+  React.useEffect(() => {
+    if (!companyId && companies.length) setCompanyId(companies[0].id)
+  }, [companies, companyId])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
+    if (!companyId) {
+      toast.error('Create a company first (Organization → Companies)')
+      return
+    }
     create.mutate(
-      { name: name.trim(), description: description.trim() || undefined, active: true },
+      { companyId, name: name.trim(), description: description.trim() || undefined, active: true },
       {
         onSuccess: () => {
           toast.success('Template created')
@@ -35,6 +47,20 @@ function CreateTemplateDrawer({ onClose }: { onClose: () => void }) {
   return (
     <Drawer open onOpenChange={(open) => { if (!open) onClose() }} title="Create onboarding template">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {companies.length > 1 && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+              Company *
+            </label>
+            <select
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              className="w-full rounded-lg border border-border-default bg-bg-base px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-default/40"
+            >
+              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
         <div className="space-y-1">
           <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
             Template name *

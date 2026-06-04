@@ -9,9 +9,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -85,6 +88,35 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.of(400, "INVALID_REQUEST",
                         detail != null ? detail : "Request body is malformed or contains an invalid value"));
+    }
+
+    /**
+     * A required query/form parameter is absent, or a parameter can't be converted to
+     * its target type (e.g. a malformed UUID). Both are CLIENT errors (400) — without
+     * these handlers they fall through to the catch-all below and surface as 500s,
+     * polluting server-error alerting. (This gap previously turned a missing/required
+     * `companyId` on GET /v1/onboarding/templates into a 500.)
+     */
+    @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ErrorResponse> handleBadRequestParam(Exception ex) {
+        log.warn("Bad request parameter: {}", ex.getMessage());
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of(400, "INVALID_PARAMETER",
+                        ex.getMessage() != null ? ex.getMessage() : "A request parameter is missing or invalid"));
+    }
+
+    /**
+     * Wrong HTTP method for an existing path (e.g. POST to a GET-only endpoint). This is a
+     * CLIENT error (405), not a server error — without this it falls through to the catch-all
+     * below and surfaces as a 500, polluting error-rate alerting. (This gap turned a POST to
+     * the GET-only /v1/rbac/roles into a 500.)
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handle(HttpRequestMethodNotSupportedException ex) {
+        log.warn("Method not allowed: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ErrorResponse.of(405, "METHOD_NOT_ALLOWED",
+                        ex.getMessage() != null ? ex.getMessage() : "HTTP method not supported for this endpoint"));
     }
 
     @ExceptionHandler(Exception.class)

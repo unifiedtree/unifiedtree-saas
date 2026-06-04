@@ -11,14 +11,14 @@ import com.unifiedtree.rbac.entity.UserRole;
 import com.unifiedtree.rbac.repository.RoleRepository;
 import com.unifiedtree.rbac.repository.UserRoleRepository;
 import com.unifiedtree.security.tenant.TenantContext;
-import com.hrms.api.mail.EmailMessage;
-import com.hrms.api.mail.MailService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -41,7 +41,7 @@ public class InvitationService {
     private final InvitationTokenRepository tokenRepo;
     private final PasswordService passwordService;
     private final AuthService canonicalAuthService;
-    private final MailService mailService;
+    private final InvitationEmailSender emailSender;
     private final JdbcTemplate jdbc;
 
     @Value("${unifiedtree.mail.invite-url-base:${unifiedtree.invitation.platform-base-url:http://localhost:3001}}")
@@ -53,7 +53,7 @@ public class InvitationService {
                              InvitationTokenRepository tokenRepo,
                              PasswordService passwordService,
                              AuthService canonicalAuthService,
-                             MailService mailService,
+                             InvitationEmailSender emailSender,
                              JdbcTemplate jdbc) {
         this.credRepo            = credRepo;
         this.userRoleRepo        = userRoleRepo;
@@ -61,7 +61,7 @@ public class InvitationService {
         this.tokenRepo           = tokenRepo;
         this.passwordService     = passwordService;
         this.canonicalAuthService = canonicalAuthService;
-        this.mailService         = mailService;
+        this.emailSender         = emailSender;
         this.jdbc                = jdbc;
     }
 
@@ -138,11 +138,12 @@ public class InvitationService {
         // Build invite URL: uses tenantSlug.localhost:3001 for dev, tenantSlug.unifiedtree.com for prod
         String inviteUrl = buildUrl(tenantSlug, "/accept-invite?token=" + rawToken);
 
-        // Send email
-        sendEmail(email, "Welcome to " + tenantName,
+        // Queue the invite email (async, best-effort) once this tx commits — a slow or
+        // unreachable SMTP server must never block the request or roll back the token.
+        queueInviteEmail(token.getId(), tenantId, email, "Welcome to " + tenantName,
             inviteHtml(firstName, tenantName, inviteUrl));
 
-        log.info("Invitation sent to {} (employee {})", email, employeeId);
+        log.info("Invitation queued for {} (employee {})", email, employeeId);
         return new InvitationResult(true, expiresAt);
     }
 
@@ -188,10 +189,10 @@ public class InvitationService {
         tokenRepo.save(token);
 
         String inviteUrl = buildUrl(tenantSlug, "/accept-invite?token=" + rawToken);
-        sendEmail(creds.getEmail(), "Welcome to " + tenantName,
+        queueInviteEmail(token.getId(), tenantId, creds.getEmail(), "Welcome to " + tenantName,
             inviteHtml(firstName, tenantName, inviteUrl));
 
-        log.info("Workspace invite sent to {} (no employee record)", creds.getEmail());
+        log.info("Workspace invite queued for {} (no employee record)", creds.getEmail());
         return new InvitationResult(true, expiresAt);
     }
 
@@ -285,8 +286,9 @@ public class InvitationService {
             String tenantSlug = loadTenantSlug(resolvedTenant);
             String resetUrl   = buildUrl(tenantSlug, "/reset-password?token=" + rawToken);
 
-            sendEmail(email, "Reset your UnifiedTree password", resetHtml(resetUrl));
-            log.info("Password reset email sent to {}", email);
+            queueInviteEmail(token.getId(), resolvedTenant, email,
+                "Reset your UnifiedTree password", resetHtml(resetUrl));
+            log.info("Password reset email queued for {}", email);
         });
     }
 
@@ -411,8 +413,22 @@ public class InvitationService {
         return "https://" + tenantSlug + "." + platformBaseUrl.replaceFirst("https?://", "") + path;
     }
 
-    private void sendEmail(String to, String subject, String bodyHtml) {
-        mailService.send(EmailMessage.simple(to, subject, bodyHtml));
+    /**
+     * Hand the email to the async sender AFTER the current transaction commits, so
+     * (a) the token row is durably visible to the status-update tx and (b) the email
+     * is never sent for a token that ends up rolled back. Falls back to an immediate
+     * (still off-request-thread) send when there is no active transaction.
+     */
+    private void queueInviteEmail(UUID tokenId, UUID tenantId, String to, String subject, String bodyHtml) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() {
+                    emailSender.sendAndTrack(tokenId, tenantId, to, subject, bodyHtml);
+                }
+            });
+        } else {
+            emailSender.sendAndTrack(tokenId, tenantId, to, subject, bodyHtml);
+        }
     }
 
     private static String randomToken() {

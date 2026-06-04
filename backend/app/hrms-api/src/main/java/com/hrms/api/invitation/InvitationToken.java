@@ -43,6 +43,16 @@ public class InvitationToken {
     @Column(name = "created_by")
     private UUID createdBy;
 
+    /** Async email delivery tracking: PENDING (queued) → SENT | FAILED. */
+    @Column(name = "send_status", nullable = false, length = 20)
+    private String sendStatus = "PENDING";
+
+    @Column(name = "send_attempted_at")
+    private OffsetDateTime sendAttemptedAt;
+
+    @Column(name = "last_send_error", columnDefinition = "TEXT")
+    private String lastSendError;
+
     public boolean isExpired() {
         return OffsetDateTime.now().isAfter(expiresAt);
     }

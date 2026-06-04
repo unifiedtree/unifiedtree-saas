@@ -9,6 +9,8 @@ export interface WorkspaceRole {
   module: string         // 'hrms' | 'crm' | 'accounts' | 'core' | ...
 }
 
+export type InvitationSendStatus = 'PENDING' | 'SENT' | 'FAILED'
+
 export interface WorkspaceUser {
   userId: string
   email: string
@@ -18,6 +20,10 @@ export interface WorkspaceUser {
   status: WorkspaceUserStatus
   lastLoginAt: string | null
   roles: WorkspaceRole[]
+  // Latest invitation email delivery state (null = never invited). The email is
+  // sent asynchronously, so this reflects PENDING (queued) → SENT | FAILED.
+  invitationSendStatus: InvitationSendStatus | null
+  lastSendError: string | null
 }
 
 export interface AssignableRole {

@@ -21,4 +21,22 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * Dedicated pool for sending invitation / password-reset emails out of band,
+     * so a slow or unreachable SMTP server never blocks the request thread. Drains
+     * in-flight sends on shutdown so a queued invite isn't silently dropped.
+     */
+    @Bean(name = "invitationEmailExecutor")
+    public Executor invitationEmailExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(5);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("invite-email-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
+    }
 }
