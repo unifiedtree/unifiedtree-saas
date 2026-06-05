@@ -11,6 +11,8 @@ import com.hrms.attendance.service.AttendanceService;
 import com.hrms.attendance.service.GeoValidationService;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.tenant.entity.Department;
+import com.hrms.tenant.repository.DepartmentRepository;
 import com.hrms.core.tenant.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -33,33 +35,48 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Geofence + face-recognition attendance endpoints excluded from canonical Phase 1.
- * Target market (services/SaaS SMBs) doesn't require location/biometric verification.
- * Legacy implementation preserved here for re-enable when a customer with
- * factory/field-sales requirements arrives.
+ * Geofence + face-recognition attendance endpoints.
  *
- * Loaded only when the "canonical" Spring profile is NOT active.
+ * <p>Originally excluded from canonical Phase 1 (services/SaaS SMBs), these
+ * handlers are now re-enabled on canonical-prod so the Attendance App's
+ * Geofencing Map (Screen 9) and Find Others (Screen 10) work end-to-end.
+ *
+ * <p>Profile semantics — loads when EITHER:
+ * <ul>
+ *   <li>the "canonical" profile is NOT active (original legacy/dev behavior), OR</li>
+ *   <li>the "canonical-prod" profile IS active (production Railway deploy).</li>
+ * </ul>
+ *
+ * <p>Note: if {@code canonical-jdbc-api} profile is ever activated alongside
+ * {@code canonical-prod}, {@link com.unifiedtree.attendance.api.CanonicalAttendanceController}
+ * will also try to register {@code POST /v1/attendance/geo-fence/check} and
+ * Spring will fail at startup with a duplicate-mapping error. The current
+ * production profile set ({@code canonical,canonical-prod}) does NOT activate
+ * canonical-jdbc-api, so there is no conflict today.
  */
 @RestController
 @RequestMapping("/v1/attendance")
-@Tag(name = "Attendance (Legacy Extras)", description = "Geofence and face-recognition endpoints — legacy profile only")
+@Tag(name = "Attendance (Geofence + Face)", description = "Geofence zones, live locations, face-recognition check-in")
 @SecurityRequirement(name = "bearerAuth")
-@Profile("!canonical")
+@Profile({"!canonical", "canonical-prod"})
 public class LegacyAttendanceExtrasController {
 
     private final AttendanceService attendanceService;
     private final GeoValidationService geoValidationService;
     private final AttendanceContextResolver contextResolver;
     private final EmployeeRepository employeeRepository;
+    private final DepartmentRepository departmentRepository;
 
     public LegacyAttendanceExtrasController(AttendanceService attendanceService,
                                             GeoValidationService geoValidationService,
                                             AttendanceContextResolver contextResolver,
-                                            EmployeeRepository employeeRepository) {
+                                            EmployeeRepository employeeRepository,
+                                            DepartmentRepository departmentRepository) {
         this.attendanceService = attendanceService;
         this.geoValidationService = geoValidationService;
         this.contextResolver = contextResolver;
         this.employeeRepository = employeeRepository;
+        this.departmentRepository = departmentRepository;
     }
 
     @Operation(summary = "Check if employee is within office geofence")
@@ -108,13 +125,24 @@ public class LegacyAttendanceExtrasController {
         List<Employee> employees = scopedEmployees(jwt, departmentId);
         Map<UUID, Employee> employeeMap = employees.stream()
                 .collect(Collectors.toMap(Employee::getId, e -> e));
+
+        // Pre-load department names for the caller's company in one query so the
+        // Find Others panel can show "Engineering" / "Sales" labels without
+        // forcing the client to do a second round-trip. Falls back gracefully
+        // when an employee has no departmentId.
+        UUID companyId = contextResolver.resolve(extractEmployeeId(jwt)).companyId();
+        Map<UUID, String> deptNames = departmentRepository.findByCompanyId(companyId).stream()
+                .collect(Collectors.toMap(Department::getId, Department::getName, (a, b) -> a));
+
         return ResponseEntity.ok(attendanceService.getActiveSessions(
                         employees.stream().map(Employee::getId).toList(), LocalDate.now())
                 .stream()
                 .map(record -> {
                     Employee emp = employeeMap.get(record.getEmployeeId());
+                    UUID deptId = emp != null ? emp.getDepartmentId() : null;
                     return new LiveLocationResponse(
                             record.getEmployeeId(),
+                            emp != null ? emp.getEmployeeCode() : null,
                             emp != null ? (emp.getFirstName() + " " + emp.getLastName()).trim() : null,
                             emp != null ? emp.getJobTitle() : null,
                             emp != null ? emp.getProfilePhotoUrl() : null,
@@ -122,6 +150,9 @@ public class LegacyAttendanceExtrasController {
                             record.getCheckInLongitude(),
                             record.getLocationName(),
                             record.getCheckInZoneName(),
+                            deptId,
+                            deptId != null ? deptNames.get(deptId) : null,
+                            emp != null ? emp.getBranchId() : null,
                             record.getCheckInAt(),
                             true);
                 })
