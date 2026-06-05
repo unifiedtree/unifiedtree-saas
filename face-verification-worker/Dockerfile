@@ -15,8 +15,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
-# Operators bind-mount models or COPY them in via a derived image.
-# COPY models ./models
+# Download ONNX models directly into the image for Railway deployment
+RUN mkdir -p /worker/models && \
+    apt-get update && apt-get install -y curl && \
+    curl -L -o /worker/models/face_detection_yunet_2023mar.onnx https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx && \
+    curl -L -o /worker/models/face_recognition_sface_2021dec.onnx https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 8091
 ENV FACE_MODEL_DIR=/worker/models
