@@ -27,4 +27,4 @@ ENV FACE_MODEL_DIR=/worker/models
 ENV LOG_LEVEL=INFO
 
 # Workers default to 1 to keep cold-start memory low; tune via env.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8091", "--workers", "1"]
+CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8091} --workers 1"
