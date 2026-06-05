@@ -9,6 +9,9 @@ import java.util.UUID;
 public record CorrectionRequestResponse(
         UUID id,
         UUID employeeId,
+        String employeeName,
+        String employeeCode,
+        String departmentName,
         UUID attendanceRecordId,
         LocalDate requestedDate,
         Instant requestedCheckInAt,

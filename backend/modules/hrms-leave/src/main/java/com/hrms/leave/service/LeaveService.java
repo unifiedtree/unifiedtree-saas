@@ -170,6 +170,9 @@ public class LeaveService {
         return new LeaveRequestResponse(
                 response.id(),
                 response.employeeId(),
+                response.employeeName(),
+                response.employeeCode(),
+                response.departmentName(),
                 response.leaveTypeId(),
                 leaveType.getName(),
                 response.startDate(),
@@ -258,6 +261,9 @@ public class LeaveService {
         return new LeaveRequestResponse(
                 response.id(),
                 response.employeeId(),
+                response.employeeName(),
+                response.employeeCode(),
+                response.departmentName(),
                 response.leaveTypeId(),
                 leaveTypeName,
                 response.startDate(),
@@ -544,6 +550,9 @@ public class LeaveService {
         return new LeaveRequestResponse(
                 base.id(),
                 base.employeeId(),
+                base.employeeName(),
+                base.employeeCode(),
+                base.departmentName(),
                 base.leaveTypeId(),
                 leaveTypeName,
                 base.startDate(),

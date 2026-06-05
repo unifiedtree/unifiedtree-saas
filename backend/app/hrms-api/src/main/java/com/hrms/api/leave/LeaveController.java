@@ -12,6 +12,7 @@ import com.hrms.leave.service.LeaveService;
 import com.hrms.leave.service.LeaveTypeService;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,8 +26,12 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/v1/leave")
@@ -37,13 +42,16 @@ public class LeaveController {
     private final LeaveService leaveService;
     private final LeaveTypeService leaveTypeService;
     private final EmployeeRepository employeeRepository;
+    private final WorkforceDepartmentRepository departmentRepository;
 
     public LeaveController(LeaveService leaveService,
                            LeaveTypeService leaveTypeService,
-                           EmployeeRepository employeeRepository) {
+                           EmployeeRepository employeeRepository,
+                           WorkforceDepartmentRepository departmentRepository) {
         this.leaveService = leaveService;
         this.leaveTypeService = leaveTypeService;
         this.employeeRepository = employeeRepository;
+        this.departmentRepository = departmentRepository;
     }
 
     // ─── Employee self-service ───────────────────────────────────────────────
@@ -118,7 +126,8 @@ public class LeaveController {
     public ResponseEntity<PageResponse<LeaveRequestResponse>> pendingApprovals(
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(leaveService.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable));
+        return ResponseEntity.ok(enrichPage(
+                leaveService.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable)));
     }
 
     @Operation(summary = "L1 manager approval — approve escalates to HR, reject closes")
@@ -128,7 +137,7 @@ public class LeaveController {
             @PathVariable UUID requestId,
             @Valid @RequestBody LeaveApprovalRequest approval,
             @AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(leaveService.approveL1(requestId, extractEmployeeId(jwt), approval));
+        return ResponseEntity.ok(enrichOne(leaveService.approveL1(requestId, extractEmployeeId(jwt), approval)));
     }
 
     // ─── L2 HR approval ─────────────────────────────────────────────────────
@@ -138,7 +147,7 @@ public class LeaveController {
     @PreAuthorize("@perm.check('hrms.leave.approve.l2')")
     public ResponseEntity<PageResponse<LeaveRequestResponse>> pendingL2Approvals(
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(leaveService.getPendingL2Approvals(pageable));
+        return ResponseEntity.ok(enrichPage(leaveService.getPendingL2Approvals(pageable)));
     }
 
     @Operation(summary = "L2 HR final approval or rejection")
@@ -148,7 +157,7 @@ public class LeaveController {
             @PathVariable UUID requestId,
             @Valid @RequestBody LeaveApprovalRequest approval,
             @AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(leaveService.approveL2(requestId, extractEmployeeId(jwt), approval));
+        return ResponseEntity.ok(enrichOne(leaveService.approveL2(requestId, extractEmployeeId(jwt), approval)));
     }
 
     @Operation(summary = "Approve or reject a leave request (legacy single-step)")
@@ -158,7 +167,7 @@ public class LeaveController {
             @PathVariable UUID requestId,
             @Valid @RequestBody LeaveApprovalRequest approval,
             @AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(leaveService.approveLeave(requestId, extractEmployeeId(jwt), approval));
+        return ResponseEntity.ok(enrichOne(leaveService.approveLeave(requestId, extractEmployeeId(jwt), approval)));
     }
 
     // ─── Leave type admin ────────────────────────────────────────────────────
@@ -178,6 +187,82 @@ public class LeaveController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<LeaveTypeResponse>> listTypes(@RequestParam UUID companyId) {
         return ResponseEntity.ok(leaveTypeService.listLeaveTypes(companyId));
+    }
+
+    // ─── Requester identity enrichment ───────────────────────────────────────
+    // The leave module has no dependency on hrms-employee, so the requester's
+    // name / code / department are resolved here (the API layer) and folded into
+    // the response DTO so manager/admin approval cards can show WHOSE request it is.
+
+    private PageResponse<LeaveRequestResponse> enrichPage(PageResponse<LeaveRequestResponse> page) {
+        List<UUID> employeeIds = page.content().stream()
+                .map(LeaveRequestResponse::employeeId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID, Employee> employeeMap = employeeIds.isEmpty()
+                ? Map.of()
+                : employeeRepository.findAllById(employeeIds).stream()
+                        .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
+        Map<UUID, String> departmentNames = departmentNames(employeeMap.values());
+        List<LeaveRequestResponse> enriched = page.content().stream()
+                .map(r -> enrich(r, employeeMap.get(r.employeeId()), departmentNames))
+                .toList();
+        return new PageResponse<>(
+                enriched, page.page(), page.size(), page.totalElements(), page.totalPages(), page.last());
+    }
+
+    private LeaveRequestResponse enrichOne(LeaveRequestResponse r) {
+        Employee employee = r.employeeId() == null
+                ? null
+                : employeeRepository.findById(r.employeeId()).orElse(null);
+        Map<UUID, String> departmentNames = employee != null
+                ? departmentNames(List.of(employee))
+                : Map.of();
+        return enrich(r, employee, departmentNames);
+    }
+
+    private LeaveRequestResponse enrich(LeaveRequestResponse r,
+                                        Employee employee,
+                                        Map<UUID, String> departmentNames) {
+        String employeeName = employee != null
+                ? (employee.getFirstName() + " " + employee.getLastName()).trim()
+                : null;
+        String employeeCode = employee != null ? employee.getEmployeeCode() : null;
+        String departmentName = employee != null && employee.getDepartmentId() != null
+                ? departmentNames.get(employee.getDepartmentId())
+                : null;
+        return new LeaveRequestResponse(
+                r.id(),
+                r.employeeId(),
+                employeeName,
+                employeeCode,
+                departmentName,
+                r.leaveTypeId(),
+                r.leaveTypeName(),
+                r.startDate(),
+                r.endDate(),
+                r.totalDays(),
+                r.reason(),
+                r.status(),
+                r.approverComment(),
+                r.approvedAt(),
+                r.createdAt());
+    }
+
+    private Map<UUID, String> departmentNames(java.util.Collection<Employee> employees) {
+        List<UUID> departmentIds = employees.stream()
+                .map(Employee::getDepartmentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (departmentIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, String> names = new HashMap<>();
+        departmentRepository.findAllById(departmentIds)
+                .forEach(department -> names.put(department.getId(), department.getName()));
+        return names;
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

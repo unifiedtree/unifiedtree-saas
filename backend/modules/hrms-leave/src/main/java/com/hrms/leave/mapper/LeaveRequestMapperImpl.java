@@ -48,8 +48,11 @@ public class LeaveRequestMapperImpl implements LeaveRequestMapper {
         createdAt = leaveRequest.getCreatedAt();
 
         String leaveTypeName = null;
+        String employeeName = null;
+        String employeeCode = null;
+        String departmentName = null;
 
-        LeaveRequestResponse leaveRequestResponse = new LeaveRequestResponse( id, employeeId, leaveTypeId, leaveTypeName, startDate, endDate, totalDays, reason, status, approverComment, approvedAt, createdAt );
+        LeaveRequestResponse leaveRequestResponse = new LeaveRequestResponse( id, employeeId, employeeName, employeeCode, departmentName, leaveTypeId, leaveTypeName, startDate, endDate, totalDays, reason, status, approverComment, approvedAt, createdAt );
 
         return leaveRequestResponse;
     }

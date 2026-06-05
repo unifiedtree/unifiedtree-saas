@@ -325,8 +325,19 @@ public class AttendanceController {
         ApprovalStatus approvalStatus = status == null || status.isBlank()
                 ? ApprovalStatus.PENDING
                 : ApprovalStatus.valueOf(status.toUpperCase());
-        List<UUID> employeeIds = scopedEmployees(jwt, departmentId).stream().map(Employee::getId).toList();
-        return ResponseEntity.ok(attendanceService.getCorrectionRequestsForEmployees(employeeIds, approvalStatus, pageable));
+        List<Employee> employees = scopedEmployees(jwt, departmentId);
+        List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
+        PageResponse<CorrectionRequestResponse> page =
+                attendanceService.getCorrectionRequestsForEmployees(employeeIds, approvalStatus, pageable);
+
+        Map<UUID, Employee> employeeMap = employees.stream()
+                .collect(Collectors.toMap(Employee::getId, Function.identity(), (a, b) -> a));
+        Map<UUID, String> departmentNames = departmentNames(employees);
+        List<CorrectionRequestResponse> enriched = page.content().stream()
+                .map(c -> enrichCorrection(c, employeeMap.get(c.employeeId()), departmentNames))
+                .toList();
+        return ResponseEntity.ok(new PageResponse<>(
+                enriched, page.page(), page.size(), page.totalElements(), page.totalPages(), page.last()));
     }
 
     @Operation(summary = "Approve or reject an attendance correction")
@@ -336,7 +347,13 @@ public class AttendanceController {
             @PathVariable UUID correctionId,
             @Valid @RequestBody CorrectionDecisionRequest decision,
             @AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(attendanceService.decideCorrection(correctionId, extractEmployeeId(jwt), decision));
+        CorrectionRequestResponse decided =
+                attendanceService.decideCorrection(correctionId, extractEmployeeId(jwt), decision);
+        Employee employee = employeeRepository.findById(decided.employeeId()).orElse(null);
+        Map<UUID, String> departmentNames = employee != null
+                ? departmentNames(List.of(employee))
+                : Map.of();
+        return ResponseEntity.ok(enrichCorrection(decided, employee, departmentNames));
     }
 
     @Operation(summary = "Get my attendance records (paginated)")
@@ -471,6 +488,33 @@ public class AttendanceController {
         return fullName(employee).toLowerCase().contains(query)
                 || employee.getEmployeeCode().toLowerCase().contains(query)
                 || employee.getJobTitle() != null && employee.getJobTitle().toLowerCase().contains(query);
+    }
+
+    private CorrectionRequestResponse enrichCorrection(CorrectionRequestResponse c,
+                                                       Employee employee,
+                                                       Map<UUID, String> departmentNames) {
+        String employeeName = employee != null ? fullName(employee) : null;
+        String employeeCode = employee != null ? employee.getEmployeeCode() : null;
+        String departmentName = employee != null && employee.getDepartmentId() != null
+                ? departmentNames.get(employee.getDepartmentId())
+                : null;
+        return new CorrectionRequestResponse(
+                c.id(),
+                c.employeeId(),
+                employeeName,
+                employeeCode,
+                departmentName,
+                c.attendanceRecordId(),
+                c.requestedDate(),
+                c.requestedCheckInAt(),
+                c.requestedCheckOutAt(),
+                c.reason(),
+                c.attachmentUrl(),
+                c.status(),
+                c.approverId(),
+                c.approverComment(),
+                c.decidedAt(),
+                c.createdAt());
     }
 
     private String fullName(Employee employee) {

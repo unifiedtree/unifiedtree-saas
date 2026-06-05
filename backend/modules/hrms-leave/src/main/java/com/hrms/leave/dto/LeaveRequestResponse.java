@@ -9,6 +9,9 @@ import java.util.UUID;
 public record LeaveRequestResponse(
         UUID id,
         UUID employeeId,
+        String employeeName,
+        String employeeCode,
+        String departmentName,
         UUID leaveTypeId,
         String leaveTypeName,
         LocalDate startDate,

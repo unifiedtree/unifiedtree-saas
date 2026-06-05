@@ -914,6 +914,9 @@ public class AttendanceService {
         return new CorrectionRequestResponse(
                 correction.getId(),
                 correction.getEmployeeId(),
+                null,
+                null,
+                null,
                 correction.getAttendanceRecordId(),
                 correction.getRequestedDate(),
                 correction.getRequestedCheckInAt(),
