@@ -11,8 +11,8 @@ import com.hrms.attendance.service.AttendanceService;
 import com.hrms.attendance.service.GeoValidationService;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
-import com.hrms.tenant.entity.Department;
-import com.hrms.tenant.repository.DepartmentRepository;
+import com.hrms.employee.workforce.entity.Department;
+import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import com.hrms.core.tenant.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -65,13 +65,13 @@ public class LegacyAttendanceExtrasController {
     private final GeoValidationService geoValidationService;
     private final AttendanceContextResolver contextResolver;
     private final EmployeeRepository employeeRepository;
-    private final DepartmentRepository departmentRepository;
+    private final WorkforceDepartmentRepository departmentRepository;
 
     public LegacyAttendanceExtrasController(AttendanceService attendanceService,
                                             GeoValidationService geoValidationService,
                                             AttendanceContextResolver contextResolver,
                                             EmployeeRepository employeeRepository,
-                                            DepartmentRepository departmentRepository) {
+                                            WorkforceDepartmentRepository departmentRepository) {
         this.attendanceService = attendanceService;
         this.geoValidationService = geoValidationService;
         this.contextResolver = contextResolver;
@@ -128,10 +128,13 @@ public class LegacyAttendanceExtrasController {
 
         // Pre-load department names for the caller's company in one query so the
         // Find Others panel can show "Engineering" / "Sales" labels without
-        // forcing the client to do a second round-trip. Falls back gracefully
-        // when an employee has no departmentId.
+        // forcing the client to do a second round-trip. Uses the canonical
+        // workforce Department repo so this works under canonical-prod (the
+        // legacy com.hrms.tenant package is excluded from that profile's
+        // component scan — see CanonicalProfileScan.java).
         UUID companyId = contextResolver.resolve(extractEmployeeId(jwt)).companyId();
-        Map<UUID, String> deptNames = departmentRepository.findByCompanyId(companyId).stream()
+        Map<UUID, String> deptNames = departmentRepository
+                .findAllByCompanyIdAndActiveTrueOrderByNameAsc(companyId).stream()
                 .collect(Collectors.toMap(Department::getId, Department::getName, (a, b) -> a));
 
         return ResponseEntity.ok(attendanceService.getActiveSessions(
