@@ -1,0 +1,15 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+# Python 3.13 needs NumPy 2.x wheels; 1.26.x attempts a local source build.
+numpy>=2.2,<3
+opencv-python-headless>=4.12,<5
+# Current code loads ONNX models through OpenCV. Keep onnxruntime available
+# for the Phase-2 anti-spoof model hook and GPU migration path.
+onnxruntime>=1.23,<2
+pillow>=11,<13
+# Optional GPU runtime (replace onnxruntime above):
+# onnxruntime-gpu>=1.23,<2
+
+# Dev / load-test only
+httpx==0.27.2
