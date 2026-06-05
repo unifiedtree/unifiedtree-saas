@@ -76,8 +76,22 @@ public final class AttendanceApiDtos {
             String locationLabel,
             boolean withinZone,
             int pendingApprovals,
-            int teamPresentToday
+            int teamPresentToday,
+            String scheduledStart,
+            Integer graceMinutes
     ) {
+        public AttendanceHomeResponse(String employeeName,
+                                      String jobTitle,
+                                      boolean punchedIn,
+                                      AttendanceDto todayRecord,
+                                      MonthlyStatsResponse monthlySummary,
+                                      String locationLabel,
+                                      boolean withinZone,
+                                      int pendingApprovals,
+                                      int teamPresentToday) {
+            this(employeeName, jobTitle, punchedIn, todayRecord, monthlySummary,
+                    locationLabel, withinZone, pendingApprovals, teamPresentToday, null, null);
+        }
     }
 
     public record CheckOutSummaryResponse(
@@ -102,8 +116,14 @@ public final class AttendanceApiDtos {
     public record WeeklyDayResponse(
             String date,
             double hours,
-            String status
+            String status,
+            String checkInTime,
+            String checkOutTime,
+            Integer lateByMinutes
     ) {
+        public WeeklyDayResponse(String date, double hours, String status) {
+            this(date, hours, status, null, null, null);
+        }
     }
 
     public record WeeklySummaryResponse(
@@ -111,8 +131,16 @@ public final class AttendanceApiDtos {
             double overtimeHours,
             int presentDays,
             String avgArrivalTime,
+            Double dailyTargetHours,
             List<WeeklyDayResponse> days
     ) {
+        public WeeklySummaryResponse(double totalHours,
+                                     double overtimeHours,
+                                     int presentDays,
+                                     String avgArrivalTime,
+                                     List<WeeklyDayResponse> days) {
+            this(totalHours, overtimeHours, presentDays, avgArrivalTime, null, days);
+        }
     }
 
     public record AttendanceRecordResponse(

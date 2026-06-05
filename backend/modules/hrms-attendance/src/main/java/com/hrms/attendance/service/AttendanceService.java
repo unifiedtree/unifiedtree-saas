@@ -28,6 +28,8 @@ import com.hrms.attendance.enums.AttendanceStatus;
 import com.hrms.attendance.enums.AttendanceType;
 import com.hrms.attendance.enums.CheckInMethod;
 import com.hrms.attendance.mapper.AttendanceMapper;
+import com.hrms.attendance.entity.EmployeeShiftAssignment;
+import com.hrms.attendance.entity.ShiftPolicy;
 import com.hrms.attendance.repository.AttendanceCorrectionRequestRepository;
 import com.hrms.attendance.repository.AttendanceEventLogRepository;
 import com.hrms.attendance.repository.AttendanceRecordRepository;
@@ -39,9 +41,11 @@ import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.core.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +56,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -80,6 +85,9 @@ public class AttendanceService {
     private final double confidenceThreshold;
     private final boolean faceRecognitionEnabled;
     private final boolean kafkaEnabled;
+
+    @Autowired(required = false)
+    private JdbcTemplate jdbcTemplate;
 
     public AttendanceService(
             AttendanceRecordRepository attendanceRecordRepository,
@@ -336,11 +344,19 @@ public class AttendanceService {
 
     @Transactional(readOnly = true)
     public WeeklySummaryResponse getWeeklySummary(UUID employeeId) {
+        return getWeeklySummary(employeeId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public WeeklySummaryResponse getWeeklySummary(UUID employeeId, LocalDate weekStart) {
         LocalDate today = LocalDate.now(IST);
-        LocalDate monday = today.with(DayOfWeek.MONDAY);
+        LocalDate monday = weekStart != null
+                ? weekStart.with(DayOfWeek.MONDAY)
+                : today.with(DayOfWeek.MONDAY);
+        LocalDate sunday = monday.plusDays(6);
 
         List<AttendanceRecord> records = attendanceRecordRepository
-                .findByEmployeeIdAndAttendanceDateBetween(employeeId, monday, today);
+                .findByEmployeeIdAndAttendanceDateBetween(employeeId, monday, sunday);
         Map<LocalDate, AttendanceRecord> byDate = records.stream()
                 .collect(Collectors.toMap(AttendanceRecord::getAttendanceDate, r -> r));
 
@@ -355,11 +371,15 @@ public class AttendanceService {
             if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
                 AttendanceRecord rec = byDate.get(day);
                 double h = rec != null && rec.getWorkingHours() != null ? rec.getWorkingHours() : 0;
-                days.add(new WeeklyDayResponse(day.toString(), h, "WEEKEND"));
+                String checkIn = rec != null ? formatIstHourMinute(rec.getCheckInAt()) : null;
+                String checkOut = rec != null ? formatIstHourMinute(rec.getCheckOutAt()) : null;
+                Integer lateBy = rec != null ? rec.getLateByMinutes() : null;
+                days.add(new WeeklyDayResponse(day.toString(), h, "WEEKEND",
+                        checkIn, checkOut, lateBy));
                 continue;
             }
             if (day.isAfter(today)) {
-                days.add(new WeeklyDayResponse(day.toString(), 0, "ABSENT"));
+                days.add(new WeeklyDayResponse(day.toString(), 0, "ABSENT", null, null, null));
                 continue;
             }
 
@@ -373,9 +393,15 @@ public class AttendanceService {
                 presentDays++;
                 totalArrivalMinutes += checkInLocal.getHour() * 60.0 + checkInLocal.getMinute();
                 arrivalCount++;
-                days.add(new WeeklyDayResponse(day.toString(), h, status));
+                days.add(new WeeklyDayResponse(
+                        day.toString(),
+                        h,
+                        status,
+                        formatIstHourMinute(rec.getCheckInAt()),
+                        formatIstHourMinute(rec.getCheckOutAt()),
+                        rec.getLateByMinutes()));
             } else {
-                days.add(new WeeklyDayResponse(day.toString(), 0, "ABSENT"));
+                days.add(new WeeklyDayResponse(day.toString(), 0, "ABSENT", null, null, null));
             }
         }
 
@@ -389,12 +415,91 @@ public class AttendanceService {
                     : "%02d:%02d PM".formatted(h == 12 ? 12 : h - 12, m);
         }
 
+        Double dailyTargetHours = lookupDailyTargetHours(employeeId, monday);
+
         return new WeeklySummaryResponse(
                 Math.round(totalHours * 100.0) / 100.0,
                 Math.round(overtime * 100.0) / 100.0,
                 presentDays,
                 avgArrival,
+                dailyTargetHours,
                 days);
+    }
+
+    private String formatIstHourMinute(Instant instant) {
+        if (instant == null) {
+            return null;
+        }
+        return instant.atZone(IST).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"));
+    }
+
+    public record ShiftProfile(String scheduledStart, Integer graceMinutes, Double dailyTargetHours) {
+    }
+
+    @Transactional(readOnly = true)
+    public ShiftProfile getShiftProfile(UUID employeeId, LocalDate onDate) {
+        if (jdbcTemplate == null || employeeId == null) {
+            return null;
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT sp.start_time, sp.grace_period_minutes, sp.working_hours_per_day
+                      FROM attendance.employee_shift_assignments esa
+                      JOIN attendance.shift_policies sp
+                        ON sp.id = esa.shift_policy_id
+                     WHERE esa.employee_id = ?
+                       AND esa.effective_from <= ?
+                       AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
+                       AND sp.is_active = TRUE
+                     ORDER BY esa.effective_from DESC
+                     LIMIT 1
+                    """,
+                    rs -> {
+                        if (!rs.next()) return null;
+                        java.sql.Time start = rs.getTime("start_time");
+                        String scheduledStart = start == null
+                                ? null
+                                : start.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"));
+                        int graceRaw = rs.getInt("grace_period_minutes");
+                        Integer grace = rs.wasNull() ? null : graceRaw;
+                        double hoursRaw = rs.getDouble("working_hours_per_day");
+                        Double hours = rs.wasNull() ? null : hoursRaw;
+                        return new ShiftProfile(scheduledStart, grace, hours);
+                    },
+                    employeeId, onDate, onDate);
+        } catch (Exception ex) {
+            log.debug("Shift profile lookup failed for employee {}: {}", employeeId, ex.getMessage());
+            return null;
+        }
+    }
+
+    private Double lookupDailyTargetHours(UUID employeeId, LocalDate onDate) {
+        if (jdbcTemplate == null || employeeId == null) {
+            return null;
+        }
+        try {
+            return jdbcTemplate.query("""
+                    SELECT sp.working_hours_per_day
+                      FROM attendance.employee_shift_assignments esa
+                      JOIN attendance.shift_policies sp
+                        ON sp.id = esa.shift_policy_id
+                     WHERE esa.employee_id = ?
+                       AND esa.effective_from <= ?
+                       AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
+                       AND sp.is_active = TRUE
+                     ORDER BY esa.effective_from DESC
+                     LIMIT 1
+                    """,
+                    rs -> {
+                        if (!rs.next()) return null;
+                        double value = rs.getDouble("working_hours_per_day");
+                        return rs.wasNull() ? null : value;
+                    },
+                    employeeId, onDate, onDate);
+        } catch (Exception ex) {
+            log.debug("Daily target hours lookup failed for employee {}: {}", employeeId, ex.getMessage());
+            return null;
+        }
     }
 
     // ── Legacy methods (kept for backward compat) ────────────────────────────

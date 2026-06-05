@@ -187,9 +187,11 @@ public class AttendanceController {
     @Operation(summary = "Weekly summary — hours, overtime, avg arrival, bar chart data")
     @GetMapping("/weekly-summary")
     @PreAuthorize("hasAuthority('attendance.checkin.self')")
-    public ResponseEntity<WeeklySummaryResponse> weeklySummary(@AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<WeeklySummaryResponse> weeklySummary(
+            @RequestParam(required = false) LocalDate weekStart,
+            @AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
-        return ResponseEntity.ok(attendanceService.getWeeklySummary(employeeId));
+        return ResponseEntity.ok(attendanceService.getWeeklySummary(employeeId, weekStart));
     }
 
     @Operation(summary = "Mobile home payload for punch screen")
@@ -211,6 +213,7 @@ public class AttendanceController {
                     .size();
         }
 
+        AttendanceService.ShiftProfile shift = attendanceService.getShiftProfile(employeeId, now);
         AttendanceHomeResponse response = new AttendanceHomeResponse(
                 fullName(employee),
                 employee.getJobTitle(),
@@ -220,7 +223,9 @@ public class AttendanceController {
                 ctx.branchName(),
                 true,
                 0,
-                teamPresent);
+                teamPresent,
+                shift != null ? shift.scheduledStart() : null,
+                shift != null ? shift.graceMinutes() : null);
         return ResponseEntity.ok(response);
     }
 

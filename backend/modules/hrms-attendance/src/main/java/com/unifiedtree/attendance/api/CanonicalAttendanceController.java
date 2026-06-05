@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -79,8 +80,8 @@ public class CanonicalAttendanceController {
     }
 
     @GetMapping("/weekly-summary")
-    public WeeklySummaryResponse weeklySummary() {
-        return attendance.weeklySummary();
+    public WeeklySummaryResponse weeklySummary(@RequestParam(required = false) LocalDate weekStart) {
+        return attendance.weeklySummary(weekStart);
     }
 
     @GetMapping("/my")
