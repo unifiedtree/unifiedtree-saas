@@ -81,7 +81,7 @@ public class LegacyAttendanceExtrasController {
 
     @Operation(summary = "Check if employee is within office geofence")
     @PostMapping("/geo-fence/check")
-    @PreAuthorize("hasAnyRole('EMPLOYEE','DEPT_MANAGER','HR_MANAGER','COMPANY_ADMIN')")
+    @PreAuthorize("hasAuthority('attendance.checkin.self')")
     public ResponseEntity<GeoValidateResponse> geoFenceCheck(
             @RequestBody GeoValidateRequest request,
             @AuthenticationPrincipal Jwt jwt) {
@@ -94,7 +94,7 @@ public class LegacyAttendanceExtrasController {
 
     @Operation(summary = "Validate GPS before opening camera (legacy - prefer /geo-fence/check)")
     @PostMapping("/geo-validate")
-    @PreAuthorize("hasAnyRole('EMPLOYEE','DEPT_MANAGER','HR_MANAGER','COMPANY_ADMIN')")
+    @PreAuthorize("hasAuthority('attendance.checkin.self')")
     public ResponseEntity<GeoValidateResponse> geoValidate(
             @Valid @RequestBody GeoValidateRequest request,
             @AuthenticationPrincipal Jwt jwt) {
@@ -107,7 +107,7 @@ public class LegacyAttendanceExtrasController {
 
     @Operation(summary = "Face check-in via multipart upload (legacy)")
     @PostMapping(value = "/face-checkin", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('EMPLOYEE','DEPT_MANAGER','HR_MANAGER','COMPANY_ADMIN')")
+    @PreAuthorize("hasAuthority('attendance.checkin.face')")
     public ResponseEntity<FaceCheckInResponse> faceCheckIn(
             @RequestPart("metadata") @Valid FaceCheckInRequest request,
             @RequestPart("faceFrame") MultipartFile faceFrame,
@@ -118,7 +118,7 @@ public class LegacyAttendanceExtrasController {
 
     @Operation(summary = "Currently checked-in staff locations for geofence map")
     @GetMapping("/geofence/live-locations")
-    @PreAuthorize("hasAnyRole('DEPT_MANAGER','HR_MANAGER','COMPANY_ADMIN')")
+    @PreAuthorize("hasAuthority('attendance.team.read')")
     public ResponseEntity<List<LiveLocationResponse>> liveLocations(
             @RequestParam(required = false) UUID departmentId,
             @AuthenticationPrincipal Jwt jwt) {
@@ -164,7 +164,7 @@ public class LegacyAttendanceExtrasController {
 
     @Operation(summary = "List geofence zones for current company")
     @GetMapping("/geofence/zones")
-    @PreAuthorize("hasAnyRole('DEPT_MANAGER','HR_MANAGER','COMPANY_ADMIN')")
+    @PreAuthorize("hasAuthority('attendance.team.read')")
     public ResponseEntity<List<GeoFenceZoneResponse>> zones(@AuthenticationPrincipal Jwt jwt) {
         UUID companyId = contextResolver.resolve(extractEmployeeId(jwt)).companyId();
         return ResponseEntity.ok(attendanceService.listGeoFenceZones(companyId));
@@ -172,7 +172,7 @@ public class LegacyAttendanceExtrasController {
 
     @Operation(summary = "Create geofence zone")
     @PostMapping("/geofence/zones")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN')")
+    @PreAuthorize("hasAuthority('org.geofence.write')")
     public ResponseEntity<GeoFenceZoneResponse> createZone(
             @Valid @RequestBody GeoFenceZoneRequest request,
             @AuthenticationPrincipal Jwt jwt) {
@@ -183,7 +183,7 @@ public class LegacyAttendanceExtrasController {
 
     @Operation(summary = "Update geofence zone")
     @PutMapping("/geofence/zones/{zoneId}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN')")
+    @PreAuthorize("hasAuthority('org.geofence.write')")
     public ResponseEntity<GeoFenceZoneResponse> updateZone(
             @PathVariable UUID zoneId,
             @Valid @RequestBody GeoFenceZoneRequest request,
@@ -195,7 +195,7 @@ public class LegacyAttendanceExtrasController {
 
     @Operation(summary = "Deactivate geofence zone")
     @DeleteMapping("/geofence/zones/{zoneId}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN')")
+    @PreAuthorize("hasAuthority('org.geofence.write')")
     public ResponseEntity<Void> deleteZone(@PathVariable UUID zoneId) {
         attendanceService.deleteGeoFenceZone(zoneId);
         return ResponseEntity.noContent().build();
