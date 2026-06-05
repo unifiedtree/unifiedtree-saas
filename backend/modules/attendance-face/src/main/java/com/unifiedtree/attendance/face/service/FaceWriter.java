@@ -24,6 +24,11 @@ public class FaceWriter {
     @Transactional
     public UUID upsertPendingEnrollment(UUID tenantId, UUID employeeId, int samplesRequired) {
         UUID newId = UUID.randomUUID();
+        // Invalidate any previously captured templates for this employee 
+        // so they don't block the new capture sequence on a restart.
+        jdbc.update("UPDATE attendance.face_embedding_templates SET is_active = FALSE " +
+                    "WHERE tenant_id = ? AND employee_id = ?", tenantId, employeeId);
+
         jdbc.update("""
             INSERT INTO attendance.face_enrollments
                 (id, tenant_id, employee_id, status, samples_required, samples_captured,
