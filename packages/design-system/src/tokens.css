@@ -1,71 +1,72 @@
 /* ============================================================
  * UnifiedTree Design System — Semantic CSS Custom Properties
  * Light theme is the default; dark theme via [data-theme='dark']
- * Brand palette: Emerald / Green
+ * Brand palette: Teal (Attendance-app — single source of truth)
+ *   primary #0F6E56 · primaryDark #0A5240 · primaryLight #E6F4F1 · primaryMuted #1A8A6E
  * ============================================================ */
 
 :root,
 [data-theme='light'] {
   /* ── Backgrounds ─────────────────────────────────────── */
-  --bg-base:             #f0fdf4;
+  --bg-base:             #f8fafc;
   --bg-surface:          #ffffff;
   --bg-surface-raised:   #ffffff;
   --bg-surface-overlay:  rgba(255, 255, 255, 0.97);
-  --bg-subtle:           #f0fdf4;
-  --bg-muted:            #dcfce7;
+  --bg-subtle:           #f1f5f9;
+  --bg-muted:            #e6f4f1;
 
-  /* ── Accent / Brand (Emerald) ────────────────────────── */
-  --accent-bg:           #d1fae5;
-  --accent-bg-strong:    #a7f3d0;
-  --accent-fg:           #059669;
-  --accent-fg-strong:    #064e3b;
-  --accent-border:       #6ee7b7;
+  /* ── Accent / Brand (Teal) ───────────────────────────── */
+  --accent-bg:           #e6f4f1;
+  --accent-bg-strong:    #c7e7df;
+  --accent-fg:           #0f6e56;
+  --accent-fg-strong:    #0a5240;
+  --accent-border:       #9bd3c4;
 
   /* ── Text ────────────────────────────────────────────── */
-  --text-primary:        #111827;
-  --text-secondary:      #374151;
-  --text-tertiary:       #9ca3af;
-  --text-disabled:       #d1d5db;
+  --text-primary:        #0f172a;
+  --text-secondary:      #64748b;
+  --text-tertiary:       #94a3b8;
+  --text-disabled:       #cbd5e1;
   --text-inverse:        #ffffff;
   --text-on-accent:      #ffffff;
-  --text-link:           #059669;
+  --text-link:           #0f6e56;
 
   /* ── Border ──────────────────────────────────────────── */
-  --border-default:      #e5e7eb;
-  --border-strong:       #d1d5db;
-  --border-subtle:       #f3f4f6;
-  --border-focus:        #059669;
-  --border-accent:       #6ee7b7;
+  --border-default:      #e2e8f0;
+  --border-strong:       #cbd5e1;
+  --border-subtle:       #f1f5f9;
+  --border-focus:        #0f6e56;
+  --border-accent:       #9bd3c4;
 
   /* ── Status: Success ─────────────────────────────────── */
-  --status-success-bg:     #ecfdf5;
-  --status-success-fg:     #059669;
-  --status-success-border: #a7f3d0;
+  --status-success-bg:     #dcfce7;
+  --status-success-fg:     #22c55e;
+  --status-success-border: #bbf7d0;
 
   /* ── Status: Warning ─────────────────────────────────── */
-  --status-warning-bg:     #fffbeb;
-  --status-warning-fg:     #d97706;
+  --status-warning-bg:     #fef3c7;
+  --status-warning-fg:     #f59e0b;
   --status-warning-border: #fde68a;
 
   /* ── Status: Error ───────────────────────────────────── */
-  --status-error-bg:       #fef2f2;
-  --status-error-fg:       #dc2626;
-  --status-error-border:   #fca5a5;
+  --status-error-bg:       #fee2e2;
+  --status-error-fg:       #ef4444;
+  --status-error-border:   #fecaca;
 
   /* ── Status: Info ────────────────────────────────────── */
-  --status-info-bg:        #eff6ff;
-  --status-info-fg:        #2563eb;
+  --status-info-bg:        #dbeafe;
+  --status-info-fg:        #3b82f6;
   --status-info-border:    #bfdbfe;
 
   /* ── Interactive ─────────────────────────────────────── */
-  --interactive-primary:        #059669;
-  --interactive-primary-hover:  #047857;
-  --interactive-primary-active: #065f46;
-  --interactive-secondary:      #f0fdf4;
-  --interactive-secondary-hover:#dcfce7;
-  --interactive-danger:         #dc2626;
-  --interactive-danger-hover:   #b91c1c;
-  --interactive-ghost-hover:    #f3f4f6;
+  --interactive-primary:        #0f6e56;
+  --interactive-primary-hover:  #0a5240;
+  --interactive-primary-active: #08402f;
+  --interactive-secondary:      #f1f5f9;
+  --interactive-secondary-hover:#e6f4f1;
+  --interactive-danger:         #ef4444;
+  --interactive-danger-hover:   #dc2626;
+  --interactive-ghost-hover:    #f1f5f9;
 
   /* ── Radius Scale ────────────────────────────────────── */
   --radius-xs:   4px;
@@ -82,7 +83,7 @@
   --shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg:   0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-xl:   0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --shadow-glow: 0 0 0 3px rgb(5 150 105 / 0.2);
+  --shadow-glow: 0 0 0 3px rgb(15 110 86 / 0.2);
 
   /* ── Motion ──────────────────────────────────────────── */
   --motion-fast:   100ms ease;
@@ -104,62 +105,62 @@
 
 /* ── Dark Theme ──────────────────────────────────────────── */
 [data-theme='dark'] {
-  --bg-base:             #0a0f0d;
-  --bg-surface:          #111713;
-  --bg-surface-raised:   #182019;
-  --bg-surface-overlay:  rgba(17, 23, 19, 0.97);
-  --bg-subtle:           #182019;
+  --bg-base:             #0b1220;
+  --bg-surface:          #111a2b;
+  --bg-surface-raised:   #18233a;
+  --bg-surface-overlay:  rgba(17, 26, 43, 0.97);
+  --bg-subtle:           #18233a;
   --bg-muted:            #1e2b21;
 
-  --accent-bg:           #052e16;
-  --accent-bg-strong:    #064e3b;
-  --accent-fg:           #34d399;
-  --accent-fg-strong:    #6ee7b7;
-  --accent-border:       #065f46;
+  --accent-bg:           #0c2e26;
+  --accent-bg-strong:    #0a5240;
+  --accent-fg:           #2ea183;
+  --accent-fg-strong:    #5fbba3;
+  --accent-border:       #0f6e56;
 
-  --text-primary:        #ecfdf5;
-  --text-secondary:      #a7f3d0;
-  --text-tertiary:       #6ee7b7;
-  --text-disabled:       #374151;
-  --text-inverse:        #0a0f0d;
-  --text-on-accent:      #0a0f0d;
-  --text-link:           #34d399;
+  --text-primary:        #f1f5f9;
+  --text-secondary:      #94a3b8;
+  --text-tertiary:       #64748b;
+  --text-disabled:       #475569;
+  --text-inverse:        #0b1220;
+  --text-on-accent:      #ffffff;
+  --text-link:           #2ea183;
 
-  --border-default:      #33453b;
-  --border-strong:       #46594e;
-  --border-subtle:       #232f28;
-  --border-focus:        #34d399;
-  --border-accent:       #065f46;
+  --border-default:      #2a3650;
+  --border-strong:       #3b4a68;
+  --border-subtle:       #1c2740;
+  --border-focus:        #2ea183;
+  --border-accent:       #0f6e56;
 
-  --status-success-bg:     #052e16;
-  --status-success-fg:     #34d399;
-  --status-success-border: #065f46;
+  --status-success-bg:     #0c2e1a;
+  --status-success-fg:     #4ade80;
+  --status-success-border: #166534;
 
-  --status-warning-bg:     #1c1400;
+  --status-warning-bg:     #2a1e02;
   --status-warning-fg:     #fbbf24;
-  --status-warning-border: #2d2200;
+  --status-warning-border: #4a3508;
 
-  --status-error-bg:       #1c0a0a;
+  --status-error-bg:       #2a0e0e;
   --status-error-fg:       #f87171;
-  --status-error-border:   #3b0f0f;
+  --status-error-border:   #5b1717;
 
   --status-info-bg:        #0d1b2e;
   --status-info-fg:        #60a5fa;
   --status-info-border:    #1a2e4a;
 
-  --interactive-primary:        #34d399;
-  --interactive-primary-hover:  #6ee7b7;
-  --interactive-primary-active: #a7f3d0;
-  --interactive-secondary:      #182019;
-  --interactive-secondary-hover:#1e2b21;
+  --interactive-primary:        #1a8a6e;
+  --interactive-primary-hover:  #2ea183;
+  --interactive-primary-active: #5fbba3;
+  --interactive-secondary:      #18233a;
+  --interactive-secondary-hover:#1e2b41;
   --interactive-danger:         #f87171;
   --interactive-danger-hover:   #fca5a5;
-  --interactive-ghost-hover:    #1e2b21;
+  --interactive-ghost-hover:    #1e2b41;
 
   --shadow-xs:   0 1px 2px 0 rgb(0 0 0 / 0.4);
   --shadow-sm:   0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.4);
   --shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
   --shadow-lg:   0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
   --shadow-xl:   0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.4);
-  --shadow-glow: 0 0 0 3px rgb(52 211 153 / 0.25);
+  --shadow-glow: 0 0 0 3px rgb(15 110 86 / 0.3);
 }

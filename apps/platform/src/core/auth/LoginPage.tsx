@@ -23,7 +23,7 @@ export const LoginPage: React.FC = () => {
   const [searchParams] = useSearchParams()
   const loginWithCredentials = useSdkStore((state) => state.loginWithCredentials)
 
-  const [email,       setEmail]       = useState(searchParams.get('email') || 'admin@unifiedtree.demo')
+  const [email,       setEmail]       = useState(searchParams.get('email') || '')
   const [password,    setPassword]    = useState('')
   const [workspace,   setWorkspace]   = useState(searchParams.get('tid') || searchParams.get('workspace') || 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
   const [showPwd,     setShowPwd]     = useState(false)

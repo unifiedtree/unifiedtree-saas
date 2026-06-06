@@ -38,6 +38,13 @@ public final class AuthDtos {
             UUID tenantId,
             String email,
             List<String> roles,
-            List<String> permissions
-    ) { }
+            List<String> permissions,
+            List<String> activeModules
+    ) {
+        /** Backward-compatible: callers that don't carry modules get an empty list. */
+        public MeResponse(UUID userId, UUID tenantId, String email,
+                          List<String> roles, List<String> permissions) {
+            this(userId, tenantId, email, roles, permissions, List.of());
+        }
+    }
 }

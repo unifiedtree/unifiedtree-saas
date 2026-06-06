@@ -10,6 +10,7 @@ import { Settings } from '@/pages/Settings'
 import { AuditLogs } from '@/pages/AuditLogs'
 import { Users } from '@/pages/Users'
 import { Roles } from '@/pages/Roles'
+import { Modules } from '@/pages/Modules'
 import { Files } from '@/pages/Files'
 import { PendingApproval } from '@/pages/PendingApproval'
 import { NoAccess } from '@/pages/NoAccess'
@@ -22,8 +23,11 @@ import { Instances } from '@/modules/hrms/onboarding/Instances'
 import { InstanceDetail } from '@/modules/hrms/onboarding/InstanceDetail'
 import { ModuleGate } from '@/shared/components/ModuleGate'
 import { ModulePreview } from '@/shared/components/ModulePreview'
+import { ComingSoon } from '@/shared/components/ComingSoon'
+import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { Employees } from '@/modules/hrms/Employees'
 import { Attendance } from '@/modules/hrms/Attendance'
+import { GeofenceZones } from '@/modules/hrms/attendance/GeofenceZones'
 import { Leave } from '@/modules/hrms/Leave'
 import { Payroll } from '@/modules/hrms/Payroll'
 import { OrgSetup } from '@/modules/hrms/organization/OrgSetup'
@@ -66,6 +70,29 @@ function RoleAwareLanding() {
   return <Navigate to="/no-access" replace />
 }
 
+// Roles allowed to see the "Not Activated" upsell (they can act on billing).
+const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN'] as const
+
+/**
+ * Route wrapper for the 10 sellable-but-unbuilt modules.
+ *  - Module ACTIVE for the workspace  → <ComingSoon /> (ModuleGate passes through).
+ *  - Module NOT active + admin        → ModuleGate falls back to ModuleNotActivated (upsell).
+ *  - Module NOT active + non-admin    → redirect to dashboard (never land on a locked route).
+ */
+function ComingSoonRoute({ moduleKey }: { moduleKey: string }) {
+  const isActive = useLocalAuthStore(s => s.tenant?.activeModules.includes(moduleKey) ?? false)
+  const roles = useSdkStore(s => s.user?.roles ?? [])
+  const isAdmin = roles.some(r => (ADMIN_ROLES as readonly string[]).includes(r))
+
+  if (!isActive && !isAdmin) return <Navigate to="/dashboard" replace />
+
+  return (
+    <ModuleGate moduleKey={moduleKey}>
+      <ComingSoon module={moduleKey} />
+    </ModuleGate>
+  )
+}
+
 export default function App() {
   return (
     <Routes>
@@ -98,6 +125,10 @@ export default function App() {
         <Route path="/users"      element={<RouteGuard anyOf={[P.WORKSPACE_USERS_READ]}><Users /></RouteGuard>} />
         <Route path="/roles"      element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE]}><Roles /></RouteGuard>} />
         <Route path="/audit-logs" element={<RouteGuard anyOf={[P.AUDIT_READ]}><AuditLogs /></RouteGuard>} />
+        {/* Admin-only Modules manager. Guarded on the module-management perms; the '*'
+            wildcard lets super-admins (who hold a wildcard-only grant) through, mirroring
+            the gating agent's admin definition (roles ∪ permissions.has('*')). */}
+        <Route path="/modules"    element={<RouteGuard anyOf={[P.PLATFORM_MODULE_MANAGE, P.TENANT_MODULE_ACTIVATE, '*']}><Modules /></RouteGuard>} />
         <Route path="/files"     element={<Files />} />
 
         {/* Employee self-service landing */}
@@ -158,6 +189,16 @@ export default function App() {
           element={
             <RouteGuard anyOf={[P.HRMS_ESS_READ, P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_CHECKIN_SELF]}>
               <ModuleGate moduleKey="hrms"><Attendance /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        {/* Admin/manager geofencing zones. Read needs attendance.team.read,
+            write needs org.geofence.write — backend enforces both. */}
+        <Route
+          path="/hrms/attendance/geofencing"
+          element={
+            <RouteGuard anyOf={[P.ORG_GEOFENCE_WRITE, P.ATTENDANCE_TEAM_READ]}>
+              <ModuleGate moduleKey="hrms"><GeofenceZones /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -369,6 +410,28 @@ export default function App() {
             </RouteGuard>
           }
         />
+
+        {/* ── Sellable "coming soon" modules ───────────────────────────────
+            The 10 canonical non-HRMS module keys have no real backend yet.
+            Each renders <ComingSoon> when the workspace owns the module, and
+            falls back to the ModuleGate upsell (admins) / dashboard (others)
+            when it is not active. Both the canonical-key path and the legacy
+            nav path are registered so clicking the sidebar item never lands on
+            a blank/broken page. */}
+        <Route path="/payroll"            element={<ComingSoonRoute moduleKey="payroll" />} />
+        <Route path="/accounting"         element={<ComingSoonRoute moduleKey="accounting" />} />
+        <Route path="/accounts/*"         element={<ComingSoonRoute moduleKey="accounting" />} />
+        <Route path="/inventory"          element={<ComingSoonRoute moduleKey="inventory" />} />
+        <Route path="/crm"                element={<ComingSoonRoute moduleKey="crm" />} />
+        <Route path="/crm/*"              element={<ComingSoonRoute moduleKey="crm" />} />
+        <Route path="/purchase"           element={<ComingSoonRoute moduleKey="purchase" />} />
+        <Route path="/procurement"        element={<ComingSoonRoute moduleKey="purchase" />} />
+        <Route path="/sales"              element={<ComingSoonRoute moduleKey="sales" />} />
+        <Route path="/projects"           element={<ComingSoonRoute moduleKey="projects" />} />
+        <Route path="/projects/*"         element={<ComingSoonRoute moduleKey="projects" />} />
+        <Route path="/manufacturing"      element={<ComingSoonRoute moduleKey="manufacturing" />} />
+        <Route path="/pos"                element={<ComingSoonRoute moduleKey="pos" />} />
+        <Route path="/reports"            element={<ComingSoonRoute moduleKey="reports" />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

@@ -10,8 +10,12 @@ import com.hrms.api.saas.SaasDtos.TenantRequestSummary;
 import com.hrms.api.saas.SaasDtos.WorkspaceStatusResponse;
 import com.hrms.auth.util.JwtTokenProvider;
 import com.hrms.core.enums.Role;
+import com.hrms.api.mail.MailService;
+import com.hrms.api.mail.EmailMessage;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -31,6 +35,8 @@ import java.util.UUID;
 @Service
 public class SaasPlatformService {
 
+    private static final Logger log = LoggerFactory.getLogger(SaasPlatformService.class);
+
     private static final UUID PLATFORM_TENANT_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
     private static final List<String> DEFAULT_MODULES = List.of("hrms", "attendance");
     private static final List<String> DEFAULT_ADMIN_ROLES = List.of("COMPANY_ADMIN", "HR_MANAGER", "EMPLOYEE");
@@ -38,17 +44,20 @@ public class SaasPlatformService {
     private final JdbcTemplate jdbc;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final MailService mailService;
     private final String baseDomain;
     private final long accessTokenExpiryMinutes;
 
     public SaasPlatformService(JdbcTemplate jdbc,
                                PasswordEncoder passwordEncoder,
                                JwtTokenProvider jwtTokenProvider,
+                               MailService mailService,
                                @Value("${unifiedtree.base-domain:unifiedtree.com}") String baseDomain,
                                @Value("${hrms.jwt.access-token-expiry-minutes:15}") long accessTokenExpiryMinutes) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.mailService = mailService;
         this.baseDomain = baseDomain;
         this.accessTokenExpiryMinutes = accessTokenExpiryMinutes;
     }
@@ -150,6 +159,8 @@ public class SaasPlatformService {
         audit(tenantId, userId, "SIGNUP_REQUESTED", null, "ACTIVE",
                 "Instant approval enabled. Modules: " + String.join(",", requestedModules));
 
+        sendWelcomeEmail(request.adminName(), request.adminEmail(), request.companyName(), subdomain, "https://" + fullDomain);
+
         return new SignupResponse(
                 tenantId,
                 companyId,
@@ -158,6 +169,74 @@ public class SaasPlatformService {
                 "https://" + fullDomain,
                 requestedModules,
                 "Workspace created and instantly activated.");
+    }
+
+    private void sendWelcomeEmail(String adminName, String adminEmail, String companyName, String subdomain, String workspaceUrl) {
+        String subject = "Welcome to UnifiedTree! Your workspace is ready";
+        String htmlBody = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <style>
+                body { font-family: sans-serif; max-width: 550px; margin: auto; padding: 24px; color: #0F172A; line-height: 1.6; }
+                .container { border: 1px solid #E2E8F0; border-radius: 16px; padding: 32px; background-color: #FFFFFF; }
+                h1 { font-size: 24px; font-weight: 700; color: #0f6e56; margin-top: 0; }
+                .button { display: inline-block; background: #0f6e56; color: #FFFFFF; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 15px; margin: 24px 0; }
+                .details { background-color: #F1F5F9; border-radius: 12px; padding: 16px; margin: 20px 0; font-size: 14px; }
+                .details table { width: 100%%; border-collapse: collapse; }
+                .details td { padding: 4px 0; }
+                .details td.label { font-weight: bold; color: #475569; width: 120px; }
+                .footer { color: #64748B; font-size: 13px; margin-top: 24px; border-top: 1px solid #E2E8F0; padding-top: 16px; }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <h1>Welcome to UnifiedTree!</h1>
+                <p>Hi %s,</p>
+                <p>Congratulations! Your corporate HRMS & SaaS workspace for <strong>%s</strong> has been successfully created and activated.</p>
+                
+                <p>You can access your private workspace and sign in with the password you set during registration at the following URL:</p>
+                
+                <div style="text-align: center;">
+                  <a href="%s" class="button">Go to Workspace &rarr;</a>
+                </div>
+                
+                <div class="details">
+                  <table>
+                    <tr>
+                      <td class="label">Workspace URL:</td>
+                      <td><a href="%s" style="color: #0f6e56; text-decoration: none; font-weight: bold;">%s</a></td>
+                    </tr>
+                    <tr>
+                      <td class="label">Subdomain:</td>
+                      <td>%s</td>
+                    </tr>
+                    <tr>
+                      <td class="label">Admin Email:</td>
+                      <td>%s</td>
+                    </tr>
+                  </table>
+                </div>
+                
+                <p>Get started by setting up your departments, branches, and inviting your team members to register their profiles and enroll their faces for attendance tracking.</p>
+                
+                <p>Best regards,<br>The UnifiedTree Team</p>
+                
+                <div class="footer">
+                  This is an automated welcome email for your active UnifiedTree SaaS workspace.
+                </div>
+              </div>
+            </body>
+            </html>
+            """.formatted(adminName, companyName, workspaceUrl, workspaceUrl, workspaceUrl, subdomain, adminEmail);
+        
+        try {
+            mailService.send(EmailMessage.simple(adminEmail, subject, htmlBody));
+            log.info("Workspace welcome email sent to {} for subdomain {}", adminEmail, subdomain);
+        } catch (Exception e) {
+            log.error("Failed to send workspace welcome email to {}", adminEmail, e);
+        }
     }
 
     public WorkspaceStatusResponse workspaceStatus(String tenantIdHeader, String subdomainHeader, String host) {

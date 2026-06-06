@@ -24,7 +24,7 @@ const slabColumns: Column<PtSlab>[] = [
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
     <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)}
-      className={clsx('relative inline-flex h-5 w-9 items-center rounded-full transition-colors', on ? 'bg-[#0F6E56]' : 'bg-slate-300')}>
+      className={clsx('relative inline-flex h-5 w-9 items-center rounded-full transition-colors', on ? 'bg-primary' : 'bg-slate-300')}>
       <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
         style={{ transform: on ? 'translateX(18px)' : 'translateX(4px)' }} />
     </button>
@@ -104,7 +104,7 @@ export const PayrollSettings: React.FC = () => {
           <>
             <Field label="State">
               <select value={s.ptStateCode ?? ''} onChange={(e) => set('ptStateCode', e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#0F6E56]">
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-primary">
                 {PT_STATES.map(st => <option key={st.code} value={st.code}>{st.name}</option>)}
               </select>
             </Field>

@@ -40,6 +40,10 @@ interface CanonicalMeResponse {
   user?: AuthUser;
   tenant?: AuthTenant;
   modules?: ModuleInfo[];
+  // Real active-module set for the workspace, as returned by /me (string keys).
+  // When present, this is the authoritative source of modules; deriveModulesFromGrants
+  // is only used as a backward-compat fallback when this is absent.
+  activeModules?: string[];
   scopes?: ScopeContext;
 }
 
@@ -81,6 +85,13 @@ function meToAuthState(data: CanonicalMeResponse) {
     roles,
   };
 
+  // Prefer the workspace's real active-module set from /me when provided.
+  // Fall back to deriving modules from RBAC grants only for backward compat.
+  const modules: ModuleInfo[] = data.modules
+    ?? (data.activeModules != null
+      ? data.activeModules.map((key) => ({ key, displayName: key, enabled: true }))
+      : deriveModulesFromGrants(grants));
+
   const slug = resolveTenantSlug() ?? '';
   const tenant: AuthTenant = data.tenant ?? {
     id: data.tenantId ?? '',
@@ -96,7 +107,7 @@ function meToAuthState(data: CanonicalMeResponse) {
     user,
     tenant,
     permissions: buildPermissionMap(grants),
-    modules: data.modules ?? deriveModulesFromGrants(grants),
+    modules,
     scopes: data.scopes ?? EMPTY_SCOPES,
   };
 }

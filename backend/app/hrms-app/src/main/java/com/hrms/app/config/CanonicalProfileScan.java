@@ -63,6 +63,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.letters",
         "com.hrms.api.invitation",
         "com.hrms.api.mail",
+        "com.hrms.api.modulereq",
         "com.hrms.api.access",
         "com.hrms.api.probation",
         "com.hrms.api.payroll",

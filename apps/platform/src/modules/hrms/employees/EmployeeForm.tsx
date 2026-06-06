@@ -24,8 +24,8 @@ const STEPS: { key: FormStep; label: string }[] = [
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-[#64748B] mb-1.5">
-        {label} {required && <span className="text-red-400">*</span>}
+      <label className="block text-xs font-medium text-text-secondary mb-1.5">
+        {label} {required && <span className="text-danger">*</span>}
       </label>
       {children}
     </div>
@@ -36,7 +36,7 @@ function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2 text-sm text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+      className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-primary transition-colors"
     />
   )
 }
@@ -45,7 +45,7 @@ function Sel({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElemen
   return (
     <select
       {...props}
-      className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500 transition-colors"
+      className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
     >
       {children}
     </select>
@@ -201,22 +201,22 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   return (
     <>
       <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-[110] w-full max-w-lg bg-white border-l border-[#E2E8F0] flex flex-col shadow-2xl">
+      <div className="fixed right-0 top-0 bottom-0 z-[110] w-full max-w-lg bg-white border-l border-border flex flex-col shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E2E8F0]">
-          <h3 className="text-[#0F172A] font-semibold">{isEdit ? 'Edit Employee' : 'Add Employee'}</h3>
-          <button onClick={onClose} className="p-1.5 text-[#64748B] hover:text-[#0F172A] rounded-lg hover:bg-white/5"><X size={16} /></button>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h3 className="text-text-primary font-semibold">{isEdit ? 'Edit Employee' : 'Add Employee'}</h3>
+          <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg hover:bg-white/5"><X size={16} /></button>
         </div>
 
         {/* Step pills */}
-        <div className="flex gap-1 px-5 py-3 border-b border-[#E2E8F0] overflow-x-auto scrollbar-hide">
+        <div className="flex gap-1 px-5 py-3 border-b border-border overflow-x-auto scrollbar-hide">
           {STEPS.map((s, i) => (
             <button
               key={s.key}
               onClick={() => setStep(s.key)}
               className={clsx(
                 'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all',
-                step === s.key ? 'bg-[#0F6E56] text-white shadow-sm' : 'bg-white text-[#64748B] hover:text-[#0F172A]'
+                step === s.key ? 'bg-primary text-white shadow-sm' : 'bg-white text-text-secondary hover:text-text-primary'
               )}
             >
               {i + 1}. {s.label}
@@ -266,7 +266,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" checked={form.systemAccess} onChange={(e) => set('systemAccess', e.target.checked as any)} className="sr-only peer" />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0F6E56]"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                 </label>
               </div>
 
@@ -311,7 +311,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </Sel>
                 {branches.length === 0 && (
                   <p className="mt-1 text-xs text-slate-600">
-                    Add branches under <a href="/hrms/organization" className="text-[#0F6E56] hover:underline">Organization → Branches</a>
+                    Add branches under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Branches</a>
                   </p>
                 )}
               </Field>
@@ -333,7 +333,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                       <option value="CONSULTANT">Consultant</option>
                     </Sel>
                     <p className="mt-1 text-xs text-slate-600">
-                      Using defaults — add custom types under <a href="/hrms/organization" className="text-[#0F6E56] hover:underline">Organization → Employment Types</a>
+                      Using defaults — add custom types under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Employment Types</a>
                     </p>
                   </>
                 )}
@@ -349,7 +349,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </Sel>
                 {grades.length === 0 && (
                   <p className="mt-1 text-xs text-slate-600">
-                    Add grades under <a href="/hrms/organization" className="text-[#0F6E56] hover:underline">Organization → Grades</a>
+                    Add grades under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Grades</a>
                   </p>
                 )}
               </Field>
@@ -366,7 +366,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </Sel>
                 {shifts.length === 0 && (
                   <p className="mt-1 text-xs text-slate-600">
-                    Add shifts under <a href="/hrms/organization" className="text-[#0F6E56] hover:underline">Organization → Shifts</a>
+                    Add shifts under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Shifts</a>
                   </p>
                 )}
               </Field>
@@ -424,19 +424,19 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-5 border-t border-[#E2E8F0]">
+        <div className="flex gap-3 p-5 border-t border-border">
           {step !== 'basic' && (
-            <button onClick={() => setStep(STEPS[STEPS.findIndex((s) => s.key === step) - 1].key)} className="px-4 py-2.5 border border-[#E2E8F0] text-[#64748B] hover:text-[#0F172A] rounded-xl text-sm transition-colors">
+            <button onClick={() => setStep(STEPS[STEPS.findIndex((s) => s.key === step) - 1].key)} className="px-4 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">
               Back
             </button>
           )}
-          <button onClick={onClose} className="px-4 py-2.5 border border-[#E2E8F0] text-[#64748B] hover:text-[#0F172A] rounded-xl text-sm transition-colors">
+          <button onClick={onClose} className="px-4 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">
             Cancel
           </button>
           {step !== 'emergency' ? (
             <button
               onClick={() => setStep(STEPS[STEPS.findIndex((s) => s.key === step) + 1].key)}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#0F6E56] hover:bg-[#0A5240] text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-dark text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
             >
               Next <ChevronRight size={14} />
             </button>
@@ -448,16 +448,16 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     type="checkbox"
                     checked={sendInvitation}
                     onChange={e => setSendInvitation(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded accent-[#0F6E56]"
+                    className="h-3.5 w-3.5 rounded accent-primary"
                   />
-                  <Send size={11} className="text-[#0F6E56]" />
+                  <Send size={11} className="text-primary" />
                   Send invitation email
                 </label>
               )}
               <button
                 onClick={handleSubmit}
                 disabled={isPending}
-                className="w-full py-2.5 bg-[#0F6E56] hover:bg-[#0A5240] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
+                className="w-full py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
               >
                 {isPending ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Employee'}
               </button>

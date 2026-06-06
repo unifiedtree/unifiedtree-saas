@@ -78,7 +78,7 @@ export const SalaryComponents: React.FC = () => {
           <div className="flex gap-1 mb-4 border-b border-slate-200">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${tab === t.key ? 'border-[#0F6E56] text-[#0F6E56]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+                className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${tab === t.key ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
                 {t.label}
               </button>
             ))}

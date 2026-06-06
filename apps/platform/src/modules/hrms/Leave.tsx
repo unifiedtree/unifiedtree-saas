@@ -20,7 +20,7 @@ const STATUS_STYLE: Record<LeaveApprovalStatus, { label: string; color: string; 
   PENDING: { label: 'Pending', color: 'text-amber-400', bg: 'bg-amber-500/10', icon: Clock },
   APPROVED: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10', icon: CheckCircle },
   REJECTED: { label: 'Rejected', color: 'text-red-400', bg: 'bg-red-500/10', icon: XCircle },
-  CANCELLED: { label: 'Cancelled', color: 'text-[#64748B]', bg: 'bg-[#F1F5F9]/40', icon: XCircle },
+  CANCELLED: { label: 'Cancelled', color: 'text-text-secondary', bg: 'bg-surface-2/40', icon: XCircle },
   ESCALATED: { label: 'Escalated', color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Clock },
 }
 
@@ -52,34 +52,34 @@ function MyLeavesTab() {
         <EmptyState variant="error" title="Failed to load leaves" description={(leavesError as Error).message} primaryAction={{ label: 'Retry', onClick: () => refetchLeaves() }} />
       ) : leaves.length === 0 ? (
         <div className="text-center py-16">
-          <FileText size={32} className="mx-auto mb-3 text-slate-700" />
-          <p className="text-[#64748B] text-sm">No leave requests yet</p>
-          <p className="text-slate-600 text-xs mt-1">Use the Apply tab to request leave</p>
+          <FileText size={32} className="mx-auto mb-3 text-text-tertiary" />
+          <p className="text-text-secondary text-sm">No leave requests yet</p>
+          <p className="text-text-tertiary text-xs mt-1">Use the Apply tab to request leave</p>
         </div>
       ) : (
         leaves.map((leave) => {
           const sc = STATUS_STYLE[leave.status] ?? STATUS_STYLE['PENDING']
           return (
-            <div key={leave.id} className="bg-white border border-[#E2E8F0] rounded-2xl px-4 py-3 flex items-center gap-4">
+            <div key={leave.id} className="bg-white border border-border-default rounded-2xl px-4 py-3 flex items-center gap-4">
               <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', sc.bg)}>
                 <sc.icon size={16} className={sc.color} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-[#0F172A] font-medium text-sm">{leave.leaveTypeName ?? 'Leave'}</p>
+                  <p className="text-text-primary font-medium text-sm">{leave.leaveTypeName ?? 'Leave'}</p>
                   <span className={clsx('text-xs px-2 py-0.5 rounded-full', sc.bg, sc.color)}>{sc.label}</span>
                 </div>
-                <p className="text-[#64748B] text-xs mt-0.5">
+                <p className="text-text-secondary text-xs mt-0.5">
                   {format(new Date(leave.startDate), 'd MMM')} – {format(new Date(leave.endDate), 'd MMM yyyy')}
                   {' · '}{leave.totalDays} day{leave.totalDays !== 1 ? 's' : ''}
                 </p>
-                {leave.reason && <p className="text-slate-600 text-xs truncate mt-0.5">"{leave.reason}"</p>}
+                {leave.reason && <p className="text-text-tertiary text-xs truncate mt-0.5">"{leave.reason}"</p>}
               </div>
               {leave.status === 'PENDING' && (
                 <button
                   onClick={() => handleCancel(leave.id)}
                   disabled={cancelLeave.isPending}
-                  className="text-xs text-[#64748B] hover:text-red-400 transition-colors disabled:opacity-50 whitespace-nowrap"
+                  className="text-xs text-text-secondary hover:text-danger transition-colors disabled:opacity-50 whitespace-nowrap"
                 >
                   Cancel
                 </button>
@@ -91,9 +91,9 @@ function MyLeavesTab() {
 
       {total > 20 && (
         <div className="flex justify-center gap-3 pt-2">
-          <button onClick={() => setPage((p) => p - 1)} disabled={page === 0} className="px-3 py-1.5 text-xs border border-[#E2E8F0] rounded-lg text-[#64748B] disabled:opacity-30 hover:text-[#0F172A] transition-colors">Prev</button>
-          <span className="text-xs text-[#64748B] py-1.5">Page {page + 1}</span>
-          <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * 20 >= total} className="px-3 py-1.5 text-xs border border-[#E2E8F0] rounded-lg text-[#64748B] disabled:opacity-30 hover:text-[#0F172A] transition-colors">Next</button>
+          <button onClick={() => setPage((p) => p - 1)} disabled={page === 0} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Prev</button>
+          <span className="text-xs text-text-secondary py-1.5">Page {page + 1}</span>
+          <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * 20 >= total} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Next</button>
         </div>
       )}
     </div>
@@ -138,14 +138,14 @@ function ApplyTab() {
   return (
     <div className="max-w-lg space-y-4">
       <div>
-        <label className="block text-xs font-medium text-[#64748B] mb-1.5">Leave Type *</label>
+        <label className="block text-xs font-medium text-text-secondary mb-1.5">Leave Type *</label>
         {typesLoading ? (
           <Skeleton className="h-10 w-full rounded-xl" />
         ) : (
           <select
             value={form.leaveTypeId}
             onChange={(e) => setForm((p) => ({ ...p, leaveTypeId: e.target.value }))}
-            className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
+            className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
           >
             <option value="">Select leave type</option>
             {leaveTypes.filter((t) => t.isActive).map((t) => (
@@ -157,21 +157,21 @@ function ApplyTab() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-[#64748B] mb-1.5">Start Date *</label>
-          <input type="date" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary" />
+          <label className="block text-xs font-medium text-text-secondary mb-1.5">Start Date *</label>
+          <input type="date" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-[#64748B] mb-1.5">End Date *</label>
-          <input type="date" value={form.endDate} onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))} className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary" />
+          <label className="block text-xs font-medium text-text-secondary mb-1.5">End Date *</label>
+          <input type="date" value={form.endDate} onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))} className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary" />
         </div>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-[#64748B] mb-1.5">Duration</label>
+        <label className="block text-xs font-medium text-text-secondary mb-1.5">Duration</label>
         <select
           value={form.duration}
           onChange={(e) => setForm((p) => ({ ...p, duration: e.target.value as typeof form.duration }))}
-          className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary"
+          className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary"
         >
           <option value="FULL_DAY">Full Day</option>
           <option value="HALF_DAY_MORNING">Half Day (Morning)</option>
@@ -180,13 +180,13 @@ function ApplyTab() {
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-[#64748B] mb-1.5">Reason</label>
+        <label className="block text-xs font-medium text-text-secondary mb-1.5">Reason</label>
         <textarea
           value={form.reason}
           onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))}
           rows={3}
           placeholder="Reason for leave (optional)"
-          className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-primary resize-none"
+          className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary resize-none"
         />
       </div>
 
@@ -216,27 +216,27 @@ function BalancesTab() {
         <EmptyState variant="error" title="Failed to load balances" primaryAction={{ label: 'Retry', onClick: () => refetchBal() }} />
       ) : balances.length === 0 ? (
         <div className="text-center py-16">
-          <Calendar size={32} className="mx-auto mb-3 text-slate-700" />
-          <p className="text-[#64748B] text-sm">No leave balances found</p>
-          <p className="text-slate-600 text-xs mt-1">Contact HR to set up leave types for your company</p>
+          <Calendar size={32} className="mx-auto mb-3 text-text-tertiary" />
+          <p className="text-text-secondary text-sm">No leave balances found</p>
+          <p className="text-text-tertiary text-xs mt-1">Contact HR to set up leave types for your company</p>
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {balances.map((balance) => {
             const pct = balance.totalEntitlement > 0 ? (balance.used / balance.totalEntitlement) * 100 : 0
             return (
-              <div key={balance.id} className="bg-white border border-[#E2E8F0] rounded-2xl p-4">
+              <div key={balance.id} className="bg-white border border-border-default rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-[#0F172A] font-semibold text-sm">{balance.leaveTypeName}</p>
-                  <span className="text-lg font-bold text-[#0F172A]">{balance.available.toFixed(1)}</span>
+                  <p className="text-text-primary font-semibold text-sm">{balance.leaveTypeName}</p>
+                  <span className="text-lg font-bold text-text-primary">{balance.available.toFixed(1)}</span>
                 </div>
-                <div className="w-full bg-white rounded-full h-1.5 mb-3">
+                <div className="w-full bg-surface-2 rounded-full h-1.5 mb-3">
                   <div
                     className={clsx('h-1.5 rounded-full transition-all', pct > 80 ? 'bg-red-500' : pct > 50 ? 'bg-amber-500' : 'bg-emerald-500')}
                     style={{ width: `${Math.min(pct, 100)}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-xs text-[#64748B]">
+                <div className="flex justify-between text-xs text-text-secondary">
                   <span>{balance.used.toFixed(1)} used</span>
                   <span>{balance.totalEntitlement.toFixed(1)} total</span>
                 </div>
@@ -288,20 +288,20 @@ function ApprovalsTab() {
         <EmptyState variant="error" title="Failed to load approvals" primaryAction={{ label: 'Retry', onClick: () => refetchApprovals() }} />
       ) : approvals.length === 0 ? (
         <div className="text-center py-16">
-          <CheckCircle size={32} className="mx-auto mb-3 text-slate-700" />
-          <p className="text-[#64748B] text-sm">No pending approvals</p>
+          <CheckCircle size={32} className="mx-auto mb-3 text-text-tertiary" />
+          <p className="text-text-secondary text-sm">No pending approvals</p>
         </div>
       ) : (
         approvals.map((leave) => (
-          <div key={leave.id} className="bg-white border border-[#E2E8F0] rounded-2xl px-4 py-3 space-y-3">
+          <div key={leave.id} className="bg-white border border-border-default rounded-2xl px-4 py-3 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[#0F172A] font-medium text-sm">{leave.leaveTypeName ?? 'Leave'}</p>
-                <p className="text-[#64748B] text-xs mt-0.5">
+                <p className="text-text-primary font-medium text-sm">{leave.leaveTypeName ?? 'Leave'}</p>
+                <p className="text-text-secondary text-xs mt-0.5">
                   {format(new Date(leave.startDate), 'd MMM')} – {format(new Date(leave.endDate), 'd MMM yyyy')}
                   {' · '}{leave.totalDays} day{leave.totalDays !== 1 ? 's' : ''}
                 </p>
-                {leave.reason && <p className="text-[#64748B] text-xs mt-0.5 italic">"{leave.reason}"</p>}
+                {leave.reason && <p className="text-text-secondary text-xs mt-0.5 italic">"{leave.reason}"</p>}
               </div>
               <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full flex-shrink-0">Pending</span>
             </div>
@@ -311,11 +311,11 @@ function ApprovalsTab() {
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   placeholder="Comment (optional)"
-                  className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-primary"
+                  className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary"
                 />
                 <div className="flex gap-2">
-                  <button onClick={() => setCommenting(null)} className="flex-1 py-2 border border-[#E2E8F0] text-[#64748B] text-xs rounded-xl hover:text-[#0F172A] transition-colors">Cancel</button>
-                  <button onClick={handleDecide} disabled={decide.isPending} className={clsx('flex-1 py-2 text-xs rounded-xl font-medium transition-colors disabled:opacity-50', commenting.approved ? 'bg-emerald-600 hover:bg-emerald-500 text-[#0F172A]' : 'bg-red-600 hover:bg-red-500 text-[#0F172A]')}>
+                  <button onClick={() => setCommenting(null)} className="flex-1 py-2 border border-border-default text-text-secondary text-xs rounded-xl hover:text-text-primary transition-colors">Cancel</button>
+                  <button onClick={handleDecide} disabled={decide.isPending} className={clsx('flex-1 py-2 text-xs rounded-xl font-medium transition-colors disabled:opacity-50', commenting.approved ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white')}>
                     {decide.isPending ? '...' : commenting.approved ? 'Confirm Approve' : 'Confirm Reject'}
                   </button>
                 </div>
@@ -334,9 +334,9 @@ function ApprovalsTab() {
 
       {total > 20 && (
         <div className="flex justify-center gap-3 pt-2">
-          <button onClick={() => setPage((p) => p - 1)} disabled={page === 0} className="px-3 py-1.5 text-xs border border-[#E2E8F0] rounded-lg text-[#64748B] disabled:opacity-30 hover:text-[#0F172A] transition-colors">Prev</button>
-          <span className="text-xs text-[#64748B] py-1.5">Page {page + 1}</span>
-          <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * 20 >= total} className="px-3 py-1.5 text-xs border border-[#E2E8F0] rounded-lg text-[#64748B] disabled:opacity-30 hover:text-[#0F172A] transition-colors">Next</button>
+          <button onClick={() => setPage((p) => p - 1)} disabled={page === 0} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Prev</button>
+          <span className="text-xs text-text-secondary py-1.5">Page {page + 1}</span>
+          <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * 20 >= total} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Next</button>
         </div>
       )}
     </div>
@@ -363,8 +363,8 @@ export const Leave: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-[#0F172A]">Leave Management</h1>
-        <p className="text-[#64748B] text-sm mt-0.5">Apply for leave, track balances, and manage approvals</p>
+        <h1 className="text-xl font-bold text-text-primary">Leave Management</h1>
+        <p className="text-text-secondary text-sm mt-0.5">Apply for leave, track balances, and manage approvals</p>
       </div>
 
       <div className="flex flex-wrap gap-1 bg-white p-1 rounded-xl w-fit">

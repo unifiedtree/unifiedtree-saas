@@ -51,7 +51,7 @@ unifiedtree:
     # this value; production must override via UNIFIEDTREE_JWT_SECRET.
     secret: "smoke-test-only-do-not-use-in-production-32+chars"
     issuer: unifiedtree
-    access-ttl-minutes: 15
+    access-ttl-minutes: 720   # 12h (see canonical-prod for rationale)
     refresh-ttl-days: 7
 
   # SMOKE-TEST defaults for the face module. canonical-prod overrides

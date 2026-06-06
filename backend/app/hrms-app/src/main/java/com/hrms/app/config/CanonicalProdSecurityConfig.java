@@ -112,6 +112,7 @@ public class CanonicalProdSecurityConfig {
                     "/v1/public/signup-request",
                     "/v1/public/subdomains/check",
                     "/v1/public/workspace-status",
+                    "/v1/public/module-request",
                     "/v1/accounts/auth/login",
                     "/v1/platform/auth/login"
                 ).permitAll()

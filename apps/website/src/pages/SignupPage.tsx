@@ -101,15 +101,13 @@ export function SignupPage() {
     setLoading(true);
     setError('');
     try {
-      // The backend (platform.module_catalog) currently only supports a subset of these modules.
-      // E.g., it supports 'hrms', 'attendance', 'leave', 'payroll', 'crm', 'accounts'.
-      // It does not support 'projects', 'inventory', 'procurement', 'purchase', 'sales', 'manufacturing', 'pos', 'reports'.
-      // Filter out modules that are not supported to avoid a 400 Bad Request error.
-      const supportedModules = new Set(['hrms', 'attendance', 'leave', 'payroll', 'recruitment', 'performance', 'learning', 'expense', 'compliance', 'crm', 'accounts', 'whatsapp', 'billing']);
-      const validModules = actualModules.filter(m => supportedModules.has(m));
-      
-      // Ensure at least 'hrms' is requested if everything else is filtered out
-      if (validModules.length === 0) validModules.push('hrms');
+      // Send all selected canonical module keys (hrms, attendance, payroll, accounting,
+      // inventory, crm, purchase, sales, projects, manufacturing, pos, reports).
+      // 'hr' -> 'hrms' normalization is already applied when building actualModules.
+      const validModules = [...actualModules];
+
+      // Ensure at least 'hrms' is requested if nothing was selected.
+      if (!validModules.includes('hrms')) validModules.unshift('hrms');
 
       const signupPayload = {
         adminName: data.adminName,

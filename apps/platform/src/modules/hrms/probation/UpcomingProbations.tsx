@@ -21,8 +21,8 @@ const columns: Column<UpcomingProbation>[] = [
     header: 'Employee',
     cell: (r) => (
       <div>
-        <p className="font-semibold text-slate-900">{r.employeeName}</p>
-        <p className="text-xs text-slate-500">{r.employeeCode}{r.jobTitle ? ` · ${r.jobTitle}` : ''}</p>
+        <p className="font-semibold text-text-primary">{r.employeeName}</p>
+        <p className="text-xs text-text-secondary">{r.employeeCode}{r.jobTitle ? ` · ${r.jobTitle}` : ''}</p>
       </div>
     ),
   },
@@ -42,12 +42,12 @@ export const UpcomingProbations: React.FC = () => {
   const { data = [], isLoading } = useUpcomingProbations(30)
 
   return (
-    <div className="bg-white border border-[#0F6E56]/15 rounded-2xl shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
-        <CalendarClock size={16} className="text-[#0F6E56]" />
-        <h2 className="text-sm font-bold text-slate-800">Upcoming Probation Confirmations</h2>
+    <div className="bg-white border border-primary/15 rounded-2xl shadow-sm overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-border-light">
+        <CalendarClock size={16} className="text-primary" />
+        <h2 className="text-sm font-bold text-text-primary">Upcoming Probation Confirmations</h2>
         {data.length > 0 && (
-          <span className="ml-1 text-xs bg-[#0F6E56]/10 text-[#0F6E56] px-1.5 py-0.5 rounded-full font-semibold">
+          <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-semibold">
             {data.length}
           </span>
         )}

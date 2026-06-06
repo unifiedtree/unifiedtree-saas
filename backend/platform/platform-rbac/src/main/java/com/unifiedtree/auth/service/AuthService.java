@@ -13,6 +13,7 @@ import com.unifiedtree.rbac.repository.RolePermissionRepository;
 import com.unifiedtree.rbac.repository.RoleRepository;
 import com.unifiedtree.rbac.repository.UserRoleRepository;
 import com.unifiedtree.security.tenant.TenantContext;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +47,7 @@ public class AuthService {
     private final RolePermissionRepository rolePermissionRepo;
     private final PasswordService passwords;
     private final JwtService jwt;
+    private final JdbcTemplate jdbc;
 
     public AuthService(UserCredentialsRepository credentialsRepo,
                        RbacRefreshTokenRepository refreshRepo,
@@ -53,7 +55,8 @@ public class AuthService {
                        RoleRepository roleRepo,
                        RolePermissionRepository rolePermissionRepo,
                        PasswordService passwords,
-                       JwtService jwt) {
+                       JwtService jwt,
+                       JdbcTemplate jdbc) {
         this.credentialsRepo = credentialsRepo;
         this.refreshRepo = refreshRepo;
         this.userRoleRepo = userRoleRepo;
@@ -61,6 +64,7 @@ public class AuthService {
         this.rolePermissionRepo = rolePermissionRepo;
         this.passwords = passwords;
         this.jwt = jwt;
+        this.jdbc = jdbc;
     }
 
     public LoginResponse login(LoginRequest req) {
@@ -185,7 +189,14 @@ public class AuthService {
             ? List.of()
             : rolePermissionRepo.findPermissionCodesByRoleIds(roleIds).stream()
                 .distinct().sorted().toList();
-        return new MeResponse(userId, tenantId, creds.getEmail(), roleCodes, permissions);
+        // ACTIVE modules come straight from platform.tenant_modules — the source
+        // of truth for what the workspace selected/activated — NOT derived from
+        // permissions. Same query pattern as WorkspaceAccessService.activeModuleKeys
+        // and SaasService.workspaceStatus.
+        List<String> activeModules = jdbc.queryForList(
+            "SELECT module_key FROM platform.tenant_modules WHERE tenant_id = ? AND status = 'ACTIVE' ORDER BY module_key",
+            String.class, tenantId);
+        return new MeResponse(userId, tenantId, creds.getEmail(), roleCodes, permissions, activeModules);
     }
 
     // ---- helpers --------------------------------------------------------------

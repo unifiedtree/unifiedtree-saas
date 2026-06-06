@@ -159,12 +159,12 @@ function maskPassport(passport: string) {
 function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value?: string }) {
   if (!value) return null
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-[#E2E8F0] last:border-0">
+    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
       <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-        <Icon size={13} className="text-[#64748B]" />
+        <Icon size={13} className="text-text-secondary" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs text-[#64748B]">{label}</p>
+        <p className="text-xs text-text-secondary">{label}</p>
         <p className="text-sm text-slate-200 truncate">{value}</p>
       </div>
     </div>
@@ -173,9 +173,9 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
 
 function SectionCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4">
+    <div className="bg-white border border-border rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">{title}</h3>
+        <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{title}</h3>
         {action}
       </div>
       {children}
@@ -193,13 +193,13 @@ function ActionModal({
     <>
       <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white border border-[#E2E8F0]/60 rounded-2xl p-6 shadow-2xl">
-          <h3 className="text-[#0F172A] font-semibold mb-1">{title}</h3>
-          <p className="text-[#64748B] text-sm mb-4">{description}</p>
+        <div className="w-full max-w-md bg-white border border-border/60 rounded-2xl p-6 shadow-2xl">
+          <h3 className="text-text-primary font-semibold mb-1">{title}</h3>
+          <p className="text-text-secondary text-sm mb-4">{description}</p>
           {children}
           <div className="flex gap-3 mt-4">
-            <button onClick={onClose} className="flex-1 py-2.5 border border-[#E2E8F0] text-[#64748B] hover:text-[#0F172A] rounded-xl text-sm transition-colors">Cancel</button>
-            <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-[#0F172A] font-medium rounded-xl text-sm transition-colors">
+            <button onClick={onClose} className="flex-1 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">Cancel</button>
+            <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors">
               {isLoading ? 'Processing…' : confirm}
             </button>
           </div>
@@ -244,7 +244,7 @@ function AccountCard({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceE
         <div className="space-y-3 py-1">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-            <span className="text-sm text-[#64748B]">Invitation sent — awaiting acceptance</span>
+            <span className="text-sm text-text-secondary">Invitation sent — awaiting acceptance</span>
           </div>
           {canInvite && (
             <Button size="sm" variant="secondary" leftIcon={<Send size={13} />}
@@ -255,7 +255,7 @@ function AccountCard({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceE
         </div>
       ) : (
         <div className="space-y-3 py-1">
-          <p className="text-sm text-[#64748B]">No login account yet. Send an invitation so this employee can set a password and log in.</p>
+          <p className="text-sm text-text-secondary">No login account yet. Send an invitation so this employee can set a password and log in.</p>
           {canInvite && (
             <Button size="sm" leftIcon={<Send size={13} />}
               loading={busy} onClick={() => doSend(false)}>
@@ -302,12 +302,12 @@ function OverviewTab({ emp, departments, designations, branches, companies }: {
         <InfoRow icon={Calendar} label="Probation End"  value={emp.probationEndDate ? format(new Date(emp.probationEndDate), 'd MMM yyyy') : undefined} />
         <InfoRow icon={Calendar} label="Last Working Day" value={emp.lastWorkingDay ? format(new Date(emp.lastWorkingDay), 'd MMM yyyy') : undefined} />
         {emp.ctcAnnual && (
-          <div className="flex items-center gap-3 py-2.5 border-b border-[#E2E8F0] last:border-0">
+          <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
             <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-              <span className="text-xs text-[#64748B]">₹</span>
+              <span className="text-xs text-text-secondary">₹</span>
             </div>
             <div>
-              <p className="text-xs text-[#64748B]">CTC (Annual)</p>
+              <p className="text-xs text-text-secondary">CTC (Annual)</p>
               <p className="text-sm text-slate-200">₹{emp.ctcAnnual.toLocaleString('en-IN')}</p>
             </div>
           </div>
@@ -345,21 +345,21 @@ function ContactTab({ employeeId, emp }: { employeeId: string; emp: NonNullable<
   return (
     <>
       {/* Contact details from employee record */}
-      <div className="grid sm:grid-cols-2 gap-3 mb-5 p-4 bg-white rounded-xl border border-[#E2E8F0]/40">
+      <div className="grid sm:grid-cols-2 gap-3 mb-5 p-4 bg-white rounded-xl border border-border/40">
         <div>
-          <p className="text-xs text-[#64748B] mb-0.5">Work Email</p>
-          <p className="text-sm text-[#0F172A]">{emp.email}</p>
+          <p className="text-xs text-text-secondary mb-0.5">Work Email</p>
+          <p className="text-sm text-text-primary">{emp.email}</p>
         </div>
         {emp.phone && (
           <div>
-            <p className="text-xs text-[#64748B] mb-0.5">Phone</p>
-            <p className="text-sm text-[#0F172A]">{emp.phone}</p>
+            <p className="text-xs text-text-secondary mb-0.5">Phone</p>
+            <p className="text-sm text-text-primary">{emp.phone}</p>
           </div>
         )}
       </div>
 
       <div className="flex items-center justify-between mb-3">
-        <h4 className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Addresses</h4>
+        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Addresses</h4>
         <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
           <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setOpen(true)}>Add Address</Button>
         </Can>
@@ -370,7 +370,7 @@ function ContactTab({ employeeId, emp }: { employeeId: string; emp: NonNullable<
       ) : (
         <div className="space-y-2">
           {data.map((addr) => (
-            <div key={addr.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-[#E2E8F0]/40">
+            <div key={addr.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-border/40">
               <div>
                 <Badge tone="info" className="mb-1">{addr.addressType}</Badge>
                 <p className="text-sm text-slate-200">
@@ -378,7 +378,7 @@ function ContactTab({ employeeId, emp }: { employeeId: string; emp: NonNullable<
                 </p>
               </div>
               <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(addr.id)} className="p-1.5 text-[#64748B] hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(addr.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -390,8 +390,8 @@ function ContactTab({ employeeId, emp }: { employeeId: string; emp: NonNullable<
       <Drawer open={open} onOpenChange={setOpen} title="Add Address">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[#334155] mb-1">Address Type</label>
-            <select {...register('addressType')} className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500">
+            <label className="block text-sm font-medium text-text-primary mb-1">Address Type</label>
+            <select {...register('addressType')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
               <option value="CURRENT">Current</option>
               <option value="PERMANENT">Permanent</option>
               <option value="OFFICE">Office</option>
@@ -456,8 +456,8 @@ function IdentityTab({ employeeId }: { employeeId: string }) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="max-w-lg space-y-4">
       {identity && (
-        <div className="space-y-3 p-4 bg-white rounded-xl border border-[#E2E8F0]/40 mb-4">
-          <h4 className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Current Values</h4>
+        <div className="space-y-3 p-4 bg-white rounded-xl border border-border/40 mb-4">
+          <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Current Values</h4>
           {identity.pan && (
             <PiiField label="PAN" masked={maskPan(identity.pan)} full={identity.pan} show={showPan} onToggle={() => setShowPan((v) => !v)} />
           )}
@@ -495,10 +495,10 @@ function PiiField({ label, masked, full, show, onToggle }: { label: string; mask
   return (
     <div className="flex items-center justify-between gap-2">
       <div>
-        <p className="text-xs text-[#64748B]">{label}</p>
-        <p className="text-sm text-[#0F172A] font-mono">{show ? full : masked}</p>
+        <p className="text-xs text-text-secondary">{label}</p>
+        <p className="text-sm text-text-primary font-mono">{show ? full : masked}</p>
       </div>
-      <button type="button" onClick={onToggle} className="p-1.5 text-[#64748B] hover:text-[#0F172A] transition-colors">
+      <button type="button" onClick={onToggle} className="p-1.5 text-text-secondary hover:text-text-primary transition-colors">
         {show ? <EyeOff size={14} /> : <Eye size={14} />}
       </button>
     </div>
@@ -543,18 +543,18 @@ function BankTab({ employeeId }: { employeeId: string }) {
       ) : (
         <div className="space-y-2">
           {(data as EmployeeBankAccountResponse[]).map((acc) => (
-            <div key={acc.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-[#E2E8F0]/40">
+            <div key={acc.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-border/40">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium text-[#0F172A]">{acc.accountHolderName}</p>
-                <p className="text-xs text-[#64748B]">{acc.bankName} {acc.branchName ? `· ${acc.branchName}` : ''}</p>
-                <p className="text-xs font-mono text-[#64748B]">IFSC: {acc.ifscCode} · ****{acc.accountNumberLast4}</p>
+                <p className="text-sm font-medium text-text-primary">{acc.accountHolderName}</p>
+                <p className="text-xs text-text-secondary">{acc.bankName} {acc.branchName ? `· ${acc.branchName}` : ''}</p>
+                <p className="text-xs font-mono text-text-secondary">IFSC: {acc.ifscCode} · ****{acc.accountNumberLast4}</p>
                 <div className="flex gap-1.5 mt-1">
                   {acc.primary   && <Badge tone="success">Primary</Badge>}
                   {acc.verified  && <Badge tone="info">Verified</Badge>}
                 </div>
               </div>
               <Can code={P.HRMS_EMPLOYEE_BANK_WRITE}>
-                <button onClick={() => deleteMut.mutate(acc.id)} className="p-1.5 text-[#64748B] hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(acc.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -572,7 +572,7 @@ function BankTab({ employeeId }: { employeeId: string }) {
             <Field label="Bank Name" error={errors.bankName?.message}><Input {...register('bankName')} /></Field>
             <Field label="Branch" error={errors.branchName?.message}><Input {...register('branchName')} /></Field>
           </div>
-          <label className="flex items-center gap-2 text-sm text-[#334155] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
             <input type="checkbox" {...register('primary')} className="rounded border-slate-600 bg-white" />
             Set as primary account
           </label>
@@ -621,20 +621,20 @@ function EducationTab({ employeeId }: { employeeId: string }) {
       ) : (
         <div className="space-y-2">
           {(data as EmployeeEducation[]).map((edu) => (
-            <div key={edu.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-[#E2E8F0]/40">
+            <div key={edu.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-border/40">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-[#0F172A]">{edu.degree}{edu.fieldOfStudy ? ` · ${edu.fieldOfStudy}` : ''}</p>
+                  <p className="text-sm font-medium text-text-primary">{edu.degree}{edu.fieldOfStudy ? ` · ${edu.fieldOfStudy}` : ''}</p>
                   {edu.highest && <Badge tone="accent">Highest</Badge>}
                 </div>
-                <p className="text-xs text-[#64748B]">{edu.institution}</p>
+                <p className="text-xs text-text-secondary">{edu.institution}</p>
                 {(edu.startYear || edu.endYear) && (
-                  <p className="text-xs text-[#64748B]">{edu.startYear ?? '?'} – {edu.endYear ?? 'Present'}</p>
+                  <p className="text-xs text-text-secondary">{edu.startYear ?? '?'} – {edu.endYear ?? 'Present'}</p>
                 )}
-                {edu.gradeOrPercentage && <p className="text-xs text-[#64748B]">Grade/% : {edu.gradeOrPercentage}</p>}
+                {edu.gradeOrPercentage && <p className="text-xs text-text-secondary">Grade/% : {edu.gradeOrPercentage}</p>}
               </div>
               <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(edu.id)} className="p-1.5 text-[#64748B] hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(edu.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -653,7 +653,7 @@ function EducationTab({ employeeId }: { employeeId: string }) {
             <Field label="End Year" error={errors.endYear?.message}><Input {...register('endYear')} type="number" placeholder="2022" /></Field>
           </div>
           <Field label="Grade / Percentage" error={errors.gradeOrPercentage?.message}><Input {...register('gradeOrPercentage')} placeholder="8.5 CGPA / 85%" /></Field>
-          <label className="flex items-center gap-2 text-sm text-[#334155] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
             <input type="checkbox" {...register('highest')} className="rounded border-slate-600 bg-white" />
             Highest qualification
           </label>
@@ -703,20 +703,20 @@ function ExperienceTab({ employeeId }: { employeeId: string }) {
       ) : (
         <div className="space-y-2">
           {(data as EmployeeExperience[]).map((exp) => (
-            <div key={exp.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-[#E2E8F0]/40">
+            <div key={exp.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-border/40">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-[#0F172A]">{exp.companyName}</p>
+                  <p className="text-sm font-medium text-text-primary">{exp.companyName}</p>
                   {exp.current && <Badge tone="success">Current</Badge>}
                 </div>
-                {exp.designation && <p className="text-xs text-[#64748B]">{exp.designation}</p>}
-                <p className="text-xs text-[#64748B]">
+                {exp.designation && <p className="text-xs text-text-secondary">{exp.designation}</p>}
+                <p className="text-xs text-text-secondary">
                   {exp.startDate} – {exp.current ? 'Present' : (exp.endDate ?? '?')}
                   {exp.location ? ` · ${exp.location}` : ''}
                 </p>
               </div>
               <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(exp.id)} className="p-1.5 text-[#64748B] hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(exp.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -733,7 +733,7 @@ function ExperienceTab({ employeeId }: { employeeId: string }) {
             <Field label="Start Date" required error={errors.startDate?.message}><Input {...register('startDate')} type="date" /></Field>
             {!isCurrent && <Field label="End Date" error={errors.endDate?.message}><Input {...register('endDate')} type="date" /></Field>}
           </div>
-          <label className="flex items-center gap-2 text-sm text-[#334155] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
             <input type="checkbox" {...register('current')} className="rounded border-slate-600 bg-white" />
             Currently working here
           </label>
@@ -785,17 +785,17 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
       ) : (
         <div className="space-y-2">
           {(data as EmployeeDependent[]).map((dep) => (
-            <div key={dep.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-[#E2E8F0]/40">
+            <div key={dep.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-border/40">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-[#0F172A]">{dep.name}</p>
+                  <p className="text-sm font-medium text-text-primary">{dep.name}</p>
                   {dep.nominee && <Badge tone="accent">Nominee {dep.nomineePercentage ? `${dep.nomineePercentage}%` : ''}</Badge>}
                 </div>
-                <p className="text-xs text-[#64748B]">{dep.relationship}{dep.gender ? ` · ${dep.gender}` : ''}</p>
-                {dep.dateOfBirth && <p className="text-xs text-[#64748B]">DOB: {dep.dateOfBirth}</p>}
+                <p className="text-xs text-text-secondary">{dep.relationship}{dep.gender ? ` · ${dep.gender}` : ''}</p>
+                {dep.dateOfBirth && <p className="text-xs text-text-secondary">DOB: {dep.dateOfBirth}</p>}
               </div>
               <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(dep.id)} className="p-1.5 text-[#64748B] hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(dep.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -811,8 +811,8 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Date of Birth" error={errors.dateOfBirth?.message}><Input {...register('dateOfBirth')} type="date" /></Field>
             <div>
-              <label className="block text-sm font-medium text-[#334155] mb-1">Gender</label>
-              <select {...register('gender')} className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500">
+              <label className="block text-sm font-medium text-text-primary mb-1">Gender</label>
+              <select {...register('gender')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
                 <option value="">Select</option>
                 <option value="MALE">Male</option>
                 <option value="FEMALE">Female</option>
@@ -820,7 +820,7 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
               </select>
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-[#334155] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
             <input type="checkbox" {...register('nominee')} className="rounded border-slate-600 bg-white" />
             Mark as nominee
           </label>
@@ -872,17 +872,17 @@ function EmergencyTab({ employeeId }: { employeeId: string }) {
       ) : (
         <div className="space-y-2">
           {(data as EmergencyContact[]).map((c) => (
-            <div key={c.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-[#E2E8F0]/40">
+            <div key={c.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-border/40">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-[#0F172A]">{c.name}</p>
+                  <p className="text-sm font-medium text-text-primary">{c.name}</p>
                   {c.isPrimary && <Badge tone="success">Primary</Badge>}
                 </div>
-                {c.relationship && <p className="text-xs text-[#64748B]">{c.relationship}</p>}
-                <p className="text-xs text-[#64748B]">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
+                {c.relationship && <p className="text-xs text-text-secondary">{c.relationship}</p>}
+                <p className="text-xs text-text-secondary">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
               </div>
               <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(c.id)} className="p-1.5 text-[#64748B] hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(c.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -897,7 +897,7 @@ function EmergencyTab({ employeeId }: { employeeId: string }) {
           <Field label="Relationship" error={errors.relationship?.message}><Input {...register('relationship')} placeholder="Spouse, Parent, Sibling…" /></Field>
           <Field label="Phone" error={errors.phone?.message}><Input {...register('phone')} type="tel" /></Field>
           <Field label="Email" error={errors.email?.message}><Input {...register('email')} type="email" /></Field>
-          <label className="flex items-center gap-2 text-sm text-[#334155] cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
             <input type="checkbox" {...register('isPrimary')} className="rounded border-slate-600 bg-white" />
             Primary contact
           </label>
@@ -958,18 +958,18 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
     <>
       {/* Read-only summary */}
       <div className="space-y-3 mb-4">
-        <div className="grid sm:grid-cols-2 gap-3 p-4 bg-white rounded-xl border border-[#E2E8F0]/40">
+        <div className="grid sm:grid-cols-2 gap-3 p-4 bg-white rounded-xl border border-border/40">
           <InfoRow icon={Briefcase} label="Department"    value={department?.name} />
           <InfoRow icon={Briefcase} label="Designation"   value={designation?.title} />
           <InfoRow icon={MapPin}    label="Branch"        value={branch?.name} />
           <InfoRow icon={Briefcase} label="Employment Type" value={emp.employmentType?.replace('_', ' ')} />
           {emp.ctcAnnual && (
-            <div className="flex items-center gap-3 py-2.5 border-b border-[#E2E8F0] last:border-0 col-span-2">
+            <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0 col-span-2">
               <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-                <span className="text-xs text-[#64748B]">₹</span>
+                <span className="text-xs text-text-secondary">₹</span>
               </div>
               <div>
-                <p className="text-xs text-[#64748B]">CTC (Annual)</p>
+                <p className="text-xs text-text-secondary">CTC (Annual)</p>
                 <p className="text-sm text-slate-200">₹{emp.ctcAnnual.toLocaleString('en-IN')}</p>
               </div>
             </div>
@@ -977,7 +977,7 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
         </div>
 
         {/* Date milestones — read-only, set via lifecycle mutations */}
-        <div className="grid sm:grid-cols-2 gap-3 p-4 bg-white rounded-xl border border-[#E2E8F0]/40">
+        <div className="grid sm:grid-cols-2 gap-3 p-4 bg-white rounded-xl border border-border/40">
           <InfoRow icon={Calendar} label="Joining Date"        value={emp.dateOfJoining      ? format(new Date(emp.dateOfJoining),      'd MMM yyyy') : undefined} />
           <InfoRow icon={Calendar} label="Confirmation Date"   value={emp.confirmationDate   ? format(new Date(emp.confirmationDate),   'd MMM yyyy') : undefined} />
           <InfoRow icon={Calendar} label="Probation End"       value={emp.probationEndDate   ? format(new Date(emp.probationEndDate),   'd MMM yyyy') : undefined} />
@@ -992,29 +992,29 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
       <Drawer open={open} onOpenChange={setOpen} title="Edit Work Details">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[#334155] mb-1">Department</label>
-            <select {...register('departmentId')} className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500">
+            <label className="block text-sm font-medium text-text-primary mb-1">Department</label>
+            <select {...register('departmentId')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
               <option value="">— None —</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-[#334155] mb-1">Designation</label>
-            <select {...register('designationId')} className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500">
+            <label className="block text-sm font-medium text-text-primary mb-1">Designation</label>
+            <select {...register('designationId')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
               <option value="">— None —</option>
               {designations.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-[#334155] mb-1">Branch</label>
-            <select {...register('branchId')} className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500">
+            <label className="block text-sm font-medium text-text-primary mb-1">Branch</label>
+            <select {...register('branchId')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
               <option value="">— None —</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-[#334155] mb-1">Employment Type</label>
-            <select {...register('employmentType')} className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500">
+            <label className="block text-sm font-medium text-text-primary mb-1">Employment Type</label>
+            <select {...register('employmentType')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
               <option value="">— None —</option>
               {empTypes.filter((t) => t.active).map((t) => <option key={t.id} value={t.code ?? t.name}>{t.name}</option>)}
             </select>
@@ -1055,11 +1055,11 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-[#334155]">Generated Letters</h3>
+        <h3 className="text-sm font-medium text-text-primary">Generated Letters</h3>
         <Can code={P.HRMS_LETTERS_GENERATE}>
           <button
             onClick={() => navigate(`/hrms/letters/generated?employeeId=${employeeId}`)}
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-[#0F172A] hover:bg-indigo-500 transition-colors"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 transition-colors"
           >
             <Plus size={12} />
             Generate letter
@@ -1076,14 +1076,14 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
           description="Generate an offer, appointment, or experience letter for this employee."
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[#E2E8F0]">
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#E2E8F0] bg-white">
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#64748B]">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#64748B]">Subject</th>
-                <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#64748B]">Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-[#64748B]">Status</th>
+              <tr className="border-b border-border bg-white">
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Subject</th>
+                <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Date</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Status</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -1091,10 +1091,10 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
               {letters.map(l => (
                 <tr key={l.id} className="hover:bg-white/30 transition-colors">
                   <td className="px-4 py-3">
-                    <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-500/15 text-[#0F6E56]">{l.type}</span>
+                    <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-500/15 text-primary">{l.type}</span>
                   </td>
-                  <td className="px-4 py-3 text-[#334155] max-w-xs truncate">{l.subject}</td>
-                  <td className="hidden md:table-cell px-4 py-3 text-[#64748B] text-xs">
+                  <td className="px-4 py-3 text-text-primary max-w-xs truncate">{l.subject}</td>
+                  <td className="hidden md:table-cell px-4 py-3 text-text-secondary text-xs">
                     {format(new Date(l.createdAt), 'dd MMM yyyy')}
                   </td>
                   <td className="px-4 py-3">
@@ -1102,13 +1102,13 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
                       'rounded-full px-2 py-0.5 text-xs font-medium',
                       l.status === 'VOID' ? 'bg-red-500/15 text-red-300' :
                       l.status === 'SENT' ? 'bg-blue-500/15 text-blue-300' :
-                      'bg-slate-500/15 text-[#334155]'
+                      'bg-slate-500/15 text-text-primary'
                     )}>{l.status}</span>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => navigate(`/hrms/letters/generated/${l.id}`)}
-                      className="text-xs text-[#64748B] hover:text-slate-200 transition-colors"
+                      className="text-xs text-text-secondary hover:text-slate-200 transition-colors"
                     >
                       View
                     </button>
@@ -1162,7 +1162,7 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-[#334155]">Current Salary Structure</h3>
+        <h3 className="text-sm font-bold text-text-primary">Current Salary Structure</h3>
         <Can code={P.PAYROLL_STRUCTURE_MANAGE}>
           <Button size="sm" onClick={openEdit}>{structure ? 'Revise structure' : 'Add structure'}</Button>
         </Can>
@@ -1173,13 +1173,13 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white border border-[#E2E8F0] rounded-xl p-3"><p className="text-xs text-[#64748B]">Annual CTC</p><p className="text-lg font-bold text-[#0F172A]">{inr(structure.ctcAnnual)}</p></div>
-            <div className="bg-white border border-[#E2E8F0] rounded-xl p-3"><p className="text-xs text-[#64748B]">Monthly</p><p className="text-lg font-bold text-[#0F172A]">{inr(structure.ctcMonthly)}</p></div>
-            <div className="bg-white border border-[#E2E8F0] rounded-xl p-3"><p className="text-xs text-[#64748B]">Tax regime</p><p className="text-lg font-bold text-[#0F172A]">{structure.taxRegime}</p></div>
-            <div className="bg-white border border-[#E2E8F0] rounded-xl p-3"><p className="text-xs text-[#64748B]">PF status</p><p className="text-sm font-bold text-[#0F172A]">{structure.pfApplicable ? structure.pfStatus : 'N/A'}</p></div>
+            <div className="bg-white border border-border rounded-xl p-3"><p className="text-xs text-text-secondary">Annual CTC</p><p className="text-lg font-bold text-text-primary">{inr(structure.ctcAnnual)}</p></div>
+            <div className="bg-white border border-border rounded-xl p-3"><p className="text-xs text-text-secondary">Monthly</p><p className="text-lg font-bold text-text-primary">{inr(structure.ctcMonthly)}</p></div>
+            <div className="bg-white border border-border rounded-xl p-3"><p className="text-xs text-text-secondary">Tax regime</p><p className="text-lg font-bold text-text-primary">{structure.taxRegime}</p></div>
+            <div className="bg-white border border-border rounded-xl p-3"><p className="text-xs text-text-secondary">PF status</p><p className="text-sm font-bold text-text-primary">{structure.pfApplicable ? structure.pfStatus : 'N/A'}</p></div>
           </div>
           {structure.lines.length > 0 && (
-            <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+            <div className="bg-white border border-border rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead><tr className="bg-slate-50 text-left text-xs font-bold text-slate-500 uppercase tracking-wider"><th className="px-4 py-2.5">Component</th><th className="px-4 py-2.5">Monthly</th><th className="px-4 py-2.5">Annual</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1195,8 +1195,8 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
 
       {history.length > 1 && (
         <div>
-          <h3 className="text-sm font-bold text-[#334155] mb-2">History</h3>
-          <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
+          <h3 className="text-sm font-bold text-text-primary mb-2">History</h3>
+          <div className="bg-white border border-border rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead><tr className="bg-slate-50 text-left text-xs font-bold text-slate-500 uppercase tracking-wider"><th className="px-4 py-2.5">Effective</th><th className="px-4 py-2.5">CTC</th><th className="px-4 py-2.5">Status</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
@@ -1215,12 +1215,12 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
             <Field label="Annual CTC (₹)" required><Input type="number" value={ctc} onChange={(e) => setCtc(e.target.value)} /></Field>
             <Field label="Effective from"><Input type="date" value={effFrom} onChange={(e) => setEffFrom(e.target.value)} /></Field>
             <Field label="Tax regime">
-              <select value={taxRegime} onChange={(e) => setTaxRegime(e.target.value as 'OLD' | 'NEW')} className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm">
+              <select value={taxRegime} onChange={(e) => setTaxRegime(e.target.value as 'OLD' | 'NEW')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm">
                 <option value="NEW">New regime</option><option value="OLD">Old regime</option>
               </select>
             </Field>
             <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} className="h-4 w-4 rounded accent-[#0F6E56]" /> PF applicable
+              <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} className="h-4 w-4 rounded accent-primary" /> PF applicable
             </label>
             {ctcComponents.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-slate-100">
@@ -1349,25 +1349,25 @@ export const EmployeeDetail: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* Back nav */}
-      <button onClick={() => navigate('/hrms/employees')} className="flex items-center gap-2 text-sm text-[#64748B] hover:text-[#0F172A] transition-colors">
+      <button onClick={() => navigate('/hrms/employees')} className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors">
         <ArrowLeft size={15} /> Back to Employees
       </button>
 
       {/* Profile card */}
-      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5">
+      <div className="bg-white border border-border rounded-2xl p-5">
         <div className="flex items-start gap-4">
-          <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-[#0F172A] text-xl font-bold flex-shrink-0">
+          <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
             {initials.toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
-                <h1 className="text-lg font-bold text-[#0F172A]">{fullName}</h1>
-                <p className="text-[#64748B] text-sm">{emp.employeeCode}</p>
+                <h1 className="text-lg font-bold text-text-primary">{fullName}</h1>
+                <p className="text-text-secondary text-sm">{emp.employeeCode}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>
-                <button onClick={() => setShowEdit(true)} className="p-2 bg-white hover:bg-[#F1F5F9] text-[#334155] rounded-xl transition-colors">
+                <button onClick={() => setShowEdit(true)} className="p-2 bg-white hover:bg-surface-2 text-text-primary rounded-xl transition-colors">
                   <Edit3 size={14} />
                 </button>
               </div>
@@ -1375,19 +1375,19 @@ export const EmployeeDetail: React.FC = () => {
 
             <div className="flex flex-wrap gap-4 mt-2">
               {companies.find((c) => c.id === emp.companyId) && (
-                <span className="text-xs text-[#64748B]">
+                <span className="text-xs text-text-secondary">
                   <Building2 size={10} className="inline mr-1" />
                   {companies.find((c) => c.id === emp.companyId)!.name}
                 </span>
               )}
               {departments.find((d) => d.id === emp.departmentId) && (
-                <span className="text-xs text-[#64748B]">
+                <span className="text-xs text-text-secondary">
                   <Briefcase size={10} className="inline mr-1" />
                   {departments.find((d) => d.id === emp.departmentId)!.name}
                 </span>
               )}
               {emp.dateOfJoining && (
-                <span className="text-xs text-[#64748B]">
+                <span className="text-xs text-text-secondary">
                   <Calendar size={10} className="inline mr-1" />
                   Joined {format(new Date(emp.dateOfJoining), 'd MMM yyyy')}
                 </span>
@@ -1398,7 +1398,7 @@ export const EmployeeDetail: React.FC = () => {
 
         {/* Lifecycle actions */}
         <Can code={P.HRMS_EMPLOYEE_WRITE}>
-          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-[#E2E8F0]">
+          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
             {emp.employmentStatus === 'PROBATION' && (
               <button onClick={() => setModal('confirm')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg text-xs font-medium transition-colors">
                 <UserCheck size={13} /> Confirm Probation
@@ -1527,8 +1527,8 @@ export const EmployeeDetail: React.FC = () => {
       {modal === 'confirm' && (
         <ActionModal title="Confirm Probation" description="Set the confirmation date for this employee." confirm="Confirm Employee" onConfirm={handleConfirm} onClose={() => setModal(null)} isLoading={confirmMutation.isPending}>
           <div>
-            <label className="block text-xs text-[#64748B] mb-1.5">Confirmation Date</label>
-            <input type="date" value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500" />
+            <label className="block text-xs text-text-secondary mb-1.5">Confirmation Date</label>
+            <input type="date" value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary" />
           </div>
         </ActionModal>
       )}
@@ -1536,8 +1536,8 @@ export const EmployeeDetail: React.FC = () => {
       {modal === 'extend' && (
         <ActionModal title="Extend Probation" description="Set a new probation end date for this employee." confirm="Extend Probation" onConfirm={handleExtend} onClose={() => setModal(null)} isLoading={extendMutation.isPending}>
           <div>
-            <label className="block text-xs text-[#64748B] mb-1.5">New Probation End Date *</label>
-            <input type="date" value={extendDate} onChange={(e) => setExtendDate(e.target.value)} className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500" />
+            <label className="block text-xs text-text-secondary mb-1.5">New Probation End Date *</label>
+            <input type="date" value={extendDate} onChange={(e) => setExtendDate(e.target.value)} className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary" />
           </div>
         </ActionModal>
       )}
@@ -1546,16 +1546,16 @@ export const EmployeeDetail: React.FC = () => {
         <ActionModal title="Start Notice Period" description="Record the employee's resignation and notice period." confirm="Start Notice" onConfirm={handleNotice} onClose={() => setModal(null)} isLoading={noticeMutation.isPending}>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-[#64748B] mb-1.5">Notice Start Date</label>
-              <input type="date" value={noticeStart} onChange={(e) => setNoticeStart(e.target.value)} className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500" />
+              <label className="block text-xs text-text-secondary mb-1.5">Notice Start Date</label>
+              <input type="date" value={noticeStart} onChange={(e) => setNoticeStart(e.target.value)} className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary" />
             </div>
             <div>
-              <label className="block text-xs text-[#64748B] mb-1.5">Last Working Day *</label>
-              <input type="date" value={lastDay} onChange={(e) => setLastDay(e.target.value)} className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500" />
+              <label className="block text-xs text-text-secondary mb-1.5">Last Working Day *</label>
+              <input type="date" value={lastDay} onChange={(e) => setLastDay(e.target.value)} className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary" />
             </div>
             <div>
-              <label className="block text-xs text-[#64748B] mb-1.5">Reason</label>
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+              <label className="block text-xs text-text-secondary mb-1.5">Reason</label>
+              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-primary" />
             </div>
           </div>
         </ActionModal>
@@ -1565,12 +1565,12 @@ export const EmployeeDetail: React.FC = () => {
         <ActionModal title="Mark Employee as Exited" description="Record the employee's final exit from the organisation." confirm="Mark Exited" onConfirm={handleExit} onClose={() => setModal(null)} isLoading={exitMutation.isPending}>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-[#64748B] mb-1.5">Last Working Day *</label>
-              <input type="date" value={lastDay} onChange={(e) => setLastDay(e.target.value)} className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500" />
+              <label className="block text-xs text-text-secondary mb-1.5">Last Working Day *</label>
+              <input type="date" value={lastDay} onChange={(e) => setLastDay(e.target.value)} className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary" />
             </div>
             <div>
-              <label className="block text-xs text-[#64748B] mb-1.5">Exit Reason</label>
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+              <label className="block text-xs text-text-secondary mb-1.5">Exit Reason</label>
+              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-primary" />
             </div>
           </div>
         </ActionModal>

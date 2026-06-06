@@ -14,6 +14,7 @@ import { WorkspacesPage } from './pages/WorkspacesPage'
 import { WorkspaceLayout } from './components/WorkspaceLayout'
 import { DashboardPage } from './pages/DashboardPage'
 import { MarketplacePage } from './pages/MarketplacePage'
+import { EditWorkspacePage } from './pages/EditWorkspacePage'
 import { ScrollToTop } from './components/ScrollToTop'
 
 function PageTransition({ children }: { children: React.ReactNode }) {
@@ -46,6 +47,7 @@ function AnimatedRoutes() {
 
         {/* Account & Workspace Routes */}
         <Route path="/workspaces"        element={<PageTransition><WorkspacesPage /></PageTransition>} />
+        <Route path="/edit-workspace"    element={<PageTransition><EditWorkspacePage /></PageTransition>} />
 
 
       </Routes>

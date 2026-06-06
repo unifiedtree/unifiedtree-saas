@@ -48,7 +48,7 @@ public class JwtService {
     public JwtService(
             @Value("${unifiedtree.jwt.secret:change-me-change-me-change-me-change-me}") String secret,
             @Value("${unifiedtree.jwt.issuer:unifiedtree}") String issuer,
-            @Value("${unifiedtree.jwt.access-ttl-minutes:15}") long accessTtlMin,
+            @Value("${unifiedtree.jwt.access-ttl-minutes:720}") long accessTtlMin,
             @Value("${unifiedtree.jwt.refresh-ttl-days:7}") long refreshTtlDays) {
         this.issuer = issuer;
         this.accessTokenTtl = Duration.ofMinutes(accessTtlMin);

@@ -179,7 +179,7 @@ export function Navbar() {
               <>
                 <Link
                   to="/workspaces"
-                  className="px-4 py-2 text-sm font-body font-medium text-white hover:text-primary transition-colors"
+                  className="px-4 py-2 text-sm font-body font-medium text-white hover:text-primary hover:bg-primary-light rounded-lg transition-all duration-150"
                 >
                   Workspaces
                 </Link>
@@ -197,7 +197,7 @@ export function Navbar() {
               <>
                 <Link
                   to="/login"
-                  className="px-4 py-2 text-sm font-body font-medium text-white hover:text-primary transition-colors"
+                  className="px-4 py-2 text-sm font-body font-medium text-white hover:text-primary hover:bg-primary-light rounded-lg transition-all duration-150"
                 >
                   Sign In
                 </Link>

@@ -18,7 +18,7 @@ export const Payroll: React.FC = () => {
         </div>
 
         <button
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-accent-default px-5 py-2.5 text-sm font-medium text-[#0F172A] hover:bg-accent-hover transition-colors"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-accent-default px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
           onClick={() => alert("You'll be notified when Payroll launches.")}
         >
           Notify me

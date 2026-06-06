@@ -100,7 +100,7 @@ export const Employees: React.FC = () => {
           {canWrite && (
             <button
               onClick={() => setShowForm(true)}
-              className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-[#0F172A] text-sm font-bold rounded-xl transition-all shadow-sm shadow-primary/30"
+              className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-bold rounded-xl transition-all shadow-sm shadow-primary/30"
             >
               <Plus size={16} /> Add Employee
             </button>

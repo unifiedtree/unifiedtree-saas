@@ -1,138 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { Clock, CheckCircle, LogIn, LogOut, Calendar, Users, Search, ChevronRight } from 'lucide-react'
+import React, { useState } from 'react'
+import { Clock, CheckCircle, Search } from 'lucide-react'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/shared/hooks/useToast'
 import { usePermission, Can, P } from '@unifiedtree/sdk'
-import { StatsSkeleton, Skeleton, TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { StatsSkeleton, Skeleton, EmptyState } from '@unifiedtree/ui-kit'
 import {
-  useTodayAttendance, useMonthlyStats, useAttendanceHistory,
+  useMonthlyStats, useAttendanceHistory,
   useTeamDashboard, useMyCorrections, useCorrectionApprovals,
-  useCheckIn, useCheckOut, useCreateCorrection, useDecideCorrection,
+  useCreateCorrection, useDecideCorrection,
 } from './api/useAttendance'
 
 type Tab = 'my' | 'team' | 'corrections'
 
-// ── Punch Widget ──────────────────────────────────────────────────────────────
-
-function useElapsed(startIso?: string | null) {
-  const [elapsed, setElapsed] = useState('')
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  useEffect(() => {
-    if (!startIso) { setElapsed(''); return }
-    const tick = () => {
-      const diff = Math.floor((Date.now() - new Date(startIso).getTime()) / 1000)
-      const h = Math.floor(diff / 3600)
-      const m = Math.floor((diff % 3600) / 60)
-      setElapsed(h > 0 ? `${h}h ${m}m` : `${m}m`)
-    }
-    tick()
-    intervalRef.current = setInterval(tick, 60_000)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [startIso])
-
-  return elapsed
-}
-
-async function getGeoLocation(): Promise<{ latitude?: number; longitude?: number }> {
-  if (!navigator.geolocation) return {}
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-      () => resolve({}),
-      { timeout: 5000, maximumAge: 60_000 }
-    )
-  })
-}
-
-function PunchWidget() {
-  const { toast } = useToast()
-  const { data: today } = useTodayAttendance()
-  const checkIn = useCheckIn()
-  const checkOut = useCheckOut()
-
-  const isCheckedIn = !!today?.checkInTime && !today?.checkOutTime
-  const isCheckedOut = !!today?.checkOutTime
-  const isPending = checkIn.isPending || checkOut.isPending
-  const elapsed = useElapsed(isCheckedIn ? today?.checkInTime : null)
-
-  return (
-    <div className="bg-white border border-border-default shadow-sm rounded-2xl p-6 relative overflow-hidden">
-      {/* Decorative background element */}
-      <div className="absolute -top-16 -right-16 w-48 h-48 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-      
-      <div className="flex items-center justify-between mb-6 relative z-10">
-        <div>
-          <p className="text-text-primary font-bold text-lg font-heading">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
-          <p className="text-text-secondary text-sm font-medium mt-0.5">
-            {isCheckedOut ? 'Completed for today' : isCheckedIn ? `Checked in${elapsed ? ` · ${elapsed}` : ''}` : 'Not checked in yet'}
-          </p>
-        </div>
-        <div className={clsx('w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm', isCheckedIn ? 'bg-success/10 text-success' : 'bg-bg-surface border border-border-default text-text-tertiary')}>
-          <Clock size={22} className={isCheckedIn ? 'text-success' : 'text-text-tertiary'} />
-        </div>
-      </div>
-
-      <div className="flex items-center gap-8 mb-6 bg-bg-base rounded-xl p-4 border border-border-default relative z-10">
-        <div className="flex-1">
-          <p className="text-xs text-text-tertiary font-semibold uppercase tracking-wider mb-1">Check In</p>
-          <p className="text-text-primary font-bold text-base">{today?.checkInTime ? format(new Date(today.checkInTime), 'h:mm a') : '—'}</p>
-        </div>
-        <div className="h-8 w-px bg-border-default" />
-        <div className="flex-1">
-          <p className="text-xs text-text-tertiary font-semibold uppercase tracking-wider mb-1">Check Out</p>
-          <p className="text-text-primary font-bold text-base">{today?.checkOutTime ? format(new Date(today.checkOutTime), 'h:mm a') : '—'}</p>
-        </div>
-        {today?.workHours != null && (
-          <>
-            <div className="h-8 w-px bg-border-default" />
-            <div className="flex-1">
-              <p className="text-xs text-text-tertiary font-semibold uppercase tracking-wider mb-1">Hours</p>
-              <p className="text-text-primary font-bold text-base">{today.workHours.toFixed(1)}h</p>
-            </div>
-          </>
-        )}
-      </div>
-
-      {isCheckedOut ? (
-        <div className="flex items-center justify-center gap-2 py-3 bg-success/10 border border-success/20 rounded-xl px-4 relative z-10">
-          <CheckCircle size={18} className="text-success" />
-          <span className="text-sm text-success font-bold">Attendance marked for today</span>
-        </div>
-      ) : (
-        <button
-          onClick={async () => {
-            try {
-              if (isCheckedIn) {
-                const geo = await getGeoLocation()
-                await checkOut.mutateAsync(geo)
-                toast('Checked out successfully', 'success')
-              } else if (!isCheckedOut) {
-                const geo = await getGeoLocation()
-                await checkIn.mutateAsync({ checkInMethod: 'WEB', ...geo })
-                toast('Checked in successfully', 'success')
-              }
-            } catch (err) {
-              // Surface the backend's actual message (e.g. "Already checked in
-              // today") instead of a generic failure.
-              toast((err as Error)?.message || 'Failed to punch attendance', 'error')
-            }
-          }}
-          disabled={isPending}
-          className={clsx(
-            'w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all shadow-sm active:scale-[0.98] relative z-10',
-            isPending ? 'opacity-70 cursor-not-allowed' : '',
-            isCheckedIn ? 'bg-warning hover:bg-warning-hover text-[#0F172A] shadow-warning/20' : 'bg-primary hover:bg-primary-hover text-[#0F172A] shadow-primary/30'
-          )}
-        >
-          {isPending ? 'Processing...' : isCheckedIn ? <><LogOut size={18} /> Check Out</> : <><LogIn size={18} /> Check In</>}
-        </button>
-      )}
-    </div>
-  )
-}
+// Punching is mobile-only — the web app no longer renders a check-in/out widget
+// or uses navigator.geolocation. The underlying useCheckIn/useCheckOut hooks are
+// intentionally kept in ./api/useAttendance for the mobile/SDK/test clients.
 
 // ── My Attendance Tab ─────────────────────────────────────────────────────────
 
@@ -144,16 +28,14 @@ function MyAttendanceTab() {
   const { data: history = [], isLoading: histLoading, error: histError, refetch: refetchHist } = useAttendanceHistory(year, month)
 
   const STATUS_BG: Record<string, string> = {
-    PRESENT: 'bg-success text-[#0F172A] shadow-sm', ABSENT: 'bg-danger text-[#0F172A] shadow-sm', LATE: 'bg-warning text-[#0F172A] shadow-sm',
-    HALF_DAY: 'bg-orange-500 text-[#0F172A] shadow-sm', ON_LEAVE: 'bg-accent-default text-[#0F172A] shadow-sm', HOLIDAY: 'bg-purple-500 text-[#0F172A] shadow-sm',
-    WEEKEND: 'bg-bg-base text-text-secondary border border-border-default', WFH: 'bg-cyan-500 text-[#0F172A] shadow-sm',
+    PRESENT: 'bg-success text-white shadow-sm', ABSENT: 'bg-danger text-white shadow-sm', LATE: 'bg-warning text-white shadow-sm',
+    HALF_DAY: 'bg-orange-500 text-white shadow-sm', ON_LEAVE: 'bg-accent-default text-white shadow-sm', HOLIDAY: 'bg-purple-500 text-white shadow-sm',
+    WEEKEND: 'bg-bg-base text-text-secondary border border-border-default', WFH: 'bg-cyan-500 text-white shadow-sm',
   }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-1 space-y-6">
-        <PunchWidget />
-        
         <div className="bg-white border border-border-default shadow-sm rounded-2xl p-5">
           <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 font-heading">{format(new Date(year, month - 1), 'MMMM yyyy')} Summary</h3>
           {statsLoading ? (
@@ -394,7 +276,7 @@ function CorrectionsTab() {
                 </div>
                 <div className="flex justify-end gap-3 pt-2">
                   <button onClick={() => setOpen(false)} className="px-4 py-2 text-text-secondary font-semibold text-sm hover:text-text-primary transition-colors">Cancel</button>
-                  <button onClick={handleCreate} disabled={createCorrection.isPending} className="px-5 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-[#0F172A] font-bold text-sm rounded-xl transition-all shadow-sm shadow-primary/30">
+                  <button onClick={handleCreate} disabled={createCorrection.isPending} className="px-5 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all shadow-sm shadow-primary/30">
                     {createCorrection.isPending ? 'Submitting...' : 'Submit Request'}
                   </button>
                 </div>
@@ -431,7 +313,7 @@ function CorrectionsTab() {
         <div className="bg-white border border-border-default shadow-sm rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-base font-bold text-text-primary font-heading">Pending Approvals</h3>
-            <span className="bg-warning text-[#0F172A] text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
+            <span className="bg-warning text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
               {(pending?.content ?? []).length}
             </span>
           </div>
@@ -453,8 +335,8 @@ function CorrectionsTab() {
                   </div>
                   <Can code={P.ATTENDANCE_REGULARIZATION_APPROVE}>
                     <div className="flex gap-2">
-                      <button onClick={() => handleDecide(c.id, true)} className="px-4 py-2 bg-success/10 text-success hover:bg-success hover:text-[#0F172A] border border-success/20 hover:border-success text-xs font-bold rounded-xl transition-all shadow-sm">Approve</button>
-                      <button onClick={() => handleDecide(c.id, false)} className="px-4 py-2 bg-danger/10 text-danger hover:bg-danger hover:text-[#0F172A] border border-danger/20 hover:border-danger text-xs font-bold rounded-xl transition-all shadow-sm">Reject</button>
+                      <button onClick={() => handleDecide(c.id, true)} className="px-4 py-2 bg-success/10 text-success hover:bg-success hover:text-white border border-success/20 hover:border-success text-xs font-bold rounded-xl transition-all shadow-sm">Approve</button>
+                      <button onClick={() => handleDecide(c.id, false)} className="px-4 py-2 bg-danger/10 text-danger hover:bg-danger hover:text-white border border-danger/20 hover:border-danger text-xs font-bold rounded-xl transition-all shadow-sm">Reject</button>
                     </div>
                   </Can>
                 </div>

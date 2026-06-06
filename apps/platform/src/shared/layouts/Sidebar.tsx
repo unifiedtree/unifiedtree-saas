@@ -5,10 +5,19 @@ import {
   LayoutDashboard, BarChart3, Users, TrendingUp, FileText, CreditCard,
   Package, ShoppingCart, Briefcase, HelpCircle, Settings, Shield, Bell,
   Folder, ChevronDown, ChevronRight, ChevronLeft, Lock, DollarSign,
-  ClipboardList, Building2, UserCheck, Calendar, Star, Receipt, Sprout,
+  ClipboardList, Building2, UserCheck, Calendar, Star, Receipt, Sprout, MapPin,
 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { P } from '@unifiedtree/sdk'
 import { useAuthStore } from '@/core/auth/authStore'
+
+interface NavChildDef {
+  label: string
+  path: string
+  icon: React.ReactNode
+  /** Optional permission code — child is hidden unless the user holds it. */
+  perm?: string
+}
 
 interface NavItemDef {
   key: string
@@ -16,7 +25,7 @@ interface NavItemDef {
   icon: React.ReactNode
   path?: string
   module?: string
-  children?: { label: string; path: string; icon: React.ReactNode }[]
+  children?: NavChildDef[]
 }
 
 const NAV_ITEMS: NavItemDef[] = [
@@ -30,6 +39,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     children: [
       { label: 'Employees', path: '/hrms/employees', icon: <UserCheck size={15} /> },
       { label: 'Attendance', path: '/hrms/attendance', icon: <Calendar size={15} /> },
+      { label: 'Geofencing', path: '/hrms/attendance/geofencing', icon: <MapPin size={15} />, perm: P.ATTENDANCE_TEAM_READ },
       { label: 'Leave', path: '/hrms/leave', icon: <ClipboardList size={15} /> },
       { label: 'Payroll', path: '/hrms/payroll', icon: <CreditCard size={15} /> },
     ],
@@ -86,6 +96,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const tenant   = useAuthStore((s) => s.tenant)
   const user     = useAuthStore((s) => s.user)
   const hasModule = useAuthStore((s) => s.hasModule)
+  const hasPermission = useAuthStore((s) => s.hasPermission)
   const [openModules, setOpenModules] = useState<string[]>(() => {
     // Open the module corresponding to the current URL on initial load
     const activeModule = MODULE_ITEMS.find(m => m.children?.some(c => location.pathname.startsWith(c.path)))
@@ -178,7 +189,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
 
           if (item.children) {
             const isOpen = openModules.includes(item.key)
-            const hasActiveChild = item.children.some((c) => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
+            // Hide permission-gated children (e.g. admin-only Geofencing) from
+            // users who lack the capability — the route is also RouteGuard-ed.
+            const visibleChildren = item.children.filter((c) => !c.perm || hasPermission(c.perm))
+            const hasActiveChild = visibleChildren.some((c) => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
             return (
               <div key={item.key}>
                 <button
@@ -198,7 +212,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                 </button>
                 {active && isOpen && (
                   <div className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l border-brand-100 pl-3">
-                    {item.children.map((child) => (
+                    {visibleChildren.map((child) => (
                       <NavLink
                         key={child.path}
                         to={child.path}

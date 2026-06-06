@@ -11,7 +11,6 @@ import {
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
-import { toast } from 'sonner'
 
 const SIDEBAR_KEY = 'ut.sidebar.collapsed'
 
@@ -245,10 +244,35 @@ export function PlatformShell() {
   const user = useSdkStore(s => s.user)
 
   const hasModule = useLocalAuthStore(s => s.hasModule)
+  const tenant = useSdkStore(s => s.tenant)
+  const permissions = useSdkStore(s => s.permissions)
   const userRoles: string[] = user?.roles ?? []
 
   // Primary role for filtering and badge display
   const primaryRole = (ROLE_PRIORITY as readonly string[]).find(r => userRoles.includes(r)) ?? null
+
+  // ─── Admin detection (mirrors loginWithCredentials' admin-role set + wildcard perm) ──
+  // Admin = SUPER_ADMIN/COMPANY_ADMIN/HR_MANAGER role OR a wildcard ('*') permission grant.
+  const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
+  const isAdmin =
+    userRoles.some(r => ADMIN_ROLES.includes(r)) ||
+    permissions.has('*')
+
+  // Tenant subdomain + admin email — source for the Edit-Workspace deep link.
+  const subdomain  = tenant?.slug ?? ''
+  const adminEmail = user?.email ?? ''
+
+  // Opens the main website's Edit-Workspace page (to add/buy a module) in a new tab.
+  const openEditWorkspace = (moduleKey: string) => {
+    const websiteUrl = import.meta.env.VITE_WEBSITE_URL || 'https://unifiedtree.com'
+    window.open(
+      websiteUrl + '/edit-workspace?ws=' + encodeURIComponent(subdomain) +
+        '&email=' + encodeURIComponent(adminEmail) +
+        '&add=' + encodeURIComponent(moduleKey),
+      '_blank',
+      'noopener',
+    )
+  }
 
   // Filter a nav item by visibleForRoles
   function isVisible(item: { visibleForRoles?: string[] }): boolean {
@@ -270,7 +294,10 @@ export function PlatformShell() {
   })
 
   const activeModules   = visibleModuleItems.filter(m => hasModule(m.module ?? ''))
-  const lockedModules   = visibleModuleItems.filter(m => !hasModule(m.module ?? ''))
+  // Locked modules are surfaced ONLY to admins. Managers/Employees see active modules only.
+  const lockedModules   = isAdmin
+    ? visibleModuleItems.filter(m => !hasModule(m.module ?? ''))
+    : []
   const displayedLocked = lockedModules.slice(0, 2)
   const hiddenLocked    = lockedModules.slice(2)
 
@@ -303,7 +330,7 @@ export function PlatformShell() {
           onClick={e => {
             if (!active) {
               e.preventDefault()
-              toast.error('Module Locked', { description: `The ${item.label} module is not purchased.` })
+              openEditWorkspace(item.module ?? item.key)
             }
           }}
         >
@@ -366,7 +393,7 @@ export function PlatformShell() {
         onClick={e => {
           if (!active) {
             e.preventDefault()
-            toast.error('Module Locked', { description: `The ${item.label} module is not purchased.` })
+            openEditWorkspace(item.module ?? item.key)
           }
         }}
         title={collapsed ? item.label : undefined}
