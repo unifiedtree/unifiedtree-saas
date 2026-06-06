@@ -25,6 +25,8 @@ public final class AuthDtos {
             UUID employeeId,
             UUID tenantId,
             String email,
+            String firstName,
+            String lastName,
             List<String> roles,
             List<String> permissions
     ) { }
@@ -37,14 +39,16 @@ public final class AuthDtos {
             UUID userId,
             UUID tenantId,
             String email,
+            String firstName,
+            String lastName,
             List<String> roles,
             List<String> permissions,
             List<String> activeModules
     ) {
         /** Backward-compatible: callers that don't carry modules get an empty list. */
-        public MeResponse(UUID userId, UUID tenantId, String email,
+        public MeResponse(UUID userId, UUID tenantId, String email, String firstName, String lastName,
                           List<String> roles, List<String> permissions) {
-            this(userId, tenantId, email, roles, permissions, List.of());
+            this(userId, tenantId, email, firstName, lastName, roles, permissions, List.of());
         }
     }
 }

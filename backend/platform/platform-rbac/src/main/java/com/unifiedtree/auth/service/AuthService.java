@@ -150,10 +150,20 @@ public class AuthService {
         rt.setExpiresAt(OffsetDateTime.now().plus(jwt.refreshTokenTtl()));
         refreshRepo.save(rt);
 
+        String firstName = "";
+        String lastName = "";
+        if (creds.getEmployeeId() != null) {
+            List<java.util.Map<String, Object>> rows = jdbc.queryForList("SELECT first_name, last_name FROM hrms.employees WHERE id = ?", creds.getEmployeeId());
+            if (!rows.isEmpty()) {
+                firstName = (String) rows.get(0).get("first_name");
+                lastName = (String) rows.get(0).get("last_name");
+            }
+        }
+
         return new LoginResponse(
             access.token(), refreshPlain, access.expiresAt(),
             creds.getId(), creds.getEmployeeId(), tenantId, creds.getEmail(),
-            roleCodes, permissions);
+            firstName, lastName, roleCodes, permissions);
     }
 
     /** Issue a session for a user that just activated via invitation/password reset. */
@@ -196,7 +206,18 @@ public class AuthService {
         List<String> activeModules = jdbc.queryForList(
             "SELECT module_key FROM platform.tenant_modules WHERE tenant_id = ? AND status = 'ACTIVE' ORDER BY module_key",
             String.class, tenantId);
-        return new MeResponse(userId, tenantId, creds.getEmail(), roleCodes, permissions, activeModules);
+        
+        String firstName = "";
+        String lastName = "";
+        if (creds.getEmployeeId() != null) {
+            List<java.util.Map<String, Object>> rows = jdbc.queryForList("SELECT first_name, last_name FROM hrms.employees WHERE id = ?", creds.getEmployeeId());
+            if (!rows.isEmpty()) {
+                firstName = (String) rows.get(0).get("first_name");
+                lastName = (String) rows.get(0).get("last_name");
+            }
+        }
+        
+        return new MeResponse(userId, tenantId, creds.getEmail(), firstName, lastName, roleCodes, permissions, activeModules);
     }
 
     // ---- helpers --------------------------------------------------------------

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore, WorkspaceSummary } from '../store/authStore';
 import { api, ApiError } from '../lib/api';
-import { Building2, Plus, ArrowRight, Star, Loader2 } from 'lucide-react';
+import { Building2, Plus, ArrowRight, Star, Loader2, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Navbar } from '../components/layout/Navbar';
 import { Footer } from '../components/layout/Footer';
@@ -120,8 +120,20 @@ export function WorkspacesPage() {
                       {ws.subdomain}.unifiedtree.com
                     </p>
                   </div>
-                  <div className="px-2.5 py-1 rounded-lg bg-surface-2 text-[10px] font-extrabold text-text-secondary uppercase tracking-widest border border-border shrink-0">
-                    {ws.role}
+                  <div className="flex items-center gap-2">
+                    <div className="px-2.5 py-1 rounded-lg bg-surface-2 text-[10px] font-extrabold text-text-secondary uppercase tracking-widest border border-border shrink-0">
+                      {ws.role}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/edit-workspace?tenantId=${ws.tenantId}`);
+                      }}
+                      className="p-1.5 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
+                      title="Manage Workspace"
+                    >
+                      <Settings size={16} />
+                    </button>
                   </div>
                 </div>
 

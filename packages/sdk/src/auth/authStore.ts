@@ -34,6 +34,8 @@ interface CanonicalMeResponse {
   userId?: string;
   tenantId?: string;
   email?: string;
+  firstName?: string;
+  lastName?: string;
   roles?: string[];
   permissions?: Array<string | PermissionGrant>;
   // tolerated nested form
@@ -80,8 +82,8 @@ function meToAuthState(data: CanonicalMeResponse) {
   const user: AuthUser = data.user ?? {
     id: data.userId ?? '',
     email,
-    firstName: localPart.charAt(0).toUpperCase() + localPart.slice(1),
-    lastName: '',
+    firstName: data.firstName || (localPart.charAt(0).toUpperCase() + localPart.slice(1)),
+    lastName: data.lastName || '',
     roles,
   };
 
@@ -142,8 +144,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
     const user: AuthUser = {
       id: userId,
       email,
-      firstName: localPart.charAt(0).toUpperCase() + localPart.slice(1),
-      lastName: '',
+      firstName: (arguments[0] as any).firstName || localPart.charAt(0).toUpperCase() + localPart.slice(1),
+      lastName: (arguments[0] as any).lastName || '',
       roles,
     };
 
