@@ -11,8 +11,10 @@ import com.unifiedtree.saas.dto.SaasDtos.SignupResponse;
 import com.unifiedtree.saas.dto.SaasDtos.SubdomainCheckResponse;
 import com.unifiedtree.saas.dto.SaasDtos.TenantRequestSummary;
 import com.unifiedtree.saas.dto.SaasDtos.WorkspaceStatusResponse;
+import com.unifiedtree.saas.event.WorkspaceCreatedEvent;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -72,17 +74,20 @@ public class SaasService {
     private final JwtService jwt;
     private final PasswordService passwords;
     private final String baseDomain;
+    private final ApplicationEventPublisher events;
 
     public SaasService(JdbcTemplate jdbc,
                        SaasWriter writer,
                        JwtService jwt,
                        PasswordService passwords,
-                       @Value("${unifiedtree.base-domain:unifiedtree.com}") String baseDomain) {
+                       @Value("${unifiedtree.base-domain:unifiedtree.com}") String baseDomain,
+                       ApplicationEventPublisher events) {
         this.jdbc = jdbc;
         this.writer = writer;
         this.jwt = jwt;
         this.passwords = passwords;
         this.baseDomain = baseDomain;
+        this.events = events;
     }
 
     // -- Public: subdomain availability -----------------------------------------------------------
@@ -165,6 +170,16 @@ public class SaasService {
             TenantContext.clear();
         }
 
+        // Fire-and-forget welcome email — listener lives in hrms-api where MailService is.
+        // Wrapped: a mail-side failure must NEVER fail the signup transaction.
+        try {
+            events.publishEvent(new WorkspaceCreatedEvent(
+                    tenantId, accountId, subdomain,
+                    subdomain + "." + baseDomain, workspaceUrl(subdomain),
+                    req.adminName(), req.adminEmail(), req.companyName(),
+                    requestedModules));
+        } catch (Exception ignored) { /* no-op; signup must not depend on email */ }
+
         return new SignupResponse(
                 accountId,
                 tenantId,
@@ -225,13 +240,23 @@ public class SaasService {
 
     // -- Public: workspace status ----------------------------------------------------------------
 
-    public WorkspaceStatusResponse workspaceStatus(String tenantIdHeader,
+    public WorkspaceStatusResponse workspaceStatus(String subdomainParam,
+                                                   String tenantIdHeader,
                                                    String subdomainHeader,
                                                    String hostHeader) {
-        String subdomain = resolveSubdomain(tenantIdHeader, subdomainHeader, hostHeader);
+        String subdomain = resolveSubdomain(subdomainParam, tenantIdHeader, subdomainHeader, hostHeader);
         if (subdomain == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not identified");
         }
+        return buildWorkspaceStatus(subdomain);
+    }
+
+    /**
+     * Build the status payload for a resolved subdomain. Shared by the public
+     * {@code workspace-status} read and the {@code module-toggle} write so both
+     * return the same authoritative shape.
+     */
+    private WorkspaceStatusResponse buildWorkspaceStatus(String subdomain) {
         var tenant = jdbc.query(
                 "SELECT id, subdomain, display_name, status FROM platform.tenants WHERE subdomain = ?",
                 rs -> rs.next() ? new Object[]{
@@ -258,6 +283,78 @@ public class SaasService {
                 (String) tenant[3],
                 requestedModules,
                 activeModules);
+    }
+
+    // -- Public: self-service module toggle ------------------------------------------------------
+
+    /**
+     * Modules a workspace admin may switch on/off from the public Edit-Workspace
+     * page, keyed exactly as the website's {@code data/modules.ts}. The value is
+     * the catalog display name used to self-seed {@code platform.module_catalog}
+     * — the website ships keys (inventory, pos, …) the original catalog seed
+     * never listed, and {@code tenant_modules.module_key} has an FK onto it.
+     */
+    private static final java.util.Map<String, String> TOGGLEABLE_MODULES = java.util.Map.ofEntries(
+            java.util.Map.entry("hrms",          "HR & Employees"),
+            java.util.Map.entry("attendance",    "Attendance"),
+            java.util.Map.entry("payroll",       "Payroll"),
+            java.util.Map.entry("accounting",    "Accounting"),
+            java.util.Map.entry("inventory",     "Inventory"),
+            java.util.Map.entry("crm",           "CRM"),
+            java.util.Map.entry("purchase",      "Purchase"),
+            java.util.Map.entry("sales",         "Sales"),
+            java.util.Map.entry("projects",      "Projects"),
+            java.util.Map.entry("manufacturing", "Manufacturing"),
+            java.util.Map.entry("pos",           "Point of Sale"),
+            java.util.Map.entry("reports",       "Reports & BI"));
+
+    /**
+     * Activate or deactivate a single module for a workspace, addressed by
+     * subdomain. Unauthenticated to match the rest of the Edit-Workspace page
+     * (the admin lands here from an emailed deep link, not a logged-in session).
+     *
+     * <p>Writes target the non-RLS {@code platform.*} tables, so no
+     * TenantContext is needed. Activation upserts the row to {@code ACTIVE};
+     * deactivation hard-deletes it so re-adding is a clean insert and the admin
+     * can toggle as many times as they like. Returns the refreshed status.
+     */
+    public WorkspaceStatusResponse setModuleActive(String subdomainRaw, String moduleRaw, boolean active) {
+        String subdomain = subdomainRaw == null ? "" : subdomainRaw.trim().toLowerCase(Locale.ROOT);
+        if (subdomain.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "subdomain is required");
+        }
+        String moduleKey = normalizeModuleKey(moduleRaw == null ? "" : moduleRaw);
+        String displayName = TOGGLEABLE_MODULES.get(moduleKey);
+        if (displayName == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown module: " + moduleKey);
+        }
+        UUID tenantId = jdbc.query(
+                "SELECT id FROM platform.tenants WHERE subdomain = ?",
+                rs -> rs.next() ? UUID.fromString(rs.getString(1)) : null,
+                subdomain);
+        if (tenantId == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found");
+        }
+
+        if (active) {
+            // Ensure the catalog row exists (FK target) before activating.
+            jdbc.update("""
+                    INSERT INTO platform.module_catalog (key, display_name, category, is_available)
+                    VALUES (?, ?, 'ERP', TRUE)
+                    ON CONFLICT (key) DO NOTHING
+                    """, moduleKey, displayName);
+            jdbc.update("""
+                    INSERT INTO platform.tenant_modules
+                        (id, tenant_id, module_key, status, requested_at, approved_at, activated_at)
+                    VALUES (?, ?, ?, 'ACTIVE', now(), now(), now())
+                    ON CONFLICT (tenant_id, module_key)
+                    DO UPDATE SET status = 'ACTIVE', activated_at = now()
+                    """, UUID.randomUUID(), tenantId, moduleKey);
+        } else {
+            jdbc.update("DELETE FROM platform.tenant_modules WHERE tenant_id = ? AND module_key = ?",
+                    tenantId, moduleKey);
+        }
+        return buildWorkspaceStatus(subdomain);
     }
 
     // -- Public: platform admin login ------------------------------------------------------------
@@ -455,7 +552,13 @@ public class SaasService {
         return (value == null || value.isBlank()) ? fallback : value.trim();
     }
 
-    private String resolveSubdomain(String tenantIdHeader, String subdomainHeader, String hostHeader) {
+    private String resolveSubdomain(String subdomainParam, String tenantIdHeader,
+                                    String subdomainHeader, String hostHeader) {
+        // Explicit ?subdomain= wins: the website's Edit-Workspace page identifies
+        // the workspace this way (no tenant headers on cross-origin calls).
+        if (subdomainParam != null && !subdomainParam.isBlank()) {
+            return subdomainParam.trim().toLowerCase(Locale.ROOT);
+        }
         if (subdomainHeader != null && !subdomainHeader.isBlank()) {
             return subdomainHeader.trim().toLowerCase(Locale.ROOT);
         }

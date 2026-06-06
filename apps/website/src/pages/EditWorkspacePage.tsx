@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Check, Loader2, Lock, Plus, Sparkles, ShieldAlert, Globe, Mail,
+  Check, Loader2, Plus, Globe, Mail,
   Users, MapPin, Banknote, BarChart2, Package, Target, ShoppingCart,
-  TrendingUp, Kanban, Settings, Monitor, PieChart, type LucideIcon,
+  TrendingUp, Kanban, Settings, Monitor, PieChart, AlertTriangle, type LucideIcon,
 } from 'lucide-react'
 import { Navbar } from '../components/layout/Navbar'
 import { Footer } from '../components/layout/Footer'
 import { modules } from '../data/modules'
 import { API_BASE_URL } from '../lib/api'
 
-// Canonical 12 module keys. hrms + attendance are BUILT (live now); the rest are coming soon.
+// hrms + attendance are BUILT (live now); the rest are coming soon.
 const BUILT_MODULES = new Set(['hrms', 'attendance'])
 
 // Map the lucide icon name stored in modules.ts to an actual component.
@@ -47,19 +47,19 @@ export function EditWorkspacePage() {
   const email = (searchParams.get('email') || '').trim()
   const addKeyParam = (searchParams.get('add') || '').trim().toLowerCase()
 
-  // Keys already active in the workspace (locked / "Included").
+  // Keys currently active in the workspace (the source of truth, kept in sync
+  // with the backend after every toggle).
   const [activeKeys, setActiveKeys] = useState<string[]>([])
   const [statusLoading, setStatusLoading] = useState(true)
-  // Keys the admin has picked to ADD in this session.
-  const [selectedToAdd, setSelectedToAdd] = useState<Set<string>>(new Set())
-
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+  // Keys with a toggle request in flight — used to disable + spin that one card.
+  const [pending, setPending] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
 
   const activeSet = useMemo(() => new Set(activeKeys), [activeKeys])
+  // Guards the ?add= deep-link so it auto-activates the module at most once.
+  const autoAddDone = useRef(false)
 
-  // Best-effort fetch of current workspace modules.
+  // Fetch the workspace's currently active modules on page load.
   useEffect(() => {
     let cancelled = false
     if (!ws) {
@@ -74,7 +74,7 @@ export function EditWorkspacePage() {
         setActiveKeys(extractActiveKeys(data))
       })
       .catch(() => {
-        // Fail open: if we can't read status, show all 12 as selectable.
+        // Fail open: if we can't read status, show everything as inactive.
         if (!cancelled) setActiveKeys([])
       })
       .finally(() => {
@@ -85,51 +85,29 @@ export function EditWorkspacePage() {
     }
   }, [ws])
 
-  // Pre-check the requested module from ?add= once we know what's already active.
-  useEffect(() => {
-    if (statusLoading) return
-    const normalized = addKeyParam === 'hr' ? 'hrms' : addKeyParam
-    if (!normalized) return
-    const isValid = modules.some((m) => m.id === normalized)
-    if (isValid && !activeSet.has(normalized)) {
-      setSelectedToAdd((prev) => {
-        if (prev.has(normalized)) return prev
-        const next = new Set(prev)
-        next.add(normalized)
-        return next
-      })
-    }
-  }, [statusLoading, addKeyParam, activeSet])
+  // Activate or deactivate a single module against the backend. Updates the UI
+  // optimistically, then reconciles with the authoritative response so the user
+  // can re-add / re-remove freely without refreshing.
+  const toggleModule = async (key: string) => {
+    if (!ws || pending.has(key)) return
+    const nextActive = !activeSet.has(key)
 
-  const toggleAdd = (key: string) => {
-    if (activeSet.has(key)) return // Included modules are locked — adding only.
-    setSelectedToAdd((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }
-
-  const addCount = selectedToAdd.size
-
-  const handleSubmit = async () => {
-    if (addCount === 0 || submitting) return
-    setSubmitting(true)
     setError('')
+    setPending((prev) => new Set(prev).add(key))
+    // Optimistic update.
+    setActiveKeys((prev) =>
+      nextActive ? (prev.includes(key) ? prev : [...prev, key]) : prev.filter((k) => k !== key),
+    )
+
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/public/module-request`, {
+      const res = await fetch(`${API_BASE_URL}/v1/public/module-toggle`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subdomain: ws,
-          adminEmail: email,
-          modules: Array.from(selectedToAdd),
-        }),
+        body: JSON.stringify({ subdomain: ws, module: key, active: nextActive }),
       })
       if (!res.ok) {
         const text = await res.text()
-        let msg = `Failed to send request (${res.status})`
+        let msg = `Couldn't ${nextActive ? 'add' : 'remove'} this module (${res.status})`
         try {
           const j = text ? JSON.parse(text) : null
           msg = j?.message || j?.error || msg
@@ -138,13 +116,42 @@ export function EditWorkspacePage() {
         }
         throw new Error(msg)
       }
-      setSubmitted(true)
+      // Reconcile with the server's authoritative active list.
+      const data: WorkspaceStatus = await res.json()
+      setActiveKeys(extractActiveKeys(data))
     } catch (err: any) {
+      // Roll the optimistic change back.
+      setActiveKeys((prev) =>
+        nextActive ? prev.filter((k) => k !== key) : (prev.includes(key) ? prev : [...prev, key]),
+      )
       setError(err?.message || 'Something went wrong. Please try again.')
     } finally {
-      setSubmitting(false)
+      setPending((prev) => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
     }
   }
+
+  // Honor the ?add=<key> deep link from the platform console: if the requested
+  // module is valid and not already active, switch it on once after load.
+  useEffect(() => {
+    if (statusLoading || autoAddDone.current) return
+    const normalized = addKeyParam === 'hr' ? 'hrms' : addKeyParam
+    if (!normalized) return
+    const isValid = modules.some((m) => m.id === normalized)
+    if (isValid && !activeSet.has(normalized)) {
+      autoAddDone.current = true
+      void toggleModule(normalized)
+    }
+    // toggleModule intentionally omitted: it closes over the latest state and
+    // this effect is guarded by autoAddDone so it runs at most once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusLoading, addKeyParam, activeSet])
+
+  const activeCount = modules.filter((m) => activeSet.has(m.id)).length
+  const saving = pending.size > 0
 
   return (
     <div className="min-h-screen bg-bg flex flex-col font-body relative">
@@ -165,10 +172,10 @@ export function EditWorkspacePage() {
         >
           <div className="section-badge mb-5 inline-flex">Manage your workspace</div>
           <h1 className="text-4xl sm:text-5xl font-heading font-extrabold text-text-primary tracking-tight mb-3">
-            Add Modules to <span className="gradient-text">Your Workspace</span>
+            Manage <span className="gradient-text">Your Modules</span>
           </h1>
           <p className="text-text-secondary font-body font-medium text-base max-w-xl mx-auto">
-            Pick the modules you'd like to enable. We'll switch them on for your workspace shortly.
+            Switch modules on or off for your workspace. Changes apply instantly — no refresh needed.
           </p>
         </motion.div>
 
@@ -201,175 +208,166 @@ export function EditWorkspacePage() {
             )}
           </div>
 
-          {submitted ? (
-            /* Success state */
-            <motion.div
-              initial={{ opacity: 0, scale: 0.97 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-surface rounded-3xl border border-border shadow-xl p-10 sm:p-14 text-center relative overflow-hidden"
-            >
-              <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary to-accent rounded-t-3xl" />
-              <div className="w-16 h-16 rounded-2xl bg-success/10 text-success flex items-center justify-center mx-auto mb-6">
-                <Check size={32} strokeWidth={3} />
-              </div>
-              <h2 className="font-heading font-extrabold text-2xl text-text-primary mb-3">
-                Request sent — we'll enable these shortly.
-              </h2>
-              <p className="text-text-secondary font-body text-sm max-w-md mx-auto mb-7">
-                We received your request to add{' '}
-                <strong className="text-text-primary">{addCount}</strong>{' '}
-                {addCount === 1 ? 'module' : 'modules'} to{' '}
-                <strong className="text-text-primary">{ws}.unifiedtree.com</strong>. You'll be notified once they're live.
-              </p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {Array.from(selectedToAdd).map((key) => {
-                  const mod = modules.find((m) => m.id === key)
-                  return (
-                    <span
-                      key={key}
-                      className="px-3.5 py-1.5 rounded-full bg-primary-light text-primary text-xs font-body font-bold"
-                    >
-                      {mod?.name || key}
-                    </span>
-                  )
-                })}
-              </div>
-            </motion.div>
-          ) : (
-            /* Module selection */
-            <div className="bg-surface rounded-3xl border border-border shadow-xl p-6 sm:p-9 relative">
-              <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary to-accent rounded-t-3xl" />
+          {/* Module management */}
+          <div className="bg-surface rounded-3xl border border-border shadow-xl p-6 sm:p-9 relative">
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary to-accent rounded-t-3xl" />
 
-              {error && (
-                <div className="bg-danger/5 border border-danger/20 text-danger p-4 rounded-xl mb-6 text-sm font-body font-semibold flex items-center gap-3">
-                  <span className="w-2 h-2 rounded-full bg-danger" />
-                  {error}
-                </div>
+            {!ws && (
+              <div className="bg-warning/5 border border-warning/20 text-warning p-4 rounded-xl mb-6 text-sm font-body font-semibold flex items-center gap-3">
+                <AlertTriangle size={16} className="flex-shrink-0" />
+                We couldn't tell which workspace to manage. Open this page from your workspace's
+                “Manage modules” link to switch modules on or off.
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-danger/5 border border-danger/20 text-danger p-4 rounded-xl mb-6 text-sm font-body font-semibold flex items-center gap-3">
+                <span className="w-2 h-2 rounded-full bg-danger" />
+                {error}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-heading font-bold text-xl text-text-primary">Your modules</h2>
+              {statusLoading ? (
+                <span className="text-xs text-text-secondary font-body flex items-center gap-1.5">
+                  <Loader2 size={13} className="animate-spin" /> Loading your modules…
+                </span>
+              ) : saving ? (
+                <span className="text-xs text-primary font-body font-semibold flex items-center gap-1.5">
+                  <Loader2 size={13} className="animate-spin" /> Saving…
+                </span>
+              ) : (
+                <span className="text-xs text-text-secondary font-body flex items-center gap-1.5">
+                  <Check size={13} className="text-success" strokeWidth={3} /> Changes save automatically
+                </span>
               )}
+            </div>
 
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="font-heading font-bold text-xl text-text-primary">Choose modules to add</h2>
-                {statusLoading && (
-                  <span className="text-xs text-text-secondary font-body flex items-center gap-1.5">
-                    <Loader2 size={13} className="animate-spin" /> Checking active modules…
-                  </span>
-                )}
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {modules.map((mod) => {
+                const Icon = ICON_MAP[mod.icon] || Package
+                const isActive = activeSet.has(mod.id)
+                const isPending = pending.has(mod.id)
+                const isBuilt = BUILT_MODULES.has(mod.id)
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {modules.map((mod) => {
-                  const Icon = ICON_MAP[mod.icon] || Package
-                  const isIncluded = activeSet.has(mod.id)
-                  const isSelected = selectedToAdd.has(mod.id)
-                  const isBuilt = BUILT_MODULES.has(mod.id)
-
-                  return (
-                    <button
-                      type="button"
-                      key={mod.id}
-                      onClick={() => toggleAdd(mod.id)}
-                      disabled={isIncluded}
-                      aria-pressed={isSelected}
-                      className={`relative flex items-start gap-3.5 p-4 rounded-2xl border-2 text-left transition-all duration-200 ${
-                        isIncluded
-                          ? 'border-success/30 bg-success/5 cursor-default'
-                          : isSelected
-                            ? 'border-primary bg-primary/5 shadow-sm'
-                            : 'border-border hover:border-primary/40 hover:bg-bg/60'
-                      }`}
+                return (
+                  <button
+                    type="button"
+                    key={mod.id}
+                    onClick={() => toggleModule(mod.id)}
+                    disabled={isPending || !ws}
+                    aria-pressed={isActive}
+                    title={isActive ? 'Click to remove this module' : 'Click to add this module'}
+                    className={`relative flex items-start gap-3.5 p-4 rounded-2xl border-2 text-left transition-all duration-200 ${
+                      isActive
+                        ? 'border-success bg-success/5 shadow-sm'
+                        : 'border-border hover:border-primary/40 hover:bg-bg/60'
+                    } ${
+                      isPending
+                        ? 'opacity-70 cursor-wait'
+                        : !ws
+                          ? 'opacity-60 cursor-not-allowed'
+                          : 'cursor-pointer'
+                    }`}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{
+                        backgroundColor: isActive ? '#DCFCE7' : `${mod.color}14`,
+                        color: isActive ? '#16A34A' : mod.color,
+                      }}
                     >
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{
-                          backgroundColor: isIncluded ? '#DCFCE7' : `${mod.color}14`,
-                          color: isIncluded ? '#16A34A' : mod.color,
-                        }}
-                      >
-                        <Icon size={18} />
-                      </div>
+                      <Icon size={18} />
+                    </div>
 
-                      <div className="flex-1 min-w-0 pr-7">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h3 className="font-heading font-bold text-sm text-text-primary truncate">{mod.name}</h3>
-                          {isBuilt ? (
-                            <span className="text-[10px] font-body font-bold px-1.5 py-0.5 rounded bg-success/10 text-success uppercase tracking-wide">
-                              Live now
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-body font-bold px-1.5 py-0.5 rounded bg-warning/10 text-warning uppercase tracking-wide">
-                              Coming soon
-                            </span>
-                          )}
-                        </div>
-                        <p
-                          className="text-xs text-text-secondary leading-snug overflow-hidden"
-                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
-                        >
-                          {mod.description}
-                        </p>
-                        {isIncluded && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-body font-bold text-success mt-1.5">
-                            <Check size={11} strokeWidth={3} /> Included
+                    <div className="flex-1 min-w-0 pr-7">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <h3 className="font-heading font-bold text-sm text-text-primary truncate">{mod.name}</h3>
+                        {isBuilt ? (
+                          <span className="text-[10px] font-body font-bold px-1.5 py-0.5 rounded bg-success/10 text-success uppercase tracking-wide">
+                            Live now
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-body font-bold px-1.5 py-0.5 rounded bg-warning/10 text-warning uppercase tracking-wide">
+                            Coming soon
                           </span>
                         )}
                       </div>
-
-                      {/* Selection indicator */}
-                      <div
-                        className={`absolute top-4 right-4 w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
-                          isIncluded
-                            ? 'bg-success border-success text-white'
-                            : isSelected
-                              ? 'bg-primary border-primary text-white'
-                              : 'border-slate-300 text-transparent'
+                      <p
+                        className="text-xs text-text-secondary leading-snug overflow-hidden"
+                        style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
+                      >
+                        {mod.description}
+                      </p>
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] font-body font-bold mt-1.5 ${
+                          isActive ? 'text-success' : 'text-text-tertiary'
                         }`}
                       >
-                        {isIncluded ? (
-                          <Lock size={11} strokeWidth={3} />
-                        ) : isSelected ? (
-                          <Check size={12} strokeWidth={3} />
+                        {isActive ? (
+                          <>
+                            <Check size={11} strokeWidth={3} /> Active · tap to remove
+                          </>
                         ) : (
-                          <Plus size={12} strokeWidth={3} className="text-slate-300" />
+                          <>
+                            <Plus size={11} strokeWidth={3} /> Tap to add
+                          </>
                         )}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
+                      </span>
+                    </div>
 
-              {/* Cannot-remove note */}
-              <div className="mt-6 flex items-start gap-2.5 bg-bg border border-border rounded-xl p-3.5">
-                <ShieldAlert size={16} className="flex-shrink-0 mt-0.5" style={{ color: '#94A3B8' }} />
-                <p className="text-xs text-text-secondary font-body leading-relaxed">
-                  Removing modules isn't available here — contact support if you need to disable a module.
-                  Included modules are locked and can only be added to.
-                </p>
-              </div>
-
-              {/* Submit */}
-              <div className="mt-7 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-border">
-                <span className="text-sm font-body font-semibold text-text-secondary">
-                  {addCount === 0
-                    ? 'Select at least one module to add'
-                    : `${addCount} new ${addCount === 1 ? 'module' : 'modules'} selected`}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={addCount === 0 || submitting}
-                  className="px-10 py-3.5 bg-primary text-white text-base font-body font-bold rounded-xl hover:bg-primary-dark transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 min-w-[220px] shadow-teal hover:shadow-teal-lg active:scale-[0.99] transform btn-shimmer"
-                >
-                  {submitting ? (
-                    <Loader2 size={20} className="animate-spin" />
-                  ) : (
-                    <>
-                      <Sparkles size={18} /> Request these modules
-                    </>
-                  )}
-                </button>
-              </div>
+                    {/* Toggle indicator */}
+                    <div
+                      className={`absolute top-4 right-4 w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
+                        isActive
+                          ? 'bg-success border-success text-white'
+                          : 'border-slate-300 bg-white text-slate-400'
+                      }`}
+                    >
+                      {isPending ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : isActive ? (
+                        <Check size={13} strokeWidth={3} />
+                      ) : (
+                        <Plus size={13} strokeWidth={3} />
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
-          )}
+
+            {/* How-it-works note */}
+            <div className="mt-6 flex items-start gap-2.5 bg-bg border border-border rounded-xl p-3.5">
+              <Check size={16} className="flex-shrink-0 mt-0.5 text-success" strokeWidth={3} />
+              <p className="text-xs text-text-secondary font-body leading-relaxed">
+                Tap any module to switch it on or off. Active modules show a green check and a highlighted
+                border — changes apply to your workspace instantly, so you can add or remove modules as
+                many times as you like without refreshing.
+              </p>
+            </div>
+
+            {/* Status summary */}
+            <div className="mt-7 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-border">
+              <span className="text-sm font-body font-semibold text-text-secondary">
+                {statusLoading
+                  ? 'Checking your modules…'
+                  : `${activeCount} of ${modules.length} ${activeCount === 1 ? 'module' : 'modules'} active`}
+              </span>
+              <span className="text-sm font-body font-semibold flex items-center gap-2">
+                {saving ? (
+                  <span className="text-primary flex items-center gap-2">
+                    <Loader2 size={16} className="animate-spin" /> Saving changes…
+                  </span>
+                ) : (
+                  <span className="text-success flex items-center gap-2">
+                    <Check size={16} strokeWidth={3} /> Up to date
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
         </motion.div>
       </div>
 
