@@ -1,7 +1,5 @@
-package com.hrms.api.saas;
+package com.hrms.api.mail;
 
-import com.hrms.api.mail.EmailMessage;
-import com.hrms.api.mail.MailService;
 import com.unifiedtree.saas.event.WorkspaceCreatedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,14 +12,17 @@ import org.springframework.stereotype.Component;
  * workspace is created via the canonical signup flow
  * ({@link com.unifiedtree.saas.service.SaasService}).
  *
- * <p>Lives in {@code hrms-api} because {@link MailService} is here and
- * {@code platform-saas} does not depend on this module. The decoupling is
- * Spring's {@link org.springframework.context.ApplicationEventPublisher} via
+ * <p>Lives in {@code com.hrms.api.mail} (alongside {@link MailService}) — a
+ * package that is component-scanned on canonical-prod. It must NOT live in
+ * {@code com.hrms.api.saas}, whose legacy {@code @Service}/{@code @Component}
+ * beans target {@code public.*} tables and break the canonical context if
+ * scanned. The decoupling from {@code platform-saas} is Spring's
+ * {@link org.springframework.context.ApplicationEventPublisher} via
  * {@link WorkspaceCreatedEvent}.
  *
- * <p>This listener mirrors the legacy {@link SaasPlatformService#sendWelcomeEmail}
- * template so the user-facing copy is identical on both code paths. Failures
- * are logged and swallowed — the signup must never fail because of email.
+ * <p>Mirrors the legacy welcome-email template so the user-facing copy is
+ * identical on both code paths. Failures are logged and swallowed — signup
+ * must never fail because of email.
  */
 @Component
 public class WorkspaceWelcomeEmailListener {
@@ -37,9 +38,9 @@ public class WorkspaceWelcomeEmailListener {
     @EventListener
     @Async
     public void onWorkspaceCreated(WorkspaceCreatedEvent ev) {
-        String adminName    = ev.adminName()    == null ? "there"           : ev.adminName();
+        String adminName    = ev.adminName()    == null ? "there"        : ev.adminName();
         String adminEmail   = ev.adminEmail();
-        String companyName  = ev.companyName()  == null ? "your company"    : ev.companyName();
+        String companyName  = ev.companyName()  == null ? "your company" : ev.companyName();
         String subdomain    = ev.subdomain();
         String workspaceUrl = ev.workspaceUrl();
 

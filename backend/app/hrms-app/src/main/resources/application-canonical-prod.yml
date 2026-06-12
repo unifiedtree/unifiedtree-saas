@@ -8,6 +8,17 @@
 #  - CanonicalSecurityConfig (smoke) refuses to load. CanonicalProdSecurityConfig
 #    activates with @EnableMethodSecurity.
 # =============================================================================
+# Face attendance: the canonical attendance-face module (Python worker at
+# UNIFIEDTREE_FACE_WORKER_URL) is the ONE source of biometric verification. The
+# mobile app verifies via /v1/attendance/face/checkin BEFORE calling /checkin, so
+# the LEGACY in-process face check inside AttendanceService.checkInJson (which
+# calls a non-existent localhost:8085 sidecar and otherwise throws FACE_MISMATCH)
+# must be OFF on canonical-prod — otherwise every face check-in fails after a
+# successful scan and no attendance record is written.
+hrms:
+  face-recognition:
+    enabled: ${HRMS_FACE_RECOGNITION_ENABLED:false}
+
 spring:
   flyway:
     # Production NEVER loads db/dev-seed. Explicitly override so a forgotten

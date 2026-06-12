@@ -49,10 +49,14 @@ public class FaceService {
 
     private static final Logger log = LoggerFactory.getLogger(FaceService.class);
 
-    private static final int SAMPLES_REQUIRED = 5;
+    // 3-sample enrollment (was 5) — faster, less friction for employees. The
+    // mobile app follows this CAPTURE_SEQUENCE dynamically, so no client change
+    // is needed for the count. match-quorum default is 2 (see ctor): 2-of-3
+    // templates must agree on verify — with only 3 samples a quorum of 3 would
+    // demand a perfect match on every angle and reject genuine users.
+    private static final int SAMPLES_REQUIRED = 3;
     private static final List<CaptureAngle> CAPTURE_SEQUENCE = List.of(
-            CaptureAngle.FRONT, CaptureAngle.LEFT_30, CaptureAngle.RIGHT_30,
-            CaptureAngle.UP_15, CaptureAngle.VARIED_LIGHT);
+            CaptureAngle.FRONT, CaptureAngle.LEFT_30, CaptureAngle.RIGHT_30);
 
     private final JdbcTemplate jdbc;
     private final FaceWriter writer;
@@ -89,7 +93,7 @@ public class FaceService {
                        /* Minimum number of agreeing templates needed for PASS.
                           With 5 enrolled samples and default 3, a stranger has
                           to fool the model on 3 of the 5 captured angles. */
-                       @Value("${unifiedtree.face.match-quorum:3}") int matchQuorum,
+                       @Value("${unifiedtree.face.match-quorum:2}") int matchQuorum,
                        @Value("${unifiedtree.face.min-quality:0.55}") double minQuality,
                        @Value("${unifiedtree.face.require-liveness:true}") boolean requireLiveness,
                        @Value("${unifiedtree.face.liveness-threshold:0.30}") double livenessThreshold,
@@ -124,13 +128,26 @@ public class FaceService {
                     EnrollmentStatus.PENDING, SAMPLES_REQUIRED, 0,
                     CAPTURE_SEQUENCE, 0, false, null);
         }
+        // Self-heal: if all samples were captured but the explicit
+        // completeEnrollment call was missed/failed (leaving the row PENDING),
+        // activate it here so the user is NOT bounced back into enrollment on
+        // their next session. This makes "enroll once, then only verify" robust.
+        EnrollmentStatus effectiveStatus = row.status;
+        if (row.status == EnrollmentStatus.PENDING && row.samplesCaptured >= SAMPLES_REQUIRED) {
+            try {
+                writer.markEnrollmentActive(row.id, employeeId);
+                effectiveStatus = EnrollmentStatus.ACTIVE;
+            } catch (Exception ignored) {
+                // Non-fatal: fall back to the persisted status.
+            }
+        }
         List<CaptureAngle> captured = capturedAngles(tenantId, employeeId);
         List<CaptureAngle> remaining = new ArrayList<>(CAPTURE_SEQUENCE);
         remaining.removeAll(captured);
         return new EnrollmentStatusResponse(
-                row.status, SAMPLES_REQUIRED, row.samplesCaptured,
+                effectiveStatus, SAMPLES_REQUIRED, row.samplesCaptured,
                 remaining, row.consecutiveFailures,
-                row.status == EnrollmentStatus.LOCKED,
+                effectiveStatus == EnrollmentStatus.LOCKED,
                 row.enrolledAt);
     }
 
