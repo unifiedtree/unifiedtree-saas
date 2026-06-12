@@ -127,7 +127,7 @@ export function WorkspacesPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/edit-workspace?tenantId=${ws.tenantId}`);
+                        navigate(`/edit-workspace?ws=${encodeURIComponent(ws.subdomain)}&tenantId=${ws.tenantId}`);
                       }}
                       className="p-1.5 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
                       title="Manage Workspace"

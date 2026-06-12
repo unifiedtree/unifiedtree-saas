@@ -67,11 +67,39 @@ public class AuthService {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Resolve which workspace an email belongs to WITHOUT an authenticated
+     * tenant context — used for email-only login (the mobile app sends no
+     * workspace field).
+     *
+     * <p>auth.user_credentials is RLS-protected with FORCE ROW LEVEL SECURITY,
+     * so no app-role query can read it across tenants. The {@code SECURITY DEFINER}
+     * SQL function {@code auth.resolve_login_tenant(text)} (owned by a BYPASSRLS
+     * role) does the lookup and returns the tenant id only when the email is
+     * globally unique (0 or &gt;1 matches → null). Returns null on ANY error
+     * (incl. the function not existing yet) so callers fall back to requiring a
+     * tenantId — deploying this code before the function exists never breaks login.
+     */
+    public UUID resolveLoginTenant(String email) {
+        if (email == null || email.isBlank()) return null;
+        try {
+            return jdbc.queryForObject(
+                    "SELECT auth.resolve_login_tenant(?)", UUID.class, email.trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public LoginResponse login(LoginRequest req) {
-        // Bind the caller-supplied tenant id BEFORE touching the repos so RLS
-        // can scope auth.user_credentials and rbac.user_roles correctly.
-        TenantContext.setTenantId(req.tenantId());
-        com.hrms.core.tenant.TenantContext.setTenantId(req.tenantId());
+        // tenantId is optional: on email-only mobile login the controller has
+        // already resolved + bound the tenant context BEFORE this @Transactional
+        // boundary, so honor that when the request omits it.
+        UUID tenantId = req.tenantId() != null ? req.tenantId() : TenantContext.getTenantId();
+
+        // Bind the resolved tenant id BEFORE touching the repos so RLS can scope
+        // auth.user_credentials and rbac.user_roles correctly.
+        TenantContext.setTenantId(tenantId);
+        com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
 
         UserCredentials creds = credentialsRepo.findByEmailIgnoreCase(req.email())
             .orElseThrow(() -> new BusinessRuleException("Invalid email or password", "INVALID_CREDENTIALS"));
@@ -89,7 +117,7 @@ public class AuthService {
             throw new BusinessRuleException("Invalid email or password", "INVALID_CREDENTIALS");
         }
 
-        return issueSession(creds, req.tenantId());
+        return issueSession(creds, tenantId);
     }
 
     /**

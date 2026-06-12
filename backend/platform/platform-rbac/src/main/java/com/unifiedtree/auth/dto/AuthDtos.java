@@ -2,7 +2,6 @@ package com.unifiedtree.auth.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
 import java.util.List;
@@ -11,8 +10,14 @@ import java.util.UUID;
 public final class AuthDtos {
     private AuthDtos() {}
 
+    /**
+     * Login request. {@code tenantId} is OPTIONAL: when omitted, the server
+     * resolves the workspace from the email via {@code auth.resolve_login_tenant}
+     * (the mobile app sends only email + password — no workspace field). When
+     * present (e.g. subdomain-scoped web login), it is used directly.
+     */
     public record LoginRequest(
-            @NotNull UUID tenantId,
+            UUID tenantId,
             @NotBlank @Email String email,
             @NotBlank String password
     ) { }

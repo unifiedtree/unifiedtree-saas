@@ -137,15 +137,15 @@ export const useAuthStore = create<AuthState>()((set) => ({
     }
   },
 
-  loginWithCredentials: ({ token, userId, email, roles, permissions, tenantId, tenantSlug, tenantName, activeModules }: LoginWithCredentialsParams) => {
+  loginWithCredentials: ({ token, userId, email, firstName, lastName, roles, permissions, tenantId, tenantSlug, tenantName, activeModules }: LoginWithCredentialsParams) => {
     setAccessToken(token);
 
     const localPart = email.split('@')[0] || 'User';
     const user: AuthUser = {
       id: userId,
       email,
-      firstName: (arguments[0] as any).firstName || localPart.charAt(0).toUpperCase() + localPart.slice(1),
-      lastName: (arguments[0] as any).lastName || '',
+      firstName: firstName || (localPart.charAt(0).toUpperCase() + localPart.slice(1)),
+      lastName: lastName || '',
       roles,
     };
 

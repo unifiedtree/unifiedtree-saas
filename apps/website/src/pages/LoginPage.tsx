@@ -61,6 +61,52 @@ export function LoginPage() {
   const [success, setSuccess] = useState(false)
   const navigate = useNavigate()
 
+  // Forgot-password modal state. Backend POST /v1/auth/forgot-password
+  // resolves the workspace from the email and queues a reset email; it
+  // always returns 200 (no email-existence leak).
+  const [forgotOpen, setForgotOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotSending, setForgotSending] = useState(false)
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotError, setForgotError] = useState('')
+
+  const openForgot = (prefill?: string) => {
+    setForgotEmail(prefill ?? initialEmail ?? '')
+    setForgotError('')
+    setForgotSent(false)
+    setForgotOpen(true)
+  }
+  const closeForgot = () => {
+    if (forgotSending) return
+    setForgotOpen(false)
+  }
+  const submitForgot = async () => {
+    const email = forgotEmail.trim()
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setForgotError('Enter a valid email address.')
+      return
+    }
+    setForgotSending(true)
+    setForgotError('')
+    try {
+      const res = await fetch(`${(import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')}/v1/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      // 200 even when email doesn't exist (intentional no-leak). Treat any
+      // non-network response as success from the user's perspective.
+      if (!res.ok && res.status >= 500) {
+        throw new Error(`Server error (${res.status})`)
+      }
+      setForgotSent(true)
+    } catch (err) {
+      setForgotError(err instanceof Error ? err.message : 'Could not send the reset email. Please try again.')
+    } finally {
+      setForgotSending(false)
+    }
+  }
+
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -205,9 +251,13 @@ export function LoginPage() {
                   />
                   <span className="text-sm text-text-secondary font-body group-hover:text-text-primary transition-colors">Remember me</span>
                 </label>
-                <a href="#" className="text-sm text-primary hover:text-primary-dark hover:underline font-body font-semibold transition-colors">
+                <button
+                  type="button"
+                  onClick={() => openForgot()}
+                  className="text-sm text-primary hover:text-primary-dark hover:underline font-body font-semibold transition-colors"
+                >
                   Forgot password?
-                </a>
+                </button>
               </div>
 
               {/* Submit */}
@@ -249,7 +299,98 @@ export function LoginPage() {
           </div>
         </motion.div>
       </main>
-      
+
+      {/* Forgot-password modal */}
+      {forgotOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40 backdrop-blur-sm"
+          onClick={closeForgot}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="forgot-title"
+        >
+          <div
+            className="w-full max-w-md bg-surface rounded-2xl shadow-xl border border-border p-6 sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {forgotSent ? (
+              <>
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-success/10 mx-auto mb-4">
+                  <Check size={22} className="text-success" />
+                </div>
+                <h2 id="forgot-title" className="text-xl font-heading font-bold text-text-primary text-center mb-2">
+                  Check your email
+                </h2>
+                <p className="text-sm text-text-secondary text-center mb-6">
+                  If <span className="font-semibold text-text-primary">{forgotEmail}</span> matches an account, we&rsquo;ve sent a password-reset link. It expires in 1 hour.
+                </p>
+                <button
+                  type="button"
+                  onClick={closeForgot}
+                  className="w-full py-3 rounded-xl bg-primary text-white font-body font-semibold text-sm hover:bg-primary-dark transition-colors"
+                >
+                  Done
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mx-auto mb-4">
+                  <Mail size={22} className="text-primary" />
+                </div>
+                <h2 id="forgot-title" className="text-xl font-heading font-bold text-text-primary text-center mb-2">
+                  Reset your password
+                </h2>
+                <p className="text-sm text-text-secondary text-center mb-5">
+                  Enter your work email and we&rsquo;ll send you a link to set a new password.
+                </p>
+                <label className="block text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
+                  Work Email
+                </label>
+                <div className="relative mb-4">
+                  <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                  <input
+                    type="email"
+                    autoFocus
+                    autoComplete="email"
+                    value={forgotEmail}
+                    onChange={(e) => { setForgotEmail(e.target.value); if (forgotError) setForgotError('') }}
+                    placeholder="you@company.com"
+                    disabled={forgotSending}
+                    onKeyDown={(e) => { if (e.key === 'Enter') submitForgot() }}
+                    className="w-full pl-10 pr-3 py-3 rounded-xl border border-border bg-surface text-text-primary placeholder:text-text-tertiary text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+                  />
+                </div>
+                {forgotError && (
+                  <p className="text-danger text-xs mb-3 flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-danger" />
+                    {forgotError}
+                  </p>
+                )}
+                <div className="flex gap-3 mt-2">
+                  <button
+                    type="button"
+                    onClick={closeForgot}
+                    disabled={forgotSending}
+                    className="flex-1 py-3 rounded-xl border border-border text-text-secondary font-body font-semibold text-sm hover:bg-surface-2 transition-colors disabled:opacity-70"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitForgot}
+                    disabled={forgotSending || !forgotEmail.trim()}
+                    className="flex-1 py-3 rounded-xl bg-primary text-white font-body font-semibold text-sm hover:bg-primary-dark transition-colors disabled:opacity-70 flex items-center justify-center gap-2"
+                  >
+                    {forgotSending && <Loader2 size={14} className="animate-spin" />}
+                    {forgotSending ? 'Sending…' : 'Send reset link'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div>
   )

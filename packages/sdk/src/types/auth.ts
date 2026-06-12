@@ -60,6 +60,9 @@ export interface LoginWithCredentialsParams {
   token: string;
   userId: string;
   email: string;
+  /** Optional display name from canonical login; falls back to email's local part. */
+  firstName?: string;
+  lastName?: string;
   roles: string[];
   /** Flat permission code strings from canonical login response */
   permissions: string[];
