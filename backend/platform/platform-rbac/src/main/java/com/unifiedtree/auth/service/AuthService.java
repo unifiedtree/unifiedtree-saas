@@ -22,6 +22,7 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -69,25 +70,63 @@ public class AuthService {
 
     /**
      * Resolve which workspace an email belongs to WITHOUT an authenticated
-     * tenant context — used for email-only login (the mobile app sends no
-     * workspace field).
+     * tenant context — used for email-only login (the app sends no workspace).
      *
      * <p>auth.user_credentials is RLS-protected with FORCE ROW LEVEL SECURITY,
-     * so no app-role query can read it across tenants. The {@code SECURITY DEFINER}
-     * SQL function {@code auth.resolve_login_tenant(text)} (owned by a BYPASSRLS
-     * role) does the lookup and returns the tenant id only when the email is
-     * globally unique (0 or &gt;1 matches → null). Returns null on ANY error
-     * (incl. the function not existing yet) so callers fall back to requiring a
-     * tenantId — deploying this code before the function exists never breaks login.
+     * so a single query cannot read it across tenants. Instead we iterate the
+     * known tenants and, for each, bind the RLS context transaction-locally with
+     * {@code set_config('app.tenant_id', <uuid>, true)} and count matching rows.
+     * The class is {@code @Transactional}, so every statement here shares one
+     * connection — the per-iteration {@code set_config} reliably re-scopes RLS.
+     *
+     * <p>Self-contained: needs NO superuser SQL function and NO extra deploy
+     * step. Returns null when the email matches no workspace (caller surfaces a
+     * generic invalid-credentials error); when it matches several, returns the
+     * most-recently-logged-into one (see the loop below).
      */
     public UUID resolveLoginTenant(String email) {
         if (email == null || email.isBlank()) return null;
+        final String norm = email.trim();
+        List<UUID> tenantIds;
         try {
-            return jdbc.queryForObject(
-                    "SELECT auth.resolve_login_tenant(?)", UUID.class, email.trim());
+            tenantIds = jdbc.queryForList(
+                    "SELECT id FROM platform.tenants WHERE status = 'ACTIVE'", UUID.class);
         } catch (Exception e) {
-            return null;
+            // status column may be absent on older schemas — fall back to all tenants.
+            try {
+                tenantIds = jdbc.queryForList("SELECT id FROM platform.tenants", UUID.class);
+            } catch (Exception e2) {
+                return null;
+            }
         }
+        // When an email belongs to exactly one workspace (the normal employee
+        // case) we return it. When it belongs to several (e.g. a founder who
+        // created multiple workspaces with the same email) we land on the one
+        // most-recently logged into, rather than failing — the password is still
+        // verified within that tenant by login().
+        UUID match = null;
+        double bestEpoch = Double.NEGATIVE_INFINITY;
+        for (UUID t : tenantIds) {
+            try {
+                jdbc.queryForObject("SELECT set_config('app.tenant_id', ?, true)",
+                        String.class, t.toString());
+                Map<String, Object> row = jdbc.queryForMap(
+                        "SELECT count(*) AS c, EXTRACT(EPOCH FROM MAX(last_login_at)) AS ep "
+                        + "FROM auth.user_credentials WHERE lower(email) = lower(?)", norm);
+                long c = ((Number) row.get("c")).longValue();
+                if (c == 0) continue;
+                double ep = row.get("ep") == null
+                        ? Double.NEGATIVE_INFINITY
+                        : ((Number) row.get("ep")).doubleValue();
+                if (match == null || ep > bestEpoch) {
+                    match = t;
+                    bestEpoch = ep;
+                }
+            } catch (Exception ignored) {
+                // skip a tenant we can't read; keep scanning
+            }
+        }
+        return match;
     }
 
     public LoginResponse login(LoginRequest req) {

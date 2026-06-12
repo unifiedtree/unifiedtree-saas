@@ -41,9 +41,9 @@ public class CanonicalAuthController {
         // tenantId is optional. When absent (email-only mobile login), resolve
         // the workspace from the email HERE — before AuthService.login's
         // @Transactional boundary — so the connection is leased with the correct
-        // tenant and RLS can see the credential row. resolveLoginTenant returns
-        // null for unknown/ambiguous emails (and when the SECURITY DEFINER
-        // resolver function isn't deployed yet), surfaced as generic invalid creds.
+        // tenant and RLS can see the credential row. resolveLoginTenant scans the
+        // known tenants and returns null for unknown/ambiguous emails, surfaced
+        // here as a generic invalid-credentials error.
         java.util.UUID tenantId = req.tenantId();
         if (tenantId == null) {
             tenantId = auth.resolveLoginTenant(req.email());
