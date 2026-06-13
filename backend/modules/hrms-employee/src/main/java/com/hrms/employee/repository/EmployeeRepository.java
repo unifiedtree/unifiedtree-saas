@@ -28,6 +28,13 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
 
     Page<Employee> findByEmploymentStatus(EmploymentStatus employmentStatus, Pageable pageable);
 
-    @Query("SELECT e FROM Employee e WHERE e.companyId = :companyId AND e.employmentStatus = 'ACTIVE'")
+    // "Working" employees for attendance scoping: everyone who is still employed
+    // and therefore expected to punch in — ACTIVE, ON_LEAVE, PROBATION and
+    // NOTICE_PERIOD. Only fully-exited staff (TERMINATED/RESIGNED/RETIRED) are
+    // excluded. Previously this was ACTIVE-only, which silently hid probation/
+    // notice-period employees (and their punches) from the admin dashboard.
+    @Query("SELECT e FROM Employee e WHERE e.companyId = :companyId "
+            + "AND e.employmentStatus NOT IN (com.hrms.core.enums.EmploymentStatus.TERMINATED, "
+            + "com.hrms.core.enums.EmploymentStatus.RESIGNED, com.hrms.core.enums.EmploymentStatus.RETIRED)")
     List<Employee> findActiveByCompany(@Param("companyId") UUID companyId);
 }
