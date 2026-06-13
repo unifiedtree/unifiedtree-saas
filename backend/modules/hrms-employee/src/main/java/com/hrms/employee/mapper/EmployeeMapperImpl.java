@@ -43,6 +43,7 @@ public class EmployeeMapperImpl implements EmployeeMapper {
         UUID departmentId = null;
         UUID branchId = null;
         UUID geoFenceZoneId = null;
+        String weeklyOffDays = null;
         UUID managerId = null;
         String jobTitle = null;
         EmploymentType employmentType = null;
@@ -76,6 +77,7 @@ public class EmployeeMapperImpl implements EmployeeMapper {
         departmentId = employee.getDepartmentId();
         branchId = employee.getBranchId();
         geoFenceZoneId = employee.getGeoFenceZoneId();
+        weeklyOffDays = employee.getWeeklyOffDays();
         managerId = employee.getManagerId();
         jobTitle = employee.getJobTitle();
         employmentType = employee.getEmploymentType();
@@ -94,7 +96,7 @@ public class EmployeeMapperImpl implements EmployeeMapper {
         bankBranchName = employee.getBankBranchName();
         profilePhotoUrl = employee.getProfilePhotoUrl();
 
-        EmployeeResponse employeeResponse = new EmployeeResponse( id, tenantId, employeeCode, firstName, lastName, email, phone, dateOfBirth, gender, companyId, departmentId, branchId, geoFenceZoneId, managerId, jobTitle, employmentType, employmentStatus, dateOfJoining, workLocation, salaryFrequency, monthlySalary, panNumber, aadhaarNumber, uanNumber, esiNumber, bankAccountNumber, bankIfscCode, bankName, bankBranchName, isFaceEnrolled, profilePhotoUrl, createdAt );
+        EmployeeResponse employeeResponse = new EmployeeResponse( id, tenantId, employeeCode, firstName, lastName, email, phone, dateOfBirth, gender, companyId, departmentId, branchId, geoFenceZoneId, weeklyOffDays, managerId, jobTitle, employmentType, employmentStatus, dateOfJoining, workLocation, salaryFrequency, monthlySalary, panNumber, aadhaarNumber, uanNumber, esiNumber, bankAccountNumber, bankIfscCode, bankName, bankBranchName, isFaceEnrolled, profilePhotoUrl, createdAt );
 
         return employeeResponse;
     }

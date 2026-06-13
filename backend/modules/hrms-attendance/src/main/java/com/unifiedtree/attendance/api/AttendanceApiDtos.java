@@ -231,6 +231,7 @@ public final class AttendanceApiDtos {
             UUID departmentId,
             UUID branchId,
             UUID geoFenceZoneId,
+            String weeklyOffDays,
             UUID managerId,
             String jobTitle,
             String employmentType,

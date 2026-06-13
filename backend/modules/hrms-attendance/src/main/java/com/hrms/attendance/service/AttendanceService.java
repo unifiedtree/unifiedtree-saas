@@ -283,6 +283,35 @@ public class AttendanceService {
         }
     }
 
+    /**
+     * The employee's weekly OFF days as ISO day numbers (1=Mon .. 7=Sun). Not
+     * everyone is off Sat+Sun — this reads the per-employee {@code
+     * weekly_off_days} CSV so present/absent/weekend is computed against THEIR
+     * schedule. Falls back to Sat+Sun ({6,7}) for null / unparseable / missing
+     * JdbcTemplate, so attendance math always has a sane week-off set.
+     */
+    private java.util.Set<Integer> resolveWeeklyOffSet(UUID employeeId) {
+        java.util.Set<Integer> defaults = new java.util.HashSet<>(java.util.Arrays.asList(6, 7));
+        if (jdbcTemplate == null || employeeId == null) return defaults;
+        String csv;
+        try {
+            csv = jdbcTemplate.queryForObject(
+                    "SELECT weekly_off_days FROM hrms.employees WHERE id = ?",
+                    String.class, employeeId);
+        } catch (Exception ex) {
+            return defaults;
+        }
+        if (csv == null || csv.isBlank()) return defaults;
+        java.util.Set<Integer> set = new java.util.HashSet<>();
+        for (String tok : csv.split(",")) {
+            try {
+                int d = Integer.parseInt(tok.trim());
+                if (d >= 1 && d <= 7) set.add(d);
+            } catch (NumberFormatException ignored) { /* skip junk */ }
+        }
+        return set.isEmpty() ? defaults : set;
+    }
+
     @Transactional(readOnly = true)
     public MonthlyStatsResponse getMonthlyStats(UUID employeeId, int year, int month) {
         LocalDate start = LocalDate.of(year, month, 1);
@@ -299,10 +328,12 @@ public class AttendanceService {
         // Don't count days before the employee joined as Absent. A new hire on
         // the 13th has no records for the 1st-12th, but those weren't absences.
         LocalDate joining = resolveJoiningDate(employeeId);
+        // Per-employee week-offs (not hardcoded Sat+Sun).
+        java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
         LocalDate cursor = (joining != null && joining.isAfter(start)) ? joining : start;
         while (!cursor.isAfter(end) && !cursor.isAfter(today)) {
             DayOfWeek dow = cursor.getDayOfWeek();
-            if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+            if (weekOffs.contains(dow.getValue())) {
                 cursor = cursor.plusDays(1);
                 continue;
             }
@@ -341,13 +372,15 @@ public class AttendanceService {
         // yet). We still walk the whole month so WEEKEND grid cells render, but
         // gate the ABSENT branch below on the join date.
         LocalDate joining = resolveJoiningDate(employeeId);
+        // Per-employee week-offs (not hardcoded Sat+Sun).
+        java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
 
         List<DayRecordResponse> result = new ArrayList<>();
         LocalDate cursor = start;
 
         while (!cursor.isAfter(end)) {
             DayOfWeek dow = cursor.getDayOfWeek();
-            if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+            if (weekOffs.contains(dow.getValue())) {
                 result.add(new DayRecordResponse(cursor.toString(), "WEEKEND", null, null, null));
             } else {
                 AttendanceRecord rec = byDate.get(cursor);
@@ -391,6 +424,10 @@ public class AttendanceService {
         Map<LocalDate, AttendanceRecord> byDate = records.stream()
                 .collect(Collectors.toMap(AttendanceRecord::getAttendanceDate, r -> r));
 
+        // Per-employee week-offs + join date (so pre-join weekdays aren't "Absent").
+        java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
+        LocalDate joining = resolveJoiningDate(employeeId);
+
         List<WeeklyDayResponse> days = new ArrayList<>();
         double totalHours = 0, overtime = 0, totalArrivalMinutes = 0;
         int presentDays = 0, arrivalCount = 0;
@@ -399,7 +436,7 @@ public class AttendanceService {
             LocalDate day = monday.plusDays(i);
             DayOfWeek dow = day.getDayOfWeek();
 
-            if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+            if (weekOffs.contains(dow.getValue())) {
                 AttendanceRecord rec = byDate.get(day);
                 double h = rec != null && rec.getWorkingHours() != null ? rec.getWorkingHours() : 0;
                 String checkIn = rec != null ? formatIstHourMinute(rec.getCheckInAt()) : null;
@@ -409,8 +446,11 @@ public class AttendanceService {
                         checkIn, checkOut, lateBy));
                 continue;
             }
-            if (day.isAfter(today)) {
-                days.add(new WeeklyDayResponse(day.toString(), 0, "ABSENT", null, null, null));
+            // Future days, and days before the employee joined, are not absences.
+            // Render them as a neutral off-day cell (the mobile treats WEEKEND as
+            // neutral) rather than a red "Absent".
+            if (day.isAfter(today) || (joining != null && day.isBefore(joining))) {
+                days.add(new WeeklyDayResponse(day.toString(), 0, "WEEKEND", null, null, null));
                 continue;
             }
 

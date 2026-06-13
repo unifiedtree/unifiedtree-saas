@@ -78,6 +78,8 @@ public class WorkforceEmployee extends BaseEntity {
     @Column(name = "branch_id")     private UUID branchId;
     // Geofence zone the employee must punch in at (overrides branch geofence).
     @Column(name = "geo_fence_zone_id") private UUID geoFenceZoneId;
+    // Weekly off days, CSV of ISO day numbers (1=Mon..7=Sun); e.g. "6,7"=Sat+Sun.
+    @Column(name = "weekly_off_days", length = 20) private String weeklyOffDays;
     @Column(name = "reporting_manager_id") private UUID reportingManagerId;
 
     @Enumerated(EnumType.STRING)

@@ -508,7 +508,7 @@ public class CanonicalAttendanceService {
         return jdbc.queryForObject("""
                 SELECT e.id, e.tenant_id, e.employee_code, e.first_name, e.last_name,
                        e.email, e.phone, e.date_of_birth, e.gender, e.company_id,
-                       e.department_id, e.branch_id, e.geo_fence_zone_id, e.reporting_manager_id,
+                       e.department_id, e.branch_id, e.geo_fence_zone_id, e.weekly_off_days, e.reporting_manager_id,
                        d.title AS job_title, e.employment_type, e.employment_status,
                        e.date_of_joining, b.name AS work_location, e.ctc_annual,
                        e.pan_number, e.aadhaar_number, e.pf_uan, e.esi_number,
@@ -729,6 +729,7 @@ public class CanonicalAttendanceService {
                 uuid(rs, "department_id"),
                 uuid(rs, "branch_id"),
                 uuid(rs, "geo_fence_zone_id"),
+                rs.getString("weekly_off_days"),
                 uuid(rs, "reporting_manager_id"),
                 rs.getString("job_title"),
                 rs.getString("employment_type"),

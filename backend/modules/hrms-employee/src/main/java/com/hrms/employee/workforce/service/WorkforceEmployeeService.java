@@ -108,6 +108,9 @@ public class WorkforceEmployeeService {
         e.setDesignationId(req.designationId());
         e.setBranchId(req.branchId());
         e.setGeoFenceZoneId(req.geoFenceZoneId());
+        // Weekly off days CSV (ISO 1=Mon..7=Sun). Default Sat+Sun when unset.
+        e.setWeeklyOffDays((req.weeklyOffDays() == null || req.weeklyOffDays().isBlank())
+                ? "6,7" : req.weeklyOffDays().trim());
         // Reporting manager: explicit value wins; otherwise auto-derive from the
         // selected department's head. The client no longer ships a chip picker;
         // the rule "you report to the head of your department" is canonical.

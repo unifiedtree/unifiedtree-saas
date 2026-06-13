@@ -174,6 +174,16 @@ public class EmployeeController {
         return ResponseEntity.ok(employeeService.assignPunchZone(employeeId, zoneId));
     }
 
+    @Operation(summary = "Set an employee's weekly off days (CSV of ISO day numbers 1=Mon..7=Sun)")
+    @PutMapping("/{employeeId}/weekly-offs")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    public ResponseEntity<EmployeeResponse> setWeeklyOffs(
+            @PathVariable UUID employeeId,
+            @RequestParam(required = false) String days) {
+        // e.g. days=6,7 for Sat+Sun. Blank/omitted falls back to the Sat+Sun default.
+        return ResponseEntity.ok(employeeService.setWeeklyOffDays(employeeId, days));
+    }
+
     @Operation(summary = "Terminate or accept resignation of an employee")
     @PostMapping("/{employeeId}/terminate")
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")

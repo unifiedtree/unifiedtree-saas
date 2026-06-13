@@ -211,6 +211,36 @@ public class EmployeeService {
         return employeeMapper.toResponse(saved);
     }
 
+    /**
+     * Set an employee's weekly off days. {@code days} is a CSV of ISO day
+     * numbers (1=Mon..7=Sun), e.g. "6,7" for Sat+Sun. A blank/null value clears
+     * to the Sat+Sun default. Invalid tokens are dropped; an all-invalid input
+     * falls back to "6,7" so attendance math always has a sane week-off set.
+     */
+    @Transactional
+    public EmployeeResponse setWeeklyOffDays(UUID employeeId, String days) {
+        Employee employee = findEmployeeById(employeeId);
+        String normalized = normalizeWeeklyOffDays(days);
+        employee.setWeeklyOffDays(normalized);
+        Employee saved = employeeRepository.save(employee);
+        log.info("Employee {} weekly off days set to {}", employeeId, normalized);
+        return employeeMapper.toResponse(saved);
+    }
+
+    /** Keep only valid 1..7 day numbers, de-duplicated and ordered; default "6,7". */
+    private String normalizeWeeklyOffDays(String days) {
+        if (days == null || days.isBlank()) return "6,7";
+        java.util.TreeSet<Integer> set = new java.util.TreeSet<>();
+        for (String tok : days.split(",")) {
+            try {
+                int d = Integer.parseInt(tok.trim());
+                if (d >= 1 && d <= 7) set.add(d);
+            } catch (NumberFormatException ignored) { /* skip junk */ }
+        }
+        if (set.isEmpty()) return "6,7";
+        return set.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+    }
+
     @Transactional
     public void terminateEmployee(UUID employeeId, TerminationRequest request) {
         Employee employee = findEmployeeById(employeeId);

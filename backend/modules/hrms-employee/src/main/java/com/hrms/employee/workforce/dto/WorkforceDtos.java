@@ -179,6 +179,7 @@ public final class WorkforceDtos {
             UUID designationId,
             UUID branchId,
             UUID geoFenceZoneId,
+            String weeklyOffDays,
             UUID reportingManagerId,
             WorkforceEmployee.EmploymentType employmentType,
             LocalDate dateOfJoining,

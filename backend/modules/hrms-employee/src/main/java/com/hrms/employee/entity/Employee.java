@@ -69,6 +69,14 @@ public class Employee extends BaseEntity {
     @Column(name = "geo_fence_zone_id")
     private UUID geoFenceZoneId;
 
+    /**
+     * Weekly off days as a CSV of ISO day numbers (1=Mon .. 7=Sun), e.g. "6,7"
+     * for Sat+Sun. Drives the attendance present/absent/weekend calculation
+     * per employee. Null/blank falls back to Sat+Sun.
+     */
+    @Column(name = "weekly_off_days", length = 20)
+    private String weeklyOffDays;
+
     @Column(name = "reporting_manager_id")
     private UUID managerId;
 

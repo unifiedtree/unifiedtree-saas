@@ -23,6 +23,7 @@ public record EmployeeResponse(
         UUID departmentId,
         UUID branchId,
         UUID geoFenceZoneId,
+        String weeklyOffDays,
         UUID managerId,
         String jobTitle,
         EmploymentType employmentType,
