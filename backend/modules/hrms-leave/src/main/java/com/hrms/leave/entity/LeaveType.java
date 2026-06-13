@@ -49,9 +49,12 @@ public class LeaveType extends BaseEntity {
     @Column(name = "carry_forward")
     private boolean carryForwardAllowed;
 
-    // canonical column is carry_forward_max_days
+    // canonical column is carry_forward_max_days. Boxed Integer (not primitive)
+    // so a legacy NULL in the DB doesn't blow up Hibernate hydration — that
+    // produced a PropertyAccessException -> 500 on /v1/leave/overview and
+    // surfaced to the mobile app as "Cannot reach the HRMS server."
     @Column(name = "carry_forward_max_days")
-    private int maxCarryForwardDays = 0;
+    private Integer maxCarryForwardDays = 0;
 
     @Column(name = "is_encashable")
     private boolean encashable;

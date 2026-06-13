@@ -40,7 +40,9 @@ public class LeaveTypeMapperImpl implements LeaveTypeMapper {
         maxConsecutiveDays = leaveType.getMaxConsecutiveDays();
         isPaidLeave = leaveType.isPaidLeave();
         isCarryForwardAllowed = leaveType.isCarryForwardAllowed();
-        maxCarryForwardDays = leaveType.getMaxCarryForwardDays();
+        // Null-safe unbox: getMaxCarryForwardDays() is a boxed Integer and may be
+        // null for legacy rows. Default to 0 to match the entity initializer.
+        maxCarryForwardDays = leaveType.getMaxCarryForwardDays() != null ? leaveType.getMaxCarryForwardDays() : 0;
         isActive = leaveType.isActive();
 
         LeaveTypeResponse leaveTypeResponse = new LeaveTypeResponse( id, name, code, category, annualEntitlement, maxConsecutiveDays, isPaidLeave, isCarryForwardAllowed, maxCarryForwardDays, isActive );
