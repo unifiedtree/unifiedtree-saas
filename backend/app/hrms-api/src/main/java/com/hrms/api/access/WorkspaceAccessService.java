@@ -210,10 +210,14 @@ public class WorkspaceAccessService {
             }
             String first = (req.firstName() == null || req.firstName().isBlank())
                 ? req.email().split("@")[0] : req.firstName();
+            // Positional ctor (30 components). Everything past name/email is
+            // unset for a workspace-invite-created employee — including
+            // geoFenceZoneId (no punch zone assigned via this path).
             CreateWorkforceEmployeeRequest cr = new CreateWorkforceEmployeeRequest(
                 req.companyId(), null, first, null, req.lastName(), req.email(),
-                null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null);
             WorkforceEmployeeResponse emp = workforceService.create(cr);
 
             InvitationService.InvitationResult result =
