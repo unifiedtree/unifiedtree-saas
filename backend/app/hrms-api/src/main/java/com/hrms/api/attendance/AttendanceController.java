@@ -383,11 +383,13 @@ public class AttendanceController {
                 ? employeeRepository.findActiveByCompany(current.getCompanyId())
                 : employeeRepository.findByManagerId(currentEmployeeId);
 
-        if (!isAdmin(jwt)) {
-            employees = employees.stream()
-                    .filter(employee -> !employee.getId().equals(currentEmployeeId))
-                    .toList();
-        }
+        // Exclude the caller (admin or manager) from the team list — admins and
+        // managers don't punch on this app, so counting them produces phantom
+        // "Not Marked / Absent" tiles. Without this, a brand-new workspace with
+        // only an admin shows the admin as Absent No-show.
+        employees = employees.stream()
+                .filter(employee -> !employee.getId().equals(currentEmployeeId))
+                .toList();
 
         if (departmentId != null) {
             employees = employees.stream()

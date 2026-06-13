@@ -96,14 +96,15 @@ public class CanonicalProdSecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Public surface. /refresh is intentionally NOT here yet --
-                // the endpoint is not yet wired and listing it as permitAll
-                // would create a phantom unauthenticated path. It will be
-                // added when refresh is shipped.
+                // Public surface. /refresh's own credential is the refresh
+                // token in the body — the rotation route does not require an
+                // already-valid access token (the whole point is that the
+                // access token has expired).
                 .requestMatchers(
                     "/actuator/health",
                     "/actuator/info",
                     "/v1/canonical-auth/login",
+                    "/v1/canonical-auth/refresh",
                     // Invitation + password reset flows — token IS the auth
                     "/v1/auth/accept-invite",
                     "/v1/auth/forgot-password",

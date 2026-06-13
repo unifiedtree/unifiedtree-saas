@@ -160,6 +160,72 @@ public class AuthService {
     }
 
     /**
+     * Rotate an access token using a valid refresh token (Play Store-grade
+     * session: a brief 401 from token expiry MUST NOT log the user out — the
+     * mobile axios interceptor calls this transparently and retries).
+     *
+     * <p>auth.refresh_tokens has FORCE ROW LEVEL SECURITY; the refresh hash is
+     * a 256-bit random value, so a per-tenant scan to find its owning tenant is
+     * collision-safe AND avoids any superuser/SECURITY DEFINER plumbing — same
+     * pattern as {@link #resolveLoginTenant}. Once the tenant is bound, the old
+     * row is invalidated (rotation) and a fresh access + refresh pair is minted
+     * via {@link #issueSession}.
+     */
+    public LoginResponse refresh(String refreshTokenPlain) {
+        if (refreshTokenPlain == null || refreshTokenPlain.isBlank()) {
+            throw new BusinessRuleException("Refresh token missing", "REFRESH_INVALID");
+        }
+        final String hash = sha256Hex(refreshTokenPlain.trim());
+
+        List<UUID> tenantIds;
+        try {
+            tenantIds = jdbc.queryForList("SELECT id FROM platform.tenants", UUID.class);
+        } catch (Exception e) {
+            throw new BusinessRuleException("Session expired — please sign in again.", "REFRESH_INVALID");
+        }
+
+        for (UUID t : tenantIds) {
+            try {
+                jdbc.queryForObject("SELECT set_config('app.tenant_id', ?, true)",
+                        String.class, t.toString());
+                Optional<RefreshToken> maybe = refreshRepo.findByTokenHash(hash);
+                if (maybe.isEmpty()) continue;
+
+                RefreshToken rt = maybe.get();
+                if (rt.getExpiresAt() != null && rt.getExpiresAt().isBefore(OffsetDateTime.now())) {
+                    refreshRepo.delete(rt);
+                    throw new BusinessRuleException("Session expired — please sign in again.", "REFRESH_EXPIRED");
+                }
+                if (rt.getRevokedAt() != null) {
+                    throw new BusinessRuleException("Session expired — please sign in again.", "REFRESH_REVOKED");
+                }
+
+                // Bind the canonical tenant contexts so issueSession's RLS-scoped
+                // writes (delete of the old row + insert of the new one + update
+                // of last_login_at) all see the right tenant.
+                TenantContext.setTenantId(t);
+                com.hrms.core.tenant.TenantContext.setTenantId(t);
+
+                UserCredentials creds = credentialsRepo.findById(rt.getUserId())
+                        .orElseThrow(() -> new BusinessRuleException("Session expired — please sign in again.", "REFRESH_USER_GONE"));
+                if (!creds.isActive()) {
+                    throw new BusinessRuleException("Account is inactive", "ACCOUNT_INACTIVE");
+                }
+
+                // Rotate: invalidate the old refresh token so the same plaintext
+                // cannot be replayed (defends against stolen-token replay).
+                refreshRepo.delete(rt);
+                return issueSession(creds, t);
+            } catch (BusinessRuleException bre) {
+                throw bre;
+            } catch (Exception ignored) {
+                // unreadable tenant; keep scanning
+            }
+        }
+        throw new BusinessRuleException("Session expired — please sign in again.", "REFRESH_NOT_FOUND");
+    }
+
+    /**
      * Issue a normal tenant-scoped ERP session after a global account token has
      * already proved the caller can enter this workspace. This deliberately does
      * not check a password; account membership is validated by the SaaS account

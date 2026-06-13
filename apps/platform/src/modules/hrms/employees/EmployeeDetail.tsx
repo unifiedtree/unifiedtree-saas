@@ -42,6 +42,7 @@ import type {
 } from '../api/useEmployeeProfile'
 import { EmployeeForm } from './EmployeeForm'
 import { sendInvite, resendInvite } from './api/useInvitation'
+import { resetFaceEnrollment } from './api/useFaceAdmin'
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -264,7 +265,48 @@ function AccountCard({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceE
           )}
         </div>
       )}
+      <FaceResetRow employeeId={emp.id} employeeName={`${emp.firstName ?? ''} ${emp.lastName ?? ''}`.trim() || emp.email || 'this employee'} />
     </SectionCard>
+  )
+}
+
+/**
+ * Admin action: wipe an employee's face enrollment + templates so they can
+ * re-enroll on the mobile app. Use when the employee is locked out from too
+ * many failed verifications, or when they've changed appearance enough that
+ * the existing templates are giving false rejections.
+ */
+function FaceResetRow({ employeeId, employeeName }: { employeeId: string; employeeName: string }) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const doReset = async () => {
+    setBusy(true)
+    try {
+      await resetFaceEnrollment(employeeId)
+      toast.success('Face enrollment reset — the employee can enroll again from the mobile app.')
+      setConfirming(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to reset face enrollment.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mt-3 pt-3 border-t border-border space-y-2">
+      <p className="text-xs text-text-secondary">
+        Reset Face Enrollment — clears stored face templates and unlocks any verification lockout for {employeeName}. They&rsquo;ll need to enroll again on the mobile app.
+      </p>
+      {confirming ? (
+        <div className="flex gap-2">
+          <Button size="sm" variant="danger" loading={busy} onClick={doReset}>Yes, reset</Button>
+          <Button size="sm" variant="secondary" onClick={() => setConfirming(false)} disabled={busy}>Cancel</Button>
+        </div>
+      ) : (
+        <Button size="sm" variant="secondary" onClick={() => setConfirming(true)}>
+          Reset face enrollment
+        </Button>
+      )}
+    </div>
   )
 }
 

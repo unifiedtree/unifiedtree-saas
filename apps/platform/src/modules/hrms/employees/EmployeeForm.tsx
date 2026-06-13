@@ -123,6 +123,14 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
       toast('First name and email are required', 'error')
       return
     }
+    // Branch is the employee's PUNCH LOCATION — outside-zone punches are
+    // hard-blocked on the server, so an employee with no branch can never
+    // check in. Catch this here with a clear message instead of letting them
+    // hit "Outside Zone" forever on the phone.
+    if (!form.branchId) {
+      toast('Pick a Punch Location (branch) — the employee must be inside this geofence to punch in', 'error')
+      return
+    }
     try {
       if (isEdit) {
         const result = await updateEmp.mutateAsync({
@@ -302,18 +310,19 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   {designations.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
                 </Sel>
               </Field>
-              <Field label="Branch">
+              <Field label="Punch Location (Branch) *">
                 <Sel value={form.branchId} onChange={(e) => set('branchId', e.target.value)}>
                   <option value="">
                     {branches.length === 0 ? 'No branches configured — set up in Organization' : 'Select branch'}
                   </option>
                   {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </Sel>
-                {branches.length === 0 && (
-                  <p className="mt-1 text-xs text-slate-600">
-                    Add branches under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Branches</a>
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-slate-600">
+                  Employees can only punch in from inside this branch&rsquo;s geofence — outside-zone punches are blocked.
+                  {branches.length === 0 && (
+                    <> Add branches under <a href="/hrms/organization" className="text-primary hover:underline">Organization &rarr; Branches</a>.</>
+                  )}
+                </p>
               </Field>
               <Field label="Employment Type">
                 {employmentTypes.length > 0 ? (

@@ -18,6 +18,13 @@
 hrms:
   face-recognition:
     enabled: ${HRMS_FACE_RECOGNITION_ENABLED:false}
+  attendance:
+    # Outside-zone punches are HARD-BLOCKED in production. The mobile app
+    # detects the zone violation pre-flight and shows a warning popup, but
+    # this server-side gate is the source of truth — a tampered client cannot
+    # bypass it. To disable per-tenant override later, expose this on a
+    # settings page; for now it is a global env flip.
+    geofence-enforce: ${HRMS_GEOFENCE_ENFORCE:true}
 
 spring:
   flyway:

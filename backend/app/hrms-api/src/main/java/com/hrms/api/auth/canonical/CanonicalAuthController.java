@@ -62,4 +62,17 @@ public class CanonicalAuthController {
     public MeResponse me() {
         return auth.currentUser();
     }
+
+    /**
+     * Rotate access token using a refresh token. Public — the refresh token
+     * itself is the credential. Without this endpoint, every brief 401 (token
+     * expiry, network blip) forces the mobile app to clear tokens and
+     * re-prompt the login screen — terrible Play-Store experience.
+     */
+    @PostMapping("/refresh")
+    public LoginResponse refresh(@Valid @RequestBody RefreshRequest req) {
+        return auth.refresh(req.refreshToken());
+    }
+
+    public record RefreshRequest(@jakarta.validation.constraints.NotBlank String refreshToken) {}
 }

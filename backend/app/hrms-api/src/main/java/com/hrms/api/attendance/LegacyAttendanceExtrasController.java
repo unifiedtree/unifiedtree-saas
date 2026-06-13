@@ -208,6 +208,12 @@ public class LegacyAttendanceExtrasController {
         List<Employee> employees = isAdmin(jwt)
                 ? employeeRepository.findActiveByCompany(current.getCompanyId())
                 : employeeRepository.findByManagerId(currentEmployeeId);
+        // Exclude the caller from the team list — admins/managers should not
+        // see themselves on live-location / Find Others (and shouldn't show as
+        // a "Not Marked" phantom on the dashboard).
+        employees = employees.stream()
+                .filter(e -> !e.getId().equals(currentEmployeeId))
+                .toList();
         if (departmentId != null) {
             employees = employees.stream()
                     .filter(e -> departmentId.equals(e.getDepartmentId()))
