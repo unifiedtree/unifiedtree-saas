@@ -1,10 +1,12 @@
 package com.hrms.api.employee;
 
-import com.hrms.auth.service.AuthService;
+import com.hrms.api.invitation.InvitationService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.core.enums.Role;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.tenant.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.hrms.employee.dto.CreateEmployeeRequest;
 import com.hrms.employee.dto.EmergencyContactRequest;
 import com.hrms.employee.dto.EmergencyContactResponse;
@@ -49,30 +51,24 @@ public class EmployeeController {
             Role.DEPT_MANAGER
     );
 
+    private static final Logger log = LoggerFactory.getLogger(EmployeeController.class);
+
     private final EmployeeService employeeService;
-    private final AuthService authService;
+    private final InvitationService invitationService;
 
     public EmployeeController(EmployeeService employeeService,
-                              @Autowired(required = false) AuthService authService) {
+                              @Autowired(required = false) InvitationService invitationService) {
         this.employeeService = employeeService;
-        this.authService = authService;
+        this.invitationService = invitationService;
     }
 
     @Operation(summary = "Create a new employee")
     @PostMapping
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<EmployeeResponse> create(@Valid @RequestBody CreateEmployeeRequest request) {
+    public ResponseEntity<EmployeeResponse> create(@Valid @RequestBody CreateEmployeeRequest request,
+                                                   @AuthenticationPrincipal Jwt jwt) {
         EmployeeResponse employee = employeeService.createEmployee(request);
-        if (authService != null) {
-            authService.createOrUpdateCredentialForEmployee(
-                    TenantContext.getTenantId(),
-                    employee.id(),
-                    employee.email(),
-                    employee.phone(),
-                    "Welcome@123",
-                    List.of(Role.EMPLOYEE),
-                    true);
-        }
+        queueInvite(employee, jwt);
         return ResponseEntity.status(HttpStatus.CREATED).body(employee);
     }
 
@@ -86,10 +82,12 @@ public class EmployeeController {
         boolean adminRequest = hasAnyRole(currentRoles, ADMIN_ROLES);
 
         CreateEmployeeRequest employeeRequest = request.employee();
-        List<Role> credentialRoles;
 
         if (adminRequest) {
-            credentialRoles = normalizeAdminStaffRoles(request.roles());
+            // Just normalise admin-supplied roles for validation; the
+            // canonical invitation flow only grants EMPLOYEE today — roles
+            // beyond that come from a separate access-management screen.
+            normalizeAdminStaffRoles(request.roles());
         } else {
             EmployeeResponse manager = employeeService.getEmployee(extractEmployeeId(jwt));
             if (manager.departmentId() == null) {
@@ -98,21 +96,30 @@ public class EmployeeController {
                         "MANAGER_DEPARTMENT_REQUIRED");
             }
             employeeRequest = scopeToManager(employeeRequest, manager);
-            credentialRoles = List.of(Role.EMPLOYEE);
         }
 
         EmployeeResponse employee = employeeService.createEmployee(employeeRequest);
-        if (authService != null) {
-            authService.createOrUpdateCredentialForEmployee(
-                    TenantContext.getTenantId(),
-                    employee.id(),
-                    employee.email(),
-                    employee.phone(),
-                    temporaryPasswordOrDefault(request.temporaryPassword()),
-                    credentialRoles,
-                    request.biometricEnabled());
-        }
+        queueInvite(employee, jwt);
         return ResponseEntity.status(HttpStatus.CREATED).body(employee);
+    }
+
+    /**
+     * Best-effort invitation send. Replaces the old default-password path
+     * (which silently created a bcrypt(`Welcome@123`) credential — a known
+     * preset password is a security liability). The canonical invitation
+     * flow creates the credential with active=false / no password and
+     * emails a single-use token; the employee picks their own password.
+     */
+    private void queueInvite(EmployeeResponse employee, Jwt jwt) {
+        if (invitationService == null || jwt == null) return;
+        if (employee.email() == null || employee.email().isBlank()) return;
+        try {
+            UUID actorId = UUID.fromString(jwt.getSubject());
+            invitationService.sendInvitation(employee.id(), TenantContext.getTenantId(), actorId);
+        } catch (RuntimeException ex) {
+            log.warn("Invitation for {} (employee {}) failed to queue: {}",
+                    employee.email(), employee.id(), ex.getMessage());
+        }
     }
 
     @Operation(summary = "Get current logged-in employee profile")

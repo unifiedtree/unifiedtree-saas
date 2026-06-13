@@ -43,10 +43,13 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-import com.hrms.auth.service.AuthService;
+import com.hrms.api.invitation.InvitationService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import com.hrms.core.tenant.TenantContext;
-import com.hrms.core.enums.Role;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * REST surface for the HR workforce module - covers Companies, Branches,
@@ -60,6 +63,8 @@ import com.hrms.core.enums.Role;
 @RequestMapping("/v1/hrms")
 public class WorkforceController {
 
+    private static final Logger log = LoggerFactory.getLogger(WorkforceController.class);
+
     private final CompanyService            companies;
     private final BranchService             branches;
     private final DepartmentService         departments;
@@ -70,7 +75,7 @@ public class WorkforceController {
     private final GradeService              grades;
     private final EmploymentTypeService     employmentTypes;
     private final ShiftService              shifts;
-    private final AuthService               authService;
+    private final InvitationService         invitationService;
 
     public WorkforceController(CompanyService companies,
                                @Qualifier("workforceBranchService") BranchService branches,
@@ -82,7 +87,7 @@ public class WorkforceController {
                                GradeService grades,
                                EmploymentTypeService employmentTypes,
                                ShiftService shifts,
-                               @Autowired(required = false) AuthService authService) {
+                               @Autowired(required = false) InvitationService invitationService) {
         this.companies = companies;
         this.branches = branches;
         this.departments = departments;
@@ -93,7 +98,7 @@ public class WorkforceController {
         this.grades = grades;
         this.employmentTypes = employmentTypes;
         this.shifts = shifts;
-        this.authService = authService;
+        this.invitationService = invitationService;
     }
 
     // -- Companies -----------------------------------------------------------
@@ -224,17 +229,24 @@ public class WorkforceController {
     @PostMapping("/employees")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('hrms.employee.write')")
-    public WorkforceEmployeeResponse createEmployee(@Valid @RequestBody CreateWorkforceEmployeeRequest req) {
+    public WorkforceEmployeeResponse createEmployee(@Valid @RequestBody CreateWorkforceEmployeeRequest req,
+                                                    @AuthenticationPrincipal Jwt jwt) {
         WorkforceEmployeeResponse emp = employees.create(req);
-        if (authService != null && emp.email() != null && !emp.email().isBlank()) {
-            authService.createOrUpdateCredentialForEmployee(
-                    TenantContext.getTenantId(),
-                    emp.id(),
-                    emp.email(),
-                    emp.phone(),
-                    "Welcome@123",
-                    List.of(Role.EMPLOYEE),
-                    true);
+        // Security: never create a credential with a default password — that
+        // gives every onboarded employee a publicly-known login. Instead, fire
+        // the invitation flow so the canonical credential is born with
+        // active=false / password_hash=null and a single-use token is emailed.
+        // The send is best-effort: a misconfigured SMTP must not roll back the
+        // create or surface a 5xx to the admin — they can resend from the
+        // staff profile if the email never arrives.
+        if (invitationService != null && emp.email() != null && !emp.email().isBlank() && jwt != null) {
+            try {
+                UUID actorId = UUID.fromString(jwt.getSubject());
+                invitationService.sendInvitation(emp.id(), TenantContext.getTenantId(), actorId);
+            } catch (RuntimeException ex) {
+                log.warn("Invitation for {} (employee {}) failed to queue: {}",
+                        emp.email(), emp.id(), ex.getMessage());
+            }
         }
         return emp;
     }

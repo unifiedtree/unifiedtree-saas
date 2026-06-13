@@ -7,7 +7,9 @@ import com.hrms.employee.workforce.dto.WorkforceDtos.CreateWorkforceEmployeeRequ
 import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateWorkforceEmployeeRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.WorkforceEmployeeResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.WorkforceFilter;
+import com.hrms.employee.workforce.entity.Department;
 import com.hrms.employee.workforce.entity.WorkforceEmployee;
+import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import com.hrms.employee.workforce.repository.WorkforceEmployeeRepository;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
@@ -31,9 +33,12 @@ import java.util.UUID;
 public class WorkforceEmployeeService {
 
     private final WorkforceEmployeeRepository repository;
+    private final WorkforceDepartmentRepository departmentRepository;
 
-    public WorkforceEmployeeService(WorkforceEmployeeRepository repository) {
+    public WorkforceEmployeeService(WorkforceEmployeeRepository repository,
+                                    WorkforceDepartmentRepository departmentRepository) {
         this.repository = repository;
+        this.departmentRepository = departmentRepository;
     }
 
     // -- Directory query ----------------------------------------------------
@@ -102,7 +107,10 @@ public class WorkforceEmployeeService {
         e.setDepartmentId(req.departmentId());
         e.setDesignationId(req.designationId());
         e.setBranchId(req.branchId());
-        e.setReportingManagerId(req.reportingManagerId());
+        // Reporting manager: explicit value wins; otherwise auto-derive from the
+        // selected department's head. The client no longer ships a chip picker;
+        // the rule "you report to the head of your department" is canonical.
+        e.setReportingManagerId(resolveReportingManager(req.reportingManagerId(), req.departmentId()));
         e.setEmploymentType(req.employmentType() != null
                 ? req.employmentType() : WorkforceEmployee.EmploymentType.FULL_TIME);
         e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.PROBATION);
@@ -186,6 +194,20 @@ public class WorkforceEmployeeService {
         e.setLastWorkingDay(lastWorkingDay);
         e.setExitReason(reason);
         return toResponse(repository.save(e));
+    }
+
+    // -- Resolve reporting manager from department head ---------------------
+    // Returns the explicit value if provided; otherwise looks up the
+    // selected department's head. Falls back to null when the department has
+    // no head set (e.g. first ever employee in a brand-new workspace) — the
+    // controller layer can layer-on additional fallbacks like "report to admin"
+    // by passing reportingManagerId in the request.
+    private UUID resolveReportingManager(UUID explicit, UUID departmentId) {
+        if (explicit != null) return explicit;
+        if (departmentId == null) return null;
+        return departmentRepository.findById(departmentId)
+                .map(Department::getDepartmentHeadEmployeeId)
+                .orElse(null);
     }
 
     // -- Generator: simple sequential code per company ----------------------

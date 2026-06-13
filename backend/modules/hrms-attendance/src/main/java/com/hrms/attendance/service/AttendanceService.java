@@ -766,7 +766,12 @@ public class AttendanceService {
         zone.setLatitude(request.latitude());
         zone.setLongitude(request.longitude());
         zone.setRadiusMeters(request.radiusMeters());
-        zone.setPunchMethod(parseMethod(request.punchMethod()));
+        // Every geofence zone hard-requires BOTH location (the radius check is
+        // the GPS gate) AND face recognition. The client no longer offers a
+        // punch-method selector and there is intentionally no "manual" zone —
+        // pin FACE_RECOGNITION server-side so the rule can't be bypassed by a
+        // crafted request. (GPS-only / PIN / MANUAL are deliberately rejected.)
+        zone.setPunchMethod(CheckInMethod.FACE_RECOGNITION);
         zone.setColorHex(request.colorHex());
         zone.setIconKey(request.iconKey());
         if (request.active() != null) {
