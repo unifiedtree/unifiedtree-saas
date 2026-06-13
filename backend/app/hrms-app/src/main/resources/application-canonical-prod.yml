@@ -82,7 +82,14 @@ unifiedtree:
   face:
     enabled:              ${UNIFIEDTREE_FACE_ENABLED:true}
     worker-url:           ${UNIFIEDTREE_FACE_WORKER_URL:http://localhost:8091}
-    worker-timeout-ms:    ${UNIFIEDTREE_FACE_WORKER_TIMEOUT_MS:1500}
+    # READ timeout. The face worker is its own scale-to-zero Railway service;
+    # the first verify after idle pays an ONNX model-load + inference cost, so
+    # 1500ms was far too tight (cold punch -> 503 FACE_WORKER_UNAVAILABLE).
+    worker-timeout-ms:    ${UNIFIEDTREE_FACE_WORKER_TIMEOUT_MS:12000}
+    # CONNECT timeout. Must tolerate Railway holding the socket open while the
+    # worker container boots. Previously capped at 750ms which a cold worker
+    # could never meet. Kept well under the mobile 60s checkin timeout.
+    worker-connect-timeout-ms: ${UNIFIEDTREE_FACE_WORKER_CONNECT_TIMEOUT_MS:12000}
     # Identity match floor. SFace mapped 0.85 corresponds to roughly raw
     # cosine 0.70 - a high-security default for attendance punch-in.
     match-threshold:      ${UNIFIEDTREE_FACE_MATCH_THRESHOLD:0.85}

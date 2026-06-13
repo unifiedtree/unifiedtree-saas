@@ -262,6 +262,27 @@ public class AttendanceService {
 
     // ── Monthly stats ────────────────────────────────────────────────────────
 
+    /**
+     * The employee's date of joining, or null when unknown. Used to avoid
+     * counting weekdays BEFORE the employee existed as "Absent" (a brand-new
+     * mid-month hire was showing a full month of phantom absences). Read via
+     * JdbcTemplate to avoid a cross-module dependency on hrms-employee; falls
+     * back to null (no clamp) in environments where JdbcTemplate is absent.
+     */
+    private LocalDate resolveJoiningDate(UUID employeeId) {
+        if (jdbcTemplate == null || employeeId == null) {
+            return null;
+        }
+        try {
+            java.sql.Date d = jdbcTemplate.queryForObject(
+                    "SELECT date_of_joining FROM hrms.employees WHERE id = ?",
+                    java.sql.Date.class, employeeId);
+            return d != null ? d.toLocalDate() : null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     @Transactional(readOnly = true)
     public MonthlyStatsResponse getMonthlyStats(UUID employeeId, int year, int month) {
         LocalDate start = LocalDate.of(year, month, 1);
@@ -275,7 +296,10 @@ public class AttendanceService {
 
         int presentDays = 0, absentDays = 0, onTimeDays = 0, lateDays = 0;
 
-        LocalDate cursor = start;
+        // Don't count days before the employee joined as Absent. A new hire on
+        // the 13th has no records for the 1st-12th, but those weren't absences.
+        LocalDate joining = resolveJoiningDate(employeeId);
+        LocalDate cursor = (joining != null && joining.isAfter(start)) ? joining : start;
         while (!cursor.isAfter(end) && !cursor.isAfter(today)) {
             DayOfWeek dow = cursor.getDayOfWeek();
             if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
@@ -313,6 +337,11 @@ public class AttendanceService {
         Map<LocalDate, AttendanceRecord> byDate = records.stream()
                 .collect(Collectors.toMap(AttendanceRecord::getAttendanceDate, r -> r));
 
+        // Pre-join weekdays must NOT be painted ABSENT (the employee didn't exist
+        // yet). We still walk the whole month so WEEKEND grid cells render, but
+        // gate the ABSENT branch below on the join date.
+        LocalDate joining = resolveJoiningDate(employeeId);
+
         List<DayRecordResponse> result = new ArrayList<>();
         LocalDate cursor = start;
 
@@ -322,6 +351,7 @@ public class AttendanceService {
                 result.add(new DayRecordResponse(cursor.toString(), "WEEKEND", null, null, null));
             } else {
                 AttendanceRecord rec = byDate.get(cursor);
+                boolean beforeJoining = joining != null && cursor.isBefore(joining);
                 if (rec != null && rec.getCheckInAt() != null) {
                     LocalTime checkInLocal = rec.getCheckInAt().atZone(IST).toLocalTime();
                     String status = checkInLocal.isAfter(LATE_THRESHOLD) ? "LATE" : "PRESENT";
@@ -330,10 +360,11 @@ public class AttendanceService {
                             rec.getCheckInAt().toString(),
                             rec.getCheckOutAt() != null ? rec.getCheckOutAt().toString() : null,
                             rec.getWorkingHours()));
-                } else if (!cursor.isAfter(today)) {
+                } else if (!cursor.isAfter(today) && !beforeJoining) {
                     result.add(new DayRecordResponse(cursor.toString(), "ABSENT", null, null, null));
                 }
-                // future working days: omit (frontend handles missing dates as no-dot)
+                // future working days, and weekdays before the join date: omit
+                // (frontend handles missing dates as no-dot)
             }
             cursor = cursor.plusDays(1);
         }

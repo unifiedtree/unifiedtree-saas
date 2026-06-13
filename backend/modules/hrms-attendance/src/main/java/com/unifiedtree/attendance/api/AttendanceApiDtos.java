@@ -230,6 +230,7 @@ public final class AttendanceApiDtos {
             UUID companyId,
             UUID departmentId,
             UUID branchId,
+            UUID geoFenceZoneId,
             UUID managerId,
             String jobTitle,
             String employmentType,

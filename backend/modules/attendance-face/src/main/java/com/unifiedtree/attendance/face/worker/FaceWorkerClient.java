@@ -40,10 +40,17 @@ public class FaceWorkerClient {
 
     public FaceWorkerClient(
             @Value("${unifiedtree.face.worker-url:http://localhost:8091}") String workerUrl,
-            @Value("${unifiedtree.face.worker-timeout-ms:1500}") int timeoutMs) {
+            @Value("${unifiedtree.face.worker-timeout-ms:12000}") int timeoutMs,
+            @Value("${unifiedtree.face.worker-connect-timeout-ms:12000}") int connectTimeoutMs) {
         this.workerUrl = workerUrl.replaceAll("/$", "");
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Math.min(750, timeoutMs));
+        // Connect timeout MUST tolerate a scale-to-zero worker: Railway holds the
+        // socket open while the container boots and lazy-loads its ONNX models.
+        // The old Math.min(750, readTimeout) cap made a cold worker unreachable,
+        // so the first punch after idle always 503'd. Both timeouts stay well
+        // under the mobile checkin timeout (60s) so Spring returns a real verdict
+        // before the app gives up with a bare "Network Error".
+        factory.setConnectTimeout(connectTimeoutMs);
         factory.setReadTimeout(timeoutMs);
         this.http = new RestTemplate(factory);
     }

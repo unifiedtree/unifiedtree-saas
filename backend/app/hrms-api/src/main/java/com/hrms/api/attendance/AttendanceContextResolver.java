@@ -1,5 +1,7 @@
 package com.hrms.api.attendance;
 
+import com.hrms.attendance.entity.GeoFenceZone;
+import com.hrms.attendance.repository.GeoFenceZoneRepository;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.employee.workforce.entity.Branch;
@@ -30,11 +32,14 @@ public class AttendanceContextResolver {
 
     private final EmployeeRepository employeeRepository;
     private final WorkforceBranchRepository branchRepository;
+    private final GeoFenceZoneRepository zoneRepository;
 
     public AttendanceContextResolver(EmployeeRepository employeeRepository,
-                                     WorkforceBranchRepository branchRepository) {
+                                     WorkforceBranchRepository branchRepository,
+                                     GeoFenceZoneRepository zoneRepository) {
         this.employeeRepository = employeeRepository;
         this.branchRepository = branchRepository;
+        this.zoneRepository = zoneRepository;
     }
 
     @Transactional(readOnly = true)
@@ -69,6 +74,25 @@ public class AttendanceContextResolver {
                 branchLon = hq.getLongitude() != null ? hq.getLongitude().doubleValue() : null;
                 geoFenceRadius = hq.getGeoFenceRadiusMeters() != null ? hq.getGeoFenceRadiusMeters() : 100;
                 branchName = hq.getName();
+            }
+        }
+
+        // Per-employee assigned punch zone OVERRIDES the branch geofence. When an
+        // admin assigns a zone (onboarding or staff profile), the employee may
+        // only punch inside THAT zone — so the geofence check must validate
+        // against the zone's coordinates/radius, not the branch's. Falls back to
+        // the branch (resolved above) when no zone is assigned or it's inactive.
+        if (employee.getGeoFenceZoneId() != null) {
+            GeoFenceZone zone = zoneRepository.findById(employee.getGeoFenceZoneId())
+                    .filter(GeoFenceZone::isActive)
+                    .orElse(null);
+            if (zone != null && zone.getLatitude() != null && zone.getLongitude() != null) {
+                branchLat = zone.getLatitude();
+                branchLon = zone.getLongitude();
+                geoFenceRadius = zone.getRadiusMeters() != null ? zone.getRadiusMeters() : geoFenceRadius;
+                branchName = zone.getName();
+                log.debug("Employee {} punch zone override -> zone={} ({}, {}) r={}m",
+                        employeeId, zone.getName(), branchLat, branchLon, geoFenceRadius);
             }
         }
 
