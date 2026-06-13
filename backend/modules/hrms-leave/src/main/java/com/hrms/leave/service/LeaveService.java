@@ -109,13 +109,26 @@ public class LeaveService {
                     "EXCEEDS_CONSECUTIVE_DAYS");
         }
 
-        // Check leave balance
+        // Check leave balance. New hires (and employees added before a leave type
+        // existed) have NO balance row until the monthly accrual job runs — so
+        // create it lazily from the leave type's annual entitlement instead of
+        // hard-failing. Without this, a freshly onboarded employee could never
+        // apply for leave ("No allocations yet" / LEAVE_BALANCE_NOT_FOUND).
         int year = startDate.getYear();
         LeaveBalance balance = leaveBalanceRepository
                 .findByEmployeeIdAndLeaveTypeIdAndYear(employeeId, request.leaveTypeId(), year)
-                .orElseThrow(() -> new BusinessRuleException(
-                        "No leave balance found for employee and leave type in year %d".formatted(year),
-                        "LEAVE_BALANCE_NOT_FOUND"));
+                .orElseGet(() -> {
+                    LeaveBalance b = new LeaveBalance();
+                    b.setTenantId(TenantContext.getTenantId());
+                    b.setEmployeeId(employeeId);
+                    b.setLeaveTypeId(request.leaveTypeId());
+                    b.setYear(year);
+                    b.setTotalEntitlement(leaveType.getAnnualEntitlement());
+                    b.setUsed(0);
+                    b.setPending(0);
+                    b.setCarryForward(0);
+                    return leaveBalanceRepository.save(b);
+                });
 
         if (balance.getAvailable() < totalDays) {
             throw new BusinessRuleException(

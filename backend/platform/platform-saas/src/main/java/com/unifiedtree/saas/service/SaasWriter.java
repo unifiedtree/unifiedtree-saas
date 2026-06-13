@@ -270,17 +270,21 @@ public class SaasWriter {
 
         int year = today.getYear();
         for (LeaveTypeSeed leaveType : List.of(
-                new LeaveTypeSeed(UUID.randomUUID(), "Annual Leave", "ANNUAL", 21),
-                new LeaveTypeSeed(UUID.randomUUID(), "Sick Leave", "SICK", 12),
-                new LeaveTypeSeed(UUID.randomUUID(), "Casual Leave", "CASUAL", 6))) {
+                // category MUST be a valid com.hrms.leave.enums.LeaveCategory name
+                // (EARNED/SICK/CASUAL/...). 'PAID' is NOT a LeaveCategory and made
+                // Hibernate fail to hydrate the row -> 500 on /v1/leave/types and
+                // /my/balances -> the empty "No allocations yet" apply-leave screen.
+                new LeaveTypeSeed(UUID.randomUUID(), "Annual Leave", "ANNUAL", 21, "EARNED"),
+                new LeaveTypeSeed(UUID.randomUUID(), "Sick Leave", "SICK", 12, "SICK"),
+                new LeaveTypeSeed(UUID.randomUUID(), "Casual Leave", "CASUAL", 6, "CASUAL"))) {
             jdbc.update("""
                     INSERT INTO leave_mgmt.leave_types
                         (id, tenant_id, company_id, name, code, annual_entitlement, is_paid_leave,
                          category, description, is_active, created_at, updated_at, created_by, updated_by, version)
-                    VALUES (?, ?, ?, ?, ?, ?, TRUE, 'PAID', ?, TRUE, now(), now(), 'signup', 'signup', 0)
+                    VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?, TRUE, now(), now(), 'signup', 'signup', 0)
                     """,
                     leaveType.id(), tenantId, companyId, leaveType.name(), leaveType.code(),
-                    leaveType.days(), leaveType.name());
+                    leaveType.days(), leaveType.category(), leaveType.name());
 
             jdbc.update("""
                     INSERT INTO leave_mgmt.leave_balances
@@ -290,6 +294,28 @@ public class SaasWriter {
                     """,
                     UUID.randomUUID(), tenantId, adminUserId, leaveType.id(), year,
                     leaveType.days(), leaveType.days());
+        }
+
+        // Seed default fixed-date national holidays so the calendar isn't empty
+        // on day one. Variable-date festivals are left for the admin to add via
+        // the Manage Holidays screen. (month, day, name, type)
+        for (Object[] h : List.<Object[]>of(
+                new Object[]{1, 1, "New Year", "FESTIVAL"},
+                new Object[]{1, 26, "Republic Day", "NATIONAL"},
+                new Object[]{8, 15, "Independence Day", "NATIONAL"},
+                new Object[]{10, 2, "Gandhi Jayanti", "NATIONAL"},
+                new Object[]{12, 25, "Christmas", "FESTIVAL"})) {
+            jdbc.update("""
+                    INSERT INTO settings.holiday_calendar
+                        (id, tenant_id, company_id, year, holiday_date, holiday_name, holiday_type,
+                         is_active, created_at, updated_at, created_by, updated_by, version)
+                    SELECT ?, ?, ?, ?, make_date(?, ?, ?), ?, ?, TRUE, now(), now(), 'signup', 'signup', 0
+                    WHERE NOT EXISTS (SELECT 1 FROM settings.holiday_calendar
+                        WHERE company_id = ? AND holiday_date = make_date(?, ?, ?))
+                    """,
+                    UUID.randomUUID(), tenantId, companyId, year,
+                    year, h[0], h[1], h[2], h[3],
+                    companyId, year, h[0], h[1]);
         }
     }
 
@@ -364,7 +390,7 @@ public class SaasWriter {
         return new String[]{first, last};
     }
 
-    private record LeaveTypeSeed(UUID id, String name, String code, int days) {}
+    private record LeaveTypeSeed(UUID id, String name, String code, int days, String category) {}
 
     private static String rootMessage(Throwable t) {
         Throwable cur = t;

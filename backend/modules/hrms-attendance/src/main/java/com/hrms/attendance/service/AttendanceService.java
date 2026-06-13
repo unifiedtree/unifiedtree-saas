@@ -312,6 +312,48 @@ public class AttendanceService {
         return set.isEmpty() ? defaults : set;
     }
 
+    /**
+     * Dates within [start,end] that the employee is on APPROVED leave. Read via
+     * JdbcTemplate (leave lives in another module/schema) so an approved-leave
+     * day shows as ON_LEAVE on the calendar/summary instead of red ABSENT.
+     * Falls back to empty when JdbcTemplate is absent.
+     */
+    private java.util.Set<LocalDate> resolveApprovedLeaveDates(UUID employeeId, LocalDate start, LocalDate end) {
+        java.util.Set<LocalDate> dates = new java.util.HashSet<>();
+        if (jdbcTemplate == null || employeeId == null) return dates;
+        try {
+            jdbcTemplate.query(
+                    "SELECT start_date, end_date FROM leave_mgmt.leave_requests "
+                            + "WHERE employee_id = ? AND status = 'APPROVED' "
+                            + "AND start_date <= ? AND end_date >= ?",
+                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                        LocalDate s = rs.getDate("start_date").toLocalDate();
+                        LocalDate e = rs.getDate("end_date").toLocalDate();
+                        LocalDate d = s.isBefore(start) ? start : s;
+                        LocalDate last = e.isAfter(end) ? end : e;
+                        while (!d.isAfter(last)) { dates.add(d); d = d.plusDays(1); }
+                    },
+                    employeeId, java.sql.Date.valueOf(end), java.sql.Date.valueOf(start));
+        } catch (Exception ex) { /* no leave overlay on failure */ }
+        return dates;
+    }
+
+    /** Company holiday dates within [start,end] for the employee's company. */
+    private java.util.Set<LocalDate> resolveHolidayDates(UUID employeeId, LocalDate start, LocalDate end) {
+        java.util.Set<LocalDate> dates = new java.util.HashSet<>();
+        if (jdbcTemplate == null || employeeId == null) return dates;
+        try {
+            jdbcTemplate.query(
+                    "SELECT h.holiday_date FROM settings.holiday_calendar h "
+                            + "JOIN hrms.employees e ON e.company_id = h.company_id AND e.tenant_id = h.tenant_id "
+                            + "WHERE e.id = ? AND h.is_active = TRUE AND h.holiday_date BETWEEN ? AND ?",
+                    (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                            dates.add(rs.getDate("holiday_date").toLocalDate()),
+                    employeeId, java.sql.Date.valueOf(start), java.sql.Date.valueOf(end));
+        } catch (Exception ex) { /* no holiday overlay on failure */ }
+        return dates;
+    }
+
     @Transactional(readOnly = true)
     public MonthlyStatsResponse getMonthlyStats(UUID employeeId, int year, int month) {
         LocalDate start = LocalDate.of(year, month, 1);
@@ -323,13 +365,16 @@ public class AttendanceService {
         Map<LocalDate, AttendanceRecord> byDate = records.stream()
                 .collect(Collectors.toMap(AttendanceRecord::getAttendanceDate, r -> r));
 
-        int presentDays = 0, absentDays = 0, onTimeDays = 0, lateDays = 0;
+        int presentDays = 0, absentDays = 0, onTimeDays = 0, lateDays = 0, holidayDays = 0;
 
         // Don't count days before the employee joined as Absent. A new hire on
         // the 13th has no records for the 1st-12th, but those weren't absences.
         LocalDate joining = resolveJoiningDate(employeeId);
         // Per-employee week-offs (not hardcoded Sat+Sun).
         java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
+        // Holidays + approved leave are NOT absences and don't drag the score.
+        java.util.Set<LocalDate> holidays = resolveHolidayDates(employeeId, start, end);
+        java.util.Set<LocalDate> leaveDays = resolveApprovedLeaveDates(employeeId, start, end);
         LocalDate cursor = (joining != null && joining.isAfter(start)) ? joining : start;
         while (!cursor.isAfter(end) && !cursor.isAfter(today)) {
             DayOfWeek dow = cursor.getDayOfWeek();
@@ -343,6 +388,10 @@ public class AttendanceService {
                 LocalTime checkInLocal = rec.getCheckInAt().atZone(IST).toLocalTime();
                 if (checkInLocal.isAfter(LATE_THRESHOLD)) lateDays++;
                 else onTimeDays++;
+            } else if (holidays.contains(cursor)) {
+                holidayDays++;
+            } else if (leaveDays.contains(cursor)) {
+                // on approved leave — neither present nor absent
             } else {
                 absentDays++;
             }
@@ -352,7 +401,7 @@ public class AttendanceService {
         int workingDays = presentDays + absentDays;
         int score = workingDays > 0 ? Math.round((float) presentDays / workingDays * 100) : 100;
 
-        return new MonthlyStatsResponse(presentDays, absentDays, 0, onTimeDays, lateDays, score);
+        return new MonthlyStatsResponse(presentDays, absentDays, holidayDays, onTimeDays, lateDays, score);
     }
 
     // ── Month history (calendar) ─────────────────────────────────────────────
@@ -374,6 +423,10 @@ public class AttendanceService {
         LocalDate joining = resolveJoiningDate(employeeId);
         // Per-employee week-offs (not hardcoded Sat+Sun).
         java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
+        // Overlay company holidays + approved leave so those days render as
+        // HOLIDAY (pink) / ON_LEAVE (blue) instead of red ABSENT.
+        java.util.Set<LocalDate> holidays = resolveHolidayDates(employeeId, start, end);
+        java.util.Set<LocalDate> leaveDays = resolveApprovedLeaveDates(employeeId, start, end);
 
         List<DayRecordResponse> result = new ArrayList<>();
         LocalDate cursor = start;
@@ -393,6 +446,10 @@ public class AttendanceService {
                             rec.getCheckInAt().toString(),
                             rec.getCheckOutAt() != null ? rec.getCheckOutAt().toString() : null,
                             rec.getWorkingHours()));
+                } else if (!beforeJoining && holidays.contains(cursor)) {
+                    result.add(new DayRecordResponse(cursor.toString(), "HOLIDAY", null, null, null));
+                } else if (!beforeJoining && leaveDays.contains(cursor)) {
+                    result.add(new DayRecordResponse(cursor.toString(), "ON_LEAVE", null, null, null));
                 } else if (!cursor.isAfter(today) && !beforeJoining) {
                     result.add(new DayRecordResponse(cursor.toString(), "ABSENT", null, null, null));
                 }
@@ -427,6 +484,9 @@ public class AttendanceService {
         // Per-employee week-offs + join date (so pre-join weekdays aren't "Absent").
         java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
         LocalDate joining = resolveJoiningDate(employeeId);
+        // Holiday + approved-leave overlay (so those days aren't "Absent").
+        java.util.Set<LocalDate> holidays = resolveHolidayDates(employeeId, monday, sunday);
+        java.util.Set<LocalDate> leaveDays = resolveApprovedLeaveDates(employeeId, monday, sunday);
 
         List<WeeklyDayResponse> days = new ArrayList<>();
         double totalHours = 0, overtime = 0, totalArrivalMinutes = 0;
@@ -471,6 +531,10 @@ public class AttendanceService {
                         formatIstHourMinute(rec.getCheckInAt()),
                         formatIstHourMinute(rec.getCheckOutAt()),
                         rec.getLateByMinutes()));
+            } else if (holidays.contains(day)) {
+                days.add(new WeeklyDayResponse(day.toString(), 0, "HOLIDAY", null, null, null));
+            } else if (leaveDays.contains(day)) {
+                days.add(new WeeklyDayResponse(day.toString(), 0, "ON_LEAVE", null, null, null));
             } else {
                 days.add(new WeeklyDayResponse(day.toString(), 0, "ABSENT", null, null, null));
             }
