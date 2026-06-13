@@ -81,6 +81,7 @@ public class LeaveController {
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam(defaultValue = "#{T(java.time.Year).now().value}") int year) {
         UUID employeeId = extractEmployeeId(jwt);
+        ensureBalancesForEmployee(employeeId, year);
         List<LeaveBalanceResponse> balances = leaveService.getMyBalances(employeeId, year);
         PageResponse<LeaveRequestResponse> recent = leaveService.getMyLeaves(employeeId, Pageable.ofSize(5));
         long pendingApprovals = leaveService
@@ -104,7 +105,30 @@ public class LeaveController {
     public ResponseEntity<List<LeaveBalanceResponse>> myBalances(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam(defaultValue = "#{T(java.time.Year).now().value}") int year) {
-        return ResponseEntity.ok(leaveService.getMyBalances(extractEmployeeId(jwt), year));
+        UUID employeeId = extractEmployeeId(jwt);
+        ensureBalancesForEmployee(employeeId, year);
+        return ResponseEntity.ok(leaveService.getMyBalances(employeeId, year));
+    }
+
+    /**
+     * Read-time lazy creation of leave_balances rows. Without this, a freshly
+     * onboarded employee whose hire-time init step never ran sees an empty
+     * "Apply for Leave" screen ("No allocations yet") and cannot apply at all —
+     * the mobile UI has no way to select a leave type when balances is [].
+     * Idempotent: initLeaveBalances checks for existing rows per type before
+     * inserting. Swallows exceptions so a transient init failure cannot 500 the
+     * read; the worst case is the screen renders empty, same as the old code.
+     */
+    private void ensureBalancesForEmployee(UUID employeeId, int year) {
+        try {
+            employeeRepository.findById(employeeId).ifPresent(e -> {
+                if (e.getCompanyId() != null && e.getTenantId() != null) {
+                    leaveService.initLeaveBalances(employeeId, e.getCompanyId(), e.getTenantId(), year);
+                }
+            });
+        } catch (Exception ex) {
+            // Best-effort init; never break the read path.
+        }
     }
 
     @Operation(summary = "Cancel a leave request")
