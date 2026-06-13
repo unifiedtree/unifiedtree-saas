@@ -11,6 +11,7 @@ public record UpdateEmployeeRequest(
         String phone,
         UUID departmentId,
         UUID branchId,
+        UUID geoFenceZoneId,
         UUID managerId,
         String jobTitle,
         EmploymentType employmentType,

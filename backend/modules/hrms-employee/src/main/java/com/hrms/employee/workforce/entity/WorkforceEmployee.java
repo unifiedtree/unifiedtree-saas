@@ -76,6 +76,8 @@ public class WorkforceEmployee extends BaseEntity {
     @Column(name = "department_id") private UUID departmentId;
     @Column(name = "designation_id") private UUID designationId;
     @Column(name = "branch_id")     private UUID branchId;
+    // Geofence zone the employee must punch in at (overrides branch geofence).
+    @Column(name = "geo_fence_zone_id") private UUID geoFenceZoneId;
     @Column(name = "reporting_manager_id") private UUID reportingManagerId;
 
     @Enumerated(EnumType.STRING)

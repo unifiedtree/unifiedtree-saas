@@ -61,6 +61,14 @@ public class Employee extends BaseEntity {
     @Column(name = "branch_id")
     private UUID branchId;
 
+    /**
+     * The geofence zone this employee is allowed to punch in at. When set, the
+     * attendance geofence check enforces THIS zone's coordinates/radius instead
+     * of the branch's. Null = fall back to branch (or no geofence).
+     */
+    @Column(name = "geo_fence_zone_id")
+    private UUID geoFenceZoneId;
+
     @Column(name = "reporting_manager_id")
     private UUID managerId;
 

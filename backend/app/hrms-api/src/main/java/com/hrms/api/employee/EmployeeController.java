@@ -164,6 +164,16 @@ public class EmployeeController {
         return ResponseEntity.ok(employeeService.updateEmployee(employeeId, request));
     }
 
+    @Operation(summary = "Assign or clear the geofence zone an employee must punch in at")
+    @PutMapping("/{employeeId}/punch-zone")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    public ResponseEntity<EmployeeResponse> assignPunchZone(
+            @PathVariable UUID employeeId,
+            @RequestParam(required = false) UUID zoneId) {
+        // zoneId present -> assign that zone; omitted -> clear (company-wide / branch fallback).
+        return ResponseEntity.ok(employeeService.assignPunchZone(employeeId, zoneId));
+    }
+
     @Operation(summary = "Terminate or accept resignation of an employee")
     @PostMapping("/{employeeId}/terminate")
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")

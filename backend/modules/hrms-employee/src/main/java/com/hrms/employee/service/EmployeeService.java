@@ -145,6 +145,9 @@ public class EmployeeService {
         if (request.branchId() != null) {
             employee.setBranchId(request.branchId());
         }
+        if (request.geoFenceZoneId() != null) {
+            employee.setGeoFenceZoneId(request.geoFenceZoneId());
+        }
         if (request.managerId() != null) {
             employee.setManagerId(request.managerId());
         }
@@ -190,6 +193,21 @@ public class EmployeeService {
 
         Employee saved = employeeRepository.save(employee);
         log.info("Employee updated: id={}", saved.getId());
+        return employeeMapper.toResponse(saved);
+    }
+
+    /**
+     * Assign (or clear) the geofence zone an employee must punch in at. A null
+     * {@code zoneId} clears the assignment (falls back to branch / no fence).
+     * Kept as a dedicated method because the generic {@link #updateEmployee}
+     * "apply when non-null" convention cannot express "clear to null".
+     */
+    @Transactional
+    public EmployeeResponse assignPunchZone(UUID employeeId, UUID zoneId) {
+        Employee employee = findEmployeeById(employeeId);
+        employee.setGeoFenceZoneId(zoneId);
+        Employee saved = employeeRepository.save(employee);
+        log.info("Employee {} punch zone set to {}", employeeId, zoneId);
         return employeeMapper.toResponse(saved);
     }
 

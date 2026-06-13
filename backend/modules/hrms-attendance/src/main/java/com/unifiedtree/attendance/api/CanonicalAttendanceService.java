@@ -79,9 +79,14 @@ public class CanonicalAttendanceService {
     @Transactional(readOnly = true)
     public GeoValidateResponse geoFence(double latitude, double longitude) {
         EmployeeContext employee = currentEmployee();
-        if (employee.branchId() == null || employee.branchLat() == null || employee.branchLon() == null) {
+        // Enforce whenever we have fence COORDINATES — these are resolved from
+        // the assigned zone first, branch second (see currentEmployee()). The
+        // old guard keyed off branchId, which let a zone-assigned employee with
+        // no branch slip through unchecked. Now we only skip enforcement when
+        // there is genuinely no zone AND no branch geofence configured.
+        if (employee.branchLat() == null || employee.branchLon() == null) {
             return new GeoValidateResponse(true, employee.branchId(), employee.branchName(), 0,
-                    "No branch geofence configured. Attendance is allowed.");
+                    "No punch location configured. Attendance is allowed.");
         }
 
         double meters = distanceMeters(latitude, longitude, employee.branchLat(), employee.branchLon());
@@ -503,7 +508,7 @@ public class CanonicalAttendanceService {
         return jdbc.queryForObject("""
                 SELECT e.id, e.tenant_id, e.employee_code, e.first_name, e.last_name,
                        e.email, e.phone, e.date_of_birth, e.gender, e.company_id,
-                       e.department_id, e.branch_id, e.reporting_manager_id,
+                       e.department_id, e.branch_id, e.geo_fence_zone_id, e.reporting_manager_id,
                        d.title AS job_title, e.employment_type, e.employment_status,
                        e.date_of_joining, b.name AS work_location, e.ctc_annual,
                        e.pan_number, e.aadhaar_number, e.pf_uan, e.esi_number,
@@ -530,14 +535,20 @@ public class CanonicalAttendanceService {
                            e.branch_id,
                            trim(e.first_name || ' ' || coalesce(e.last_name, '')) AS full_name,
                            coalesce(d.title, 'Employee') AS job_title,
-                           b.name AS branch_name,
-                           b.latitude::float8 AS branch_lat,
-                           b.longitude::float8 AS branch_lon,
-                           coalesce(b.geo_fence_radius_meters, 500) AS radius
+                           -- Prefer the employee's assigned geofence zone over
+                           -- their branch. A zone-assigned employee must punch
+                           -- inside THAT zone; only if no zone is set do we fall
+                           -- back to the branch geofence.
+                           coalesce(z.name, b.name) AS branch_name,
+                           coalesce(z.latitude, b.latitude::float8) AS branch_lat,
+                           coalesce(z.longitude, b.longitude::float8) AS branch_lon,
+                           coalesce(z.radius_meters, b.geo_fence_radius_meters, 500) AS radius
                       FROM auth.user_credentials uc
                       JOIN hrms.employees e ON e.tenant_id = uc.tenant_id AND e.id = uc.employee_id
                       LEFT JOIN hrms.designations d ON d.tenant_id = e.tenant_id AND d.id = e.designation_id
                       LEFT JOIN org.branches b ON b.tenant_id = e.tenant_id AND b.id = e.branch_id
+                      LEFT JOIN public.geo_fence_zones z ON z.tenant_id = e.tenant_id
+                                AND z.id = e.geo_fence_zone_id AND z.is_active = TRUE
                      WHERE uc.tenant_id = ?
                        AND uc.id = ?
                        AND uc.is_active = TRUE
@@ -717,6 +728,7 @@ public class CanonicalAttendanceService {
                 requireUuid(rs, "company_id"),
                 uuid(rs, "department_id"),
                 uuid(rs, "branch_id"),
+                uuid(rs, "geo_fence_zone_id"),
                 uuid(rs, "reporting_manager_id"),
                 rs.getString("job_title"),
                 rs.getString("employment_type"),

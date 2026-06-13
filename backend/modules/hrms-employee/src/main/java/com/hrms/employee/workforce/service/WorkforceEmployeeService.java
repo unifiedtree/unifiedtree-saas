@@ -107,6 +107,7 @@ public class WorkforceEmployeeService {
         e.setDepartmentId(req.departmentId());
         e.setDesignationId(req.designationId());
         e.setBranchId(req.branchId());
+        e.setGeoFenceZoneId(req.geoFenceZoneId());
         // Reporting manager: explicit value wins; otherwise auto-derive from the
         // selected department's head. The client no longer ships a chip picker;
         // the rule "you report to the head of your department" is canonical.
@@ -151,6 +152,7 @@ public class WorkforceEmployeeService {
         if (req.departmentId()     != null) e.setDepartmentId(req.departmentId());
         if (req.designationId()    != null) e.setDesignationId(req.designationId());
         if (req.branchId()         != null) e.setBranchId(req.branchId());
+        if (req.geoFenceZoneId()   != null) e.setGeoFenceZoneId(req.geoFenceZoneId());
         if (req.reportingManagerId() != null) e.setReportingManagerId(req.reportingManagerId());
         if (req.employmentType()   != null) e.setEmploymentType(req.employmentType());
         if (req.employmentStatus() != null) e.setEmploymentStatus(req.employmentStatus());
@@ -224,6 +226,7 @@ public class WorkforceEmployeeService {
                 e.getFirstName(), e.getMiddleName(), e.getLastName(),
                 e.getEmail(), e.getPhone(), e.getDateOfBirth(), e.getGender(),
                 e.getDepartmentId(), e.getDesignationId(), e.getBranchId(),
+                e.getGeoFenceZoneId(),
                 e.getReportingManagerId(),
                 e.getEmploymentType(), e.getEmploymentStatus(),
                 e.getDateOfJoining(), e.getProbationEndDate(),
