@@ -1,5 +1,6 @@
 package com.hrms.api.employee;
 
+import com.hrms.api.access.WorkspaceAccessService;
 import com.hrms.api.invitation.InvitationService;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.core.enums.Role;
@@ -35,6 +36,7 @@ import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -59,13 +61,16 @@ public class EmployeeController {
     private final EmployeeService employeeService;
     private final InvitationService invitationService;
     private final JdbcTemplate jdbcTemplate;
+    private final WorkspaceAccessService accessService;
 
     public EmployeeController(EmployeeService employeeService,
                               @Autowired(required = false) InvitationService invitationService,
-                              @Autowired(required = false) JdbcTemplate jdbcTemplate) {
+                              @Autowired(required = false) JdbcTemplate jdbcTemplate,
+                              @Autowired(required = false) WorkspaceAccessService accessService) {
         this.employeeService = employeeService;
         this.invitationService = invitationService;
         this.jdbcTemplate = jdbcTemplate;
+        this.accessService = accessService;
     }
 
     @Operation(summary = "Create a new employee")
@@ -188,6 +193,89 @@ public class EmployeeController {
             @RequestParam(required = false) String days) {
         // e.g. days=6,7 for Sat+Sun. Blank/omitted falls back to the Sat+Sun default.
         return ResponseEntity.ok(employeeService.setWeeklyOffDays(employeeId, days));
+    }
+
+    @Operation(summary = "Read the employee's elevated role (EMPLOYEE, DEPT_MANAGER, HR_MANAGER, COMPANY_ADMIN)")
+    @GetMapping("/{employeeId}/access")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, Object>> getAccess(@PathVariable UUID employeeId) {
+        // Reads the highest-tier role on the employee's credential. Used by the
+        // mobile Staff Profile to show "Role: Department Manager" alongside the
+        // existing Account-Activated panel.
+        if (jdbcTemplate == null) {
+            return ResponseEntity.ok(Map.of("role", "EMPLOYEE", "roles", List.of("EMPLOYEE")));
+        }
+        try {
+            List<String> roles = jdbcTemplate.queryForList(
+                    "SELECT r.code FROM rbac.user_roles ur "
+                            + "JOIN rbac.roles r ON r.id = ur.role_id "
+                            + "JOIN auth.user_credentials uc ON uc.id = ur.user_id "
+                            + "WHERE uc.employee_id = ?",
+                    String.class, employeeId);
+            // Priority: COMPANY_ADMIN > HR_MANAGER > DEPT_MANAGER > EMPLOYEE
+            String top = roles.contains("COMPANY_ADMIN") ? "COMPANY_ADMIN"
+                    : roles.contains("HR_MANAGER") ? "HR_MANAGER"
+                    : roles.contains("DEPT_MANAGER") ? "DEPT_MANAGER"
+                    : "EMPLOYEE";
+            return ResponseEntity.ok(Map.of("role", top, "roles", roles));
+        } catch (Exception ex) {
+            return ResponseEntity.ok(Map.of("role", "EMPLOYEE", "roles", List.of("EMPLOYEE")));
+        }
+    }
+
+    @Operation(summary = "Set the employee's elevated role (promote to Manager, demote, etc.)")
+    @PutMapping("/{employeeId}/access")
+    @PreAuthorize("hasAuthority('workspace.users.manage')")
+    public ResponseEntity<Map<String, Object>> setAccess(
+            @PathVariable UUID employeeId,
+            @RequestParam String role,
+            @AuthenticationPrincipal Jwt jwt) {
+        // Allowed targets. We deliberately exclude OWNER/SUPER_ADMIN — those are
+        // platform-level roles, only assignable via the web SaaS portal.
+        Set<String> allowed = Set.of("EMPLOYEE", "DEPT_MANAGER", "HR_MANAGER", "COMPANY_ADMIN");
+        if (!allowed.contains(role)) {
+            throw new BusinessRuleException(
+                    "Role must be one of: " + allowed, "INVALID_ROLE");
+        }
+        if (jdbcTemplate == null || accessService == null) {
+            throw new BusinessRuleException(
+                    "Role assignment is not configured on this deployment.", "ACCESS_UNAVAILABLE");
+        }
+        // Look up credential by employeeId.
+        UUID userId;
+        try {
+            userId = jdbcTemplate.queryForObject(
+                    "SELECT id FROM auth.user_credentials WHERE employee_id = ? LIMIT 1",
+                    UUID.class, employeeId);
+        } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
+            throw new BusinessRuleException(
+                    "This employee has no login credential yet — send them an invite first.",
+                    "NO_CREDENTIAL");
+        }
+        UUID tenantId = TenantContext.getTenantId();
+        UUID actorId = UUID.fromString(jwt.getSubject());
+
+        // Step 1: revoke any of the four mutable roles the employee currently holds.
+        List<String> existing = jdbcTemplate.queryForList(
+                "SELECT r.code FROM rbac.user_roles ur JOIN rbac.roles r ON r.id = ur.role_id "
+                        + "WHERE ur.user_id = ?",
+                String.class, userId);
+        for (String code : List.of("DEPT_MANAGER", "HR_MANAGER", "COMPANY_ADMIN")) {
+            if (existing.contains(code)) {
+                try { accessService.revokeRole(tenantId, userId, code, actorId); }
+                catch (Exception ignored) { /* tolerate already-removed */ }
+            }
+        }
+        // Always keep EMPLOYEE so login still works; assignRole is idempotent.
+        if (!existing.contains("EMPLOYEE")) {
+            try { accessService.assignRole(tenantId, userId, "EMPLOYEE", actorId); }
+            catch (Exception ignored) { /* tolerate */ }
+        }
+        // Step 2: assign the requested elevated role (no-op for EMPLOYEE).
+        if (!"EMPLOYEE".equals(role)) {
+            accessService.assignRole(tenantId, userId, role, actorId);
+        }
+        return ResponseEntity.ok(Map.of("role", role));
     }
 
     @Operation(summary = "Whether the employee has activated their account by setting a password")

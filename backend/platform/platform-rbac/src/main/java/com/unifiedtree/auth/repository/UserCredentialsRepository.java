@@ -21,4 +21,12 @@ public interface UserCredentialsRepository extends JpaRepository<UserCredentials
      */
     @Query("SELECT u FROM UserCredentials u WHERE lower(u.email) = lower(:email)")
     Optional<UserCredentials> findByEmailIgnoreCase(@Param("email") String email);
+
+    /**
+     * Lookup the credential row by the employee_id foreign key. Used by the
+     * mobile "promote to manager" flow so an admin can change an employee's
+     * role from the staff-profile screen (role-assignment APIs are keyed on
+     * the credential id, not the employee id).
+     */
+    Optional<UserCredentials> findByEmployeeId(UUID employeeId);
 }
