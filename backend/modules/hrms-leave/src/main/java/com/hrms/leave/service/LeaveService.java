@@ -46,6 +46,7 @@ public class LeaveService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final LeaveRequestMapper leaveRequestMapper;
     private final LeaveBalanceMapper leaveBalanceMapper;
+    private final boolean kafkaEnabled;
 
     public LeaveService(
             LeaveTypeRepository leaveTypeRepository,
@@ -54,7 +55,8 @@ public class LeaveService {
             HolidayCalendarRepository holidayCalendarRepository,
             KafkaTemplate<String, Object> kafkaTemplate,
             LeaveRequestMapper leaveRequestMapper,
-            LeaveBalanceMapper leaveBalanceMapper) {
+            LeaveBalanceMapper leaveBalanceMapper,
+            @org.springframework.beans.factory.annotation.Value("${hrms.kafka.enabled:false}") boolean kafkaEnabled) {
         this.leaveTypeRepository = leaveTypeRepository;
         this.leaveBalanceRepository = leaveBalanceRepository;
         this.leaveRequestRepository = leaveRequestRepository;
@@ -62,6 +64,7 @@ public class LeaveService {
         this.kafkaTemplate = kafkaTemplate;
         this.leaveRequestMapper = leaveRequestMapper;
         this.leaveBalanceMapper = leaveBalanceMapper;
+        this.kafkaEnabled = kafkaEnabled;
     }
 
     @Transactional
@@ -160,23 +163,31 @@ public class LeaveService {
 
         // Publish Kafka event
         UUID tenantId = TenantContext.getTenantId();
-        try {
-            LeaveRequestedEvent event = new LeaveRequestedEvent(
-                    leaveRequest.getId(),
-                    employeeId,
-                    tenantId,
-                    approverId,
-                    startDate,
-                    endDate,
-                    totalDays,
-                    leaveType.getName(),
-                    Instant.now()
-            );
-            kafkaTemplate.send(TOPIC_LEAVE_REQUESTED, tenantId.toString(), event);
-            log.debug("Published {} event for leaveRequest={}", TOPIC_LEAVE_REQUESTED, leaveRequest.getId());
-        } catch (Exception e) {
-            log.warn("Failed to publish {} for leaveRequest={}: {}",
-                    TOPIC_LEAVE_REQUESTED, leaveRequest.getId(), e.getMessage());
+        // CRITICAL: skip the Kafka publish when Kafka is disabled. Otherwise
+        // kafkaTemplate.send() blocks for up to `max.block.ms` (~60s default)
+        // trying to fetch producer metadata from a broker that doesn't exist —
+        // the HTTP request hangs on the Submit Application button and the user
+        // sees an indefinite "Submitting…" spinner. Same defensive pattern
+        // already used in AttendanceService.publishCheckinEvent.
+        if (kafkaEnabled) {
+            try {
+                LeaveRequestedEvent event = new LeaveRequestedEvent(
+                        leaveRequest.getId(),
+                        employeeId,
+                        tenantId,
+                        approverId,
+                        startDate,
+                        endDate,
+                        totalDays,
+                        leaveType.getName(),
+                        Instant.now()
+                );
+                kafkaTemplate.send(TOPIC_LEAVE_REQUESTED, tenantId.toString(), event);
+                log.debug("Published {} event for leaveRequest={}", TOPIC_LEAVE_REQUESTED, leaveRequest.getId());
+            } catch (Exception e) {
+                log.warn("Failed to publish {} for leaveRequest={}: {}",
+                        TOPIC_LEAVE_REQUESTED, leaveRequest.getId(), e.getMessage());
+            }
         }
 
         LeaveRequestResponse response = leaveRequestMapper.toResponse(leaveRequest);
@@ -250,20 +261,22 @@ public class LeaveService {
         leaveBalanceRepository.save(balance);
         leaveRequest = leaveRequestRepository.save(leaveRequest);
 
-        // Publish Kafka event
-        try {
-            LeaveApprovedEvent event = new LeaveApprovedEvent(
-                    leaveRequest.getId(),
-                    leaveRequest.getEmployeeId(),
-                    leaveRequest.getTenantId(),
-                    approval.status(),
-                    Instant.now()
-            );
-            kafkaTemplate.send(TOPIC_LEAVE_APPROVED, leaveRequest.getTenantId().toString(), event);
-            log.debug("Published {} event for leaveRequest={}", TOPIC_LEAVE_APPROVED, leaveRequest.getId());
-        } catch (Exception e) {
-            log.warn("Failed to publish {} for leaveRequest={}: {}",
-                    TOPIC_LEAVE_APPROVED, leaveRequest.getId(), e.getMessage());
+        // Publish Kafka event (skipped when Kafka disabled — see applyLeave note).
+        if (kafkaEnabled) {
+            try {
+                LeaveApprovedEvent event = new LeaveApprovedEvent(
+                        leaveRequest.getId(),
+                        leaveRequest.getEmployeeId(),
+                        leaveRequest.getTenantId(),
+                        approval.status(),
+                        Instant.now()
+                );
+                kafkaTemplate.send(TOPIC_LEAVE_APPROVED, leaveRequest.getTenantId().toString(), event);
+                log.debug("Published {} event for leaveRequest={}", TOPIC_LEAVE_APPROVED, leaveRequest.getId());
+            } catch (Exception e) {
+                log.warn("Failed to publish {} for leaveRequest={}: {}",
+                        TOPIC_LEAVE_APPROVED, leaveRequest.getId(), e.getMessage());
+            }
         }
 
         LeaveRequestResponse response = leaveRequestMapper.toResponse(leaveRequest);

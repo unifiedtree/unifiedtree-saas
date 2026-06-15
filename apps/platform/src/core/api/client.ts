@@ -59,14 +59,32 @@ function authHeaders(): Record<string, string> {
 }
 
 export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-      ...(init.headers || {}),
-    },
-  })
+  // Hard cap every request at 60s. Without this, a backend stall (Kafka
+  // metadata fetch, slow upstream, accidental sync I/O) leaves the UI on
+  // "Submitting…" forever with no way out except closing the tab. 60s
+  // absorbs a Railway cold start while still surfacing a clear error in a
+  // reasonable time.
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 60_000)
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      signal: init.signal ?? controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+        ...(init.headers || {}),
+      },
+    })
+  } catch (err) {
+    clearTimeout(timer)
+    if ((err as Error).name === 'AbortError') {
+      throw new Error('The server took too long to respond. Please try again.')
+    }
+    throw err
+  }
+  clearTimeout(timer)
 
   const text = await response.text()
   const data = text ? JSON.parse(text) : null
