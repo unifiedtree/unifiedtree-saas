@@ -28,10 +28,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -55,11 +58,14 @@ public class EmployeeController {
 
     private final EmployeeService employeeService;
     private final InvitationService invitationService;
+    private final JdbcTemplate jdbcTemplate;
 
     public EmployeeController(EmployeeService employeeService,
-                              @Autowired(required = false) InvitationService invitationService) {
+                              @Autowired(required = false) InvitationService invitationService,
+                              @Autowired(required = false) JdbcTemplate jdbcTemplate) {
         this.employeeService = employeeService;
         this.invitationService = invitationService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Operation(summary = "Create a new employee")
@@ -182,6 +188,43 @@ public class EmployeeController {
             @RequestParam(required = false) String days) {
         // e.g. days=6,7 for Sat+Sun. Blank/omitted falls back to the Sat+Sun default.
         return ResponseEntity.ok(employeeService.setWeeklyOffDays(employeeId, days));
+    }
+
+    @Operation(summary = "Whether the employee has activated their account by setting a password")
+    @GetMapping("/{employeeId}/invitation-status")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, Object>> invitationStatus(@PathVariable UUID employeeId) {
+        // Source of truth: auth.user_credentials.password_hash + last_login_at.
+        // employmentStatus is NOT a reliable signal (a freshly invited employee
+        // is PROBATION/ACTIVE — neither "INVITED" nor "DRAFT" exists in the
+        // enum) so the staff-profile UI used to lie ("Account activated" for
+        // someone who never set their password). This endpoint returns the
+        // accurate state so the UI can show Resend Invitation / Account
+        // activated correctly.
+        if (jdbcTemplate == null) {
+            // Best-effort: in tests without JdbcTemplate, treat as inactive so
+            // the UI defaults to "Resend invitation" (the safe, useful action).
+            return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", ""));
+        }
+        try {
+            Map<String, Object> row = jdbcTemplate.queryForMap(
+                    "SELECT (password_hash IS NOT NULL) AS activated, "
+                            + "invited_at, last_login_at, is_active "
+                            + "FROM auth.user_credentials WHERE employee_id = ? LIMIT 1",
+                    employeeId);
+            boolean activated = Boolean.TRUE.equals(row.get("activated"))
+                    && Boolean.TRUE.equals(row.get("is_active"));
+            Object invitedAt = row.get("invited_at");
+            Object lastLoginAt = row.get("last_login_at");
+            return ResponseEntity.ok(Map.of(
+                    "activated", activated,
+                    "invitedAt", invitedAt instanceof Instant i ? i.toString() : (invitedAt == null ? "" : invitedAt.toString()),
+                    "lastLoginAt", lastLoginAt instanceof Instant i ? i.toString() : (lastLoginAt == null ? "" : lastLoginAt.toString())
+            ));
+        } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
+            // No credential row yet -> never invited / never activated.
+            return ResponseEntity.ok(Map.of("activated", false, "invitedAt", "", "lastLoginAt", ""));
+        }
     }
 
     @Operation(summary = "Terminate or accept resignation of an employee")
