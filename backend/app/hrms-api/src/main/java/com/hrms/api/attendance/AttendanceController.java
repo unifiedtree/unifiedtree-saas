@@ -520,7 +520,19 @@ public class AttendanceController {
     }
 
     private String fullName(Employee employee) {
-        return (employee.getFirstName() + " " + employee.getLastName()).trim();
+        // Java's string concatenation prints "null" for a null reference, so
+        // (firstName + " " + lastName) became "Anil null" on the punch
+        // success screen when lastName was missing. Compose explicitly from
+        // the non-null parts instead.
+        String first = employee.getFirstName();
+        String last = employee.getLastName();
+        StringBuilder sb = new StringBuilder();
+        if (first != null && !first.isBlank()) sb.append(first.trim());
+        if (last != null && !last.isBlank()) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(last.trim());
+        }
+        return sb.toString();
     }
 
     private UUID extractEmployeeId(Jwt jwt) {
