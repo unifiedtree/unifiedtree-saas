@@ -71,6 +71,7 @@ export interface CreateTemplateRequest {
 
 export interface UpdateTemplateRequest {
   name?: string
+  type?: LetterType
   subject?: string
   bodyHtml?: string
   active?: boolean

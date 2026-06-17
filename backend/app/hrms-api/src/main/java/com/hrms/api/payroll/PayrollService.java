@@ -129,6 +129,28 @@ public class PayrollService {
     @Transactional
     public List<ComponentDto> listComponents(UUID tenantId) {
         bindTenant(tenantId);
+        List<ComponentDto> rows = queryComponents();
+        if (rows.isEmpty()) {
+            // FIX P0-1: a fresh tenant has no salary components seeded. Auto-seed the 9
+            // standard defaults the first time the components page is opened (idempotent),
+            // so payroll is configured out-of-the-box. System components can never be
+            // deleted, so a zero count only ever means "never seeded".
+            //
+            // Write-on-read trade-off (chosen over a tenant-create hook so tenants
+            // provisioned BEFORE this fix are backfilled too). Two concurrent first-readers
+            // can both enter this branch — that is safe: the seeder uses
+            // ON CONFLICT (tenant_id, code) DO NOTHING, so the redundant inserts are
+            // idempotent (no duplicate rows, no duplicate-key error; the second tx blocks,
+            // then no-ops). Only cost is one caller paying for 9 conflict-skipped inserts.
+            // Left un-locked deliberately at pilot scale; add pg_advisory_xact_lock(
+            // hashtext(tenant_id::text)) here only if it ever shows up as real contention.
+            seeder.seedForTenant(tenantId);
+            rows = queryComponents();
+        }
+        return rows;
+    }
+
+    private List<ComponentDto> queryComponents() {
         return jdbc.query("SELECT * FROM payroll.salary_components ORDER BY display_order, code",
             (rs, i) -> new ComponentDto(
                 rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),

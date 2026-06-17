@@ -127,6 +127,15 @@ export function useCreateComponent() {
   })
 }
 
+export function useUpdateComponent() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<SalaryComponent> }) =>
+      apiJson(`/v1/payroll/components/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...KEY, 'components'] }),
+  })
+}
+
 export function useDeleteComponent() {
   const qc = useQueryClient()
   return useMutation({

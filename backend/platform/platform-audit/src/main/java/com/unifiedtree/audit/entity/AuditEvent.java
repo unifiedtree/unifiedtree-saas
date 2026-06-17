@@ -1,6 +1,8 @@
 package com.unifiedtree.audit.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -31,7 +33,9 @@ public class AuditEvent {
     @Column(name = "actor_email", length = 255)
     private String actorEmail;
 
-    @Column(name = "actor_ip", columnDefinition = "INET")
+    // V060 changed audit.events.actor_ip from inet to varchar(45) so the String
+    // binding works (the inet column rejected varchar binds and broke audit writes).
+    @Column(name = "actor_ip", length = 45)
     private String actorIp;
 
     @Column(name = "actor_user_agent", length = 500)
@@ -52,6 +56,10 @@ public class AuditEvent {
     @Column(name = "summary", columnDefinition = "TEXT")
     private String summary;
 
+    // jsonb column — bind the String as JSON (matches the GeneratedLetter
+    // generation_context pattern). Without this Hibernate binds varchar and
+    // Postgres rejects it, which silently broke every audit write that flushes.
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "diff", columnDefinition = "JSONB")
     private String diff;
 

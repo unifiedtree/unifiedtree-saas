@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
-import { Plus, Tag, Loader2, Zap } from 'lucide-react'
+import { Plus, Tag, Loader2, Zap, Pencil, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
 import { Can, P } from '@unifiedtree/sdk'
 import { TableSkeleton } from '@unifiedtree/ui-kit'
-import { useLeaveTypes, useCreateLeaveType, type LeaveTypeResponse } from '../api/useLeave'
+import { useLeaveTypes, useCreateLeaveType, useUpdateLeaveType, useDeactivateLeaveType, type LeaveTypeResponse } from '../api/useLeave'
 import { useCompanies } from '../api/useOrg'
 
 // Indian standard: PL 1.5/month (18/year) carry-forward max 30;
@@ -47,27 +47,31 @@ const INDIAN_DEFAULTS = [
 
 // ── Add Drawer ────────────────────────────────────────────────────────────────
 
-interface AddDrawerProps {
+interface TypeDrawerProps {
   companyId: string
+  editType?: LeaveTypeResponse
   onClose: () => void
 }
 
-function AddDrawer({ companyId, onClose }: AddDrawerProps) {
+function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
   const { toast } = useToast()
+  const isEdit = !!editType
   const create = useCreateLeaveType()
+  const update = useUpdateLeaveType()
   const [form, setForm] = useState({
-    name: '',
-    code: '',
-    category: 'CASUAL',
-    annualEntitlement: 10,
-    maxConsecutiveDays: 5,
-    isCarryForwardAllowed: false,
-    maxCarryForwardDays: 0,
-    isPaidLeave: true,
+    name: editType?.name ?? '',
+    code: editType?.code ?? '',
+    category: editType?.category ?? 'CASUAL',
+    annualEntitlement: editType?.annualEntitlement ?? 10,
+    maxConsecutiveDays: editType?.maxConsecutiveDays ?? 5,
+    isCarryForwardAllowed: editType?.isCarryForwardAllowed ?? false,
+    maxCarryForwardDays: editType?.maxCarryForwardDays ?? 0,
+    isPaidLeave: editType?.isPaidLeave ?? true,
     description: '',
   })
 
   const set = (key: string, value: unknown) => setForm((p) => ({ ...p, [key]: value }))
+  const saving = create.isPending || update.isPending
 
   const handleSave = async () => {
     if (!form.name.trim() || !form.code.trim()) {
@@ -75,11 +79,16 @@ function AddDrawer({ companyId, onClose }: AddDrawerProps) {
       return
     }
     try {
-      await create.mutateAsync({ companyId, data: { ...form } })
-      toast('Leave type created', 'success')
+      if (isEdit) {
+        await update.mutateAsync({ id: editType!.id, data: { ...form } })
+        toast('Leave type updated', 'success')
+      } else {
+        await create.mutateAsync({ companyId, data: { ...form } })
+        toast('Leave type created', 'success')
+      }
       onClose()
     } catch (err: unknown) {
-      toast((err as Error)?.message ?? 'Failed to create leave type', 'error')
+      toast((err as Error)?.message ?? 'Failed to save leave type', 'error')
     }
   }
 
@@ -88,7 +97,7 @@ function AddDrawer({ companyId, onClose }: AddDrawerProps) {
       <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md bg-white border-l border-border flex flex-col shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h3 className="text-text-primary font-semibold">Add Leave Type</h3>
+          <h3 className="text-text-primary font-semibold">{isEdit ? 'Edit Leave Type' : 'Add Leave Type'}</h3>
           <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg hover:bg-white/5">×</button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -201,10 +210,10 @@ function AddDrawer({ companyId, onClose }: AddDrawerProps) {
           </button>
           <button
             onClick={handleSave}
-            disabled={create.isPending}
+            disabled={saving}
             className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
           >
-            {create.isPending ? 'Saving...' : 'Create Leave Type'}
+            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Leave Type'}
           </button>
         </div>
       </div>
@@ -214,7 +223,7 @@ function AddDrawer({ companyId, onClose }: AddDrawerProps) {
 
 // ── Type Row ──────────────────────────────────────────────────────────────────
 
-function TypeRow({ type }: { type: LeaveTypeResponse }) {
+function TypeRow({ type, onEdit, onDeactivate }: { type: LeaveTypeResponse; onEdit: (t: LeaveTypeResponse) => void; onDeactivate: (t: LeaveTypeResponse) => void }) {
   return (
     <div className={clsx('bg-white border rounded-2xl px-4 py-3 flex items-center gap-4', type.isActive ? 'border-border' : 'border-border/40 opacity-60')}>
       <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -233,6 +242,16 @@ function TypeRow({ type }: { type: LeaveTypeResponse }) {
         </p>
       </div>
       <span className="text-xs text-slate-600 capitalize">{(type.category ?? '').toLowerCase()}</span>
+      <Can code={P.LEAVE_TYPE_WRITE}>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onEdit(type)} title="Edit" className="p-1.5 text-text-secondary hover:text-primary rounded-lg hover:bg-slate-100 transition-colors">
+            <Pencil size={14} />
+          </button>
+          <button onClick={() => onDeactivate(type)} title="Deactivate" className="p-1.5 text-text-secondary hover:text-danger rounded-lg hover:bg-slate-100 transition-colors">
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </Can>
     </div>
   )
 }
@@ -245,8 +264,20 @@ export function LeaveTypes() {
   const companyId = companies[0]?.id ?? ''
   const { data: types = [], isLoading } = useLeaveTypes(companyId)
   const create = useCreateLeaveType()
+  const deactivate = useDeactivateLeaveType()
   const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState<LeaveTypeResponse | null>(null)
   const [seeding, setSeeding] = useState(false)
+
+  const handleDeactivate = async (type: LeaveTypeResponse) => {
+    if (!window.confirm(`Deactivate "${type.name}"? Employees will no longer be able to apply under this leave type.`)) return
+    try {
+      await deactivate.mutateAsync(type.id)
+      toast('Leave type deactivated', 'success')
+    } catch (err: unknown) {
+      toast((err as Error)?.message ?? 'Failed to deactivate leave type', 'error')
+    }
+  }
 
   const handleSeedDefaults = async () => {
     if (!companyId) return
@@ -315,11 +346,12 @@ export function LeaveTypes() {
         </div>
       ) : (
         <div className="space-y-2">
-          {types.map((t) => <TypeRow key={t.id} type={t} />)}
+          {types.map((t) => <TypeRow key={t.id} type={t} onEdit={setEditing} onDeactivate={handleDeactivate} />)}
         </div>
       )}
 
-      {showAdd && companyId && <AddDrawer companyId={companyId} onClose={() => setShowAdd(false)} />}
+      {showAdd && companyId && <TypeDrawer companyId={companyId} onClose={() => setShowAdd(false)} />}
+      {editing && <TypeDrawer companyId={companyId} editType={editing} onClose={() => setEditing(null)} />}
     </div>
   )
 }

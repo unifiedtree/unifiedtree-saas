@@ -8,7 +8,6 @@ export interface NavItemConfig {
 
 export const MAIN_NAV: NavItemConfig[] = [
   { key: 'dashboard', label: 'Dashboard', path: '/' },
-  { key: 'analytics', label: 'Analytics', path: '/analytics' },
 ]
 
 export const MODULE_NAV: NavItemConfig[] = [
@@ -59,6 +58,5 @@ export const PLATFORM_NAV: NavItemConfig[] = [
   { key: 'users', label: 'Users', path: '/users' },
   { key: 'roles', label: 'Roles', path: '/roles' },
   { key: 'audit', label: 'Audit Logs', path: '/audit-logs' },
-  { key: 'files', label: 'Files', path: '/files' },
   { key: 'settings', label: 'Settings', path: '/settings' },
 ]

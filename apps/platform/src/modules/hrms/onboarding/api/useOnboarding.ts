@@ -68,6 +68,7 @@ export interface CompleteTaskRequest {
 
 const templatesKey = () => ['hrms', 'onboarding', 'templates'] as const
 const templateKey = (id: string) => ['hrms', 'onboarding', 'templates', id] as const
+const instancesKey = (status?: string) => ['hrms', 'onboarding', 'instances', 'list', status ?? 'all'] as const
 const instanceKey = (employeeId: string) => ['hrms', 'onboarding', 'instances', 'employee', employeeId] as const
 const instanceTasksKey = (instanceId: string) => ['hrms', 'onboarding', 'instances', instanceId, 'tasks'] as const
 
@@ -116,6 +117,17 @@ export function useUpdateTemplate(id: string) {
   })
 }
 
+export function useDeleteTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiJson<void>(`/v1/onboarding/templates/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: templatesKey() }),
+  })
+}
+
 export function useCreateTemplateTask(templateId: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -140,6 +152,14 @@ export function useDeleteTemplateTask(templateId: string) {
 }
 
 // ── Instance hooks ─────────────────────────────────────────────────────────────
+
+export function useInstances(status?: string) {
+  const params = status ? `?status=${status}` : ''
+  return useQuery({
+    queryKey: instancesKey(status),
+    queryFn: () => apiJson<OnboardingInstance[]>(`/v1/onboarding/instances${params}`),
+  })
+}
 
 export function useCreateInstance() {
   return useMutation({

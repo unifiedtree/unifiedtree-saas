@@ -14,6 +14,7 @@ import com.hrms.payroll.lop.LopCalculator;
 import com.hrms.payroll.lop.LopCalculator.DayStatus;
 import com.hrms.payroll.lop.LopCalculator.LopInput;
 import com.hrms.payroll.lop.LopCalculator.LopResult;
+import com.hrms.payroll.service.DefaultComponentSeeder;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,11 +53,14 @@ public class PayrollRunService {
     private final JdbcTemplate jdbc;
     private final PdfRenderer pdfRenderer;
     private final ObjectMapper objectMapper;
+    private final DefaultComponentSeeder seeder;
 
-    public PayrollRunService(JdbcTemplate jdbc, PdfRenderer pdfRenderer, ObjectMapper objectMapper) {
+    public PayrollRunService(JdbcTemplate jdbc, PdfRenderer pdfRenderer, ObjectMapper objectMapper,
+                             DefaultComponentSeeder seeder) {
         this.jdbc = jdbc;
         this.pdfRenderer = pdfRenderer;
         this.objectMapper = objectMapper;
+        this.seeder = seeder;
     }
 
     // ── DTOs ──────────────────────────────────────────────────────────────────
@@ -67,7 +71,7 @@ public class PayrollRunService {
         UUID id, UUID companyId, String companyName, int periodMonth, int periodYear,
         String periodStart, String periodEnd, String status, int employeeCount,
         BigDecimal totalGross, BigDecimal totalDeductions, BigDecimal totalNet,
-        String processedAt, String lockedAt, String createdAt) {}
+        String processedAt, String lockedAt, String createdAt, int skippedEmployeeCount) {}
 
     public record EligibleEmployeeDto(UUID employeeId, String employeeCode, String employeeName,
                                       BigDecimal ctcMonthly) {}
@@ -126,6 +130,33 @@ public class PayrollRunService {
         bindTenant(tenantId);
         RunRow run = loadRun(runId);
         return queryEligible(run.companyId(), run.periodStart(), run.periodEnd());
+    }
+
+    /**
+     * Employees who would have been eligible for this run's period but were skipped
+     * because they have no current salary structure assigned (FIX P1-4). Eligibility
+     * filters mirror {@link #queryEligible} exactly, minus the structure join.
+     */
+    @Transactional
+    public List<EligibleEmployeeDto> listSkippedEmployees(UUID tenantId, UUID runId) {
+        bindTenant(tenantId);
+        RunRow run = loadRun(runId);
+        return jdbc.query("""
+            SELECT e.id, e.employee_code,
+                   coalesce(e.first_name,'') || ' ' || coalesce(e.last_name,'') AS name
+              FROM hrms.employees e
+             WHERE e.company_id = ?
+               AND e.is_active = TRUE
+               AND e.employment_status::text NOT IN ('EXITED','TERMINATED')
+               AND (e.date_of_joining IS NULL OR e.date_of_joining <= ?)
+               AND (e.last_working_day IS NULL OR e.last_working_day >= ?)
+               AND NOT EXISTS (SELECT 1 FROM payroll.employee_salary_structures s
+                                WHERE s.employee_id = e.id AND s.is_current IS TRUE)
+             ORDER BY e.employee_code
+            """, (rs, i) -> new EligibleEmployeeDto(
+                rs.getObject("id", UUID.class), rs.getString("employee_code"),
+                rs.getString("name").trim(), null),
+            run.companyId(), run.periodEnd(), run.periodStart());
     }
 
     @Transactional
@@ -193,8 +224,19 @@ public class PayrollRunService {
 
         Map<String, CompMeta> components = loadComponentsMeta();
         if (components.isEmpty()) {
-            throw new BusinessRuleException("Seed default salary components before processing payroll",
-                "COMPONENTS_NOT_SEEDED");
+            // FIX P0-1: a fresh tenant has no salary components, which used to make the
+            // very first payroll run fail with COMPONENTS_NOT_SEEDED. Auto-seed the 9
+            // standard components on demand (idempotent — ON CONFLICT DO NOTHING; mirrors
+            // the loadSettings auto-create idiom below) so payroll works out-of-the-box
+            // for every tenant, including ones provisioned before this fix. Concurrent
+            // first-callers entering this branch together are safe for the same reason
+            // (ON CONFLICT DO NOTHING → no dup rows, no error). See PayrollService.listComponents.
+            log.info("No salary components for tenant {} — auto-seeding defaults before processing", tenantId);
+            seeder.seedForTenant(tenantId);
+            components = loadComponentsMeta();
+            if (components.isEmpty()) {
+                throw new BusinessRuleException("Unable to seed default salary components", "COMPONENTS_NOT_SEEDED");
+            }
         }
         Map<String, Object> settings = loadSettings(tenantId);
 
@@ -206,6 +248,32 @@ public class PayrollRunService {
         for (EligibleEmployeeDto emp : eligible) {
             processEmployee(tenantId, runId, run.companyId(), emp.employeeId(), ym, components, settings);
         }
+
+        // FIX P1-3: never let a run complete with negative net pay. Deductions
+        // exceeding earnings means a misconfigured structure; halt the whole run
+        // (this @Transactional rolls back the payslip writes above) and name the
+        // affected employees so HR can fix the structures and re-process.
+        List<String> negativeNet = jdbc.query("""
+            SELECT e.employee_code
+              FROM payroll.payslip_lines l
+              JOIN hrms.employees e ON e.id = l.employee_id
+             WHERE l.run_id = ?
+             GROUP BY e.employee_code
+            HAVING coalesce(sum(l.amount) FILTER (WHERE l.category IN ('EARNING','REIMBURSEMENT')),0)
+                 - coalesce(sum(l.amount) FILTER (WHERE l.category = 'DEDUCTION'),0) < 0
+             ORDER BY e.employee_code
+            """, (rs, i) -> rs.getString("employee_code"), runId);
+        if (!negativeNet.isEmpty()) {
+            throw new BusinessRuleException(
+                "Run halted: " + negativeNet.size() + " employee(s) have negative net pay ("
+                    + String.join(", ", negativeNet)
+                    + "). Their deductions exceed earnings — fix the salary structures and re-process.",
+                "NEGATIVE_NET_PAYROLL");
+        }
+
+        // FIX P1-4: count otherwise-eligible employees skipped for lacking a current
+        // salary structure, so the run can surface them instead of silently dropping them.
+        int skipped = countSkipped(run.companyId(), run.periodStart(), run.periodEnd());
 
         // Roll up run totals from the persisted lines.
         jdbc.update("""
@@ -219,11 +287,13 @@ public class PayrollRunService {
                           - coalesce((SELECT sum(amount) FROM payroll.payslip_lines
                                          WHERE run_id = r.id AND category = 'DEDUCTION'), 0),
                 employee_count = (SELECT count(DISTINCT employee_id) FROM payroll.payslip_lines WHERE run_id = r.id),
-                status = 'PROCESSING', processed_at = now(), processed_by = ?, updated_at = now()
+                status = 'PROCESSING', processed_at = now(), processed_by = ?,
+                skipped_employee_count = ?, updated_at = now()
              WHERE r.id = ?
-            """, processedBy, runId);
+            """, processedBy, skipped, runId);
 
-        log.info("Processed payroll run {} for {} employees", runId, eligible.size());
+        log.info("Processed payroll run {} for {} employees ({} skipped, no structure)",
+            runId, eligible.size(), skipped);
         return getRun(tenantId, runId);
     }
 
@@ -530,6 +600,22 @@ public class PayrollRunService {
             companyId, periodEnd, periodStart);
     }
 
+    /** Count of base-eligible employees lacking a current structure (FIX P1-4). */
+    private int countSkipped(UUID companyId, LocalDate periodStart, LocalDate periodEnd) {
+        Integer n = jdbc.queryForObject("""
+            SELECT count(*)
+              FROM hrms.employees e
+             WHERE e.company_id = ?
+               AND e.is_active = TRUE
+               AND e.employment_status::text NOT IN ('EXITED','TERMINATED')
+               AND (e.date_of_joining IS NULL OR e.date_of_joining <= ?)
+               AND (e.last_working_day IS NULL OR e.last_working_day >= ?)
+               AND NOT EXISTS (SELECT 1 FROM payroll.employee_salary_structures s
+                                WHERE s.employee_id = e.id AND s.is_current IS TRUE)
+            """, Integer.class, companyId, periodEnd, periodStart);
+        return n == null ? 0 : n;
+    }
+
     private Map<String, CompMeta> loadComponentsMeta() {
         Map<String, CompMeta> map = new HashMap<>();
         jdbc.query("SELECT id, code, name, category, display_order FROM payroll.salary_components", rs -> {
@@ -635,7 +721,8 @@ public class PayrollRunService {
             String.valueOf(rs.getObject("period_start")), String.valueOf(rs.getObject("period_end")),
             rs.getString("status"), rs.getInt("employee_count"),
             rs.getBigDecimal("total_gross"), rs.getBigDecimal("total_deductions"), rs.getBigDecimal("total_net"),
-            ts(rs.getTimestamp("processed_at")), ts(rs.getTimestamp("locked_at")), ts(rs.getTimestamp("created_at")));
+            ts(rs.getTimestamp("processed_at")), ts(rs.getTimestamp("locked_at")), ts(rs.getTimestamp("created_at")),
+            rs.getInt("skipped_employee_count"));
     }
 
     private static String renderPayslipHtml(PayslipDto s) {

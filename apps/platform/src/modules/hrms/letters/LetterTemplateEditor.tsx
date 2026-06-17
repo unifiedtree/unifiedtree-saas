@@ -8,6 +8,7 @@ import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies } from '@/modules/hrms/api/useOrg'
+import { useEmployeeDirectory } from '@/modules/hrms/api/useWorkforce'
 import { CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import {
   useLetterTemplate,
@@ -213,10 +214,12 @@ function PreviewPane({ templateId }: { templateId: string | undefined }) {
   const previewMut = usePreviewTemplate()
   const [employeeId, setEmployeeId] = useState('')
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
+  const { data: empPage } = useEmployeeDirectory({ pageSize: 200 })
+  const employees = empPage?.content ?? []
 
   const handlePreview = async () => {
     if (!templateId || !employeeId.trim()) {
-      toast('Enter an employee ID to preview', 'error')
+      toast('Select an employee to preview', 'error')
       return
     }
     try {
@@ -238,12 +241,18 @@ function PreviewPane({ templateId }: { templateId: string | undefined }) {
           Preview as employee
         </h3>
         <div className="flex gap-2">
-          <input
+          <select
             value={employeeId}
             onChange={(e) => setEmployeeId(e.target.value)}
-            placeholder="Employee ID"
-            className="flex-1 bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2 text-sm text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-          />
+            className="flex-1 bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500 transition-colors"
+          >
+            <option value="">{employees.length === 0 ? 'No employees yet' : 'Select an employee…'}</option>
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {[emp.firstName, emp.lastName].filter(Boolean).join(' ')}{emp.employeeCode ? ` (${emp.employeeCode})` : ''}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={handlePreview}
@@ -344,7 +353,7 @@ export const LetterTemplateEditor: React.FC = () => {
         setSavedId(created.id)
         navigate('/hrms/letters/templates', { replace: true })
       } else {
-        await updateMut.mutateAsync({ name: name.trim(), subject: subject.trim(), bodyHtml })
+        await updateMut.mutateAsync({ name: name.trim(), type, subject: subject.trim(), bodyHtml })
         toast('Template saved', 'success')
         navigate('/hrms/letters/templates', { replace: true })
       }

@@ -161,3 +161,36 @@ export function useCreateLeaveType() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'types'] }),
   })
 }
+
+export function useUpdateLeaveType() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string
+      data: {
+        name: string
+        code: string
+        category: string
+        annualEntitlement: number
+        maxConsecutiveDays?: number
+        minNoticeDays?: number
+        isCarryForwardAllowed?: boolean
+        maxCarryForwardDays?: number
+        isPaidLeave?: boolean
+        description?: string
+      }
+    }) => apiJson<LeaveTypeResponse>(`/v1/leave/types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'types'] }),
+  })
+}
+
+export function useDeactivateLeaveType() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiJson<void>(`/v1/leave/types/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'types'] }),
+  })
+}

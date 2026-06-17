@@ -5,13 +5,11 @@ import { RouteGuard } from '@/routes/RouteGuard'
 import { PlatformShell } from '@/layouts/PlatformShell'
 import { LoginPage } from '@/core/auth/LoginPage'
 import { Dashboard } from '@/pages/Dashboard'
-import { Analytics } from '@/pages/Analytics'
 import { Settings } from '@/pages/Settings'
 import { AuditLogs } from '@/pages/AuditLogs'
 import { Users } from '@/pages/Users'
 import { Roles } from '@/pages/Roles'
 import { Modules } from '@/pages/Modules'
-import { Files } from '@/pages/Files'
 import { PendingApproval } from '@/pages/PendingApproval'
 import { NoAccess } from '@/pages/NoAccess'
 import { AcceptInvite } from '@/pages/AcceptInvite'
@@ -46,6 +44,8 @@ import { LetterTemplates } from '@/modules/hrms/letters/LetterTemplates'
 import { LetterTemplateEditor } from '@/modules/hrms/letters/LetterTemplateEditor'
 import { GeneratedLetters } from '@/modules/hrms/letters/GeneratedLetters'
 import { GeneratedLetterDetail } from '@/modules/hrms/letters/GeneratedLetterDetail'
+import { Distributions } from '@/modules/hrms/letters/Distributions'
+import { DistributionDetail } from '@/modules/hrms/letters/DistributionDetail'
 import { HeadcountReport } from '@/modules/hrms/reports/HeadcountReport'
 import { AttritionReport } from '@/modules/hrms/reports/AttritionReport'
 import { AttendanceSummaryReport } from '@/modules/hrms/reports/AttendanceSummaryReport'
@@ -115,7 +115,9 @@ export default function App() {
         {/* Role-aware root — redirects based on highest role */}
         <Route path="/"          element={<RoleAwareLanding />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/analytics" element={<Analytics />} />
+        {/* Analytics renders fabricated/mock KPIs (no backend yet) — show the
+            ComingSoon placeholder instead of fake data. Page file kept for later. */}
+        <Route path="/analytics" element={<ComingSoon module="analytics" />} />
         <Route path="/settings"  element={<Settings />} />
         {/* Platform-admin pages. These were previously reachable by direct URL for any
             authenticated user (the sidebar hid them by role, and the backend 403'd the
@@ -129,7 +131,9 @@ export default function App() {
             wildcard lets super-admins (who hold a wildcard-only grant) through, mirroring
             the gating agent's admin definition (roles ∪ permissions.has('*')). */}
         <Route path="/modules"    element={<RouteGuard anyOf={[P.PLATFORM_MODULE_MANAGE, P.TENANT_MODULE_ACTIVATE, '*']}><Modules /></RouteGuard>} />
-        <Route path="/files"     element={<Files />} />
+        {/* Files is fully mock (no backend yet) — show the ComingSoon
+            placeholder instead of fake data. Page file kept for later. */}
+        <Route path="/files"     element={<ComingSoon module="files" />} />
 
         {/* Employee self-service landing */}
         <Route
@@ -405,6 +409,30 @@ export default function App() {
               <ModuleGate moduleKey="hrms">
                 <React.Suspense fallback={null}>
                   <GeneratedLetterDetail />
+                </React.Suspense>
+              </ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/letters/distributions"
+          element={
+            <RouteGuard anyOf={[P.HRMS_LETTERS_DISTRIBUTE]}>
+              <ModuleGate moduleKey="hrms">
+                <React.Suspense fallback={null}>
+                  <Distributions />
+                </React.Suspense>
+              </ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/letters/distributions/:jobId"
+          element={
+            <RouteGuard anyOf={[P.HRMS_LETTERS_DISTRIBUTE]}>
+              <ModuleGate moduleKey="hrms">
+                <React.Suspense fallback={null}>
+                  <DistributionDetail />
                 </React.Suspense>
               </ModuleGate>
             </RouteGuard>

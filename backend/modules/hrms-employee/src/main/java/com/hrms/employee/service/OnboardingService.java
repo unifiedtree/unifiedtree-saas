@@ -86,6 +86,17 @@ public class OnboardingService {
     }
 
     @Transactional
+    public void archiveTemplate(UUID id) {
+        // Soft-delete: templates are referenced by historical instances, so we
+        // deactivate rather than hard-delete to preserve those references.
+        OnboardingTemplate existing = templateRepo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("OnboardingTemplate", id));
+        existing.setActive(false);
+        templateRepo.save(existing);
+        log.info("Archived onboarding template {}", id);
+    }
+
+    @Transactional
     public OnboardingTask addTask(UUID templateId, OnboardingTask task) {
         OnboardingTemplate template = getTemplate(templateId);
         task.setTenantId(template.getTenantId());
@@ -187,6 +198,20 @@ public class OnboardingService {
     }
 
     // ── Queries ───────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<OnboardingInstance> listInstances(String status) {
+        // status is optional: when omitted, return every instance for the current
+        // tenant (RLS already scopes the query to this tenant).
+        List<OnboardingInstance> instances = status != null
+                ? instanceRepo.findByStatusOrderByCreatedAtDesc(status)
+                : instanceRepo.findAllByOrderByCreatedAtDesc();
+        // Init the lazy instanceTasks collection inside the tx so the controller can
+        // serialize it (open-in-view is disabled in the canonical profiles); the FE
+        // uses it to compute completion progress.
+        instances.forEach(i -> i.getInstanceTasks().size());
+        return instances;
+    }
 
     @Transactional(readOnly = true)
     public OnboardingInstance getInstanceForEmployee(UUID employeeId) {

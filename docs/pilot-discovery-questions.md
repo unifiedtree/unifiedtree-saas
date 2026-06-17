@@ -249,6 +249,14 @@ letters are snapshotted and safe, but template edits aren't tracked). This makes
 the customer's answer more consequential than "standard vs custom" implies — see
 **A7** for the starter-pack / numbering / e-sign follow-ups.
 
+**Follow-up — bulk vs one-at-a-time (both now shippable):**
+> "Do you need to send the same letter to many employees at once (e.g. monthly
+> payslips, a policy broadcast) — or always one person at a time?"
+
+Both answers now map to features that exist:
+- *"One at a time"* → the existing **Letters → Generate** flow (pick employee, generate, send/download).
+- *"Many at once"* → the new **Letter Distribution** feature (`hrms.letters.distribute`, HR-only): pick a template, filter recipients (all / department / designation / employment-type / custom list), each gets a personalized PDF emailed; failures are retryable. See `docs/features/letter-distribution.md`. (Adds migrations `V058`/`V059` — relevant to the deploy, not the customer.)
+
 **Likely answers + what you'd do:**
 - *"Standard templates are fine"* → They still need *some* templates authored;
   offer to seed a starter pack (see A7). Mention numbering/e-sign as options.
@@ -372,6 +380,7 @@ original 10. Scan the index, then jump to the ones the demo touches.)*
 - **A8** — **Report exports** + statutory registers (on-screen only today)
 - **A9** — **Holiday calendars** per location + workweek/weekend days
 - **A10** — Attendance **enforcement**: face on/off, geofence advisory vs block
+- **A10b** — Punch verification model: GPS+Face **both** vs **either** (web↔mobile mismatch; coordinate w/ attendance owner)
 - **A11** — **SSO / identity provider** requirement
 
 **NICE-TO-ASK additions**
@@ -440,6 +449,27 @@ Both are silent net-pay risks today:
   window-aware period + LOP before go-live.
 - *"No record should mean unpaid"* → Needs a per-tenant toggle flipping the
   default day status; flag as a change.
+
+### A3b: Professional Tax — which state(s)? *(added post payroll-audit, 2026-06-16)*
+
+**Question:**
+> "For Professional Tax, which state(s) are your employees taxed in?"
+
+**Why it matters:**
+The payroll engine applies PT as a **flat monthly amount every month** (the per-state
+slab; PayrollEngine.java:164-166). That is **correct for Telangana, Andhra Pradesh,
+Karnataka (monthly), Tamil Nadu** as seeded — but **wrong for Maharashtra** (MH levies
+₹300 in February, ₹200 other months; the engine charges a flat ₹200 → under-collects
+₹100/employee/year, a statutory liability) and for any state billing PT **half-yearly**
+(the payslip deduction line won't match what the accountant files). PT slabs are seeded
+for 8 states only (KA, MH, TN, TS, AP, WB, GJ, KL); other states get no PT. See
+`docs/PAYROLL_AUDIT.md` P1-2.
+
+**Likely answers + what you'd do:**
+- *Telangana / Andhra / Karnataka(monthly) / Tamil Nadu* → flat-monthly is correct; no change.
+- *Maharashtra* → **P1-2 becomes pre-pilot**: make PT month-aware (Feb ₹300).
+- *Half-yearly-billing state, or a state not in the 8 seeded* → seed its slabs and/or add
+  period-aware PT before go-live.
 
 ### A4: How employees get into the system → see **Qualifier 2** (top)
 
@@ -578,6 +608,21 @@ wired to the per-branch toggle.
 - *On-site enforcement required* → Turn on geofence zones, set each site's
   lat/long + radius, decide block-vs-flag; per-branch if only some sites are
   restricted.
+
+**A10 follow-up (logged 2026-06-17):** the `Branch` entity already supports `latitude`/`longitude`/`geo_fence_radius_meters`/`geo_fence_enforced`, and check-in validates against the employee's **branch** fence (`GeoValidationService` haversine) — but the **web Branch creation form doesn't expose those fields**, so web-created branches have no geofence coords. If vnp wants **enforced** geofencing, it's a ~1-hour UI fix (expose lat/lon/radius on the branch form; backend + check-in already support it). Also: the codebase has **two** geofence models — branch-level (wired to check-in) and the `GeoFenceZone` entity + `employees.geo_fence_zone_id` (wired to the mobile/web zones page) — which need reconciliation with the attendance-module owner before any enforcement work. Geofence is advisory in the pilot profile, so this is post-pilot / discovery-gated, not blocking.
+
+### A10b: Punch verification model — GPS + Face both, or either? *(added 2026-06-17)*
+
+**Question:**
+> "For employee attendance, do you require GPS location **and** face recognition (both must succeed to punch), or is one enough?"
+
+**Why it matters:**
+The manager **mobile** app models punch verification as **both GPS *and* Face required** ("employees must be inside the zone and pass a face check to punch"). The **web** platform models it as a single `punch_method` choice per geofence zone (`FACE` / `GPS` / `MANUAL`). These two clients **don't match**. Confirm the customer's expectation before pilot and align — but note this touches **punch-verification behavior** in the attendance subsystem, so any change is **coordinated with the attendance-module owner** (see `boundary.md`), not patched from the web UI.
+
+**Likely answers + what you'd do:**
+- *"Both required"* → coordinate with the attendance-module owner to make the web zone model enforce GPS+Face like mobile; confirm whether enforcement is client-side (mobile) or backend.
+- *"Either one is fine"* → the web single-choice model is acceptable; verify mobile can also be configured to one factor, else the clients still diverge.
+- *"Depends on the zone/group"* → per-zone verification config; size as build, coordinate with the owner.
 
 ### A11: SSO / identity provider *(added during creation)*
 

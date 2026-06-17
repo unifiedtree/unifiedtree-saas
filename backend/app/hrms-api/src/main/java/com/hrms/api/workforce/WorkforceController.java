@@ -14,6 +14,8 @@ import com.hrms.employee.workforce.dto.WorkforceDtos.CreateDesignationRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateWorkforceEmployeeRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.DepartmentResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.DesignationResponse;
+import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateCompanyRequest;
+import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateDesignationRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateGeofenceRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateWorkforceEmployeeRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.WorkforceEmployeeResponse;
@@ -121,6 +123,13 @@ public class WorkforceController {
         return companies.get(id);
     }
 
+    @PutMapping("/companies/{id}")
+    @PreAuthorize("hasAuthority('org.company.write')")
+    public CompanyResponse updateCompany(@PathVariable UUID id,
+                                         @Valid @RequestBody UpdateCompanyRequest req) {
+        return companies.update(id, req);
+    }
+
     @DeleteMapping("/companies/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('org.company.write')")
@@ -177,6 +186,13 @@ public class WorkforceController {
         return departments.rename(id, name);
     }
 
+    @PatchMapping("/departments/{id}/head")
+    @PreAuthorize("hasAuthority('hrms.department.write')")
+    public DepartmentResponse setDepartmentHead(@PathVariable UUID id,
+                                                @RequestParam(required = false) UUID employeeId) {
+        return departments.setHead(id, employeeId);
+    }
+
     @DeleteMapping("/departments/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('hrms.department.write')")
@@ -197,6 +213,13 @@ public class WorkforceController {
     @PreAuthorize("hasAuthority('hrms.designation.write')")
     public DesignationResponse createDesignation(@Valid @RequestBody CreateDesignationRequest req) {
         return designations.create(req);
+    }
+
+    @PutMapping("/designations/{id}")
+    @PreAuthorize("hasAuthority('hrms.designation.write')")
+    public DesignationResponse updateDesignation(@PathVariable UUID id,
+                                                 @Valid @RequestBody UpdateDesignationRequest req) {
+        return designations.update(id, req);
     }
 
     @DeleteMapping("/designations/{id}")

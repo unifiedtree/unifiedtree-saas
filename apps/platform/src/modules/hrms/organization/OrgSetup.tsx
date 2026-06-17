@@ -6,15 +6,16 @@ import { Badge, DataTable, EmptyState } from '@unifiedtree/ui-kit'
 import type { Column, SortState } from '@unifiedtree/ui-kit'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  useCompanies, useCreateCompany,
+  useCompanies, useCreateCompany, useUpdateCompany, useArchiveCompany,
   useBranches, useCreateBranch, useArchiveBranch,
-  useDepartments, useCreateDepartment, useArchiveDepartment,
-  useDesignations, useCreateDesignation, useArchiveDesignation,
+  useDepartments, useCreateDepartment, useArchiveDepartment, useSetDepartmentHead,
+  useDesignations, useCreateDesignation, useUpdateDesignation, useArchiveDesignation,
   useGrades, useCreateGrade, useUpdateGrade, useDeleteGrade,
   useEmploymentTypes, useCreateEmploymentType, useUpdateEmploymentType, useDeleteEmploymentType,
   useShifts, useCreateShift, useUpdateShift, useDeleteShift,
-  type Company, type Grade, type EmploymentTypeRecord, type Shift,
+  type Company, type Designation, type Grade, type EmploymentTypeRecord, type Shift,
 } from '../api/useOrg'
+import { useEmployeeDirectory } from '../api/useWorkforce'
 
 type Tab = 'companies' | 'branches' | 'departments' | 'designations' | 'grades' | 'employment-types' | 'shifts'
 
@@ -113,19 +114,44 @@ function CompaniesTab() {
   const { toast } = useToast()
   const { data: companies = [], isLoading, error, refetch } = useCompanies()
   const createCompany = useCreateCompany()
+  const updateCompany = useUpdateCompany()
+  const archiveCompany = useArchiveCompany()
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ name: '', legalName: '', industry: '', currency: 'INR', country: 'India' })
+  const [editing, setEditing] = useState<Company | null>(null)
+  const emptyForm = { name: '', legalName: '', industry: '', currency: 'INR', country: 'India' }
+  const [form, setForm] = useState(emptyForm)
+
+  const openAdd = () => { setEditing(null); setForm(emptyForm); setOpen(true) }
+  const openEdit = (co: Company) => {
+    setEditing(co)
+    setForm({
+      name: co.name, legalName: co.legalName ?? '', industry: co.industry ?? '',
+      currency: co.currency ?? 'INR', country: co.country ?? 'India',
+    })
+    setOpen(true)
+  }
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     if (!form.name.trim()) return
     try {
-      await createCompany.mutateAsync(form)
-      toast('Company created', 'success')
+      if (editing) {
+        await updateCompany.mutateAsync({ id: editing.id, ...form })
+        toast('Company updated', 'success')
+      } else {
+        await createCompany.mutateAsync(form)
+        toast('Company created', 'success')
+      }
       setOpen(false)
-      setForm({ name: '', legalName: '', industry: '', currency: 'INR', country: 'India' })
-    } catch { toast('Failed to create company', 'error') }
+    } catch { toast(editing ? 'Failed to update company' : 'Failed to create company', 'error') }
   }
+
+  const handleArchive = async (co: Company) => {
+    try { await archiveCompany.mutateAsync(co.id); toast('Company archived', 'success') }
+    catch { toast('Failed to archive company', 'error') }
+  }
+
+  const isPending = createCompany.isPending || updateCompany.isPending
 
   const cols: Column<Company>[] = [
     {
@@ -149,13 +175,24 @@ function CompaniesTab() {
       key: 'status', header: 'Status',
       cell: (co) => <Badge tone={co.active ? 'success' : 'default'}>{co.active ? 'Active' : 'Inactive'}</Badge>,
     },
+    {
+      key: 'actions', header: '',
+      cell: (co) => (
+        <Can code={P.ORG_COMPANY_WRITE}>
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => openEdit(co)} className={BTN_ICON}><Pencil size={13} /></button>
+            <button onClick={() => handleArchive(co)} className={BTN_DEL}><Trash2 size={13} /></button>
+          </div>
+        </Can>
+      ),
+    },
   ]
 
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
         <Can code={P.ORG_COMPANY_WRITE}>
-          <button onClick={() => setOpen(true)} className={BTN_ADD}><Plus size={15} /> Add Company</button>
+          <button onClick={openAdd} className={BTN_ADD}><Plus size={15} /> Add Company</button>
         </Can>
       </div>
 
@@ -167,7 +204,7 @@ function CompaniesTab() {
           emptyDescription="Add your first company to get started." />
       )}
 
-      <SlideModal open={open} onClose={() => setOpen(false)} title="Add Company">
+      <SlideModal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Company' : 'Add Company'}>
         <div className="space-y-4">
           <Field label="Company Name *"><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Acme Pvt Ltd" /></Field>
           <Field label="Legal Name"><Input value={form.legalName} onChange={(e) => set('legalName', e.target.value)} placeholder="Registered legal name" /></Field>
@@ -178,9 +215,11 @@ function CompaniesTab() {
           </div>
           <div className="flex gap-3 pt-2">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
-            <button onClick={handleCreate} disabled={createCompany.isPending} className={BTN_PRIMARY}>
-              {createCompany.isPending ? 'Creating...' : 'Create'}
-            </button>
+            <Can code={P.ORG_COMPANY_WRITE}>
+              <button onClick={handleSave} disabled={isPending} className={BTN_PRIMARY}>
+                {isPending ? 'Saving...' : editing ? 'Save Changes' : 'Create'}
+              </button>
+            </Can>
           </div>
         </div>
       </SlideModal>
@@ -242,7 +281,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
     {
       key: 'actions', header: '',
       cell: (br) => (
-        <Can code={P.HRMS_BRANCH_WRITE}>
+        <Can code={P.ORG_COMPANY_WRITE}>
           <button onClick={() => handleArchive(br.id)} className={BTN_DEL}><Trash2 size={14} /></button>
         </Can>
       ),
@@ -257,7 +296,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Can code={P.HRMS_BRANCH_WRITE}>
+        <Can code={P.ORG_COMPANY_WRITE}>
           <button onClick={() => setOpen(true)} className={BTN_ADD}><Plus size={15} /> Add Branch</button>
         </Can>
       </div>
@@ -302,25 +341,46 @@ function BranchesTab({ activeCompany }: CompanyProp) {
 function DepartmentsTab({ activeCompany }: CompanyProp) {
   const { toast } = useToast()
   const { data: departments = [], isLoading, error, refetch } = useDepartments(activeCompany?.id ?? '')
+  const { data: empPage } = useEmployeeDirectory({ companyId: activeCompany?.id, pageSize: 200 })
+  const employees = empPage?.content ?? []
   const createDept = useCreateDepartment()
   const archiveDept = useArchiveDepartment()
+  const setHead = useSetDepartmentHead()
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ name: '', code: '', description: '' })
+  const [form, setForm] = useState({ name: '', code: '', description: '', departmentHeadEmployeeId: '' })
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
+
+  const empLabel = (id?: string) => {
+    const e = employees.find((x) => x.id === id)
+    return e ? [e.firstName, e.lastName].filter(Boolean).join(' ') : ''
+  }
 
   const handleCreate = async () => {
     if (!activeCompany || !form.name.trim()) return
     try {
-      await createDept.mutateAsync({ companyId: activeCompany.id, ...form })
+      await createDept.mutateAsync({
+        companyId: activeCompany.id,
+        name: form.name,
+        code: form.code || undefined,
+        description: form.description || undefined,
+        departmentHeadEmployeeId: form.departmentHeadEmployeeId || undefined,
+      })
       toast('Department created', 'success')
       setOpen(false)
-      setForm({ name: '', code: '', description: '' })
+      setForm({ name: '', code: '', description: '', departmentHeadEmployeeId: '' })
     } catch { toast('Failed to create department', 'error') }
   }
 
   const handleArchive = async (id: string) => {
     try { await archiveDept.mutateAsync(id); toast('Department archived', 'success') }
     catch { toast('Failed to archive department', 'error') }
+  }
+
+  const handleSetHead = async (id: string, employeeId: string) => {
+    try {
+      await setHead.mutateAsync({ id, employeeId: employeeId || undefined })
+      toast('Department head updated', 'success')
+    } catch { toast('Failed to update department head', 'error') }
   }
 
   type Dept = typeof departments[number]
@@ -332,6 +392,20 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
     {
       key: 'code', header: 'Code', hideBelow: 'md',
       cell: (d) => <span className="text-sm text-text-secondary">{d.code || '—'}</span>,
+    },
+    {
+      key: 'head', header: 'Head', hideBelow: 'md',
+      cell: (d) => (
+        <Can code={P.HRMS_DEPARTMENT_WRITE} fallback={<span className="text-sm text-text-secondary">{empLabel(d.departmentHeadEmployeeId) || '—'}</span>}>
+          <select value={d.departmentHeadEmployeeId ?? ''} onChange={(e) => handleSetHead(d.id, e.target.value)}
+            className="bg-bg-surface border border-border-default rounded-lg px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-indigo-500 max-w-[10rem]">
+            <option value="">None</option>
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>{[emp.firstName, emp.lastName].filter(Boolean).join(' ')}</option>
+            ))}
+          </select>
+        </Can>
+      ),
     },
     {
       key: 'employees', header: 'Employees', hideBelow: 'lg',
@@ -377,6 +451,15 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
           <Field label="Department Name *"><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Engineering" /></Field>
           <Field label="Code"><Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. ENG" /></Field>
           <Field label="Description"><Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional" /></Field>
+          <Field label="Department Head">
+            <select value={form.departmentHeadEmployeeId} onChange={(e) => set('departmentHeadEmployeeId', e.target.value)}
+              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-indigo-500 transition-colors">
+              <option value="">None</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>{[emp.firstName, emp.lastName].filter(Boolean).join(' ')}</option>
+              ))}
+            </select>
+          </Field>
           <div className="flex gap-3 pt-2">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <button onClick={handleCreate} disabled={createDept.isPending} className={BTN_PRIMARY}>
@@ -395,25 +478,41 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
   const { toast } = useToast()
   const { data: designations = [], isLoading, error, refetch } = useDesignations(activeCompany?.id ?? '')
   const createDesig = useCreateDesignation()
+  const updateDesig = useUpdateDesignation()
   const archiveDesig = useArchiveDesignation()
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ title: '', grade: '' })
+  const [editing, setEditing] = useState<Designation | null>(null)
+  const emptyForm = { title: '', grade: '' }
+  const [form, setForm] = useState(emptyForm)
+
+  const openAdd = () => { setEditing(null); setForm(emptyForm); setOpen(true) }
+  const openEdit = (d: Designation) => {
+    setEditing(d)
+    setForm({ title: d.title, grade: d.grade ?? '' })
+    setOpen(true)
+  }
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     if (!activeCompany || !form.title.trim()) return
     try {
-      await createDesig.mutateAsync({ companyId: activeCompany.id, ...form })
-      toast('Designation created', 'success')
+      if (editing) {
+        await updateDesig.mutateAsync({ id: editing.id, ...form })
+        toast('Designation updated', 'success')
+      } else {
+        await createDesig.mutateAsync({ companyId: activeCompany.id, ...form })
+        toast('Designation created', 'success')
+      }
       setOpen(false)
-      setForm({ title: '', grade: '' })
-    } catch { toast('Failed to create designation', 'error') }
+    } catch { toast(editing ? 'Failed to update designation' : 'Failed to create designation', 'error') }
   }
 
   const handleArchive = async (id: string) => {
     try { await archiveDesig.mutateAsync(id); toast('Designation archived', 'success') }
     catch { toast('Failed to archive designation', 'error') }
   }
+
+  const isPending = createDesig.isPending || updateDesig.isPending
 
   type Desig = typeof designations[number]
   const cols: Column<Desig>[] = [
@@ -437,7 +536,10 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
       key: 'actions', header: '',
       cell: (d) => (
         <Can code={P.HRMS_DESIGNATION_WRITE}>
-          <button onClick={() => handleArchive(d.id)} className={BTN_DEL}><Trash2 size={14} /></button>
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => openEdit(d)} className={BTN_ICON}><Pencil size={13} /></button>
+            <button onClick={() => handleArchive(d.id)} className={BTN_DEL}><Trash2 size={13} /></button>
+          </div>
         </Can>
       ),
     },
@@ -452,7 +554,7 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
     <div className="space-y-4">
       <div className="flex justify-end">
         <Can code={P.HRMS_DESIGNATION_WRITE}>
-          <button onClick={() => setOpen(true)} className={BTN_ADD}><Plus size={15} /> Add Designation</button>
+          <button onClick={openAdd} className={BTN_ADD}><Plus size={15} /> Add Designation</button>
         </Can>
       </div>
 
@@ -464,15 +566,17 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
           emptyDescription="Define roles and job titles for your employees." />
       )}
 
-      <SlideModal open={open} onClose={() => setOpen(false)} title="Add Designation">
+      <SlideModal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Designation' : 'Add Designation'}>
         <div className="space-y-4">
           <Field label="Title *"><Input value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Senior Engineer" /></Field>
           <Field label="Grade"><Input value={form.grade} onChange={(e) => set('grade', e.target.value)} placeholder="e.g. L4" /></Field>
           <div className="flex gap-3 pt-2">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
-            <button onClick={handleCreate} disabled={createDesig.isPending} className={BTN_PRIMARY}>
-              {createDesig.isPending ? 'Creating...' : 'Create'}
-            </button>
+            <Can code={P.HRMS_DESIGNATION_WRITE}>
+              <button onClick={handleSave} disabled={isPending} className={BTN_PRIMARY}>
+                {isPending ? 'Saving...' : editing ? 'Save Changes' : 'Create'}
+              </button>
+            </Can>
           </div>
         </div>
       </SlideModal>

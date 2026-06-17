@@ -69,6 +69,7 @@ export const P = {
   HRMS_LETTERS_READ_SELF:       'hrms.letters.read.self',
   HRMS_LETTERS_SEND:            'hrms.letters.send',
   HRMS_LETTERS_VOID:            'hrms.letters.void',
+  HRMS_LETTERS_DISTRIBUTE:      'hrms.letters.distribute',
 
   // ── HRMS: Leave ───────────────────────────────────────────────────────────
   HRMS_LEAVE_APPROVE_L1:           'hrms.leave.approve.l1',

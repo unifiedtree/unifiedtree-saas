@@ -1,13 +1,93 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, GripVertical } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, GripVertical, Pencil } from 'lucide-react'
 import { Drawer, Button, Badge, CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
 import {
-  useTemplate, useCreateTemplateTask, useDeleteTemplateTask,
+  useTemplate, useCreateTemplateTask, useDeleteTemplateTask, useUpdateTemplate,
 } from './api/useOnboarding'
-import type { OnboardingTask } from './api/useOnboarding'
+import type { OnboardingTask, OnboardingTemplate } from './api/useOnboarding'
+
+// ── Edit template drawer ───────────────────────────────────────────────────────
+
+function EditTemplateDrawer({
+  template,
+  onClose,
+}: {
+  template: OnboardingTemplate
+  onClose: () => void
+}) {
+  const update = useUpdateTemplate(template.id)
+  const [name, setName] = useState(template.name)
+  const [description, setDescription] = useState(template.description ?? '')
+  const [active, setActive] = useState(template.active)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return
+    update.mutate(
+      {
+        companyId: template.companyId,
+        name: name.trim(),
+        description: description.trim() || undefined,
+        designationId: template.designationId,
+        departmentId: template.departmentId,
+        active,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Template updated')
+          onClose()
+        },
+        onError: () => toast.error('Failed to update template'),
+      },
+    )
+  }
+
+  return (
+    <Drawer open onOpenChange={(open) => { if (!open) onClose() }} title="Edit template">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+            Template name *
+          </label>
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-lg border border-border-default bg-bg-base px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-default/40"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+            Description
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional description"
+            rows={3}
+            className="w-full rounded-lg border border-border-default bg-bg-base px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-default/40 resize-none"
+          />
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(e) => setActive(e.target.checked)}
+            className="accent-indigo-500"
+          />
+          <span className="text-sm text-text-primary">Active</span>
+        </label>
+        <div className="flex gap-2 border-t border-border-default pt-4">
+          <Button type="submit" size="sm" loading={update.isPending}>Save changes</Button>
+          <Button type="button" size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+        </div>
+      </form>
+    </Drawer>
+  )
+}
 
 // ── Add task drawer ────────────────────────────────────────────────────────────
 
@@ -170,6 +250,7 @@ export const TemplateDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [addOpen, setAddOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
 
   const { data: template, isLoading, error, refetch } = useTemplate(id!)
 
@@ -211,6 +292,16 @@ export const TemplateDetail: React.FC = () => {
               <Badge tone={template.active ? 'success' : 'default'}>
                 {template.active ? 'Active' : 'Inactive'}
               </Badge>
+              <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<Pencil size={12} />}
+                  onClick={() => setEditOpen(true)}
+                >
+                  Edit template
+                </Button>
+              </Can>
             </div>
           </div>
 
@@ -257,6 +348,10 @@ export const TemplateDetail: React.FC = () => {
           nextSeq={(sortedTasks.at(-1)?.sequenceNo ?? 0) + 1}
           onClose={() => setAddOpen(false)}
         />
+      )}
+
+      {editOpen && template && (
+        <EditTemplateDrawer template={template} onClose={() => setEditOpen(false)} />
       )}
     </div>
   )

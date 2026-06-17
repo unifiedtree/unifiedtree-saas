@@ -152,6 +152,8 @@ public class WorkforceEmployeeService {
         if (req.lastName()         != null) e.setLastName(req.lastName());
         if (req.email()            != null) e.setEmail(req.email());
         if (req.phone()            != null) e.setPhone(req.phone());
+        if (req.dateOfBirth()      != null) e.setDateOfBirth(req.dateOfBirth());
+        if (req.gender()           != null) e.setGender(req.gender());
         if (req.departmentId()     != null) e.setDepartmentId(req.departmentId());
         if (req.designationId()    != null) e.setDesignationId(req.designationId());
         if (req.branchId()         != null) e.setBranchId(req.branchId());

@@ -54,6 +54,13 @@ public class DepartmentService {
         return toResponse(repository.save(d));
     }
 
+    public DepartmentResponse setHead(UUID id, UUID employeeId) {
+        Department d = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Department " + id + " not found"));
+        d.setDepartmentHeadEmployeeId(employeeId);   // null clears the head
+        return toResponse(repository.save(d));
+    }
+
     public void archive(UUID id) {
         Department d = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Department " + id + " not found"));

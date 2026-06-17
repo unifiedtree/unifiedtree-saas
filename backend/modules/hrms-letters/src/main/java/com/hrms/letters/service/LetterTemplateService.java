@@ -82,6 +82,7 @@ public class LetterTemplateService {
     public LetterTemplateDto updateTemplate(UUID id, UpdateTemplateRequest req) {
         LetterTemplate t = requireTemplate(id);
         if (req.name()        != null) t.setName(req.name());
+        if (req.type()        != null) t.setType(req.type());
         if (req.subject()     != null) t.setSubject(req.subject());
         if (req.bodyHtml()    != null) t.setBodyHtml(req.bodyHtml());
         if (req.active()      != null) t.setActive(req.active());

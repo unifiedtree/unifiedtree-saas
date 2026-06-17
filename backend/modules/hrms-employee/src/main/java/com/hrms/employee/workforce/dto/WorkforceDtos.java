@@ -48,6 +48,19 @@ public final class WorkforceDtos {
             String fiscalYearStart
     ) { }
 
+    public record UpdateCompanyRequest(
+            @NotBlank @Size(max = 150) String name,
+            @Size(max = 200) String legalName,
+            @Size(max = 50)  String registrationNumber,
+            @Size(max = 15)  String panNumber,
+            @Size(max = 20)  String gstin,
+            @Size(max = 50)  String industry,
+            String country,
+            String timezone,
+            String currency,
+            String fiscalYearStart
+    ) { }
+
     // -- Branch --------------------------------------------------------------
     public record BranchResponse(
             UUID id,
@@ -136,6 +149,14 @@ public final class WorkforceDtos {
             String jobResponsibilities
     ) { }
 
+    public record UpdateDesignationRequest(
+            @NotBlank @Size(max = 100) String title,
+            @Size(max = 10) String grade,
+            UUID departmentId,
+            UUID reportsToDesignationId,
+            String jobResponsibilities
+    ) { }
+
     // -- Workforce employee --------------------------------------------------
     public record WorkforceEmployeeResponse(
             UUID id,
@@ -209,6 +230,8 @@ public final class WorkforceDtos {
             String lastName,
             String email,
             String phone,
+            LocalDate dateOfBirth,
+            WorkforceEmployee.Gender gender,
             UUID departmentId,
             UUID designationId,
             UUID branchId,

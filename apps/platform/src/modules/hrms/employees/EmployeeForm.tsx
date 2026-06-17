@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
 import { useAuthStore } from '@unifiedtree/sdk'
 import { P } from '@unifiedtree/sdk'
-import { useCreateWorkforceEmployee, useUpdateWorkforceEmployee, type WorkforceEmployee } from '../api/useWorkforce'
+import { useCreateWorkforceEmployee, useUpdateWorkforceEmployee, useEmployeeDirectory, type WorkforceEmployee } from '../api/useWorkforce'
 import { useCompanies, useDepartments, useDesignations, useBranches, useGrades, useEmploymentTypes, useShifts } from '../api/useOrg'
 import { useTemplates } from '../onboarding/api/useOnboarding'
 import { sendInvite } from './api/useInvitation'
@@ -76,6 +76,8 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const { data: employmentTypes = [] } = useEmploymentTypes(companyId)
   const { data: shifts = [] } = useShifts(companyId)
   const { data: templates = [] } = useTemplates(companyId || undefined)
+  const { data: managerPage } = useEmployeeDirectory({ companyId: companyId || undefined, pageSize: 200 })
+  const managers = (managerPage?.content ?? []).filter((m) => m.id !== employee?.id)
 
   const [step, setStep] = useState<FormStep>('basic')
   const [form, setForm] = useState({
@@ -131,6 +133,10 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
       toast('Pick a Punch Location (branch) — the employee must be inside this geofence to punch in', 'error')
       return
     }
+    if (!isEdit && !companyId) {
+      toast('Create a company first (Organization → Companies), then add employees', 'error')
+      return
+    }
     try {
       if (isEdit) {
         const result = await updateEmp.mutateAsync({
@@ -141,6 +147,8 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
             lastName: form.lastName || undefined,
             email: form.email,
             phone: form.phone || undefined,
+            dateOfBirth: form.dateOfBirth || undefined,
+            gender: (form.gender as WorkforceEmployee['gender']) || undefined,
             departmentId: departmentId || undefined,
             designationId: form.designationId || undefined,
             branchId: form.branchId || undefined,
@@ -237,11 +245,17 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           {step === 'basic' && (
             <>
               {!isEdit && (
-                <Field label="Company" required>
-                  <Sel value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </Sel>
-                </Field>
+                companies.length === 0 ? (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    No company exists yet. Create one in <span className="font-semibold">Organization → Companies</span> before adding employees.
+                  </div>
+                ) : (
+                  <Field label="Company" required>
+                    <Sel value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+                      {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </Sel>
+                  </Field>
+                )
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="First Name" required><Input value={form.firstName} onChange={(e) => set('firstName', e.target.value)} placeholder="First name" /></Field>
@@ -309,6 +323,15 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   <option value="">Select designation</option>
                   {designations.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
                 </Sel>
+              </Field>
+              <Field label="Reporting Manager">
+                <Sel value={form.reportingManagerId} onChange={(e) => set('reportingManagerId', e.target.value)}>
+                  <option value="">{managers.length === 0 ? 'No other employees yet — leave routes to dept head / HR' : 'Select manager (optional)'}</option>
+                  {managers.map((m) => (
+                    <option key={m.id} value={m.id}>{[m.firstName, m.lastName].filter(Boolean).join(' ')}{m.employeeCode ? ` (${m.employeeCode})` : ''}</option>
+                  ))}
+                </Sel>
+                <p className="mt-1 text-xs text-slate-600">Leave requests route here for approval. If unset, the department head (or HR) approves.</p>
               </Field>
               <Field label="Punch Location (Branch) *">
                 <Sel value={form.branchId} onChange={(e) => set('branchId', e.target.value)}>
@@ -465,7 +488,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               )}
               <button
                 onClick={handleSubmit}
-                disabled={isPending}
+                disabled={isPending || (!isEdit && companies.length === 0)}
                 className="w-full py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
               >
                 {isPending ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Employee'}

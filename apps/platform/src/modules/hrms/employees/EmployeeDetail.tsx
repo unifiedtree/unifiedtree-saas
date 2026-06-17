@@ -1184,7 +1184,15 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
 
   const openEdit = () => {
     setCtc(structure ? String(structure.ctcAnnual) : '')
-    setLines({})
+    setEffFrom(new Date().toISOString().split('T')[0])
+    setTaxRegime((structure?.taxRegime as 'OLD' | 'NEW') ?? 'NEW')
+    setPfApplicable(structure?.pfApplicable ?? true)
+    // Pre-fill the existing component amounts so "Revise" preserves them — without
+    // this, saving a revision zeroed every line and the employee was paid ₹0.
+    // (Clear a field to drop that component; that's the explicit-removal path.)
+    const prefill: Record<string, string> = {}
+    for (const l of structure?.lines ?? []) prefill[l.componentId] = String(l.monthlyAmount)
+    setLines(prefill)
     setOpen(true)
   }
 

@@ -39,4 +39,22 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * Dedicated pool for bulk letter distribution: generates a personalized PDF
+     * per recipient and emails it out of band. Drains in-flight sends on shutdown
+     * so a queued distribution recipient isn't silently dropped.
+     */
+    @Bean(name = "letterDistributionExecutor")
+    public Executor letterDistributionExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("letter-dist-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
+    }
 }

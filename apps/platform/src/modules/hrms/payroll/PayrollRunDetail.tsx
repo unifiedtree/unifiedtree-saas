@@ -1,13 +1,13 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Play, Lock, Download, Users, IndianRupee, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Play, Lock, Download, Users, IndianRupee, CheckCircle2, AlertTriangle } from 'lucide-react'
 import {
   DataTable, Badge, Button, StatCard, Drawer, Modal, CardSkeleton, type Column,
 } from '@unifiedtree/ui-kit'
 import { Can, P } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  useRun, useRunEmployees, useProcessRun, useLockRun, useRunPayslip, downloadPayslipPdf,
+  useRun, useRunEmployees, useProcessRun, useLockRun, useRunPayslip, useRunSkipped, downloadPayslipPdf,
   MONTHS, statusTone, inr, inr2,
   type RunEmployee,
 } from '../api/usePayrollRuns'
@@ -86,6 +86,8 @@ export const PayrollRunDetail: React.FC = () => {
   const [tab, setTab] = useState<'overview' | 'employees'>('overview')
   const [slipEmp, setSlipEmp] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<null | 'process' | 'lock'>(null)
+  const [showSkipped, setShowSkipped] = useState(false)
+  const { data: skipped = [] } = useRunSkipped(id, showSkipped)
 
   if (isLoading || !run) return <div className="max-w-6xl mx-auto p-6 sm:p-8"><CardSkeleton /></div>
 
@@ -160,6 +162,22 @@ export const PayrollRunDetail: React.FC = () => {
         </div>
       </div>
 
+      {run.skippedEmployeeCount > 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-500" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-900">
+              {run.skippedEmployeeCount} employee{run.skippedEmployeeCount > 1 ? 's were' : ' was'} skipped
+            </p>
+            <p className="text-amber-800">
+              No salary structure is assigned, so no payslip was generated for them. Assign a salary structure
+              and re-process to include them.
+            </p>
+          </div>
+          <Button variant="ghost" onClick={() => setShowSkipped(true)}>View list</Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Employees" value={run.employeeCount} icon={Users} />
         <StatCard label="Gross" value={inr(run.totalGross)} icon={IndianRupee} tone="info" />
@@ -212,6 +230,20 @@ export const PayrollRunDetail: React.FC = () => {
         <div className="flex justify-end gap-2 mt-6">
           <Button variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button>
           <Button loading={process.isPending || lock.isPending} onClick={runAction}>Confirm</Button>
+        </div>
+      </Modal>
+
+      <Modal open={showSkipped} onOpenChange={setShowSkipped} title="Skipped employees"
+        description="Not paid in this run — no current salary structure assigned." size="sm">
+        <div className="mt-2 max-h-80 divide-y divide-slate-100 overflow-auto">
+          {skipped.length === 0 ? (
+            <p className="py-3 text-sm text-slate-400">No skipped employees.</p>
+          ) : skipped.map((e) => (
+            <div key={e.employeeId} className="flex items-center justify-between py-2 text-sm">
+              <span className="text-slate-700">{e.employeeName}</span>
+              <span className="font-mono text-xs text-slate-400">{e.employeeCode}</span>
+            </div>
+          ))}
         </div>
       </Modal>
     </div>

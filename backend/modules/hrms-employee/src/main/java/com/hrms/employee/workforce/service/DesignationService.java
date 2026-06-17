@@ -4,6 +4,7 @@ import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateDesignationRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.DesignationResponse;
+import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateDesignationRequest;
 import com.hrms.employee.workforce.entity.Designation;
 import com.hrms.employee.workforce.repository.DesignationRepository;
 import org.springframework.stereotype.Service;
@@ -24,10 +25,18 @@ public class DesignationService {
 
     @Transactional(readOnly = true)
     public List<DesignationResponse> listForCompany(UUID companyId, UUID departmentFilter) {
-        var rows = departmentFilter == null
-                ? repository.findAllByCompanyIdAndActiveTrueOrderByTitleAsc(companyId)
-                : repository.findAllByCompanyIdAndDepartmentIdAndActiveTrueOrderByTitleAsc(companyId, departmentFilter);
-        return rows.stream().map(this::toResponse).toList();
+        // Always include company-wide designations (no department set); when a
+        // department is selected, ALSO include that department's designations.
+        // Filtering strictly on department_id hid null-department ("global")
+        // designations from the Add-Employee form the moment a department was
+        // picked — so a designation created without a department was unusable.
+        var rows = repository.findAllByCompanyIdAndActiveTrueOrderByTitleAsc(companyId);
+        var filtered = departmentFilter == null
+                ? rows
+                : rows.stream()
+                        .filter(d -> d.getDepartmentId() == null || departmentFilter.equals(d.getDepartmentId()))
+                        .toList();
+        return filtered.stream().map(this::toResponse).toList();
     }
 
     public DesignationResponse create(CreateDesignationRequest req) {
@@ -42,6 +51,21 @@ public class DesignationService {
         d.setReportsToDesignationId(req.reportsToDesignationId());
         d.setJobResponsibilities(req.jobResponsibilities());
         d.setActive(true);
+        return toResponse(repository.save(d));
+    }
+
+    public DesignationResponse update(UUID id, UpdateDesignationRequest req) {
+        Designation d = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Designation " + id + " not found"));
+        if (!d.getTitle().equalsIgnoreCase(req.title())
+                && repository.existsByCompanyIdAndTitleIgnoreCase(d.getCompanyId(), req.title())) {
+            throw new BusinessRuleException("Designation '" + req.title() + "' already exists", "DUPLICATE_DESIGNATION");
+        }
+        d.setTitle(req.title());
+        d.setGrade(req.grade());
+        d.setDepartmentId(req.departmentId());
+        d.setReportsToDesignationId(req.reportsToDesignationId());
+        d.setJobResponsibilities(req.jobResponsibilities());
         return toResponse(repository.save(d));
     }
 

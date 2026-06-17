@@ -65,6 +65,14 @@ public class OnboardingController {
         return onboardingService.updateTemplate(id, template);
     }
 
+    @DeleteMapping("/templates/{id}")
+    @Operation(summary = "Archive (soft-delete) an onboarding template")
+    @PreAuthorize("@perm.check('hrms.onboarding.template.write')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void archiveTemplate(@PathVariable UUID id) {
+        onboardingService.archiveTemplate(id);
+    }
+
     @PostMapping("/templates/{templateId}/tasks")
     @Operation(summary = "Add a task to an onboarding template")
     @PreAuthorize("@perm.check('hrms.onboarding.template.write')")
@@ -82,6 +90,13 @@ public class OnboardingController {
     }
 
     // ── Instances ─────────────────────────────────────────────────────────
+
+    @GetMapping("/instances")
+    @Operation(summary = "List onboarding instances for the tenant (optionally filtered by status)")
+    @PreAuthorize("@perm.check('hrms.onboarding.instance.read')")
+    public List<OnboardingInstance> listInstances(@RequestParam(required = false) String status) {
+        return onboardingService.listInstances(status);
+    }
 
     @PostMapping("/instances")
     @Operation(summary = "Manually create an onboarding instance for an employee")

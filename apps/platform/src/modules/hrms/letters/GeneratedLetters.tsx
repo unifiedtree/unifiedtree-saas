@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, FileText, Download, Eye, ChevronLeft, ChevronRight } from 'lucide-react'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
@@ -13,6 +13,8 @@ import {
   downloadLetterPdf,
 } from './api/useLetters'
 import type { GeneratedLetterDto, LetterType, LetterStatus } from './api/useLetters'
+import { useCompanies } from '../api/useOrg'
+import { useEmployeeDirectory } from '../api/useWorkforce'
 
 const TYPE_STYLE: Record<LetterType, { label: string; color: string; bg: string }> = {
   OFFER:          { label: 'Offer',          color: 'text-blue-400',    bg: 'bg-blue-500/10'    },
@@ -31,13 +33,26 @@ const STATUS_STYLE: Record<LetterStatus, { label: string; color: string; bg: str
   VOID:      { label: 'Void',      color: 'text-red-400',     bg: 'bg-red-500/10'     },
 }
 
-function GenerateLetterModal({ onClose }: { onClose: () => void }) {
+function GenerateLetterModal({
+  onClose,
+  initialEmployeeId = '',
+}: {
+  onClose: () => void
+  initialEmployeeId?: string
+}) {
+  const navigate = useNavigate()
   const generate = useGenerateLetter()
   const { data: templatesPage } = useLetterTemplates()
   const templates = templatesPage?.content ?? []
+  const activeTemplates = templates.filter((t) => t.active)
+
+  const { data: companies = [] } = useCompanies()
+  const companyId = companies[0]?.id ?? ''
+  const { data: directory } = useEmployeeDirectory({ companyId, pageSize: 200 })
+  const employees = directory?.content ?? []
 
   const [templateId, setTemplateId] = useState('')
-  const [employeeId, setEmployeeId] = useState('')
+  const [employeeId, setEmployeeId] = useState(initialEmployeeId)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,6 +72,31 @@ function GenerateLetterModal({ onClose }: { onClose: () => void }) {
       <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white border border-[#E2E8F0]/60 rounded-2xl p-6 shadow-2xl">
           <h3 className="text-[#0F172A] font-semibold mb-4">Generate Letter</h3>
+          {activeTemplates.length === 0 ? (
+            <div className="space-y-4">
+              <div className="text-center py-6 text-[#64748B]">
+                <FileText size={32} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No active letter templates</p>
+                <p className="text-xs mt-1 text-slate-600">Create a template before generating letters</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/hrms/letters/templates/new')}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-[#0F172A] font-medium rounded-xl text-sm transition-colors"
+                >
+                  Create template
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-2.5 border border-[#E2E8F0] text-[#64748B] hover:text-[#0F172A] rounded-xl text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
               <label className="text-xs font-medium text-[#64748B] uppercase tracking-wider">
@@ -69,22 +109,28 @@ function GenerateLetterModal({ onClose }: { onClose: () => void }) {
                 className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500"
               >
                 <option value="">Select a template</option>
-                {templates.filter((t) => t.active).map((t) => (
+                {activeTemplates.map((t) => (
                   <option key={t.id} value={t.id}>{t.name} ({TYPE_STYLE[t.type]?.label ?? t.type})</option>
                 ))}
               </select>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-[#64748B] uppercase tracking-wider">
-                Employee ID *
+                Employee *
               </label>
-              <input
+              <select
                 required
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
-                placeholder="e.g. 3fa85f64-5717-4562-b3fc-2c963f66afa6"
-                className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              />
+                className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">Select an employee</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {[emp.firstName, emp.lastName].filter(Boolean).join(' ')} ({emp.employeeCode})
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="flex gap-3 pt-2">
               <button
@@ -103,6 +149,7 @@ function GenerateLetterModal({ onClose }: { onClose: () => void }) {
               </button>
             </div>
           </form>
+          )}
         </div>
       </div>
     </>
@@ -111,8 +158,23 @@ function GenerateLetterModal({ onClose }: { onClose: () => void }) {
 
 export const GeneratedLetters: React.FC = () => {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const employeeIdParam = searchParams.get('employeeId') ?? ''
   const [page, setPage] = useState(0)
   const [generateOpen, setGenerateOpen] = useState(false)
+
+  // Deep-link from EmployeeDetail: ?employeeId=<id> opens the modal pre-filled.
+  useEffect(() => {
+    if (employeeIdParam) setGenerateOpen(true)
+  }, [employeeIdParam])
+
+  const closeGenerate = () => {
+    setGenerateOpen(false)
+    if (employeeIdParam) {
+      searchParams.delete('employeeId')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }
 
   const { data, isLoading, error, refetch } = useGeneratedLetters(page)
   const letters: GeneratedLetterDto[] = data?.content ?? []
@@ -261,7 +323,9 @@ export const GeneratedLetters: React.FC = () => {
         </div>
       )}
 
-      {generateOpen && <GenerateLetterModal onClose={() => setGenerateOpen(false)} />}
+      {generateOpen && (
+        <GenerateLetterModal onClose={closeGenerate} initialEmployeeId={employeeIdParam} />
+      )}
     </div>
   )
 }

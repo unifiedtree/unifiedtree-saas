@@ -3,10 +3,10 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Users, Calendar, Clock, Building2, ClipboardList,
-  BarChart3, Settings, LogOut, Menu, X, ChevronRight, ChevronDown,
+  Settings, LogOut, Menu, X, ChevronRight, ChevronDown,
   UserCircle2, ShieldAlert, FileBarChart2, FileText, Bell, Search, Hexagon,
   TrendingUp, CreditCard, Package, ShoppingCart, HelpCircle, Briefcase,
-  UserCheck, Star, Receipt, DollarSign, Lock,
+  UserCheck, Star, Receipt, DollarSign, Lock, MapPin,
 } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
@@ -51,13 +51,6 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: <LayoutDashboard size={18} />,
     path: '/dashboard',
     visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'],
-  },
-  {
-    key: 'analytics',
-    label: 'Analytics',
-    icon: <BarChart3 size={18} />,
-    path: '/analytics',
-    visibleForRoles: ['SUPER_ADMIN'],
   },
   {
     key: 'myworkspace',
@@ -108,6 +101,12 @@ const MODULE_ITEMS: NavItemDef[] = [
         visibleForRoles: ['EMPLOYEE'],
       },
       {
+        label: 'Geofencing',
+        path: '/hrms/attendance/geofencing',
+        icon: <MapPin size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
+      },
+      {
         label: 'Leave',
         path: '/hrms/leave',
         icon: <Calendar size={15} />,
@@ -134,6 +133,12 @@ const MODULE_ITEMS: NavItemDef[] = [
       {
         label: 'Letters',
         path: '/hrms/letters/templates',
+        icon: <FileText size={15} />,
+        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
+      },
+      {
+        label: 'Distributions',
+        path: '/hrms/letters/distributions',
         icon: <FileText size={15} />,
         visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
       },
@@ -171,7 +176,7 @@ const MODULE_ITEMS: NavItemDef[] = [
         label: 'Salary Components',
         path: '/hrms/payroll/components',
         icon: <Receipt size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'FINANCE_LEAD'],
+        visibleForRoles: ['SUPER_ADMIN', 'FINANCE_LEAD', 'HR_MANAGER'],
       },
       {
         label: 'Payroll Runs',

@@ -89,6 +89,8 @@ export interface UpdateWorkforceEmployeePayload {
   lastName?: string
   email?: string
   phone?: string
+  dateOfBirth?: string
+  gender?: Gender
   departmentId?: string
   designationId?: string
   branchId?: string

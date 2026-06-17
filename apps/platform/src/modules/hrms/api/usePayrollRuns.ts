@@ -19,6 +19,7 @@ export interface PayrollRun {
   totalGross: number
   totalDeductions: number
   totalNet: number
+  skippedEmployeeCount: number
   processedAt?: string | null
   lockedAt?: string | null
   createdAt: string
@@ -126,6 +127,15 @@ export function useEligibleEmployees(id: string, enabled: boolean) {
   return useQuery({
     queryKey: [...KEY, 'detail', id, 'eligible'],
     queryFn: () => apiJson<EligibleEmployee[]>(`/v1/payroll/runs/${id}/eligible-employees`),
+    enabled: !!id && enabled,
+  })
+}
+
+// Employees skipped during processing for lacking a current salary structure (FIX P1-4).
+export function useRunSkipped(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...KEY, 'detail', id, 'skipped'],
+    queryFn: () => apiJson<EligibleEmployee[]>(`/v1/payroll/runs/${id}/skipped`),
     enabled: !!id && enabled,
   })
 }

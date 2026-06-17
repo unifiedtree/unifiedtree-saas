@@ -1,13 +1,13 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, ClipboardList } from 'lucide-react'
+import { Plus, ClipboardList, Archive } from 'lucide-react'
 import {
   DataTable, Badge, Drawer, TableSkeleton, EmptyState, Button,
 } from '@unifiedtree/ui-kit'
 import type { Column } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
-import { useTemplates, useCreateTemplate } from './api/useOnboarding'
+import { useTemplates, useCreateTemplate, useDeleteTemplate } from './api/useOnboarding'
 import type { OnboardingTemplate } from './api/useOnboarding'
 import { useCompanies } from '../api/useOrg'
 
@@ -105,6 +105,15 @@ export const Templates: React.FC = () => {
   const [createOpen, setCreateOpen] = useState(false)
 
   const { data: templates = [], isLoading, error, refetch } = useTemplates()
+  const del = useDeleteTemplate()
+
+  const handleDelete = (template: OnboardingTemplate) => {
+    if (!window.confirm(`Archive "${template.name}"? It will no longer be available for new hires.`)) return
+    del.mutate(template.id, {
+      onSuccess: () => toast.success('Template archived'),
+      onError: () => toast.error('Failed to archive template'),
+    })
+  }
 
   const columns: Column<OnboardingTemplate>[] = [
     {
@@ -139,6 +148,24 @@ export const Templates: React.FC = () => {
           {row.active ? 'Active' : 'Inactive'}
         </Badge>
       ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      cell: (row) =>
+        row.active ? (
+          <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDelete(row) }}
+              disabled={del.isPending}
+              className="rounded-lg p-1.5 text-text-tertiary hover:bg-status-danger-bg hover:text-status-danger-fg transition-colors disabled:opacity-40"
+              aria-label="Archive template"
+              title="Archive template"
+            >
+              <Archive size={14} />
+            </button>
+          </Can>
+        ) : null,
     },
   ]
 

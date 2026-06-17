@@ -70,6 +70,13 @@ public class PayrollRunController {
         return service.listRunEmployees(TenantContext.getTenantId(), id);
     }
 
+    /** Employees skipped during processing for lacking a current salary structure (FIX P1-4). */
+    @GetMapping("/runs/{id}/skipped")
+    @PreAuthorize("hasAuthority('payroll.runs.read')")
+    public List<PayrollRunService.EligibleEmployeeDto> skipped(@PathVariable UUID id) {
+        return service.listSkippedEmployees(TenantContext.getTenantId(), id);
+    }
+
     @PostMapping("/runs/{id}/process")
     @PreAuthorize("hasAuthority('payroll.runs.manage')")
     public PayrollRunService.RunDto process(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {

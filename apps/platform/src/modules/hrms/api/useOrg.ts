@@ -80,6 +80,15 @@ export function useCreateCompany() {
   })
 }
 
+export function useUpdateCompany() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; name: string; legalName?: string; industry?: string; currency?: string; country?: string; timezone?: string }) =>
+      apiJson<Company>(`/v1/hrms/companies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'companies'] }),
+  })
+}
+
 export function useArchiveCompany() {
   const qc = useQueryClient()
   return useMutation({
@@ -139,7 +148,7 @@ export function useDepartments(companyId: string) {
 export function useCreateDepartment() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { companyId: string; name: string; code?: string; description?: string; parentDepartmentId?: string }) =>
+    mutationFn: (data: { companyId: string; name: string; code?: string; description?: string; parentDepartmentId?: string; departmentHeadEmployeeId?: string }) =>
       apiJson<Department>('/v1/hrms/departments', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'departments'] }),
   })
@@ -150,6 +159,19 @@ export function useRenameDepartment() {
   return useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) =>
       apiJson<Department>(`/v1/hrms/departments/${id}/name?name=${encodeURIComponent(name)}`, { method: 'PATCH' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'departments'] }),
+  })
+}
+
+export function useSetDepartmentHead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, employeeId }: { id: string; employeeId?: string }) => {
+      const url = employeeId
+        ? `/v1/hrms/departments/${id}/head?employeeId=${employeeId}`
+        : `/v1/hrms/departments/${id}/head`
+      return apiJson<Department>(url, { method: 'PATCH' })
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'departments'] }),
   })
 }
@@ -181,6 +203,15 @@ export function useCreateDesignation() {
   return useMutation({
     mutationFn: (data: { companyId: string; title: string; grade?: string; departmentId?: string; jobResponsibilities?: string }) =>
       apiJson<Designation>('/v1/hrms/designations', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'designations'] }),
+  })
+}
+
+export function useUpdateDesignation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; title: string; grade?: string; departmentId?: string; jobResponsibilities?: string }) =>
+      apiJson<Designation>(`/v1/hrms/designations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'designations'] }),
   })
 }

@@ -1,6 +1,7 @@
 package com.hrms.api.leave;
 
 import com.hrms.core.dto.PageResponse;
+import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.leave.dto.LeaveApprovalRequest;
 import com.hrms.leave.dto.LeaveBalanceResponse;
 import com.hrms.leave.dto.LeaveOverviewResponse;
@@ -43,15 +44,18 @@ public class LeaveController {
     private final LeaveTypeService leaveTypeService;
     private final EmployeeRepository employeeRepository;
     private final WorkforceDepartmentRepository departmentRepository;
+    private final ApproverFallbackResolver approverFallbackResolver;
 
     public LeaveController(LeaveService leaveService,
                            LeaveTypeService leaveTypeService,
                            EmployeeRepository employeeRepository,
-                           WorkforceDepartmentRepository departmentRepository) {
+                           WorkforceDepartmentRepository departmentRepository,
+                           ApproverFallbackResolver approverFallbackResolver) {
         this.leaveService = leaveService;
         this.leaveTypeService = leaveTypeService;
         this.employeeRepository = employeeRepository;
         this.departmentRepository = departmentRepository;
+        this.approverFallbackResolver = approverFallbackResolver;
     }
 
     // ─── Employee self-service ───────────────────────────────────────────────
@@ -66,12 +70,37 @@ public class LeaveController {
         UUID employeeId = extractEmployeeId(jwt);
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
+        // Approver resolution chain (audit P0-1). The approval queue filters by
+        // approver_id, so a null approver makes the request invisible to everyone —
+        // the worst customer-facing bug on a fresh tenant. Resolve in order and
+        // NEVER persist null:
+        //   L1: the employee's explicit reporting manager
+        //   L2: the employee's department head (resolved live, so a head set AFTER
+        //       the employee was created still routes correctly)
+        //   L3: any active HR_MANAGER in the tenant   ┐ terminal fallback so a tenant
+        //   L4: any active SUPER_ADMIN in the tenant   ┘ that hasn't set up org structure
+        //       still routes leave somewhere a human will see it
+        // If even L4 fails, fail loudly at apply time so HR fixes the org structure
+        // rather than the request silently rotting.
+        UUID approverId = employee.getManagerId();
+        if (approverId == null && employee.getDepartmentId() != null) {
+            approverId = departmentRepository.findById(employee.getDepartmentId())
+                    .map(com.hrms.employee.workforce.entity.Department::getDepartmentHeadEmployeeId)
+                    .orElse(null);
+        }
+        if (approverId == null) {
+            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId())
+                    .orElseThrow(() -> new BusinessRuleException(
+                            "No approver available — assign this employee a reporting manager, set a "
+                                    + "department head, or add an HR manager before applying for leave",
+                            "NO_APPROVER_AVAILABLE"));
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(leaveService.applyLeave(
                         employeeId,
                         companyId != null ? companyId : employee.getCompanyId(),
                         request,
-                        employee.getManagerId()));
+                        approverId));
     }
 
     @Operation(summary = "Mobile leave overview - balances, recent requests, and approval count")
@@ -211,6 +240,23 @@ public class LeaveController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<LeaveTypeResponse>> listTypes(@RequestParam UUID companyId) {
         return ResponseEntity.ok(leaveTypeService.listLeaveTypes(companyId));
+    }
+
+    @Operation(summary = "Update a leave type")
+    @PutMapping("/types/{id}")
+    @PreAuthorize("hasAuthority('leave.type.write')")
+    public ResponseEntity<LeaveTypeResponse> updateType(
+            @PathVariable UUID id,
+            @Valid @RequestBody LeaveTypeRequest request) {
+        return ResponseEntity.ok(leaveTypeService.updateLeaveType(id, request));
+    }
+
+    @Operation(summary = "Deactivate (soft-delete) a leave type")
+    @DeleteMapping("/types/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('leave.type.write')")
+    public void deactivateType(@PathVariable UUID id) {
+        leaveTypeService.deactivateLeaveType(id);
     }
 
     // ─── Requester identity enrichment ───────────────────────────────────────

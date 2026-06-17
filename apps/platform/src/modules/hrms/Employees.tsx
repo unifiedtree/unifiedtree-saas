@@ -34,8 +34,12 @@ export const Employees: React.FC = () => {
   const { toast } = useToast()
   const canWrite = usePermission(P.HRMS_EMPLOYEE_WRITE)
 
-  const { data: companies = [] } = useCompanies()
+  const { data: companies = [], isLoading: companiesLoading } = useCompanies()
   const activeCompany = companies[0]
+  const canCreateCompany = usePermission(P.ORG_COMPANY_WRITE)
+  // P0-2: a fresh tenant has no companies. Adding an employee needs one, so guide
+  // the user to create a company first instead of letting the form fail cryptically.
+  const noCompany = !companiesLoading && companies.length === 0
 
   const { data: departments = [] } = useDepartments(activeCompany?.id ?? '')
   const { data: branches = [] } = useBranches(activeCompany?.id)
@@ -97,7 +101,7 @@ export const Employees: React.FC = () => {
               <Upload size={16} /> Import
             </button>
           </Can>
-          {canWrite && (
+          {canWrite && !noCompany && (
             <button
               onClick={() => setShowForm(true)}
               className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-bold rounded-xl transition-all shadow-sm shadow-primary/30"
@@ -108,6 +112,18 @@ export const Employees: React.FC = () => {
         </div>
       </div>
 
+      {noCompany ? (
+        <EmptyState
+          title="No companies yet"
+          description={canCreateCompany
+            ? 'Create a company before you can add employees.'
+            : 'Ask an admin to set up a company first.'}
+          primaryAction={canCreateCompany
+            ? { label: 'Create a company', onClick: () => navigate('/hrms/organization') }
+            : undefined}
+        />
+      ) : (
+      <>
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
@@ -267,6 +283,8 @@ export const Employees: React.FC = () => {
           </div>
         )}
       </div>
+      )}
+      </>
       )}
 
       {showForm && <EmployeeForm onClose={() => setShowForm(false)} onSuccess={() => toast('Employee added', 'success')} />}
