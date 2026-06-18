@@ -16,9 +16,11 @@ import com.hrms.leave.repository.LeaveRequestRepository;
 import com.hrms.leave.repository.LeaveTypeRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.hrms.core.tenant.TenantContext;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,7 +39,8 @@ public class LeaveService {
     private static final Logger log = LoggerFactory.getLogger(LeaveService.class);
 
     private static final String TOPIC_LEAVE_REQUESTED = "leave.requested.v1";
-    private static final String TOPIC_LEAVE_APPROVED = "leave.approved.v1";
+    private static final String TOPIC_LEAVE_APPROVED  = "leave.approved.v1";
+    private static final String TOPIC_LEAVE_CANCELLED = "leave.cancelled.v1";
 
     private final LeaveTypeRepository leaveTypeRepository;
     private final LeaveBalanceRepository leaveBalanceRepository;
@@ -46,6 +49,7 @@ public class LeaveService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final LeaveRequestMapper leaveRequestMapper;
     private final LeaveBalanceMapper leaveBalanceMapper;
+    private final JdbcTemplate jdbcTemplate;
     private final boolean kafkaEnabled;
 
     public LeaveService(
@@ -56,6 +60,7 @@ public class LeaveService {
             KafkaTemplate<String, Object> kafkaTemplate,
             LeaveRequestMapper leaveRequestMapper,
             LeaveBalanceMapper leaveBalanceMapper,
+            JdbcTemplate jdbcTemplate,
             @org.springframework.beans.factory.annotation.Value("${hrms.kafka.enabled:false}") boolean kafkaEnabled) {
         this.leaveTypeRepository = leaveTypeRepository;
         this.leaveBalanceRepository = leaveBalanceRepository;
@@ -64,7 +69,30 @@ public class LeaveService {
         this.kafkaTemplate = kafkaTemplate;
         this.leaveRequestMapper = leaveRequestMapper;
         this.leaveBalanceMapper = leaveBalanceMapper;
+        this.jdbcTemplate = jdbcTemplate;
         this.kafkaEnabled = kafkaEnabled;
+    }
+
+    private String resolveEmail(UUID employeeId, UUID tenantId) {
+        if (employeeId == null) return null;
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT email FROM auth.user_credentials WHERE employee_id = ? AND tenant_id = ? AND is_active = true LIMIT 1",
+                    String.class, employeeId, tenantId);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
+    }
+
+    private String resolveName(UUID employeeId, UUID tenantId) {
+        if (employeeId == null) return null;
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT first_name || ' ' || last_name FROM hrms.employees WHERE id = ? AND tenant_id = ? LIMIT 1",
+                    String.class, employeeId, tenantId);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
     }
 
     @Transactional
@@ -180,7 +208,11 @@ public class LeaveService {
                         endDate,
                         totalDays,
                         leaveType.getName(),
-                        Instant.now()
+                        Instant.now(),
+                        resolveName(employeeId, tenantId),
+                        resolveEmail(employeeId, tenantId),
+                        resolveEmail(approverId, tenantId),
+                        resolveName(approverId, tenantId)
                 );
                 kafkaTemplate.send(TOPIC_LEAVE_REQUESTED, tenantId.toString(), event);
                 log.debug("Published {} event for leaveRequest={}", TOPIC_LEAVE_REQUESTED, leaveRequest.getId());
@@ -264,14 +296,24 @@ public class LeaveService {
         // Publish Kafka event (skipped when Kafka disabled — see applyLeave note).
         if (kafkaEnabled) {
             try {
+                UUID tid = leaveRequest.getTenantId();
+                UUID eid = leaveRequest.getEmployeeId();
+                String ltName = leaveTypeRepository.findById(leaveRequest.getLeaveTypeId())
+                        .map(LeaveType::getName).orElse(null);
                 LeaveApprovedEvent event = new LeaveApprovedEvent(
                         leaveRequest.getId(),
-                        leaveRequest.getEmployeeId(),
-                        leaveRequest.getTenantId(),
+                        eid,
+                        tid,
                         approval.status(),
-                        Instant.now()
+                        Instant.now(),
+                        resolveEmail(eid, tid),
+                        resolveName(eid, tid),
+                        ltName,
+                        leaveRequest.getStartDate(),
+                        leaveRequest.getEndDate(),
+                        approval.comment()
                 );
-                kafkaTemplate.send(TOPIC_LEAVE_APPROVED, leaveRequest.getTenantId().toString(), event);
+                kafkaTemplate.send(TOPIC_LEAVE_APPROVED, tid.toString(), event);
                 log.debug("Published {} event for leaveRequest={}", TOPIC_LEAVE_APPROVED, leaveRequest.getId());
             } catch (Exception e) {
                 log.warn("Failed to publish {} for leaveRequest={}: {}",
@@ -349,6 +391,33 @@ public class LeaveService {
 
         leaveBalanceRepository.save(balance);
         leaveRequestRepository.save(leaveRequest);
+
+        if (kafkaEnabled) {
+            try {
+                UUID tid = leaveRequest.getTenantId();
+                String ltName = leaveTypeRepository.findById(leaveRequest.getLeaveTypeId())
+                        .map(LeaveType::getName).orElse(null);
+                LeaveCancelledEvent event = new LeaveCancelledEvent(
+                        leaveRequest.getId(),
+                        employeeId,
+                        tid,
+                        leaveRequest.getApproverId(),
+                        ltName,
+                        leaveRequest.getStartDate(),
+                        leaveRequest.getEndDate(),
+                        reason,
+                        Instant.now(),
+                        resolveName(employeeId, tid),
+                        resolveEmail(employeeId, tid),
+                        resolveEmail(leaveRequest.getApproverId(), tid),
+                        resolveName(leaveRequest.getApproverId(), tid)
+                );
+                kafkaTemplate.send(TOPIC_LEAVE_CANCELLED, tid.toString(), event);
+            } catch (Exception e) {
+                log.warn("Failed to publish {} for leaveRequest={}: {}",
+                        TOPIC_LEAVE_CANCELLED, requestId, e.getMessage());
+            }
+        }
 
         log.info("Leave request {} cancelled successfully", requestId);
     }

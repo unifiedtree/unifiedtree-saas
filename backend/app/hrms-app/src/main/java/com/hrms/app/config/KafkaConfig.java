@@ -29,6 +29,11 @@ public class KafkaConfig {
         return TopicBuilder.name("leave.approved.v1").partitions(3).replicas(1).build();
     }
 
+    @Bean
+    public NewTopic leaveCancelledTopic() {
+        return TopicBuilder.name("leave.cancelled.v1").partitions(3).replicas(1).build();
+    }
+
     // Employee lifecycle
     @Bean
     public NewTopic employeeOnboardedTopic() {

@@ -1,22 +1,22 @@
 package com.hrms.leave.dto;
 
-import com.hrms.core.enums.ApprovalStatus;
-
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
-public record LeaveApprovedEvent(
+public record LeaveCancelledEvent(
         UUID leaveRequestId,
         UUID employeeId,
         UUID tenantId,
-        ApprovalStatus status,
-        Instant occurredAt,
-        String employeeEmail,
-        String employeeName,
+        UUID approverId,
         String leaveTypeName,
         LocalDate startDate,
         LocalDate endDate,
-        String approverComment
+        String cancellationReason,
+        Instant occurredAt,
+        String employeeName,
+        String employeeEmail,
+        String approverEmail,
+        String approverName
 ) {
 }

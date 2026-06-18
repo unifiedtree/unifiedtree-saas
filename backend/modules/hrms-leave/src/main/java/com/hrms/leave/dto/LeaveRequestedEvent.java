@@ -13,6 +13,10 @@ public record LeaveRequestedEvent(
         LocalDate endDate,
         double totalDays,
         String leaveTypeName,
-        Instant occurredAt
+        Instant occurredAt,
+        String employeeName,
+        String employeeEmail,
+        String approverEmail,
+        String approverName
 ) {
 }
