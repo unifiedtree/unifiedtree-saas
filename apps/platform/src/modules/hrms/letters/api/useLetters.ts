@@ -215,6 +215,15 @@ export function useVoidLetter() {
   })
 }
 
+export function useDeleteGeneratedLetter() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiJson<void>(`/v1/letters/generated/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'letters', 'generated'] }),
+  })
+}
+
 // ── Employee self-service ─────────────────────────────────────────────────────
 
 export function useMyLetters(page = 0) {

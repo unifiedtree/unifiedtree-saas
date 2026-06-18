@@ -155,6 +155,14 @@ public class LetterGenerationService {
         return GeneratedLetterDto.from(generatedRepo.save(letter));
     }
 
+    @Transactional
+    public void deleteGeneratedLetter(UUID letterId) {
+        GeneratedLetter letter = requireLetter(letterId);
+        letter.setDeletedAt(Instant.now());
+        generatedRepo.save(letter);
+        log.info("Soft-deleted generated letter id={}", letterId);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<GeneratedLetterDto> listGenerated(Pageable pageable) {
         Page<GeneratedLetter> page = generatedRepo.findAllActive(pageable);

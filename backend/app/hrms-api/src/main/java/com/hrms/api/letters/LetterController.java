@@ -165,6 +165,14 @@ public class LetterController {
         return ResponseEntity.ok(generationService.voidLetter(id, req));
     }
 
+    @Operation(summary = "Delete a generated letter")
+    @DeleteMapping("/generated/{id}")
+    @PreAuthorize("hasAuthority('hrms.letters.delete')")
+    public ResponseEntity<Void> deleteGeneratedLetter(@PathVariable UUID id) {
+        generationService.deleteGeneratedLetter(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // ── Employee self-service ────────────────────────────────────────────────
 
     @Operation(summary = "Employee: list own letters")
