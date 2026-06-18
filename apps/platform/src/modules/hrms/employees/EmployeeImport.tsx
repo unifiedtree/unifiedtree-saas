@@ -351,7 +351,7 @@ export const EmployeeImport: React.FC = () => {
 
           <div className="flex items-center gap-3 flex-wrap">
             <button
-              onClick={() => downloadMutation.mutate(useAuthStore.getState().tenant?.subdomain ?? 'tenant')}
+              onClick={() => downloadMutation.mutate(useAuthStore.getState().tenant?.slug ?? 'tenant')}
               disabled={downloadMutation.isPending}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors"
             >
