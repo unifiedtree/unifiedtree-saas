@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.time.LocalDate;
@@ -77,6 +78,36 @@ public class EmployeeBulkImportService {
 
         log.info("BulkImport: committed {} employees for company={}", created, companyId);
         return BulkImportResult.committed(rows.size(), created);
+    }
+
+    // ── Template ─────────────────────────────────────────────────────────────
+
+    public byte[] buildTemplate() throws IOException {
+        String[] required = {"first_name", "last_name", "email", "employment_type", "date_of_joining"};
+        String[] optional = {"phone", "department", "designation", "job_title", "gender", "date_of_birth"};
+
+        try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = wb.createSheet("Employees");
+
+            // Header row
+            Row header = sheet.createRow(0);
+            int col = 0;
+            for (String h : required) header.createCell(col++).setCellValue(h);
+            for (String h : optional) header.createCell(col++).setCellValue(h);
+
+            // One example row
+            Row example = sheet.createRow(1);
+            example.createCell(0).setCellValue("Jane");
+            example.createCell(1).setCellValue("Smith");
+            example.createCell(2).setCellValue("jane.smith@example.com");
+            example.createCell(3).setCellValue("FULL_TIME");
+            example.createCell(4).setCellValue("2025-01-15");
+
+            for (int i = 0; i < required.length + optional.length; i++) sheet.autoSizeColumn(i);
+
+            wb.write(out);
+            return out.toByteArray();
+        }
     }
 
     // ── Parsing ───────────────────────────────────────────────────────────────

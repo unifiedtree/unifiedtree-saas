@@ -349,28 +349,14 @@ export const EmployeeImport: React.FC = () => {
             </ul>
           </div>
 
-          {/* TODO[backend]: template download endpoint not yet implemented.
-              Button is disabled until GET /v1/bulk-import/employees/template exists.
-              Column reference above serves as the substitute for now. */}
-          <div className="bg-white border border-border/40 rounded-xl px-4 py-3 flex items-start gap-3">
-            <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-blue-400 text-xs font-bold">i</span>
-            </div>
-            <p className="text-text-secondary text-xs leading-relaxed">
-              Template download is coming soon (backend endpoint not yet implemented).
-              Use the column reference above to prepare your file manually — save as .xlsx or .csv
-              and upload below.
-            </p>
-          </div>
-
           <div className="flex items-center gap-3 flex-wrap">
             <button
-              disabled
-              title="Template download not yet available — see column reference above"
-              className="flex items-center gap-2 px-4 py-2 bg-surface-2 text-text-secondary text-sm font-medium rounded-xl cursor-not-allowed"
+              onClick={() => downloadMutation.mutate(useAuthStore.getState().tenant?.subdomain ?? 'tenant')}
+              disabled={downloadMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors"
             >
               <Download size={15} />
-              Download template
+              {downloadMutation.isPending ? 'Downloading…' : 'Download template'}
             </button>
 
             <button

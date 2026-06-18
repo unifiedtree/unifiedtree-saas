@@ -3,7 +3,9 @@ package com.hrms.app.bulk;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,6 +23,17 @@ public class BulkImportController {
 
     public BulkImportController(EmployeeBulkImportService bulkImportService) {
         this.bulkImportService = bulkImportService;
+    }
+
+    @GetMapping("/employees/template")
+    @Operation(summary = "Download a blank XLSX template with all required and optional columns")
+    @PreAuthorize("@perm.check('hrms.employee.import')")
+    public ResponseEntity<byte[]> downloadTemplate() throws IOException {
+        byte[] xlsx = bulkImportService.buildTemplate();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"employee_import_template.xlsx\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(xlsx);
     }
 
     @PostMapping(value = "/employees/validate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
