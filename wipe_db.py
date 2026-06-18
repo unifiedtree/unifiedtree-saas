@@ -2,7 +2,7 @@ import psycopg2
 import sys
 
 try:
-    conn = psycopg2.connect("postgresql://postgres:THYqKkKaGSWTkIciCKnpTUkqpbpQdElx@junction.proxy.rlwy.net:22145/railway")
+    conn = psycopg2.connect("postgresql://postgres:PDCfIAyzVhxfrEkhYvfpBGzdgqasJnav@thomas.proxy.rlwy.net:29991/railway")
     conn.autocommit = True
     cursor = conn.cursor()
     cursor.execute("TRUNCATE TABLE attendance.face_enrollments CASCADE;")

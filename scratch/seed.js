@@ -3,7 +3,7 @@ const crypto = require('crypto');
 
 async function main() {
   const client = new Client({
-    connectionString: 'postgresql://postgres:THYqKkKaGSWTkIciCKnpTUkqpbpQdElx@junction.proxy.rlwy.net:22145/railway'
+    connectionString: 'postgresql://postgres:PDCfIAyzVhxfrEkhYvfpBGzdgqasJnav@thomas.proxy.rlwy.net:29991/railway'
   });
   await client.connect();
 
