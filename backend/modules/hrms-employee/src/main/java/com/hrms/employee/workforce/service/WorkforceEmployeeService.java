@@ -12,10 +12,13 @@ import com.hrms.employee.workforce.entity.WorkforceEmployee;
 import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import com.hrms.employee.workforce.repository.WorkforceEmployeeRepository;
 import jakarta.persistence.criteria.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,13 +35,18 @@ import java.util.UUID;
 @Transactional
 public class WorkforceEmployeeService {
 
+    private static final Logger log = LoggerFactory.getLogger(WorkforceEmployeeService.class);
+
     private final WorkforceEmployeeRepository repository;
     private final WorkforceDepartmentRepository departmentRepository;
+    private final JdbcTemplate jdbc;
 
     public WorkforceEmployeeService(WorkforceEmployeeRepository repository,
-                                    WorkforceDepartmentRepository departmentRepository) {
+                                    WorkforceDepartmentRepository departmentRepository,
+                                    JdbcTemplate jdbc) {
         this.repository = repository;
         this.departmentRepository = departmentRepository;
+        this.jdbc = jdbc;
     }
 
     // -- Directory query ----------------------------------------------------
@@ -237,6 +245,18 @@ public class WorkforceEmployeeService {
                 e.getDateOfJoining(), e.getProbationEndDate(),
                 e.getConfirmationDate(), e.getLastWorkingDay(),
                 e.getCtcAnnual(), e.getProfilePhotoUrl(),
-                e.isFaceEnrolled(), e.isActive());
+                e.isFaceEnrolled(), checkHasAccount(e.getId()), e.isActive());
+    }
+
+    private boolean checkHasAccount(UUID employeeId) {
+        try {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM auth.user_credentials WHERE employee_id = ? AND is_active = true",
+                    Integer.class, employeeId);
+            return count != null && count > 0;
+        } catch (Exception ex) {
+            log.warn("hasAccount check failed for employee {}: {}", employeeId, ex.getMessage());
+            return false;
+        }
     }
 }

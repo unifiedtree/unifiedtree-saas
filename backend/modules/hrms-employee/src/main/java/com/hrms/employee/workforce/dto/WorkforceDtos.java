@@ -183,6 +183,7 @@ public final class WorkforceDtos {
             BigDecimal ctcAnnual,
             String profilePhotoUrl,
             boolean faceEnrolled,
+            boolean hasAccount,
             boolean active
     ) { }
 

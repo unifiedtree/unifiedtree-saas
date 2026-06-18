@@ -125,11 +125,10 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
       toast('First name and email are required', 'error')
       return
     }
-    // Branch is the employee's PUNCH LOCATION — outside-zone punches are
-    // hard-blocked on the server, so an employee with no branch can never
-    // check in. Catch this here with a clear message instead of letting them
-    // hit "Outside Zone" forever on the phone.
-    if (!form.branchId) {
+    // For new employees, branch is required (punch location). For edits,
+    // warn but allow saving so Excel-imported employees without a branch
+    // can still be updated.
+    if (!form.branchId && !isEdit) {
       toast('Pick a Punch Location (branch) — the employee must be inside this geofence to punch in', 'error')
       return
     }
