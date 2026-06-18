@@ -29,6 +29,7 @@ export interface WorkforceEmployee {
   ctcAnnual?: number
   profilePhotoUrl?: string
   faceEnrolled: boolean
+  hasAccount?: boolean
   active: boolean
 }
 

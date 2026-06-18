@@ -42,5 +42,6 @@ public record EmployeeResponse(
         String bankBranchName,
         boolean isFaceEnrolled,
         String profilePhotoUrl,
+        boolean hasAccount,
         Instant createdAt
 ) {}

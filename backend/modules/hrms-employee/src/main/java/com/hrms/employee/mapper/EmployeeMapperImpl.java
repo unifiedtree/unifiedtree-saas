@@ -96,7 +96,7 @@ public class EmployeeMapperImpl implements EmployeeMapper {
         bankBranchName = employee.getBankBranchName();
         profilePhotoUrl = employee.getProfilePhotoUrl();
 
-        EmployeeResponse employeeResponse = new EmployeeResponse( id, tenantId, employeeCode, firstName, lastName, email, phone, dateOfBirth, gender, companyId, departmentId, branchId, geoFenceZoneId, weeklyOffDays, managerId, jobTitle, employmentType, employmentStatus, dateOfJoining, workLocation, salaryFrequency, monthlySalary, panNumber, aadhaarNumber, uanNumber, esiNumber, bankAccountNumber, bankIfscCode, bankName, bankBranchName, isFaceEnrolled, profilePhotoUrl, createdAt );
+        EmployeeResponse employeeResponse = new EmployeeResponse( id, tenantId, employeeCode, firstName, lastName, email, phone, dateOfBirth, gender, companyId, departmentId, branchId, geoFenceZoneId, weeklyOffDays, managerId, jobTitle, employmentType, employmentStatus, dateOfJoining, workLocation, salaryFrequency, monthlySalary, panNumber, aadhaarNumber, uanNumber, esiNumber, bankAccountNumber, bankIfscCode, bankName, bankBranchName, isFaceEnrolled, profilePhotoUrl, false, createdAt );
 
         return employeeResponse;
     }

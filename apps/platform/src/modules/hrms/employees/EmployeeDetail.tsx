@@ -216,6 +216,7 @@ function AccountCard({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceE
   const canInvite = usePermission(P.HRMS_EMPLOYEE_INVITE)
   const [busy, setBusy] = useState(false)
   const status = emp.employmentStatus ?? 'DRAFT'
+  const hasAccount = emp.hasAccount ?? (status === 'ACTIVE')
 
   const doSend = async (resend: boolean) => {
     setBusy(true)
@@ -236,7 +237,7 @@ function AccountCard({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceE
 
   return (
     <SectionCard title="Account">
-      {status === 'ACTIVE' ? (
+      {hasAccount ? (
         <div className="flex items-center gap-2 py-2">
           <CheckCircle2 size={16} className="text-emerald-500" />
           <span className="text-sm font-medium text-emerald-600">Account active</span>

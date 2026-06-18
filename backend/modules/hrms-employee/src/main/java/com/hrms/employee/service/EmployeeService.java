@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +51,7 @@ public class EmployeeService {
     private final EmployeeCodeGenerator employeeCodeGenerator;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final OnboardingService onboardingService;
+    private final JdbcTemplate jdbc;
     private final boolean kafkaEnabled;
 
     public EmployeeService(
@@ -61,6 +63,7 @@ public class EmployeeService {
             EmployeeCodeGenerator employeeCodeGenerator,
             KafkaTemplate<String, Object> kafkaTemplate,
             OnboardingService onboardingService,
+            JdbcTemplate jdbc,
             @Value("${hrms.kafka.enabled:false}") boolean kafkaEnabled) {
         this.employeeRepository = employeeRepository;
         this.emergencyContactRepository = emergencyContactRepository;
@@ -70,6 +73,7 @@ public class EmployeeService {
         this.employeeCodeGenerator = employeeCodeGenerator;
         this.kafkaTemplate = kafkaTemplate;
         this.onboardingService = onboardingService;
+        this.jdbc = jdbc;
         this.kafkaEnabled = kafkaEnabled;
     }
 
@@ -111,7 +115,30 @@ public class EmployeeService {
     @Transactional(readOnly = true)
     public EmployeeResponse getEmployee(UUID employeeId) {
         Employee employee = findEmployeeById(employeeId);
-        return employeeMapper.toResponse(employee);
+        EmployeeResponse base = employeeMapper.toResponse(employee);
+        boolean hasAccount = checkHasAccount(employee.getId());
+        return new EmployeeResponse(
+                base.id(), base.tenantId(), base.employeeCode(), base.firstName(), base.lastName(),
+                base.email(), base.phone(), base.dateOfBirth(), base.gender(),
+                base.companyId(), base.departmentId(), base.branchId(), base.geoFenceZoneId(),
+                base.weeklyOffDays(), base.managerId(), base.jobTitle(), base.employmentType(),
+                base.employmentStatus(), base.dateOfJoining(), base.workLocation(),
+                base.salaryFrequency(), base.monthlySalary(), base.panNumber(), base.aadhaarNumber(),
+                base.uanNumber(), base.esiNumber(), base.bankAccountNumber(), base.bankIfscCode(),
+                base.bankName(), base.bankBranchName(), base.isFaceEnrolled(), base.profilePhotoUrl(),
+                hasAccount, base.createdAt());
+    }
+
+    private boolean checkHasAccount(UUID employeeId) {
+        try {
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM auth.user_credentials WHERE employee_id = ? AND is_active = true",
+                    Integer.class, employeeId);
+            return count != null && count > 0;
+        } catch (Exception e) {
+            log.warn("hasAccount check failed for employee {}: {}", employeeId, e.getMessage());
+            return false;
+        }
     }
 
     @Transactional(readOnly = true)
