@@ -265,7 +265,9 @@ public class WorkforceController {
         if (invitationService != null && emp.email() != null && !emp.email().isBlank() && jwt != null) {
             try {
                 UUID actorId = UUID.fromString(jwt.getSubject());
-                invitationService.sendInvitation(emp.id(), TenantContext.getTenantId(), actorId);
+                String roleCode = (req.roleCode() != null && !req.roleCode().isBlank())
+                        ? req.roleCode() : "EMPLOYEE";
+                invitationService.sendInvitation(emp.id(), TenantContext.getTenantId(), actorId, roleCode);
             } catch (RuntimeException ex) {
                 log.warn("Invitation for {} (employee {}) failed to queue: {}",
                         emp.email(), emp.id(), ex.getMessage());

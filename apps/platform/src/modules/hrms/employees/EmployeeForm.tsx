@@ -190,6 +190,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           emergencyContactRelation: form.emergencyContactRelation || undefined,
           emergencyContactPhone: form.emergencyContactPhone || undefined,
           onboardingTemplateId: form.onboardingTemplateId || undefined,
+          roleCode: form.systemRole || 'EMPLOYEE',
         })
         if (!isEdit && sendInvitation && canInvite) {
           try {
@@ -296,8 +297,10 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   <Field label="Workspace Role" required>
                     <Sel value={form.systemRole} onChange={(e) => set('systemRole', e.target.value)}>
                       <option value="EMPLOYEE">Employee (Self-service only)</option>
-                      <option value="MANAGER">Manager (View team data, approve leaves)</option>
-                      <option value="ADMIN">Admin (Full HRMS access)</option>
+                      <option value="DEPT_MANAGER">Dept Manager (Approve team leaves)</option>
+                      <option value="HR_MANAGER">HR Manager (Full HR access)</option>
+                      <option value="FINANCE_LEAD">Finance Lead (Payroll &amp; reports)</option>
+                      <option value="SUPER_ADMIN">Super Admin (Full access)</option>
                     </Sel>
                   </Field>
                   <p className="mt-3 text-xs text-slate-500 bg-blue-50 text-blue-700 p-3 rounded-lg border border-blue-100">

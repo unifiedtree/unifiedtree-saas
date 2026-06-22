@@ -71,6 +71,11 @@ public class InvitationService {
 
     @Transactional
     public InvitationResult sendInvitation(UUID employeeId, UUID tenantId, UUID actorId) {
+        return sendInvitation(employeeId, tenantId, actorId, "EMPLOYEE");
+    }
+
+    @Transactional
+    public InvitationResult sendInvitation(UUID employeeId, UUID tenantId, UUID actorId, String roleCode) {
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
 
@@ -93,25 +98,33 @@ public class InvitationService {
             return credRepo.save(c);
         });
 
-        // Grant EMPLOYEE role if not already granted (canonical rbac.user_roles)
-        boolean hasRole = userRoleRepo.findAllByUserId(creds.getId()).stream()
-            .anyMatch(ur -> {
-                Role r = roleRepo.findById(ur.getRoleId()).orElse(null);
-                return r != null && "EMPLOYEE".equals(r.getCode());
-            });
-        if (!hasRole) {
-            roleRepo.findAll().stream()
-                .filter(r -> "EMPLOYEE".equals(r.getCode()))
-                .findFirst()
-                .ifPresent(role -> {
-                    UserRole ur = new UserRole();
-                    ur.setTenantId(tenantId);
-                    ur.setUserId(creds.getId());
-                    ur.setRoleId(role.getId());
-                    ur.setGrantedAt(OffsetDateTime.now());
-                    ur.setGrantedBy(actorId);
-                    userRoleRepo.save(ur);
-                });
+        // Grant the requested role if not already granted. Always ensure EMPLOYEE
+        // is also granted so the user retains self-service access.
+        String targetRole = (roleCode != null && !roleCode.isBlank()) ? roleCode : "EMPLOYEE";
+        List<String> toGrant = targetRole.equals("EMPLOYEE")
+                ? List.of("EMPLOYEE")
+                : List.of("EMPLOYEE", targetRole);
+
+        List<String> existingCodes = userRoleRepo.findAllByUserId(creds.getId()).stream()
+            .map(ur -> roleRepo.findById(ur.getRoleId()).map(Role::getCode).orElse(null))
+            .filter(c -> c != null)
+            .toList();
+
+        for (String code : toGrant) {
+            if (!existingCodes.contains(code)) {
+                roleRepo.findAll().stream()
+                    .filter(r -> code.equals(r.getCode()))
+                    .findFirst()
+                    .ifPresent(role -> {
+                        UserRole ur = new UserRole();
+                        ur.setTenantId(tenantId);
+                        ur.setUserId(creds.getId());
+                        ur.setRoleId(role.getId());
+                        ur.setGrantedAt(OffsetDateTime.now());
+                        ur.setGrantedBy(actorId);
+                        userRoleRepo.save(ur);
+                    });
+            }
         }
 
         // Mark invited_at

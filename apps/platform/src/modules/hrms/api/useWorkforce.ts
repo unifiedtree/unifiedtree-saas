@@ -82,6 +82,7 @@ export interface CreateWorkforceEmployeePayload {
   emergencyContactRelation?: string
   emergencyContactPhone?: string
   onboardingTemplateId?: string
+  roleCode?: string
 }
 
 export interface UpdateWorkforceEmployeePayload {

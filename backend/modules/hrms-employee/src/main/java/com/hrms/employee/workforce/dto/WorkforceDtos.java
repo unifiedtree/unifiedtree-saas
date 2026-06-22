@@ -222,7 +222,9 @@ public final class WorkforceDtos {
             // emergency
             String emergencyContactName,
             String emergencyContactRelation,
-            String emergencyContactPhone
+            String emergencyContactPhone,
+            // role to assign on invitation (defaults to EMPLOYEE if null)
+            String roleCode
     ) { }
 
     public record UpdateWorkforceEmployeeRequest(

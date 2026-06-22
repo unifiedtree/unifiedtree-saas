@@ -217,7 +217,7 @@ public class WorkspaceAccessService {
                 req.companyId(), null, first, null, req.lastName(), req.email(),
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
             WorkforceEmployeeResponse emp = workforceService.create(cr);
 
             InvitationService.InvitationResult result =
