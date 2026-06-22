@@ -15,8 +15,10 @@ interface NavChildDef {
   label: string
   path: string
   icon: React.ReactNode
-  /** Optional permission code — child is hidden unless the user holds it. */
+  /** Hidden unless the user holds this single permission. */
   perm?: string
+  /** Hidden unless the user holds AT LEAST ONE of these permissions (mirrors the route's anyOf guard). */
+  anyPerm?: string[]
 }
 
 interface NavItemDef {
@@ -25,6 +27,10 @@ interface NavItemDef {
   icon: React.ReactNode
   path?: string
   module?: string
+  /** Hidden unless the user holds this single permission. */
+  perm?: string
+  /** Hidden unless the user holds AT LEAST ONE of these permissions (mirrors the route's anyOf guard). */
+  anyPerm?: string[]
   children?: NavChildDef[]
 }
 
@@ -37,11 +43,11 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'hrms', label: 'HRMS', icon: <Users size={18} />, module: 'hrms',
     children: [
-      { label: 'Employees', path: '/hrms/employees', icon: <UserCheck size={15} /> },
-      { label: 'Attendance', path: '/hrms/attendance', icon: <Calendar size={15} /> },
-      { label: 'Geofencing', path: '/hrms/attendance/geofencing', icon: <MapPin size={15} />, perm: P.ATTENDANCE_TEAM_READ },
-      { label: 'Leave', path: '/hrms/leave', icon: <ClipboardList size={15} /> },
-      { label: 'Payroll', path: '/hrms/payroll', icon: <CreditCard size={15} /> },
+      { label: 'Employees', path: '/hrms/employees', icon: <UserCheck size={15} />, anyPerm: [P.HRMS_EMPLOYEE_READ] },
+      { label: 'Attendance', path: '/hrms/attendance', icon: <Calendar size={15} />, anyPerm: [P.HRMS_ESS_READ, P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_CHECKIN_SELF] },
+      { label: 'Geofencing', path: '/hrms/attendance/geofencing', icon: <MapPin size={15} />, anyPerm: [P.ORG_GEOFENCE_WRITE, P.ATTENDANCE_TEAM_READ] },
+      { label: 'Leave', path: '/hrms/leave', icon: <ClipboardList size={15} />, anyPerm: [P.HRMS_LEAVE_READ, P.HRMS_ESS_READ, P.LEAVE_REQUEST_SELF] },
+      { label: 'Payroll', path: '/hrms/payroll', icon: <CreditCard size={15} />, anyPerm: [P.PAYROLL_SETTINGS_READ, P.PAYROLL_RUNS_READ, P.PAYROLL_COMPONENTS_READ] },
     ],
   },
   {
@@ -79,11 +85,12 @@ const MODULE_ITEMS: NavItemDef[] = [
 ]
 
 const PLATFORM_ITEMS: NavItemDef[] = [
-  { key: 'users',    label: 'Users',      icon: <Users size={18} />,    path: '/users' },
-  { key: 'roles',    label: 'Roles',      icon: <Shield size={18} />,   path: '/roles' },
-  { key: 'audit',    label: 'Audit Logs', icon: <Bell size={18} />,     path: '/audit-logs' },
+  { key: 'users',    label: 'Users',      icon: <Users size={18} />,    path: '/users',      anyPerm: [P.WORKSPACE_USERS_READ] },
+  { key: 'roles',    label: 'Roles',      icon: <Shield size={18} />,   path: '/roles',      anyPerm: [P.RBAC_ROLE_WRITE] },
+  { key: 'audit',    label: 'Audit Logs', icon: <Bell size={18} />,     path: '/audit-logs', anyPerm: [P.AUDIT_READ] },
   { key: 'files',    label: 'Files',      icon: <Folder size={18} />,   path: '/files' },
-  { key: 'settings', label: 'Settings',   icon: <Settings size={18} />, path: '/settings' },
+  { key: 'settings', label: 'Settings',   icon: <Settings size={18} />, path: '/settings',
+    anyPerm: [P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ] },
 ]
 
 interface SidebarProps {
@@ -106,6 +113,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const toggleModule = (key: string) => {
     setOpenModules((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key])
   }
+
+  // Menu visibility = (single perm held, if required) AND (at least one anyPerm held, if required).
+  // Items with neither constraint are always visible. Mirrors the route-level anyOf guards.
+  const canSee = (it: { perm?: string; anyPerm?: string[] }) =>
+    (!it.perm || hasPermission(it.perm)) &&
+    (!it.anyPerm || it.anyPerm.some((p) => hasPermission(p)))
 
   const planColors: Record<string, string> = {
     STARTER:      'bg-brand-100 text-brand-700',
@@ -142,7 +155,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
       {/* Nav */}
       <div className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
         {/* Main */}
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter(canSee).map((item) => (
           <NavLink
             key={item.key}
             to={item.path!}
@@ -191,7 +204,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
             const isOpen = openModules.includes(item.key)
             // Hide permission-gated children (e.g. admin-only Geofencing) from
             // users who lack the capability — the route is also RouteGuard-ed.
-            const visibleChildren = item.children.filter((c) => !c.perm || hasPermission(c.perm))
+            const visibleChildren = item.children.filter(canSee)
+            // If the module is active but the user can see none of its pages, hide it entirely.
+            if (active && visibleChildren.length === 0) return null
             const hasActiveChild = visibleChildren.some((c) => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
             return (
               <div key={item.key}>
@@ -263,7 +278,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
           </p>
         )}
         {collapsed && <div className="my-2 border-t border-brand-100" />}
-        {PLATFORM_ITEMS.map((item) => (
+        {PLATFORM_ITEMS.filter(canSee).map((item) => (
           <NavLink
             key={item.key}
             to={item.path!}

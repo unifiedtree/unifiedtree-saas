@@ -114,11 +114,16 @@ export default function App() {
       >
         {/* Role-aware root — redirects based on highest role */}
         <Route path="/"          element={<RoleAwareLanding />} />
+        {/* AUTH-ONLY (intentional): the dashboard is the universal post-login landing
+            every authenticated user must reach; it carries no privileged data of its own
+            (each widget fetches behind its own permission and 403s independently). */}
         <Route path="/dashboard" element={<Dashboard />} />
-        {/* Analytics renders fabricated/mock KPIs (no backend yet) — show the
-            ComingSoon placeholder instead of fake data. Page file kept for later. */}
+        {/* AUTH-ONLY (intentional): Analytics renders mock KPIs (no backend yet) — shows the
+            ComingSoon placeholder, not real data. No permission to gate on until it ships. */}
         <Route path="/analytics" element={<ComingSoon module="analytics" />} />
-        <Route path="/settings"  element={<Settings />} />
+        {/* Gated on any settings capability so non-admins (e.g. plain EMPLOYEE) get a clean
+            "Access Restricted" instead of an empty page; matches the sidebar's Settings gate. */}
+        <Route path="/settings"  element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ]}><Settings /></RouteGuard>} />
         {/* Platform-admin pages. These were previously reachable by direct URL for any
             authenticated user (the sidebar hid them by role, and the backend 403'd the
             data fetch — so a non-admin saw a broken "failed to load" page rather than a
@@ -131,8 +136,8 @@ export default function App() {
             wildcard lets super-admins (who hold a wildcard-only grant) through, mirroring
             the gating agent's admin definition (roles ∪ permissions.has('*')). */}
         <Route path="/modules"    element={<RouteGuard anyOf={[P.PLATFORM_MODULE_MANAGE, P.TENANT_MODULE_ACTIVATE, '*']}><Modules /></RouteGuard>} />
-        {/* Files is fully mock (no backend yet) — show the ComingSoon
-            placeholder instead of fake data. Page file kept for later. */}
+        {/* AUTH-ONLY (intentional): Files is fully mock (no backend yet) — shows the
+            ComingSoon placeholder, not real data. No permission to gate on until it ships. */}
         <Route path="/files"     element={<ComingSoon module="files" />} />
 
         {/* Employee self-service landing */}
