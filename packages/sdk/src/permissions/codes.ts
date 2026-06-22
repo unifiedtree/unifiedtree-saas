@@ -85,7 +85,6 @@ export const P = {
   HRMS_LEAVE_APPROVE_L1:           'hrms.leave.approve.l1',
   HRMS_LEAVE_APPROVE_L2:           'hrms.leave.approve.l2',
   HRMS_LEAVE_READ:                 'hrms.leave.read',
-  HRMS_LEAVE_WRITE:                'hrms.leave.write',
 
   // ── HRMS: Payroll ─────────────────────────────────────────────────────────
   HRMS_PAYROLL_READ:               'hrms.payroll.read',
@@ -116,7 +115,6 @@ export const P = {
   // ── Leave ─────────────────────────────────────────────────────────────────
   LEAVE_BALANCE_READ:              'leave.balance.read',
   LEAVE_REQUEST_SELF:              'leave.request.self',
-  LEAVE_REQUEST_APPROVE:           'leave.request.approve',
   LEAVE_TYPE_WRITE:                'leave.type.write',
 
   // ── Org ───────────────────────────────────────────────────────────────────

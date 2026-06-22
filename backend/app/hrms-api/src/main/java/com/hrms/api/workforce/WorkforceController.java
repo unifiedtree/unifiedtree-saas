@@ -105,7 +105,7 @@ public class WorkforceController {
 
     // -- Companies -----------------------------------------------------------
     @GetMapping("/companies")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('org.company.read') or hasAuthority('platform.admin')")
     public List<CompanyResponse> listCompanies() {
         return companies.list();
     }
@@ -118,7 +118,7 @@ public class WorkforceController {
     }
 
     @GetMapping("/companies/{id}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('org.company.read') or hasAuthority('platform.admin')")
     public CompanyResponse getCompany(@PathVariable UUID id) {
         return companies.get(id);
     }
@@ -139,7 +139,7 @@ public class WorkforceController {
 
     // -- Branches ------------------------------------------------------------
     @GetMapping("/branches")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('org.company.read') or hasAuthority('platform.admin')")
     public List<BranchResponse> listBranches(@RequestParam(required = false) UUID companyId) {
         return companyId == null ? branches.listAll() : branches.listForCompany(companyId);
     }
@@ -167,7 +167,7 @@ public class WorkforceController {
 
     // -- Departments ---------------------------------------------------------
     @GetMapping("/departments")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('hrms.department.read') or hasAuthority('platform.admin')")
     public List<DepartmentResponse> listDepartments(@RequestParam UUID companyId) {
         return departments.listForCompany(companyId);
     }
@@ -202,7 +202,7 @@ public class WorkforceController {
 
     // -- Designations --------------------------------------------------------
     @GetMapping("/designations")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('hrms.designation.read') or hasAuthority('platform.admin')")
     public List<DesignationResponse> listDesignations(@RequestParam UUID companyId,
                                                       @RequestParam(required = false) UUID departmentId) {
         return designations.listForCompany(companyId, departmentId);
@@ -309,7 +309,7 @@ public class WorkforceController {
 
     // -- Contractors ---------------------------------------------------------
     @GetMapping("/contractors")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    @PreAuthorize("hasAuthority('hrms.contractor.read') or hasAuthority('platform.admin')")
     public List<ContractorResponse> listContractors(@RequestParam UUID companyId) {
         return contractors.listForCompany(companyId);
     }

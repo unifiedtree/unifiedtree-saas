@@ -55,18 +55,30 @@ test('finance is denied admin data endpoints (403)', async ({ apiRequest }) => {
   }
 })
 
-// ── OBSERVATION (not a restriction) — FINANCE_LEAD is broader than its name implies. ──
-test('OBSERVATION: finance also holds leave-approve + letters perms (separation-of-duties)', async ({ apiRequest }) => {
-  // Ground truth: FINANCE_LEAD has hrms.leave.approve.l1+l2, hrms.leave.write, and full
-  // hrms.letters.* (incl template.create/delete) + hrms.employee.import — HR functions, not
-  // finance. These pass (the perms are real); FLAGGED as a separation-of-duties concern for
-  // product review (see report / memory). Not failed — this documents current behavior.
-  const leave = await apiRequest('/api/v1/leave/approvals/pending')
-  const letters = await apiRequest('/api/v1/letters/templates')
-  expect(leave.status, 'finance can read leave approvals (has leave.read+approve)').toBe(200)
-  expect(letters.status, 'finance can read letter templates (has letters.template.read)').toBe(200)
-  test.info().annotations.push({
-    type: 'issue',
-    description: 'FINANCE_LEAD over-privileged: leave approve L1+L2 + full letters management + employee.import. Confirm intended vs over-grant (filed).',
+// ── Separation of duties (enforced by migration V066) ──
+// FINANCE_LEAD must NOT hold HR-domain powers: leave approval, attendance
+// regularization approval, employee bulk-import, or letter-template authoring.
+// It KEEPS finance-appropriate access: payroll, reports, and operating on
+// letters (read/generate/send/void + template.read).
+test('finance is denied leave approval (separation of duties, 403)', async ({ apiRequest }) => {
+  const l1 = await apiRequest('/api/v1/leave/approvals/pending')
+  const l2 = await apiRequest('/api/v1/leave/approvals/pending-l2')
+  expect(l1.status, 'finance must NOT approve L1 leave (V066 revoked hrms.leave.approve.l1)').toBe(403)
+  expect(l2.status, 'finance must NOT approve L2 leave (V066 revoked hrms.leave.approve.l2)').toBe(403)
+})
+
+test('finance cannot author letter templates but can read them', async ({ apiRequest }) => {
+  // template.read kept (needed to generate letters); create/update/delete revoked in V066
+  const read = await apiRequest('/api/v1/letters/templates')
+  expect(read.status, 'finance keeps letters.template.read').toBe(200)
+  const create = await apiRequest('/api/v1/letters/templates', {
+    method: 'POST',
+    body: JSON.stringify({ name: `fin-tpl-${Date.now()}`, body: 'x', category: 'OTHER' }),
   })
+  expect(create.status, 'finance must NOT create templates (V066 revoked letters.template.create)').toBe(403)
+})
+
+test('finance cannot bulk-import employees (403)', async ({ apiRequest }) => {
+  const res = await apiRequest('/api/v1/bulk-import/employees/template')
+  expect(res.status, 'finance must NOT import employees (V066 revoked hrms.employee.import)').toBe(403)
 })
