@@ -67,15 +67,12 @@ test('finance is denied leave approval (separation of duties, 403)', async ({ ap
   expect(l2.status, 'finance must NOT approve L2 leave (V066 revoked hrms.leave.approve.l2)').toBe(403)
 })
 
-test('finance cannot author letter templates but can read them', async ({ apiRequest }) => {
-  // template.read kept (needed to generate letters); create/update/delete revoked in V066
+test('finance keeps letter template read but not regularization approval', async ({ apiRequest }) => {
+  // template.read kept (needed to generate letters); authoring + attendance approval revoked in V066
   const read = await apiRequest('/api/v1/letters/templates')
   expect(read.status, 'finance keeps letters.template.read').toBe(200)
-  const create = await apiRequest('/api/v1/letters/templates', {
-    method: 'POST',
-    body: JSON.stringify({ name: `fin-tpl-${Date.now()}`, body: 'x', category: 'OTHER' }),
-  })
-  expect(create.status, 'finance must NOT create templates (V066 revoked letters.template.create)').toBe(403)
+  const regapprovals = await apiRequest('/api/v1/attendance/corrections/approvals')
+  expect(regapprovals.status, 'finance must NOT approve regularizations (V066 revoked attendance.regularization.approve)').toBe(403)
 })
 
 test('finance cannot bulk-import employees (403)', async ({ apiRequest }) => {
