@@ -21,31 +21,32 @@ const STEPS: { key: FormStep; label: string }[] = [
   { key: 'emergency', label: 'Emergency' },
 ]
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="block text-xs font-medium text-text-secondary mb-1.5">
         {label} {required && <span className="text-danger">*</span>}
       </label>
       {children}
+      {error && <p className="mt-1 text-xs text-red-500 font-medium">{error}</p>}
     </div>
   )
 }
 
-function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { error?: boolean }) {
   return (
     <input
       {...props}
-      className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-primary transition-colors"
+      className={`w-full bg-white border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none transition-colors ${error ? 'border-red-400 focus:border-red-500 bg-red-50' : 'border-border/60 focus:border-primary'}`}
     />
   )
 }
 
-function Sel({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+function Sel({ error, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { error?: boolean }) {
   return (
     <select
       {...props}
-      className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
+      className={`w-full bg-white border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none transition-colors ${error ? 'border-red-400 focus:border-red-500 bg-red-50' : 'border-border/60 focus:border-primary'}`}
     >
       {children}
     </select>
@@ -117,29 +118,28 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     systemRole: 'EMPLOYEE',
   })
 
-  const set = (key: string, value: string) => setForm((p) => ({ ...p, [key]: value }))
+  const [errors, setErrors] = React.useState<Record<string, string>>({})
+  const set = (key: string, value: string) => {
+    setForm((p) => ({ ...p, [key]: value }))
+    if (errors[key]) setErrors((p) => ({ ...p, [key]: '' }))
+  }
 
   const handleSubmit = async () => {
-    // Double-submit guard: even if the disabled-prop briefly flickers between
-    // mutations completing and the modal unmounting, refuse to fire a second
-    // request. Without this, an over-eager second click on a stale form
-    // produces a duplicate that the backend rejects with 422.
     if (createEmp.isPending || updateEmp.isPending) return
-    if (!form.firstName.trim() || !form.email.trim()) {
-      toast('First name and email are required', 'error')
+
+    const errs: Record<string, string> = {}
+    if (!form.firstName.trim()) errs.firstName = 'First name is required'
+    if (!form.email.trim()) errs.email = 'Work email is required'
+    if (!isEdit && !companyId) errs.companyId = 'Select a company — create one in Organization → Companies first'
+    if (!isEdit && !form.branchId) errs.branchId = 'Select a Punch Location so the employee can clock in'
+
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs)
+      if (errs.firstName || errs.email || errs.companyId) setStep('basic')
+      else if (errs.branchId) setStep('work')
       return
     }
-    // For new employees, branch is required (punch location). For edits,
-    // warn but allow saving so Excel-imported employees without a branch
-    // can still be updated.
-    if (!form.branchId && !isEdit) {
-      toast('Pick a Punch Location (branch) — the employee must be inside this geofence to punch in', 'error')
-      return
-    }
-    if (!isEdit && !companyId) {
-      toast('Create a company first (Organization → Companies), then add employees', 'error')
-      return
-    }
+    setErrors({})
     try {
       if (isEdit) {
         const result = await updateEmp.mutateAsync({
@@ -250,23 +250,24 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
             <>
               {!isEdit && (
                 companies.length === 0 ? (
-                  <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <div className={`rounded-xl border px-4 py-3 text-sm ${errors.companyId ? 'border-red-400 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
                     No company exists yet. Create one in <span className="font-semibold">Organization → Companies</span> before adding employees.
+                    {errors.companyId && <p className="mt-1 font-semibold text-red-600">{errors.companyId}</p>}
                   </div>
                 ) : (
-                  <Field label="Company" required>
-                    <Sel value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+                  <Field label="Company" required error={errors.companyId}>
+                    <Sel error={!!errors.companyId} value={companyId} onChange={(e) => { setCompanyId(e.target.value); setErrors(p => ({ ...p, companyId: '' })) }}>
                       {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </Sel>
                   </Field>
                 )
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="First Name" required><Input value={form.firstName} onChange={(e) => set('firstName', e.target.value)} placeholder="First name" /></Field>
+                <Field label="First Name" required error={errors.firstName}><Input error={!!errors.firstName} value={form.firstName} onChange={(e) => set('firstName', e.target.value)} placeholder="First name" /></Field>
                 <Field label="Last Name"><Input value={form.lastName} onChange={(e) => set('lastName', e.target.value)} placeholder="Last name" /></Field>
               </div>
               <Field label="Middle Name"><Input value={form.middleName} onChange={(e) => set('middleName', e.target.value)} placeholder="Middle name" /></Field>
-              <Field label="Work Email" required><Input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="employee@company.com" /></Field>
+              <Field label="Work Email" required error={errors.email}><Input error={!!errors.email} type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="employee@company.com" /></Field>
               <Field label="Phone"><Input type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+91 9876543210" /></Field>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Date of Birth"><Input type="date" value={form.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} /></Field>
@@ -339,8 +340,8 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </Sel>
                 <p className="mt-1 text-xs text-slate-600">Leave requests route here for approval. If unset, the department head (or HR) approves.</p>
               </Field>
-              <Field label="Punch Location (Branch) *">
-                <Sel value={form.branchId} onChange={(e) => set('branchId', e.target.value)}>
+              <Field label="Punch Location (Branch)" required={!isEdit} error={errors.branchId}>
+                <Sel error={!!errors.branchId} value={form.branchId} onChange={(e) => set('branchId', e.target.value)}>
                   <option value="">
                     {branches.length === 0 ? 'No branches configured — set up in Organization' : 'Select branch'}
                   </option>
