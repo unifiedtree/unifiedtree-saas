@@ -46,6 +46,12 @@ public class RbacController {
         rbac.setRolePermissions(roleId, permissionCodes);
     }
 
+    @GetMapping("/users/{userId}/roles")
+    @PreAuthorize("hasAuthority('rbac.role.write') or hasAuthority('platform.admin')")
+    public RbacService.UserRolesView getUserRoles(@PathVariable UUID userId) {
+        return rbac.getUserRoles(userId);
+    }
+
     @PostMapping("/users/{userId}/roles/{roleId}")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('rbac.role.write')")

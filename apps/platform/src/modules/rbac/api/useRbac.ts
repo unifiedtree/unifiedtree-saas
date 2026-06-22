@@ -59,28 +59,37 @@ export function useSetRolePermissions(roleId: string) {
   })
 }
 
+export interface UserRolesView {
+  userId: string
+  roles: RbacRole[]
+  effectivePermissions: string[]
+}
+
+/** A user's assigned roles + the flattened permissions they grant. */
+export function useUserRoles(userId: string | null) {
+  return useQuery({
+    queryKey: ['rbac', 'user-roles', userId],
+    queryFn: () => apiJson<UserRolesView>(`/v1/rbac/users/${userId}/roles`),
+    enabled: !!userId,
+  })
+}
+
 export function useGrantRole() {
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
       apiJson<unknown>(`/v1/rbac/users/${userId}/roles/${roleId}`, { method: 'POST' }),
+    onSuccess: (_d, { userId }) =>
+      qc.invalidateQueries({ queryKey: ['rbac', 'user-roles', userId] }),
   })
 }
 
 export function useRevokeRole() {
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
       apiJson<void>(`/v1/rbac/users/${userId}/roles/${roleId}`, { method: 'DELETE' }),
+    onSuccess: (_d, { userId }) =>
+      qc.invalidateQueries({ queryKey: ['rbac', 'user-roles', userId] }),
   })
 }
-
-// TODO[backend]: POST /v1/rbac/roles — create role (endpoint not yet implemented)
-// export function useCreateRole() { ... }
-
-// TODO[backend]: PUT /v1/rbac/roles/{id} — update role metadata (endpoint not yet implemented)
-// export function useUpdateRole(roleId: string) { ... }
-
-// TODO[backend]: DELETE /v1/rbac/roles/{id} — delete role (endpoint not yet implemented)
-// export function useDeleteRole() { ... }
-
-// TODO[backend]: GET /v1/rbac/users/{userId}/roles — list user roles (endpoint not yet implemented)
-// export function useUserRoles(userId: string) { ... }

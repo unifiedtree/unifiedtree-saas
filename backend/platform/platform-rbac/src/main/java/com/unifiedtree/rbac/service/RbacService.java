@@ -70,6 +70,19 @@ public class RbacService {
             .distinct().sorted().toList();
     }
 
+    /** A user's assigned roles plus the flattened set of permissions they grant. */
+    public record UserRolesView(UUID userId, List<Role> roles, List<String> effectivePermissions) {}
+
+    @Transactional(readOnly = true)
+    public UserRolesView getUserRoles(UUID userId) {
+        List<UUID> roleIds = userRoleRepo.findAllByUserId(userId)
+            .stream().map(UserRole::getRoleId).toList();
+        List<Role> roles = roleIds.isEmpty()
+            ? List.of()
+            : roleRepo.findAllById(roleIds);
+        return new UserRolesView(userId, roles, permissionsForUser(userId));
+    }
+
     public UserRole grant(UUID userId, UUID roleId) {
         UUID tenantId = TenantContext.requireTenantId();
         roleRepo.findById(roleId).orElseThrow(() ->

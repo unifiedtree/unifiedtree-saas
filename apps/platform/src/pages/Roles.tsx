@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { Shield, Info } from 'lucide-react'
+import { Shield, Search, X, UserCog } from 'lucide-react'
 import {
   DataTable, Badge, Drawer, Tabs, TabsList, TabsTrigger, TabsContent,
   TableSkeleton, EmptyState, Button,
@@ -9,8 +9,10 @@ import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
 import {
   useRoles, usePermissionsCatalogue, useRolePermissions, useSetRolePermissions,
+  useUserRoles, useGrantRole, useRevokeRole,
 } from '@/modules/rbac/api/useRbac'
 import type { RbacRole, RbacPermission } from '@/modules/rbac/api/useRbac'
+import { useWorkspaceUsers, workspaceUserDisplayName } from '@/modules/rbac/api/useWorkspaceAccess'
 
 // ── Permission Drawer ──────────────────────────────────────────────────────────
 
@@ -163,6 +165,166 @@ function PermissionsDrawer({
   )
 }
 
+// ── Assignments tab ─────────────────────────────────────────────────────────────
+
+function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
+  const { data: users = [], isLoading: usersLoading } = useWorkspaceUsers()
+  const [search, setSearch] = useState('')
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const { data: userRoles, isLoading: userRolesLoading } = useUserRoles(selectedUserId)
+  const grant = useGrantRole()
+  const revoke = useRevokeRole()
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return users
+    return users.filter(
+      (u) => u.email.toLowerCase().includes(q) || workspaceUserDisplayName(u).toLowerCase().includes(q),
+    )
+  }, [users, search])
+
+  const selectedUser = users.find((u) => u.userId === selectedUserId)
+  const assignedRoleIds = new Set((userRoles?.roles ?? []).map((r) => r.id))
+  const availableRoles = roles.filter((r) => !assignedRoleIds.has(r.id))
+  const busy = grant.isPending || revoke.isPending
+
+  const handleGrant = (roleId: string) => {
+    if (!selectedUserId || !roleId) return
+    grant.mutate({ userId: selectedUserId, roleId }, {
+      onSuccess: () => toast.success('Role granted'),
+      onError: () => toast.error('Failed to grant role'),
+    })
+  }
+  const handleRevoke = (roleId: string, label: string) => {
+    if (!selectedUserId) return
+    revoke.mutate({ userId: selectedUserId, roleId }, {
+      onSuccess: () => toast.success(`Removed ${label}`),
+      onError: () => toast.error('Failed to revoke role'),
+    })
+  }
+
+  return (
+    <div className="grid gap-4 md:grid-cols-[300px_1fr]">
+      {/* User list */}
+      <div className="rounded-xl border border-border-default bg-bg-surface overflow-hidden">
+        <div className="relative border-b border-border-default p-2.5">
+          <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search users…"
+            className="w-full rounded-lg border border-border-default bg-white py-1.5 pl-8 pr-3 text-sm focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div className="max-h-[60vh] overflow-y-auto">
+          {usersLoading ? (
+            <div className="p-4 text-sm text-text-tertiary">Loading users…</div>
+          ) : filtered.length === 0 ? (
+            <div className="p-4 text-sm text-text-tertiary">No users match “{search}”.</div>
+          ) : (
+            filtered.map((u) => (
+              <button
+                key={u.userId}
+                onClick={() => setSelectedUserId(u.userId)}
+                className={`block w-full border-b border-border-default/40 px-3 py-2 text-left transition-colors hover:bg-interactive-hover ${
+                  selectedUserId === u.userId ? 'bg-accent-subtle' : ''
+                }`}
+              >
+                <p className="truncate text-sm font-medium text-text-primary">{workspaceUserDisplayName(u)}</p>
+                <p className="truncate text-xs text-text-tertiary">{u.email}</p>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Detail panel */}
+      <div className="rounded-xl border border-border-default bg-bg-surface p-5">
+        {!selectedUser ? (
+          <div className="flex h-full min-h-[200px] flex-col items-center justify-center text-center text-text-tertiary">
+            <UserCog size={28} className="mb-2" />
+            <p className="text-sm">Select a user to view and manage their role assignments.</p>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <div>
+              <h3 className="text-base font-semibold text-text-primary">{workspaceUserDisplayName(selectedUser)}</h3>
+              <p className="text-sm text-text-secondary">{selectedUser.email}</p>
+            </div>
+
+            {/* Assigned roles */}
+            <section>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Assigned roles</p>
+              {userRolesLoading ? (
+                <p className="text-sm text-text-tertiary">Loading…</p>
+              ) : (userRoles?.roles.length ?? 0) === 0 ? (
+                <p className="text-sm text-text-tertiary">No roles assigned.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {userRoles!.roles.map((r) => (
+                    <span
+                      key={r.id}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-slate-50 py-1 pl-3 pr-1.5 text-sm text-text-primary"
+                    >
+                      {r.displayName}
+                      <button
+                        onClick={() => handleRevoke(r.id, r.displayName)}
+                        disabled={busy}
+                        title="Revoke role"
+                        className="rounded-full p-0.5 text-text-tertiary hover:bg-red-100 hover:text-red-600 disabled:opacity-40"
+                      >
+                        <X size={13} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Grant a role */}
+            <section>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Grant a role</p>
+              <select
+                value=""
+                disabled={busy || availableRoles.length === 0}
+                onChange={(e) => handleGrant(e.target.value)}
+                className="w-full max-w-sm rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
+              >
+                <option value="">
+                  {availableRoles.length === 0 ? 'All roles already assigned' : 'Select a role to grant…'}
+                </option>
+                {availableRoles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.displayName} {r.systemRole ? '(system)' : '(tenant)'}
+                  </option>
+                ))}
+              </select>
+            </section>
+
+            {/* Effective permissions */}
+            <section>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                Effective permissions ({userRoles?.effectivePermissions.length ?? 0})
+              </p>
+              {(userRoles?.effectivePermissions.length ?? 0) === 0 ? (
+                <p className="text-sm text-text-tertiary">No permissions — assign a role above.</p>
+              ) : (
+                <div className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
+                  {userRoles!.effectivePermissions.map((p) => (
+                    <code key={p} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-text-secondary">
+                      {p}
+                    </code>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export const Roles: React.FC = () => {
@@ -304,17 +466,11 @@ export const Roles: React.FC = () => {
 
         {/* ── Tab: Assignments ────────────────────────────────────────────── */}
         <TabsContent value="assignments" className="mt-4">
-          <div className="flex flex-col items-center justify-center rounded-xl border border-border-default bg-bg-surface p-10 text-center space-y-3">
-            <Info size={32} className="text-text-tertiary" />
-            <h3 className="font-semibold text-text-primary">User role assignments</h3>
-            <p className="max-w-md text-sm text-text-secondary">
-              Assigning roles to users requires a user-search endpoint and
-              GET&nbsp;/v1/rbac/users/&#123;userId&#125;/roles — both pending backend
-              implementation. Grant and revoke hooks are ready in{' '}
-              <code className="text-xs font-mono">useRbac.ts</code> and will be wired
-              once those endpoints ship.
-            </p>
-          </div>
+          {rolesLoading ? (
+            <TableSkeleton />
+          ) : (
+            <AssignmentsTab roles={roles} />
+          )}
         </TabsContent>
 
         {/* ── Tab: Permission Catalogue ───────────────────────────────────── */}
