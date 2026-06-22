@@ -23,19 +23,19 @@ function PermissionsDrawer({
   permissions: RbacPermission[]
   onClose: () => void
 }) {
-  const { data: currentPerms, isLoading: loadingPerms } = useRolePermissions(role.id)
+  const { data: currentPerms, isLoading: loadingPerms, isError: permsError, refetch: refetchPerms, isSuccess: permsLoaded } = useRolePermissions(role.id)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [initialised, setInitialised] = useState(false)
   const setPerms = useSetRolePermissions(role.id)
   const isSystemRole = role.systemRole
 
-  // Pre-load existing permissions once they arrive
+  // Pre-load existing permissions once the query succeeds (handles empty array correctly)
   React.useEffect(() => {
-    if (currentPerms && !initialised) {
-      setSelected(new Set(currentPerms))
+    if (permsLoaded && !initialised) {
+      setSelected(new Set(currentPerms ?? []))
       setInitialised(true)
     }
-  }, [currentPerms, initialised])
+  }, [permsLoaded, initialised, currentPerms])
 
   const byModule = useMemo(
     () =>
@@ -88,6 +88,11 @@ function PermissionsDrawer({
 
         {loadingPerms ? (
           <div className="py-8 text-center text-sm text-text-tertiary">Loading current permissions…</div>
+        ) : permsError ? (
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-center space-y-2">
+            <p className="text-sm text-red-400">Failed to load current permissions</p>
+            <button onClick={() => refetchPerms()} className="text-xs text-red-300 underline hover:text-red-200">Retry</button>
+          </div>
         ) : (
           <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
             {Object.entries(byModule).sort(([a], [b]) => a.localeCompare(b)).map(([module, perms]) => (
