@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { Shield, Search, X, UserCog } from 'lucide-react'
+import { Shield, Search, X, UserCog, Plus } from 'lucide-react'
 import {
   DataTable, Badge, Drawer, Tabs, TabsList, TabsTrigger, TabsContent,
   TableSkeleton, EmptyState, Button,
@@ -10,9 +10,12 @@ import { Can, P } from '@unifiedtree/sdk'
 import {
   useRoles, usePermissionsCatalogue, useRolePermissions, useSetRolePermissions,
   useUserRoles, useGrantRole, useRevokeRole,
+  useCreateRole, useUpdateRole, useDeleteRole,
 } from '@/modules/rbac/api/useRbac'
 import type { RbacRole, RbacPermission } from '@/modules/rbac/api/useRbac'
 import { useWorkspaceUsers, workspaceUserDisplayName } from '@/modules/rbac/api/useWorkspaceAccess'
+
+type RoleEditorState = { mode: 'create' | 'edit' | 'clone'; role?: RbacRole }
 
 // ── Permission Drawer ──────────────────────────────────────────────────────────
 
@@ -325,11 +328,138 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
   )
 }
 
+// ── Role editor (create / edit / clone) ─────────────────────────────────────────
+
+function RoleEditorModal({ state, onClose }: { state: RoleEditorState; onClose: () => void }) {
+  const { mode, role } = state
+  const isCreate = mode === 'create' || mode === 'clone'
+  const create = useCreateRole()
+  const update = useUpdateRole()
+
+  const [code, setCode] = useState(mode === 'clone' && role ? `${role.code}_COPY` : '')
+  const [displayName, setDisplayName] = useState(
+    mode === 'edit' && role ? role.displayName : mode === 'clone' && role ? `${role.displayName} (Copy)` : '',
+  )
+  const [description, setDescription] = useState(mode === 'edit' && role ? role.description ?? '' : '')
+
+  const busy = create.isPending || update.isPending
+  const title = mode === 'create' ? 'New role' : mode === 'clone' ? `Clone “${role?.displayName}”` : `Edit “${role?.displayName}”`
+
+  const submit = () => {
+    if (isCreate) {
+      if (!code.trim() || !displayName.trim()) { toast.error('Role code and name are required'); return }
+      create.mutate(
+        {
+          code: code.trim().toUpperCase().replace(/\s+/g, '_'),
+          displayName: displayName.trim(),
+          description: description.trim() || undefined,
+          cloneFromRoleId: mode === 'clone' ? role?.id : undefined,
+        },
+        {
+          onSuccess: () => { toast.success(mode === 'clone' ? 'Role cloned' : 'Role created'); onClose() },
+          onError: (e: unknown) => {
+            const msg = (e as { message?: string })?.message ?? ''
+            toast.error(msg.includes('ROLE_CODE_DUPLICATE') ? 'That role code already exists in this workspace' : 'Failed to create role')
+          },
+        },
+      )
+    } else {
+      if (!displayName.trim()) { toast.error('Name is required'); return }
+      update.mutate(
+        { roleId: role!.id, displayName: displayName.trim(), description: description.trim() || undefined },
+        {
+          onSuccess: () => { toast.success('Role updated'); onClose() },
+          onError: () => toast.error('Failed to update role'),
+        },
+      )
+    }
+  }
+
+  return (
+    <Drawer open onOpenChange={(o) => { if (!o) onClose() }} title={title}>
+      <div className="space-y-4">
+        {isCreate && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-text-secondary">Role code <span className="text-danger">*</span></label>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="e.g. REGIONAL_HR"
+              className="w-full rounded-xl border border-border/60 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-text-tertiary">Uppercase identifier, unique within your workspace. Spaces become underscores.</p>
+          </div>
+        )}
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-text-secondary">Display name <span className="text-danger">*</span></label>
+          <input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="e.g. Regional HR"
+            className="w-full rounded-xl border border-border/60 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-text-secondary">Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            placeholder="What is this role for?"
+            className="w-full rounded-xl border border-border/60 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          />
+        </div>
+        {mode === 'clone' && role && (
+          <p className="rounded-lg bg-slate-50 border border-border-default px-3 py-2 text-xs text-text-secondary">
+            Permissions will be copied from <span className="font-medium text-text-primary">{role.displayName}</span>. You can adjust them afterward via “Edit permissions”.
+          </p>
+        )}
+        <div className="flex gap-2 border-t border-border-default pt-4">
+          <Button size="sm" loading={busy} onClick={submit}>{isCreate ? 'Create role' : 'Save changes'}</Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+    </Drawer>
+  )
+}
+
+function DeleteRoleConfirm({ role, onClose }: { role: RbacRole; onClose: () => void }) {
+  const del = useDeleteRole()
+  return (
+    <Drawer open onOpenChange={(o) => { if (!o) onClose() }} title={`Delete “${role.displayName}”?`}>
+      <div className="space-y-4">
+        <p className="text-sm text-text-secondary">
+          This permanently deletes the <span className="font-mono text-xs">{role.code}</span> role, its permission set,
+          and removes it from every user who currently holds it. This cannot be undone.
+        </p>
+        <div className="flex gap-2 border-t border-border-default pt-4">
+          <Button
+            size="sm"
+            loading={del.isPending}
+            onClick={() =>
+              del.mutate(role.id, {
+                onSuccess: () => { toast.success('Role deleted'); onClose() },
+                onError: () => toast.error('Failed to delete role'),
+              })
+            }
+            className="bg-red-600 hover:bg-red-700"
+          >
+            Delete role
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+        </div>
+      </div>
+    </Drawer>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export const Roles: React.FC = () => {
   const [activeTab, setActiveTab] = useState('roles')
   const [drawerRole, setDrawerRole] = useState<RbacRole | null>(null)
+  const [editorState, setEditorState] = useState<RoleEditorState | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<RbacRole | null>(null)
   const [moduleFilter, setModuleFilter] = useState('')
 
   const { data: roles = [], isLoading: rolesLoading, error: rolesError, refetch: refetchRoles } = useRoles()
@@ -373,13 +503,24 @@ export const Roles: React.FC = () => {
       header: '',
       cell: (row) => (
         <Can code={P.RBAC_ROLE_WRITE}>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={(e) => { e.stopPropagation(); setDrawerRole(row) }}
-          >
-            Edit permissions
-          </Button>
+          <div className="flex justify-end gap-1">
+            <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDrawerRole(row) }}>
+              Edit permissions
+            </Button>
+            <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditorState({ mode: 'clone', role: row }) }}>
+              Clone
+            </Button>
+            {!row.systemRole && (
+              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditorState({ mode: 'edit', role: row }) }}>
+                Edit
+              </Button>
+            )}
+            {!row.systemRole && (
+              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row) }}>
+                Delete
+              </Button>
+            )}
+          </div>
         </Can>
       ),
     },
@@ -442,6 +583,13 @@ export const Roles: React.FC = () => {
 
         {/* ── Tab: Roles ──────────────────────────────────────────────────── */}
         <TabsContent value="roles" className="mt-4">
+          <Can code={P.RBAC_ROLE_WRITE}>
+            <div className="mb-3 flex justify-end">
+              <Button size="sm" onClick={() => setEditorState({ mode: 'create' })}>
+                <Plus size={14} className="mr-1" /> New role
+              </Button>
+            </div>
+          </Can>
           {rolesLoading ? (
             <TableSkeleton />
           ) : rolesError ? (
@@ -534,6 +682,14 @@ export const Roles: React.FC = () => {
           permissions={permissions}
           onClose={() => setDrawerRole(null)}
         />
+      )}
+
+      {editorState && (
+        <RoleEditorModal state={editorState} onClose={() => setEditorState(null)} />
+      )}
+
+      {deleteTarget && (
+        <DeleteRoleConfirm role={deleteTarget} onClose={() => setDeleteTarget(null)} />
       )}
     </div>
   )

@@ -21,10 +21,33 @@ public class RbacController {
         this.rbac = rbac;
     }
 
+    public record CreateRoleRequest(String code, String displayName, String description, UUID cloneFromRoleId) {}
+    public record UpdateRoleRequest(String displayName, String description) {}
+
     @GetMapping("/roles")
     @PreAuthorize("hasAuthority('rbac.role.write') or hasAuthority('platform.admin')")
     public List<Role> listRoles() {
         return rbac.listVisibleRoles();
+    }
+
+    @PostMapping("/roles")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('rbac.role.write')")
+    public Role createRole(@RequestBody CreateRoleRequest req) {
+        return rbac.createCustomRole(req.code(), req.displayName(), req.description(), req.cloneFromRoleId());
+    }
+
+    @PutMapping("/roles/{roleId}")
+    @PreAuthorize("hasAuthority('rbac.role.write')")
+    public Role updateRole(@PathVariable UUID roleId, @RequestBody UpdateRoleRequest req) {
+        return rbac.updateCustomRole(roleId, req.displayName(), req.description());
+    }
+
+    @DeleteMapping("/roles/{roleId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAuthority('rbac.role.write')")
+    public void deleteRole(@PathVariable UUID roleId) {
+        rbac.deleteCustomRole(roleId);
     }
 
     @GetMapping("/permissions")

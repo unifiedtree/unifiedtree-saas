@@ -59,6 +59,35 @@ export function useSetRolePermissions(roleId: string) {
   })
 }
 
+export function useCreateRole() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { code: string; displayName: string; description?: string; cloneFromRoleId?: string }) =>
+      apiJson<RbacRole>('/v1/rbac/roles', { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
+  })
+}
+
+export function useUpdateRole() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ roleId, displayName, description }: { roleId: string; displayName: string; description?: string }) =>
+      apiJson<RbacRole>(`/v1/rbac/roles/${roleId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ displayName, description }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
+  })
+}
+
+export function useDeleteRole() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (roleId: string) => apiJson<void>(`/v1/rbac/roles/${roleId}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
+  })
+}
+
 export interface UserRolesView {
   userId: string
   roles: RbacRole[]

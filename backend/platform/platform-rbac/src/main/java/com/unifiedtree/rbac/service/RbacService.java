@@ -151,4 +151,37 @@ public class RbacService {
         }
         return role;
     }
+
+    /** Rename / re-describe a custom (non-system) role owned by the current tenant. */
+    public Role updateCustomRole(UUID roleId, String displayName, String description) {
+        Role role = requireTenantCustomRole(roleId);
+        role.setDisplayName(displayName);
+        role.setDescription(description);
+        return roleRepo.save(role);
+    }
+
+    /** Delete a custom role, removing its permission set and any user assignments. */
+    public void deleteCustomRole(UUID roleId) {
+        Role role = requireTenantCustomRole(roleId);
+        rolePermissionRepo.deleteAllInBatch(rolePermissionRepo.findAllByRoleId(roleId));
+        userRoleRepo.findAllByRoleId(roleId).forEach(ur -> {
+            userRoleRepo.deleteById(new UserRole.PK(ur.getTenantId(), ur.getUserId(), ur.getRoleId()));
+            events.publishEvent(new PermissionCacheEvictEvent(ur.getTenantId(), ur.getUserId()));
+        });
+        roleRepo.delete(role);
+    }
+
+    /** Guard: the role must exist, be a non-system role, and belong to the current tenant. */
+    private Role requireTenantCustomRole(UUID roleId) {
+        Role role = roleRepo.findById(roleId).orElseThrow(() ->
+            new ResourceNotFoundException("Role " + roleId + " not found"));
+        if (role.isSystemRole()) {
+            throw new BusinessRuleException("System roles cannot be modified or deleted", "SYSTEM_ROLE_LOCKED");
+        }
+        UUID tenantId = TenantContext.requireTenantId();
+        if (role.getTenantId() == null || !tenantId.equals(role.getTenantId())) {
+            throw new BusinessRuleException("Role does not belong to this tenant", "ROLE_TENANT_MISMATCH");
+        }
+        return role;
+    }
 }
