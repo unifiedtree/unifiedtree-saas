@@ -36,6 +36,14 @@ export function usePermissionsCatalogue() {
   })
 }
 
+export function useRolePermissions(roleId: string) {
+  return useQuery({
+    queryKey: ['rbac', 'role-permissions', roleId],
+    queryFn: () => apiJson<string[]>(`/v1/rbac/roles/${roleId}/permissions`),
+    enabled: !!roleId,
+  })
+}
+
 export function useSetRolePermissions(roleId: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -44,7 +52,10 @@ export function useSetRolePermissions(roleId: string) {
         method: 'PUT',
         body: JSON.stringify(permissionCodes),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ROLES_KEY })
+      qc.invalidateQueries({ queryKey: ['rbac', 'role-permissions', roleId] })
+    },
   })
 }
 

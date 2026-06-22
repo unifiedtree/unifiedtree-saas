@@ -52,6 +52,16 @@ public class RbacService {
     }
 
     @Transactional(readOnly = true)
+    public List<String> getPermissionsForRole(UUID roleId) {
+        roleRepo.findById(roleId).orElseThrow(() ->
+            new ResourceNotFoundException("Role " + roleId + " not found"));
+        return rolePermissionRepo.findAllByRoleId(roleId).stream()
+            .map(RolePermission::getPermissionCode)
+            .sorted()
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<String> permissionsForUser(UUID userId) {
         List<UUID> roleIds = userRoleRepo.findAllByUserId(userId)
             .stream().map(UserRole::getRoleId).toList();

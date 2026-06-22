@@ -8,7 +8,7 @@ import type { Column } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
 import {
-  useRoles, usePermissionsCatalogue, useSetRolePermissions,
+  useRoles, usePermissionsCatalogue, useRolePermissions, useSetRolePermissions,
 } from '@/modules/rbac/api/useRbac'
 import type { RbacRole, RbacPermission } from '@/modules/rbac/api/useRbac'
 
@@ -23,8 +23,19 @@ function PermissionsDrawer({
   permissions: RbacPermission[]
   onClose: () => void
 }) {
+  const { data: currentPerms, isLoading: loadingPerms } = useRolePermissions(role.id)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [initialised, setInitialised] = useState(false)
   const setPerms = useSetRolePermissions(role.id)
+  const isSystemRole = role.systemRole
+
+  // Pre-load existing permissions once they arrive
+  React.useEffect(() => {
+    if (currentPerms && !initialised) {
+      setSelected(new Set(currentPerms))
+      setInitialised(true)
+    }
+  }, [currentPerms, initialised])
 
   const byModule = useMemo(
     () =>
@@ -50,7 +61,14 @@ function PermissionsDrawer({
         toast.success('Permissions updated')
         onClose()
       },
-      onError: () => toast.error('Failed to update permissions'),
+      onError: (err: unknown) => {
+        const msg = (err as { message?: string })?.message ?? ''
+        if (msg.includes('SYSTEM_ROLE_LOCKED')) {
+          toast.error('System roles cannot be edited')
+        } else {
+          toast.error('Failed to update permissions')
+        }
+      },
     })
   }
 
@@ -61,51 +79,59 @@ function PermissionsDrawer({
       title={`${role.displayName} — Permissions`}
     >
       <div className="space-y-4">
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-400 leading-relaxed">
-          Submitting replaces the role's entire permission set. Current assignment
-          cannot be pre-loaded until GET&nbsp;/v1/rbac/roles/&#123;id&#125;/permissions is
-          implemented.
-        </div>
+        {isSystemRole && (
+          <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3 text-xs text-blue-400 leading-relaxed flex items-start gap-2">
+            <Shield size={13} className="mt-0.5 flex-shrink-0" />
+            <span>System role — permissions are managed by UnifiedTree and cannot be changed. You can view what this role grants below.</span>
+          </div>
+        )}
 
-        <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
-          {Object.entries(byModule).sort(([a], [b]) => a.localeCompare(b)).map(([module, perms]) => (
-            <div key={module}>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                {module}
-              </p>
-              <div className="space-y-1">
-                {perms.map((p) => (
-                  <label
-                    key={p.code}
-                    className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-interactive-hover"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 flex-shrink-0 accent-indigo-500"
-                      checked={selected.has(p.code)}
-                      onChange={(e) => toggle(p.code, e.target.checked)}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm text-text-primary">{p.displayName}</p>
-                      <p className="font-mono text-xs text-text-tertiary">{p.code}</p>
-                    </div>
-                  </label>
-                ))}
+        {loadingPerms ? (
+          <div className="py-8 text-center text-sm text-text-tertiary">Loading current permissions…</div>
+        ) : (
+          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
+            {Object.entries(byModule).sort(([a], [b]) => a.localeCompare(b)).map(([module, perms]) => (
+              <div key={module}>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                  {module}
+                </p>
+                <div className="space-y-1">
+                  {perms.map((p) => (
+                    <label
+                      key={p.code}
+                      className={`flex items-start gap-2.5 rounded-lg px-2 py-1.5 ${isSystemRole ? 'cursor-default opacity-70' : 'cursor-pointer hover:bg-interactive-hover'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 flex-shrink-0 accent-indigo-500"
+                        checked={selected.has(p.code)}
+                        onChange={(e) => !isSystemRole && toggle(p.code, e.target.checked)}
+                        disabled={isSystemRole}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm text-text-primary">{p.displayName}</p>
+                        <p className="font-mono text-xs text-text-tertiary">{p.code}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <div className="flex gap-2 border-t border-border-default pt-4">
-          <Button
-            size="sm"
-            loading={setPerms.isPending}
-            onClick={handleSave}
-          >
-            Save permissions
-          </Button>
+          {!isSystemRole && (
+            <Button
+              size="sm"
+              loading={setPerms.isPending}
+              onClick={handleSave}
+            >
+              Save permissions
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={onClose}>
-            Cancel
+            {isSystemRole ? 'Close' : 'Cancel'}
           </Button>
         </div>
       </div>
@@ -166,7 +192,7 @@ export const Roles: React.FC = () => {
             variant="ghost"
             onClick={(e) => { e.stopPropagation(); setDrawerRole(row) }}
           >
-            Edit permissions
+            {row.systemRole ? 'View permissions' : 'Edit permissions'}
           </Button>
         </Can>
       ),

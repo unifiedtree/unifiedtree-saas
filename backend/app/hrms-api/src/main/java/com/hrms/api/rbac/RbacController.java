@@ -33,6 +33,12 @@ public class RbacController {
         return rbac.listPermissions();
     }
 
+    @GetMapping("/roles/{roleId}/permissions")
+    @PreAuthorize("hasAuthority('rbac.role.write') or hasAuthority('platform.admin')")
+    public List<String> getRolePermissions(@PathVariable UUID roleId) {
+        return rbac.getPermissionsForRole(roleId);
+    }
+
     @PutMapping("/roles/{roleId}/permissions")
     @PreAuthorize("hasAuthority('rbac.role.write')")
     public void setRolePermissions(@PathVariable UUID roleId,
