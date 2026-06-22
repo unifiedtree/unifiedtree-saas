@@ -67,7 +67,11 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const updateEmp = useUpdateWorkforceEmployee()
 
   const { data: companies = [] } = useCompanies()
-  const [companyId, setCompanyId] = useState(employee?.companyId ?? companies[0]?.id ?? '')
+  const [companyId, setCompanyId] = useState(employee?.companyId ?? '')
+  // Once companies load, auto-select the first if none already chosen
+  React.useEffect(() => {
+    if (!companyId && companies.length > 0) setCompanyId(companies[0].id)
+  }, [companies])
   const [departmentId, setDepartmentId] = useState(employee?.departmentId ?? '')
   const { data: departments = [] } = useDepartments(companyId)
   const { data: designations = [] } = useDesignations(companyId, departmentId || undefined)
@@ -490,7 +494,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               )}
               <button
                 onClick={handleSubmit}
-                disabled={isPending || (!isEdit && companies.length === 0)}
+                disabled={isPending}
                 className="w-full py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
               >
                 {isPending ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Employee'}
