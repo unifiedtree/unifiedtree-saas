@@ -2,6 +2,7 @@ package com.unifiedtree.attendance.api;
 
 import com.unifiedtree.attendance.api.AttendanceApiDtos.EmployeeResponse;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,6 +18,7 @@ public class CanonicalEmployeeSelfController {
     }
 
     @GetMapping("/me")
+    @PreAuthorize("hasAuthority('hrms.ess.read')")
     public EmployeeResponse me() {
         return attendance.me();
     }

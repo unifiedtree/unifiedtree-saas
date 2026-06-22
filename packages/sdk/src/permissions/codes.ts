@@ -1,6 +1,15 @@
 /**
- * Typed constants for all 97 permission codes used across UnifiedTree modules.
+ * Typed constants for all permission codes used across UnifiedTree modules.
  * Import as: import { P } from '@unifiedtree/sdk'
+ *
+ * Backend-seeded codes (rbac.permissions) MUST have a constant here.
+ * Codes for modules not yet shipped (crm.*, accounts.*, tenant.*, projects.*,
+ * helpdesk.*, inventory.*, procurement.*, hrms.payroll.*, hrms.branch.*,
+ * hrms.classification.*, hrms.employee.document.*, notification.*, branch.*,
+ * department.*, rbac.role.read, rbac.permission.manage, audit.export,
+ * settings.write, hrms.ess.write, platform.user.*, platform.module.manage,
+ * platform.billing.read) are PLANNED — kept for forward typing only and are
+ * intentionally absent from the backend catalogue until their module ships.
  */
 export const P = {
   // ── HRMS: Employee ─────────────────────────────────────────────────────────
@@ -88,7 +97,6 @@ export const P = {
   HRMS_ESS_WRITE:                  'hrms.ess.write',
 
   // ── HRMS: Reports ────────────────────────────────────────────────────────
-  HRMS_ATTENDANCE_REPORT:          'hrms.attendance.report',
   HRMS_REPORT_HEADCOUNT:           'hrms.report.headcount',
   HRMS_REPORT_ATTRITION:           'hrms.report.attrition',
   HRMS_REPORT_ATTENDANCE:          'hrms.report.attendance',
@@ -100,6 +108,10 @@ export const P = {
   ATTENDANCE_CHECKIN_FACE:         'attendance.checkin.face',
   ATTENDANCE_REGULARIZATION_APPROVE: 'attendance.regularization.approve',
   ATTENDANCE_TEAM_READ:            'attendance.team.read',
+  ATTENDANCE_FACE_ENROLL_SELF:     'attendance.face.enroll.self',
+  ATTENDANCE_FACE_VERIFY_SELF:     'attendance.face.verify.self',
+  ATTENDANCE_FACE_ADMIN_READ:      'attendance.face.admin.read',
+  ATTENDANCE_FACE_ADMIN_RESET:     'attendance.face.admin.reset',
 
   // ── Leave ─────────────────────────────────────────────────────────────────
   LEAVE_BALANCE_READ:              'leave.balance.read',
@@ -154,6 +166,11 @@ export const P = {
   // ── Workspace (Users & Access) ───────────────────────────────────────────
   WORKSPACE_USERS_READ:            'workspace.users.read',
   WORKSPACE_USERS_MANAGE:          'workspace.users.manage',
+  WORKSPACE_ACCOUNT_READ:          'workspace.account.read',
+  WORKSPACE_CONTEXT_READ:          'workspace.context.read',
+  WORKSPACE_MODULES_READ:          'workspace.modules.read',
+  WORKSPACE_MODULES_BUY:           'workspace.modules.buy',
+  WORKSPACE_BILLING_MANAGE:        'workspace.billing.manage',
 
   // ── Tenant ────────────────────────────────────────────────────────────────
   TENANT_USER_INVITE:              'tenant.user.invite',
