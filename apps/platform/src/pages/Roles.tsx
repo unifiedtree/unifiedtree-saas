@@ -27,9 +27,7 @@ function PermissionsDrawer({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [initialised, setInitialised] = useState(false)
   const setPerms = useSetRolePermissions(role.id)
-  const isSystemRole = role.systemRole
 
-  // Pre-load existing permissions once the query succeeds (handles empty array correctly)
   React.useEffect(() => {
     if (permsLoaded && !initialised) {
       setSelected(new Set(currentPerms ?? []))
@@ -55,22 +53,30 @@ function PermissionsDrawer({
     })
   }
 
+  const toggleModule = (moduleCodes: string[]) => {
+    const allOn = moduleCodes.every((c) => selected.has(c))
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (allOn) moduleCodes.forEach((c) => next.delete(c))
+      else moduleCodes.forEach((c) => next.add(c))
+      return next
+    })
+  }
+
   const handleSave = () => {
     setPerms.mutate(Array.from(selected), {
       onSuccess: () => {
-        toast.success('Permissions updated')
+        toast.success(`Permissions updated — ${selected.size} granted to ${role.displayName}`)
         onClose()
       },
-      onError: (err: unknown) => {
-        const msg = (err as { message?: string })?.message ?? ''
-        if (msg.includes('SYSTEM_ROLE_LOCKED')) {
-          toast.error('System roles cannot be edited')
-        } else {
-          toast.error('Failed to update permissions')
-        }
-      },
+      onError: () => toast.error('Failed to update permissions'),
     })
   }
+
+  const isDirty = initialised && (
+    selected.size !== (currentPerms?.length ?? 0) ||
+    Array.from(selected).some((c) => !currentPerms?.includes(c))
+  )
 
   return (
     <Drawer
@@ -79,10 +85,13 @@ function PermissionsDrawer({
       title={`${role.displayName} — Permissions`}
     >
       <div className="space-y-4">
-        {isSystemRole && (
-          <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3 text-xs text-blue-400 leading-relaxed flex items-start gap-2">
-            <Shield size={13} className="mt-0.5 flex-shrink-0" />
-            <span>System role — permissions are managed by UnifiedTree and cannot be changed. You can view what this role grants below.</span>
+        {/* Summary bar */}
+        {initialised && (
+          <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-border-default px-3 py-2">
+            <span className="text-xs text-text-secondary">
+              <span className="font-semibold text-text-primary">{selected.size}</span> of {permissions.length} permissions granted
+            </span>
+            {isDirty && <span className="text-xs text-amber-600 font-medium">● Unsaved changes</span>}
           </div>
         )}
 
@@ -94,24 +103,35 @@ function PermissionsDrawer({
             <button onClick={() => refetchPerms()} className="text-xs text-red-300 underline hover:text-red-200">Retry</button>
           </div>
         ) : (
-          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
-            {Object.entries(byModule).sort(([a], [b]) => a.localeCompare(b)).map(([module, perms]) => (
-              <div key={module}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                  {module}
-                </p>
-                <div className="space-y-1">
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+            {Object.entries(byModule).sort(([a], [b]) => a.localeCompare(b)).map(([module, perms]) => {
+              const codes = perms.map((p) => p.code)
+              const allOn = codes.every((c) => selected.has(c))
+              const someOn = codes.some((c) => selected.has(c))
+              return (
+              <div key={module} className="rounded-lg border border-border-default overflow-hidden">
+                {/* Module header — click to toggle all */}
+                <button
+                  onClick={() => toggleModule(codes)}
+                  className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors"
+                >
+                  <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">{module}</span>
+                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${allOn ? 'bg-green-100 text-green-700' : someOn ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'}`}>
+                    {codes.filter((c) => selected.has(c)).length}/{codes.length}
+                    {allOn ? ' ✓ all' : someOn ? ' partial' : ' none'}
+                  </span>
+                </button>
+                <div className="divide-y divide-border-default/50">
                   {perms.map((p) => (
                     <label
                       key={p.code}
-                      className={`flex items-start gap-2.5 rounded-lg px-2 py-1.5 ${isSystemRole ? 'cursor-default opacity-70' : 'cursor-pointer hover:bg-interactive-hover'}`}
+                      className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-interactive-hover transition-colors"
                     >
                       <input
                         type="checkbox"
-                        className="mt-0.5 flex-shrink-0 accent-indigo-500"
+                        className="mt-0.5 flex-shrink-0 accent-indigo-500 h-4 w-4"
                         checked={selected.has(p.code)}
-                        onChange={(e) => !isSystemRole && toggle(p.code, e.target.checked)}
-                        disabled={isSystemRole}
+                        onChange={(e) => toggle(p.code, e.target.checked)}
                       />
                       <div className="min-w-0">
                         <p className="text-sm text-text-primary">{p.displayName}</p>
@@ -121,22 +141,21 @@ function PermissionsDrawer({
                   ))}
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         )}
 
         <div className="flex gap-2 border-t border-border-default pt-4">
-          {!isSystemRole && (
-            <Button
-              size="sm"
-              loading={setPerms.isPending}
-              onClick={handleSave}
-            >
-              Save permissions
-            </Button>
-          )}
+          <Button
+            size="sm"
+            loading={setPerms.isPending}
+            onClick={handleSave}
+            disabled={!initialised || loadingPerms}
+          >
+            Save permissions
+          </Button>
           <Button size="sm" variant="ghost" onClick={onClose}>
-            {isSystemRole ? 'Close' : 'Cancel'}
+            Cancel
           </Button>
         </div>
       </div>
@@ -197,7 +216,7 @@ export const Roles: React.FC = () => {
             variant="ghost"
             onClick={(e) => { e.stopPropagation(); setDrawerRole(row) }}
           >
-            {row.systemRole ? 'View permissions' : 'Edit permissions'}
+            Edit permissions
           </Button>
         </Can>
       ),

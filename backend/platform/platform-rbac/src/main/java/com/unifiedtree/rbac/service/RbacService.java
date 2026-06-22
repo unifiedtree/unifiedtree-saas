@@ -89,15 +89,12 @@ public class RbacService {
     }
 
     /**
-     * Replace the entire permission set on a custom role. System roles are immutable.
-     * After update, all users holding this role have their cache evicted.
+     * Replace the entire permission set on a role. After update, all users
+     * holding this role have their cache evicted.
      */
     public void setRolePermissions(UUID roleId, List<String> permissionCodes) {
         Role role = roleRepo.findById(roleId).orElseThrow(() ->
             new ResourceNotFoundException("Role " + roleId + " not found"));
-        if (role.isSystemRole()) {
-            throw new BusinessRuleException("System roles are immutable", "SYSTEM_ROLE_LOCKED");
-        }
         for (String code : permissionCodes) {
             permissionRepo.findById(code).orElseThrow(() ->
                 new ResourceNotFoundException("Permission " + code + " not in catalog"));
