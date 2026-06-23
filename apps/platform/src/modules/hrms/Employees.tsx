@@ -178,6 +178,14 @@ export const Employees: React.FC = () => {
         >
           {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
+        {(search || departmentId || branchId || status) && (
+          <button
+            onClick={() => { setSearch(''); setDepartmentId(''); setBranchId(''); setStatus(''); resetPage() }}
+            className="px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10 rounded-xl transition-colors whitespace-nowrap"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -214,7 +222,7 @@ export const Employees: React.FC = () => {
                           <Users size={24} className="text-text-tertiary" />
                         </div>
                         <p className="text-sm font-bold text-text-secondary">No employees found</p>
-                        {search && <p className="text-xs mt-1 text-text-tertiary font-medium">Try adjusting your search or filters</p>}
+                        {(search || departmentId || branchId || status) && <p className="text-xs mt-1 text-text-tertiary font-medium">Try adjusting your search or filters</p>}
                       </td>
                     </tr>
                   )
