@@ -286,33 +286,26 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
 
           {step === 'system' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-900">Enable System Access</h4>
-                  <p className="text-xs text-slate-500 mt-0.5">Creates a workspace login account for this employee.</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" checked={form.systemAccess} onChange={(e) => set('systemAccess', e.target.checked as any)} className="sr-only peer" />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                </label>
+              {/* A workspace login account is always provisioned on create (the backend
+                  sends a roleCode unconditionally), so the role is always required.
+                  The old "Enable System Access" toggle was a no-op and was removed. */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <h4 className="text-sm font-semibold text-slate-900">System Access</h4>
+                <p className="text-xs text-slate-500 mt-0.5">A workspace login account is created for this employee. Choose their access level below.</p>
               </div>
 
-              {form.systemAccess && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                  <Field label="Workspace Role" required>
-                    <Sel value={form.systemRole} onChange={(e) => set('systemRole', e.target.value)}>
-                      <option value="EMPLOYEE">Employee (Self-service only)</option>
-                      <option value="DEPT_MANAGER">Dept Manager (Approve team leaves)</option>
-                      <option value="HR_MANAGER">HR Manager (Full HR access)</option>
-                      <option value="FINANCE_LEAD">Finance Lead (Payroll &amp; reports)</option>
-                      <option value="SUPER_ADMIN">Super Admin (Full access)</option>
-                    </Sel>
-                  </Field>
-                  <p className="mt-3 text-xs text-slate-500 bg-blue-50 text-blue-700 p-3 rounded-lg border border-blue-100">
-                    An invitation email will automatically be sent to <strong>{form.email || 'the employee'}</strong> to set their password.
-                  </p>
-                </div>
-              )}
+              <Field label="Workspace Role" required>
+                <Sel value={form.systemRole} onChange={(e) => set('systemRole', e.target.value)}>
+                  <option value="EMPLOYEE">Employee (Self-service only)</option>
+                  <option value="DEPT_MANAGER">Dept Manager (Approve team leaves)</option>
+                  <option value="HR_MANAGER">HR Manager (Full HR access)</option>
+                  <option value="FINANCE_LEAD">Finance Lead (Payroll &amp; reports)</option>
+                  <option value="SUPER_ADMIN">Super Admin (Full access)</option>
+                </Sel>
+              </Field>
+              <p className="mt-3 text-xs text-slate-500 bg-blue-50 text-blue-700 p-3 rounded-lg border border-blue-100">
+                An invitation email will be sent to <strong>{form.email || 'the employee'}</strong> (when "Send invitation" is enabled) so they can set their password.
+              </p>
             </div>
           )}
 

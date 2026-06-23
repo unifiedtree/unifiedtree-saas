@@ -7,12 +7,11 @@ import { useEmployeeDirectory } from './api/useWorkforce'
 import { useCompanies } from './api/useOrg'
 import { useLeaveOverview } from './api/useLeave'
 import { useMonthlyStats } from './api/useAttendance'
-import { useAuthStore as useSdkStore, usePermission, P } from '@unifiedtree/sdk'
+import { usePermission, P } from '@unifiedtree/sdk'
 import { UpcomingProbations } from './probation/UpcomingProbations'
 
 export const HrmsDashboard: React.FC = () => {
   const navigate = useNavigate()
-  const user = useSdkStore(s => s.user)
   const { data: companies = [] } = useCompanies()
   const activeCompany = companies[0]
 
@@ -25,12 +24,18 @@ export const HrmsDashboard: React.FC = () => {
   const recentEmployees = directory?.content ?? []
   const pendingLeaves = leaveOverview?.pendingApprovals ?? 0
 
-  const isAdmin = user?.roles?.includes('COMPANY_ADMIN') || user?.roles?.includes('SUPER_ADMIN')
+  // Visibility follows the backend authority the action actually needs, not role
+  // membership: createEmployee requires hrms.employee.write; org setup requires
+  // org.company.write. So HR_MANAGER (who holds both) sees them, like the backend allows.
+  const canWriteEmployee = usePermission(P.HRMS_EMPLOYEE_WRITE)
+  const canManageOrg = usePermission(P.ORG_COMPANY_WRITE)
   const canSeeProbation = usePermission(P.HRMS_EMPLOYEE_READ)
 
   const quickActions = [
-    ...(isAdmin ? [
+    ...(canWriteEmployee ? [
       { label: 'Add Employee', icon: Plus, path: '/hrms/employees', color: 'text-brand-600', bg: 'bg-brand-100' },
+    ] : []),
+    ...(canManageOrg ? [
       { label: 'Org Setup', icon: Building2, path: '/hrms/organization', color: 'text-brand-500', bg: 'bg-brand-50' },
     ] : []),
     { label: 'Attendance', icon: Clock, path: '/hrms/attendance', color: 'text-emerald-600', bg: 'bg-emerald-100' },
