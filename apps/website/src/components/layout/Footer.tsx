@@ -2,14 +2,16 @@ import { Link } from 'react-router-dom'
 import { Linkedin, Twitter, Github, Youtube, Mail, MessageCircle } from 'lucide-react'
 
 function TreeLogoSmall() {
-  return (
-    <img
-      src="/UnifiedTreeLogoWhite.png"
-      alt="UnifiedTree logo"
-      style={{ height: 40, width: 'auto' }}
-      className="object-contain"
-    />
-  )
+  // TEMP: brand logo hidden — restore the <img> below to bring it back.
+  return null
+  // return (
+  //   <img
+  //     src="/UnifiedTreeLogoWhite.png"
+  //     alt="UnifiedTree logo"
+  //     style={{ height: 40, width: 'auto' }}
+  //     className="object-contain"
+  //   />
+  // )
 }
 
 const columns = [

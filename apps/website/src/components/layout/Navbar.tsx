@@ -26,14 +26,16 @@ const navModules = [
 
 /** UnifiedTree logo from brand image */
 function UTLogo({ size = 32 }: { size?: number }) {
-  return (
-    <img
-      src="/UnifiedTreeLogoWhite.png"
-      alt="UnifiedTree logo"
-      style={{ height: size, width: 'auto' }}
-      className="object-contain"
-    />
-  )
+  // TEMP: brand logo hidden — restore the <img> below to bring it back.
+  return <span style={{ height: size }} aria-hidden />
+  // return (
+  //   <img
+  //     src="/UnifiedTreeLogoWhite.png"
+  //     alt="UnifiedTree logo"
+  //     style={{ height: size, width: 'auto' }}
+  //     className="object-contain"
+  //   />
+  // )
 }
 
 export function Navbar() {

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, BarChart3, Users, TrendingUp, FileText, CreditCard,
   Package, ShoppingCart, Briefcase, HelpCircle, Settings, Shield, Bell,
   Folder, ChevronDown, ChevronRight, ChevronLeft, Lock, DollarSign,
-  ClipboardList, Building2, UserCheck, Calendar, Star, Receipt, Sprout, MapPin,
+  ClipboardList, Building2, UserCheck, Calendar, Star, Receipt, MapPin,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { P } from '@unifiedtree/sdk'
@@ -133,22 +133,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
         collapsed ? 'w-16' : 'w-64'
       )}
     >
-      {/* Logo */}
+      {/* Brand lockup (logo + wordmark) temporarily hidden — restore it here later.
+          The header bar + plan badge are kept so layout is unchanged. */}
       <div className="flex h-16 flex-shrink-0 items-center border-b border-brand-100 px-4">
-        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient shadow-glow-brand">
-          <Sprout size={17} className="text-[#0F172A]" />
-        </div>
-        {!collapsed && (
-          <div className="ml-3 overflow-hidden">
-            <span className="font-display text-base text-brand-900">UnifiedTree</span>
-            {tenant && (
-              <div className="mt-0.5 flex items-center gap-1.5">
-                <span className={clsx('rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider', planColors[tenant.planType] ?? planColors.STARTER)}>
-                  {tenant.planType}
-                </span>
-              </div>
-            )}
-          </div>
+        {!collapsed && tenant && (
+          <span className={clsx('rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider', planColors[tenant.planType] ?? planColors.STARTER)}>
+            {tenant.planType}
+          </span>
         )}
       </div>
 
