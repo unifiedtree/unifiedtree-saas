@@ -75,7 +75,7 @@ function MyLeavesTab() {
                 </p>
                 {leave.reason && <p className="text-text-tertiary text-xs truncate mt-0.5">"{leave.reason}"</p>}
               </div>
-              {leave.status === 'PENDING' && (
+              {(leave.status === 'PENDING' || leave.status === 'APPROVED') && (
                 <button
                   onClick={() => handleCancel(leave.id)}
                   disabled={cancelLeave.isPending}

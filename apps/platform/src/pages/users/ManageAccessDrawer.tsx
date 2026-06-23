@@ -69,7 +69,9 @@ export const ManageAccessDrawer: React.FC<Props> = ({ user, open, onClose }) => 
 
         <div className="space-y-6">
           {groups.map(([moduleKey, moduleRoles]) => {
-            const active = moduleKey === 'core' || hasModule(moduleKey)
+            // Trust the backend's per-role moduleActive (from /workspace/assignable-roles)
+            // rather than recomputing client-side; fall back to hasModule only if absent.
+            const active = moduleKey === 'core' || (moduleRoles[0]?.moduleActive ?? hasModule(moduleKey))
             return (
               <div key={moduleKey}>
                 <div className="flex items-center gap-2 mb-2">

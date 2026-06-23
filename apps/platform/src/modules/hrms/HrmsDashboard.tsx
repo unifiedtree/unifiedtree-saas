@@ -117,7 +117,7 @@ export const HrmsDashboard: React.FC = () => {
                     emp.employmentStatus === 'PROBATION' ? 'bg-amber-50 text-amber-600 border-amber-200' :
                     'bg-slate-50 text-slate-500 border-slate-200'
                   )}>
-                    {emp.employmentStatus ?? 'Active'}
+                    {emp.employmentStatus ?? '—'}
                   </span>
                 </div>
               )

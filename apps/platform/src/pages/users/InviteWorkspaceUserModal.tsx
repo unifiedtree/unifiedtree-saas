@@ -101,7 +101,9 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
           <p className="text-sm font-semibold text-slate-800 mb-2">Roles</p>
           <div className="space-y-4">
             {groups.map(([moduleKey, moduleRoles]) => {
-              const active = moduleKey === 'core' || hasModule(moduleKey)
+              // Trust the backend's per-role moduleActive rather than recomputing
+              // client-side; fall back to hasModule only if absent.
+              const active = moduleKey === 'core' || (moduleRoles[0]?.moduleActive ?? hasModule(moduleKey))
               return (
                 <div key={moduleKey}>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">

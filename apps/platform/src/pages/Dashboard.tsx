@@ -60,13 +60,15 @@ export const Dashboard: React.FC = () => {
         <h3 className="text-lg font-bold text-[#0F172A] px-1">Quick Actions</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Add Employee', icon: UserPlus, color: 'text-[#0F6E56]', bg: 'bg-[#0F6E56]/10', hover: 'hover:bg-[#0F6E56] hover:text-white hover:border-[#0F6E56]', border: 'border-[#0F6E56]/20', path: '/hrms/employees', module: 'hrms', permission: 'hrms.employee.write' },
-            { label: 'View Directory', icon: Users, color: 'text-[#35c98a]', bg: 'bg-[#35c98a]/10', hover: 'hover:bg-[#35c98a] hover:text-[#053024] hover:border-[#35c98a]', border: 'border-[#35c98a]/20', path: '/hrms/employees', module: 'hrms', permission: 'hrms.employee.read' },
-            { label: 'Run Payroll', icon: FileText, color: 'text-emerald-600', bg: 'bg-emerald-50', hover: 'hover:bg-emerald-600 hover:text-white hover:border-emerald-600', border: 'border-emerald-100', path: '/hrms/payroll/runs', module: 'payroll', permission: 'hrms.payroll.write' },
-            { label: 'Settings', icon: Settings, color: 'text-[#0A5240]', bg: 'bg-[#0A5240]/10', hover: 'hover:bg-[#0A5240] hover:text-white hover:border-[#0A5240]', border: 'border-[#0A5240]/20', path: '/settings', module: 'hrms', permission: 'audit.read' },
-          ].map(({ label, icon: Icon, color, bg, hover, border, path, module, permission }) => {
+            { label: 'Add Employee', icon: UserPlus, color: 'text-[#0F6E56]', bg: 'bg-[#0F6E56]/10', hover: 'hover:bg-[#0F6E56] hover:text-white hover:border-[#0F6E56]', border: 'border-[#0F6E56]/20', path: '/hrms/employees', module: 'hrms', anyOf: ['hrms.employee.write'] },
+            { label: 'View Directory', icon: Users, color: 'text-[#35c98a]', bg: 'bg-[#35c98a]/10', hover: 'hover:bg-[#35c98a] hover:text-[#053024] hover:border-[#35c98a]', border: 'border-[#35c98a]/20', path: '/hrms/employees', module: 'hrms', anyOf: ['hrms.employee.read'] },
+            { label: 'Run Payroll', icon: FileText, color: 'text-emerald-600', bg: 'bg-emerald-50', hover: 'hover:bg-emerald-600 hover:text-white hover:border-emerald-600', border: 'border-emerald-100', path: '/hrms/payroll/runs', module: 'payroll', anyOf: ['payroll.runs.read'] },
+            { label: 'Settings', icon: Settings, color: 'text-[#0A5240]', bg: 'bg-[#0A5240]/10', hover: 'hover:bg-[#0A5240] hover:text-white hover:border-[#0A5240]', border: 'border-[#0A5240]/20', path: '/settings', module: 'hrms', anyOf: ['settings.read', 'settings.hrconfig.write', 'settings.holidays.write', 'hrms.probation.config.read'] },
+          ].map(({ label, icon: Icon, color, bg, hover, border, path, module, anyOf }) => {
             if (module && !hasModule(module) && module !== 'hrms') return null // Only hide if it's a completely disabled module
-            
+            // Enforce the declared permission(s): hide actions the backend would reject.
+            if (anyOf && !anyOf.some((p) => hasPermission(p))) return null
+
             return (
               <motion.button
                 key={label}

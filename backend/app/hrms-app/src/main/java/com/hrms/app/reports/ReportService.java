@@ -89,9 +89,9 @@ public class ReportService {
                     e.first_name || ' ' || e.last_name                  AS employee_name,
                     d.name                                               AS department,
                     COUNT(ar.id)                                         AS present_days,
-                    SUM(CASE WHEN ar.attendance_status = 'LATE' THEN 1 ELSE 0 END) AS late_days,
-                    ROUND(AVG(ar.work_hours)::numeric, 2)                AS avg_hours,
-                    SUM(ar.overtime_minutes)                             AS total_overtime_mins
+                    COALESCE(SUM(CASE WHEN ar.attendance_status = 'LATE' THEN 1 ELSE 0 END), 0) AS late_days,
+                    COALESCE(ROUND(AVG(ar.work_hours)::numeric, 2), 0)   AS avg_hours,
+                    COALESCE(SUM(ar.overtime_minutes), 0)                AS total_overtime_mins
                 FROM hrms.employees e
                 LEFT JOIN hrms.departments d ON d.id = e.department_id
                 LEFT JOIN attendance.records ar
