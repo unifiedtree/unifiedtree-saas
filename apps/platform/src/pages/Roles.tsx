@@ -17,6 +17,10 @@ import { useWorkspaceUsers, workspaceUserDisplayName } from '@/modules/rbac/api/
 
 type RoleEditorState = { mode: 'create' | 'edit' | 'clone'; role?: RbacRole }
 
+// Privileged roles that must NOT be grantable via the Assignments surface — mirrors
+// the backend WorkspaceAccessService.EXCLUDED_ROLES / RbacService.NON_ASSIGNABLE_ROLE_CODES.
+const NON_ASSIGNABLE_ROLE_CODES = new Set(['SUPER_ADMIN', 'OWNER', 'ADMIN', 'MANAGER', 'PLATFORM_SUPER_ADMIN'])
+
 // ── Permission Drawer ──────────────────────────────────────────────────────────
 
 function PermissionsDrawer({
@@ -188,7 +192,7 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
 
   const selectedUser = users.find((u) => u.userId === selectedUserId)
   const assignedRoleIds = new Set((userRoles?.roles ?? []).map((r) => r.id))
-  const availableRoles = roles.filter((r) => !assignedRoleIds.has(r.id))
+  const availableRoles = roles.filter((r) => !assignedRoleIds.has(r.id) && !NON_ASSIGNABLE_ROLE_CODES.has(r.code))
   const busy = grant.isPending || revoke.isPending
 
   const handleGrant = (roleId: string) => {

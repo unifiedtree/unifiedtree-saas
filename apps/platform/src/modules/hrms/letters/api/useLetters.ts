@@ -173,12 +173,13 @@ export function useGenerateLetter() {
   })
 }
 
-export function useGeneratedLetters(page = 0) {
+export function useGeneratedLetters(page = 0, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['hrms', 'letters', 'generated', page],
     queryFn: () =>
       apiJson<PageResponse<GeneratedLetterDto>>(`/v1/letters/generated?page=${page}&size=20`),
     staleTime: 30_000,
+    enabled: opts?.enabled ?? true,
   })
 }
 
@@ -226,12 +227,13 @@ export function useDeleteGeneratedLetter() {
 
 // ── Employee self-service ─────────────────────────────────────────────────────
 
-export function useMyLetters(page = 0) {
+export function useMyLetters(page = 0, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['hrms', 'letters', 'my', page],
     queryFn: () =>
       apiJson<PageResponse<GeneratedLetterDto>>(`/v1/letters/my?page=${page}&size=20`),
     staleTime: 30_000,
+    enabled: opts?.enabled ?? true,
   })
 }
 

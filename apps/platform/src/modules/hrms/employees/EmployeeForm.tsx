@@ -355,12 +355,17 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </p>
               </Field>
               <Field label="Employment Type">
-                {employmentTypes.length > 0 ? (
+                {/* Only org types whose code is a real backend enum value are offered —
+                    the API field is a fixed enum, so a custom/lookup code (or a UUID
+                    fallback) would 400 at deserialization. */}
+                {employmentTypes.filter((t) => t.active && t.code && ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT'].includes(t.code)).length > 0 ? (
                   <Sel value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)}>
                     <option value="">Select type</option>
-                    {employmentTypes.filter((t) => t.active).map((t) => (
-                      <option key={t.id} value={t.code ?? t.id}>{t.name}</option>
-                    ))}
+                    {employmentTypes
+                      .filter((t) => t.active && t.code && ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT'].includes(t.code))
+                      .map((t) => (
+                        <option key={t.id} value={t.code!}>{t.name}</option>
+                      ))}
                   </Sel>
                 ) : (
                   <>

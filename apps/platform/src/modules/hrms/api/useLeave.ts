@@ -33,6 +33,11 @@ export interface LeaveBalanceResponse {
 export interface LeaveRequestResponse {
   id: string
   employeeId: string
+  // Requester identity — enriched by the backend on approval/decision responses
+  // so approvers can see whose request they are deciding.
+  employeeName?: string
+  employeeCode?: string
+  departmentName?: string
   leaveTypeId: string
   leaveTypeName?: string
   startDate: string

@@ -296,11 +296,15 @@ function ApprovalsTab() {
           <div key={leave.id} className="bg-white border border-border-default rounded-2xl px-4 py-3 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-text-primary font-medium text-sm">{leave.leaveTypeName ?? 'Leave'}</p>
+                <p className="text-text-primary font-medium text-sm">
+                  {leave.employeeName ?? 'Employee'}{leave.employeeCode ? ` · ${leave.employeeCode}` : ''}
+                </p>
                 <p className="text-text-secondary text-xs mt-0.5">
-                  {format(new Date(leave.startDate), 'd MMM')} – {format(new Date(leave.endDate), 'd MMM yyyy')}
+                  {leave.leaveTypeName ?? 'Leave'}
+                  {' · '}{format(new Date(leave.startDate), 'd MMM')} – {format(new Date(leave.endDate), 'd MMM yyyy')}
                   {' · '}{leave.totalDays} day{leave.totalDays !== 1 ? 's' : ''}
                 </p>
+                {leave.departmentName && <p className="text-text-tertiary text-xs mt-0.5">{leave.departmentName}</p>}
                 {leave.reason && <p className="text-text-secondary text-xs mt-0.5 italic">"{leave.reason}"</p>}
               </div>
               <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full flex-shrink-0">Pending</span>

@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -83,10 +84,24 @@ public class RbacService {
         return new UserRolesView(userId, roles, permissionsForUser(userId));
     }
 
+    /**
+     * Privileged role codes that must never be granted through the generic RBAC
+     * assignment surface. Mirrors WorkspaceAccessService.EXCLUDED_ROLES so both
+     * role-management surfaces agree — prevents privilege escalation (a holder of
+     * rbac.role.write granting SUPER_ADMIN/OWNER to anyone, including themselves).
+     */
+    private static final Set<String> NON_ASSIGNABLE_ROLE_CODES =
+        Set.of("SUPER_ADMIN", "OWNER", "ADMIN", "MANAGER", "PLATFORM_SUPER_ADMIN");
+
     public UserRole grant(UUID userId, UUID roleId) {
         UUID tenantId = TenantContext.requireTenantId();
-        roleRepo.findById(roleId).orElseThrow(() ->
+        Role role = roleRepo.findById(roleId).orElseThrow(() ->
             new ResourceNotFoundException("Role " + roleId + " not found"));
+        if (NON_ASSIGNABLE_ROLE_CODES.contains(role.getCode())) {
+            throw new BusinessRuleException(
+                "Role '" + role.getCode() + "' cannot be assigned through this surface",
+                "ROLE_NOT_ASSIGNABLE");
+        }
         UserRole.PK pk = new UserRole.PK(tenantId, userId, roleId);
         UserRole assignment = userRoleRepo.findById(pk).orElseGet(() ->
             userRoleRepo.save(new UserRole(tenantId, userId, roleId)));

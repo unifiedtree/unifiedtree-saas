@@ -4,10 +4,11 @@ import { Plus, FileText, Download, Eye, ChevronLeft, ChevronRight } from 'lucide
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
-import { Can, P } from '@unifiedtree/sdk'
+import { Can, P, usePermission } from '@unifiedtree/sdk'
 import { TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import {
   useGeneratedLetters,
+  useMyLetters,
   useLetterTemplates,
   useGenerateLetter,
   downloadLetterPdf,
@@ -176,7 +177,14 @@ export const GeneratedLetters: React.FC = () => {
     }
   }
 
-  const { data, isLoading, error, refetch } = useGeneratedLetters(page)
+  // Admins read the whole tenant via /letters/generated (hrms.letters.read); an
+  // EMPLOYEE (read.self only) must use /letters/my, or the admin endpoint 403s.
+  const canReadAll = usePermission(P.HRMS_LETTERS_READ)
+  const canReadSelf = usePermission(P.HRMS_LETTERS_READ_SELF)
+  const canView = canReadAll || canReadSelf
+  const adminQuery = useGeneratedLetters(page, { enabled: canReadAll })
+  const myQuery = useMyLetters(page, { enabled: !canReadAll && canReadSelf })
+  const { data, isLoading, error, refetch } = canReadAll ? adminQuery : myQuery
   const letters: GeneratedLetterDto[] = data?.content ?? []
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
@@ -269,7 +277,7 @@ export const GeneratedLetters: React.FC = () => {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <Can code={P.HRMS_LETTERS_READ}>
+                          {canView && (
                             <button
                               onClick={() => navigate(`/hrms/letters/generated/${letter.id}`)}
                               title="View"
@@ -277,7 +285,7 @@ export const GeneratedLetters: React.FC = () => {
                             >
                               <Eye size={14} />
                             </button>
-                          </Can>
+                          )}
                           {letter.hasPdf && (
                             <button
                               onClick={() => downloadLetterPdf(letter.id, `letter-${letter.type.toLowerCase()}-${letter.id.slice(0, 8)}.pdf`)}
