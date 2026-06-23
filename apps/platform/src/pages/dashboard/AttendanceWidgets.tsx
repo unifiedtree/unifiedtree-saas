@@ -3,8 +3,10 @@ import { motion } from 'framer-motion'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { Users, CheckCircle, HelpCircle, Clock, ArrowUpRight } from 'lucide-react'
+import { usePermission, P } from '@unifiedtree/sdk'
 import { StatCard } from '@/shared/components/StatCard'
 import { useTeamDashboard, useTodayAttendance } from '@/modules/hrms/api/useAttendance'
+import { useEmployeeDirectory } from '@/modules/hrms/api/useWorkforce'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 14 },
@@ -18,12 +20,21 @@ export const TeamAttendanceWidgets: React.FC = () => {
   // We already checked permissions before rendering this component
   const { data: teamData } = useTeamDashboard(dateStr, undefined, true)
 
+  // "Total Employees" is the HR directory headcount, not today's attendance roster.
+  // Only fetch the directory when the user may read it; otherwise fall back to the
+  // attendance roster count so attendance-only managers still see a number.
+  const canReadDirectory = usePermission(P.HRMS_EMPLOYEE_READ)
+  const { data: directory } = useEmployeeDirectory({ page: 0, pageSize: 1 }, { enabled: canReadDirectory })
+  const totalEmployees = canReadDirectory && directory
+    ? directory.totalElements.toString()
+    : (teamData?.staffStatuses.length.toString() ?? '0')
+
   return (
     <>
       <h3 className="font-display text-lg font-semibold text-brand-900 mt-6 mb-2">Team Attendance</h3>
       {/* Stats */}
       <motion.div variants={stagger} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total Employees" value={teamData?.staffStatuses.length.toString() ?? '0'} change="Active today" changeType="neutral" icon={Users} iconColor="text-brand-600" iconBg="bg-brand-soft" subtitle="Across all departments" />
+        <StatCard title="Total Employees" value={totalEmployees} change="Directory headcount" changeType="neutral" icon={Users} iconColor="text-brand-600" iconBg="bg-brand-soft" subtitle="Across all departments" />
         <StatCard title="Present Today" value={teamData?.counts.present.toString() ?? '0'} change="Currently checked in" changeType="positive" icon={CheckCircle} iconColor="text-brand-mint" iconBg="bg-brand-100" subtitle="Staff members" />
         <StatCard title="Late Check-ins" value={teamData?.counts.late.toString() ?? '0'} change="Needs attention" changeType="negative" icon={HelpCircle} iconColor="text-peach-500" iconBg="bg-peach-50" subtitle="Staff members" />
         <StatCard title="Not Marked" value={teamData?.counts.notMarked.toString() ?? '0'} change="Pending check-in" changeType="neutral" icon={Clock} iconColor="text-amber-500" iconBg="bg-amber-50" subtitle="Staff members" />

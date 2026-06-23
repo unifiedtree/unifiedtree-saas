@@ -103,7 +103,7 @@ export interface UpdateWorkforceEmployeePayload {
   profilePhotoUrl?: string
 }
 
-export function useEmployeeDirectory(filters: EmployeeDirectoryFilters) {
+export function useEmployeeDirectory(filters: EmployeeDirectoryFilters, opts?: { enabled?: boolean }) {
   const params = new URLSearchParams()
   if (filters.companyId) params.set('companyId', filters.companyId)
   if (filters.departmentId) params.set('departmentId', filters.departmentId)
@@ -116,6 +116,7 @@ export function useEmployeeDirectory(filters: EmployeeDirectoryFilters) {
   return useQuery({
     queryKey: ['hrms', 'employees', filters],
     queryFn: () => apiJson<PageResponse<WorkforceEmployee>>(`/v1/hrms/employees?${params.toString()}`),
+    enabled: opts?.enabled ?? true,
   })
 }
 

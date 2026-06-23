@@ -33,7 +33,7 @@ public class PlatformUserController {
 
     @Operation(summary = "List all users in the workspace")
     @GetMapping
-    @PreAuthorize("hasAuthority('platform.users.read') or hasRole('COMPANY_ADMIN') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('workspace.users.read') or hasAuthority('platform.admin')")
     public ResponseEntity<List<PlatformUserResponse>> listUsers() {
         List<UserCredential> users = authService.listUsersByTenant(TenantContext.getTenantId());
         
@@ -53,7 +53,7 @@ public class PlatformUserController {
 
     @Operation(summary = "Invite a new non-HRMS user to the workspace")
     @PostMapping
-    @PreAuthorize("hasAuthority('platform.users.write') or hasRole('COMPANY_ADMIN') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('workspace.users.manage') or hasAuthority('platform.admin')")
     public ResponseEntity<PlatformUserResponse> createUser(@Valid @RequestBody CreatePlatformUserRequest req) {
         // employeeId is null for pure platform users
         UserCredential created = authService.createOrUpdateCredentialForEmployee(

@@ -69,11 +69,21 @@ export const Employees: React.FC = () => {
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
 
+  // Stat-card counts: server-side totals scoped to the company and independent of
+  // the table's department/branch/status/search filters — so the cards are a
+  // stable workforce breakdown, not a count of just the current page (max 25).
+  const cid = activeCompany?.id
+  const { data: allCount }    = useEmployeeDirectory({ companyId: cid, pageSize: 1 })
+  const { data: activeCount } = useEmployeeDirectory({ companyId: cid, status: 'ACTIVE', pageSize: 1 })
+  const { data: noticeCount } = useEmployeeDirectory({ companyId: cid, status: 'NOTICE_PERIOD', pageSize: 1 })
+  const { data: exitedCount } = useEmployeeDirectory({ companyId: cid, status: 'EXITED', pageSize: 1 })
+  const { data: termCount }   = useEmployeeDirectory({ companyId: cid, status: 'TERMINATED', pageSize: 1 })
+
   const statusCounts = {
-    total,
-    active: employees.filter((e) => e.employmentStatus === 'ACTIVE').length,
-    onLeave: employees.filter((e) => e.employmentStatus === 'NOTICE_PERIOD').length,
-    inactive: employees.filter((e) => e.employmentStatus === 'EXITED' || e.employmentStatus === 'TERMINATED').length,
+    total: allCount?.totalElements ?? 0,
+    active: activeCount?.totalElements ?? 0,
+    onLeave: noticeCount?.totalElements ?? 0,
+    inactive: (exitedCount?.totalElements ?? 0) + (termCount?.totalElements ?? 0),
   }
 
   const resetPage = useCallback(() => setPage(0), [])
@@ -129,7 +139,7 @@ export const Employees: React.FC = () => {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total', value: total, icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
+          { label: 'Total', value: statusCounts.total, icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
           { label: 'Active', value: statusCounts.active, icon: UserCheck, color: 'text-success', bg: 'bg-success/10' },
           { label: 'On Notice', value: statusCounts.onLeave, icon: Clock, color: 'text-warning', bg: 'bg-warning/10' },
           { label: 'Exited', value: statusCounts.inactive, icon: UserX, color: 'text-danger', bg: 'bg-danger/10' },
