@@ -20,7 +20,7 @@ import {
 } from '@unifiedtree/ui-kit'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
 import { toast } from 'sonner'
-import { useWorkforceEmployee, useUpdateWorkforceEmployee, useConfirmEmployee, useStartNotice, useExitEmployee } from '../api/useWorkforce'
+import { useWorkforceEmployee, useUpdateWorkforceEmployee, useConfirmEmployee, useStartNotice, useExitEmployee, useCancelNotice } from '../api/useWorkforce'
 import { useExtendProbation } from '../api/useProbation'
 import {
   useEmployeeStructure, useStructureHistory, useUpsertStructure, useSalaryComponents,
@@ -1299,6 +1299,7 @@ export const EmployeeDetail: React.FC = () => {
   const confirmMutation = useConfirmEmployee()
   const noticeMutation  = useStartNotice()
   const exitMutation    = useExitEmployee()
+  const cancelNoticeMutation = useCancelNotice()
 
   const canReadIdentity = usePermission(P.HRMS_EMPLOYEE_IDENTITY_READ)
   const canReadBank     = usePermission(P.HRMS_EMPLOYEE_BANK_READ)
@@ -1306,7 +1307,7 @@ export const EmployeeDetail: React.FC = () => {
 
   const extendMutation = useExtendProbation()
   const [showEdit,     setShowEdit]     = useState(false)
-  const [modal,        setModal]        = useState<'confirm' | 'notice' | 'exit' | 'extend' | null>(null)
+  const [modal,        setModal]        = useState<'confirm' | 'notice' | 'exit' | 'extend' | 'cancel-notice' | null>(null)
   const [confirmDate,  setConfirmDate]  = useState(new Date().toISOString().split('T')[0])
   const [noticeStart,  setNoticeStart]  = useState(new Date().toISOString().split('T')[0])
   const [lastDay,      setLastDay]      = useState('')
@@ -1375,6 +1376,14 @@ export const EmployeeDetail: React.FC = () => {
       toast.success('Employee exited')
       setModal(null)
     } catch { toast.error('Failed to exit employee') }
+  }
+
+  const handleCancelNotice = async () => {
+    try {
+      await cancelNoticeMutation.mutateAsync(emp.id)
+      toast.success('Notice withdrawn — employee is active again')
+      setModal(null)
+    } catch (e) { toast.error((e as Error).message || 'Failed to cancel notice') }
   }
 
   const handleExtend = async () => {
@@ -1451,6 +1460,11 @@ export const EmployeeDetail: React.FC = () => {
             {emp.employmentStatus === 'ACTIVE' && (
               <button onClick={() => setModal('notice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 rounded-lg text-xs font-medium transition-colors">
                 <AlertTriangle size={13} /> Start Notice
+              </button>
+            )}
+            {emp.employmentStatus === 'NOTICE_PERIOD' && (
+              <button onClick={() => setModal('cancel-notice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg text-xs font-medium transition-colors">
+                <UserCheck size={13} /> Cancel Notice
               </button>
             )}
             {emp.employmentStatus === 'NOTICE_PERIOD' && (
@@ -1617,6 +1631,14 @@ export const EmployeeDetail: React.FC = () => {
               <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-primary" />
             </div>
           </div>
+        </ActionModal>
+      )}
+
+      {modal === 'cancel-notice' && (
+        <ActionModal title="Cancel Notice Period" description="Withdraw the resignation and set this employee back to Active." confirm="Cancel Notice" onConfirm={handleCancelNotice} onClose={() => setModal(null)} isLoading={cancelNoticeMutation.isPending}>
+          <p className="text-sm text-text-secondary">
+            {fullName} will return to <span className="font-semibold text-text-primary">Active</span> employment, and their notice start &amp; last working day will be cleared. You can start a new notice period later if needed.
+          </p>
         </ActionModal>
       )}
 

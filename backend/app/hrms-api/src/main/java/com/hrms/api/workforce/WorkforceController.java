@@ -307,6 +307,12 @@ public class WorkforceController {
         return employees.exit(id, lastWorkingDay, reason);
     }
 
+    @PostMapping("/employees/{id}/cancel-notice")
+    @PreAuthorize("hasAuthority('hrms.employee.write')")
+    public WorkforceEmployeeResponse cancelNotice(@PathVariable UUID id) {
+        return employees.cancelNotice(id);
+    }
+
     // -- Contractors ---------------------------------------------------------
     @GetMapping("/contractors")
     @PreAuthorize("hasAuthority('hrms.contractor.read') or hasAuthority('platform.admin')")

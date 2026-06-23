@@ -211,6 +211,21 @@ public class WorkforceEmployeeService {
         return toResponse(repository.save(e));
     }
 
+    // -- Cancel notice (withdraw resignation, revert to active) -------------
+    public WorkforceEmployeeResponse cancelNotice(UUID id) {
+        WorkforceEmployee e = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee " + id + " not found"));
+        if (e.getEmploymentStatus() != WorkforceEmployee.EmploymentStatus.NOTICE_PERIOD) {
+            throw new BusinessRuleException("Only an employee on notice period can have their notice cancelled",
+                    "NOT_ON_NOTICE");
+        }
+        e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.ACTIVE);
+        e.setNoticeStartDate(null);
+        e.setLastWorkingDay(null);
+        e.setExitReason(null);
+        return toResponse(repository.save(e));
+    }
+
     // -- Resolve reporting manager from department head ---------------------
     // Returns the explicit value if provided; otherwise looks up the
     // selected department's head. Falls back to null when the department has

@@ -189,3 +189,16 @@ export function useExitEmployee() {
     },
   })
 }
+
+/** Withdraw an in-progress notice period and revert the employee to ACTIVE. */
+export function useCancelNotice() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiJson<WorkforceEmployee>(`/v1/hrms/employees/${id}/cancel-notice`, { method: 'POST' }),
+    onSuccess: (_result, id) => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'employees'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'employee', id] })
+    },
+  })
+}
