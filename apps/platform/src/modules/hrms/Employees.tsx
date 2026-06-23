@@ -11,12 +11,12 @@ import { useCompanies, useDepartments, useBranches } from './api/useOrg'
 import { EmployeeForm } from './employees/EmployeeForm'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 
+// Keys MUST match backend WorkforceEmployee.EmploymentStatus.
 const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }> = {
   ACTIVE: { label: 'Active', color: 'text-success', bg: 'bg-success/10 border-success/20' },
   PROBATION: { label: 'Probation', color: 'text-warning', bg: 'bg-warning/10 border-warning/20' },
-  ON_NOTICE: { label: 'Notice', color: 'text-orange-600', bg: 'bg-orange-100 border-orange-200' },
-  DRAFT: { label: 'Draft', color: 'text-text-tertiary', bg: 'bg-bg-surface border-border-default' },
-  INVITED: { label: 'Invited', color: 'text-accent-default', bg: 'bg-accent-subtle border-accent-default/20' },
+  NOTICE_PERIOD: { label: 'Notice', color: 'text-orange-600', bg: 'bg-orange-100 border-orange-200' },
+  SUSPENDED: { label: 'Suspended', color: 'text-amber-700', bg: 'bg-amber-100 border-amber-200' },
   EXITED: { label: 'Exited', color: 'text-danger', bg: 'bg-danger/10 border-danger/20' },
   TERMINATED: { label: 'Terminated', color: 'text-danger', bg: 'bg-danger/10 border-danger/20' },
 }
@@ -25,8 +25,10 @@ const STATUSES: { value: string; label: string }[] = [
   { value: '', label: 'All Statuses' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'PROBATION', label: 'Probation' },
-  { value: 'ON_NOTICE', label: 'On Notice' },
+  { value: 'NOTICE_PERIOD', label: 'On Notice' },
+  { value: 'SUSPENDED', label: 'Suspended' },
   { value: 'EXITED', label: 'Exited' },
+  { value: 'TERMINATED', label: 'Terminated' },
 ]
 
 export const Employees: React.FC = () => {
@@ -70,7 +72,7 @@ export const Employees: React.FC = () => {
   const statusCounts = {
     total,
     active: employees.filter((e) => e.employmentStatus === 'ACTIVE').length,
-    onLeave: employees.filter((e) => e.employmentStatus === 'ON_NOTICE').length,
+    onLeave: employees.filter((e) => e.employmentStatus === 'NOTICE_PERIOD').length,
     inactive: employees.filter((e) => e.employmentStatus === 'EXITED' || e.employmentStatus === 'TERMINATED').length,
   }
 
@@ -227,7 +229,12 @@ export const Employees: React.FC = () => {
                     </tr>
                   )
                 : employees.map((emp) => {
-                    const sc = STATUS_STYLE[emp.employmentStatus ?? 'ACTIVE'] ?? STATUS_STYLE['ACTIVE']
+                    // Never masquerade an unknown status as "Active" — show it raw in a neutral badge.
+                    const sc = STATUS_STYLE[emp.employmentStatus ?? ''] ?? {
+                      label: emp.employmentStatus ?? '—',
+                      color: 'text-text-secondary',
+                      bg: 'bg-bg-surface border-border-default',
+                    }
                     const initials = (emp.firstName[0] ?? '') + (emp.lastName?.[0] ?? '')
                     const dept = departments.find((d) => d.id === emp.departmentId)
                     const br = branches.find((b) => b.id === emp.branchId)

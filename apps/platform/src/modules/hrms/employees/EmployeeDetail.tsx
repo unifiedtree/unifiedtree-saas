@@ -132,13 +132,12 @@ type WorkForm      = z.infer<typeof workSchema>
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const STATUS_STYLE: Record<string, { label: string; tone: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
-  ACTIVE:     { label: 'Active',        tone: 'success' },
-  PROBATION:  { label: 'Probation',     tone: 'warning' },
-  ON_NOTICE:  { label: 'Notice Period', tone: 'warning' },
-  DRAFT:      { label: 'Draft',         tone: 'default' },
-  INVITED:    { label: 'Invited',       tone: 'info'    },
-  EXITED:     { label: 'Exited',        tone: 'error'   },
-  TERMINATED: { label: 'Terminated',    tone: 'error'   },
+  ACTIVE:        { label: 'Active',        tone: 'success' },
+  PROBATION:     { label: 'Probation',     tone: 'warning' },
+  NOTICE_PERIOD: { label: 'Notice Period', tone: 'warning' },
+  SUSPENDED:     { label: 'Suspended',     tone: 'warning' },
+  EXITED:        { label: 'Exited',        tone: 'error'   },
+  TERMINATED:    { label: 'Terminated',    tone: 'error'   },
 }
 
 // ── PII helpers ───────────────────────────────────────────────────────────────
@@ -215,8 +214,9 @@ function ActionModal({
 function AccountCard({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmployee>['data']> }) {
   const canInvite = usePermission(P.HRMS_EMPLOYEE_INVITE)
   const [busy, setBusy] = useState(false)
-  const status = emp.employmentStatus ?? 'DRAFT'
-  const hasAccount = emp.hasAccount ?? (status === 'ACTIVE')
+  // Account state comes from hasAccount — NOT employmentStatus (an active
+  // employee may have no login yet, and an on-notice employee may have one).
+  const hasAccount = emp.hasAccount ?? false
 
   const doSend = async (resend: boolean) => {
     setBusy(true)
@@ -242,27 +242,20 @@ function AccountCard({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceE
           <CheckCircle2 size={16} className="text-emerald-500" />
           <span className="text-sm font-medium text-emerald-600">Account active</span>
         </div>
-      ) : status === 'INVITED' ? (
-        <div className="space-y-3 py-1">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-            <span className="text-sm text-text-secondary">Invitation sent — awaiting acceptance</span>
-          </div>
-          {canInvite && (
-            <Button size="sm" variant="secondary" leftIcon={<Send size={13} />}
-              loading={busy} onClick={() => doSend(true)}>
-              Resend invitation
-            </Button>
-          )}
-        </div>
       ) : (
         <div className="space-y-3 py-1">
           <p className="text-sm text-text-secondary">No login account yet. Send an invitation so this employee can set a password and log in.</p>
           {canInvite && (
-            <Button size="sm" leftIcon={<Send size={13} />}
-              loading={busy} onClick={() => doSend(false)}>
-              Send invitation
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" leftIcon={<Send size={13} />}
+                loading={busy} onClick={() => doSend(false)}>
+                Send invitation
+              </Button>
+              <Button size="sm" variant="secondary" leftIcon={<Send size={13} />}
+                loading={busy} onClick={() => doSend(true)}>
+                Resend
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -1356,7 +1349,7 @@ export const EmployeeDetail: React.FC = () => {
 
   const fullName   = [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(' ')
   const initials   = (emp.firstName[0] ?? '') + (emp.lastName?.[0] ?? emp.firstName[1] ?? '')
-  const statusInfo = STATUS_STYLE[emp.employmentStatus ?? 'ACTIVE'] ?? STATUS_STYLE['ACTIVE']
+  const statusInfo = STATUS_STYLE[emp.employmentStatus ?? ''] ?? { label: emp.employmentStatus ?? '—', tone: 'default' as const }
 
   const handleConfirm = async () => {
     try {
@@ -1460,7 +1453,7 @@ export const EmployeeDetail: React.FC = () => {
                 <AlertTriangle size={13} /> Start Notice
               </button>
             )}
-            {emp.employmentStatus === 'ON_NOTICE' && (
+            {emp.employmentStatus === 'NOTICE_PERIOD' && (
               <button onClick={() => setModal('exit')} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg text-xs font-medium transition-colors">
                 <LogOut size={13} /> Mark Exited
               </button>
