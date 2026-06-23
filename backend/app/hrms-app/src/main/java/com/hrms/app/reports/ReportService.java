@@ -50,27 +50,30 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> attritionReport(UUID companyId, LocalDate fromDate, LocalDate toDate) {
+        // Exits are recorded in last_working_day by the workforce offboarding flow
+        // (WorkforceEmployeeService.exit/startNotice); the legacy date_of_termination
+        // column is left NULL, so attrition must filter/group on last_working_day.
         String sql = """
                 SELECT
-                    TO_CHAR(e.date_of_termination, 'YYYY-MM')           AS month,
+                    TO_CHAR(e.last_working_day, 'YYYY-MM')              AS month,
                     COUNT(*)                                             AS exits,
                     SUM(CASE WHEN e.employment_status = 'RESIGNED'  THEN 1 ELSE 0 END) AS resignations,
                     SUM(CASE WHEN e.employment_status = 'TERMINATED' THEN 1 ELSE 0 END) AS terminations,
                     ROUND(
                         COUNT(*) * 100.0 / NULLIF(
                             -- MAX() wraps the outer column so the correlated subquery is valid
-                            -- under GROUP BY (the raw e.date_of_termination is not a grouped column).
+                            -- under GROUP BY (the raw e.last_working_day is not a grouped column).
                             (SELECT COUNT(*) FROM hrms.employees
                              WHERE company_id = e.company_id
-                               AND date_of_joining <= MAX(e.date_of_termination)
-                               AND (date_of_termination IS NULL OR date_of_termination > MAX(e.date_of_termination))
+                               AND date_of_joining <= MAX(e.last_working_day)
+                               AND (last_working_day IS NULL OR last_working_day > MAX(e.last_working_day))
                             ), 0
                         ), 2
                     )                                                    AS attrition_pct
                 FROM hrms.employees e
                 WHERE e.company_id = ?
-                  AND e.date_of_termination BETWEEN ? AND ?
-                GROUP BY TO_CHAR(e.date_of_termination, 'YYYY-MM'), e.company_id
+                  AND e.last_working_day BETWEEN ? AND ?
+                GROUP BY TO_CHAR(e.last_working_day, 'YYYY-MM'), e.company_id
                 ORDER BY month
                 """;
         return jdbc.queryForList(sql, companyId, fromDate, toDate);

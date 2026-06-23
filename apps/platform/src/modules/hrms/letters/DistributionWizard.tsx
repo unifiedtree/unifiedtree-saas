@@ -41,7 +41,12 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
   const templates = (templatesPage?.content ?? []).filter((t) => t.active)
   const { data: departments = [] } = useDepartments(companyId)
   const { data: designations = [] } = useDesignations(companyId)
-  const { data: empPage } = useEmployeeDirectory({ companyId: companyId || undefined, pageSize: 500 })
+  // Fetch tenant-wide (no companyId): the backend resolves ALL_EMPLOYEES /
+  // BY_EMPLOYMENT_TYPE across the whole tenant, so the client-side recipient
+  // count must too, or it diverges once there's more than one company.
+  // BY_DEPARTMENT / BY_DESIGNATION still narrow by the (company-scoped) dept/
+  // desig ids selected, so a tenant-wide source is correct for every filter type.
+  const { data: empPage } = useEmployeeDirectory({ pageSize: 500 })
   const employees = empPage?.content ?? []
 
   const [step, setStep] = useState<Step>(1)
