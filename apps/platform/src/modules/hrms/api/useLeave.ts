@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 
-export type LeaveApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'ESCALATED'
+// Mirrors backend ApprovalStatus enum. PENDING_L2 = approved at L1, awaiting HR
+// (L2). ESCALATED was a phantom value the backend never returns and was removed.
+export type LeaveApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'PENDING_L2'
 export type LeaveDuration = 'FULL_DAY' | 'HALF_DAY_MORNING' | 'HALF_DAY_AFTERNOON'
 
 export interface LeaveTypeResponse {

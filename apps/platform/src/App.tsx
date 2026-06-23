@@ -130,7 +130,7 @@ export default function App() {
             clean denial). Guard them on the same permission the page's data requires so
             non-admins get "Access Restricted" up front. (super-admin holds all three.) */}
         <Route path="/users"      element={<RouteGuard anyOf={[P.WORKSPACE_USERS_READ]}><Users /></RouteGuard>} />
-        <Route path="/roles"      element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE]}><Roles /></RouteGuard>} />
+        <Route path="/roles"      element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN]}><Roles /></RouteGuard>} />
         <Route path="/audit-logs" element={<RouteGuard anyOf={[P.AUDIT_READ]}><AuditLogs /></RouteGuard>} />
         {/* Admin-only Modules manager. Guarded on the module-management perms; the '*'
             wildcard lets super-admins (who hold a wildcard-only grant) through, mirroring
@@ -422,7 +422,7 @@ export default function App() {
         <Route
           path="/hrms/letters/distributions"
           element={
-            <RouteGuard anyOf={[P.HRMS_LETTERS_DISTRIBUTE]}>
+            <RouteGuard anyOf={[P.HRMS_LETTERS_DISTRIBUTE, P.HRMS_LETTERS_READ]}>
               <ModuleGate moduleKey="hrms">
                 <React.Suspense fallback={null}>
                   <Distributions />
@@ -434,7 +434,7 @@ export default function App() {
         <Route
           path="/hrms/letters/distributions/:jobId"
           element={
-            <RouteGuard anyOf={[P.HRMS_LETTERS_DISTRIBUTE]}>
+            <RouteGuard anyOf={[P.HRMS_LETTERS_DISTRIBUTE, P.HRMS_LETTERS_READ]}>
               <ModuleGate moduleKey="hrms">
                 <React.Suspense fallback={null}>
                   <DistributionDetail />

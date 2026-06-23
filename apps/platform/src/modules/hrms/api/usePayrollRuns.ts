@@ -4,7 +4,8 @@ import { apiJson, API_BASE_URL, currentSubdomain } from '@/core/api/client'
 
 // ── Types (mirror PayrollRunService DTOs) ───────────────────────────────────
 
-export type RunStatus = 'DRAFT' | 'PROCESSING' | 'LOCKED'
+// Mirrors the DB CHECK on payroll.runs.status (V046): DRAFT/PROCESSING/LOCKED/PAID/CANCELLED.
+export type RunStatus = 'DRAFT' | 'PROCESSING' | 'LOCKED' | 'PAID' | 'CANCELLED'
 
 export interface PayrollRun {
   id: string
@@ -240,6 +241,8 @@ export const statusTone: Record<RunStatus, 'default' | 'info' | 'success'> = {
   DRAFT: 'default',
   PROCESSING: 'info',
   LOCKED: 'success',
+  PAID: 'success',
+  CANCELLED: 'default',
 }
 
 export const inr = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`

@@ -86,7 +86,7 @@ const MODULE_ITEMS: NavItemDef[] = [
 
 const PLATFORM_ITEMS: NavItemDef[] = [
   { key: 'users',    label: 'Users',      icon: <Users size={18} />,    path: '/users',      anyPerm: [P.WORKSPACE_USERS_READ] },
-  { key: 'roles',    label: 'Roles',      icon: <Shield size={18} />,   path: '/roles',      anyPerm: [P.RBAC_ROLE_WRITE] },
+  { key: 'roles',    label: 'Roles',      icon: <Shield size={18} />,   path: '/roles',      anyPerm: [P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN] },
   { key: 'audit',    label: 'Audit Logs', icon: <Bell size={18} />,     path: '/audit-logs', anyPerm: [P.AUDIT_READ] },
   { key: 'files',    label: 'Files',      icon: <Folder size={18} />,   path: '/files' },
   { key: 'settings', label: 'Settings',   icon: <Settings size={18} />, path: '/settings',

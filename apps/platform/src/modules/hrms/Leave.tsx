@@ -21,7 +21,7 @@ const STATUS_STYLE: Record<LeaveApprovalStatus, { label: string; color: string; 
   APPROVED: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10', icon: CheckCircle },
   REJECTED: { label: 'Rejected', color: 'text-red-400', bg: 'bg-red-500/10', icon: XCircle },
   CANCELLED: { label: 'Cancelled', color: 'text-text-secondary', bg: 'bg-surface-2/40', icon: XCircle },
-  ESCALATED: { label: 'Escalated', color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Clock },
+  PENDING_L2: { label: 'Awaiting HR', color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Clock },
 }
 
 // ── My Leaves Tab ─────────────────────────────────────────────────────────────

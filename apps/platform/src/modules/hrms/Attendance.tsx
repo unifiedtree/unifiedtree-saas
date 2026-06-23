@@ -127,13 +127,19 @@ function TeamDashboardTab() {
   const [search, setSearch] = useState('')
   const { data, isLoading, error: teamError, refetch: refetchTeam } = useTeamDashboard(date)
 
+  // Keys must cover the backend AttendanceStatus enum (ON_TIME/WFH/HOLIDAY/WEEKEND
+  // included) — an unmapped value falls back to grey "Not Marked" styling.
   const STATUS_SC: Record<string, string> = {
     PRESENT: 'text-success bg-success/10 border-success/20',
+    ON_TIME: 'text-success bg-success/10 border-success/20',
     LATE: 'text-warning bg-warning/10 border-warning/20',
     ABSENT: 'text-danger bg-danger/10 border-danger/20',
     NOT_MARKED: 'text-text-tertiary bg-bg-surface border-border-default',
     ON_LEAVE: 'text-accent-default bg-accent-subtle border-accent-default/20',
     HALF_DAY: 'text-orange-600 bg-orange-100 border-orange-200',
+    WFH: 'text-accent-default bg-accent-subtle border-accent-default/20',
+    HOLIDAY: 'text-purple-600 bg-purple-100 border-purple-200',
+    WEEKEND: 'text-text-tertiary bg-bg-surface border-border-default',
   }
 
   const staff = (data?.staffStatuses ?? []).filter((s) => {
