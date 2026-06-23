@@ -34,7 +34,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'https://unifiedtree-saas-production.up.railway.app',
+        target: 'https://erpinfrastructure-production.up.railway.app',
         changeOrigin: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
