@@ -1,10 +1,8 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, ClipboardList, Archive } from 'lucide-react'
-import {
-  DataTable, Badge, Drawer, TableSkeleton, EmptyState, Button,
-} from '@unifiedtree/ui-kit'
-import type { Column } from '@unifiedtree/ui-kit'
+import { Drawer, TableSkeleton, EmptyState, Button } from '@unifiedtree/ui-kit'
+import { HrPageHeader, HrStatusPill, TableCard } from '@/shared/components/hr'
 import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
 import { useTemplates, useCreateTemplate, useDeleteTemplate } from './api/useOnboarding'
@@ -115,75 +113,18 @@ export const Templates: React.FC = () => {
     })
   }
 
-  const columns: Column<OnboardingTemplate>[] = [
-    {
-      key: 'name',
-      header: 'Template',
-      cell: (row) => (
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-accent-subtle">
-            <ClipboardList size={13} className="text-accent-default" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-text-primary">{row.name}</p>
-            {row.description && (
-              <p className="text-xs text-text-tertiary truncate max-w-[240px]">{row.description}</p>
-            )}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'tasks',
-      header: 'Tasks',
-      cell: (row) => (
-        <span className="text-sm text-text-secondary">{row.tasks?.length ?? 0}</span>
-      ),
-    },
-    {
-      key: 'active',
-      header: 'Status',
-      cell: (row) => (
-        <Badge tone={row.active ? 'success' : 'default'}>
-          {row.active ? 'Active' : 'Inactive'}
-        </Badge>
-      ),
-    },
-    {
-      key: 'actions',
-      header: '',
-      cell: (row) =>
-        row.active ? (
-          <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleDelete(row) }}
-              disabled={del.isPending}
-              className="rounded-lg p-1.5 text-text-tertiary hover:bg-status-danger-bg hover:text-status-danger-fg transition-colors disabled:opacity-40"
-              aria-label="Archive template"
-              title="Archive template"
-            >
-              <Archive size={14} />
-            </button>
-          </Can>
-        ) : null,
-    },
-  ]
-
   return (
-    <div className="p-6 animate-fade-in">
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-text-primary">Onboarding Templates</h1>
-          <p className="mt-0.5 text-sm text-text-secondary">
-            Define reusable task checklists for new hires
-          </p>
-        </div>
-        <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
-          <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setCreateOpen(true)}>
-            New template
-          </Button>
-        </Can>
-      </div>
+    <div className="mx-auto max-w-5xl p-6 sm:p-8">
+      <HrPageHeader
+        crumb="Recruitment & Onboarding"
+        title="Onboarding Templates"
+        subtitle="Define reusable task checklists for new hires"
+        actions={
+          <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
+            <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setCreateOpen(true)}>New template</Button>
+          </Can>
+        }
+      />
 
       {isLoading ? (
         <TableSkeleton />
@@ -194,16 +135,49 @@ export const Templates: React.FC = () => {
           description={(error as Error).message}
           primaryAction={{ label: 'Retry', onClick: () => refetch() }}
         />
+      ) : templates.length === 0 ? (
+        <EmptyState variant="first-run" title="No templates yet" description="Create your first onboarding template to get started." />
       ) : (
-        <DataTable
-          data={templates}
-          columns={columns}
-          getRowKey={(row) => row.id}
-          onRowClick={(row) => navigate(`/hrms/onboarding/templates/${row.id}`)}
-          emptyTitle="No templates yet"
-          emptyDescription="Create your first onboarding template to get started."
-          emptyVariant="first-run"
-        />
+        <TableCard>
+          <table className="hr-table">
+            <thead>
+              <tr><th>Template</th><th>Tasks</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              {templates.map((row) => (
+                <tr key={row.id} onClick={() => navigate(`/hrms/onboarding/templates/${row.id}`)} className="cursor-pointer">
+                  <td>
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#FFF4E1]">
+                        <ClipboardList size={13} className="text-[#FF9D00]" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-text-primary">{row.name}</p>
+                        {row.description && <p className="max-w-[240px] truncate text-xs text-text-tertiary">{row.description}</p>}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="text-text-secondary">{row.tasks?.length ?? 0}</td>
+                  <td><HrStatusPill tone={row.active ? 'ok' : 'gray'}>{row.active ? 'Active' : 'Inactive'}</HrStatusPill></td>
+                  <td>
+                    {row.active && (
+                      <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(row) }}
+                          disabled={del.isPending}
+                          className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C] disabled:opacity-40"
+                          aria-label="Archive template" title="Archive template"
+                        >
+                          <Archive size={14} />
+                        </button>
+                      </Can>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableCard>
       )}
 
       {createOpen && <CreateTemplateDrawer onClose={() => setCreateOpen(false)} />}
