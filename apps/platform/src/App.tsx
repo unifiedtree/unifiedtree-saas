@@ -34,6 +34,7 @@ import { EssDashboard } from '@/modules/hrms/ess/EssDashboard'
 import { TeamDashboard } from '@/modules/hrms/team/TeamDashboard'
 import { ReportsIndex } from '@/modules/hrms/reports/ReportsIndex'
 import { ProbationSettings } from '@/modules/hrms/probation/ProbationSettings'
+import { ModuleComingSoon } from '@/shared/components/ModuleComingSoon'
 import { PayrollSettings } from '@/modules/hrms/payroll/PayrollSettings'
 import { SalaryComponents } from '@/modules/hrms/payroll/SalaryComponents'
 import { MySalaryStructure } from '@/modules/hrms/payroll/MySalaryStructure'
@@ -273,6 +274,14 @@ export default function App() {
             <RouteGuard anyOf={[P.HRMS_PROBATION_CONFIG_READ]}>
               <ModuleGate moduleKey="hrms"><ProbationSettings /></ModuleGate>
             </RouteGuard>
+          }
+        />
+        {/* Placeholder for client HR screens still being built — keeps the full
+            client nav navigable (no 404s). Auth + HRMS module gated. */}
+        <Route
+          path="/hrms/soon/:key"
+          element={
+            <ModuleGate moduleKey="hrms"><ModuleComingSoon /></ModuleGate>
           }
         />
         <Route

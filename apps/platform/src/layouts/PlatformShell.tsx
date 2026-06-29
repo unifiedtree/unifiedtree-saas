@@ -7,6 +7,7 @@ import {
   UserCircle2, ShieldAlert, FileBarChart2, FileText, Bell, Search, Hexagon,
   TrendingUp, CreditCard, Package, ShoppingCart, HelpCircle, Briefcase,
   UserCheck, Star, Receipt, DollarSign, Lock, MapPin, TreePine,
+  Database, Target, Wallet, Plug, Award,
 } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
@@ -68,122 +69,129 @@ const NAV_ITEMS: NavItemDef[] = [
   },
 ]
 
-// ─── Module items (subscription-gated + role-tuned) ───────────────────────────
+// Role sets for nav-link visibility. NOTE: the real security boundary is the
+// per-route RouteGuard + per-endpoint RBAC; this only tunes which links a role sees.
+const R_ADMIN     = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD']
+const R_ADMIN_MGR = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER']
+const R_HR        = ['SUPER_ADMIN', 'HR_MANAGER']
+const R_FIN       = ['SUPER_ADMIN', 'FINANCE_LEAD', 'HR_MANAGER']
+const R_ESS       = ['EMPLOYEE']
+
+// ─── Module items: the client's 13 HR nav groups (all under the hrms module),
+//     followed by the sellable modules (locked/upsell). ────────────────────────
 const MODULE_ITEMS: NavItemDef[] = [
   {
-    key: 'hrms',
-    label: 'HRMS Core',
-    icon: <Users size={18} />,
-    module: 'hrms',
+    key: 'company', label: 'Company Profile', icon: <Building2 size={18} />, module: 'hrms',
     children: [
-      {
-        label: 'Directory',
-        path: '/hrms/employees',
-        icon: <UserCheck size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER'],
-      },
-      {
-        label: 'Organization',
-        path: '/hrms/organization',
-        icon: <Building2 size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
-      },
-      {
-        label: 'Attendance',
-        path: '/hrms/attendance',
-        icon: <Clock size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'DEPT_MANAGER'],
-      },
-      {
-        label: 'My Attendance',
-        path: '/hrms/attendance',
-        icon: <Clock size={15} />,
-        visibleForRoles: ['EMPLOYEE'],
-      },
-      {
-        label: 'Geofencing',
-        path: '/hrms/attendance/geofencing',
-        icon: <MapPin size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
-      },
-      {
-        label: 'Leave',
-        path: '/hrms/leave',
-        icon: <Calendar size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'DEPT_MANAGER'],
-      },
-      {
-        label: 'My Leave',
-        path: '/hrms/leave',
-        icon: <Calendar size={15} />,
-        visibleForRoles: ['EMPLOYEE'],
-      },
-      {
-        label: 'Onboarding',
-        path: '/hrms/onboarding',
-        icon: <ClipboardList size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
-      },
-      {
-        label: 'My Onboarding',
-        path: '/hrms/onboarding/instances',
-        icon: <ClipboardList size={15} />,
-        visibleForRoles: ['EMPLOYEE'],
-      },
-      {
-        label: 'Letters',
-        path: '/hrms/letters/templates',
-        icon: <FileText size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
-      },
-      {
-        label: 'Distributions',
-        path: '/hrms/letters/distributions',
-        icon: <FileText size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
-      },
-      {
-        label: 'My Letters',
-        path: '/hrms/letters/generated',
-        icon: <FileText size={15} />,
-        visibleForRoles: ['EMPLOYEE'],
-      },
-      {
-        label: 'My Payslips',
-        path: '/me/payslips',
-        icon: <Receipt size={15} />,
-        visibleForRoles: ['EMPLOYEE'],
-      },
-      {
-        label: 'Reports',
-        path: '/hrms/reports',
-        icon: <FileBarChart2 size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER'],
-      },
-      {
-        label: 'Settings',
-        path: '/hrms/settings',
-        icon: <Settings size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER'],
-      },
-      {
-        label: 'Payroll Settings',
-        path: '/hrms/payroll/settings',
-        icon: <CreditCard size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'FINANCE_LEAD'],
-      },
-      {
-        label: 'Salary Components',
-        path: '/hrms/payroll/components',
-        icon: <Receipt size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'FINANCE_LEAD', 'HR_MANAGER'],
-      },
-      {
-        label: 'Payroll Runs',
-        path: '/hrms/payroll/runs',
-        icon: <Receipt size={15} />,
-        visibleForRoles: ['SUPER_ADMIN', 'FINANCE_LEAD', 'HR_MANAGER'],
-      },
+      { label: 'Companies & Branches', path: '/hrms/organization', icon: <Building2 size={15} />, visibleForRoles: R_HR },
+    ],
+  },
+  {
+    key: 'master', label: 'Master', icon: <Database size={18} />, module: 'hrms',
+    children: [
+      { label: 'Workforce Directory', path: '/hrms/employees',         icon: <UserCheck size={15} />,     visibleForRoles: R_ADMIN_MGR },
+      { label: 'Organization Setup',  path: '/hrms/organization',      icon: <Building2 size={15} />,     visibleForRoles: R_HR },
+      { label: 'Rules & Policies',    path: '/hrms/soon/rules-policies', icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
+      { label: 'Payroll Configuration', path: '/hrms/payroll/components', icon: <Receipt size={15} />,     visibleForRoles: R_FIN },
+    ],
+  },
+  {
+    key: 'attendance', label: 'Attendance & Time', icon: <Clock size={18} />, module: 'hrms',
+    children: [
+      { label: 'Attendance Analytics', path: '/hrms/soon/att-analytics', icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN_MGR },
+      { label: 'Daily Tracking',       path: '/hrms/attendance',          icon: <Clock size={15} />,         visibleForRoles: R_ADMIN_MGR },
+      { label: 'Shifts & Overtime',    path: '/hrms/soon/shifts-ot',      icon: <Clock size={15} />,         visibleForRoles: R_HR },
+      { label: 'Geofencing',           path: '/hrms/attendance/geofencing', icon: <MapPin size={15} />,      visibleForRoles: R_HR },
+    ],
+  },
+  {
+    key: 'leave', label: 'Leave Management', icon: <Calendar size={18} />, module: 'hrms',
+    children: [
+      { label: 'Leave Operations Center', path: '/hrms/leave', icon: <Calendar size={15} />, visibleForRoles: R_ADMIN_MGR },
+    ],
+  },
+  {
+    key: 'recruit', label: 'Recruitment & Onboarding', icon: <UserCheck size={18} />, module: 'hrms',
+    children: [
+      { label: 'Hiring Pipeline',      path: '/hrms/soon/hiring-pipeline',  icon: <UserCheck size={15} />,    visibleForRoles: R_HR },
+      { label: 'Onboarding & Assets',  path: '/hrms/onboarding/instances',  icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
+      { label: 'Letter Templates',     path: '/hrms/letters/templates',     icon: <FileText size={15} />,      visibleForRoles: R_HR },
+      { label: 'Generated Letters',    path: '/hrms/letters/generated',     icon: <FileText size={15} />,      visibleForRoles: R_HR },
+      { label: 'Letter Distributions', path: '/hrms/letters/distributions', icon: <FileText size={15} />,      visibleForRoles: R_HR },
+      { label: 'Employee Vault',       path: '/hrms/soon/emp-vault',        icon: <FileText size={15} />,      visibleForRoles: R_HR },
+    ],
+  },
+  {
+    key: 'payroll-hr', label: 'Payroll', icon: <CreditCard size={18} />, module: 'hrms',
+    children: [
+      { label: 'Payroll Dashboard',          path: '/hrms/soon/payroll-dashboard', icon: <LayoutDashboard size={15} />, visibleForRoles: R_FIN },
+      { label: 'Salary Structure',           path: '/hrms/soon/salary-structure',  icon: <Receipt size={15} />,         visibleForRoles: R_FIN },
+      { label: 'Processing & Payslips',      path: '/hrms/payroll/runs',           icon: <Receipt size={15} />,         visibleForRoles: R_FIN },
+      { label: 'Payroll Settings',           path: '/hrms/payroll/settings',       icon: <Settings size={15} />,        visibleForRoles: R_FIN },
+      { label: 'Production-Linked Incentive', path: '/hrms/soon/pli',              icon: <Target size={15} />,          visibleForRoles: R_FIN },
+      { label: 'Advances & Loans',           path: '/hrms/soon/advances',          icon: <Wallet size={15} />,          visibleForRoles: R_FIN },
+      { label: 'Bank Disbursement',          path: '/hrms/soon/bank-disbursement', icon: <CreditCard size={15} />,      visibleForRoles: R_FIN },
+    ],
+  },
+  {
+    key: 'expense', label: 'Expense Management', icon: <Receipt size={18} />, module: 'hrms',
+    children: [
+      { label: 'Expense Center', path: '/hrms/soon/expense-center', icon: <Receipt size={15} />, visibleForRoles: R_ADMIN },
+    ],
+  },
+  {
+    key: 'ess', label: 'Employee Self Service', icon: <UserCircle2 size={18} />, module: 'hrms',
+    children: [
+      { label: 'My Attendance & Leaves', path: '/hrms/attendance', icon: <Clock size={15} />,       visibleForRoles: R_ESS },
+      { label: 'My Payslip',             path: '/me/payslips',     icon: <Receipt size={15} />,      visibleForRoles: R_ESS },
+      { label: 'My Profile',             path: '/me',              icon: <UserCircle2 size={15} />,  visibleForRoles: R_ESS },
+      { label: 'Team Attendance',        path: '/team',            icon: <Users size={15} />,        visibleForRoles: ['DEPT_MANAGER'] },
+    ],
+  },
+  {
+    key: 'performance', label: 'Performance & Learning', icon: <Target size={18} />, module: 'hrms',
+    children: [
+      { label: 'Employee Performance', path: '/hrms/soon/emp-performance', icon: <Target size={15} />,   visibleForRoles: R_ADMIN_MGR },
+      { label: 'Appraisals & 360°',    path: '/hrms/soon/appraisals',      icon: <Star size={15} />,     visibleForRoles: R_HR },
+      { label: 'KPI Tracking',         path: '/hrms/soon/kpi-tracking',    icon: <Target size={15} />,   visibleForRoles: R_ADMIN_MGR },
+      { label: 'Skill Matrix',         path: '/hrms/soon/skill-matrix',    icon: <Database size={15} />, visibleForRoles: R_HR },
+      { label: 'Training Programs',    path: '/hrms/soon/training',        icon: <Award size={15} />,    visibleForRoles: R_HR },
+      { label: 'Certifications',       path: '/hrms/soon/certifications',  icon: <Award size={15} />,    visibleForRoles: R_HR },
+    ],
+  },
+  {
+    key: 'compliance', label: 'Compliance', icon: <ShieldAlert size={18} />, module: 'hrms',
+    children: [
+      { label: 'Statutory Compliance', path: '/hrms/soon/statutory',           icon: <ShieldAlert size={15} />, visibleForRoles: R_ADMIN },
+      { label: 'Muster Roll',          path: '/hrms/soon/muster-roll',         icon: <FileText size={15} />,    visibleForRoles: R_HR },
+      { label: 'POSH Case Management', path: '/hrms/soon/posh',                icon: <ShieldAlert size={15} />, visibleForRoles: R_HR },
+      { label: 'Inspector View',       path: '/hrms/soon/inspector-view',      icon: <ShieldAlert size={15} />, visibleForRoles: R_ADMIN },
+      { label: 'Compliance Calendar',  path: '/hrms/soon/compliance-calendar', icon: <Calendar size={15} />,    visibleForRoles: R_ADMIN },
+    ],
+  },
+  {
+    key: 'reports', label: 'Reports & Analytics', icon: <FileBarChart2 size={18} />, module: 'hrms',
+    children: [
+      { label: 'Attendance & OT Reports', path: '/hrms/reports',                 icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN_MGR },
+      { label: 'Payroll Reports',         path: '/hrms/soon/payroll-reports',    icon: <FileBarChart2 size={15} />, visibleForRoles: R_FIN },
+      { label: 'Workforce Analytics',     path: '/hrms/soon/workforce-analytics', icon: <TrendingUp size={15} />,   visibleForRoles: R_ADMIN },
+    ],
+  },
+  {
+    key: 'exit', label: 'Employee Exit', icon: <LogOut size={18} />, module: 'hrms',
+    children: [
+      { label: 'Resignation & Exit',       path: '/hrms/soon/resignation',  icon: <LogOut size={15} />,   visibleForRoles: R_HR },
+      { label: 'Full & Final Settlement',  path: '/hrms/soon/fnf',          icon: <Wallet size={15} />,   visibleForRoles: R_FIN },
+      { label: 'Experience Letter',        path: '/hrms/letters/templates', icon: <FileText size={15} />, visibleForRoles: R_HR },
+    ],
+  },
+  {
+    key: 'hrsettings', label: 'Settings', icon: <Settings size={18} />, module: 'hrms',
+    children: [
+      { label: 'HR Configuration',      path: '/hrms/settings',                   icon: <Settings size={15} />, visibleForRoles: R_HR },
+      { label: 'Holiday Calendar',      path: '/hrms/leave',                      icon: <Calendar size={15} />, visibleForRoles: R_HR },
+      { label: 'Notification Templates', path: '/hrms/soon/notification-templates', icon: <Bell size={15} />,    visibleForRoles: R_HR },
+      { label: 'Integrations',          path: '/hrms/soon/integrations',          icon: <Plug size={15} />,     visibleForRoles: R_HR },
     ],
   },
   {
