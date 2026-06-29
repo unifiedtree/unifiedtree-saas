@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
-import { DataTable, Badge, Button, EmptyState, type Column } from '@unifiedtree/ui-kit'
+import { EmptyState } from '@unifiedtree/ui-kit'
 import { Can, P } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
+import { HrPageHeader, HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import {
   useSalaryComponents, useSeedDefaultComponents, useCreateComponent, useUpdateComponent, useDeleteComponent,
   type SalaryComponent, type ComponentCategory,
@@ -25,8 +26,8 @@ const CATEGORIES: { value: ComponentCategory; label: string }[] = [
 
 const COMPUTATION_TYPES = ['FIXED', 'PERCENT_OF_BASIC', 'FORMULA', 'STATUTORY']
 
-const catTone: Record<ComponentCategory, 'success' | 'error' | 'info' | 'default'> = {
-  EARNING: 'success', DEDUCTION: 'error', EMPLOYER_CONTRIBUTION: 'info', REIMBURSEMENT: 'default',
+const catTone: Record<ComponentCategory, PillTone> = {
+  EARNING: 'ok', DEDUCTION: 'red', EMPLOYER_CONTRIBUTION: 'info', REIMBURSEMENT: 'gray',
 }
 
 // ── Add / Edit Drawer ───────────────────────────────────────────────────────
@@ -188,7 +189,7 @@ function ComponentDrawer({ editComponent, onClose }: ComponentDrawerProps) {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
+            className="flex-1 rounded-xl bg-[#FF9D00] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#E08A00] disabled:opacity-50"
           >
             {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Component'}
           </button>
@@ -211,46 +212,18 @@ export const SalaryComponents: React.FC = () => {
     () => tab === 'all' ? data : data.filter(c => c.category === tab),
     [data, tab])
 
-  const columns: Column<SalaryComponent>[] = [
-    { key: 'code', header: 'Code', cell: (r) => <span className="font-mono text-xs">{r.code}</span> },
-    { key: 'name', header: 'Name', cell: (r) => r.name },
-    { key: 'category', header: 'Category', cell: (r) => <Badge tone={catTone[r.category]}>{r.category.replace('_', ' ')}</Badge> },
-    { key: 'statutory', header: 'Statutory', cell: (r) => r.isStatutory ? <Badge tone="warning">Statutory</Badge> : '—', hideBelow: 'sm' },
-    { key: 'comp', header: 'Computation', cell: (r) => <span className="text-xs text-slate-500">{r.computationType}{r.percentValue ? ` (${r.percentValue}%)` : ''}</span>, hideBelow: 'md' },
-    {
-      key: 'actions', header: '', cell: (r) => (
-        <Can code={P.PAYROLL_COMPONENTS_MANAGE}>
-          {!r.isSystem && (
-            <div className="flex items-center gap-1">
-              <button onClick={() => setEditing(r)} title="Edit"
-                className="p-1.5 text-slate-400 hover:text-primary rounded-lg transition-colors">
-                <Pencil size={15} />
-              </button>
-              <button onClick={() => del.mutate(r.id, { onSuccess: () => toast('Component deleted', 'success'), onError: (e) => toast((e as Error).message, 'error') })}
-                title="Delete"
-                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors">
-                <Trash2 size={15} />
-              </button>
-            </div>
-          )}
-        </Can>
-      ),
-    },
-  ]
-
   return (
-    <div className="max-w-5xl mx-auto p-6 sm:p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 font-heading tracking-tight">Salary Components</h1>
-          <p className="text-sm text-slate-500 mt-1">The catalog of earnings, deductions and statutory components.</p>
-        </div>
-        {data.length > 0 && (
+    <div className="mx-auto max-w-5xl p-6 sm:p-8">
+      <HrPageHeader
+        crumb="Payroll"
+        title="Salary Components"
+        subtitle="The catalog of earnings, deductions and statutory components."
+        actions={data.length > 0 && (
           <Can code={P.PAYROLL_COMPONENTS_MANAGE}>
-            <Button onClick={() => setShowAdd(true)} leftIcon={<Plus size={15} />}>Add Component</Button>
+            <HrButton onClick={() => setShowAdd(true)}><Plus size={15} /> Add Component</HrButton>
           </Can>
         )}
-      </div>
+      />
 
       {!isLoading && data.length === 0 ? (
         <EmptyState
@@ -267,17 +240,50 @@ export const SalaryComponents: React.FC = () => {
         />
       ) : (
         <>
-          <div className="flex gap-1 mb-4 border-b border-slate-200">
+          <div className="mb-4 flex gap-1 border-b border-border-default">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${tab === t.key ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+                className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${tab === t.key ? 'border-[#FF9D00] text-[#C16E00]' : 'border-transparent text-text-secondary hover:text-text-primary'}`}>
                 {t.label}
               </button>
             ))}
           </div>
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-            <DataTable columns={columns} data={filtered} getRowKey={(r) => r.id} isLoading={isLoading} emptyTitle="No components in this category" />
-          </div>
+          <TableCard>
+            <table className="hr-table">
+              <thead>
+                <tr>
+                  <th>Code</th><th>Name</th><th>Category</th>
+                  <th className="hidden sm:table-cell">Statutory</th>
+                  <th className="hidden md:table-cell">Computation</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  [...Array(4)].map((_, i) => <tr key={i}><td colSpan={6} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={6} className="py-12 text-center text-sm text-text-tertiary">No components in this category</td></tr>
+                ) : filtered.map((r) => (
+                  <tr key={r.id}>
+                    <td><span className="hr-mono">{r.code}</span></td>
+                    <td className="font-medium text-text-primary">{r.name}</td>
+                    <td><HrStatusPill tone={catTone[r.category]}>{r.category.replace('_', ' ')}</HrStatusPill></td>
+                    <td className="hidden sm:table-cell">{r.isStatutory ? <HrStatusPill tone="warn">Statutory</HrStatusPill> : <span className="text-text-tertiary">—</span>}</td>
+                    <td className="hidden md:table-cell text-text-secondary">{r.computationType}{r.percentValue ? ` (${r.percentValue}%)` : ''}</td>
+                    <td>
+                      <Can code={P.PAYROLL_COMPONENTS_MANAGE}>
+                        {!r.isSystem && (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => setEditing(r)} title="Edit" className="rounded-lg p-1.5 text-text-tertiary hover:text-[#C16E00]"><Pencil size={15} /></button>
+                            <button onClick={() => del.mutate(r.id, { onSuccess: () => toast('Component deleted', 'success'), onError: (e) => toast((e as Error).message, 'error') })} title="Delete" className="rounded-lg p-1.5 text-text-tertiary hover:text-rose-600"><Trash2 size={15} /></button>
+                          </div>
+                        )}
+                      </Can>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableCard>
         </>
       )}
 
