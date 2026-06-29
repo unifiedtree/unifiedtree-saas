@@ -57,6 +57,10 @@
         <module>modules/hrms-fnf</module>
         <module>modules/hrms-hiring</module>
         <module>modules/hrms-performance</module>
+        <module>modules/hrms-document</module>
+        <module>modules/hrms-learning</module>
+        <module>modules/hrms-compliance</module>
+        <module>modules/hrms-policy</module>
         <module>modules/mod-crm</module>
         <module>modules/attendance-face</module>
 
@@ -150,6 +154,26 @@
             <dependency>
                 <groupId>com.hrms</groupId>
                 <artifactId>hrms-performance</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-document</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-learning</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-compliance</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-policy</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

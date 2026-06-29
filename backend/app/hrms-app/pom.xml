@@ -30,6 +30,10 @@
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-fnf</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-hiring</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-performance</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-document</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-learning</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-compliance</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-policy</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-notification</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-api</artifactId></dependency>
 

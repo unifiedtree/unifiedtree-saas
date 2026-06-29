@@ -58,6 +58,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.fnf",
         "com.hrms.hiring",
         "com.hrms.performance",
+        "com.hrms.document",
+        "com.hrms.learning",
+        "com.hrms.compliance",
+        "com.hrms.policy",
 
         // canonical REST controllers
         "com.hrms.api.workforce",
@@ -81,6 +85,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.fnf",
         "com.hrms.api.hiring",
         "com.hrms.api.performance",
+        "com.hrms.api.document",
+        "com.hrms.api.learning",
+        "com.hrms.api.compliance",
+        "com.hrms.api.policy",
 
         // app-layer: reports, bulk import, jobs
         "com.hrms.app.reports",
@@ -101,6 +109,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.fnf.entity",
         "com.hrms.hiring.entity",
         "com.hrms.performance.entity",
+        "com.hrms.document.entity",
+        "com.hrms.learning.entity",
+        "com.hrms.compliance.entity",
+        "com.hrms.policy.entity",
         "com.hrms.letters.domain",
         "com.unifiedtree.settings.entity",
         "com.unifiedtree.auth.entity",
@@ -118,6 +130,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.fnf.repository",
         "com.hrms.hiring.repository",
         "com.hrms.performance.repository",
+        "com.hrms.document.repository",
+        "com.hrms.learning.repository",
+        "com.hrms.compliance.repository",
+        "com.hrms.policy.repository",
         "com.hrms.letters.repository",
         "com.unifiedtree.settings.repository",
         "com.unifiedtree.auth.repository",

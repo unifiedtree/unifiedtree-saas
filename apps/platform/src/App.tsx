@@ -45,6 +45,10 @@ import { PayrollDashboard } from '@/modules/hrms/payroll/PayrollDashboard'
 import { SalaryStructureAdmin } from '@/modules/hrms/payroll/SalaryStructureAdmin'
 import { MusterRoll } from '@/modules/hrms/attendance/MusterRoll'
 import { BankDisbursement } from '@/modules/hrms/payroll/BankDisbursement'
+import { DocumentVault } from '@/modules/hrms/DocumentVault'
+import { Learning } from '@/modules/hrms/Learning'
+import { Compliance } from '@/modules/hrms/Compliance'
+import { Policies } from '@/modules/hrms/Policies'
 import { ModuleComingSoon } from '@/shared/components/ModuleComingSoon'
 import { PayrollSettings } from '@/modules/hrms/payroll/PayrollSettings'
 import { SalaryComponents } from '@/modules/hrms/payroll/SalaryComponents'
@@ -316,6 +320,38 @@ export default function App() {
           element={
             <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
               <ModuleGate moduleKey="hrms"><BankDisbursement /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/documents"
+          element={
+            <RouteGuard anyOf={['hrms.document.read.self', 'hrms.document.read', 'hrms.document.write']}>
+              <ModuleGate moduleKey="hrms"><DocumentVault /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/learning"
+          element={
+            <RouteGuard anyOf={['hrms.learning.read', 'hrms.learning.write', 'hrms.learning.enroll.self']}>
+              <ModuleGate moduleKey="hrms"><Learning /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/compliance"
+          element={
+            <RouteGuard anyOf={['hrms.compliance.read', 'hrms.compliance.write', 'hrms.compliance.posh']}>
+              <ModuleGate moduleKey="hrms"><Compliance /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/policies"
+          element={
+            <RouteGuard anyOf={['hrms.policy.read', 'hrms.policy.write', 'hrms.policy.acknowledge.self']}>
+              <ModuleGate moduleKey="hrms"><Policies /></ModuleGate>
             </RouteGuard>
           }
         />
