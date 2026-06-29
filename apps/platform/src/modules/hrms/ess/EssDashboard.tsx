@@ -1,72 +1,68 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, ClipboardList } from 'lucide-react'
-import { clsx } from 'clsx'
+import { ArrowRight, ClipboardList, CheckCircle, Clock } from 'lucide-react'
 import { format } from 'date-fns'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
+import { HrStatCard, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { useMonthlyStats } from '../api/useAttendance'
 import { useMyBalances, useMyLeaves } from '../api/useLeave'
+
+const LEAVE_TONE: Record<string, PillTone> = {
+  APPROVED: 'ok', PENDING: 'warn', REJECTED: 'red', CANCELLED: 'gray', PENDING_L2: 'purple',
+}
 
 export const EssDashboard: React.FC = () => {
   const navigate = useNavigate()
   const user = useSdkStore((state) => state.user)
 
-  // Punching is mobile-only — the web ESS dashboard no longer shows a
-  // check-in/out widget. useCheckIn/useCheckOut remain in ../api/useAttendance
-  // for the mobile/SDK clients.
+  // Punching is mobile-only — the web ESS dashboard no longer shows a check-in/out
+  // widget. useCheckIn/useCheckOut remain in ../api/useAttendance for mobile clients.
   const { data: monthStats } = useMonthlyStats()
   const { data: balances = [] } = useMyBalances()
   const { data: myLeaves } = useMyLeaves(0)
 
   const recentLeaves = (myLeaves?.content ?? []).slice(0, 3)
   const pendingLeaves = (myLeaves?.content ?? []).filter((l) => l.status === 'PENDING').length
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
       {/* Greeting */}
-      <div className="bg-gradient-to-r from-indigo-600/20 to-purple-600/10 border border-indigo-500/20 rounded-2xl p-5">
-        <p className="text-text-secondary text-sm">Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'},</p>
-        <h1 className="text-2xl font-bold text-text-primary mt-0.5">{user?.firstName ?? 'Employee'} {user?.lastName ?? ''}</h1>
-        <p className="text-text-secondary text-sm mt-1">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
+      <div className="rounded-2xl border border-[#FFD68A] bg-[#FFF4E1] p-5">
+        <p className="text-sm text-[#9A5600]">Good {greeting},</p>
+        <h1 className="mt-0.5 text-2xl font-bold text-text-primary">{user?.firstName ?? 'Employee'} {user?.lastName ?? ''}</h1>
+        <p className="mt-1 text-sm text-text-secondary">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
+
       {/* Monthly stats */}
       {monthStats && (
-        <div className="bg-white border border-border-default rounded-2xl p-4">
-          <h2 className="text-sm font-semibold text-text-primary mb-3">This Month</h2>
-          <div className="flex flex-wrap gap-5">
-            {[
-              { label: 'Present', value: monthStats.presentDays, color: 'text-emerald-400' },
-              { label: 'Absent', value: monthStats.absentDays, color: 'text-red-400' },
-              { label: 'Late', value: monthStats.lateDays, color: 'text-amber-400' },
-              { label: 'On Time', value: monthStats.onTimeDays, color: 'text-blue-400' },
-            ].map((s) => (
-              <div key={s.label} className="text-center min-w-[48px]">
-                <p className={clsx('text-xl font-bold', s.color)}>{s.value}</p>
-                <p className="text-xs text-text-secondary mt-0.5">{s.label}</p>
-              </div>
-            ))}
-            <div className="text-center ml-auto">
-              <p className="text-xl font-bold text-primary">{monthStats.attendanceScore}%</p>
-              <p className="text-xs text-text-secondary mt-0.5">Score</p>
-            </div>
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-text-primary">This Month</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <HrStatCard icon={<CheckCircle size={16} />} color="green"  value={monthStats.presentDays}            label="Present" />
+            <HrStatCard icon={<Clock size={16} />}       color="red"    value={monthStats.absentDays}             label="Absent" />
+            <HrStatCard icon={<Clock size={16} />}       color="orange" value={monthStats.lateDays}               label="Late" />
+            <HrStatCard icon={<CheckCircle size={16} />} color="blue"   value={monthStats.onTimeDays}             label="On Time" />
+            <HrStatCard icon={<CheckCircle size={16} />} color="teal"   value={`${monthStats.attendanceScore}%`}  label="Score" />
           </div>
         </div>
       )}
 
       {/* Leave balances */}
       {balances.length > 0 && (
-        <div className="bg-white border border-border-default rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
+        <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-text-primary">Leave Balances</h2>
-            <button onClick={() => navigate('/hrms/leave')} className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark transition-colors">
+            <button onClick={() => navigate('/hrms/leave')} className="flex items-center gap-1 text-xs font-semibold text-[#C16E00] hover:text-[#9A5600]">
               Apply leave <ArrowRight size={12} />
             </button>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {balances.slice(0, 6).map((b) => (
-              <div key={b.id} className="bg-surface-2 rounded-xl p-3">
-                <p className="text-xs text-text-secondary truncate">{b.leaveTypeName}</p>
-                <p className="text-lg font-bold text-text-primary mt-0.5">{b.available.toFixed(1)}</p>
+              <div key={b.id} className="rounded-xl bg-bg-base p-3">
+                <p className="truncate text-xs text-text-secondary">{b.leaveTypeName}</p>
+                <p className="mt-0.5 text-lg font-bold text-text-primary">{b.available.toFixed(1)}</p>
                 <p className="text-xs text-text-tertiary">of {b.totalEntitlement.toFixed(1)} days</p>
               </div>
             ))}
@@ -75,11 +71,11 @@ export const EssDashboard: React.FC = () => {
       )}
 
       {/* Onboarding tasks shortcut */}
-      <div className="bg-white border border-border-default rounded-2xl p-4">
+      <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-subtle">
-              <ClipboardList size={15} className="text-accent-default" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FFF4E1]">
+              <ClipboardList size={15} className="text-[#FF9D00]" />
             </div>
             <div>
               <p className="text-sm font-semibold text-text-primary">Onboarding Tasks</p>
@@ -88,7 +84,7 @@ export const EssDashboard: React.FC = () => {
           </div>
           <button
             onClick={() => navigate('/hrms/onboarding/instances')}
-            className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark transition-colors"
+            className="flex items-center gap-1 text-xs font-semibold text-[#C16E00] hover:text-[#9A5600]"
           >
             Open <ArrowRight size={12} />
           </button>
@@ -97,28 +93,20 @@ export const EssDashboard: React.FC = () => {
 
       {/* Recent leave requests */}
       {recentLeaves.length > 0 && (
-        <div className="bg-white border border-border-default rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border-default">
+        <div className="overflow-hidden rounded-2xl border border-border-default bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-border-default px-4 py-3">
             <h2 className="text-sm font-semibold text-text-primary">Recent Leave Requests</h2>
-            {pendingLeaves > 0 && (
-              <span className="text-xs bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full">{pendingLeaves} pending</span>
-            )}
+            {pendingLeaves > 0 && <HrStatusPill tone="warn">{pendingLeaves} pending</HrStatusPill>}
           </div>
           {recentLeaves.map((leave) => (
-            <div key={leave.id} className="flex items-center justify-between px-4 py-3 border-b border-border-default/40 last:border-0">
+            <div key={leave.id} className="flex items-center justify-between border-b border-border-default/40 px-4 py-3 last:border-0">
               <div>
-                <p className="text-text-primary text-sm">{leave.leaveTypeName ?? 'Leave'}</p>
-                <p className="text-text-secondary text-xs mt-0.5">
+                <p className="text-sm text-text-primary">{leave.leaveTypeName ?? 'Leave'}</p>
+                <p className="mt-0.5 text-xs text-text-secondary">
                   {format(new Date(leave.startDate), 'd MMM')} – {format(new Date(leave.endDate), 'd MMM')} · {leave.totalDays}d
                 </p>
               </div>
-              <span className={clsx('text-xs px-2 py-0.5 rounded-full',
-                leave.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-400' :
-                leave.status === 'PENDING' ? 'bg-amber-500/10 text-amber-400' :
-                'bg-red-500/10 text-red-400'
-              )}>
-                {leave.status}
-              </span>
+              <HrStatusPill tone={LEAVE_TONE[leave.status] ?? 'gray'}>{leave.status}</HrStatusPill>
             </div>
           ))}
         </div>
