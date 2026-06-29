@@ -217,6 +217,13 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   }
 
   const isPending = createEmp.isPending || updateEmp.isPending
+  // The update API persists ONLY Basic + Work fields. Identity/Bank/Address/Emergency
+  // are managed via the employee's profile tabs (separate endpoints), and System Access
+  // (role + invite) is create-only. Showing those steps on edit silently dropped data,
+  // so in edit mode we restrict the wizard to the steps the update actually saves.
+  const visibleSteps = isEdit ? STEPS.filter((s) => s.key === 'basic' || s.key === 'work') : STEPS
+  const stepIdx = Math.max(0, visibleSteps.findIndex((s) => s.key === step))
+  const isLastStep = stepIdx === visibleSteps.length - 1
 
   return (
     <>
@@ -230,7 +237,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
 
         {/* Step pills */}
         <div className="flex gap-1 px-5 py-3 border-b border-border overflow-x-auto scrollbar-hide">
-          {STEPS.map((s, i) => (
+          {visibleSteps.map((s, i) => (
             <button
               key={s.key}
               onClick={() => setStep(s.key)}
@@ -462,17 +469,17 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
 
         {/* Footer */}
         <div className="flex gap-3 p-5 border-t border-border">
-          {step !== 'basic' && (
-            <button onClick={() => setStep(STEPS[STEPS.findIndex((s) => s.key === step) - 1].key)} className="px-4 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">
+          {stepIdx > 0 && (
+            <button onClick={() => setStep(visibleSteps[stepIdx - 1].key)} className="px-4 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">
               Back
             </button>
           )}
           <button onClick={onClose} className="px-4 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">
             Cancel
           </button>
-          {step !== 'emergency' ? (
+          {!isLastStep ? (
             <button
-              onClick={() => setStep(STEPS[STEPS.findIndex((s) => s.key === step) + 1].key)}
+              onClick={() => setStep(visibleSteps[stepIdx + 1].key)}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-dark text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
             >
               Next <ChevronRight size={14} />
