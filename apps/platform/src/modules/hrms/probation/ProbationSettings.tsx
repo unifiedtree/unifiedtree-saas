@@ -1,28 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
-import { DataTable, Badge, Button, Field, Input, type Column } from '@unifiedtree/ui-kit'
+import { Button, Field, Input } from '@unifiedtree/ui-kit'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
+import { HrPageHeader, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import {
   useProbationConfig, useUpdateProbationConfig,
   useProbationReminders, useTriggerProbationScan,
-  type ProbationReminder,
 } from '../api/useProbation'
 
-const reminderColumns: Column<ProbationReminder>[] = [
-  { key: 'employeeName', header: 'Employee', cell: (r) => r.employeeName },
-  {
-    key: 'reminderType', header: 'Type',
-    cell: (r) => (
-      <Badge tone={r.reminderType === 'OVERDUE' ? 'error' : r.reminderType === 'FINAL' ? 'warning' : 'info'}>
-        {r.reminderType}
-      </Badge>
-    ),
-  },
-  { key: 'probationEndDate', header: 'Probation End', cell: (r) => format(new Date(r.probationEndDate), 'd MMM yyyy'), hideBelow: 'sm' },
-  { key: 'sentAt', header: 'Sent', cell: (r) => format(new Date(r.sentAt), 'd MMM yyyy, HH:mm') },
-]
+const remTone: Record<string, PillTone> = { OVERDUE: 'red', FINAL: 'warn' }
 
 export const ProbationSettings: React.FC = () => {
   const { toast } = useToast()
@@ -62,13 +50,14 @@ export const ProbationSettings: React.FC = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 sm:p-8 space-y-8">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 font-heading tracking-tight">Probation Settings</h1>
-        <p className="text-sm text-slate-500 mt-1">Configure when probation-ending reminders are sent to managers and HR.</p>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-8 p-6 sm:p-8">
+      <HrPageHeader
+        crumb="Settings"
+        title="Probation Settings"
+        subtitle="Configure when probation-ending reminders are sent to managers and HR."
+      />
 
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-5">
+      <div className="space-y-5 rounded-2xl border border-border-default bg-white p-6 shadow-sm">
         <Field label="Reminder days before probation ends" hint="How many days ahead of the probation end date to email the manager and HR (1–90).">
           <Input
             type="number" min={1} max={90} value={days}
@@ -77,19 +66,19 @@ export const ProbationSettings: React.FC = () => {
           />
         </Field>
 
-        <label className="flex items-center gap-3 cursor-pointer select-none">
+        <label className="flex cursor-pointer select-none items-center gap-3">
           <button
             type="button"
             role="switch"
             aria-checked={autoExtend}
             onClick={() => { setAutoExtend(v => !v); setDirty(true) }}
             className={clsx('relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-              autoExtend ? 'bg-[#0F6E56]' : 'bg-slate-300')}
+              autoExtend ? 'bg-[#FF9D00]' : 'bg-border-strong')}
           >
             <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
               style={{ transform: autoExtend ? 'translateX(18px)' : 'translateX(4px)' }} />
           </button>
-          <span className="text-sm font-medium text-slate-800">Auto-extend probation if no action is taken</span>
+          <span className="text-sm font-medium text-text-primary">Auto-extend probation if no action is taken</span>
         </label>
 
         {autoExtend && (
@@ -113,18 +102,32 @@ export const ProbationSettings: React.FC = () => {
       </div>
 
       {canReadReminders && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h2 className="text-sm font-bold text-slate-800">Recent reminders</h2>
-          </div>
-          <DataTable
-            columns={reminderColumns}
-            data={reminders}
-            getRowKey={(r) => r.id}
-            isLoading={remindersLoading}
-            emptyTitle="No reminders sent yet"
-            emptyDescription="Reminders appear here once the scan fires."
-          />
+        <div>
+          <h2 className="mb-3 text-sm font-bold text-text-primary">Recent reminders</h2>
+          <TableCard>
+            <table className="hr-table">
+              <thead>
+                <tr>
+                  <th>Employee</th><th>Type</th>
+                  <th className="hidden sm:table-cell">Probation End</th><th>Sent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {remindersLoading ? (
+                  [...Array(3)].map((_, i) => <tr key={i}><td colSpan={4} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
+                ) : reminders.length === 0 ? (
+                  <tr><td colSpan={4} className="py-12 text-center text-sm text-text-tertiary">No reminders sent yet</td></tr>
+                ) : reminders.map((r) => (
+                  <tr key={r.id}>
+                    <td className="font-medium text-text-primary">{r.employeeName}</td>
+                    <td><HrStatusPill tone={remTone[r.reminderType] ?? 'info'}>{r.reminderType}</HrStatusPill></td>
+                    <td className="hidden sm:table-cell text-text-secondary">{format(new Date(r.probationEndDate), 'd MMM yyyy')}</td>
+                    <td className="text-text-secondary">{format(new Date(r.sentAt), 'd MMM yyyy, HH:mm')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableCard>
         </div>
       )}
     </div>
