@@ -100,7 +100,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     children: [
       { label: 'Attendance Analytics', path: '/hrms/att-analytics', icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN_MGR },
       { label: 'Daily Tracking',       path: '/hrms/attendance',          icon: <Clock size={15} />,         visibleForRoles: R_ADMIN_MGR },
-      { label: 'Shifts & Overtime',    path: '/hrms/soon/shifts-ot',      icon: <Clock size={15} />,         visibleForRoles: R_HR },
+      { label: 'Shifts & Overtime',    path: '/hrms/shifts',      icon: <Clock size={15} />,         visibleForRoles: R_HR },
       { label: 'Geofencing',           path: '/hrms/attendance/geofencing', icon: <MapPin size={15} />,      visibleForRoles: R_HR },
     ],
   },
@@ -128,7 +128,7 @@ const MODULE_ITEMS: NavItemDef[] = [
       { label: 'Salary Structure',           path: '/hrms/salary-structure',  icon: <Receipt size={15} />,         visibleForRoles: R_FIN },
       { label: 'Processing & Payslips',      path: '/hrms/payroll/runs',           icon: <Receipt size={15} />,         visibleForRoles: R_FIN },
       { label: 'Payroll Settings',           path: '/hrms/payroll/settings',       icon: <Settings size={15} />,        visibleForRoles: R_FIN },
-      { label: 'Production-Linked Incentive', path: '/hrms/soon/pli',              icon: <Target size={15} />,          visibleForRoles: R_FIN },
+      { label: 'Production-Linked Incentive', path: '/hrms/pli',              icon: <Target size={15} />,          visibleForRoles: R_FIN },
       { label: 'Advances & Loans',           path: '/hrms/advances',          icon: <Wallet size={15} />,          visibleForRoles: [...R_ADMIN_MGR, ...R_ESS] },
       { label: 'Bank Disbursement',          path: '/hrms/bank-disbursement', icon: <CreditCard size={15} />,      visibleForRoles: R_FIN },
     ],
@@ -190,8 +190,8 @@ const MODULE_ITEMS: NavItemDef[] = [
     children: [
       { label: 'HR Configuration',      path: '/hrms/settings',                   icon: <Settings size={15} />, visibleForRoles: R_HR },
       { label: 'Holiday Calendar',      path: '/hrms/leave',                      icon: <Calendar size={15} />, visibleForRoles: R_HR },
-      { label: 'Notification Templates', path: '/hrms/soon/notification-templates', icon: <Bell size={15} />,    visibleForRoles: R_HR },
-      { label: 'Integrations',          path: '/hrms/soon/integrations',          icon: <Plug size={15} />,     visibleForRoles: R_HR },
+      { label: 'Notification Templates', path: '/hrms/notification-templates', icon: <Bell size={15} />,    visibleForRoles: R_HR },
+      { label: 'Integrations',          path: '/hrms/integrations',          icon: <Plug size={15} />,     visibleForRoles: R_HR },
     ],
   },
   {

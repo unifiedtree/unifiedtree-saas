@@ -49,6 +49,10 @@ import { DocumentVault } from '@/modules/hrms/DocumentVault'
 import { Learning } from '@/modules/hrms/Learning'
 import { Compliance } from '@/modules/hrms/Compliance'
 import { Policies } from '@/modules/hrms/Policies'
+import { Pli } from '@/modules/hrms/Pli'
+import { Integrations } from '@/modules/hrms/Integrations'
+import { NotificationTemplates } from '@/modules/hrms/NotificationTemplates'
+import { ShiftsAndOt } from '@/modules/hrms/attendance/ShiftsAndOt'
 import { ModuleComingSoon } from '@/shared/components/ModuleComingSoon'
 import { PayrollSettings } from '@/modules/hrms/payroll/PayrollSettings'
 import { SalaryComponents } from '@/modules/hrms/payroll/SalaryComponents'
@@ -352,6 +356,38 @@ export default function App() {
           element={
             <RouteGuard anyOf={['hrms.policy.read', 'hrms.policy.write', 'hrms.policy.acknowledge.self']}>
               <ModuleGate moduleKey="hrms"><Policies /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/pli"
+          element={
+            <RouteGuard anyOf={['hrms.pli.read', 'hrms.pli.write', 'hrms.pli.read.self']}>
+              <ModuleGate moduleKey="hrms"><Pli /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/integrations"
+          element={
+            <RouteGuard anyOf={['hrms.integration.read', 'hrms.integration.write']}>
+              <ModuleGate moduleKey="hrms"><Integrations /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/notification-templates"
+          element={
+            <RouteGuard anyOf={['hrms.notiftemplate.read', 'hrms.notiftemplate.write']}>
+              <ModuleGate moduleKey="hrms"><NotificationTemplates /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/shifts"
+          element={
+            <RouteGuard anyOf={['attendance.team.read', P.HRMS_EMPLOYEE_READ]}>
+              <ModuleGate moduleKey="hrms"><ShiftsAndOt /></ModuleGate>
             </RouteGuard>
           }
         />

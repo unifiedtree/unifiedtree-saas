@@ -62,6 +62,9 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.learning",
         "com.hrms.compliance",
         "com.hrms.policy",
+        "com.hrms.pli",
+        "com.hrms.integration",
+        "com.hrms.notiftemplate",
 
         // canonical REST controllers
         "com.hrms.api.workforce",
@@ -89,6 +92,9 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.learning",
         "com.hrms.api.compliance",
         "com.hrms.api.policy",
+        "com.hrms.api.pli",
+        "com.hrms.api.integration",
+        "com.hrms.api.notiftemplate",
 
         // app-layer: reports, bulk import, jobs
         "com.hrms.app.reports",
@@ -113,6 +119,9 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.learning.entity",
         "com.hrms.compliance.entity",
         "com.hrms.policy.entity",
+        "com.hrms.pli.entity",
+        "com.hrms.integration.entity",
+        "com.hrms.notiftemplate.entity",
         "com.hrms.letters.domain",
         "com.unifiedtree.settings.entity",
         "com.unifiedtree.auth.entity",
@@ -134,6 +143,9 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.learning.repository",
         "com.hrms.compliance.repository",
         "com.hrms.policy.repository",
+        "com.hrms.pli.repository",
+        "com.hrms.integration.repository",
+        "com.hrms.notiftemplate.repository",
         "com.hrms.letters.repository",
         "com.unifiedtree.settings.repository",
         "com.unifiedtree.auth.repository",

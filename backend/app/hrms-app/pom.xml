@@ -34,6 +34,9 @@
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-learning</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-compliance</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-policy</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-pli</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-integration</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-notiftemplate</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-notification</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-api</artifactId></dependency>
 
