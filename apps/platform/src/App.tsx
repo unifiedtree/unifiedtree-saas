@@ -39,6 +39,12 @@ import { Advance } from '@/modules/hrms/Advance'
 import { FullAndFinal } from '@/modules/hrms/FullAndFinal'
 import { Hiring } from '@/modules/hrms/Hiring'
 import { Performance } from '@/modules/hrms/Performance'
+import { WorkforceAnalytics } from '@/modules/hrms/analytics/WorkforceAnalytics'
+import { AttendanceAnalytics } from '@/modules/hrms/analytics/AttendanceAnalytics'
+import { PayrollDashboard } from '@/modules/hrms/payroll/PayrollDashboard'
+import { SalaryStructureAdmin } from '@/modules/hrms/payroll/SalaryStructureAdmin'
+import { MusterRoll } from '@/modules/hrms/attendance/MusterRoll'
+import { BankDisbursement } from '@/modules/hrms/payroll/BankDisbursement'
 import { ModuleComingSoon } from '@/shared/components/ModuleComingSoon'
 import { PayrollSettings } from '@/modules/hrms/payroll/PayrollSettings'
 import { SalaryComponents } from '@/modules/hrms/payroll/SalaryComponents'
@@ -262,6 +268,54 @@ export default function App() {
           element={
             <RouteGuard anyOf={['hrms.performance.read', 'hrms.performance.write', 'hrms.performance.review.self']}>
               <ModuleGate moduleKey="hrms"><Performance /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/workforce-analytics"
+          element={
+            <RouteGuard anyOf={[P.HRMS_REPORT_HEADCOUNT, P.HRMS_REPORT_ATTRITION, P.HRMS_REPORT_DIVERSITY]}>
+              <ModuleGate moduleKey="hrms"><WorkforceAnalytics /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/att-analytics"
+          element={
+            <RouteGuard anyOf={[P.HRMS_REPORT_ATTENDANCE, 'attendance.team.read']}>
+              <ModuleGate moduleKey="hrms"><AttendanceAnalytics /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/payroll-dashboard"
+          element={
+            <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
+              <ModuleGate moduleKey="hrms"><PayrollDashboard /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/salary-structure"
+          element={
+            <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
+              <ModuleGate moduleKey="hrms"><SalaryStructureAdmin /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/muster-roll"
+          element={
+            <RouteGuard anyOf={['attendance.team.read', P.HRMS_EMPLOYEE_READ]}>
+              <ModuleGate moduleKey="hrms"><MusterRoll /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/bank-disbursement"
+          element={
+            <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
+              <ModuleGate moduleKey="hrms"><BankDisbursement /></ModuleGate>
             </RouteGuard>
           }
         />

@@ -98,7 +98,7 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'attendance', label: 'Attendance & Time', icon: <Clock size={18} />, module: 'hrms',
     children: [
-      { label: 'Attendance Analytics', path: '/hrms/soon/att-analytics', icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN_MGR },
+      { label: 'Attendance Analytics', path: '/hrms/att-analytics', icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN_MGR },
       { label: 'Daily Tracking',       path: '/hrms/attendance',          icon: <Clock size={15} />,         visibleForRoles: R_ADMIN_MGR },
       { label: 'Shifts & Overtime',    path: '/hrms/soon/shifts-ot',      icon: <Clock size={15} />,         visibleForRoles: R_HR },
       { label: 'Geofencing',           path: '/hrms/attendance/geofencing', icon: <MapPin size={15} />,      visibleForRoles: R_HR },
@@ -124,13 +124,13 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'payroll-hr', label: 'Payroll', icon: <CreditCard size={18} />, module: 'hrms',
     children: [
-      { label: 'Payroll Dashboard',          path: '/hrms/soon/payroll-dashboard', icon: <LayoutDashboard size={15} />, visibleForRoles: R_FIN },
-      { label: 'Salary Structure',           path: '/hrms/soon/salary-structure',  icon: <Receipt size={15} />,         visibleForRoles: R_FIN },
+      { label: 'Payroll Dashboard',          path: '/hrms/payroll-dashboard', icon: <LayoutDashboard size={15} />, visibleForRoles: R_FIN },
+      { label: 'Salary Structure',           path: '/hrms/salary-structure',  icon: <Receipt size={15} />,         visibleForRoles: R_FIN },
       { label: 'Processing & Payslips',      path: '/hrms/payroll/runs',           icon: <Receipt size={15} />,         visibleForRoles: R_FIN },
       { label: 'Payroll Settings',           path: '/hrms/payroll/settings',       icon: <Settings size={15} />,        visibleForRoles: R_FIN },
       { label: 'Production-Linked Incentive', path: '/hrms/soon/pli',              icon: <Target size={15} />,          visibleForRoles: R_FIN },
       { label: 'Advances & Loans',           path: '/hrms/advances',          icon: <Wallet size={15} />,          visibleForRoles: [...R_ADMIN_MGR, ...R_ESS] },
-      { label: 'Bank Disbursement',          path: '/hrms/soon/bank-disbursement', icon: <CreditCard size={15} />,      visibleForRoles: R_FIN },
+      { label: 'Bank Disbursement',          path: '/hrms/bank-disbursement', icon: <CreditCard size={15} />,      visibleForRoles: R_FIN },
     ],
   },
   {
@@ -163,7 +163,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     key: 'compliance', label: 'Compliance', icon: <ShieldAlert size={18} />, module: 'hrms',
     children: [
       { label: 'Statutory Compliance', path: '/hrms/soon/statutory',           icon: <ShieldAlert size={15} />, visibleForRoles: R_ADMIN },
-      { label: 'Muster Roll',          path: '/hrms/soon/muster-roll',         icon: <FileText size={15} />,    visibleForRoles: R_HR },
+      { label: 'Muster Roll',          path: '/hrms/muster-roll',         icon: <FileText size={15} />,    visibleForRoles: R_HR },
       { label: 'POSH Case Management', path: '/hrms/soon/posh',                icon: <ShieldAlert size={15} />, visibleForRoles: R_HR },
       { label: 'Inspector View',       path: '/hrms/soon/inspector-view',      icon: <ShieldAlert size={15} />, visibleForRoles: R_ADMIN },
       { label: 'Compliance Calendar',  path: '/hrms/soon/compliance-calendar', icon: <Calendar size={15} />,    visibleForRoles: R_ADMIN },
@@ -174,7 +174,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     children: [
       { label: 'Attendance & OT Reports', path: '/hrms/reports',                 icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN_MGR },
       { label: 'Payroll Reports',         path: '/hrms/soon/payroll-reports',    icon: <FileBarChart2 size={15} />, visibleForRoles: R_FIN },
-      { label: 'Workforce Analytics',     path: '/hrms/soon/workforce-analytics', icon: <TrendingUp size={15} />,   visibleForRoles: R_ADMIN },
+      { label: 'Workforce Analytics',     path: '/hrms/workforce-analytics', icon: <TrendingUp size={15} />,   visibleForRoles: R_ADMIN },
     ],
   },
   {
