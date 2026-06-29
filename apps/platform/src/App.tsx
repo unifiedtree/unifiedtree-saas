@@ -34,6 +34,7 @@ import { EssDashboard } from '@/modules/hrms/ess/EssDashboard'
 import { TeamDashboard } from '@/modules/hrms/team/TeamDashboard'
 import { ReportsIndex } from '@/modules/hrms/reports/ReportsIndex'
 import { ProbationSettings } from '@/modules/hrms/probation/ProbationSettings'
+import { Expense } from '@/modules/hrms/Expense'
 import { ModuleComingSoon } from '@/shared/components/ModuleComingSoon'
 import { PayrollSettings } from '@/modules/hrms/payroll/PayrollSettings'
 import { SalaryComponents } from '@/modules/hrms/payroll/SalaryComponents'
@@ -217,6 +218,14 @@ export default function App() {
           element={
             <RouteGuard anyOf={[P.HRMS_LEAVE_READ, P.HRMS_ESS_READ, P.LEAVE_REQUEST_SELF]}>
               <ModuleGate moduleKey="hrms"><Leave /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/expenses"
+          element={
+            <RouteGuard anyOf={['hrms.expense.claim.self', 'hrms.expense.claim.read', 'hrms.expense.claim.approve', 'hrms.expense.policy.read']}>
+              <ModuleGate moduleKey="hrms"><Expense /></ModuleGate>
             </RouteGuard>
           }
         />

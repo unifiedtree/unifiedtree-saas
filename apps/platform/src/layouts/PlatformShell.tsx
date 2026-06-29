@@ -136,7 +136,7 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'expense', label: 'Expense Management', icon: <Receipt size={18} />, module: 'hrms',
     children: [
-      { label: 'Expense Center', path: '/hrms/soon/expense-center', icon: <Receipt size={15} />, visibleForRoles: R_ADMIN },
+      { label: 'Expense Center', path: '/hrms/expenses', icon: <Receipt size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_ESS] },
     ],
   },
   {

@@ -50,6 +50,9 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         // payroll module (seeder @Service; LopCalculator is a pure POJO, not scanned)
         "com.hrms.payroll.service",
 
+        // expense module (canonical schema: expense_mgmt.*, V067)
+        "com.hrms.expense",
+
         // canonical REST controllers
         "com.hrms.api.workforce",
         "com.hrms.api.settings",
@@ -67,6 +70,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.access",
         "com.hrms.api.probation",
         "com.hrms.api.payroll",
+        "com.hrms.api.expense",
 
         // app-layer: reports, bulk import, jobs
         "com.hrms.app.reports",
@@ -82,6 +86,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.employee.entity",
         "com.hrms.attendance.entity",
         "com.hrms.leave.entity",
+        "com.hrms.expense.entity",
         "com.hrms.letters.domain",
         "com.unifiedtree.settings.entity",
         "com.unifiedtree.auth.entity",
@@ -94,6 +99,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.employee.repository",
         "com.hrms.attendance.repository",
         "com.hrms.leave.repository",
+        "com.hrms.expense.repository",
         "com.hrms.letters.repository",
         "com.unifiedtree.settings.repository",
         "com.unifiedtree.auth.repository",

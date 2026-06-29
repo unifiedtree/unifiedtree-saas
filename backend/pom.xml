@@ -52,6 +52,7 @@
         <module>modules/hrms-leave</module>
         <module>modules/hrms-letters</module>
         <module>modules/hrms-payroll</module>
+        <module>modules/hrms-expense</module>
         <module>modules/mod-crm</module>
         <module>modules/attendance-face</module>
 
@@ -120,6 +121,11 @@
             <dependency>
                 <groupId>com.hrms</groupId>
                 <artifactId>hrms-payroll</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-expense</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
