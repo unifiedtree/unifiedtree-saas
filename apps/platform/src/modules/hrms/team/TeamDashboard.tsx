@@ -1,23 +1,28 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Users, Clock, Calendar, ArrowRight, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
-import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useTeamDashboard } from '../api/useAttendance'
 import { usePendingApprovals } from '../api/useLeave'
+import {
+  HrPageHeader,
+  HrStatCard,
+  HrStatusPill,
+  HrButton,
+  HrAvatar,
+  type PillTone,
+} from '@/shared/components/hr'
 
 const today = format(new Date(), 'yyyy-MM-dd')
 
-const StatusDot: React.FC<{ status: string }> = ({ status }) => {
+function statusPill(status: string): { tone: PillTone; label: string } {
   const s = status?.toUpperCase()
-  if (s === 'PRESENT' || s === 'CHECKED_IN')
-    return <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-  if (s === 'ABSENT')
-    return <span className="inline-flex h-2 w-2 rounded-full bg-rose-500" />
-  if (s === 'LATE')
-    return <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" />
-  return <span className="inline-flex h-2 w-2 rounded-full bg-slate-300" />
+  const label = status?.toLowerCase().replace('_', ' ') ?? '—'
+  if (s === 'PRESENT' || s === 'CHECKED_IN') return { tone: 'ok', label }
+  if (s === 'ABSENT') return { tone: 'red', label }
+  if (s === 'LATE') return { tone: 'late', label }
+  return { tone: 'gray', label }
 }
 
 export const TeamDashboard: React.FC = () => {
@@ -31,137 +36,129 @@ export const TeamDashboard: React.FC = () => {
   const staffStatuses = teamData?.staffStatuses ?? []
   const pendingLeaves = approvals?.content ?? []
 
-  const statCards = [
-    {
-      label: 'Present today',
-      value: teamLoading ? '—' : (counts?.present ?? 0),
-      icon: <CheckCircle size={18} className="text-emerald-500" />,
-      bg: 'bg-emerald-50',
-    },
-    {
-      label: 'Absent today',
-      value: teamLoading ? '—' : (counts?.absent ?? 0),
-      icon: <XCircle size={18} className="text-rose-500" />,
-      bg: 'bg-rose-50',
-    },
-    {
-      label: 'On leave',
-      value: teamLoading ? '—' : (counts?.onLeave ?? 0),
-      icon: <Calendar size={18} className="text-blue-500" />,
-      bg: 'bg-blue-50',
-    },
-    {
-      label: 'Pending approvals',
-      value: approvalsLoading ? '—' : pendingLeaves.length,
-      icon: <AlertCircle size={18} className="text-amber-500" />,
-      bg: 'bg-amber-50',
-    },
-  ]
+  const greeting =
+    new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
       {/* Greeting */}
-      <div className="bg-gradient-to-r from-[#0F6E56]/10 to-emerald-50 border border-[#0F6E56]/15 rounded-2xl p-5">
-        <p className="text-slate-500 text-sm">
-          Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'},
-        </p>
-        <h1 className="text-2xl font-bold text-slate-900 mt-0.5">
-          {user?.firstName ?? 'Manager'} — your team today
-        </h1>
-        <p className="text-slate-500 text-sm mt-1">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
-      </div>
+      <HrPageHeader
+        crumb="Attendance & Time"
+        title={`Good ${greeting}, ${user?.firstName ?? 'Manager'} — your team today`}
+        subtitle={format(new Date(), 'EEEE, d MMMM yyyy')}
+      />
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {statCards.map((c) => (
-          <div key={c.label} className={clsx('rounded-2xl border border-slate-200 p-4', c.bg)}>
-            <div className="mb-2">{c.icon}</div>
-            <p className="text-2xl font-bold text-slate-900">{String(c.value)}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{c.label}</p>
-          </div>
-        ))}
+        <HrStatCard
+          color="green"
+          icon={<CheckCircle size={18} />}
+          value={counts?.present ?? 0}
+          label="Present today"
+          loading={teamLoading}
+        />
+        <HrStatCard
+          color="red"
+          icon={<XCircle size={18} />}
+          value={counts?.absent ?? 0}
+          label="Absent today"
+          loading={teamLoading}
+        />
+        <HrStatCard
+          color="blue"
+          icon={<Calendar size={18} />}
+          value={counts?.onLeave ?? 0}
+          label="On leave"
+          loading={teamLoading}
+        />
+        <HrStatCard
+          color="orange"
+          icon={<AlertCircle size={18} />}
+          value={pendingLeaves.length}
+          label="Pending approvals"
+          loading={approvalsLoading}
+        />
       </div>
 
       {/* Team attendance status */}
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      <div className="overflow-hidden rounded-xl border border-border-default bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-border-default px-5 py-4">
           <div className="flex items-center gap-2">
-            <Users size={16} className="text-slate-400" />
-            <h2 className="text-sm font-semibold text-slate-800">Team attendance — {format(new Date(), 'd MMM')}</h2>
+            <Users size={16} className="text-text-tertiary" />
+            <h2 className="text-sm font-semibold text-text-primary">
+              Team attendance — {format(new Date(), 'd MMM')}
+            </h2>
           </div>
           <button
             onClick={() => navigate('/hrms/attendance')}
-            className="flex items-center gap-1 text-xs text-[#0F6E56] hover:text-[#0A5240] transition-colors"
+            className="flex items-center gap-1 text-xs font-semibold text-[#C16E00] transition-colors hover:text-[#E08A00]"
           >
             Full view <ArrowRight size={12} />
           </button>
         </div>
 
         {teamLoading ? (
-          <div className="flex items-center justify-center py-10 text-sm text-slate-400">Loading…</div>
+          <div className="flex items-center justify-center py-10 text-sm text-text-tertiary">Loading…</div>
         ) : staffStatuses.length === 0 ? (
-          <div className="flex items-center justify-center py-10 text-sm text-slate-400">
+          <div className="flex items-center justify-center py-10 text-sm text-text-tertiary">
             No team data available for today
           </div>
         ) : (
-          <div className="divide-y divide-slate-50">
-            {staffStatuses.slice(0, 8).map((s) => (
-              <div key={s.employeeId} className="flex items-center gap-3 px-5 py-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
-                  {s.fullName?.charAt(0)?.toUpperCase() ?? '?'}
+          <div className="divide-y divide-border-default">
+            {staffStatuses.slice(0, 8).map((s, i) => {
+              const pill = statusPill(s.status)
+              return (
+                <div key={s.employeeId} className="flex items-center gap-3 px-5 py-3">
+                  <div className="min-w-0 flex-1">
+                    <HrAvatar
+                      name={s.fullName ?? '—'}
+                      sub={s.jobTitle ?? s.departmentName ?? ''}
+                      seed={i}
+                    />
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <HrStatusPill tone={pill.tone}>
+                      <span className="capitalize">{pill.label}</span>
+                    </HrStatusPill>
+                    {s.checkInAt && (
+                      <span className="text-xs text-text-tertiary">
+                        {format(new Date(s.checkInAt), 'h:mm a')}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900 truncate">{s.fullName}</p>
-                  <p className="text-xs text-slate-400 truncate">{s.jobTitle ?? s.departmentName ?? ''}</p>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <StatusDot status={s.status} />
-                  <span className="text-xs text-slate-500 capitalize">{s.status?.toLowerCase().replace('_', ' ')}</span>
-                  {s.checkInAt && (
-                    <span className="text-xs text-slate-400 ml-1">
-                      {format(new Date(s.checkInAt), 'h:mm a')}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
 
       {/* Pending leave approvals */}
       {pendingLeaves.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <div className="overflow-hidden rounded-xl border border-border-default bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-border-default px-5 py-4">
             <div className="flex items-center gap-2">
-              <Clock size={16} className="text-slate-400" />
-              <h2 className="text-sm font-semibold text-slate-800">Pending leave approvals</h2>
-              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
-                {pendingLeaves.length}
-              </span>
+              <Clock size={16} className="text-text-tertiary" />
+              <h2 className="text-sm font-semibold text-text-primary">Pending leave approvals</h2>
+              <HrStatusPill tone="warn">{pendingLeaves.length}</HrStatusPill>
             </div>
-            <button
-              onClick={() => navigate('/hrms/leave')}
-              className="flex items-center gap-1 text-xs text-[#0F6E56] hover:text-[#0A5240] transition-colors"
-            >
+            <HrButton size="sm" onClick={() => navigate('/hrms/leave')}>
               Approve <ArrowRight size={12} />
-            </button>
+            </HrButton>
           </div>
-          <div className="divide-y divide-slate-50">
+          <div className="divide-y divide-border-default">
             {pendingLeaves.slice(0, 5).map((leave) => (
               <div key={leave.id} className="flex items-center justify-between px-5 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900 truncate">
+                  <p className="truncate text-sm font-medium text-text-primary">
                     {leave.leaveTypeName ?? 'Leave request'}
                   </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="mt-0.5 text-xs text-text-tertiary">
                     {format(new Date(leave.startDate), 'd MMM')} – {format(new Date(leave.endDate), 'd MMM')}
                     {' · '}{leave.totalDays}d
                   </p>
                 </div>
-                <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full border border-amber-200 shrink-0">
-                  Pending
-                </span>
+                <HrStatusPill tone="warn">Pending</HrStatusPill>
               </div>
             ))}
           </div>

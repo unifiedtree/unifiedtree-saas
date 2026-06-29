@@ -3,10 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
-import { DataTable } from '@unifiedtree/ui-kit'
-import type { Column } from '@unifiedtree/ui-kit'
 import { useLateMarksReport } from '@/modules/hrms/api/useReports'
 import type { LateMarkRow } from '@/modules/hrms/api/useReports'
+import { TableCard, HrAvatar, HrStatusPill } from '@/shared/components/hr'
 import { ReportShell, CompanySelector } from './ReportShell'
 
 function defaultFrom() {
@@ -30,15 +29,6 @@ function aggregateByEmployee(rows: LateMarkRow[]) {
   }
   return [...map.values()].sort((a, b) => b.totalMins - a.totalMins).slice(0, 15)
 }
-
-const COLUMNS: Column<LateMarkRow>[] = [
-  { key: 'employee_code',   header: 'Emp Code',   cell: (r) => <span className="font-mono text-xs">{r.employee_code}</span> },
-  { key: 'employee_name',   header: 'Name',       cell: (r) => r.employee_name },
-  { key: 'department',      header: 'Department', cell: (r) => r.department ?? '—' },
-  { key: 'attendance_date', header: 'Date',       cell: (r) => r.attendance_date },
-  { key: 'late_by_minutes', header: 'Late (min)', cell: (r) => r.late_by_minutes },
-  { key: 'check_in_at',     header: 'Check-in',  cell: (r) => r.check_in_at ?? '—' },
-]
 
 export function LateMarksReport() {
   const [params, setParams] = useSearchParams()
@@ -73,40 +63,59 @@ export function LateMarksReport() {
             type="date"
             value={from}
             onChange={(e) => set('from', e.target.value)}
-            className="bg-white border border-[#E2E8F0] rounded-xl px-3 py-2.5 text-sm text-[#334155] focus:outline-none focus:border-indigo-500 transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#FF9D00] transition-all"
           />
           <input
             type="date"
             value={to}
             onChange={(e) => set('to', e.target.value)}
-            className="bg-white border border-[#E2E8F0] rounded-xl px-3 py-2.5 text-sm text-[#334155] focus:outline-none focus:border-indigo-500 transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#FF9D00] transition-all"
           />
         </>
       }
     >
-      <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5">
-        <p className="text-xs text-[#64748B] mb-3">Top 15 offenders by total minutes late</p>
+      <div className="rounded-2xl border border-border-default bg-white p-5">
+        <p className="text-xs text-text-tertiary mb-3">Top 15 offenders by total minutes late</p>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 16, left: 90, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #334155)" horizontal={false} />
-            <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #94a3b8)' }} width={90} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#FFD68A" horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 11, fill: '#94A3B8' }} />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#94A3B8' }} width={90} />
             <Tooltip
-              contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
-              labelStyle={{ color: '#e2e8f0' }}
+              contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #FFD68A', borderRadius: 8, fontSize: 12 }}
+              labelStyle={{ color: '#0F172A' }}
             />
-            <Bar dataKey="Total Late (min)" fill="var(--color-status-danger-fg, #ef4444)" />
+            <Bar dataKey="Total Late (min)" fill="#FF9D00" />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <DataTable
-        columns={COLUMNS}
-        data={data}
-        getRowKey={(r) => `${r.employee_code}-${r.attendance_date}`}
-        emptyTitle="No late marks"
-        emptyDescription="No late arrivals recorded in the selected period."
-      />
+      <TableCard>
+        <table className="hr-table">
+          <thead>
+            <tr>
+              <th>Emp Code</th>
+              <th>Name</th>
+              <th>Department</th>
+              <th>Date</th>
+              <th>Late (min)</th>
+              <th>Check-in</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((r, i) => (
+              <tr key={`${r.employee_code}-${r.attendance_date}`}>
+                <td><span className="hr-mono">{r.employee_code}</span></td>
+                <td><HrAvatar name={r.employee_name} seed={i} /></td>
+                <td>{r.department ?? '—'}</td>
+                <td>{r.attendance_date}</td>
+                <td><HrStatusPill tone="late">{r.late_by_minutes} min</HrStatusPill></td>
+                <td>{r.check_in_at ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableCard>
     </ReportShell>
   )
 }

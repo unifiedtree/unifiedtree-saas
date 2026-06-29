@@ -4,18 +4,31 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts'
-import { DataTable } from '@unifiedtree/ui-kit'
-import type { Column } from '@unifiedtree/ui-kit'
 import { useDiversityReport } from '@/modules/hrms/api/useReports'
 import type { DiversityRow } from '@/modules/hrms/api/useReports'
 import { ReportShell, CompanySelector } from './ReportShell'
+import { TableCard, HrStatusPill } from '@/shared/components/hr'
 
 const GENDER_COLORS: Record<string, string> = {
-  MALE:   'var(--color-accent-default, #6366f1)',
-  FEMALE: 'var(--color-status-danger-fg, #ec4899)',
-  OTHER:  'var(--color-status-info-fg, #38bdf8)',
+  MALE:   '#4096FF',
+  FEMALE: '#EC4899',
+  OTHER:  '#14B8A6',
 }
-const FALLBACK_COLORS = ['#6366f1', '#ec4899', '#38bdf8', '#f59e0b', '#22c55e']
+const FALLBACK_COLORS = ['#FF9D00', '#4096FF', '#EC4899', '#14B8A6', '#22C55E']
+
+const GENDER_TONES: Record<string, 'blue' | 'pink' | 'teal' | 'gray'> = {
+  MALE:   'blue',
+  FEMALE: 'pink',
+  OTHER:  'teal',
+}
+
+const chartTooltipStyle = {
+  backgroundColor: '#ffffff',
+  border: '1px solid #FFD68A',
+  borderRadius: 8,
+  fontSize: 12,
+  color: '#0F172A',
+} as const
 
 // Aggregate total by gender for pie chart
 function genderTotals(rows: DiversityRow[]) {
@@ -39,13 +52,6 @@ function deptGenderData(rows: DiversityRow[]) {
     return entry
   })
 }
-
-const COLUMNS: Column<DiversityRow>[] = [
-  { key: 'department', header: 'Department', cell: (r) => r.department ?? '—' },
-  { key: 'gender',     header: 'Gender',     cell: (r) => r.gender },
-  { key: 'count',      header: 'Count',      cell: (r) => r.count },
-  { key: 'pct',        header: '% of Dept',  cell: (r) => `${r.pct}%` },
-]
 
 export function DiversityReport() {
   const [params, setParams] = useSearchParams()
@@ -75,8 +81,8 @@ export function DiversityReport() {
     >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Pie — overall gender split */}
-        <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5">
-          <p className="text-xs text-[#64748B] mb-3">Overall gender breakdown</p>
+        <div className="rounded-2xl border border-border-default bg-white p-5">
+          <p className="text-xs text-text-secondary mb-3">Overall gender breakdown</p>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
@@ -97,26 +103,24 @@ export function DiversityReport() {
                   />
                 ))}
               </Pie>
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
-              />
+              <Tooltip contentStyle={chartTooltipStyle} />
             </PieChart>
           </ResponsiveContainer>
         </div>
 
         {/* Stacked bar — dept × gender */}
-        <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5">
-          <p className="text-xs text-[#64748B] mb-3">By department</p>
+        <div className="rounded-2xl border border-border-default bg-white p-5">
+          <p className="text-xs text-text-secondary mb-3">By department</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={barData} margin={{ top: 4, right: 8, left: -10, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #334155)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #FFD68A)" />
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #94a3b8)' }} interval={0} angle={-30} textAnchor="end" height={45} />
               <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} allowDecimals={false} />
               <Tooltip
-                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: '#e2e8f0' }}
+                contentStyle={chartTooltipStyle}
+                labelStyle={{ color: '#0F172A' }}
               />
-              <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
+              <Legend wrapperStyle={{ fontSize: 12, color: '#64748B' }} />
               {genders.map((g, i) => (
                 <Bar
                   key={g}
@@ -131,13 +135,37 @@ export function DiversityReport() {
         </div>
       </div>
 
-      <DataTable
-        columns={COLUMNS}
-        data={data}
-        getRowKey={(r) => `${r.department ?? 'null'}-${r.gender}`}
-        emptyTitle="No diversity data"
-        emptyDescription="No employee gender data available for this company."
-      />
+      {data.length === 0 ? (
+        <div className="rounded-xl border border-border-default bg-white px-6 py-12 text-center">
+          <p className="text-sm font-semibold text-text-primary">No diversity data</p>
+          <p className="mt-1 text-sm text-text-secondary">No employee gender data available for this company.</p>
+        </div>
+      ) : (
+        <TableCard>
+          <table className="hr-table">
+            <thead>
+              <tr>
+                <th>Department</th>
+                <th>Gender</th>
+                <th>Count</th>
+                <th>% of Dept</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((r) => (
+                <tr key={`${r.department ?? 'null'}-${r.gender}`}>
+                  <td className="text-text-primary">{r.department ?? '—'}</td>
+                  <td>
+                    <HrStatusPill tone={GENDER_TONES[r.gender] ?? 'gray'}>{r.gender}</HrStatusPill>
+                  </td>
+                  <td className="text-text-primary">{r.count}</td>
+                  <td className="text-text-secondary">{r.pct}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableCard>
+      )}
     </ReportShell>
   )
 }

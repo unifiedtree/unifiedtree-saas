@@ -3,10 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts'
-import { DataTable } from '@unifiedtree/ui-kit'
-import type { Column } from '@unifiedtree/ui-kit'
 import { useLeaveBalanceReport } from '@/modules/hrms/api/useReports'
 import type { LeaveBalanceRow } from '@/modules/hrms/api/useReports'
+import { TableCard, HrAvatar } from '@/shared/components/hr'
 import { ReportShell, CompanySelector } from './ReportShell'
 
 const CURRENT_YEAR = String(new Date().getFullYear())
@@ -27,18 +26,6 @@ function aggregateByEmployee(rows: LeaveBalanceRow[]) {
   }
   return [...map.values()].sort((a, b) => b.used - a.used).slice(0, 20)
 }
-
-const COLUMNS: Column<LeaveBalanceRow>[] = [
-  { key: 'employee_code',    header: 'Emp Code',     cell: (r) => <span className="font-mono text-xs">{r.employee_code}</span> },
-  { key: 'employee_name',    header: 'Name',         cell: (r) => r.employee_name },
-  { key: 'department',       header: 'Department',   cell: (r) => r.department ?? '—' },
-  { key: 'leave_type',       header: 'Leave Type',   cell: (r) => r.leave_type },
-  { key: 'total_entitlement',header: 'Entitled',     cell: (r) => r.total_entitlement },
-  { key: 'used',             header: 'Used',         cell: (r) => r.used },
-  { key: 'pending',          header: 'Pending',      cell: (r) => r.pending },
-  { key: 'carry_forward',    header: 'Carry Fwd',    cell: (r) => r.carry_forward },
-  { key: 'available',        header: 'Available',    cell: (r) => r.available },
-]
 
 export function LeaveBalanceReport() {
   const [params, setParams] = useSearchParams()
@@ -69,39 +56,64 @@ export function LeaveBalanceReport() {
           <select
             value={year}
             onChange={(e) => set('year', e.target.value)}
-            className="bg-white border border-[#E2E8F0] rounded-xl px-3 py-2.5 text-sm text-[#334155] focus:outline-none focus:border-indigo-500 transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#FF9D00] transition-all"
           >
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </>
       }
     >
-      <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5">
-        <p className="text-xs text-[#64748B] mb-3">Top 20 by leave used (summed across types)</p>
+      <div className="rounded-2xl border border-border-default bg-white p-5">
+        <p className="text-xs text-text-tertiary mb-3">Top 20 by leave used (summed across types)</p>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={chartData} margin={{ top: 4, right: 16, left: -10, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #334155)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #FFD68A)" />
             <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #94a3b8)' }} interval={0} angle={-35} textAnchor="end" height={50} />
             <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} allowDecimals={false} />
             <Tooltip
-              contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
-              labelStyle={{ color: '#e2e8f0' }}
+              contentStyle={{ backgroundColor: '#fff', border: '1px solid #FFD68A', borderRadius: 8, fontSize: 12 }}
+              labelStyle={{ color: '#0F172A' }}
             />
-            <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
-            <Bar dataKey="used"      fill="var(--color-status-danger-fg, #ef4444)" />
-            <Bar dataKey="pending"   fill="var(--color-status-warning-fg, #f59e0b)" />
-            <Bar dataKey="available" fill="var(--color-status-success-fg, #22c55e)" />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey="used"      fill="#EF4444" />
+            <Bar dataKey="pending"   fill="#FF9D00" />
+            <Bar dataKey="available" fill="#22C55E" />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <DataTable
-        columns={COLUMNS}
-        data={data}
-        getRowKey={(r) => `${r.employee_code}-${r.leave_type}`}
-        emptyTitle="No leave balance data"
-        emptyDescription="No leave balances found for the selected year."
-      />
+      <TableCard>
+        <table className="hr-table">
+          <thead>
+            <tr>
+              <th>Emp Code</th>
+              <th>Name</th>
+              <th>Department</th>
+              <th>Leave Type</th>
+              <th>Entitled</th>
+              <th>Used</th>
+              <th>Pending</th>
+              <th>Carry Fwd</th>
+              <th>Available</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((r, i) => (
+              <tr key={`${r.employee_code}-${r.leave_type}`}>
+                <td><span className="hr-mono">{r.employee_code}</span></td>
+                <td><HrAvatar name={r.employee_name} seed={i} /></td>
+                <td>{r.department ?? '—'}</td>
+                <td>{r.leave_type}</td>
+                <td>{r.total_entitlement}</td>
+                <td>{r.used}</td>
+                <td>{r.pending}</td>
+                <td>{r.carry_forward}</td>
+                <td>{r.available}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableCard>
     </ReportShell>
   )
 }

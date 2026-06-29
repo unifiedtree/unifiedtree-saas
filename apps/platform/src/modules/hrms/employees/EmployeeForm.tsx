@@ -37,7 +37,7 @@ function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> 
   return (
     <input
       {...props}
-      className={`w-full bg-white border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none transition-colors ${error ? 'border-red-400 focus:border-red-500 bg-red-50' : 'border-border/60 focus:border-primary'}`}
+      className={`w-full bg-white border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none transition-colors ${error ? 'border-red-400 focus:border-red-500 bg-red-50' : 'border-border/60 focus:border-primary'}`}
     />
   )
 }
@@ -289,9 +289,9 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               {/* A workspace login account is always provisioned on create (the backend
                   sends a roleCode unconditionally), so the role is always required.
                   The old "Enable System Access" toggle was a no-op and was removed. */}
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                <h4 className="text-sm font-semibold text-slate-900">System Access</h4>
-                <p className="text-xs text-slate-500 mt-0.5">A workspace login account is created for this employee. Choose their access level below.</p>
+              <div className="p-4 bg-bg-base border border-border-default rounded-xl">
+                <h4 className="text-sm font-semibold text-text-primary">System Access</h4>
+                <p className="text-xs text-text-tertiary mt-0.5">A workspace login account is created for this employee. Choose their access level below.</p>
               </div>
 
               <Field label="Workspace Role" required>
@@ -303,7 +303,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   <option value="SUPER_ADMIN">Super Admin (Full access)</option>
                 </Sel>
               </Field>
-              <p className="mt-3 text-xs text-slate-500 bg-blue-50 text-blue-700 p-3 rounded-lg border border-blue-100">
+              <p className="mt-3 text-xs bg-[#FFF4E1] text-[#C16E00] p-3 rounded-lg border border-[#FFD68A]">
                 An invitation email will be sent to <strong>{form.email || 'the employee'}</strong> (when "Send invitation" is enabled) so they can set their password.
               </p>
             </div>
@@ -331,7 +331,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     <option key={m.id} value={m.id}>{[m.firstName, m.lastName].filter(Boolean).join(' ')}{m.employeeCode ? ` (${m.employeeCode})` : ''}</option>
                   ))}
                 </Sel>
-                <p className="mt-1 text-xs text-slate-600">Leave requests route here for approval. If unset, the department head (or HR) approves.</p>
+                <p className="mt-1 text-xs text-text-secondary">Leave requests route here for approval. If unset, the department head (or HR) approves.</p>
               </Field>
               <Field label="Punch Location (Branch)" required={!isEdit} error={errors.branchId}>
                 <Sel error={!!errors.branchId} value={form.branchId} onChange={(e) => set('branchId', e.target.value)}>
@@ -340,7 +340,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   </option>
                   {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </Sel>
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="mt-1 text-xs text-text-secondary">
                   Employees can only punch in from inside this branch&rsquo;s geofence — outside-zone punches are blocked.
                   {branches.length === 0 && (
                     <> Add branches under <a href="/hrms/organization" className="text-primary hover:underline">Organization &rarr; Branches</a>.</>
@@ -369,7 +369,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                       <option value="INTERN">Intern</option>
                       <option value="CONSULTANT">Consultant</option>
                     </Sel>
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 text-xs text-text-secondary">
                       Using defaults — add custom types under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Employment Types</a>
                     </p>
                   </>
@@ -385,7 +385,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   ))}
                 </Sel>
                 {grades.length === 0 && (
-                  <p className="mt-1 text-xs text-slate-600">
+                  <p className="mt-1 text-xs text-text-secondary">
                     Add grades under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Grades</a>
                   </p>
                 )}
@@ -402,7 +402,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   ))}
                 </Sel>
                 {shifts.length === 0 && (
-                  <p className="mt-1 text-xs text-slate-600">
+                  <p className="mt-1 text-xs text-text-secondary">
                     Add shifts under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Shifts</a>
                   </p>
                 )}
@@ -480,7 +480,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           ) : (
             <div className="flex-1 flex flex-col gap-2">
               {!isEdit && canInvite && (
-                <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={sendInvitation}

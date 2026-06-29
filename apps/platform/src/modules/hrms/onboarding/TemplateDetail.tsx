@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Plus, Trash2, GripVertical, Pencil } from 'lucide-react'
-import { Drawer, Button, Badge, CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { Drawer, Button, CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
+import { HrPageHeader, HrStatusPill, HrButton } from '@/shared/components/hr'
 import {
   useTemplate, useCreateTemplateTask, useDeleteTemplateTask, useUpdateTemplate,
 } from './api/useOnboarding'
@@ -76,7 +77,7 @@ function EditTemplateDrawer({
             type="checkbox"
             checked={active}
             onChange={(e) => setActive(e.target.checked)}
-            className="accent-indigo-500"
+            className="accent-[#FF9D00]"
           />
           <span className="text-sm text-text-primary">Active</span>
         </label>
@@ -185,7 +186,7 @@ function AddTaskDrawer({
             type="checkbox"
             checked={required}
             onChange={(e) => setRequired(e.target.checked)}
-            className="accent-indigo-500"
+            className="accent-[#FF9D00]"
           />
           <span className="text-sm text-text-primary">Required task</span>
         </label>
@@ -216,9 +217,9 @@ function TaskRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm font-medium text-text-primary">{task.title}</p>
-          {task.required && <Badge tone="warning">Required</Badge>}
+          {task.required && <HrStatusPill tone="warn">Required</HrStatusPill>}
           {task.ownerRole && (
-            <Badge tone="info">{task.ownerRole}</Badge>
+            <HrStatusPill tone="info">{task.ownerRole}</HrStatusPill>
           )}
         </div>
         {task.description && (
@@ -259,7 +260,7 @@ export const TemplateDetail: React.FC = () => {
   )
 
   return (
-    <div className="p-6 animate-fade-in space-y-6">
+    <div className="mx-auto max-w-5xl p-6 sm:p-8 animate-fade-in space-y-6">
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/hrms/onboarding')}
@@ -281,29 +282,24 @@ export const TemplateDetail: React.FC = () => {
         />
       ) : template ? (
         <>
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-text-primary">{template.name}</h1>
-              {template.description && (
-                <p className="mt-0.5 text-sm text-text-secondary">{template.description}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge tone={template.active ? 'success' : 'default'}>
-                {template.active ? 'Active' : 'Inactive'}
-              </Badge>
-              <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  leftIcon={<Pencil size={12} />}
-                  onClick={() => setEditOpen(true)}
-                >
-                  Edit template
-                </Button>
-              </Can>
-            </div>
-          </div>
+          <HrPageHeader
+            crumb="Recruitment & Onboarding"
+            title={template.name}
+            subtitle={template.description || undefined}
+            actions={
+              <>
+                <HrStatusPill tone={template.active ? 'ok' : 'gray'}>
+                  {template.active ? 'Active' : 'Inactive'}
+                </HrStatusPill>
+                <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
+                  <HrButton variant="ghost" size="sm" onClick={() => setEditOpen(true)}>
+                    <Pencil size={12} />
+                    Edit template
+                  </HrButton>
+                </Can>
+              </>
+            }
+          />
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -311,14 +307,10 @@ export const TemplateDetail: React.FC = () => {
                 Tasks ({sortedTasks.length})
               </h2>
               <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  leftIcon={<Plus size={12} />}
-                  onClick={() => setAddOpen(true)}
-                >
+                <HrButton size="sm" onClick={() => setAddOpen(true)}>
+                  <Plus size={12} />
                   Add task
-                </Button>
+                </HrButton>
               </Can>
             </div>
 

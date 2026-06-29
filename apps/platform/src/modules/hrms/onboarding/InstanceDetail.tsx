@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, SkipForward, Clock } from 'lucide-react'
-import { Badge, Button, TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
 import { useEmployeeInstance, useInstanceTasks, useCompleteTask, useSkipTask } from './api/useOnboarding'
 import type { OnboardingInstanceTask } from './api/useOnboarding'
+import { HrPageHeader, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
 import { clsx } from 'clsx'
 
 // ── Task card ──────────────────────────────────────────────────────────────────
@@ -24,10 +25,10 @@ function TaskCard({
 
   const isDone = task.status === 'COMPLETED' || task.status === 'SKIPPED'
 
-  const statusTone = (): 'success' | 'default' | 'warning' => {
-    if (task.status === 'COMPLETED') return 'success'
-    if (task.status === 'SKIPPED') return 'default'
-    return 'warning'
+  const statusTone = (): PillTone => {
+    if (task.status === 'COMPLETED') return 'ok'
+    if (task.status === 'SKIPPED') return 'gray'
+    return 'warn'
   }
 
   const handleComplete = () => {
@@ -76,8 +77,8 @@ function TaskCard({
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {task.required && !isDone && <Badge tone="warning">Required</Badge>}
-          <Badge tone={statusTone()}>{task.status}</Badge>
+          {task.required && !isDone && <HrStatusPill tone="warn">Required</HrStatusPill>}
+          <HrStatusPill tone={statusTone()}>{task.status}</HrStatusPill>
         </div>
       </div>
 
@@ -94,32 +95,32 @@ function TaskCard({
               />
             )}
             <div className="flex gap-2">
-              <Button
+              <HrButton
                 size="sm"
-                loading={complete.isPending}
-                leftIcon={<CheckCircle2 size={12} />}
+                disabled={complete.isPending}
                 onClick={() => (notesOpen ? handleComplete() : setNotesOpen(true))}
               >
+                <CheckCircle2 size={12} />
                 {notesOpen ? 'Confirm complete' : 'Complete'}
-              </Button>
+              </HrButton>
               {!task.required && (
-                <Button
+                <HrButton
                   size="sm"
                   variant="ghost"
-                  loading={skip.isPending}
+                  disabled={skip.isPending}
                   onClick={handleSkip}
                 >
                   Skip
-                </Button>
+                </HrButton>
               )}
               {notesOpen && (
-                <Button
+                <HrButton
                   size="sm"
                   variant="ghost"
                   onClick={() => { setNotesOpen(false); setNotes('') }}
                 >
                   Cancel
-                </Button>
+                </HrButton>
               )}
             </div>
           </div>
@@ -148,7 +149,7 @@ export const InstanceDetail: React.FC = () => {
   const sortedTasks = [...tasks].sort((a, b) => a.sequenceNo - b.sequenceNo)
 
   return (
-    <div className="p-6 animate-fade-in space-y-6">
+    <div className="mx-auto max-w-3xl p-6 sm:p-8 animate-fade-in space-y-6">
       <button
         onClick={() => navigate('/hrms/onboarding/instances')}
         className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
@@ -168,19 +169,22 @@ export const InstanceDetail: React.FC = () => {
         />
       ) : instance ? (
         <>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-text-primary">Onboarding Checklist</h1>
-              <Badge tone={instance.status === 'COMPLETED' ? 'success' : 'info'}>
+          <HrPageHeader
+            crumb="Recruitment & Onboarding"
+            title="Onboarding Checklist"
+            subtitle={
+              <>
+                Started {new Date(instance.startedAt).toLocaleDateString()}
+                {instance.completedAt &&
+                  ` · Completed ${new Date(instance.completedAt).toLocaleDateString()}`}
+              </>
+            }
+            actions={
+              <HrStatusPill tone={instance.status === 'COMPLETED' ? 'ok' : 'info'}>
                 {instance.status}
-              </Badge>
-            </div>
-            <p className="mt-0.5 text-sm text-text-secondary">
-              Started {new Date(instance.startedAt).toLocaleDateString()}
-              {instance.completedAt &&
-                ` · Completed ${new Date(instance.completedAt).toLocaleDateString()}`}
-            </p>
-          </div>
+              </HrStatusPill>
+            }
+          />
 
           {totalCount > 0 && (
             <div className="space-y-1.5">
@@ -190,7 +194,7 @@ export const InstanceDetail: React.FC = () => {
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-bg-base">
                 <div
-                  className="h-full rounded-full bg-accent-default transition-all duration-500"
+                  className="h-full rounded-full bg-[#FF9D00] transition-all duration-500"
                   style={{ width: `${progress}%` }}
                 />
               </div>

@@ -17,13 +17,16 @@ import {
 import { useToast } from '@/shared/hooks/useToast'
 import { Skeleton } from '@unifiedtree/ui-kit'
 import { EmptyState } from '@/shared/components/EmptyState'
-import { DataTable } from '@/shared/components/DataTable'
-import type { Column } from '@/shared/components/DataTable'
+import {
+  HrPageHeader,
+  HrButton,
+  HrStatCard,
+  TableCard,
+} from '@/shared/components/hr'
 import { useCompanies } from '../api/useOrg'
 import {
   countValidRows,
   parseErrors,
-  type ParsedError,
   useCommitBulkImport,
   useDownloadTemplate,
   useValidateBulkImport,
@@ -66,10 +69,10 @@ function Stepper({ current }: { current: WizardStep }) {
               className={clsx(
                 'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border transition-colors',
                 s.n < active || current === 'done'
-                  ? 'bg-emerald-600 border-emerald-600 text-white'
+                  ? 'bg-[#15803D] border-[#15803D] text-white'
                   : s.n === active
-                  ? 'bg-indigo-600 border-indigo-600 text-white'
-                  : 'bg-white border-border text-text-secondary',
+                  ? 'bg-[#FF9D00] border-[#FF9D00] text-white'
+                  : 'bg-white border-border-default text-text-tertiary',
               )}
             >
               {s.n < active || current === 'done' ? <Check size={12} /> : s.n}
@@ -77,7 +80,7 @@ function Stepper({ current }: { current: WizardStep }) {
             <span
               className={clsx(
                 'text-sm font-medium hidden sm:block',
-                s.n === active ? 'text-text-primary' : s.n < active ? 'text-emerald-400' : 'text-text-secondary',
+                s.n === active ? 'text-text-primary' : s.n < active ? 'text-[#15803D]' : 'text-text-tertiary',
               )}
             >
               {s.label}
@@ -87,7 +90,7 @@ function Stepper({ current }: { current: WizardStep }) {
             <div
               className={clsx(
                 'flex-1 h-px mx-3',
-                s.n < active ? 'bg-emerald-600/40' : 'bg-surface-2/60',
+                s.n < active ? 'bg-[#FFD68A]' : 'bg-border-default',
               )}
             />
           )}
@@ -123,10 +126,10 @@ function DropZone({ file, disabled, onFile }: DropZoneProps) {
         'block border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors',
         disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
         isDragging
-          ? 'border-indigo-500 bg-primary/10'
+          ? 'border-[#FF9D00] bg-[#FFF4E1]'
           : file
-          ? 'border-emerald-600/50 bg-emerald-500/5'
-          : 'border-border hover:border-slate-600 bg-white/30',
+          ? 'border-[#15803D]/50 bg-[#DCFCE7]/40'
+          : 'border-border-default hover:border-[#FFD68A] bg-bg-base',
       )}
       onDragOver={(e) => { e.preventDefault(); if (!disabled) setIsDragging(true) }}
       onDragLeave={() => setIsDragging(false)}
@@ -146,8 +149,8 @@ function DropZone({ file, disabled, onFile }: DropZoneProps) {
       />
       {file ? (
         <div className="flex flex-col items-center gap-2">
-          <div className="w-10 h-10 bg-emerald-500/15 rounded-xl flex items-center justify-center">
-            <FileUp size={20} className="text-emerald-400" />
+          <div className="w-10 h-10 bg-[#DCFCE7] rounded-xl flex items-center justify-center">
+            <FileUp size={20} className="text-[#15803D]" />
           </div>
           <p className="text-text-primary font-medium text-sm">{file.name}</p>
           <p className="text-text-secondary text-xs">{(file.size / 1024).toFixed(0)} KB</p>
@@ -157,7 +160,7 @@ function DropZone({ file, disabled, onFile }: DropZoneProps) {
         </div>
       ) : (
         <div className="flex flex-col items-center gap-2">
-          <div className="w-10 h-10 bg-surface-2/60 rounded-xl flex items-center justify-center">
+          <div className="w-10 h-10 bg-bg-base rounded-xl flex items-center justify-center">
             <Upload size={20} className="text-text-secondary" />
           </div>
           <p className="text-text-primary text-sm font-medium">
@@ -266,59 +269,34 @@ export const EmployeeImport: React.FC = () => {
     setStep(1)
   }
 
-  // ── Error table columns ─────────────────────────────────────────────────────
-
-  const errorColumns: Column<ParsedError>[] = [
-    {
-      key: 'rowNumber',
-      header: 'Row #',
-      sortable: true,
-      width: 'w-20',
-      render: (row) => (
-        <span className="font-mono text-xs text-text-secondary">{row.rowNumber || '?'}</span>
-      ),
-    },
-    {
-      key: 'message',
-      header: 'Error',
-      render: (row) => <span className="text-red-400 text-xs">{row.message}</span>,
-    },
-  ]
-
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-3xl p-6 sm:p-8">
       {/* Header */}
-      <div>
-        <nav className="flex items-center gap-1.5 text-xs text-text-secondary mb-3">
-          <Link to="/hrms" className="hover:text-text-primary transition-colors">HRMS</Link>
-          <ChevronRight size={12} />
-          <Link to="/hrms/employees" className="hover:text-text-primary transition-colors">Employees</Link>
-          <ChevronRight size={12} />
-          <span className="text-text-secondary">Import</span>
-        </nav>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/hrms/employees')}
-            className="p-1.5 text-text-secondary hover:text-text-primary bg-white hover:bg-surface-2 rounded-lg transition-colors"
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-text-primary">Import employees</h1>
-            <p className="text-text-secondary text-sm mt-0.5">
-              Upload a CSV or XLSX file to add multiple employees at once.
-            </p>
-          </div>
-        </div>
-      </div>
+      <nav className="flex items-center gap-1.5 text-xs text-text-tertiary">
+        <Link to="/hrms" className="hover:text-[#C16E00] transition-colors">HRMS</Link>
+        <ChevronRight size={12} />
+        <Link to="/hrms/employees" className="hover:text-[#C16E00] transition-colors">Employees</Link>
+        <ChevronRight size={12} />
+        <span className="text-text-secondary">Import</span>
+      </nav>
+      <HrPageHeader
+        crumb="Employees"
+        title="Import employees"
+        subtitle="Upload a CSV or XLSX file to add multiple employees at once."
+        actions={
+          <HrButton variant="ghost" onClick={() => navigate('/hrms/employees')}>
+            <ArrowLeft size={15} /> Back to employees
+          </HrButton>
+        }
+      />
 
       <Stepper current={step} />
 
       {/* ── Step 1: Download template ────────────────────────────────────── */}
       {step === 1 && (
-        <div className="bg-white border border-border rounded-2xl p-6 space-y-5">
+        <div className="bg-white border border-border-default rounded-2xl p-6 space-y-5">
           <div>
             <h3 className="text-text-primary font-semibold text-base mb-1">Download the template</h3>
             <p className="text-text-secondary text-sm leading-relaxed">
@@ -328,17 +306,17 @@ export const EmployeeImport: React.FC = () => {
           </div>
 
           {/* Column reference */}
-          <div className="bg-white rounded-xl p-4 space-y-2.5">
-            <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Required columns</p>
+          <div className="bg-bg-base rounded-xl p-4 space-y-2.5">
+            <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Required columns</p>
             <div className="flex flex-wrap gap-1.5">
               {['first_name', 'last_name', 'email', 'employment_type', 'date_of_joining'].map((col) => (
-                <code key={col} className="px-2 py-0.5 bg-surface-2/60 rounded text-xs text-primary">{col}</code>
+                <code key={col} className="px-2 py-0.5 bg-[#FFF4E1] rounded text-xs text-[#C16E00]">{col}</code>
               ))}
             </div>
-            <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider mt-2">Optional columns</p>
+            <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mt-2">Optional columns</p>
             <div className="flex flex-wrap gap-1.5">
               {['phone', 'department', 'designation', 'job_title', 'gender', 'date_of_birth'].map((col) => (
-                <code key={col} className="px-2 py-0.5 bg-surface-2/60 rounded text-xs text-text-secondary">{col}</code>
+                <code key={col} className="px-2 py-0.5 bg-white border border-border-default rounded text-xs text-text-secondary">{col}</code>
               ))}
             </div>
             <ul className="mt-3 space-y-1 text-xs text-text-secondary">
@@ -350,18 +328,17 @@ export const EmployeeImport: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <button
+            <HrButton
               onClick={() => downloadMutation.mutate(useAuthStore.getState().tenant?.slug ?? 'tenant')}
               disabled={downloadMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors"
             >
               <Download size={15} />
               {downloadMutation.isPending ? 'Downloading…' : 'Download template'}
-            </button>
+            </HrButton>
 
             <button
               onClick={() => setStep(2)}
-              className="px-4 py-2 text-text-secondary hover:text-text-primary text-sm transition-colors"
+              className="px-4 py-2 text-[#C16E00] hover:text-[#FF9D00] text-sm font-medium transition-colors"
             >
               I have a file ready → Go to upload
             </button>
@@ -374,8 +351,8 @@ export const EmployeeImport: React.FC = () => {
         <div className="space-y-4">
           {/* Company selector */}
           {companies.length > 1 && (
-            <div className="bg-white border border-border rounded-2xl p-4">
-              <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
+            <div className="bg-white border border-border-default rounded-2xl p-4">
+              <label className="block text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
                 Import into company
               </label>
               <select
@@ -385,7 +362,7 @@ export const EmployeeImport: React.FC = () => {
                   validateMutation.reset()
                 }}
                 disabled={validateMutation.isPending}
-                className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-indigo-500 transition-colors"
+                className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/20 transition-colors"
               >
                 {companies.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
@@ -395,7 +372,7 @@ export const EmployeeImport: React.FC = () => {
           )}
 
           {/* Drop zone */}
-          <div className="bg-white border border-border rounded-2xl p-6 space-y-4">
+          <div className="bg-white border border-border-default rounded-2xl p-6 space-y-4">
             <DropZone
               file={file}
               disabled={validateMutation.isPending}
@@ -403,18 +380,14 @@ export const EmployeeImport: React.FC = () => {
             />
 
             {file && !validateMutation.isPending && !validateMutation.data && (
-              <button
-                onClick={handleValidate}
-                disabled={!companyId}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white text-sm font-medium rounded-xl transition-colors"
-              >
+              <HrButton onClick={handleValidate} disabled={!companyId}>
                 <Check size={15} /> Validate file
-              </button>
+              </HrButton>
             )}
 
             {validateMutation.isPending && (
               <div className="flex items-center gap-3 text-text-secondary text-sm">
-                <Loader2 size={16} className="animate-spin text-primary" />
+                <Loader2 size={16} className="animate-spin text-[#FF9D00]" />
                 Validating {file?.name}…
                 {validateMutation.uploadProgress > 0 && validateMutation.uploadProgress < 100 && (
                   <span className="text-xs text-text-secondary">{validateMutation.uploadProgress}%</span>
@@ -425,11 +398,11 @@ export const EmployeeImport: React.FC = () => {
 
           {/* Validation error */}
           {validateMutation.isError && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-start gap-3">
-              <AlertCircle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="bg-[#FEE2E2] border border-[#FECACA] rounded-2xl p-4 flex items-start gap-3">
+              <AlertCircle size={16} className="text-[#B91C1C] flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-red-300 text-sm font-medium">Validation request failed</p>
-                <p className="text-red-400/70 text-xs mt-0.5">{(validateMutation.error as Error)?.message}</p>
+                <p className="text-[#B91C1C] text-sm font-medium">Validation request failed</p>
+                <p className="text-[#DC2626] text-xs mt-0.5">{(validateMutation.error as Error)?.message}</p>
               </div>
             </div>
           )}
@@ -439,70 +412,73 @@ export const EmployeeImport: React.FC = () => {
             <div className="space-y-4">
               {/* Summary stat cards */}
               <div className="grid grid-cols-3 gap-3">
-                {[
-                  {
-                    label: 'Total rows',
-                    value: validationResult.totalRows,
-                    color: 'text-text-primary',
-                    bg: 'bg-white',
-                    border: 'border-border',
-                  },
-                  {
-                    label: 'Valid',
-                    value: validRows,
-                    color: validRows > 0 ? 'text-emerald-400' : 'text-text-secondary',
-                    bg: validRows > 0 ? 'bg-emerald-500/10' : 'bg-white',
-                    border: validRows > 0 ? 'border-emerald-500/30' : 'border-border',
-                  },
-                  {
-                    label: 'Errors',
-                    value: validationResult.errorCount,
-                    color: validationResult.errorCount > 0 ? 'text-red-400' : 'text-emerald-400',
-                    bg: validationResult.errorCount > 0 ? 'bg-red-500/10' : 'bg-emerald-500/10',
-                    border: validationResult.errorCount > 0 ? 'border-red-500/30' : 'border-emerald-500/30',
-                  },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    className={clsx(
-                      'rounded-xl border px-4 py-3 text-center',
-                      s.bg, s.border,
-                    )}
-                  >
-                    <p className={clsx('text-2xl font-bold', s.color)}>{s.value}</p>
-                    <p className="text-xs text-text-secondary mt-0.5">{s.label}</p>
-                  </div>
-                ))}
+                <HrStatCard
+                  icon={<Users size={18} />}
+                  color="blue"
+                  value={validationResult.totalRows}
+                  label="Total rows"
+                />
+                <HrStatCard
+                  icon={<CheckCircle size={18} />}
+                  color="green"
+                  value={validRows}
+                  label="Valid"
+                />
+                <HrStatCard
+                  icon={validationResult.errorCount > 0 ? <XCircle size={18} /> : <CheckCircle size={18} />}
+                  color={validationResult.errorCount > 0 ? 'red' : 'green'}
+                  value={validationResult.errorCount}
+                  label="Errors"
+                />
               </div>
 
               {/* Error table */}
               {validationResult.errorCount > 0 && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-text-primary">
-                      {parsedErrors.length} validation error{parsedErrors.length !== 1 ? 's' : ''}
-                    </p>
-                    <input
-                      value={errorFilter}
-                      onChange={(e) => setErrorFilter(e.target.value)}
-                      placeholder="Filter errors…"
-                      className="bg-white border border-border rounded-lg px-3 py-1.5 text-xs text-text-primary placeholder-slate-600 focus:outline-none focus:border-indigo-500 w-48"
-                    />
-                  </div>
+                  <p className="text-sm font-medium text-text-primary">
+                    {parsedErrors.length} validation error{parsedErrors.length !== 1 ? 's' : ''}
+                  </p>
 
-                  <DataTable<ParsedError>
-                    columns={errorColumns}
-                    data={displayedErrors}
-                    keyField="id"
-                    emptyMessage="No errors match the filter"
-                  />
-
-                  {hiddenCount > 0 && (
-                    <p className="text-xs text-text-secondary text-center">
-                      … and {hiddenCount} more error{hiddenCount !== 1 ? 's' : ''} not shown.
-                      Fix the file and re-validate to see all.
-                    </p>
-                  )}
+                  <TableCard
+                    search={{
+                      value: errorFilter,
+                      onChange: setErrorFilter,
+                      placeholder: 'Filter errors…',
+                    }}
+                    footer={
+                      hiddenCount > 0 ? (
+                        <p className="text-xs text-text-secondary text-center">
+                          … and {hiddenCount} more error{hiddenCount !== 1 ? 's' : ''} not shown.
+                          Fix the file and re-validate to see all.
+                        </p>
+                      ) : undefined
+                    }
+                  >
+                    <table className="hr-table">
+                      <thead>
+                        <tr>
+                          <th className="w-20">Row #</th>
+                          <th>Error</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {displayedErrors.length === 0 ? (
+                          <tr>
+                            <td colSpan={2} className="text-center text-text-tertiary">
+                              No errors match the filter
+                            </td>
+                          </tr>
+                        ) : (
+                          displayedErrors.map((row) => (
+                            <tr key={row.id}>
+                              <td><span className="hr-mono text-xs text-text-secondary">{row.rowNumber || '?'}</span></td>
+                              <td><span className="text-[#B91C1C] text-xs">{row.message}</span></td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </TableCard>
                 </div>
               )}
 
@@ -517,20 +493,14 @@ export const EmployeeImport: React.FC = () => {
 
               {/* Action buttons */}
               <div className="flex items-center gap-3 flex-wrap pt-1">
-                <button
-                  onClick={reset}
-                  className="px-4 py-2 bg-white hover:bg-surface-2 text-text-primary text-sm font-medium rounded-xl transition-colors"
-                >
+                <HrButton variant="ghost" onClick={reset}>
                   Upload a different file
-                </button>
+                </HrButton>
                 {validationResult.errorCount === 0 && validRows > 0 && (
-                  <button
-                    onClick={() => setStep(3)}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-colors"
-                  >
+                  <HrButton onClick={() => setStep(3)}>
                     Continue with {validRows} valid {validRows === 1 ? 'row' : 'rows'}
                     <ChevronRight size={15} />
-                  </button>
+                  </HrButton>
                 )}
                 {validationResult.errorCount > 0 && (
                   <p className="text-text-secondary text-xs">
@@ -551,7 +521,7 @@ export const EmployeeImport: React.FC = () => {
 
       {/* ── Step 3: Confirm & commit ─────────────────────────────────────── */}
       {step === 3 && !commitMutation.isPending && !commitMutation.isError && !commitMutation.isSuccess && (
-        <div className="bg-white border border-border rounded-2xl p-6 space-y-5">
+        <div className="bg-white border border-border-default rounded-2xl p-6 space-y-5">
           <div>
             <h3 className="text-text-primary font-semibold text-base mb-1">Confirm import</h3>
             <p className="text-text-secondary text-sm leading-relaxed">
@@ -569,10 +539,10 @@ export const EmployeeImport: React.FC = () => {
               <summary className="cursor-pointer text-sm text-text-secondary hover:text-text-primary select-none transition-colors">
                 Preview the {validRows} {validRows === 1 ? 'employee' : 'employees'} being imported
               </summary>
-              <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border divide-y divide-slate-800/40">
+              <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border-default divide-y divide-border-default">
                 {/* NOTE: the backend validate response does not return parsed row data — only error strings.
                     The preview shows the file rows that had no errors. We can only show the row numbers. */}
-                <div className="px-4 py-3 text-xs text-text-secondary bg-white/30">
+                <div className="px-4 py-3 text-xs text-text-secondary bg-bg-base">
                   {validRows} row{validRows !== 1 ? 's' : ''} from {file?.name} will be created.
                 </div>
                 {/* NOTE[backend]: validate endpoint does not return parsed row data.
@@ -588,32 +558,26 @@ export const EmployeeImport: React.FC = () => {
           )}
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setStep(2)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-surface-2 text-text-primary text-sm font-medium rounded-xl transition-colors"
-            >
+            <HrButton variant="ghost" onClick={() => setStep(2)}>
               <ArrowLeft size={15} /> Back
-            </button>
-            <button
-              onClick={handleCommit}
-              className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-colors"
-            >
+            </HrButton>
+            <HrButton onClick={handleCommit}>
               Confirm — create {validRows} {validRows === 1 ? 'employee' : 'employees'}
-            </button>
+            </HrButton>
           </div>
         </div>
       )}
 
       {/* Committing in progress */}
       {step === 3 && commitMutation.isPending && (
-        <div className="bg-white border border-border rounded-2xl p-8 flex flex-col items-center gap-4">
-          <Loader2 size={32} className="animate-spin text-primary" />
+        <div className="bg-white border border-border-default rounded-2xl p-8 flex flex-col items-center gap-4">
+          <Loader2 size={32} className="animate-spin text-[#FF9D00]" />
           <p className="text-text-primary font-medium">Creating employees…</p>
           {commitMutation.uploadProgress > 0 && commitMutation.uploadProgress < 100 && (
             <div className="w-full max-w-xs">
-              <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-bg-base rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-indigo-500 transition-all duration-300"
+                  className="h-full bg-[#FF9D00] transition-all duration-300"
                   style={{ width: `${commitMutation.uploadProgress}%` }}
                 />
               </div>
@@ -626,15 +590,15 @@ export const EmployeeImport: React.FC = () => {
 
       {/* ── Step 'done': Commit result ───────────────────────────────────── */}
       {step === 'done' && commitResult?.committed && (
-        <div className="bg-white border border-emerald-500/30 rounded-2xl p-6 space-y-4">
+        <div className="bg-white border border-[#BBF7D0] rounded-2xl p-6 space-y-4">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 bg-emerald-500/15 rounded-xl flex items-center justify-center flex-shrink-0">
-              <CheckCircle size={22} className="text-emerald-400" />
+            <div className="w-10 h-10 bg-[#DCFCE7] rounded-xl flex items-center justify-center flex-shrink-0">
+              <CheckCircle size={22} className="text-[#15803D]" />
             </div>
             <div>
               <h3 className="text-text-primary font-semibold text-base mb-1">Imported successfully</h3>
               <p className="text-text-secondary text-sm">
-                <strong className="text-emerald-400">{commitResult.successCount}</strong>{' '}
+                <strong className="text-[#15803D]">{commitResult.successCount}</strong>{' '}
                 {commitResult.successCount === 1 ? 'employee was' : 'employees were'} created in{' '}
                 {selectedCompany?.name ?? tenantName}.
               </p>
@@ -642,15 +606,12 @@ export const EmployeeImport: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={() => navigate('/hrms/employees')}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-colors"
-            >
+            <HrButton onClick={() => navigate('/hrms/employees')}>
               View employees <ChevronRight size={15} />
-            </button>
+            </HrButton>
             <button
               onClick={reset}
-              className="px-4 py-2 text-text-secondary hover:text-text-primary text-sm transition-colors"
+              className="px-4 py-2 text-[#C16E00] hover:text-[#FF9D00] text-sm font-medium transition-colors"
             >
               Import more
             </button>
@@ -659,10 +620,10 @@ export const EmployeeImport: React.FC = () => {
       )}
 
       {step === 'done' && commitResult && !commitResult.committed && (
-        <div className="bg-white border border-amber-500/30 rounded-2xl p-6 space-y-4">
+        <div className="bg-white border border-[#FDE68A] rounded-2xl p-6 space-y-4">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 bg-amber-500/15 rounded-xl flex items-center justify-center flex-shrink-0">
-              <AlertCircle size={22} className="text-amber-400" />
+            <div className="w-10 h-10 bg-[#FEF3C7] rounded-xl flex items-center justify-center flex-shrink-0">
+              <AlertCircle size={22} className="text-[#B45309]" />
             </div>
             <div>
               <h3 className="text-text-primary font-semibold text-base mb-1">Import blocked by validation errors</h3>
@@ -681,18 +642,15 @@ export const EmployeeImport: React.FC = () => {
               </summary>
               <ul className="mt-2 space-y-1">
                 {commitResult.errors.slice(0, 20).map((e, i) => (
-                  <li key={i} className="text-xs text-red-400 font-mono bg-white px-3 py-1.5 rounded-lg">{e}</li>
+                  <li key={i} className="hr-mono text-xs text-[#B91C1C] bg-[#FEE2E2] px-3 py-1.5 rounded-lg">{e}</li>
                 ))}
               </ul>
             </details>
           )}
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setStep(2)}
-              className="px-4 py-2 bg-white hover:bg-surface-2 text-text-primary text-sm font-medium rounded-xl transition-colors"
-            >
+            <HrButton variant="ghost" onClick={() => setStep(2)}>
               Back to validate
-            </button>
+            </HrButton>
           </div>
         </div>
       )}

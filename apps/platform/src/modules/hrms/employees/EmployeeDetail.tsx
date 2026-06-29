@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 import type { GeneratedLetterDto } from '../letters/api/useLetters'
-import { clsx } from 'clsx'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Edit3, UserCheck, AlertTriangle, LogOut,
@@ -15,10 +14,11 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   Tabs, TabsList, TabsTrigger, TabsContent,
-  Drawer, Button, Field, Input, Badge, EmptyState,
+  Drawer, Button, Field, Input, EmptyState,
   TableSkeleton, CardSkeleton,
 } from '@unifiedtree/ui-kit'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
+import { HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
 import { toast } from 'sonner'
 import { useWorkforceEmployee, useUpdateWorkforceEmployee, useConfirmEmployee, useStartNotice, useExitEmployee, useCancelNotice } from '../api/useWorkforce'
 import { useExtendProbation } from '../api/useProbation'
@@ -140,6 +140,15 @@ const STATUS_STYLE: Record<string, { label: string; tone: 'success' | 'warning' 
   TERMINATED:    { label: 'Terminated',    tone: 'error'   },
 }
 
+// Map ui-kit Badge tones to client HR status-pill tones
+const PILL_TONE: Record<string, PillTone> = {
+  success: 'ok',
+  warning: 'warn',
+  error:   'red',
+  info:    'info',
+  default: 'gray',
+}
+
 // ── PII helpers ───────────────────────────────────────────────────────────────
 
 function maskPan(pan: string) {
@@ -165,7 +174,7 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs text-text-secondary">{label}</p>
-        <p className="text-sm text-slate-200 truncate">{value}</p>
+        <p className="text-sm text-text-primary truncate">{value}</p>
       </div>
     </div>
   )
@@ -199,7 +208,7 @@ function ActionModal({
           {children}
           <div className="flex gap-3 mt-4">
             <button onClick={onClose} className="flex-1 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">Cancel</button>
-            <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors">
+            <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-2.5 bg-[#FF9D00] hover:bg-[#E08A00] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors">
               {isLoading ? 'Processing…' : confirm}
             </button>
           </div>
@@ -344,7 +353,7 @@ function OverviewTab({ emp, departments, designations, branches, companies }: {
             </div>
             <div>
               <p className="text-xs text-text-secondary">CTC (Annual)</p>
-              <p className="text-sm text-slate-200">₹{emp.ctcAnnual.toLocaleString('en-IN')}</p>
+              <p className="text-sm text-text-primary">₹{emp.ctcAnnual.toLocaleString('en-IN')}</p>
             </div>
           </div>
         )}
@@ -408,13 +417,13 @@ function ContactTab({ employeeId, emp }: { employeeId: string; emp: NonNullable<
           {data.map((addr) => (
             <div key={addr.id} className="flex items-start justify-between p-3 bg-white/50 rounded-xl border border-border/40">
               <div>
-                <Badge tone="info" className="mb-1">{addr.addressType}</Badge>
-                <p className="text-sm text-slate-200">
+                <div className="mb-1"><HrStatusPill tone="info">{addr.addressType}</HrStatusPill></div>
+                <p className="text-sm text-text-primary">
                   {[addr.line1, addr.line2, addr.city, addr.state, addr.country, addr.pincode].filter(Boolean).join(', ')}
                 </p>
               </div>
               <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(addr.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(addr.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -585,12 +594,12 @@ function BankTab({ employeeId }: { employeeId: string }) {
                 <p className="text-xs text-text-secondary">{acc.bankName} {acc.branchName ? `· ${acc.branchName}` : ''}</p>
                 <p className="text-xs font-mono text-text-secondary">IFSC: {acc.ifscCode} · ****{acc.accountNumberLast4}</p>
                 <div className="flex gap-1.5 mt-1">
-                  {acc.primary   && <Badge tone="success">Primary</Badge>}
-                  {acc.verified  && <Badge tone="info">Verified</Badge>}
+                  {acc.primary   && <HrStatusPill tone="ok">Primary</HrStatusPill>}
+                  {acc.verified  && <HrStatusPill tone="info">Verified</HrStatusPill>}
                 </div>
               </div>
               <Can code={P.HRMS_EMPLOYEE_BANK_WRITE}>
-                <button onClick={() => deleteMut.mutate(acc.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(acc.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -609,7 +618,7 @@ function BankTab({ employeeId }: { employeeId: string }) {
             <Field label="Branch" error={errors.branchName?.message}><Input {...register('branchName')} /></Field>
           </div>
           <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-            <input type="checkbox" {...register('primary')} className="rounded border-slate-600 bg-white" />
+            <input type="checkbox" {...register('primary')} className="rounded border-border bg-white" />
             Set as primary account
           </label>
           <Button type="submit" className="w-full" loading={addMut.isPending} disabled={!isDirty || !isValid}>Add Account</Button>
@@ -661,7 +670,7 @@ function EducationTab({ employeeId }: { employeeId: string }) {
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{edu.degree}{edu.fieldOfStudy ? ` · ${edu.fieldOfStudy}` : ''}</p>
-                  {edu.highest && <Badge tone="accent">Highest</Badge>}
+                  {edu.highest && <HrStatusPill tone="purple">Highest</HrStatusPill>}
                 </div>
                 <p className="text-xs text-text-secondary">{edu.institution}</p>
                 {(edu.startYear || edu.endYear) && (
@@ -670,7 +679,7 @@ function EducationTab({ employeeId }: { employeeId: string }) {
                 {edu.gradeOrPercentage && <p className="text-xs text-text-secondary">Grade/% : {edu.gradeOrPercentage}</p>}
               </div>
               <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(edu.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(edu.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -690,7 +699,7 @@ function EducationTab({ employeeId }: { employeeId: string }) {
           </div>
           <Field label="Grade / Percentage" error={errors.gradeOrPercentage?.message}><Input {...register('gradeOrPercentage')} placeholder="8.5 CGPA / 85%" /></Field>
           <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-            <input type="checkbox" {...register('highest')} className="rounded border-slate-600 bg-white" />
+            <input type="checkbox" {...register('highest')} className="rounded border-border bg-white" />
             Highest qualification
           </label>
           <Button type="submit" className="w-full" loading={addMut.isPending} disabled={!isDirty || !isValid}>Save</Button>
@@ -743,7 +752,7 @@ function ExperienceTab({ employeeId }: { employeeId: string }) {
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{exp.companyName}</p>
-                  {exp.current && <Badge tone="success">Current</Badge>}
+                  {exp.current && <HrStatusPill tone="ok">Current</HrStatusPill>}
                 </div>
                 {exp.designation && <p className="text-xs text-text-secondary">{exp.designation}</p>}
                 <p className="text-xs text-text-secondary">
@@ -752,7 +761,7 @@ function ExperienceTab({ employeeId }: { employeeId: string }) {
                 </p>
               </div>
               <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(exp.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(exp.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -770,7 +779,7 @@ function ExperienceTab({ employeeId }: { employeeId: string }) {
             {!isCurrent && <Field label="End Date" error={errors.endDate?.message}><Input {...register('endDate')} type="date" /></Field>}
           </div>
           <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-            <input type="checkbox" {...register('current')} className="rounded border-slate-600 bg-white" />
+            <input type="checkbox" {...register('current')} className="rounded border-border bg-white" />
             Currently working here
           </label>
           <Field label="Location" error={errors.location?.message}><Input {...register('location')} /></Field>
@@ -825,13 +834,13 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{dep.name}</p>
-                  {dep.nominee && <Badge tone="accent">Nominee {dep.nomineePercentage ? `${dep.nomineePercentage}%` : ''}</Badge>}
+                  {dep.nominee && <HrStatusPill tone="purple">Nominee {dep.nomineePercentage ? `${dep.nomineePercentage}%` : ''}</HrStatusPill>}
                 </div>
                 <p className="text-xs text-text-secondary">{dep.relationship}{dep.gender ? ` · ${dep.gender}` : ''}</p>
                 {dep.dateOfBirth && <p className="text-xs text-text-secondary">DOB: {dep.dateOfBirth}</p>}
               </div>
               <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(dep.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(dep.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -857,7 +866,7 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-            <input type="checkbox" {...register('nominee')} className="rounded border-slate-600 bg-white" />
+            <input type="checkbox" {...register('nominee')} className="rounded border-border bg-white" />
             Mark as nominee
           </label>
           {isNominee && (
@@ -912,13 +921,13 @@ function EmergencyTab({ employeeId }: { employeeId: string }) {
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{c.name}</p>
-                  {c.isPrimary && <Badge tone="success">Primary</Badge>}
+                  {c.isPrimary && <HrStatusPill tone="ok">Primary</HrStatusPill>}
                 </div>
                 {c.relationship && <p className="text-xs text-text-secondary">{c.relationship}</p>}
                 <p className="text-xs text-text-secondary">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
               </div>
               <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(c.id)} className="p-1.5 text-text-secondary hover:text-red-400 transition-colors">
+                <button onClick={() => deleteMut.mutate(c.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </Can>
@@ -934,7 +943,7 @@ function EmergencyTab({ employeeId }: { employeeId: string }) {
           <Field label="Phone" error={errors.phone?.message}><Input {...register('phone')} type="tel" /></Field>
           <Field label="Email" error={errors.email?.message}><Input {...register('email')} type="email" /></Field>
           <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-            <input type="checkbox" {...register('isPrimary')} className="rounded border-slate-600 bg-white" />
+            <input type="checkbox" {...register('isPrimary')} className="rounded border-border bg-white" />
             Primary contact
           </label>
           <Button type="submit" className="w-full" loading={addMut.isPending} disabled={!isDirty || !isValid}>Save</Button>
@@ -1006,7 +1015,7 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
               </div>
               <div>
                 <p className="text-xs text-text-secondary">CTC (Annual)</p>
-                <p className="text-sm text-slate-200">₹{emp.ctcAnnual.toLocaleString('en-IN')}</p>
+                <p className="text-sm text-text-primary">₹{emp.ctcAnnual.toLocaleString('en-IN')}</p>
               </div>
             </div>
           )}
@@ -1096,13 +1105,13 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-text-primary">Generated Letters</h3>
         <Can code={P.HRMS_LETTERS_GENERATE}>
-          <button
+          <HrButton
+            size="sm"
             onClick={() => navigate(`/hrms/letters/generated?employeeId=${employeeId}`)}
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 transition-colors"
           >
             <Plus size={12} />
             Generate letter
-          </button>
+          </HrButton>
         </Can>
       </div>
 
@@ -1115,39 +1124,34 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
           description="Generate an offer, appointment, or experience letter for this employee."
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-sm">
+        <TableCard>
+          <table className="hr-table">
             <thead>
-              <tr className="border-b border-border bg-white">
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Subject</th>
-                <th className="hidden md:table-cell px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-secondary">Status</th>
-                <th className="px-4 py-3"></th>
+              <tr>
+                <th>Type</th>
+                <th>Subject</th>
+                <th className="hidden md:table-cell">Date</th>
+                <th>Status</th>
+                <th></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700/30">
+            <tbody>
               {letters.map(l => (
-                <tr key={l.id} className="hover:bg-white/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-500/15 text-primary">{l.type}</span>
+                <tr key={l.id}>
+                  <td>
+                    <HrStatusPill tone="purple">{l.type}</HrStatusPill>
                   </td>
-                  <td className="px-4 py-3 text-text-primary max-w-xs truncate">{l.subject}</td>
-                  <td className="hidden md:table-cell px-4 py-3 text-text-secondary text-xs">
+                  <td className="text-text-primary max-w-xs truncate">{l.subject}</td>
+                  <td className="hidden md:table-cell text-text-secondary text-xs">
                     {format(new Date(l.createdAt), 'dd MMM yyyy')}
                   </td>
-                  <td className="px-4 py-3">
-                    <span className={clsx(
-                      'rounded-full px-2 py-0.5 text-xs font-medium',
-                      l.status === 'VOID' ? 'bg-red-500/15 text-red-300' :
-                      l.status === 'SENT' ? 'bg-blue-500/15 text-blue-300' :
-                      'bg-slate-500/15 text-text-primary'
-                    )}>{l.status}</span>
+                  <td>
+                    <HrStatusPill tone={l.status === 'VOID' ? 'red' : l.status === 'SENT' ? 'info' : 'gray'}>{l.status}</HrStatusPill>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="text-right">
                     <button
                       onClick={() => navigate(`/hrms/letters/generated/${l.id}`)}
-                      className="text-xs text-text-secondary hover:text-slate-200 transition-colors"
+                      className="text-xs font-semibold text-[#C16E00] hover:text-[#FF9D00] transition-colors"
                     >
                       View
                     </button>
@@ -1156,7 +1160,7 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableCard>
       )}
     </div>
   )
@@ -1226,16 +1230,16 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
             <div className="bg-white border border-border rounded-xl p-3"><p className="text-xs text-text-secondary">PF status</p><p className="text-sm font-bold text-text-primary">{structure.pfApplicable ? structure.pfStatus : 'N/A'}</p></div>
           </div>
           {structure.lines.length > 0 && (
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead><tr className="bg-slate-50 text-left text-xs font-bold text-slate-500 uppercase tracking-wider"><th className="px-4 py-2.5">Component</th><th className="px-4 py-2.5">Monthly</th><th className="px-4 py-2.5">Annual</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">
+            <TableCard>
+              <table className="hr-table">
+                <thead><tr><th>Component</th><th>Monthly</th><th>Annual</th></tr></thead>
+                <tbody>
                   {structure.lines.map(l => (
-                    <tr key={l.componentId}><td className="px-4 py-2.5 text-slate-800">{l.componentName}</td><td className="px-4 py-2.5">{inr(l.monthlyAmount)}</td><td className="px-4 py-2.5 text-slate-500">{inr(l.monthlyAmount * 12)}</td></tr>
+                    <tr key={l.componentId}><td className="text-text-primary">{l.componentName}</td><td>{inr(l.monthlyAmount)}</td><td className="text-text-secondary">{inr(l.monthlyAmount * 12)}</td></tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableCard>
           )}
         </>
       )}
@@ -1243,16 +1247,16 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
       {history.length > 1 && (
         <div>
           <h3 className="text-sm font-bold text-text-primary mb-2">History</h3>
-          <div className="bg-white border border-border rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead><tr className="bg-slate-50 text-left text-xs font-bold text-slate-500 uppercase tracking-wider"><th className="px-4 py-2.5">Effective</th><th className="px-4 py-2.5">CTC</th><th className="px-4 py-2.5">Status</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">
+          <TableCard>
+            <table className="hr-table">
+              <thead><tr><th>Effective</th><th>CTC</th><th>Status</th></tr></thead>
+              <tbody>
                 {history.map(h => (
-                  <tr key={h.id}><td className="px-4 py-2.5">{format(new Date(h.effectiveFrom), 'd MMM yyyy')}</td><td className="px-4 py-2.5">{inr(h.ctcAnnual)}</td><td className="px-4 py-2.5">{h.isCurrent ? <Badge tone="success">Current</Badge> : <Badge tone="default">Past</Badge>}</td></tr>
+                  <tr key={h.id}><td>{format(new Date(h.effectiveFrom), 'd MMM yyyy')}</td><td>{inr(h.ctcAnnual)}</td><td>{h.isCurrent ? <HrStatusPill tone="ok">Current</HrStatusPill> : <HrStatusPill tone="gray">Past</HrStatusPill>}</td></tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableCard>
         </div>
       )}
 
@@ -1266,12 +1270,12 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
                 <option value="NEW">New regime</option><option value="OLD">Old regime</option>
               </select>
             </Field>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} className="h-4 w-4 rounded accent-primary" /> PF applicable
+            <label className="flex items-center gap-2 text-sm text-text-primary">
+              <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} className="h-4 w-4 rounded accent-[#FF9D00]" /> PF applicable
             </label>
             {ctcComponents.length > 0 && (
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Monthly component amounts</p>
+              <div className="space-y-2 pt-2 border-t border-border">
+                <p className="text-xs font-bold text-text-secondary uppercase tracking-wider">Monthly component amounts</p>
                 {ctcComponents.map(c => (
                   <Field key={c.id} label={c.name}>
                     <Input type="number" value={lines[c.id] ?? ''} onChange={(e) => setLines(p => ({ ...p, [c.id]: e.target.value }))} placeholder="0" />
@@ -1412,7 +1416,7 @@ export const EmployeeDetail: React.FC = () => {
       {/* Profile card */}
       <div className="bg-white border border-border rounded-2xl p-5">
         <div className="flex items-start gap-4">
-          <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
+          <div className="w-16 h-16 bg-gradient-to-br from-[#FF9D00] to-[#C16E00] rounded-2xl flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
             {initials.toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
@@ -1422,7 +1426,7 @@ export const EmployeeDetail: React.FC = () => {
                 <p className="text-text-secondary text-sm">{emp.employeeCode}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <Badge tone={statusInfo.tone}>{statusInfo.label}</Badge>
+                <HrStatusPill tone={PILL_TONE[statusInfo.tone] ?? 'gray'}>{statusInfo.label}</HrStatusPill>
                 <button onClick={() => setShowEdit(true)} className="p-2 bg-white hover:bg-surface-2 text-text-primary rounded-xl transition-colors">
                   <Edit3 size={14} />
                 </button>
@@ -1456,22 +1460,22 @@ export const EmployeeDetail: React.FC = () => {
         <Can code={P.HRMS_EMPLOYEE_WRITE}>
           <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
             {emp.employmentStatus === 'PROBATION' && (
-              <button onClick={() => setModal('confirm')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg text-xs font-medium transition-colors">
+              <button onClick={() => setModal('confirm')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-medium transition-colors">
                 <UserCheck size={13} /> Confirm Probation
               </button>
             )}
             {emp.employmentStatus === 'ACTIVE' && (
-              <button onClick={() => setModal('notice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 rounded-lg text-xs font-medium transition-colors">
+              <button onClick={() => setModal('notice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-medium transition-colors">
                 <AlertTriangle size={13} /> Start Notice
               </button>
             )}
             {emp.employmentStatus === 'NOTICE_PERIOD' && (
-              <button onClick={() => setModal('cancel-notice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg text-xs font-medium transition-colors">
+              <button onClick={() => setModal('cancel-notice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-medium transition-colors">
                 <UserCheck size={13} /> Cancel Notice
               </button>
             )}
             {emp.employmentStatus === 'NOTICE_PERIOD' && (
-              <button onClick={() => setModal('exit')} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg text-xs font-medium transition-colors">
+              <button onClick={() => setModal('exit')} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg text-xs font-medium transition-colors">
                 <LogOut size={13} /> Mark Exited
               </button>
             )}
@@ -1616,7 +1620,7 @@ export const EmployeeDetail: React.FC = () => {
             </div>
             <div>
               <label className="block text-xs text-text-secondary mb-1.5">Reason</label>
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-primary" />
+              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary" />
             </div>
           </div>
         </ActionModal>
@@ -1631,7 +1635,7 @@ export const EmployeeDetail: React.FC = () => {
             </div>
             <div>
               <label className="block text-xs text-text-secondary mb-1.5">Exit Reason</label>
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-primary" />
+              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary" />
             </div>
           </div>
         </ActionModal>

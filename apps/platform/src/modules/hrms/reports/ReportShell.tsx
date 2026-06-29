@@ -2,6 +2,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Download } from 'lucide-react'
 import { Skeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { HrPageHeader, HrButton } from '@/shared/components/hr'
 import { useCompanies } from '@/modules/hrms/api/useOrg'
 
 interface ReportShellProps {
@@ -28,29 +29,28 @@ export function ReportShell({
   children,
 }: ReportShellProps) {
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link
-            to="/hrms/reports"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E2E8F0] text-[#64748B] hover:text-[#0F172A] hover:border-slate-600 transition-colors"
-          >
-            <ArrowLeft size={15} />
-          </Link>
-          <div>
-            <h1 className="text-xl font-bold text-[#0F172A]">{title}</h1>
-            <p className="text-[#64748B] text-sm mt-0.5">{description}</p>
-          </div>
-        </div>
-        {/* TODO[backend]: CSV export endpoints not implemented */}
-        <button
-          disabled
-          title="Export not yet available"
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#64748B] bg-white border border-[#E2E8F0]/40 rounded-xl cursor-not-allowed opacity-50"
+    <div className="mx-auto max-w-7xl p-6 sm:p-8 space-y-6">
+      <div className="flex items-start gap-3">
+        <Link
+          to="/hrms/reports"
+          className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border-default text-text-secondary transition-colors hover:border-[#FFD68A] hover:text-[#C16E00]"
         >
-          <Download size={14} />
-          Export CSV
-        </button>
+          <ArrowLeft size={15} />
+        </Link>
+        <div className="flex-1">
+          <HrPageHeader
+            crumb="Reports & Analytics"
+            title={title}
+            subtitle={description}
+            actions={
+              /* TODO[backend]: CSV export endpoints not implemented */
+              <HrButton variant="ghost" disabled title="Export not yet available">
+                <Download size={14} />
+                Export CSV
+              </HrButton>
+            }
+          />
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -102,7 +102,7 @@ export function CompanySelector({ value, onChange }: CompanySelectorProps) {
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="bg-white border border-[#E2E8F0] rounded-xl px-3 py-2.5 text-sm text-[#334155] focus:outline-none focus:border-indigo-500 transition-all min-w-[180px]"
+      className="min-w-[180px] rounded-xl border border-border-default bg-white px-3 py-2.5 text-sm text-text-primary transition-all focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20"
       disabled={isLoading}
     >
       <option value="">Select company…</option>

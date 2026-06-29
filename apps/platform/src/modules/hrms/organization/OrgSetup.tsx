@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react'
-import { Plus, Building2, GitBranch, Layers, Award, Trash2, X, MapPin, BarChart3, Briefcase, Clock, Pencil } from 'lucide-react'
+import { Plus, Building2, GitBranch, Layers, Award, Trash2, X, BarChart3, Briefcase, Clock, Pencil } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Can, P } from '@unifiedtree/sdk'
-import { Badge, DataTable, EmptyState } from '@unifiedtree/ui-kit'
+import { DataTable, EmptyState } from '@unifiedtree/ui-kit'
 import type { Column, SortState } from '@unifiedtree/ui-kit'
+import { HrPageHeader, HrStatusPill } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
 import {
   useCompanies, useCreateCompany, useUpdateCompany, useArchiveCompany,
@@ -55,7 +56,7 @@ function DayToggle({ value, onChange }: { value: number; onChange: (v: number) =
           onClick={() => onChange(value ^ DAY_BITS[i])}
           className={clsx(
             'w-8 h-8 rounded-full text-xs font-medium transition-colors',
-            value & DAY_BITS[i] ? 'bg-primary text-text-primary' : 'bg-bg-surface text-text-tertiary hover:text-text-primary'
+            value & DAY_BITS[i] ? 'bg-[#FF9D00] text-white' : 'bg-bg-surface text-text-tertiary hover:text-text-primary'
           )}
         >{d}</button>
       ))}
@@ -77,7 +78,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input {...props}
-      className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+      className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#FF9D00] transition-colors"
     />
   )
 }
@@ -102,11 +103,11 @@ function SlideModal({ open, onClose, title, children }: {
   )
 }
 
-const BTN_PRIMARY = 'flex-1 py-2.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-text-primary font-medium rounded-xl text-sm transition-colors'
+const BTN_PRIMARY = 'flex-1 py-2.5 bg-[#FF9D00] hover:bg-[#E08A00] disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors'
 const BTN_CANCEL  = 'flex-1 py-2.5 border border-border-default text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors'
-const BTN_ADD     = 'flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover disabled:opacity-40 text-text-primary text-sm font-medium rounded-xl transition-colors'
+const BTN_ADD     = 'flex items-center gap-2 px-4 py-2 bg-[#FF9D00] hover:bg-[#E08A00] disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors'
 const BTN_ICON    = 'p-1.5 text-text-tertiary hover:text-text-secondary transition-colors'
-const BTN_DEL     = 'p-1.5 text-text-tertiary hover:text-red-400 transition-colors'
+const BTN_DEL     = 'p-1.5 text-text-tertiary hover:text-red-600 transition-colors'
 
 // ── Companies Tab ─────────────────────────────────────────────────────────────
 
@@ -173,7 +174,7 @@ function CompaniesTab() {
     },
     {
       key: 'status', header: 'Status',
-      cell: (co) => <Badge tone={co.active ? 'success' : 'default'}>{co.active ? 'Active' : 'Inactive'}</Badge>,
+      cell: (co) => <HrStatusPill tone={co.active ? 'ok' : 'gray'}>{co.active ? 'Active' : 'Inactive'}</HrStatusPill>,
     },
     {
       key: 'actions', header: '',
@@ -262,7 +263,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
       cell: (br) => (
         <div className="flex items-center gap-2">
           <span className="font-medium text-text-primary text-sm">{br.name}</span>
-          {br.headquarters && <Badge tone="warning">HQ</Badge>}
+          {br.headquarters && <HrStatusPill tone="warn">HQ</HrStatusPill>}
         </div>
       ),
     },
@@ -276,7 +277,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
     },
     {
       key: 'status', header: 'Status',
-      cell: (br) => <Badge tone={br.active ? 'success' : 'default'}>{br.active ? 'Active' : 'Inactive'}</Badge>,
+      cell: (br) => <HrStatusPill tone={br.active ? 'ok' : 'gray'}>{br.active ? 'Active' : 'Inactive'}</HrStatusPill>,
     },
     {
       key: 'actions', header: '',
@@ -398,7 +399,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
       cell: (d) => (
         <Can code={P.HRMS_DEPARTMENT_WRITE} fallback={<span className="text-sm text-text-secondary">{empLabel(d.departmentHeadEmployeeId) || '—'}</span>}>
           <select value={d.departmentHeadEmployeeId ?? ''} onChange={(e) => handleSetHead(d.id, e.target.value)}
-            className="bg-bg-surface border border-border-default rounded-lg px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-indigo-500 max-w-[10rem]">
+            className="bg-bg-surface border border-border-default rounded-lg px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] max-w-[10rem]">
             <option value="">None</option>
             {employees.map((emp) => (
               <option key={emp.id} value={emp.id}>{[emp.firstName, emp.lastName].filter(Boolean).join(' ')}</option>
@@ -413,7 +414,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
     },
     {
       key: 'status', header: 'Status',
-      cell: (d) => <Badge tone={d.active ? 'success' : 'default'}>{d.active ? 'Active' : 'Inactive'}</Badge>,
+      cell: (d) => <HrStatusPill tone={d.active ? 'ok' : 'gray'}>{d.active ? 'Active' : 'Inactive'}</HrStatusPill>,
     },
     {
       key: 'actions', header: '',
@@ -453,7 +454,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
           <Field label="Description"><Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional" /></Field>
           <Field label="Department Head">
             <select value={form.departmentHeadEmployeeId} onChange={(e) => set('departmentHeadEmployeeId', e.target.value)}
-              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-indigo-500 transition-colors">
+              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] transition-colors">
               <option value="">None</option>
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>{[emp.firstName, emp.lastName].filter(Boolean).join(' ')}</option>
@@ -530,7 +531,7 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
     },
     {
       key: 'status', header: 'Status',
-      cell: (d) => <Badge tone={d.active ? 'success' : 'default'}>{d.active ? 'Active' : 'Inactive'}</Badge>,
+      cell: (d) => <HrStatusPill tone={d.active ? 'ok' : 'gray'}>{d.active ? 'Active' : 'Inactive'}</HrStatusPill>,
     },
     {
       key: 'actions', header: '',
@@ -661,7 +662,7 @@ function GradesTab({ activeCompany }: CompanyProp) {
     },
     {
       key: 'status', header: 'Status',
-      cell: (g) => <Badge tone={g.active ? 'success' : 'default'}>{g.active ? 'Active' : 'Inactive'}</Badge>,
+      cell: (g) => <HrStatusPill tone={g.active ? 'ok' : 'gray'}>{g.active ? 'Active' : 'Inactive'}</HrStatusPill>,
     },
     {
       key: 'actions', header: '',
@@ -776,7 +777,7 @@ function EmploymentTypesTab({ activeCompany }: CompanyProp) {
       cell: (t) => (
         <div className="flex items-center gap-2">
           <span className="font-medium text-text-primary text-sm">{t.name}</span>
-          {t.system && <Badge tone="accent">System</Badge>}
+          {t.system && <HrStatusPill tone="purple">System</HrStatusPill>}
         </div>
       ),
     },
@@ -786,11 +787,11 @@ function EmploymentTypesTab({ activeCompany }: CompanyProp) {
     },
     {
       key: 'payroll', header: 'Payroll Eligible', hideBelow: 'lg',
-      cell: (t) => <Badge tone={t.payrollEligible ? 'success' : 'default'}>{t.payrollEligible ? 'Yes' : 'No'}</Badge>,
+      cell: (t) => <HrStatusPill tone={t.payrollEligible ? 'ok' : 'gray'}>{t.payrollEligible ? 'Yes' : 'No'}</HrStatusPill>,
     },
     {
       key: 'status', header: 'Status',
-      cell: (t) => <Badge tone={t.active ? 'success' : 'default'}>{t.active ? 'Active' : 'Inactive'}</Badge>,
+      cell: (t) => <HrStatusPill tone={t.active ? 'ok' : 'gray'}>{t.active ? 'Active' : 'Inactive'}</HrStatusPill>,
     },
     {
       key: 'actions', header: '',
@@ -915,7 +916,7 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
       cell: (s) => (
         <div>
           <p className="font-medium text-text-primary text-sm">{s.name}</p>
-          {s.nightShift && <Badge tone="info" className="mt-0.5">Night</Badge>}
+          {s.nightShift && <div className="mt-0.5"><HrStatusPill tone="info">Night</HrStatusPill></div>}
         </div>
       ),
     },
@@ -933,7 +934,7 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
     },
     {
       key: 'status', header: 'Status',
-      cell: (s) => <Badge tone={s.active ? 'success' : 'default'}>{s.active ? 'Active' : 'Inactive'}</Badge>,
+      cell: (s) => <HrStatusPill tone={s.active ? 'ok' : 'gray'}>{s.active ? 'Active' : 'Inactive'}</HrStatusPill>,
     },
     {
       key: 'actions', header: '',
@@ -1014,16 +1015,15 @@ export const OrgSetup: React.FC = () => {
   const activeCompany = companies.find((c) => c.id === selectedCompanyId) ?? companies[0]
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-text-primary font-heading tracking-tight">Organisation Setup</h1>
-          <p className="text-text-secondary text-sm sm:text-base font-medium mt-1.5">Manage companies, branches, departments, designations, grades, employment types, and shifts</p>
-        </div>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-6 p-6 sm:p-8">
+      <HrPageHeader
+        crumb="Master"
+        title="Organisation Setup"
+        subtitle="Manage companies, branches, departments, designations, grades, employment types, and shifts"
+      />
 
       {tab !== 'companies' && companies.length > 0 && (
-        <div className="flex items-center gap-3 bg-bg-surface/40 border border-border-default rounded-xl px-4 py-2.5">
+        <div className="flex items-center gap-3 bg-white border border-border-default rounded-xl px-4 py-2.5">
           <Building2 size={14} className="text-text-tertiary flex-shrink-0" />
           <span className="text-sm text-text-secondary">Viewing for:</span>
           <select value={activeCompany?.id ?? ''} onChange={(e) => setSelectedCompanyId(e.target.value)}

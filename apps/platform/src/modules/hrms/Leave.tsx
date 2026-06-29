@@ -13,15 +13,16 @@ import {
 import { useCompanies } from './api/useOrg'
 import { LeaveTypes } from './leave/LeaveTypes'
 import { HolidayCalendar } from './leave/HolidayCalendar'
+import { HrPageHeader, HrStatusPill, type PillTone } from '@/shared/components/hr'
 
 type Tab = 'my' | 'apply' | 'balances' | 'approvals' | 'types' | 'holidays'
 
-const STATUS_STYLE: Record<LeaveApprovalStatus, { label: string; color: string; bg: string; icon: React.ElementType }> = {
-  PENDING:    { label: 'Pending',     color: 'text-[#B45309]', bg: 'bg-[#FEF3C7]', icon: Clock },
-  APPROVED:   { label: 'Approved',    color: 'text-[#15803D]', bg: 'bg-[#DCFCE7]', icon: CheckCircle },
-  REJECTED:   { label: 'Rejected',    color: 'text-[#B91C1C]', bg: 'bg-[#FEE2E2]', icon: XCircle },
-  CANCELLED:  { label: 'Cancelled',   color: 'text-[#6B7280]', bg: 'bg-[#F4F4F6]', icon: XCircle },
-  PENDING_L2: { label: 'Awaiting HR', color: 'text-[#7C3AED]', bg: 'bg-[#F3E8FF]', icon: Clock },
+const STATUS_STYLE: Record<LeaveApprovalStatus, { label: string; color: string; bg: string; icon: React.ElementType; tone: PillTone }> = {
+  PENDING:    { label: 'Pending',     color: 'text-[#B45309]', bg: 'bg-[#FEF3C7]', icon: Clock,       tone: 'warn' },
+  APPROVED:   { label: 'Approved',    color: 'text-[#15803D]', bg: 'bg-[#DCFCE7]', icon: CheckCircle, tone: 'ok' },
+  REJECTED:   { label: 'Rejected',    color: 'text-[#B91C1C]', bg: 'bg-[#FEE2E2]', icon: XCircle,     tone: 'red' },
+  CANCELLED:  { label: 'Cancelled',   color: 'text-[#6B7280]', bg: 'bg-[#F4F4F6]', icon: XCircle,     tone: 'gray' },
+  PENDING_L2: { label: 'Awaiting HR', color: 'text-[#7C3AED]', bg: 'bg-[#F3E8FF]', icon: Clock,       tone: 'purple' },
 }
 
 // ── My Leaves Tab ─────────────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ function MyLeavesTab() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-text-primary font-medium text-sm">{leave.leaveTypeName ?? 'Leave'}</p>
-                  <span className={clsx('text-xs px-2 py-0.5 rounded-full', sc.bg, sc.color)}>{sc.label}</span>
+                  <HrStatusPill tone={sc.tone}>{sc.label}</HrStatusPill>
                 </div>
                 <p className="text-text-secondary text-xs mt-0.5">
                   {format(new Date(leave.startDate), 'd MMM')} – {format(new Date(leave.endDate), 'd MMM yyyy')}
@@ -193,7 +194,7 @@ function ApplyTab() {
       <button
         onClick={handleSubmit}
         disabled={applyLeave.isPending}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm"
+        className="w-full flex items-center justify-center gap-2 py-3 bg-[#FF9D00] hover:bg-[#E08A00] disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm"
       >
         <Plus size={16} />
         {applyLeave.isPending ? 'Submitting...' : 'Apply for Leave'}
@@ -241,10 +242,10 @@ function BalancesTab() {
                   <span>{balance.totalEntitlement.toFixed(1)} total</span>
                 </div>
                 {balance.pending > 0 && (
-                  <p className="text-xs text-amber-400 mt-1.5">{balance.pending.toFixed(1)} days pending</p>
+                  <p className="text-xs text-[#B45309] mt-1.5">{balance.pending.toFixed(1)} days pending</p>
                 )}
                 {balance.carryForward > 0 && (
-                  <p className="text-xs text-blue-400 mt-0.5">{balance.carryForward.toFixed(1)} carried forward</p>
+                  <p className="text-xs text-[#1D4ED8] mt-0.5">{balance.carryForward.toFixed(1)} carried forward</p>
                 )}
               </div>
             )
@@ -307,7 +308,7 @@ function ApprovalsTab() {
                 {leave.departmentName && <p className="text-text-tertiary text-xs mt-0.5">{leave.departmentName}</p>}
                 {leave.reason && <p className="text-text-secondary text-xs mt-0.5 italic">"{leave.reason}"</p>}
               </div>
-              <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full flex-shrink-0">Pending</span>
+              <div className="flex-shrink-0"><HrStatusPill tone="warn">Pending</HrStatusPill></div>
             </div>
             {commenting?.id === leave.id ? (
               <div className="space-y-2">
@@ -319,7 +320,7 @@ function ApprovalsTab() {
                 />
                 <div className="flex gap-2">
                   <button onClick={() => setCommenting(null)} className="flex-1 py-2 border border-border-default text-text-secondary text-xs rounded-xl hover:text-text-primary transition-colors">Cancel</button>
-                  <button onClick={handleDecide} disabled={decide.isPending} className={clsx('flex-1 py-2 text-xs rounded-xl font-medium transition-colors disabled:opacity-50', commenting.approved ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white')}>
+                  <button onClick={handleDecide} disabled={decide.isPending} className={clsx('flex-1 py-2 text-xs rounded-xl font-medium transition-colors disabled:opacity-50 text-white', commenting.approved ? 'bg-[#15803D] hover:bg-[#166534]' : 'bg-[#EF4444] hover:bg-[#DC2626]')}>
                     {decide.isPending ? '...' : commenting.approved ? 'Confirm Approve' : 'Confirm Reject'}
                   </button>
                 </div>
@@ -327,8 +328,8 @@ function ApprovalsTab() {
             ) : (
               <Can code={P.HRMS_LEAVE_APPROVE_L1}>
                 <div className="flex gap-2">
-                  <button onClick={() => setCommenting({ id: leave.id, approved: true })} className="flex-1 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs rounded-lg transition-colors font-medium">Approve</button>
-                  <button onClick={() => setCommenting({ id: leave.id, approved: false })} className="flex-1 py-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs rounded-lg transition-colors font-medium">Reject</button>
+                  <button onClick={() => setCommenting({ id: leave.id, approved: true })} className="flex-1 py-1.5 bg-[#DCFCE7] text-[#15803D] hover:bg-[#BBF7D0] text-xs rounded-lg transition-colors font-medium">Approve</button>
+                  <button onClick={() => setCommenting({ id: leave.id, approved: false })} className="flex-1 py-1.5 bg-[#FEE2E2] text-[#B91C1C] hover:bg-[#FECACA] text-xs rounded-lg transition-colors font-medium">Reject</button>
                 </div>
               </Can>
             )}
@@ -365,15 +366,16 @@ export const Leave: React.FC = () => {
   ]
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-text-primary">Leave Management</h1>
-        <p className="text-text-secondary text-sm mt-0.5">Apply for leave, track balances, and manage approvals</p>
-      </div>
+    <div className="mx-auto max-w-7xl p-6 sm:p-8 space-y-6">
+      <HrPageHeader
+        crumb="Leave Management"
+        title="Leave Management"
+        subtitle="Apply for leave, track balances, and manage approvals"
+      />
 
-      <div className="flex flex-wrap gap-1 bg-white p-1 rounded-xl w-fit">
+      <div className="flex flex-wrap gap-1 bg-white border border-border-default p-1 rounded-xl w-fit">
         {tabs.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t.key ? 'bg-primary text-white shadow' : 'text-text-secondary hover:text-text-primary')}>
+          <button key={t.key} onClick={() => setTab(t.key)} className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t.key ? 'bg-[#FF9D00] text-white shadow' : 'text-text-secondary hover:text-text-primary')}>
             {t.label}
           </button>
         ))}

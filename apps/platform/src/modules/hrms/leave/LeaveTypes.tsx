@@ -6,6 +6,7 @@ import { Can, P } from '@unifiedtree/sdk'
 import { TableSkeleton } from '@unifiedtree/ui-kit'
 import { useLeaveTypes, useCreateLeaveType, useUpdateLeaveType, useDeactivateLeaveType, type LeaveTypeResponse } from '../api/useLeave'
 import { useCompanies } from '../api/useOrg'
+import { HrPageHeader, HrButton, HrStatusPill, TableCard } from '@/shared/components/hr'
 
 // Indian standard: PL 1.5/month (18/year) carry-forward max 30;
 // SL 1/month (12/year) no carry-forward; CL 1/month (12/year) no carry-forward.
@@ -211,7 +212,7 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
+            className="flex-1 py-2.5 bg-[#FF9D00] hover:bg-[#E08A00] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
           >
             {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Leave Type'}
           </button>
@@ -225,34 +226,42 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
 
 function TypeRow({ type, onEdit, onDeactivate }: { type: LeaveTypeResponse; onEdit: (t: LeaveTypeResponse) => void; onDeactivate: (t: LeaveTypeResponse) => void }) {
   return (
-    <div className={clsx('bg-white border rounded-2xl px-4 py-3 flex items-center gap-4', type.isActive ? 'border-border' : 'border-border/40 opacity-60')}>
-      <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-        <Tag size={15} className="text-primary" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-text-primary font-medium text-sm">{type.name}</p>
-          <span className="text-xs text-text-secondary font-mono bg-white px-1.5 py-0.5 rounded">{type.code}</span>
-          {!type.isActive && <span className="text-xs text-text-secondary bg-white px-2 py-0.5 rounded-full">Inactive</span>}
+    <tr className={clsx(!type.isActive && 'opacity-60')}>
+      <td>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-[#FFF4E1] flex items-center justify-center flex-shrink-0">
+            <Tag size={15} className="text-[#C16E00]" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-text-primary">{type.name}</p>
+            <p className="text-text-tertiary text-xs mt-0.5">
+              {type.annualEntitlement} days/year
+              {type.isPaidLeave ? ' · Paid' : ' · Unpaid'}
+              {type.isCarryForwardAllowed ? ` · Carry fwd up to ${type.maxCarryForwardDays}d` : ''}
+            </p>
+          </div>
         </div>
-        <p className="text-text-secondary text-xs mt-0.5">
-          {type.annualEntitlement} days/year
-          {type.isPaidLeave ? ' · Paid' : ' · Unpaid'}
-          {type.isCarryForwardAllowed ? ` · Carry fwd up to ${type.maxCarryForwardDays}d` : ''}
-        </p>
-      </div>
-      <span className="text-xs text-slate-600 capitalize">{(type.category ?? '').toLowerCase()}</span>
+      </td>
+      <td><span className="hr-mono text-text-secondary">{type.code}</span></td>
+      <td><span className="text-xs text-text-secondary capitalize">{(type.category ?? '').toLowerCase()}</span></td>
+      <td>
+        {type.isActive
+          ? <HrStatusPill tone="ok">Active</HrStatusPill>
+          : <HrStatusPill tone="gray">Inactive</HrStatusPill>}
+      </td>
       <Can code={P.LEAVE_TYPE_WRITE}>
-        <div className="flex items-center gap-1">
-          <button onClick={() => onEdit(type)} title="Edit" className="p-1.5 text-text-secondary hover:text-primary rounded-lg hover:bg-slate-100 transition-colors">
-            <Pencil size={14} />
-          </button>
-          <button onClick={() => onDeactivate(type)} title="Deactivate" className="p-1.5 text-text-secondary hover:text-danger rounded-lg hover:bg-slate-100 transition-colors">
-            <Trash2 size={14} />
-          </button>
-        </div>
+        <td className="text-right">
+          <div className="inline-flex items-center gap-1">
+            <button onClick={() => onEdit(type)} title="Edit" className="p-1.5 text-text-tertiary hover:text-[#C16E00] rounded-lg hover:bg-bg-base transition-colors">
+              <Pencil size={14} />
+            </button>
+            <button onClick={() => onDeactivate(type)} title="Deactivate" className="p-1.5 text-text-tertiary hover:text-[#EF4444] rounded-lg hover:bg-bg-base transition-colors">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </td>
       </Can>
-    </div>
+    </tr>
   )
 }
 
@@ -301,53 +310,61 @@ export function LeaveTypes() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-text-secondary text-sm">Configure leave types available to employees in this company</p>
-        <Can code={P.LEAVE_TYPE_WRITE}>
-          <div className="flex gap-2">
+      <HrPageHeader
+        crumb="Leave Management"
+        title="Leave Types"
+        subtitle="Configure leave types available to employees in this company"
+        actions={
+          <Can code={P.LEAVE_TYPE_WRITE}>
             {!isLoading && types.length === 0 && (
-              <button
-                onClick={handleSeedDefaults}
-                disabled={seeding}
-                className="flex items-center gap-1.5 px-3 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 text-xs font-medium rounded-xl border border-amber-500/20 disabled:opacity-50 transition-colors"
-              >
+              <HrButton variant="ghost" onClick={handleSeedDefaults} disabled={seeding}>
                 {seeding ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
                 Seed defaults
-              </button>
+              </HrButton>
             )}
-            <button
-              onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-xl transition-colors"
-            >
+            <HrButton onClick={() => setShowAdd(true)}>
               <Plus size={13} />
               Add Type
-            </button>
-          </div>
-        </Can>
-      </div>
+            </HrButton>
+          </Can>
+        }
+      />
 
       {isLoading ? (
         <TableSkeleton />
       ) : types.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-border/60 rounded-2xl">
-          <Tag size={32} className="mx-auto mb-3 text-slate-700" />
+        <div className="text-center py-16 border border-dashed border-border-default rounded-xl bg-white">
+          <Tag size={32} className="mx-auto mb-3 text-text-tertiary" />
           <p className="text-text-secondary text-sm font-medium">No leave types configured</p>
-          <p className="text-slate-600 text-xs mt-1">Employees cannot apply for leave until at least one type is set up</p>
+          <p className="text-text-tertiary text-xs mt-1">Employees cannot apply for leave until at least one type is set up</p>
           <Can code={P.LEAVE_TYPE_WRITE}>
-            <button
-              onClick={handleSeedDefaults}
-              disabled={seeding}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 text-sm font-medium rounded-xl border border-amber-500/20 disabled:opacity-50 transition-colors"
-            >
-              {seeding ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-              Add standard Indian leave types (PL + SL + CL)
-            </button>
+            <div className="mt-4">
+              <HrButton variant="ghost" onClick={handleSeedDefaults} disabled={seeding}>
+                {seeding ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                Add standard Indian leave types (PL + SL + CL)
+              </HrButton>
+            </div>
           </Can>
         </div>
       ) : (
-        <div className="space-y-2">
-          {types.map((t) => <TypeRow key={t.id} type={t} onEdit={setEditing} onDeactivate={handleDeactivate} />)}
-        </div>
+        <TableCard>
+          <table className="hr-table">
+            <thead>
+              <tr>
+                <th>Leave Type</th>
+                <th>Code</th>
+                <th>Category</th>
+                <th>Status</th>
+                <Can code={P.LEAVE_TYPE_WRITE}>
+                  <th className="text-right">Actions</th>
+                </Can>
+              </tr>
+            </thead>
+            <tbody>
+              {types.map((t) => <TypeRow key={t.id} type={t} onEdit={setEditing} onDeactivate={handleDeactivate} />)}
+            </tbody>
+          </table>
+        </TableCard>
       )}
 
       {showAdd && companyId && <TypeDrawer companyId={companyId} onClose={() => setShowAdd(false)} />}

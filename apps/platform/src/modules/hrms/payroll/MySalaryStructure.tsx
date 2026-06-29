@@ -1,16 +1,14 @@
 import React from 'react'
 import { format } from 'date-fns'
-import { Badge, EmptyState, CardSkeleton, DataTable, type Column } from '@unifiedtree/ui-kit'
-import { useMySalaryStructure, type StructureLine } from '../api/usePayroll'
+import { IndianRupee, Wallet, ShieldCheck } from 'lucide-react'
+import { EmptyState, CardSkeleton } from '@unifiedtree/ui-kit'
+import { HrPageHeader, HrStatCard, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { useMySalaryStructure } from '../api/usePayroll'
 
 const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
-const lineColumns: Column<StructureLine>[] = [
-  { key: 'name', header: 'Component', cell: (r) => r.componentName },
-  { key: 'category', header: 'Type', cell: (r) => <Badge tone={r.category === 'DEDUCTION' ? 'error' : r.category === 'EARNING' ? 'success' : 'info'}>{r.category.replace('_', ' ')}</Badge>, hideBelow: 'sm' },
-  { key: 'monthly', header: 'Monthly', cell: (r) => inr(r.monthlyAmount) },
-  { key: 'annual', header: 'Annual', cell: (r) => inr(r.monthlyAmount * 12), hideBelow: 'sm' },
-]
+const categoryTone = (category: string): PillTone =>
+  category === 'DEDUCTION' ? 'red' : category === 'EARNING' ? 'ok' : 'info'
 
 export const MySalaryStructure: React.FC = () => {
   const { data, isLoading, error } = useMySalaryStructure()
@@ -26,28 +24,43 @@ export const MySalaryStructure: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto p-6 sm:p-8 space-y-6">
-      <h1 className="text-2xl font-extrabold text-slate-900 font-heading tracking-tight">My Salary</h1>
+      <HrPageHeader
+        title="My Salary"
+        crumb="Payroll"
+        subtitle={`Effective from ${format(new Date(data.effectiveFrom), 'd MMM yyyy')}`}
+      />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <p className="text-xs text-slate-500">Annual CTC</p>
-          <p className="text-xl font-bold text-slate-900 mt-0.5">{inr(data.ctcAnnual)}</p>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <p className="text-xs text-slate-500">Monthly</p>
-          <p className="text-xl font-bold text-slate-900 mt-0.5">{inr(data.ctcMonthly)}</p>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <p className="text-xs text-slate-500">Tax regime</p>
-          <p className="text-xl font-bold text-slate-900 mt-0.5">{data.taxRegime}</p>
-        </div>
+        <HrStatCard icon={<IndianRupee size={18} />} color="orange" value={inr(data.ctcAnnual)} label="Annual CTC" />
+        <HrStatCard icon={<Wallet size={18} />} color="green" value={inr(data.ctcMonthly)} label="Monthly" />
+        <HrStatCard icon={<ShieldCheck size={18} />} color="blue" value={data.taxRegime} label="Tax regime" />
       </div>
-      <p className="text-xs text-slate-400">Effective from {format(new Date(data.effectiveFrom), 'd MMM yyyy')}</p>
 
       {data.lines.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <DataTable columns={lineColumns} data={data.lines} getRowKey={(r) => r.componentId} />
-        </div>
+        <TableCard>
+          <table className="hr-table">
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th className="hidden sm:table-cell">Type</th>
+                <th>Monthly</th>
+                <th className="hidden sm:table-cell">Annual</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.lines.map((r) => (
+                <tr key={r.componentId}>
+                  <td className="text-text-primary font-medium">{r.componentName}</td>
+                  <td className="hidden sm:table-cell">
+                    <HrStatusPill tone={categoryTone(r.category)}>{r.category.replace('_', ' ')}</HrStatusPill>
+                  </td>
+                  <td className="hr-mono">{inr(r.monthlyAmount)}</td>
+                  <td className="hidden sm:table-cell hr-mono">{inr(r.monthlyAmount * 12)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableCard>
       )}
     </div>
   )

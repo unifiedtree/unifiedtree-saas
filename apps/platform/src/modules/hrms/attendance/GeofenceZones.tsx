@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react'
 import { MapPin, Plus, Pencil, Trash2, X, Crosshair, Radius } from 'lucide-react'
 import { clsx } from 'clsx'
 import { usePermission, P } from '@unifiedtree/sdk'
-import { Badge, EmptyState, Skeleton } from '@unifiedtree/ui-kit'
+import { EmptyState, Skeleton } from '@unifiedtree/ui-kit'
+import { HrPageHeader, HrStatusPill, HrButton } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies, useDepartments } from '../api/useOrg'
 import {
@@ -14,7 +15,7 @@ import {
 // behaviour. Write actions are gated on org.geofence.write — the same authority
 // the backend enforces (@PreAuthorize) on POST/PUT/DELETE.
 
-const COLOR_PRESETS = ['#0F6E56', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899']
+const COLOR_PRESETS = ['#FF9D00', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899']
 const PUNCH_METHODS = ['FACE_RECOGNITION', 'GPS', 'MANUAL'] as const
 
 interface ZoneFormState {
@@ -256,7 +257,7 @@ function ZoneFormModal({
           <button
             onClick={handleSubmit}
             disabled={!canWrite || isPending}
-            className="flex-1 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
+            className="flex-1 py-2.5 bg-[#FF9D00] hover:bg-[#E08A00] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
           >
             {isPending ? 'Saving...' : isEditing ? 'Update Zone' : 'Create Zone'}
           </button>
@@ -299,27 +300,21 @@ export const GeofenceZones: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-text-primary font-heading tracking-tight">Geofencing Zones</h1>
-          <p className="text-text-secondary text-sm sm:text-base font-medium mt-1.5">
-            Define office locations where staff can punch attendance from the mobile app.
-          </p>
-        </div>
-        {canWrite && (
-          <button
-            onClick={openAdd}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-dark text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"
-          >
+    <div className="max-w-7xl mx-auto space-y-8 p-6 sm:p-8">
+      <HrPageHeader
+        crumb="Attendance & Time"
+        title="Geofencing Zones"
+        subtitle="Define office locations where staff can punch attendance from the mobile app."
+        actions={canWrite && (
+          <HrButton onClick={openAdd}>
             <Plus size={16} /> Add Zone
-          </button>
+          </HrButton>
         )}
-      </div>
+      />
 
       {!canWrite && (
-        <div className="flex items-center gap-2 bg-primary-light border border-primary/20 rounded-xl px-4 py-3">
-          <MapPin size={16} className="text-primary" />
+        <div className="flex items-center gap-2 bg-[#FFF4E1] border border-[#FFD68A] rounded-xl px-4 py-3">
+          <MapPin size={16} className="text-[#C16E00]" />
           <p className="text-sm font-medium text-text-secondary">
             View only — ask an admin or HR manager to add, edit, or remove zones.
           </p>
@@ -344,10 +339,10 @@ export const GeofenceZones: React.FC = () => {
             <div key={z.id} className="bg-white border border-border-default shadow-sm rounded-2xl p-5 flex flex-col">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: z.colorHex || '#0F6E56' }} />
+                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: z.colorHex || '#FF9D00' }} />
                   <h3 className="text-base font-bold text-text-primary truncate">{z.name}</h3>
                 </div>
-                <Badge tone={z.active ? 'success' : 'default'}>{z.active ? 'Active' : 'Inactive'}</Badge>
+                <HrStatusPill tone={z.active ? 'ok' : 'gray'}>{z.active ? 'Active' : 'Inactive'}</HrStatusPill>
               </div>
 
               <div className="space-y-2 text-sm text-text-secondary flex-1">

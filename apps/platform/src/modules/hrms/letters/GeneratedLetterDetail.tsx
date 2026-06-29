@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
 import { CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { HrPageHeader, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
 import {
   useGeneratedLetter,
   useSendLetter,
@@ -15,22 +16,25 @@ import {
 } from './api/useLetters'
 import type { LetterType, LetterStatus } from './api/useLetters'
 
-const TYPE_STYLE: Record<LetterType, { label: string; color: string; bg: string }> = {
-  OFFER:          { label: 'Offer',          color: 'text-blue-400',    bg: 'bg-blue-500/10'    },
-  APPOINTMENT:    { label: 'Appointment',    color: 'text-[#0F6E56]',  bg: 'bg-[#0F6E56]/10'  },
-  RELIEVING:      { label: 'Relieving',      color: 'text-orange-400',  bg: 'bg-orange-500/10'  },
-  EXPERIENCE:     { label: 'Experience',     color: 'text-violet-400',  bg: 'bg-violet-500/10'  },
-  SALARY_REVISION:{ label: 'Salary Revision',color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-  CUSTOM:         { label: 'Custom',         color: 'text-[#64748B]',   bg: 'bg-[#F1F5F9]/40'   },
+const TYPE_STYLE: Record<LetterType, { label: string; tone: PillTone }> = {
+  OFFER:           { label: 'Offer',           tone: 'info' },
+  APPOINTMENT:     { label: 'Appointment',     tone: 'teal' },
+  RELIEVING:       { label: 'Relieving',       tone: 'orange' },
+  EXPERIENCE:      { label: 'Experience',      tone: 'purple' },
+  SALARY_REVISION: { label: 'Salary Revision', tone: 'green' },
+  CUSTOM:          { label: 'Custom',          tone: 'gray' },
 }
 
-const STATUS_STYLE: Record<LetterStatus, { label: string; color: string; bg: string }> = {
-  GENERATED: { label: 'Generated', color: 'text-[#64748B]',   bg: 'bg-[#F1F5F9]/40'   },
-  SENT:      { label: 'Sent',      color: 'text-blue-400',    bg: 'bg-blue-500/10'    },
-  VIEWED:    { label: 'Viewed',    color: 'text-green-400',   bg: 'bg-green-500/10'   },
-  SIGNED:    { label: 'Signed',    color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-  VOID:      { label: 'Void',      color: 'text-red-400',     bg: 'bg-red-500/10'     },
+const STATUS_STYLE: Record<LetterStatus, { label: string; tone: PillTone }> = {
+  GENERATED: { label: 'Generated', tone: 'gray' },
+  SENT:      { label: 'Sent',      tone: 'info' },
+  VIEWED:    { label: 'Viewed',    tone: 'green' },
+  SIGNED:    { label: 'Signed',    tone: 'teal' },
+  VOID:      { label: 'Void',      tone: 'red' },
 }
+
+const inputClass =
+  'w-full bg-white border border-border-default rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/20'
 
 function SendForm({
   letterId,
@@ -63,9 +67,9 @@ function SendForm({
 
   if (sent) {
     return (
-      <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-        <p className="text-sm text-emerald-400 font-medium">Letter sent successfully.</p>
-        {toEmail && <p className="text-xs text-[#64748B] mt-0.5">Sent to {toEmail}</p>}
+      <div className="mt-3 p-3 bg-[#DCFCE7] border border-[#BBF7D0] rounded-xl">
+        <p className="text-sm text-[#15803D] font-medium">Letter sent successfully.</p>
+        {toEmail && <p className="text-xs text-text-secondary mt-0.5">Sent to {toEmail}</p>}
       </div>
     )
   }
@@ -73,7 +77,7 @@ function SendForm({
   return (
     <form onSubmit={handleSend} className="mt-3 space-y-3">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-[#64748B] uppercase tracking-wider">
+        <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
           To Email
         </label>
         <input
@@ -81,29 +85,25 @@ function SendForm({
           value={toEmail}
           onChange={(e) => setToEmail(e.target.value)}
           placeholder="employee@example.com"
-          className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+          className={inputClass}
         />
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-[#64748B] uppercase tracking-wider">
-          CC Email <span className="normal-case font-normal text-slate-600">(optional)</span>
+        <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+          CC Email <span className="normal-case font-normal text-text-tertiary">(optional)</span>
         </label>
         <input
           type="email"
           value={ccEmail}
           onChange={(e) => setCcEmail(e.target.value)}
           placeholder="manager@example.com"
-          className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+          className={inputClass}
         />
       </div>
-      <button
-        type="submit"
-        disabled={send.isPending}
-        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-[#0F172A] text-sm font-medium rounded-xl transition-colors"
-      >
+      <HrButton type="submit" disabled={send.isPending}>
         <Send size={13} />
         {send.isPending ? 'Sending…' : 'Send Letter'}
-      </button>
+      </HrButton>
     </form>
   )
 }
@@ -127,8 +127,8 @@ function VoidForm({ letterId }: { letterId: string }) {
 
   if (voided) {
     return (
-      <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-        <p className="text-sm text-red-400 font-medium">Letter has been voided.</p>
+      <div className="mt-3 p-3 bg-[#FEE2E2] border border-[#FECACA] rounded-xl">
+        <p className="text-sm text-[#B91C1C] font-medium">Letter has been voided.</p>
       </div>
     )
   }
@@ -136,7 +136,7 @@ function VoidForm({ letterId }: { letterId: string }) {
   return (
     <form onSubmit={handleVoid} className="mt-3 space-y-3">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-[#64748B] uppercase tracking-wider">
+        <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
           Reason *
         </label>
         <textarea
@@ -145,17 +145,13 @@ function VoidForm({ letterId }: { letterId: string }) {
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Explain why this letter is being voided…"
-          className="w-full bg-white border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+          className={clsx(inputClass, 'resize-none')}
         />
       </div>
-      <button
-        type="submit"
-        disabled={voidMut.isPending || !reason.trim()}
-        className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-[#0F172A] text-sm font-medium rounded-xl transition-colors"
-      >
+      <HrButton type="submit" variant="danger" disabled={voidMut.isPending || !reason.trim()}>
         <XCircle size={13} />
         {voidMut.isPending ? 'Voiding…' : 'Confirm Void'}
-      </button>
+      </HrButton>
     </form>
   )
 }
@@ -213,99 +209,95 @@ export const GeneratedLetterDetail: React.FC = () => {
   const contextEntries = letter.generationContext ? Object.entries(letter.generationContext) : []
 
   return (
-    <div className="p-6 animate-fade-in space-y-6">
+    <div className="mx-auto max-w-6xl p-6 sm:p-8 animate-fade-in space-y-6">
       <button
         onClick={() => navigate('/hrms/letters/generated')}
-        className="flex items-center gap-1.5 text-sm text-[#64748B] hover:text-[#0F172A] transition-colors"
+        className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
       >
         <ArrowLeft size={16} />
         Generated Letters
       </button>
 
+      <HrPageHeader
+        crumb="Recruitment & Onboarding"
+        title={letter.subject}
+        subtitle={
+          <span className="font-mono" title={letter.employeeId}>
+            Employee: {letter.employeeId}
+          </span>
+        }
+        actions={
+          <>
+            <HrStatusPill tone={typeMeta.tone}>{typeMeta.label}</HrStatusPill>
+            <HrStatusPill tone={statusMeta.tone}>{statusMeta.label}</HrStatusPill>
+            {letter.hasPdf && (
+              <HrButton
+                variant="ghost"
+                onClick={() => downloadLetterPdf(letter.id, `letter-${letter.type.toLowerCase()}-${letter.id.slice(0, 8)}.pdf`)}
+              >
+                <Download size={14} /> Download PDF
+              </HrButton>
+            )}
+          </>
+        }
+      />
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-4">
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-4">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div className="space-y-1 flex-1 min-w-0">
-                <h1 className="text-lg font-bold text-[#0F172A] leading-snug">{letter.subject}</h1>
-                <p className="text-xs text-[#64748B] font-mono" title={letter.employeeId}>
-                  Employee: {letter.employeeId}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={clsx('px-2.5 py-1 text-xs font-medium rounded-full', typeMeta.bg, typeMeta.color)}>
-                  {typeMeta.label}
-                </span>
-                <span className={clsx('px-2.5 py-1 text-xs font-medium rounded-full', statusMeta.bg, statusMeta.color)}>
-                  {statusMeta.label}
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 pt-2 border-t border-[#E2E8F0]">
+          <div className="bg-white border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
               <div>
-                <p className="text-xs text-[#64748B]">Created At</p>
-                <p className="text-sm text-slate-200">{format(new Date(letter.createdAt), 'd MMM yyyy, HH:mm')}</p>
+                <p className="text-xs text-text-tertiary">Created At</p>
+                <p className="text-sm text-text-primary">{format(new Date(letter.createdAt), 'd MMM yyyy, HH:mm')}</p>
               </div>
               <div>
-                <p className="text-xs text-[#64748B]">Generated By</p>
-                <p className="text-sm text-slate-200 font-mono text-xs" title={letter.generatedBy}>
+                <p className="text-xs text-text-tertiary">Generated By</p>
+                <p className="text-sm text-text-primary hr-mono text-xs" title={letter.generatedBy}>
                   {letter.generatedBy.slice(0, 8)}…
                 </p>
               </div>
               <div>
-                <p className="text-xs text-[#64748B]">Template ID</p>
-                <p className="text-sm text-slate-200 font-mono text-xs" title={letter.templateId}>
+                <p className="text-xs text-text-tertiary">Template ID</p>
+                <p className="text-sm text-text-primary hr-mono text-xs" title={letter.templateId}>
                   {letter.templateId.slice(0, 8)}…
                 </p>
               </div>
               {letter.pdfSizeBytes != null && (
                 <div>
-                  <p className="text-xs text-[#64748B]">PDF Size</p>
-                  <p className="text-sm text-slate-200">
+                  <p className="text-xs text-text-tertiary">PDF Size</p>
+                  <p className="text-sm text-text-primary">
                     {(letter.pdfSizeBytes / 1024).toFixed(1)} KB
                   </p>
                 </div>
               )}
             </div>
-
-            {letter.hasPdf && (
-              <div className="pt-3 border-t border-[#E2E8F0]">
-                <button
-                  onClick={() => downloadLetterPdf(letter.id, `letter-${letter.type.toLowerCase()}-${letter.id.slice(0, 8)}.pdf`)}
-                  className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-[#F1F5F9] text-slate-200 text-sm font-medium rounded-xl transition-colors"
-                >
-                  <Download size={14} /> Download PDF
-                </button>
-              </div>
-            )}
           </div>
 
           {contextEntries.length > 0 && (
-            <div className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden">
+            <div className="bg-white border border-border-default rounded-2xl overflow-hidden shadow-sm">
               <button
                 onClick={() => setContextOpen((v) => !v)}
-                className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-[#F8FAFC] transition-colors"
+                className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-bg-base transition-colors"
               >
-                <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">
+                <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
                   Generation Context ({contextEntries.length})
                 </span>
-                {contextOpen ? <ChevronUp size={14} className="text-[#64748B]" /> : <ChevronDown size={14} className="text-[#64748B]" />}
+                {contextOpen ? <ChevronUp size={14} className="text-text-tertiary" /> : <ChevronDown size={14} className="text-text-tertiary" />}
               </button>
               {contextOpen && (
-                <div className="border-t border-[#E2E8F0] overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="border-t border-border-default overflow-x-auto">
+                  <table className="hr-table w-full">
                     <thead>
-                      <tr className="border-b border-[#E2E8F0]/40">
-                        <th className="px-5 py-2 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider w-1/3">Key</th>
-                        <th className="px-5 py-2 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Value</th>
+                      <tr>
+                        <th className="w-1/3">Key</th>
+                        <th>Value</th>
                       </tr>
                     </thead>
                     <tbody>
                       {contextEntries.map(([key, value]) => (
-                        <tr key={key} className="border-b border-[#E2E8F0]/30 last:border-0">
-                          <td className="px-5 py-2 font-mono text-xs text-[#64748B] whitespace-nowrap">{key}</td>
-                          <td className="px-5 py-2 text-sm text-[#334155] break-all">{value}</td>
+                        <tr key={key}>
+                          <td className="hr-mono text-xs text-text-secondary whitespace-nowrap">{key}</td>
+                          <td className="text-sm text-text-primary break-all">{value}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -317,18 +309,18 @@ export const GeneratedLetterDetail: React.FC = () => {
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-4">
-            <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Actions</h2>
+          <div className="bg-white border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Actions</h2>
 
             <Can code={P.HRMS_LETTERS_SEND}>
-              <div className="border-b border-[#E2E8F0] pb-4">
+              <div className="border-b border-border-default pb-4">
                 <button
                   onClick={() => { setSendOpen((v) => !v); setVoidOpen(false) }}
                   className={clsx(
                     'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors w-full justify-center',
                     sendOpen
-                      ? 'bg-indigo-600 text-[#0F172A]'
-                      : 'bg-white hover:bg-[#F1F5F9] text-slate-200',
+                      ? 'bg-[#FF9D00] hover:bg-[#E08A00] text-white'
+                      : 'border border-border-default bg-white hover:bg-bg-base text-text-primary',
                   )}
                 >
                   <Send size={13} /> Send Letter
@@ -347,10 +339,10 @@ export const GeneratedLetterDetail: React.FC = () => {
                   className={clsx(
                     'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors w-full justify-center',
                     isVoid
-                      ? 'bg-white text-slate-600 cursor-not-allowed'
+                      ? 'border border-border-default bg-bg-base text-text-tertiary cursor-not-allowed'
                       : voidOpen
-                        ? 'bg-red-600 text-[#0F172A]'
-                        : 'bg-white hover:bg-[#F1F5F9] text-slate-200',
+                        ? 'bg-[#EF4444] hover:bg-[#DC2626] text-white'
+                        : 'border border-border-default bg-white hover:bg-bg-base text-text-primary',
                   )}
                 >
                   <XCircle size={13} />
@@ -363,21 +355,21 @@ export const GeneratedLetterDetail: React.FC = () => {
             </Can>
 
             <Can code={P.HRMS_LETTERS_DELETE}>
-              <div className="border-t border-[#E2E8F0] pt-4">
+              <div className="border-t border-border-default pt-4">
                 {!confirmDelete ? (
                   <button
                     onClick={() => setConfirmDelete(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors w-full justify-center bg-white hover:bg-red-50 text-red-500 border border-red-200"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors w-full justify-center bg-white hover:bg-red-50 text-[#B91C1C] border border-[#FECACA]"
                   >
                     <Trash2 size={13} /> Delete Letter
                   </button>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-xs text-red-500 text-center font-medium">Permanently delete this letter?</p>
+                    <p className="text-xs text-[#B91C1C] text-center font-medium">Permanently delete this letter?</p>
                     <div className="flex gap-2">
                       <button
                         onClick={() => setConfirmDelete(false)}
-                        className="flex-1 px-3 py-2 rounded-xl text-xs font-medium bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]"
+                        className="flex-1 px-3 py-2 rounded-xl text-xs font-medium border border-border-default bg-white text-text-secondary hover:bg-bg-base"
                       >
                         Cancel
                       </button>
@@ -393,7 +385,7 @@ export const GeneratedLetterDetail: React.FC = () => {
                             setConfirmDelete(false)
                           }
                         }}
-                        className="flex-1 px-3 py-2 rounded-xl text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+                        className="flex-1 px-3 py-2 rounded-xl text-xs font-medium bg-[#EF4444] text-white hover:bg-[#DC2626] disabled:opacity-50"
                       >
                         {deleteMut.isPending ? 'Deleting…' : 'Yes, Delete'}
                       </button>
@@ -404,27 +396,27 @@ export const GeneratedLetterDetail: React.FC = () => {
             </Can>
           </div>
 
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5 space-y-3">
-            <h2 className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Status History</h2>
+          <div className="bg-white border border-border-default rounded-2xl p-5 space-y-3 shadow-sm">
+            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Status History</h2>
 
             {letter.sentAt ? (
               <div className="space-y-0.5">
-                <p className="text-xs text-blue-400 font-medium">Sent</p>
-                <p className="text-xs text-[#64748B]">{format(new Date(letter.sentAt), 'd MMM yyyy, HH:mm')}</p>
+                <p className="text-xs text-[#1D4ED8] font-medium">Sent</p>
+                <p className="text-xs text-text-secondary">{format(new Date(letter.sentAt), 'd MMM yyyy, HH:mm')}</p>
                 {letter.sentToEmail && (
-                  <p className="text-xs text-[#64748B]">{letter.sentToEmail}</p>
+                  <p className="text-xs text-text-secondary">{letter.sentToEmail}</p>
                 )}
               </div>
             ) : (
-              <p className="text-xs text-slate-600 italic">Not yet sent</p>
+              <p className="text-xs text-text-tertiary italic">Not yet sent</p>
             )}
 
             {letter.voidedAt && (
-              <div className="space-y-0.5 pt-2 border-t border-[#E2E8F0]">
-                <p className="text-xs text-red-400 font-medium">Voided</p>
-                <p className="text-xs text-[#64748B]">{format(new Date(letter.voidedAt), 'd MMM yyyy, HH:mm')}</p>
+              <div className="space-y-0.5 pt-2 border-t border-border-default">
+                <p className="text-xs text-[#B91C1C] font-medium">Voided</p>
+                <p className="text-xs text-text-secondary">{format(new Date(letter.voidedAt), 'd MMM yyyy, HH:mm')}</p>
                 {letter.voidedReason && (
-                  <p className="text-xs text-[#64748B] italic">"{letter.voidedReason}"</p>
+                  <p className="text-xs text-text-secondary italic">"{letter.voidedReason}"</p>
                 )}
               </div>
             )}

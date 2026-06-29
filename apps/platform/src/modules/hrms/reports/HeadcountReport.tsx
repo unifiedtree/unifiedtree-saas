@@ -3,21 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts'
-import { DataTable } from '@unifiedtree/ui-kit'
-import type { Column } from '@unifiedtree/ui-kit'
 import { useHeadcountReport } from '@/modules/hrms/api/useReports'
-import type { HeadcountRow } from '@/modules/hrms/api/useReports'
 import { ReportShell, CompanySelector } from './ReportShell'
+import { TableCard } from '@/shared/components/hr'
 
 const TODAY = new Date().toISOString().slice(0, 10)
-
-const COLUMNS: Column<HeadcountRow>[] = [
-  { key: 'department', header: 'Department', cell: (r) => r.department ?? '(No dept)' },
-  { key: 'total',      header: 'Total',      cell: (r) => r.total },
-  { key: 'active',     header: 'Active',     cell: (r) => r.active },
-  { key: 'on_notice',  header: 'On Notice',  cell: (r) => r.on_notice },
-  { key: 'probation',  header: 'Probation',  cell: (r) => r.probation },
-]
 
 export function HeadcountReport() {
   const [params, setParams] = useSearchParams()
@@ -52,36 +42,53 @@ export function HeadcountReport() {
             type="date"
             value={asOf}
             onChange={(e) => set('asOf', e.target.value)}
-            className="bg-white border border-[#E2E8F0] rounded-xl px-3 py-2.5 text-sm text-[#334155] focus:outline-none focus:border-indigo-500 transition-all"
+            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/20 transition-all"
           />
         </>
       }
     >
-      <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5">
+      <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm">
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={chartData} margin={{ top: 4, right: 16, left: -10, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #334155)" />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} />
-            <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} allowDecimals={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} />
+            <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} allowDecimals={false} />
             <Tooltip
-              contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
-              labelStyle={{ color: '#e2e8f0' }}
+              contentStyle={{ backgroundColor: '#ffffff', border: '1px solid var(--color-border-default, #FFD68A)', borderRadius: 8, fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+              labelStyle={{ color: '#111827', fontWeight: 600 }}
             />
-            <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
-            <Bar dataKey="Active"     stackId="a" fill="var(--color-accent-default, #6366f1)" />
-            <Bar dataKey="On Notice"  stackId="a" fill="var(--color-status-warning-fg, #f59e0b)" />
-            <Bar dataKey="Probation"  stackId="a" fill="var(--color-status-info-fg, #38bdf8)" radius={[4, 4, 0, 0]} />
+            <Legend wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
+            <Bar dataKey="Active"     stackId="a" fill="#10B981" />
+            <Bar dataKey="On Notice"  stackId="a" fill="#F59E0B" />
+            <Bar dataKey="Probation"  stackId="a" fill="#2563EB" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <DataTable
-        columns={COLUMNS}
-        data={data}
-        getRowKey={(r) => r.department ?? 'null'}
-        emptyTitle="No headcount data"
-        emptyDescription="No employees matched the selected filters."
-      />
+      <TableCard>
+        <table className="hr-table">
+          <thead>
+            <tr>
+              <th>Department</th>
+              <th>Total</th>
+              <th>Active</th>
+              <th>On Notice</th>
+              <th>Probation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((r) => (
+              <tr key={r.department ?? 'null'}>
+                <td className="font-medium text-text-primary">{r.department ?? '(No dept)'}</td>
+                <td>{r.total}</td>
+                <td>{r.active}</td>
+                <td>{r.on_notice}</td>
+                <td>{r.probation}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableCard>
     </ReportShell>
   )
 }

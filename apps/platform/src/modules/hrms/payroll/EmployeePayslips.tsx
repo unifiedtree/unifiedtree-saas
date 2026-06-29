@@ -1,8 +1,17 @@
 import React from 'react'
 import { Download } from 'lucide-react'
-import { DataTable, Badge, Button, EmptyState, CardSkeleton, type Column } from '@unifiedtree/ui-kit'
+import { EmptyState, CardSkeleton } from '@unifiedtree/ui-kit'
+import { HrPageHeader, HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
-import { useMyPayslips, downloadMyPayslipPdf, statusTone, inr2, type MyPayslip } from '../api/usePayrollRuns'
+import { useMyPayslips, downloadMyPayslipPdf, inr2, type MyPayslip } from '../api/usePayrollRuns'
+
+const PAYSLIP_TONE: Record<MyPayslip['status'], PillTone> = {
+  DRAFT: 'gray',
+  PROCESSING: 'info',
+  LOCKED: 'ok',
+  PAID: 'ok',
+  CANCELLED: 'red',
+}
 
 export const EmployeePayslips: React.FC = () => {
   const { toast } = useToast()
@@ -10,33 +19,56 @@ export const EmployeePayslips: React.FC = () => {
 
   if (isLoading) return <div className="max-w-3xl mx-auto p-6 sm:p-8"><CardSkeleton /></div>
 
-  const columns: Column<MyPayslip>[] = [
-    { key: 'period', header: 'Period', cell: (r) => <span className="font-semibold text-slate-900">{r.period}</span> },
-    { key: 'net', header: 'Net pay', cell: (r) => inr2(r.netPay) },
-    { key: 'status', header: 'Status', cell: (r) => <Badge tone={statusTone[r.status]}>{r.status}</Badge>, hideBelow: 'sm' },
-    { key: 'actions', header: '', cell: (r) => (
-      r.status === 'LOCKED'
-        ? <Button variant="ghost" onClick={async () => {
-            try { await downloadMyPayslipPdf(r.runId) } catch (e) { toast((e as Error).message, 'error') }
-          }}><Download size={15} /> PDF</Button>
-        : <span className="text-xs text-slate-400">Not finalized</span>
-    ) },
-  ]
-
   return (
-    <div className="max-w-3xl mx-auto p-6 sm:p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 font-heading tracking-tight">My Payslips</h1>
-        <p className="text-sm text-slate-500 mt-1">Download payslips for finalized payroll periods.</p>
-      </div>
+    <div className="max-w-3xl mx-auto p-6 sm:p-8">
+      <HrPageHeader
+        crumb="Payroll"
+        title="My Payslips"
+        subtitle="Download payslips for finalized payroll periods."
+      />
 
       {data.length === 0 ? (
         <EmptyState variant="first-run" title="No payslips yet"
           description="Payslips appear here once payroll is locked for a period." />
       ) : (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <DataTable columns={columns} data={data} getRowKey={(r) => r.runId} />
-        </div>
+        <TableCard>
+          <table className="hr-table">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Net pay</th>
+                <th className="hidden sm:table-cell">Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((r) => (
+                <tr key={r.runId}>
+                  <td><span className="font-semibold text-text-primary">{r.period}</span></td>
+                  <td>{inr2(r.netPay)}</td>
+                  <td className="hidden sm:table-cell">
+                    <HrStatusPill tone={PAYSLIP_TONE[r.status]}>{r.status}</HrStatusPill>
+                  </td>
+                  <td className="text-right">
+                    {r.status === 'LOCKED' ? (
+                      <HrButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                          try { await downloadMyPayslipPdf(r.runId) } catch (e) { toast((e as Error).message, 'error') }
+                        }}
+                      >
+                        <Download size={15} /> PDF
+                      </HrButton>
+                    ) : (
+                      <span className="text-xs text-text-tertiary">Not finalized</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableCard>
       )}
     </div>
   )
