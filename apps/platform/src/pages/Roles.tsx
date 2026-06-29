@@ -138,7 +138,7 @@ function PermissionsDrawer({
                     >
                       <input
                         type="checkbox"
-                        className="mt-0.5 flex-shrink-0 accent-indigo-500 h-4 w-4"
+                        className="mt-0.5 flex-shrink-0 accent-[#FF9D00] h-4 w-4"
                         checked={selected.has(p.code)}
                         onChange={(e) => toggle(p.code, e.target.checked)}
                       />
@@ -632,7 +632,7 @@ export const Roles: React.FC = () => {
               <button
                 className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                   !moduleFilter
-                    ? 'border-accent-default bg-accent-default text-[#0F172A]'
+                    ? 'border-[#FF9D00] bg-[#FF9D00] text-white'
                     : 'border-border-default text-text-secondary hover:border-accent-default'
                 }`}
                 onClick={() => setModuleFilter('')}
@@ -644,7 +644,7 @@ export const Roles: React.FC = () => {
                   key={m}
                   className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                     moduleFilter === m
-                      ? 'border-accent-default bg-accent-default text-[#0F172A]'
+                      ? 'border-[#FF9D00] bg-[#FF9D00] text-white'
                       : 'border-border-default text-text-secondary hover:border-accent-default'
                   }`}
                   onClick={() => setModuleFilter(m === moduleFilter ? '' : m)}

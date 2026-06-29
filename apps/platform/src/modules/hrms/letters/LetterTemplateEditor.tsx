@@ -47,8 +47,8 @@ function ToolbarButton({
       className={clsx(
         'flex items-center justify-center w-7 h-7 rounded-lg text-xs font-medium transition-colors',
         active
-          ? 'bg-indigo-500/20 text-[#0F6E56]'
-          : 'text-[#64748B] hover:bg-[#F1F5F9]/60 hover:text-[#0F172A]',
+          ? 'bg-[#FFF4E1] text-[#C16E00]'
+          : 'text-text-tertiary hover:bg-[#FFF8EC] hover:text-text-primary',
       )}
     >
       {children}
@@ -82,18 +82,18 @@ function MergeFieldDropdown({ onInsert }: { onInsert: (key: string) => void }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-[#64748B] hover:bg-[#F1F5F9]/60 hover:text-[#0F172A] border border-[#E2E8F0]/60 transition-colors"
+        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-text-tertiary hover:bg-[#FFF8EC] hover:text-text-primary border border-border-default transition-colors"
       >
         Insert field
         <ChevronDown size={11} className={clsx('transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-50 w-64 bg-white border border-[#E2E8F0]/60 rounded-xl shadow-2xl overflow-hidden">
+        <div className="absolute left-0 top-full mt-1 z-50 w-64 bg-white border border-border-default rounded-xl shadow-2xl overflow-hidden">
           <div className="max-h-72 overflow-y-auto p-1">
             {Object.entries(grouped).map(([category, entries]) => (
               <div key={category}>
-                <p className="px-2 py-1.5 text-xs font-semibold text-[#64748B] uppercase tracking-wider">
+                <p className="px-2 py-1.5 text-xs font-semibold text-text-tertiary uppercase tracking-wider">
                   {category}
                 </p>
                 {entries.map((f) => (
@@ -104,20 +104,20 @@ function MergeFieldDropdown({ onInsert }: { onInsert: (key: string) => void }) {
                       onInsert(f.key)
                       setOpen(false)
                     }}
-                    className="w-full flex items-start gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-white transition-colors group"
+                    className="w-full flex items-start gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-[#FFF8EC] transition-colors group"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-[#334155] group-hover:text-[#0F172A] truncate">
+                      <p className="text-xs font-medium text-text-secondary group-hover:text-text-primary truncate">
                         {f.label}
                       </p>
-                      <p className="text-xs text-slate-600 font-mono truncate">{`{{${f.key}}}`}</p>
+                      <p className="text-xs text-[#C16E00] font-mono truncate">{`{{${f.key}}}`}</p>
                     </div>
                   </button>
                 ))}
               </div>
             ))}
             {fields.length === 0 && (
-              <p className="px-3 py-4 text-xs text-[#64748B] text-center">No merge fields available</p>
+              <p className="px-3 py-4 text-xs text-text-tertiary text-center">No merge fields available</p>
             )}
           </div>
         </div>
@@ -138,7 +138,7 @@ function EditorToolbar({
   }
 
   return (
-    <div className="flex items-center gap-1 flex-wrap px-3 py-2 border-b border-[#E2E8F0]/60 bg-white">
+    <div className="flex items-center gap-1 flex-wrap px-3 py-2 border-b border-border-default bg-white">
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBold().run()}
         active={editor.isActive('bold')}
@@ -154,7 +154,7 @@ function EditorToolbar({
         <Italic size={13} />
       </ToolbarButton>
 
-      <div className="w-px h-4 bg-[#F1F5F9]/60 mx-0.5" />
+      <div className="w-px h-4 bg-border-default mx-0.5" />
 
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
@@ -178,7 +178,7 @@ function EditorToolbar({
         H3
       </ToolbarButton>
 
-      <div className="w-px h-4 bg-[#F1F5F9]/60 mx-0.5" />
+      <div className="w-px h-4 bg-border-default mx-0.5" />
 
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBulletList().run()}
@@ -202,7 +202,7 @@ function EditorToolbar({
         <Minus size={13} />
       </ToolbarButton>
 
-      <div className="w-px h-4 bg-[#F1F5F9]/60 mx-0.5" />
+      <div className="w-px h-4 bg-border-default mx-0.5" />
 
       <MergeFieldDropdown onInsert={insertMergeField} />
     </div>
@@ -236,15 +236,15 @@ function PreviewPane({ templateId }: { templateId: string | undefined }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4 space-y-3">
-        <h3 className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">
+      <div className="bg-white border border-border-default rounded-2xl p-4 space-y-3">
+        <h3 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
           Preview as employee
         </h3>
         <div className="flex gap-2">
           <select
             value={employeeId}
             onChange={(e) => setEmployeeId(e.target.value)}
-            className="flex-1 bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500 transition-colors"
+            className="flex-1 bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/30 transition-colors"
           >
             <option value="">{employees.length === 0 ? 'No employees yet' : 'Select an employee…'}</option>
             {employees.map((emp) => (
@@ -257,7 +257,7 @@ function PreviewPane({ templateId }: { templateId: string | undefined }) {
             type="button"
             onClick={handlePreview}
             disabled={previewMut.isPending || !templateId}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#F1F5F9] hover:bg-slate-600 disabled:opacity-50 text-[#0F172A] text-sm font-medium rounded-xl transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#FFF4E1] hover:bg-[#FFE9C7] border border-[#FFD68A] disabled:opacity-50 text-[#C16E00] text-sm font-medium rounded-xl transition-colors"
           >
             {previewMut.isPending ? (
               <Loader2 size={13} className="animate-spin" />
@@ -268,16 +268,16 @@ function PreviewPane({ templateId }: { templateId: string | undefined }) {
           </button>
         </div>
         {!templateId && (
-          <p className="text-xs text-slate-600">Save the template first to enable preview</p>
+          <p className="text-xs text-text-tertiary">Save the template first to enable preview</p>
         )}
       </div>
 
       {previewMut.isPending ? (
         <CardSkeleton />
       ) : previewHtml ? (
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-[#E2E8F0]">
-            <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Rendered output</p>
+        <div className="bg-white border border-border-default rounded-2xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-border-default">
+            <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Rendered output</p>
           </div>
           <iframe
             srcDoc={previewHtml}
@@ -320,7 +320,7 @@ export const LetterTemplateEditor: React.FC = () => {
     content: '',
     editorProps: {
       attributes: {
-        class: 'prose prose-invert prose-sm max-w-none min-h-[320px] px-4 py-3 focus:outline-none text-slate-200',
+        class: 'prose prose-sm max-w-none min-h-[320px] px-4 py-3 focus:outline-none text-text-primary',
       },
     },
   })
@@ -390,12 +390,12 @@ export const LetterTemplateEditor: React.FC = () => {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <button
           onClick={() => navigate('/hrms/letters/templates')}
-          className="flex items-center gap-1.5 text-sm text-[#64748B] hover:text-[#0F172A] transition-colors"
+          className="flex items-center gap-1.5 text-sm text-text-tertiary hover:text-text-primary transition-colors"
         >
           <ArrowLeft size={16} />
           Templates
         </button>
-        <h1 className="text-lg font-bold text-[#0F172A]">
+        <h1 className="text-lg font-bold text-text-primary">
           {isNew ? 'New template' : 'Edit template'}
         </h1>
         <div className="flex-1" />
@@ -403,7 +403,7 @@ export const LetterTemplateEditor: React.FC = () => {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-[#0F172A] text-sm font-medium rounded-xl transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#FF9D00] hover:bg-[#E08A00] disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/30"
         >
           {saving && <Loader2 size={13} className="animate-spin" />}
           {saving ? 'Saving…' : 'Save template'}
@@ -412,28 +412,28 @@ export const LetterTemplateEditor: React.FC = () => {
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 space-y-4">
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl p-4 space-y-4">
+          <div className="bg-white border border-border-default rounded-2xl p-4 space-y-4">
             <div>
-              <label className="block text-xs font-medium text-[#64748B] mb-1.5">
+              <label className="block text-xs font-medium text-text-tertiary mb-1.5">
                 Template name *
               </label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Standard Offer Letter"
-                className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2 text-sm text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/30 transition-colors"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1.5">
+                <label className="block text-xs font-medium text-text-tertiary mb-1.5">
                   Letter type
                 </label>
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value as LetterType)}
-                  className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2 text-sm text-[#0F172A] focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/30 transition-colors"
                 >
                   {LETTER_TYPES.map((lt) => (
                     <option key={lt.value} value={lt.value}>{lt.label}</option>
@@ -441,22 +441,22 @@ export const LetterTemplateEditor: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#64748B] mb-1.5">
+                <label className="block text-xs font-medium text-text-tertiary mb-1.5">
                   Subject
                 </label>
                 <input
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="e.g. Offer of Employment – {{employee.fullName}}"
-                  className="w-full bg-white border border-[#E2E8F0]/60 rounded-xl px-3 py-2 text-sm text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/30 transition-colors"
                 />
               </div>
             </div>
           </div>
 
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-[#E2E8F0]">
-              <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Body</p>
+          <div className="bg-white border border-border-default rounded-2xl overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-border-default">
+              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Body</p>
             </div>
             <EditorToolbar editor={editor} />
             <EditorContent editor={editor} />

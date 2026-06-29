@@ -29,13 +29,13 @@ export const StatCard: React.FC<StatCardProps> = ({
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
     whileHover={{ y: -3 }}
-    className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-md transition-all hover:border-[#0F6E56]/20 hover:shadow-lg"
+    className="rounded-2xl border border-border-default bg-white p-5 shadow-md transition-all hover:border-[#FF9D00]/30 hover:shadow-lg"
   >
     <div className="mb-4 flex items-start justify-between">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">{title}</p>
-        <p className="mt-1.5 font-display text-3xl font-bold tracking-tight text-[#0F172A]">{value}</p>
-        {subtitle && <p className="mt-0.5 text-xs text-[#64748B]">{subtitle}</p>}
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{title}</p>
+        <p className="mt-1.5 font-display text-3xl font-bold tracking-tight text-text-primary">{value}</p>
+        {subtitle && <p className="mt-0.5 text-xs text-text-tertiary">{subtitle}</p>}
       </div>
       <div className={clsx('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl', iconBg)}>
         <Icon size={19} className={iconColor} />

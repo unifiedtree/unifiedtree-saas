@@ -17,11 +17,11 @@ export const ResetPassword: React.FC = () => {
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] p-4">
+      <div className="flex min-h-screen items-center justify-center bg-bg-base p-4">
         <div className="max-w-md text-center">
-          <p className="text-2xl font-bold text-slate-900 mb-2">Invalid link</p>
-          <p className="text-slate-500 mb-4">This reset link is missing a token.</p>
-          <Link to="/forgot-password" className="text-[#0F6E56] font-semibold hover:underline">
+          <p className="text-2xl font-bold text-text-primary mb-2">Invalid link</p>
+          <p className="text-text-secondary mb-4">This reset link is missing a token.</p>
+          <Link to="/forgot-password" className="text-[#C16E00] font-semibold hover:underline">
             Request a new reset link →
           </Link>
         </div>
@@ -45,35 +45,35 @@ export const ResetPassword: React.FC = () => {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#F8FAFC] p-4">
+    <main className="flex min-h-screen items-center justify-center bg-bg-base p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[420px] bg-white rounded-3xl shadow-xl border border-slate-100 p-10"
+        className="w-full max-w-[420px] bg-white rounded-3xl shadow-xl border border-border-default p-10"
       >
         <div className="flex items-center gap-2.5 mb-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F6E56]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF9D00]">
             <span className="text-xl font-black text-white">U</span>
           </div>
-          <span className="text-xl font-black tracking-tight text-slate-900">UnifiedTree</span>
+          <span className="text-xl font-black tracking-tight text-text-primary">UnifiedTree</span>
         </div>
 
         {done ? (
           <div className="text-center py-4">
             <div className="text-4xl mb-4">✓</div>
-            <h1 className="text-xl font-bold text-slate-900 mb-2">Password updated!</h1>
-            <p className="text-sm text-slate-500 mb-6">You can now log in with your new password.</p>
+            <h1 className="text-xl font-bold text-text-primary mb-2">Password updated!</h1>
+            <p className="text-sm text-text-secondary mb-6">You can now log in with your new password.</p>
             <Link
               to="/login"
-              className="inline-block rounded-xl bg-[#0F6E56] px-6 py-3 text-sm font-bold text-white hover:bg-[#0A5240] transition-colors"
+              className="inline-block rounded-xl bg-[#FF9D00] px-6 py-3 text-sm font-bold text-white hover:bg-[#E08A00] transition-colors"
             >
               Go to login →
             </Link>
           </div>
         ) : (
           <>
-            <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Set new password</h1>
-            <p className="text-sm text-slate-500 mb-6">Choose a new password for your account.</p>
+            <h1 className="text-2xl font-extrabold text-text-primary mb-1">Set new password</h1>
+            <p className="text-sm text-text-secondary mb-6">Choose a new password for your account.</p>
 
             {error && (
               <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -83,37 +83,37 @@ export const ResetPassword: React.FC = () => {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">
                   New Password
                 </label>
                 <div className="relative">
-                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
                     type={showPw ? 'text' : 'password'}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-10 text-sm text-slate-900 outline-none focus:border-[#0F6E56] focus:ring-4 focus:ring-[#0F6E56]/10"
+                    className="w-full rounded-xl border border-border-default bg-bg-base py-3 pl-10 pr-10 text-sm text-text-primary outline-none focus:border-[#FF9D00] focus:ring-4 focus:ring-[#FF9D00]/30"
                     placeholder="Minimum 8 characters"
                     required
                   />
                   <button type="button" onClick={() => setShowPw(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary">
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-1.5">
                   Confirm Password
                 </label>
                 <div className="relative">
-                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
                     type="password"
                     value={confirm}
                     onChange={e => setConfirm(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none focus:border-[#0F6E56] focus:ring-4 focus:ring-[#0F6E56]/10"
+                    className="w-full rounded-xl border border-border-default bg-bg-base py-3 pl-10 pr-4 text-sm text-text-primary outline-none focus:border-[#FF9D00] focus:ring-4 focus:ring-[#FF9D00]/30"
                     placeholder="Re-enter password"
                     required
                   />
@@ -123,7 +123,7 @@ export const ResetPassword: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-xl bg-[#0F6E56] hover:bg-[#0A5240] py-4 text-sm font-bold text-white transition-all disabled:opacity-60"
+                className="w-full rounded-xl bg-[#FF9D00] hover:bg-[#E08A00] py-4 text-sm font-bold text-white transition-all disabled:opacity-60"
               >
                 {loading ? 'Updating…' : 'Update password'}
               </button>

@@ -22,18 +22,18 @@ export const ModuleNotActivated: React.FC<Props> = ({ moduleKey }) => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
-      <div className="w-20 h-20 bg-white border border-[#E2E8F0] rounded-3xl flex items-center justify-center mb-6">
-        <Lock size={32} className="text-[#64748B]" />
+      <div className="w-20 h-20 bg-[#FFF4E1] border border-[#FFD68A] rounded-3xl flex items-center justify-center mb-6">
+        <Lock size={32} className="text-[#C16E00]" />
       </div>
-      <h2 className="text-2xl font-bold text-[#0F172A] mb-2">{label} Not Activated</h2>
-      <p className="text-[#64748B] max-w-md mb-1 leading-relaxed">
+      <h2 className="text-2xl font-bold text-text-primary mb-2">{label} Not Activated</h2>
+      <p className="text-text-secondary max-w-md mb-1 leading-relaxed">
         The {label} module is not included in your current plan. Activate it to unlock all features.
       </p>
-      <p className="text-[#0F6E56] font-semibold mb-8">Starting at ${price}/month</p>
+      <p className="text-[#C16E00] font-semibold mb-8">Starting at ${price}/month</p>
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/settings?tab=billing')}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-[#0F172A] font-semibold rounded-xl transition-all"
+          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#C16E00] to-[#FF9D00] hover:from-[#7A4400] hover:to-[#E08A00] text-white font-semibold rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/30"
         >
           <Sparkles size={16} />
           Activate {label}
@@ -41,7 +41,7 @@ export const ModuleNotActivated: React.FC<Props> = ({ moduleKey }) => {
         </button>
         <button
           onClick={() => navigate('/')}
-          className="px-6 py-3 border border-[#E2E8F0] text-[#64748B] hover:text-[#0F172A] hover:border-slate-600 rounded-xl transition-colors font-medium text-sm"
+          className="px-6 py-3 border border-border-default text-text-secondary hover:text-[#C16E00] hover:border-[#FFD68A] rounded-xl transition-colors font-medium text-sm"
         >
           Back to Dashboard
         </button>

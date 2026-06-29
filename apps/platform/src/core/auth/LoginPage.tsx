@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Eye, EyeOff, Lock, Mail, Users } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { apiJson, AuthResponse, currentSubdomain, WorkspaceStatus } from '@/core/api/client'
 
@@ -109,16 +109,16 @@ export const LoginPage: React.FC = () => {
   }
 
   return (
-    <main className="flex min-h-screen bg-[#F8FAFC] font-body relative overflow-hidden items-center justify-center p-4">
+    <main className="flex min-h-screen bg-bg-base font-body relative overflow-hidden items-center justify-center p-4">
       {/* Soft background elements */}
-      <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-[#E6F4F1] to-transparent pointer-events-none" />
-      <div className="absolute -top-48 -right-48 w-96 h-96 bg-[#14B8A6]/20 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-1/2 -left-48 w-96 h-96 bg-[#0F6E56]/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-[#FFF4E1] to-transparent pointer-events-none" />
+      <div className="absolute -top-48 -right-48 w-96 h-96 bg-[#FF9D00]/20 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 -left-48 w-96 h-96 bg-[#C16E00]/10 rounded-full blur-[100px] pointer-events-none" />
       
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[440px] bg-white rounded-3xl shadow-xl shadow-[#0F6E56]/5 border border-slate-100 p-8 sm:p-12 relative z-10"
+        className="w-full max-w-[440px] bg-white rounded-3xl shadow-xl shadow-[#FF9D00]/10 border border-[#FFD68A]/50 p-8 sm:p-12 relative z-10"
       >
         {/* Logo */}
         <div className="flex flex-col items-center justify-center gap-4 mb-8">
@@ -164,7 +164,7 @@ export const LoginPage: React.FC = () => {
                 type="text"
                 value={workspace}
                 onChange={(e) => setWorkspace(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#0F6E56] focus:bg-white focus:ring-4 focus:ring-[#0F6E56]/10"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#FF9D00] focus:bg-white focus:ring-4 focus:ring-[#FF9D00]/30"
                 placeholder="yourcompany"
                 autoComplete="off"
                 spellCheck={false}
@@ -182,7 +182,7 @@ export const LoginPage: React.FC = () => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#0F6E56] focus:bg-white focus:ring-4 focus:ring-[#0F6E56]/10"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#FF9D00] focus:bg-white focus:ring-4 focus:ring-[#FF9D00]/30"
                 placeholder="you@company.com"
                 required
               />
@@ -194,7 +194,7 @@ export const LoginPage: React.FC = () => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Password
               </label>
-              <Link to="/forgot-password" className="text-xs font-semibold text-[#0F6E56] hover:underline">Forgot password?</Link>
+              <Link to="/forgot-password" className="text-xs font-semibold text-[#C16E00] hover:underline">Forgot password?</Link>
             </div>
             <div className="relative">
               <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -202,7 +202,7 @@ export const LoginPage: React.FC = () => {
                 type={showPwd ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-11 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#0F6E56] focus:bg-white focus:ring-4 focus:ring-[#0F6E56]/10"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-11 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#FF9D00] focus:bg-white focus:ring-4 focus:ring-[#FF9D00]/30"
                 placeholder="Enter password"
                 required
               />
@@ -219,7 +219,7 @@ export const LoginPage: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#0F6E56] hover:bg-[#0A5240] px-4 py-4 text-sm font-bold text-white shadow-lg shadow-[#0F6E56]/20 transition-all disabled:opacity-70 active:scale-[0.98]"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#FF9D00] hover:bg-[#E08A00] px-4 py-4 text-sm font-bold text-white shadow-lg shadow-[#FF9D00]/30 transition-all disabled:opacity-70 active:scale-[0.98]"
           >
             {loading ? 'Signing in...' : 'Sign in'}
             {!loading && <ArrowRight size={18} />}
@@ -228,7 +228,7 @@ export const LoginPage: React.FC = () => {
         
         <p className="mt-8 text-center text-sm text-slate-500">
           Powered by{' '}
-          <a href="https://unifiedtree.com" className="font-semibold text-[#0F6E56] hover:underline">UnifiedTree</a>
+          <a href="https://unifiedtree.com" className="font-semibold text-[#C16E00] hover:underline">UnifiedTree</a>
         </p>
       </motion.div>
     </main>

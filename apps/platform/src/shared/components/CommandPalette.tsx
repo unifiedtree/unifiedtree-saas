@@ -98,22 +98,22 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
   return (
     <div className="fixed inset-0 z-[300] flex items-start justify-center pt-[15vh]">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-white border border-[#E2E8F0]/60 rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#E2E8F0]">
-          <Search size={16} className="text-[#64748B] flex-shrink-0" />
+      <div className="relative w-full max-w-xl bg-white border border-border-default rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border-default">
+          <Search size={16} className="text-text-tertiary flex-shrink-0" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => { setQuery(e.target.value); setSelected(0) }}
             placeholder="Search commands, pages, modules..."
-            className="flex-1 bg-transparent text-[#0F172A] placeholder-slate-500 outline-none text-sm"
+            className="flex-1 bg-transparent text-text-primary placeholder-text-tertiary outline-none text-sm"
           />
-          <kbd className="px-2 py-1 text-[10px] bg-white text-[#64748B] rounded border border-[#E2E8F0]">ESC</kbd>
+          <kbd className="px-2 py-1 text-[10px] bg-bg-base text-text-tertiary rounded border border-border-default">ESC</kbd>
         </div>
         <div className="overflow-y-auto max-h-96 py-2">
           {Object.entries(groups).map(([group, cmds]) => (
             <div key={group}>
-              <p className="px-4 py-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-wider">{group}</p>
+              <p className="px-4 py-1.5 text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">{group}</p>
               {cmds.map((cmd) => {
                 const globalIdx = filtered.indexOf(cmd)
                 return (
@@ -123,23 +123,23 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
                     onClick={cmd.action}
                     className={clsx(
                       'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
-                      selected === globalIdx ? 'bg-indigo-600/20 text-[#0F172A]' : 'text-[#64748B] hover:bg-white/5'
+                      selected === globalIdx ? 'bg-[#FFF4E1] text-[#C16E00]' : 'text-text-secondary hover:bg-[#FFF8EC]'
                     )}
                   >
-                    <span className={selected === globalIdx ? 'text-[#0F6E56]' : 'text-[#64748B]'}>{cmd.icon}</span>
+                    <span className={selected === globalIdx ? 'text-[#C16E00]' : 'text-text-tertiary'}>{cmd.icon}</span>
                     <span className="flex-1 text-left">{cmd.label}</span>
-                    {cmd.description && <span className="text-xs text-slate-600">{cmd.description}</span>}
-                    {selected === globalIdx && <ChevronRight size={14} className="text-[#64748B]" />}
+                    {cmd.description && <span className="text-xs text-text-tertiary">{cmd.description}</span>}
+                    {selected === globalIdx && <ChevronRight size={14} className="text-[#C16E00]" />}
                   </button>
                 )
               })}
             </div>
           ))}
           {filtered.length === 0 && (
-            <p className="px-4 py-8 text-center text-[#64748B] text-sm">No commands found for "{query}"</p>
+            <p className="px-4 py-8 text-center text-text-tertiary text-sm">No commands found for "{query}"</p>
           )}
         </div>
-        <div className="px-4 py-2 border-t border-[#E2E8F0] flex items-center gap-4 text-xs text-slate-600">
+        <div className="px-4 py-2 border-t border-border-default flex items-center gap-4 text-xs text-text-tertiary">
           <span><kbd className="font-mono">↑↓</kbd> navigate</span>
           <span><kbd className="font-mono">↵</kbd> open</span>
           <span><kbd className="font-mono">esc</kbd> close</span>
