@@ -1,10 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users } from 'lucide-react'
-import {
-  DataTable, Badge, TableSkeleton, EmptyState,
-} from '@unifiedtree/ui-kit'
-import type { Column } from '@unifiedtree/ui-kit'
+import { TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { HrPageHeader, HrStatusPill, TableCard, HrAvatar } from '@/shared/components/hr'
 import { useInstances, useTemplates } from './api/useOnboarding'
 import type { OnboardingInstance } from './api/useOnboarding'
 import { useEmployeeDirectory } from '../api/useWorkforce'
@@ -46,91 +43,30 @@ export const Instances: React.FC = () => {
     return map
   }, [directory])
 
-  const columns: Column<OnboardingInstance>[] = [
-    {
-      key: 'employee',
-      header: 'Employee',
-      cell: (row) => (
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-accent-subtle">
-            <Users size={13} className="text-accent-default" />
-          </div>
-          <p className="text-sm font-medium text-text-primary">
-            {employeeName.get(row.employeeId) || 'Unknown employee'}
-          </p>
-        </div>
-      ),
-    },
-    {
-      key: 'template',
-      header: 'Template',
-      cell: (row) => (
-        <span className="text-sm text-text-secondary">
-          {templateName.get(row.templateId) || '—'}
-        </span>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      cell: (row) => (
-        <Badge tone={row.status === 'COMPLETED' ? 'success' : 'info'}>{row.status}</Badge>
-      ),
-    },
-    {
-      key: 'progress',
-      header: 'Progress',
-      cell: (row) => {
-        const { done, total, pct } = progressOf(row)
-        return (
-          <div className="flex items-center gap-2 min-w-[140px]">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-bg-base">
-              <div
-                className="h-full rounded-full bg-accent-default transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <span className="text-xs text-text-tertiary whitespace-nowrap">{done}/{total}</span>
-          </div>
-        )
-      },
-    },
-    {
-      key: 'startedAt',
-      header: 'Started',
-      cell: (row) => (
-        <span className="text-sm text-text-secondary">
-          {row.startedAt ? new Date(row.startedAt).toLocaleDateString() : '—'}
-        </span>
-      ),
-    },
-  ]
-
   return (
-    <div className="p-6 animate-fade-in">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-text-primary">Onboarding Instances</h1>
-          <p className="mt-0.5 text-sm text-text-secondary">
-            Track active and completed employee onboarding runs
-          </p>
-        </div>
-        <div className="flex gap-1 rounded-lg border border-border-default bg-bg-surface p-0.5">
-          {STATUS_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setStatus(f.value)}
-              className={
-                status === f.value
-                  ? 'rounded-md bg-accent-subtle px-3 py-1 text-xs font-medium text-accent-default'
-                  : 'rounded-md px-3 py-1 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors'
-              }
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="mx-auto max-w-5xl p-6 sm:p-8">
+      <HrPageHeader
+        crumb="Recruitment & Onboarding"
+        title="Onboarding Instances"
+        subtitle="Track active and completed employee onboarding runs"
+        actions={
+          <div className="flex gap-1 rounded-lg border border-border-default bg-white p-0.5">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setStatus(f.value)}
+                className={
+                  status === f.value
+                    ? 'rounded-md bg-[#FFF4E1] px-3 py-1 text-xs font-semibold text-[#C16E00]'
+                    : 'rounded-md px-3 py-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary'
+                }
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {isLoading ? (
         <TableSkeleton />
@@ -141,16 +77,47 @@ export const Instances: React.FC = () => {
           description={(error as Error).message}
           primaryAction={{ label: 'Retry', onClick: () => refetch() }}
         />
-      ) : (
-        <DataTable
-          data={instances}
-          columns={columns}
-          getRowKey={(row) => row.id}
-          onRowClick={(row) => navigate(`/hrms/onboarding/instances/${row.employeeId}`)}
-          emptyTitle="No onboarding instances yet"
-          emptyDescription="Instances are created when a new hire is assigned an onboarding template."
-          emptyVariant="first-run"
+      ) : instances.length === 0 ? (
+        <EmptyState
+          variant="first-run"
+          title="No onboarding instances yet"
+          description="Instances are created when a new hire is assigned an onboarding template."
         />
+      ) : (
+        <TableCard>
+          <table className="hr-table">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th className="hidden sm:table-cell">Template</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th className="hidden md:table-cell">Started</th>
+              </tr>
+            </thead>
+            <tbody>
+              {instances.map((row, i) => {
+                const { done, total, pct } = progressOf(row)
+                return (
+                  <tr key={row.id} onClick={() => navigate(`/hrms/onboarding/instances/${row.employeeId}`)} className="cursor-pointer">
+                    <td><HrAvatar name={employeeName.get(row.employeeId) || 'Unknown employee'} seed={i} /></td>
+                    <td className="hidden sm:table-cell text-text-secondary">{templateName.get(row.templateId) || '—'}</td>
+                    <td><HrStatusPill tone={row.status === 'COMPLETED' ? 'ok' : 'info'}>{row.status}</HrStatusPill></td>
+                    <td>
+                      <div className="flex min-w-[140px] items-center gap-2">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-bg-base">
+                          <div className="h-full rounded-full bg-[#FF9D00] transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="whitespace-nowrap text-xs text-text-tertiary">{done}/{total}</span>
+                      </div>
+                    </td>
+                    <td className="hidden md:table-cell text-text-secondary">{row.startedAt ? new Date(row.startedAt).toLocaleDateString() : '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </TableCard>
       )}
     </div>
   )
