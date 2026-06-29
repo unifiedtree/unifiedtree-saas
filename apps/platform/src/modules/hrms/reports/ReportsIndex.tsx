@@ -2,6 +2,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { Users, TrendingDown, Clock, Calendar, AlarmClock, PieChart } from 'lucide-react'
 import { Can, P } from '@unifiedtree/sdk'
+import { HrPageHeader } from '@/shared/components/hr'
 
 interface ReportCard {
   title: string
@@ -19,7 +20,7 @@ const REPORT_CARDS: ReportCard[] = [
     to: '/hrms/reports/headcount',
     icon: <Users size={20} />,
     permCode: P.HRMS_REPORT_HEADCOUNT,
-    color: 'text-[#0F6E56]',
+    color: 'text-[#FF9D00]',
   },
   {
     title: 'Attrition',
@@ -65,27 +66,24 @@ const REPORT_CARDS: ReportCard[] = [
 
 export function ReportsIndex() {
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-[#0F172A]">Reports</h1>
-        <p className="text-[#64748B] text-sm mt-0.5">Analytical views of your workforce data</p>
-      </div>
+    <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
+      <HrPageHeader crumb="Reports & Analytics" title="Reports" subtitle="Analytical views of your workforce data" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {REPORT_CARDS.map((card) => (
           <Can key={card.to} code={card.permCode}>
             <Link
               to={card.to}
-              className="group flex flex-col gap-3 rounded-2xl border border-[#0F6E56]/15 bg-white p-5 hover:border-[#0F6E56]/30 hover:bg-[#0F6E56]/5 hover:shadow-lg transition-all shadow-sm"
+              className="group flex flex-col gap-3 rounded-2xl border border-border-default bg-white p-5 shadow-sm transition-all hover:border-[#FFD68A] hover:bg-[#FFF4E1]/40 hover:shadow-md"
             >
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center bg-[#0F6E56]/10 ${card.color}`}>
+              <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-bg-base ${card.color}`}>
                 {card.icon}
               </div>
               <div>
-                <p className="text-sm font-semibold text-[#0F172A] group-hover:text-[#0F6E56] transition-colors">
+                <p className="text-sm font-semibold text-text-primary transition-colors group-hover:text-[#C16E00]">
                   {card.title}
                 </p>
-                <p className="text-xs text-[#64748B] mt-1 leading-relaxed">{card.description}</p>
+                <p className="mt-1 text-xs leading-relaxed text-text-secondary">{card.description}</p>
               </div>
             </Link>
           </Can>
