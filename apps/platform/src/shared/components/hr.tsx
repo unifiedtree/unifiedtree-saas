@@ -31,9 +31,9 @@ export function HrStatCard({
   loading?: boolean
 }) {
   return (
-    <div className="rounded-xl border border-border-default bg-white p-4 shadow-sm">
+    <div className="group rounded-xl border border-border-default bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#FFD68A] hover:shadow-[0_10px_28px_-10px_rgba(255,157,0,0.28)]">
       <div className="flex items-start justify-between">
-        <div className={clsx('flex h-9 w-9 items-center justify-center rounded-lg', STAT_ICON[color])}>
+        <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl', STAT_ICON[color])}>
           {icon}
         </div>
         {trend && (
@@ -45,7 +45,7 @@ export function HrStatCard({
           </span>
         )}
       </div>
-      <p className="mt-3 text-2xl font-bold leading-none text-text-primary">{loading ? '—' : value}</p>
+      <p className="mt-3.5 text-[26px] font-bold leading-none tracking-tight text-text-primary">{loading ? '—' : value}</p>
       <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">{label}</p>
       {sub && <p className="mt-1 text-xs text-text-secondary">{sub}</p>}
     </div>
@@ -106,9 +106,9 @@ export function HrButton({
     <button
       {...rest}
       className={clsx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-colors disabled:opacity-50',
+        'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9D00]/40 disabled:opacity-50',
         size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2 text-sm',
-        variant === 'primary' && 'bg-[#FF9D00] text-white hover:bg-[#E08A00]',
+        variant === 'primary' && 'bg-[#FF9D00] text-white shadow-sm shadow-[#FF9D00]/30 hover:bg-[#E08A00]',
         variant === 'ghost' && 'border border-border-default bg-white text-text-primary hover:bg-bg-base',
         variant === 'danger' && 'bg-[#EF4444] text-white hover:bg-[#DC2626]',
         className,
