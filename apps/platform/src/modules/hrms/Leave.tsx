@@ -17,11 +17,11 @@ import { HolidayCalendar } from './leave/HolidayCalendar'
 type Tab = 'my' | 'apply' | 'balances' | 'approvals' | 'types' | 'holidays'
 
 const STATUS_STYLE: Record<LeaveApprovalStatus, { label: string; color: string; bg: string; icon: React.ElementType }> = {
-  PENDING: { label: 'Pending', color: 'text-amber-400', bg: 'bg-amber-500/10', icon: Clock },
-  APPROVED: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10', icon: CheckCircle },
-  REJECTED: { label: 'Rejected', color: 'text-red-400', bg: 'bg-red-500/10', icon: XCircle },
-  CANCELLED: { label: 'Cancelled', color: 'text-text-secondary', bg: 'bg-surface-2/40', icon: XCircle },
-  PENDING_L2: { label: 'Awaiting HR', color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Clock },
+  PENDING:    { label: 'Pending',     color: 'text-[#B45309]', bg: 'bg-[#FEF3C7]', icon: Clock },
+  APPROVED:   { label: 'Approved',    color: 'text-[#15803D]', bg: 'bg-[#DCFCE7]', icon: CheckCircle },
+  REJECTED:   { label: 'Rejected',    color: 'text-[#B91C1C]', bg: 'bg-[#FEE2E2]', icon: XCircle },
+  CANCELLED:  { label: 'Cancelled',   color: 'text-[#6B7280]', bg: 'bg-[#F4F4F6]', icon: XCircle },
+  PENDING_L2: { label: 'Awaiting HR', color: 'text-[#7C3AED]', bg: 'bg-[#F3E8FF]', icon: Clock },
 }
 
 // ── My Leaves Tab ─────────────────────────────────────────────────────────────
