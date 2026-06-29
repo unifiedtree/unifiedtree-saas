@@ -53,6 +53,10 @@
         <module>modules/hrms-letters</module>
         <module>modules/hrms-payroll</module>
         <module>modules/hrms-expense</module>
+        <module>modules/hrms-advance</module>
+        <module>modules/hrms-fnf</module>
+        <module>modules/hrms-hiring</module>
+        <module>modules/hrms-performance</module>
         <module>modules/mod-crm</module>
         <module>modules/attendance-face</module>
 
@@ -126,6 +130,26 @@
             <dependency>
                 <groupId>com.hrms</groupId>
                 <artifactId>hrms-expense</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-advance</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-fnf</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-hiring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-performance</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

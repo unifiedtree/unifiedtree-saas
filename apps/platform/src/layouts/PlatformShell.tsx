@@ -113,7 +113,7 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'recruit', label: 'Recruitment & Onboarding', icon: <UserCheck size={18} />, module: 'hrms',
     children: [
-      { label: 'Hiring Pipeline',      path: '/hrms/soon/hiring-pipeline',  icon: <UserCheck size={15} />,    visibleForRoles: R_HR },
+      { label: 'Hiring Pipeline',      path: '/hrms/hiring',  icon: <UserCheck size={15} />,    visibleForRoles: R_HR },
       { label: 'Onboarding & Assets',  path: '/hrms/onboarding/instances',  icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
       { label: 'Letter Templates',     path: '/hrms/letters/templates',     icon: <FileText size={15} />,      visibleForRoles: R_HR },
       { label: 'Generated Letters',    path: '/hrms/letters/generated',     icon: <FileText size={15} />,      visibleForRoles: R_HR },
@@ -129,7 +129,7 @@ const MODULE_ITEMS: NavItemDef[] = [
       { label: 'Processing & Payslips',      path: '/hrms/payroll/runs',           icon: <Receipt size={15} />,         visibleForRoles: R_FIN },
       { label: 'Payroll Settings',           path: '/hrms/payroll/settings',       icon: <Settings size={15} />,        visibleForRoles: R_FIN },
       { label: 'Production-Linked Incentive', path: '/hrms/soon/pli',              icon: <Target size={15} />,          visibleForRoles: R_FIN },
-      { label: 'Advances & Loans',           path: '/hrms/soon/advances',          icon: <Wallet size={15} />,          visibleForRoles: R_FIN },
+      { label: 'Advances & Loans',           path: '/hrms/advances',          icon: <Wallet size={15} />,          visibleForRoles: [...R_ADMIN_MGR, ...R_ESS] },
       { label: 'Bank Disbursement',          path: '/hrms/soon/bank-disbursement', icon: <CreditCard size={15} />,      visibleForRoles: R_FIN },
     ],
   },
@@ -151,7 +151,7 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'performance', label: 'Performance & Learning', icon: <Target size={18} />, module: 'hrms',
     children: [
-      { label: 'Employee Performance', path: '/hrms/soon/emp-performance', icon: <Target size={15} />,   visibleForRoles: R_ADMIN_MGR },
+      { label: 'Employee Performance', path: '/hrms/performance', icon: <Target size={15} />,   visibleForRoles: [...R_ADMIN_MGR, ...R_ESS] },
       { label: 'Appraisals & 360°',    path: '/hrms/soon/appraisals',      icon: <Star size={15} />,     visibleForRoles: R_HR },
       { label: 'KPI Tracking',         path: '/hrms/soon/kpi-tracking',    icon: <Target size={15} />,   visibleForRoles: R_ADMIN_MGR },
       { label: 'Skill Matrix',         path: '/hrms/soon/skill-matrix',    icon: <Database size={15} />, visibleForRoles: R_HR },
@@ -181,7 +181,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     key: 'exit', label: 'Employee Exit', icon: <LogOut size={18} />, module: 'hrms',
     children: [
       { label: 'Resignation & Exit',       path: '/hrms/soon/resignation',  icon: <LogOut size={15} />,   visibleForRoles: R_HR },
-      { label: 'Full & Final Settlement',  path: '/hrms/soon/fnf',          icon: <Wallet size={15} />,   visibleForRoles: R_FIN },
+      { label: 'Full & Final Settlement',  path: '/hrms/fnf',          icon: <Wallet size={15} />,   visibleForRoles: R_FIN },
       { label: 'Experience Letter',        path: '/hrms/letters/templates', icon: <FileText size={15} />, visibleForRoles: R_HR },
     ],
   },

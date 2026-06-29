@@ -35,6 +35,10 @@ import { TeamDashboard } from '@/modules/hrms/team/TeamDashboard'
 import { ReportsIndex } from '@/modules/hrms/reports/ReportsIndex'
 import { ProbationSettings } from '@/modules/hrms/probation/ProbationSettings'
 import { Expense } from '@/modules/hrms/Expense'
+import { Advance } from '@/modules/hrms/Advance'
+import { FullAndFinal } from '@/modules/hrms/FullAndFinal'
+import { Hiring } from '@/modules/hrms/Hiring'
+import { Performance } from '@/modules/hrms/Performance'
 import { ModuleComingSoon } from '@/shared/components/ModuleComingSoon'
 import { PayrollSettings } from '@/modules/hrms/payroll/PayrollSettings'
 import { SalaryComponents } from '@/modules/hrms/payroll/SalaryComponents'
@@ -226,6 +230,38 @@ export default function App() {
           element={
             <RouteGuard anyOf={['hrms.expense.claim.self', 'hrms.expense.claim.read', 'hrms.expense.claim.approve', 'hrms.expense.policy.read']}>
               <ModuleGate moduleKey="hrms"><Expense /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/advances"
+          element={
+            <RouteGuard anyOf={['hrms.advance.request.self', 'hrms.advance.read', 'hrms.advance.approve', 'hrms.advance.disburse']}>
+              <ModuleGate moduleKey="hrms"><Advance /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/fnf"
+          element={
+            <RouteGuard anyOf={['hrms.fnf.read', 'hrms.fnf.process', 'hrms.fnf.approve']}>
+              <ModuleGate moduleKey="hrms"><FullAndFinal /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/hiring"
+          element={
+            <RouteGuard anyOf={['hrms.hiring.read', 'hrms.hiring.write', 'hrms.hiring.candidate.write']}>
+              <ModuleGate moduleKey="hrms"><Hiring /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/performance"
+          element={
+            <RouteGuard anyOf={['hrms.performance.read', 'hrms.performance.write', 'hrms.performance.review.self']}>
+              <ModuleGate moduleKey="hrms"><Performance /></ModuleGate>
             </RouteGuard>
           }
         />

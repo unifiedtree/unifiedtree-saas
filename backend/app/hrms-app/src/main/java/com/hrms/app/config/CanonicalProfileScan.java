@@ -53,6 +53,12 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         // expense module (canonical schema: expense_mgmt.*, V067)
         "com.hrms.expense",
 
+        // Phase-3 modules (canonical schemas advance_mgmt/fnf_mgmt/hiring_mgmt/performance_mgmt, V068-V071)
+        "com.hrms.advance",
+        "com.hrms.fnf",
+        "com.hrms.hiring",
+        "com.hrms.performance",
+
         // canonical REST controllers
         "com.hrms.api.workforce",
         "com.hrms.api.settings",
@@ -71,6 +77,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.probation",
         "com.hrms.api.payroll",
         "com.hrms.api.expense",
+        "com.hrms.api.advance",
+        "com.hrms.api.fnf",
+        "com.hrms.api.hiring",
+        "com.hrms.api.performance",
 
         // app-layer: reports, bulk import, jobs
         "com.hrms.app.reports",
@@ -87,6 +97,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.attendance.entity",
         "com.hrms.leave.entity",
         "com.hrms.expense.entity",
+        "com.hrms.advance.entity",
+        "com.hrms.fnf.entity",
+        "com.hrms.hiring.entity",
+        "com.hrms.performance.entity",
         "com.hrms.letters.domain",
         "com.unifiedtree.settings.entity",
         "com.unifiedtree.auth.entity",
@@ -100,6 +114,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.attendance.repository",
         "com.hrms.leave.repository",
         "com.hrms.expense.repository",
+        "com.hrms.advance.repository",
+        "com.hrms.fnf.repository",
+        "com.hrms.hiring.repository",
+        "com.hrms.performance.repository",
         "com.hrms.letters.repository",
         "com.unifiedtree.settings.repository",
         "com.unifiedtree.auth.repository",

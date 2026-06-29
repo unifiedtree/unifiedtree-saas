@@ -26,6 +26,10 @@
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-leave</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-letters</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-expense</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-advance</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-fnf</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-hiring</artifactId></dependency>
+        <dependency><groupId>com.hrms</groupId><artifactId>hrms-performance</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-notification</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-api</artifactId></dependency>
 
