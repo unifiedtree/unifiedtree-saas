@@ -1,16 +1,22 @@
 import React, { useState } from 'react'
-import { Clock, CheckCircle, Search } from 'lucide-react'
+import { Clock, CheckCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/shared/hooks/useToast'
 import { usePermission, Can, P } from '@unifiedtree/sdk'
 import { StatsSkeleton, Skeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { HrStatCard, HrStatusPill, HrPageHeader, TableCard, HrAvatar, type PillTone } from '@/shared/components/hr'
 import {
   useMonthlyStats, useAttendanceHistory,
   useTeamDashboard, useMyCorrections, useCorrectionApprovals,
   useCreateCorrection, useDecideCorrection,
 } from './api/useAttendance'
+
+const TEAM_TONE: Record<string, PillTone> = {
+  PRESENT: 'ok', ON_TIME: 'ok', LATE: 'warn', ABSENT: 'red', NOT_MARKED: 'gray',
+  ON_LEAVE: 'info', WFH: 'teal', HALF_DAY: 'late', HOLIDAY: 'purple', WEEKEND: 'gray',
+}
 
 type Tab = 'my' | 'team' | 'corrections'
 
@@ -36,30 +42,20 @@ function MyAttendanceTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-1 space-y-6">
-        <div className="bg-white border border-border-default shadow-sm rounded-2xl p-5">
-          <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-4 font-heading">{format(new Date(year, month - 1), 'MMMM yyyy')} Summary</h3>
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-text-primary">{format(new Date(year, month - 1), 'MMMM yyyy')} Summary</h3>
           {statsLoading ? (
             <StatsSkeleton />
           ) : statsError ? (
             <EmptyState variant="error" title="Failed to load stats" primaryAction={{ label: 'Retry', onClick: () => refetchStats() }} />
           ) : stats ? (
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: 'Present', value: stats.presentDays, color: 'text-success' },
-                { label: 'Absent', value: stats.absentDays, color: 'text-danger' },
-                { label: 'Late', value: stats.lateDays, color: 'text-warning' },
-                { label: 'On Time', value: stats.onTimeDays, color: 'text-accent-default' },
-                { label: 'Holidays', value: stats.holidays, color: 'text-purple-500' },
-              ].map((s) => (
-                <div key={s.label} className="bg-bg-base rounded-xl p-3 border border-border-default">
-                  <p className={clsx('text-xl font-bold font-heading', s.color)}>{s.value}</p>
-                  <p className="text-xs text-text-secondary font-medium mt-0.5">{s.label}</p>
-                </div>
-              ))}
-              <div className="bg-primary-light/30 border border-primary/20 rounded-xl p-3 flex flex-col justify-center">
-                <p className="text-2xl font-extrabold text-primary font-heading">{stats.attendanceScore}%</p>
-                <p className="text-xs text-primary font-semibold mt-0.5">Score</p>
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              <HrStatCard icon={<CheckCircle size={16} />} color="green"  value={stats.presentDays}            label="Present" />
+              <HrStatCard icon={<Clock size={16} />}       color="red"    value={stats.absentDays}             label="Absent" />
+              <HrStatCard icon={<Clock size={16} />}       color="orange" value={stats.lateDays}               label="Late" />
+              <HrStatCard icon={<CheckCircle size={16} />} color="blue"   value={stats.onTimeDays}             label="On Time" />
+              <HrStatCard icon={<Clock size={16} />}       color="purple" value={stats.holidays}               label="Holidays" />
+              <HrStatCard icon={<CheckCircle size={16} />} color="green"  value={`${stats.attendanceScore}%`}  label="Score" />
             </div>
           ) : null}
         </div>
@@ -127,21 +123,6 @@ function TeamDashboardTab() {
   const [search, setSearch] = useState('')
   const { data, isLoading, error: teamError, refetch: refetchTeam } = useTeamDashboard(date)
 
-  // Keys must cover the backend AttendanceStatus enum (ON_TIME/WFH/HOLIDAY/WEEKEND
-  // included) — an unmapped value falls back to grey "Not Marked" styling.
-  const STATUS_SC: Record<string, string> = {
-    PRESENT: 'text-success bg-success/10 border-success/20',
-    ON_TIME: 'text-success bg-success/10 border-success/20',
-    LATE: 'text-warning bg-warning/10 border-warning/20',
-    ABSENT: 'text-danger bg-danger/10 border-danger/20',
-    NOT_MARKED: 'text-text-tertiary bg-bg-surface border-border-default',
-    ON_LEAVE: 'text-accent-default bg-accent-subtle border-accent-default/20',
-    HALF_DAY: 'text-orange-600 bg-orange-100 border-orange-200',
-    WFH: 'text-accent-default bg-accent-subtle border-accent-default/20',
-    HOLIDAY: 'text-purple-600 bg-purple-100 border-purple-200',
-    WEEKEND: 'text-text-tertiary bg-bg-surface border-border-default',
-  }
-
   const staff = (data?.staffStatuses ?? []).filter((s) => {
     if (!search) return true
     const q = search.toLowerCase()
@@ -150,64 +131,49 @@ function TeamDashboardTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-border-default shadow-sm">
-        <div className="flex items-center gap-3">
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="bg-bg-surface border border-border-default rounded-xl px-4 py-2 text-sm text-text-primary font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all shadow-sm" />
-          <div className="relative w-[240px]">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search team..." className="w-full bg-bg-surface border border-border-default rounded-xl pl-9 pr-4 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all shadow-sm" />
-          </div>
-        </div>
-      </div>
-
       {data?.counts && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {[['Present', data.counts.present, 'text-success'], ['Late', data.counts.late, 'text-warning'], ['On Leave', data.counts.onLeave, 'text-accent-default'], ['WFH', data.counts.workFromHome, 'text-cyan-600'], ['Not Marked', data.counts.notMarked, 'text-text-tertiary']].map(([label, val, colorClass]) => (
-            <div key={label as string} className="bg-white border border-border-default rounded-2xl p-4 shadow-sm flex flex-col items-center justify-center">
-              <p className={clsx("text-3xl font-extrabold font-heading", colorClass)}>{val as number}</p>
-              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider mt-1">{label as string}</p>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+          <HrStatCard icon={<CheckCircle size={18} />} color="green"  value={data.counts.present}      label="Present" />
+          <HrStatCard icon={<Clock size={18} />}       color="orange" value={data.counts.late}         label="Late" />
+          <HrStatCard icon={<Clock size={18} />}       color="blue"   value={data.counts.onLeave}      label="On Leave" />
+          <HrStatCard icon={<Clock size={18} />}       color="teal"   value={data.counts.workFromHome} label="WFH" />
+          <HrStatCard icon={<Clock size={18} />}       color="red"    value={data.counts.notMarked}    label="Not Marked" />
         </div>
       )}
 
-      <div className="bg-white border border-border-default shadow-sm rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
+      <TableCard
+        search={{ value: search, onChange: setSearch, placeholder: 'Search team…' }}
+        actions={
+          <input
+            type="date" value={date} onChange={(e) => setDate(e.target.value)}
+            className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#FF9D00] focus:outline-none"
+          />
+        }
+      >
+        <table className="hr-table">
           <thead>
-            <tr className="border-b border-border-default bg-bg-surface">
-              {['Employee', 'Department', 'Status', 'In', 'Out', 'Location'].map((h) => (
-                <th key={h} className="px-6 py-4 text-xs font-bold text-text-tertiary uppercase tracking-wider">{h}</th>
-              ))}
-            </tr>
+            <tr><th>Employee</th><th>Department</th><th>Status</th><th>In</th><th>Out</th><th>Location</th></tr>
           </thead>
-          <tbody className="divide-y divide-border-default">
-            {isLoading
-              ? [...Array(5)].map((_, i) => <tr key={i}><td colSpan={6} className="px-6 py-4"><Skeleton className="h-5 w-full rounded-md" /></td></tr>)
-              : teamError
-              ? <tr><td colSpan={6} className="py-10"><EmptyState variant="error" title="Failed to load team" primaryAction={{ label: 'Retry', onClick: () => refetchTeam() }} /></td></tr>
-              : staff.length === 0
-              ? <tr><td colSpan={6} className="text-center py-12 text-text-tertiary text-sm font-medium">No records found for this date</td></tr>
-              : staff.map((s) => {
-                  const sc = STATUS_SC[s.status] ?? STATUS_SC['NOT_MARKED']
-                  return (
-                    <tr key={s.employeeId} className="hover:bg-interactive-hover transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="text-text-primary text-sm font-bold">{s.fullName}</p>
-                        <p className="text-text-secondary text-xs mt-0.5">{s.employeeCode}</p>
-                      </td>
-                      <td className="px-6 py-4 text-text-secondary text-sm font-medium">{s.departmentName ?? '—'}</td>
-                      <td className="px-6 py-4"><span className={clsx('px-2.5 py-1 text-xs font-bold rounded-lg border', sc)}>{s.status.replace('_', ' ')}</span></td>
-                      <td className="px-6 py-4 text-text-secondary text-sm font-medium">{s.checkInAt ? format(new Date(s.checkInAt), 'h:mm a') : '—'}</td>
-                      <td className="px-6 py-4 text-text-secondary text-sm font-medium">{s.checkOutAt ? format(new Date(s.checkOutAt), 'h:mm a') : '—'}</td>
-                      <td className="px-6 py-4 text-text-secondary text-sm font-medium truncate max-w-[120px]" title={s.locationName}>{s.locationName ?? '—'}</td>
-                    </tr>
-                  )
-                })}
+          <tbody>
+            {isLoading ? (
+              [...Array(5)].map((_, i) => <tr key={i}><td colSpan={6}><Skeleton className="h-5 w-full rounded-md" /></td></tr>)
+            ) : teamError ? (
+              <tr><td colSpan={6} className="py-10"><EmptyState variant="error" title="Failed to load team" primaryAction={{ label: 'Retry', onClick: () => refetchTeam() }} /></td></tr>
+            ) : staff.length === 0 ? (
+              <tr><td colSpan={6} className="py-12 text-center text-sm text-text-tertiary">No records found for this date</td></tr>
+            ) : staff.map((s, i) => (
+              <tr key={s.employeeId}>
+                <td><HrAvatar name={s.fullName} sub={s.employeeCode} seed={i} /></td>
+                <td className="text-text-secondary">{s.departmentName ?? '—'}</td>
+                <td><HrStatusPill tone={TEAM_TONE[s.status] ?? 'gray'}>{s.status.replace('_', ' ')}</HrStatusPill></td>
+                <td className="text-text-secondary">{s.checkInAt ? format(new Date(s.checkInAt), 'h:mm a') : '—'}</td>
+                <td className="text-text-secondary">{s.checkOutAt ? format(new Date(s.checkOutAt), 'h:mm a') : '—'}</td>
+                <td className="max-w-[140px] truncate text-text-secondary" title={s.locationName}>{s.locationName ?? '—'}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
-        </div>
-      </div>
+      </TableCard>
     </div>
   )
 }
@@ -369,10 +335,7 @@ export const Attendance: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-8">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-text-primary font-heading tracking-tight">Attendance</h1>
-        <p className="text-text-secondary text-sm sm:text-base font-medium mt-1.5">Track and manage attendance records.</p>
-      </div>
+      <HrPageHeader crumb="Attendance & Time" title="Attendance" subtitle="Track and manage attendance records." />
 
       {/* Modern Tabs */}
       <div className="flex items-center p-1 bg-bg-surface border border-border-default rounded-xl w-max shadow-inner">
