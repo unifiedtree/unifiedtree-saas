@@ -8,35 +8,35 @@
 :root,
 [data-theme='light'] {
   /* ── Backgrounds ─────────────────────────────────────── */
-  --bg-base:             #f8fafc;
+  --bg-base:             #f4f4f6;
   --bg-surface:          #ffffff;
   --bg-surface-raised:   #ffffff;
   --bg-surface-overlay:  rgba(255, 255, 255, 0.97);
-  --bg-subtle:           #f1f5f9;
-  --bg-muted:            #e6f4f1;
+  --bg-subtle:           #f4f4f6;
+  --bg-muted:            #fff4e1;
 
-  /* ── Accent / Brand (Teal) ───────────────────────────── */
-  --accent-bg:           #e6f4f1;
-  --accent-bg-strong:    #c7e7df;
-  --accent-fg:           #0f6e56;
-  --accent-fg-strong:    #0a5240;
-  --accent-border:       #9bd3c4;
+  /* ── Accent / Brand (Amber — client palette) ─────────── */
+  --accent-bg:           #fff4e1;
+  --accent-bg-strong:    #ffe8bf;
+  --accent-fg:           #ff9d00;
+  --accent-fg-strong:    #c16e00;
+  --accent-border:       #ffd68a;
 
   /* ── Text ────────────────────────────────────────────── */
-  --text-primary:        #0f172a;
-  --text-secondary:      #64748b;
-  --text-tertiary:       #94a3b8;
+  --text-primary:        #1f2937;
+  --text-secondary:      #6b7280;
+  --text-tertiary:       #9ca3af;
   --text-disabled:       #cbd5e1;
   --text-inverse:        #ffffff;
   --text-on-accent:      #ffffff;
-  --text-link:           #0f6e56;
+  --text-link:           #c16e00;
 
   /* ── Border ──────────────────────────────────────────── */
-  --border-default:      #e2e8f0;
-  --border-strong:       #cbd5e1;
-  --border-subtle:       #f1f5f9;
-  --border-focus:        #0f6e56;
-  --border-accent:       #9bd3c4;
+  --border-default:      #e5e7eb;
+  --border-strong:       #d1d5db;
+  --border-subtle:       #f3f4f6;
+  --border-focus:        #ff9d00;
+  --border-accent:       #ffd68a;
 
   /* ── Status: Success ─────────────────────────────────── */
   --status-success-bg:     #dcfce7;
@@ -59,11 +59,11 @@
   --status-info-border:    #bfdbfe;
 
   /* ── Interactive ─────────────────────────────────────── */
-  --interactive-primary:        #0f6e56;
-  --interactive-primary-hover:  #0a5240;
-  --interactive-primary-active: #08402f;
-  --interactive-secondary:      #f1f5f9;
-  --interactive-secondary-hover:#e6f4f1;
+  --interactive-primary:        #ff9d00;
+  --interactive-primary-hover:  #c16e00;
+  --interactive-primary-active: #9a5600;
+  --interactive-secondary:      #f4f4f6;
+  --interactive-secondary-hover:#fff4e1;
   --interactive-danger:         #ef4444;
   --interactive-danger-hover:   #dc2626;
   --interactive-ghost-hover:    #f1f5f9;
@@ -83,7 +83,7 @@
   --shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg:   0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-xl:   0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --shadow-glow: 0 0 0 3px rgb(15 110 86 / 0.2);
+  --shadow-glow: 0 0 0 3px rgb(255 157 0 / 0.25);
 
   /* ── Motion ──────────────────────────────────────────── */
   --motion-fast:   100ms ease;
