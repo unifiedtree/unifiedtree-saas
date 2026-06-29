@@ -6,7 +6,7 @@ import com.hrms.core.tenant.TenantContext;
 import com.hrms.document.dto.DocumentRequest;
 import com.hrms.document.dto.DocumentResponse;
 import com.hrms.document.entity.EmployeeDocument;
-import com.hrms.document.repository.EmployeeDocumentRepository;
+import com.hrms.document.repository.DocumentVaultRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -21,9 +21,9 @@ public class DocumentService {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentService.class);
 
-    private final EmployeeDocumentRepository documentRepository;
+    private final DocumentVaultRepository documentRepository;
 
-    public DocumentService(EmployeeDocumentRepository documentRepository) {
+    public DocumentService(DocumentVaultRepository documentRepository) {
         this.documentRepository = documentRepository;
     }
 

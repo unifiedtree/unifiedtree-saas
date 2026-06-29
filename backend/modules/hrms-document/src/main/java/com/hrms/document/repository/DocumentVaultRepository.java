@@ -8,8 +8,11 @@ import org.springframework.stereotype.Repository;
 
 import java.util.UUID;
 
+// Named DocumentVaultRepository (not EmployeeDocumentRepository) to avoid a Spring
+// bean-name collision with com.hrms.employee.repository.EmployeeDocumentRepository,
+// which would throw ConflictingBeanDefinitionException at startup.
 @Repository
-public interface EmployeeDocumentRepository extends JpaRepository<EmployeeDocument, UUID> {
+public interface DocumentVaultRepository extends JpaRepository<EmployeeDocument, UUID> {
 
     Page<EmployeeDocument> findByEmployeeIdOrderByCreatedAtDesc(UUID employeeId, Pageable pageable);
 }

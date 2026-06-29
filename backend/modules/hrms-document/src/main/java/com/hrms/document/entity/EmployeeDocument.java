@@ -12,7 +12,12 @@ import java.util.UUID;
 
 @Getter
 @Setter
-@Entity
+// Unique JPA entity name — the simple class name "EmployeeDocument" already
+// belongs to com.hrms.employee.entity.EmployeeDocument (schema hrms), and both
+// packages are scanned in the canonical profile. Without a distinct entity name
+// Hibernate throws DuplicateMappingException at startup. The class name + table
+// (document_mgmt.employee_documents) are unchanged, so repos/services are unaffected.
+@Entity(name = "VaultEmployeeDocument")
 @Table(
         schema = "document_mgmt",
         name = "employee_documents"
