@@ -6,7 +6,7 @@ import {
   Settings, LogOut, Menu, X, ChevronRight, ChevronDown,
   UserCircle2, ShieldAlert, FileBarChart2, FileText, Bell, Search, Hexagon,
   TrendingUp, CreditCard, Package, ShoppingCart, HelpCircle, Briefcase,
-  UserCheck, Star, Receipt, DollarSign, Lock, MapPin,
+  UserCheck, Star, Receipt, DollarSign, Lock, MapPin, TreePine,
 } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
@@ -329,7 +329,7 @@ export function PlatformShell() {
           className={({ isActive }) => clsx(
             'flex w-11 h-11 mx-auto items-center justify-center rounded-xl px-3 py-2.5 transition-all',
             !active && 'opacity-50 grayscale',
-            isActive && active ? 'bg-[#0F6E56]/10 text-[#0F6E56]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
+            isActive && active ? 'bg-[#C16E00]/10 text-[#C16E00]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
           )}
           title={item.label}
           onClick={e => {
@@ -355,10 +355,10 @@ export function PlatformShell() {
             onClick={() => toggleModule(item.key)}
             className={clsx(
               'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
-              hasActiveChild ? 'bg-slate-50 text-[#0F6E56]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+              hasActiveChild ? 'bg-slate-50 text-[#C16E00]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
             )}
           >
-            <span className={hasActiveChild ? 'text-[#0F6E56]' : 'text-slate-400'}>{item.icon}</span>
+            <span className={hasActiveChild ? 'text-[#C16E00]' : 'text-slate-400'}>{item.icon}</span>
             <span className="flex-1 text-left">{item.label}</span>
             {isOpen
               ? <ChevronDown size={14} className="text-slate-400" />
@@ -372,7 +372,7 @@ export function PlatformShell() {
                   to={child.path}
                   className={({ isActive }) => clsx(
                     'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-all',
-                    isActive ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-bold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
+                    isActive ? 'bg-[#C16E00]/10 text-[#C16E00] font-bold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
                   )}
                 >
                   {child.icon}
@@ -392,7 +392,7 @@ export function PlatformShell() {
         className={({ isActive }) => clsx(
           'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
           !active ? 'cursor-default text-slate-400 hover:bg-slate-50' : isActive
-            ? 'bg-[#0F6E56]/10 text-[#0F6E56]'
+            ? 'bg-[#C16E00]/10 text-[#C16E00]'
             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
         )}
         onClick={e => {
@@ -403,7 +403,7 @@ export function PlatformShell() {
         }}
         title={collapsed ? item.label : undefined}
       >
-        <span className={clsx(active ? (location.pathname === item.path ? 'text-[#0F6E56]' : 'text-slate-400') : 'text-slate-300')}>
+        <span className={clsx(active ? (location.pathname === item.path ? 'text-[#C16E00]' : 'text-slate-400') : 'text-slate-300')}>
           {item.icon}
         </span>
         {!collapsed && <span className="flex-1">{item.label}</span>}
@@ -422,13 +422,12 @@ export function PlatformShell() {
   // ─── Sidebar content ───────────────────────────────────────────────────────
   const sidebarContent = (
     <div className="flex h-full flex-col bg-white border-r border-slate-200 z-30 transition-all duration-300">
-      {/* Logo */}
-      <div className={clsx('flex h-16 shrink-0 items-center border-b border-slate-100 transition-all', collapsed ? 'justify-center px-2' : 'justify-start px-6')}>
-        <img
-          src="/UnifiedTreeLogo.png"
-          alt="UnifiedTree Logo"
-          className={clsx('object-contain', collapsed ? 'w-8 h-8' : 'h-8 w-auto max-w-[200px]')}
-        />
+      {/* Logo — client HR mark (amber tree + wordmark) */}
+      <div className={clsx('flex h-16 shrink-0 items-center gap-2.5 border-b border-slate-100 transition-all', collapsed ? 'justify-center px-2' : 'justify-start px-5')}>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#FFF4E1] text-[#FF9D00]">
+          <TreePine size={19} />
+        </div>
+        {!collapsed && <span className="text-[15px] font-bold tracking-tight text-[#FF9D00]">Unified Tree</span>}
       </div>
 
       {/* Navigation */}
@@ -443,14 +442,14 @@ export function PlatformShell() {
             className={({ isActive }) => clsx(
               'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
               isActive
-                ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-semibold'
+                ? 'bg-[#C16E00]/10 text-[#C16E00] font-semibold'
                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
               collapsed && 'justify-center px-0 w-11 h-11 mx-auto',
             )}
             title={collapsed ? item.label : undefined}
           >
             <span className={clsx(
-              location.pathname === item.path ? 'text-[#0F6E56]' : 'text-slate-400 group-hover:text-[#0F6E56] transition-colors',
+              location.pathname === item.path ? 'text-[#C16E00]' : 'text-slate-400 group-hover:text-[#C16E00] transition-colors',
             )}>
               {item.icon}
             </span>
@@ -517,14 +516,14 @@ export function PlatformShell() {
                 className={({ isActive }) => clsx(
                   'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
                   isActive
-                    ? 'bg-[#0F6E56]/10 text-[#0F6E56] font-semibold'
+                    ? 'bg-[#C16E00]/10 text-[#C16E00] font-semibold'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
                   collapsed && 'justify-center px-0 w-11 h-11 mx-auto',
                 )}
                 title={collapsed ? item.label : undefined}
               >
                 <span className={clsx(
-                  location.pathname === item.path ? 'text-[#0F6E56]' : 'text-slate-400 group-hover:text-[#0F6E56] transition-colors',
+                  location.pathname === item.path ? 'text-[#C16E00]' : 'text-slate-400 group-hover:text-[#C16E00] transition-colors',
                 )}>
                   {item.icon}
                 </span>
@@ -539,7 +538,7 @@ export function PlatformShell() {
       <div className="border-t border-slate-100 p-4 bg-slate-50">
         {!collapsed && user && (
           <div className="flex items-center gap-3 px-3 py-2.5 mb-2 rounded-xl bg-white border border-slate-200 shadow-sm">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0F6E56]/10 text-sm font-bold text-[#0F6E56]">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#C16E00]/10 text-sm font-bold text-[#C16E00]">
               {(user.firstName?.[0] ?? '?').toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
@@ -547,7 +546,7 @@ export function PlatformShell() {
                 {user.firstName} {user.lastName}
               </p>
               {roleBadgeText && (
-                <span className="inline-block mt-0.5 rounded-full bg-[#0F6E56]/10 px-2 py-0.5 text-[10px] font-semibold text-[#0F6E56] leading-tight">
+                <span className="inline-block mt-0.5 rounded-full bg-[#C16E00]/10 px-2 py-0.5 text-[10px] font-semibold text-[#C16E00] leading-tight">
                   {roleBadgeText}
                 </span>
               )}
@@ -570,7 +569,7 @@ export function PlatformShell() {
   )
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAFC] font-sans selection:bg-[#0F6E56]/15 selection:text-[#0F6E56]">
+    <div className="flex h-screen overflow-hidden bg-[#F4F4F6] font-sans selection:bg-[#C16E00]/15 selection:text-[#C16E00]">
       {/* Desktop Sidebar */}
       <aside
         className={clsx(
@@ -626,7 +625,7 @@ export function PlatformShell() {
             >
               <Menu size={20} />
             </button>
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors w-64 focus-within:ring-2 focus-within:ring-[#0F6E56]/20 focus-within:border-[#0F6E56]/50">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors w-64 focus-within:ring-2 focus-within:ring-[#C16E00]/20 focus-within:border-[#C16E00]/50">
               <Search size={14} className="text-slate-400" />
               <input
                 type="text"
@@ -639,7 +638,7 @@ export function PlatformShell() {
           <div className="flex items-center gap-3">
             {/* Role badge in header (visible on mobile where sidebar is hidden) */}
             {roleBadgeText && (
-              <span className="hidden sm:inline-flex rounded-full bg-[#0F6E56]/10 px-2.5 py-1 text-xs font-semibold text-[#0F6E56]">
+              <span className="hidden sm:inline-flex rounded-full bg-[#C16E00]/10 px-2.5 py-1 text-xs font-semibold text-[#C16E00]">
                 {roleBadgeText}
               </span>
             )}
