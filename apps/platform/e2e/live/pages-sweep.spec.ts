@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test'
 
 // Broad deployed-page sweep against the prod-backed `ravi` tenant. Each page must
 // render (HTTP<400, not bounced to login) with ZERO console errors and ZERO
-// failed/5xx network requests. Excludes pages that share the known attendance
-// /v1/attendance/dashboard 500 (fix pending redeploy) and the 7 modules not yet
-// deployed (their APIs 404 until the next railway up).
+// failed/5xx network requests. Now that the attendance-dashboard fix and all 12
+// modules are deployed, this covers the full HRMS surface (incl. /dashboard, the
+// attendance family, and the 7 newest modules).
 
 const BACKEND = process.env.PLAYWRIGHT_BACKEND_URL ?? 'https://erpinfrastructure-production.up.railway.app'
 const TENANT_ID = process.env.E2E_LIVE_TENANT_ID ?? '433cdd35-6d58-45bd-8db8-b468b3711fb7'
@@ -39,6 +39,11 @@ const PAGES = [
   '/hrms/letters/templates', '/hrms/letters/generated', '/hrms/letters/distributions',
   '/hrms/onboarding', '/hrms/onboarding/instances', '/hrms/workforce-analytics',
   '/me', '/me/payslips', '/me/salary', '/roles', '/users', '/audit-logs', '/modules',
+  // now-deployed: the attendance family (shared the dashboard 500, now fixed)
+  '/dashboard', '/hrms/attendance', '/hrms/att-analytics', '/hrms/muster-roll',
+  // now-deployed: the 7 newest modules
+  '/hrms/documents', '/hrms/learning', '/hrms/compliance', '/hrms/policies',
+  '/hrms/pli', '/hrms/integrations', '/hrms/notification-templates',
 ]
 
 for (const path of PAGES) {
