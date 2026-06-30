@@ -35,6 +35,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
     // notice-period employees (and their punches) from the admin dashboard.
     @Query("SELECT e FROM Employee e WHERE e.companyId = :companyId "
             + "AND e.employmentStatus NOT IN (com.hrms.core.enums.EmploymentStatus.TERMINATED, "
-            + "com.hrms.core.enums.EmploymentStatus.RESIGNED, com.hrms.core.enums.EmploymentStatus.RETIRED)")
+            + "com.hrms.core.enums.EmploymentStatus.RESIGNED, com.hrms.core.enums.EmploymentStatus.RETIRED, "
+            + "com.hrms.core.enums.EmploymentStatus.EXITED)")
     List<Employee> findActiveByCompany(@Param("companyId") UUID companyId);
 }
