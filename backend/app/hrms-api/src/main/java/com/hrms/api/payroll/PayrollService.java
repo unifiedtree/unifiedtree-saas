@@ -36,7 +36,9 @@ public class PayrollService {
         Boolean ptEnabled, String ptStateCode,
         Boolean lwfEnabled, BigDecimal lwfEmployeeAmount, BigDecimal lwfEmployerAmount,
         Boolean sandwichRuleEnabled, Integer lateMarkLopThreshold,
-        Integer payrollCycleStartDay, Integer payrollCycleEndDay, Integer salaryProcessingDay) {}
+        @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(31) Integer payrollCycleStartDay,
+        @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(31) Integer payrollCycleEndDay,
+        @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(31) Integer salaryProcessingDay) {}
 
     public record ComponentDto(
         UUID id, String code, String name, String category, boolean isStatutory, boolean isTaxable,
@@ -54,14 +56,26 @@ public class PayrollService {
                             BigDecimal minSalary, BigDecimal maxSalary, BigDecimal monthlyTax) {}
 
     public record CreateStructureRequest(
-        UUID employeeId, BigDecimal ctcAnnual, String effectiveFrom, String taxRegime,
-        Boolean pfApplicable, String pfStatus, String revisionNote, List<LineInput> components) {}
+        @jakarta.validation.constraints.NotNull UUID employeeId,
+        @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Positive BigDecimal ctcAnnual,
+        String effectiveFrom,
+        @jakarta.validation.constraints.Pattern(regexp = "OLD|NEW", message = "invalid taxRegime") String taxRegime,
+        Boolean pfApplicable,
+        @jakarta.validation.constraints.Pattern(regexp = "ENROLLED|EXEMPTED_FORM_11|OPTED_OUT_AT_JOINING|NOT_APPLICABLE",
+            message = "invalid pfStatus") String pfStatus,
+        String revisionNote, List<LineInput> components) {}
 
     public record LineInput(UUID componentId, BigDecimal monthlyAmount) {}
 
     public record CreateComponentRequest(
-        String code, String name, String category, Boolean isStatutory, Boolean isTaxable,
-        String computationType, BigDecimal percentValue, Integer displayOrder) {}
+        @jakarta.validation.constraints.NotBlank String code,
+        @jakarta.validation.constraints.NotBlank String name,
+        @jakarta.validation.constraints.Pattern(regexp = "EARNING|DEDUCTION|EMPLOYER_CONTRIBUTION|REIMBURSEMENT",
+            message = "invalid category") String category,
+        Boolean isStatutory, Boolean isTaxable,
+        @jakarta.validation.constraints.Pattern(regexp = "FIXED|PERCENT_OF_BASIC|PERCENT_OF_GROSS|FORMULA|STATUTORY",
+            message = "invalid computationType") String computationType,
+        BigDecimal percentValue, Integer displayOrder) {}
 
     // ── Settings ────────────────────────────────────────────────────────────
 

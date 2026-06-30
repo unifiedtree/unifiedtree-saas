@@ -41,13 +41,13 @@ public class EmployeeStructureController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('payroll.structure.manage')")
-    public PayrollService.StructureDto create(@RequestBody PayrollService.CreateStructureRequest req) {
+    public PayrollService.StructureDto create(@jakarta.validation.Valid @RequestBody PayrollService.CreateStructureRequest req) {
         return service.createStructure(TenantContext.getTenantId(), req);
     }
 
     @PutMapping
     @PreAuthorize("hasAuthority('payroll.structure.manage')")
-    public PayrollService.StructureDto revise(@RequestBody PayrollService.CreateStructureRequest req) {
+    public PayrollService.StructureDto revise(@jakarta.validation.Valid @RequestBody PayrollService.CreateStructureRequest req) {
         return service.createStructure(TenantContext.getTenantId(), req);
     }
 

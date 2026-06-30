@@ -25,7 +25,7 @@ public class PayrollSettingsController {
 
     @PutMapping("/settings")
     @PreAuthorize("hasAuthority('payroll.settings.update')")
-    public PayrollService.SettingsDto updateSettings(@RequestBody PayrollService.SettingsDto req) {
+    public PayrollService.SettingsDto updateSettings(@jakarta.validation.Valid @RequestBody PayrollService.SettingsDto req) {
         return service.updateSettings(TenantContext.getTenantId(), req);
     }
 

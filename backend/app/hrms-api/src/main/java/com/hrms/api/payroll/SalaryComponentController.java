@@ -29,14 +29,14 @@ public class SalaryComponentController {
     @PostMapping
     @PreAuthorize("hasAuthority('payroll.components.manage')")
     @ResponseStatus(HttpStatus.CREATED)
-    public void create(@RequestBody PayrollService.CreateComponentRequest req) {
+    public void create(@jakarta.validation.Valid @RequestBody PayrollService.CreateComponentRequest req) {
         service.createComponent(TenantContext.getTenantId(), req);
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('payroll.components.manage')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void update(@PathVariable UUID id, @RequestBody PayrollService.CreateComponentRequest req) {
+    public void update(@PathVariable UUID id, @jakarta.validation.Valid @RequestBody PayrollService.CreateComponentRequest req) {
         service.updateComponent(TenantContext.getTenantId(), id, req);
     }
 
