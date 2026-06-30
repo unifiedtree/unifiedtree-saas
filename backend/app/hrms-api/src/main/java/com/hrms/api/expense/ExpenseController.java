@@ -81,8 +81,21 @@ public class ExpenseController {
     @Operation(summary = "Get a single expense claim with its line items")
     @GetMapping("/claims/{id}")
     @PreAuthorize("hasAnyAuthority('hrms.expense.claim.read','hrms.expense.claim.self')")
-    public ResponseEntity<ExpenseClaimResponse> getClaim(@PathVariable UUID id) {
-        return ResponseEntity.ok(enrichOne(expenseService.getClaim(id)));
+    public ResponseEntity<ExpenseClaimResponse> getClaim(@PathVariable UUID id,
+                                                         @AuthenticationPrincipal Jwt jwt) {
+        ExpenseClaimResponse claim = enrichOne(expenseService.getClaim(id));
+        // Object-level authz (prevent intra-tenant IDOR): a caller holding only the
+        // self permission may read ONLY their own claim; the admin read perm reads any.
+        if (!callerHasPermission(jwt, "hrms.expense.claim.read")
+                && !Objects.equals(claim.employeeId(), extractEmployeeId(jwt))) {
+            throw new org.springframework.security.access.AccessDeniedException("Not permitted to view this claim");
+        }
+        return ResponseEntity.ok(claim);
+    }
+
+    private boolean callerHasPermission(Jwt jwt, String permission) {
+        java.util.List<String> perms = jwt.getClaimAsStringList("permissions");
+        return perms != null && perms.contains(permission);
     }
 
     // ─── Approvals (manager / HR) ────────────────────────────────────────────

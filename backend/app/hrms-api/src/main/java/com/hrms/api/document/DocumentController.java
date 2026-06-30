@@ -82,8 +82,21 @@ public class DocumentController {
     @Operation(summary = "Get a single document")
     @GetMapping("/documents/{id}")
     @PreAuthorize("hasAnyAuthority('hrms.document.read','hrms.document.read.self')")
-    public ResponseEntity<DocumentResponse> getDocument(@PathVariable UUID id) {
-        return ResponseEntity.ok(enrichOne(documentService.getDocument(id)));
+    public ResponseEntity<DocumentResponse> getDocument(@PathVariable UUID id,
+                                                        @AuthenticationPrincipal Jwt jwt) {
+        DocumentResponse doc = enrichOne(documentService.getDocument(id));
+        // Object-level authz (prevent intra-tenant IDOR): self-permission callers may
+        // read ONLY their own document; the admin read permission may read any.
+        if (!callerHasPermission(jwt, "hrms.document.read")
+                && !java.util.Objects.equals(doc.employeeId(), extractEmployeeId(jwt))) {
+            throw new org.springframework.security.access.AccessDeniedException("Not permitted to view this document");
+        }
+        return ResponseEntity.ok(doc);
+    }
+
+    private boolean callerHasPermission(Jwt jwt, String permission) {
+        java.util.List<String> perms = jwt.getClaimAsStringList("permissions");
+        return perms != null && perms.contains(permission);
     }
 
     @Operation(summary = "Delete a document")

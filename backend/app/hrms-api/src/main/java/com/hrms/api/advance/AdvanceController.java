@@ -75,8 +75,21 @@ public class AdvanceController {
     @Operation(summary = "Get a single salary advance request")
     @GetMapping("/requests/{id}")
     @PreAuthorize("hasAnyAuthority('hrms.advance.read','hrms.advance.request.self')")
-    public ResponseEntity<AdvanceResponse> getRequest(@PathVariable UUID id) {
-        return ResponseEntity.ok(enrichOne(advanceService.getRequest(id)));
+    public ResponseEntity<AdvanceResponse> getRequest(@PathVariable UUID id,
+                                                      @AuthenticationPrincipal Jwt jwt) {
+        AdvanceResponse adv = enrichOne(advanceService.getRequest(id));
+        // Object-level authz (prevent intra-tenant IDOR): self-permission callers may
+        // read ONLY their own request; the admin read permission may read any.
+        if (!callerHasPermission(jwt, "hrms.advance.read")
+                && !java.util.Objects.equals(adv.employeeId(), extractEmployeeId(jwt))) {
+            throw new org.springframework.security.access.AccessDeniedException("Not permitted to view this advance request");
+        }
+        return ResponseEntity.ok(adv);
+    }
+
+    private boolean callerHasPermission(Jwt jwt, String permission) {
+        java.util.List<String> perms = jwt.getClaimAsStringList("permissions");
+        return perms != null && perms.contains(permission);
     }
 
     // ─── Approvals (manager / HR) ────────────────────────────────────────────
