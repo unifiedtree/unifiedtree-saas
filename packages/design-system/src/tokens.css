@@ -22,11 +22,13 @@
   --accent-fg-strong:    #c16e00;
   --accent-border:       #ffd68a;
 
-  /* ── Text ────────────────────────────────────────────── */
+  /* ── Text ── 3-tier scale, all WCAG AA on white ──────────
+     primary #1f2937 12.6:1 · secondary #4b5563 7.0:1 · tertiary #6b7280 4.83:1.
+     (tertiary was #9ca3af = 2.5:1, a contrast failure on hint/sub-label text.) */
   --text-primary:        #1f2937;
-  --text-secondary:      #6b7280;
-  --text-tertiary:       #9ca3af;
-  --text-disabled:       #cbd5e1;
+  --text-secondary:      #4b5563;
+  --text-tertiary:       #6b7280;
+  --text-disabled:       #9ca3af;
   --text-inverse:        #ffffff;
   --text-on-accent:      #ffffff;
   --text-link:           #c16e00;
