@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import {
@@ -40,24 +40,12 @@ export const Expense: React.FC = () => {
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Expense Management" title="Expense Center" subtitle="Submit, approve, and reimburse employee expenses" />
 
-      <div className="mb-5 flex gap-1 border-b border-border-default">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#FF9D00] text-[#C16E00]' : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'my' && <MyClaimsTab />}
-      {tab === 'submit' && <SubmitTab onSubmitted={() => setTab('my')} />}
-      {tab === 'approvals' && canApprove && <ApprovalsTab canReimburse={canReimburse} />}
-      {tab === 'policies' && canPolicyRead && <PoliciesTab canWrite={canPolicyWrite} />}
+      {tab === 'my' && <HrTabPanel tabKey="my"><MyClaimsTab /></HrTabPanel>}
+      {tab === 'submit' && <HrTabPanel tabKey="submit"><SubmitTab onSubmitted={() => setTab('my')} /></HrTabPanel>}
+      {tab === 'approvals' && canApprove && <HrTabPanel tabKey="approvals"><ApprovalsTab canReimburse={canReimburse} /></HrTabPanel>}
+      {tab === 'policies' && canPolicyRead && <HrTabPanel tabKey="policies"><PoliciesTab canWrite={canPolicyWrite} /></HrTabPanel>}
     </div>
   )
 }

@@ -169,3 +169,57 @@ export function HrAvatar({ name, sub, seed = 0 }: { name: string; sub?: string; 
     </div>
   )
 }
+
+// ── Accessible tab bar (role=tablist + roving focus + arrow keys) ────────────
+export interface HrTab { key: string; label: React.ReactNode; badge?: React.ReactNode }
+export function HrTabs({ tabs, active, onChange, className }: {
+  tabs: HrTab[]
+  active: string
+  onChange: (key: string) => void
+  className?: string
+}) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const focusTab = (i: number) => requestAnimationFrame(() =>
+    ref.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[i]?.focus())
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const i = tabs.findIndex((t) => t.key === active)
+    if (i < 0) return
+    let n = -1
+    if (e.key === 'ArrowRight') n = (i + 1) % tabs.length
+    else if (e.key === 'ArrowLeft') n = (i - 1 + tabs.length) % tabs.length
+    else if (e.key === 'Home') n = 0
+    else if (e.key === 'End') n = tabs.length - 1
+    if (n >= 0) { e.preventDefault(); onChange(tabs[n].key); focusTab(n) }
+  }
+  return (
+    <div ref={ref} role="tablist" onKeyDown={onKeyDown}
+      className={clsx('mb-5 flex gap-1 border-b border-border-default', className)}>
+      {tabs.map((t) => {
+        const sel = t.key === active
+        return (
+          <button
+            key={t.key}
+            role="tab"
+            id={`tab-${t.key}`}
+            aria-selected={sel}
+            aria-controls={`panel-${t.key}`}
+            tabIndex={sel ? 0 : -1}
+            onClick={() => onChange(t.key)}
+            className={clsx(
+              '-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-semibold transition-colors',
+              sel ? 'border-[#FF9D00] text-[#C16E00]' : 'border-transparent text-text-secondary hover:text-text-primary',
+            )}
+          >
+            {t.label}
+            {t.badge != null && <span aria-hidden>{t.badge}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Wrap the active tab's content so screen readers associate it with its tab.
+export function HrTabPanel({ tabKey, children }: { tabKey: string; children: React.ReactNode }) {
+  return <div role="tabpanel" id={`panel-${tabKey}`} aria-labelledby={`tab-${tabKey}`} tabIndex={0} className="focus:outline-none">{children}</div>
+}
