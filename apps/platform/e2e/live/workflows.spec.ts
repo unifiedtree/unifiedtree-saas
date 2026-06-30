@@ -85,3 +85,44 @@ test('expense: submit → approve → reimburse transitions to REIMBURSED', asyn
   expect(reim.status()).toBeLessThan(300)
   expect((await reim.json()).status).toBe('REIMBURSED')
 })
+
+// These four modules had zero committed integration coverage; they were verified
+// live (20/20) but nothing guarded them. The three below are safe to re-run
+// (append-only — no employee exit / irreversible lock). F&F is intentionally NOT
+// committed as an auto-test: its `pay` step exits the employee (destructive); it
+// is verified live in the manual workflow audit instead.
+
+test('advance: request → approve → disburse transitions to DISBURSED', async () => {
+  const req = await api.post(`${BACKEND}/api/v1/advance/requests`, { headers: hdr(adminTok), data: { amount: 5000, reason: `${tag} regression`, repaymentMonths: 4 } })
+  expect(req.status(), 'request advance').toBe(201)
+  const id = (await req.json()).id
+  const dec = await api.post(`${BACKEND}/api/v1/advance/requests/${id}/decision`, { headers: hdr(adminTok), data: { approved: true, comment: tag } })
+  expect(dec.status()).toBeLessThan(300)
+  const dis = await api.post(`${BACKEND}/api/v1/advance/requests/${id}/disburse`, { headers: hdr(adminTok) })
+  expect(dis.status()).toBeLessThan(300)
+  expect((await dis.json()).status).toBe('DISBURSED')
+})
+
+test('performance: create goal + review cycle activates', async () => {
+  const goal = await api.post(`${BACKEND}/api/v1/performance/goals`, { headers: hdr(adminTok), data: { title: `${tag} goal ${Date.now()}`, weight: 20 } })
+  expect(goal.status(), 'create goal').toBe(201)
+  const cyc = await api.post(`${BACKEND}/api/v1/performance/cycles`, { headers: hdr(adminTok), data: { name: `${tag} cycle ${Date.now()}`, periodStart: '2026-07-01', periodEnd: '2026-12-31' } })
+  expect(cyc.status(), 'create cycle').toBe(201)
+  const act = await api.post(`${BACKEND}/api/v1/performance/cycles/${(await cyc.json()).id}/activate`, { headers: hdr(adminTok) })
+  expect(act.status()).toBeLessThan(300)
+  expect((await act.json()).status).toBe('ACTIVE')
+})
+
+test('onboarding: template → task → assign instance (IN_PROGRESS)', async () => {
+  const companyId = (await (await api.get(`${BACKEND}/api/v1/hrms/companies`, { headers: hdr(adminTok) })).json())[0]?.id
+  const empId = (await (await api.get(`${BACKEND}/api/v1/hrms/employees?page=0&pageSize=1`, { headers: hdr(adminTok) })).json()).content?.[0]?.id
+  expect(companyId && empId, 'resolved company + employee').toBeTruthy()
+  const tmpl = await api.post(`${BACKEND}/api/v1/onboarding/templates`, { headers: hdr(adminTok), data: { companyId, name: `${tag} onb ${Date.now()}` } })
+  expect(tmpl.status(), 'create template').toBe(201)
+  const tId = (await tmpl.json()).id
+  const task = await api.post(`${BACKEND}/api/v1/onboarding/templates/${tId}/tasks`, { headers: hdr(adminTok), data: { title: 'Sign NDA', sequenceNo: 1 } })
+  expect(task.status(), 'add task').toBe(201)
+  const inst = await api.post(`${BACKEND}/api/v1/onboarding/instances`, { headers: hdr(adminTok), data: { employeeId: empId, templateId: tId } })
+  expect(inst.status(), 'assign instance').toBe(201)
+  expect((await inst.json()).status).toBe('IN_PROGRESS')
+})
