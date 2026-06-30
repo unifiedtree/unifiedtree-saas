@@ -64,6 +64,11 @@ public class PerformanceReviewService {
     public PerformanceReviewResponse submitReview(UUID reviewId, UUID employeeId, ReviewSubmitRequest request) {
         PerformanceReview review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new ResourceNotFoundException("PerformanceReview", reviewId));
+        if (!review.getEmployeeId().equals(employeeId)) {
+            throw new BusinessRuleException(
+                    "You can only submit your own performance review",
+                    "PERFORMANCE_REVIEW_FORBIDDEN");
+        }
         if (review.getStatus() != ReviewStatus.PENDING) {
             throw new BusinessRuleException(
                     "Only a pending review can be submitted (current status: " + review.getStatus() + ")",

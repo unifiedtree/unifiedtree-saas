@@ -65,7 +65,12 @@ public class PayrollRunService {
 
     // ── DTOs ──────────────────────────────────────────────────────────────────
 
-    public record CreateRunRequest(UUID companyId, Integer periodMonth, Integer periodYear) {}
+    public record CreateRunRequest(
+            @jakarta.validation.constraints.NotNull UUID companyId,
+            @jakarta.validation.constraints.NotNull
+            @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(12) Integer periodMonth,
+            @jakarta.validation.constraints.NotNull
+            @jakarta.validation.constraints.Min(2020) @jakarta.validation.constraints.Max(2099) Integer periodYear) {}
 
     public record RunDto(
         UUID id, UUID companyId, String companyName, int periodMonth, int periodYear,

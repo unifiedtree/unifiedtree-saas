@@ -182,7 +182,11 @@ public class OnboardingService {
         task.setCompletedBy(actorId);
         task.setCompletedAt(Instant.now());
         task.setNotes(reason);
-        return instanceTaskRepo.save(task);
+        OnboardingInstanceTask saved = instanceTaskRepo.save(task);
+        // Skipping the last outstanding task must complete the instance too —
+        // completeTask() does this; without it the instance is stuck IN_PROGRESS.
+        checkAndCompleteInstance(task.getInstanceId());
+        return saved;
     }
 
     private void checkAndCompleteInstance(UUID instanceId) {

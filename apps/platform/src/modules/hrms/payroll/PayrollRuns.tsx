@@ -34,6 +34,16 @@ export const PayrollRuns: React.FC = () => {
   }
 
   const submit = () => {
+    // Guard before hitting the API: a cleared year input yields Number('') === 0,
+    // which the backend rejects (out of the 2020–2099 range).
+    if (!Number.isInteger(year) || year < 2020 || year > 2099) {
+      toast('Year must be between 2020 and 2099', 'error')
+      return
+    }
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      toast('Month must be between 1 and 12', 'error')
+      return
+    }
     create.mutate(
       { companyId, periodMonth: month, periodYear: year },
       {
@@ -124,7 +134,7 @@ export const PayrollRuns: React.FC = () => {
           </div>
           <div className="mt-6 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button loading={create.isPending} disabled={!companyId} onClick={submit}>Create run</Button>
+            <Button loading={create.isPending} disabled={!companyId || !year || year < 2020 || year > 2099} onClick={submit}>Create run</Button>
           </div>
         </div>
       </Modal>

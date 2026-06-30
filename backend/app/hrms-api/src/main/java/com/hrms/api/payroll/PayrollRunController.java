@@ -10,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 
@@ -53,7 +54,7 @@ public class PayrollRunController {
     @PostMapping("/runs")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('payroll.runs.manage')")
-    public PayrollRunService.RunDto create(@RequestBody PayrollRunService.CreateRunRequest req,
+    public PayrollRunService.RunDto create(@Valid @RequestBody PayrollRunService.CreateRunRequest req,
                                            @AuthenticationPrincipal Jwt jwt) {
         return service.createDraftRun(TenantContext.getTenantId(), req, actorId(jwt));
     }
