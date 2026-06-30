@@ -68,10 +68,10 @@ export const inr = (n?: number) =>
 
 // ── Claims ─────────────────────────────────────────────────────────────────
 
-export function useMyClaims(page = 0) {
+export function useMyClaims(page = 0, size = 20) {
   return useQuery({
-    queryKey: ['hrms', 'expense', 'my', page],
-    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/my?page=${page}&size=20`),
+    queryKey: ['hrms', 'expense', 'my', page, size],
+    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/my?page=${page}&size=${size}`),
     staleTime: 30_000,
   })
 }

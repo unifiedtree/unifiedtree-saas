@@ -57,8 +57,9 @@ export const Advance: React.FC = () => {
 // ── My Advances ────────────────────────────────────────────────────────────────
 
 function MyAdvancesTab() {
-  const { data, isLoading } = useMyAdvances(0)
+  const { data, isLoading, isError, refetch } = useMyAdvances(0, 200)
   const advances = data?.content ?? []
+  const total = data?.totalElements ?? advances.length
 
   const stats = useMemo(() => {
     const pending = advances.filter((a) => a.status === 'REQUESTED').length
@@ -69,10 +70,19 @@ function MyAdvancesTab() {
     return { pending, approved, outstanding }
   }, [advances])
 
+  if (isError) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
+        Couldn't load your advances.{' '}
+        <button onClick={() => refetch()} className="font-semibold underline">Retry</button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<HandCoins size={18} />} color="blue" value={advances.length} label="Total Requests" loading={isLoading} />
+        <HrStatCard icon={<HandCoins size={18} />} color="blue" value={total} label="Total Requests" loading={isLoading} />
         <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending" loading={isLoading} />
         <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved" loading={isLoading} />
         <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.outstanding)} label="Outstanding" loading={isLoading} />

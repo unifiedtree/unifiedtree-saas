@@ -53,8 +53,9 @@ export const Expense: React.FC = () => {
 // ── My Claims ────────────────────────────────────────────────────────────────
 
 function MyClaimsTab() {
-  const { data, isLoading } = useMyClaims(0)
+  const { data, isLoading, isError, refetch } = useMyClaims(0, 200)
   const claims = data?.content ?? []
+  const total = data?.totalElements ?? claims.length
 
   const stats = useMemo(() => {
     const pending = claims.filter((c) => c.status === 'SUBMITTED').length
@@ -65,10 +66,19 @@ function MyClaimsTab() {
     return { pending, approved, reimbursed, claimed }
   }, [claims])
 
+  if (isError) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
+        Couldn't load your expense claims.{' '}
+        <button onClick={() => refetch()} className="font-semibold underline">Retry</button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<Receipt size={18} />} color="blue" value={claims.length} label="Total Claims" loading={isLoading} />
+        <HrStatCard icon={<Receipt size={18} />} color="blue" value={total} label="Total Claims" loading={isLoading} />
         <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending" loading={isLoading} />
         <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved" loading={isLoading} />
         <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.reimbursed)} label="Reimbursed" loading={isLoading} />

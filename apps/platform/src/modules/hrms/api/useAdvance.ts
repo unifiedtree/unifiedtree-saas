@@ -37,10 +37,10 @@ export const inr = (n?: number) =>
 
 // ── Requests ─────────────────────────────────────────────────────────────────
 
-export function useMyAdvances(page = 0) {
+export function useMyAdvances(page = 0, size = 20) {
   return useQuery({
-    queryKey: ['hrms', 'advance', 'my', page],
-    queryFn: () => apiJson<Page<AdvanceRequest>>(`/v1/advance/my?page=${page}&size=20`),
+    queryKey: ['hrms', 'advance', 'my', page, size],
+    queryFn: () => apiJson<Page<AdvanceRequest>>(`/v1/advance/my?page=${page}&size=${size}`),
     staleTime: 30_000,
   })
 }
