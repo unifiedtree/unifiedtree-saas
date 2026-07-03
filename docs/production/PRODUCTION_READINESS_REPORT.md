@@ -21,7 +21,7 @@ The gaps that block an **enterprise production launch** cluster into five themes
 
 | Theme | Status |
 |---|---|
-| **Prod was leaking DEBUG/SQL/PII logs + over‑exposed actuator** | ✅ **Fixed & deployed** |
+| **Prod was leaking DEBUG/SQL/PII logs + over‑exposed actuator** | ✅ Fixed in code — ⚠️ **not yet live** (deploy‑source split, see §2) |
 | **Mobile crash/null‑safety + no error boundary + no crash reporting** | ✅ Crashes fixed & shipped (OTA); crash reporting staged |
 | **Auth brute‑force: no rate limiting, dead account lockout** | ⚠️ **Staged** (backend PR) — highest open risk |
 | **Secrets: rotate everything shared via chat/Railway; PII key defaults to all‑zeros** | ⚠️ **Operational** — must rotate at GCP cutover |
@@ -44,7 +44,9 @@ The gaps that block an **enterprise production launch** cluster into five themes
 | M6 | Medium | **Battery** — `focusManager` wired to `AppState` in `_layout.tsx`; all 30s polling (home/dashboard/live‑map) pauses when the app is backgrounded. |
 | M7 | Low | Ungated `console.warn` in `face-enroll.tsx` now `__DEV__`‑gated. |
 
-### Backend (committed + auto‑deployed — commit `91b08f1`)
+### Backend (committed to `unifiedtree/unifiedtree-saas` — commit `91b08f1`)
+
+> ⚠️ **Deploy‑source split — action required.** This backend working copy pushes to `unifiedtree/unifiedtree-saas`, but the **live** backend `erpinfrastructure-production.up.railway.app` (what the mobile app calls) deploys from a **different** source (`erp/infrastructure`, per the Railway dashboard). After pushing `91b08f1`, the live service **still shows the old config** (`/actuator/health` returns full component details; `/actuator/prometheus` is 401 not 404) — i.e. **the hardening below is in the code but NOT yet live in production.** To activate it: point the `erpinfrastructure-production` Railway service at `unifiedtree/unifiedtree-saas` **or** sync/push these commits into `erp/infrastructure`, then redeploy. (The project memory note "push to unifiedtree/unifiedtree-saas deploys" is now stale — the deploy target moved when the backend changed Railway accounts.)
 | # | Severity | Fix |
 |---|---|---|
 | B1 | High | **Logging** — prod no longer logs `DEBUG`/`org.hibernate.SQL=DEBUG`/`BasicBinder=TRACE`. Bound **PII values were being written to logs on every query**; now INFO with SQL/bind at WARN. |
