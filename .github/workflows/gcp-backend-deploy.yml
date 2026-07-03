@@ -1,0 +1,97 @@
+# =============================================================================
+# Backend CI/CD — build + deploy the Spring Boot API to Cloud Run.
+#
+# Keyless auth via Workload Identity Federation (no JSON key in GitHub secrets).
+# One-time setup (run once, then store the two values as repo variables):
+#
+#   gcloud iam workload-identity-pools create github --location=global
+#   gcloud iam workload-identity-pools providers create-oidc github-oidc \
+#     --location=global --workload-identity-pool=github \
+#     --issuer-uri=https://token.actions.githubusercontent.com \
+#     --attribute-mapping=google.subject=assertion.sub,attribute.repository=assertion.repository \
+#     --attribute-condition="assertion.repository=='unifiedtree/unifiedtree-saas'"
+#   gcloud iam service-accounts add-iam-policy-binding ut-deployer@$PROJECT.iam.gserviceaccount.com \
+#     --role=roles/iam.workloadIdentityUser \
+#     --member="principalSet://iam.googleapis.com/projects/$PN/locations/global/workloadIdentityPools/github/attribute.repository/unifiedtree/unifiedtree-saas"
+#
+# Repo → Settings → Variables (Actions):
+#   GCP_PROJECT_ID, GCP_REGION, GCP_WIF_PROVIDER (full resource name), GCP_DEPLOYER_SA
+#
+# Only touches the backend. Does NOT build or deploy the website.
+# =============================================================================
+name: Deploy backend to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/gcp-backend-deploy.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: cloudrun-backend
+  cancel-in-progress: false   # never cancel a half-finished prod deploy
+
+env:
+  SERVICE: unifiedtree-saas
+  IMAGE_REPO: ut-images
+  IMAGE_NAME: hrms-backend
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # Compile + run the test suite BEFORE building the deploy image.
+      - name: Build & test
+        working-directory: backend
+        run: mvn -B -ntp -pl app/hrms-app -am verify
+
+  deploy:
+    needs: build-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write            # required for Workload Identity Federation
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build & push image (Cloud Build)
+        run: |
+          IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${IMAGE_REPO}/${IMAGE_NAME}:${GITHUB_SHA::12}"
+          gcloud builds submit backend --tag "$IMAGE" --project "${{ vars.GCP_PROJECT_ID }}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy revision
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" \
+            --region "${{ vars.GCP_REGION }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --quiet
+          # Startup probe gates traffic; a failed rollout keeps the old revision live.
+
+      - name: Smoke test
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --region "${{ vars.GCP_REGION }}" \
+                 --project "${{ vars.GCP_PROJECT_ID }}" --format='value(status.url)')
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/actuator/health" || true)
+            [ "$code" = "200" ] && echo "health OK" && exit 0
+            sleep 6
+          done
+          echo "health check failed"; exit 1
