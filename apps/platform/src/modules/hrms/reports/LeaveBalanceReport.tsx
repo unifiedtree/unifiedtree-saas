@@ -56,7 +56,7 @@ export function LeaveBalanceReport() {
           <select
             value={year}
             onChange={(e) => set('year', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#FF9D00] transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#0F6E56] transition-all"
           >
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
@@ -67,16 +67,16 @@ export function LeaveBalanceReport() {
         <p className="text-xs text-text-tertiary mb-3">Top 20 by leave used (summed across types)</p>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={chartData} margin={{ top: 4, right: 16, left: -10, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #FFD68A)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #6EE7B7)" />
             <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #94a3b8)' }} interval={0} angle={-35} textAnchor="end" height={50} />
             <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} allowDecimals={false} />
             <Tooltip
-              contentStyle={{ backgroundColor: '#fff', border: '1px solid #FFD68A', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ backgroundColor: '#fff', border: '1px solid #6EE7B7', borderRadius: 8, fontSize: 12 }}
               labelStyle={{ color: '#0F172A' }}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Bar dataKey="used"      fill="#EF4444" />
-            <Bar dataKey="pending"   fill="#FF9D00" />
+            <Bar dataKey="pending"   fill="#0F6E56" />
             <Bar dataKey="available" fill="#22C55E" />
           </BarChart>
         </ResponsiveContainer>

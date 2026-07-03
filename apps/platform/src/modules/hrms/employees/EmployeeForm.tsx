@@ -310,7 +310,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   <option value="SUPER_ADMIN">Super Admin (Full access)</option>
                 </Sel>
               </Field>
-              <p className="mt-3 text-xs bg-[#FFF4E1] text-[#C16E00] p-3 rounded-lg border border-[#FFD68A]">
+              <p className="mt-3 text-xs bg-[#E6F4F1] text-[#0A5240] p-3 rounded-lg border border-[#6EE7B7]">
                 An invitation email will be sent to <strong>{form.email || 'the employee'}</strong> (when "Send invitation" is enabled) so they can set their password.
               </p>
             </div>

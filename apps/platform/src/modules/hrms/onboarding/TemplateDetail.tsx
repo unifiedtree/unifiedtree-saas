@@ -77,7 +77,7 @@ function EditTemplateDrawer({
             type="checkbox"
             checked={active}
             onChange={(e) => setActive(e.target.checked)}
-            className="accent-[#FF9D00]"
+            className="accent-[#0F6E56]"
           />
           <span className="text-sm text-text-primary">Active</span>
         </label>
@@ -186,7 +186,7 @@ function AddTaskDrawer({
             type="checkbox"
             checked={required}
             onChange={(e) => setRequired(e.target.checked)}
-            className="accent-[#FF9D00]"
+            className="accent-[#0F6E56]"
           />
           <span className="text-sm text-text-primary">Required task</span>
         </label>

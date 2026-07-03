@@ -50,13 +50,13 @@ export function AttritionReport() {
             type="date"
             value={from}
             onChange={(e) => set('from', e.target.value)}
-            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/20 transition-all"
+            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/20 transition-all"
           />
           <input
             type="date"
             value={to}
             onChange={(e) => set('to', e.target.value)}
-            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/20 transition-all"
+            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/20 transition-all"
           />
         </>
       }
@@ -76,7 +76,7 @@ export function AttritionReport() {
             <Legend wrapperStyle={{ fontSize: 12, color: 'var(--color-text-tertiary, #64748B)' }} />
             <Bar yAxisId="left" dataKey="Resignations" stackId="a" fill="#F59E0B" />
             <Bar yAxisId="left" dataKey="Terminations" stackId="a" fill="#EF4444" radius={[4, 4, 0, 0]} />
-            <Line yAxisId="right" type="monotone" dataKey="Attrition %" stroke="#FF9D00" strokeWidth={2} dot={{ r: 3 }} />
+            <Line yAxisId="right" type="monotone" dataKey="Attrition %" stroke="#0F6E56" strokeWidth={2} dot={{ r: 3 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

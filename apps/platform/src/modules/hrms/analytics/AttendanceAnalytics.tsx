@@ -25,7 +25,7 @@ const CHART = {
 }
 
 const selectCls =
-  'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20'
+  'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
 
 // Today's status breakdown → donut slices (label, value, color)
 const STATUS_SLICES: { key: string; label: string; color: string }[] = [
@@ -33,7 +33,7 @@ const STATUS_SLICES: { key: string; label: string; color: string }[] = [
   { key: 'late',         label: 'Late',        color: CHART.amber },
   { key: 'workFromHome', label: 'Work Home',   color: CHART.teal },
   { key: 'onLeave',      label: 'On Leave',    color: CHART.purple },
-  { key: 'halfDay',      label: 'Half Day',    color: '#C16E00' },
+  { key: 'halfDay',      label: 'Half Day',    color: '#0A5240' },
   { key: 'absent',       label: 'Absent',      color: CHART.red },
   { key: 'notMarked',    label: 'Not Marked',  color: CHART.gray },
 ]

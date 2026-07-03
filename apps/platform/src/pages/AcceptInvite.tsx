@@ -69,7 +69,7 @@ export const AcceptInvite: React.FC = () => {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-bg-base p-4">
-      <div className="absolute -top-48 -right-48 w-96 h-96 bg-[#FF9D00]/15 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute -top-48 -right-48 w-96 h-96 bg-[#0F6E56]/15 rounded-full blur-[120px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -77,7 +77,7 @@ export const AcceptInvite: React.FC = () => {
         className="w-full max-w-[420px] bg-white rounded-3xl shadow-xl border border-slate-100 p-10 relative z-10"
       >
         <div className="flex items-center gap-2.5 mb-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF9D00]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F6E56]">
             <span className="text-xl font-black text-white">U</span>
           </div>
           <span className="text-xl font-black tracking-tight text-slate-900">UnifiedTree</span>
@@ -111,7 +111,7 @@ export const AcceptInvite: React.FC = () => {
                     type={showPw ? 'text' : 'password'}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-10 text-sm text-slate-900 outline-none focus:border-[#FF9D00] focus:ring-4 focus:ring-[#FF9D00]/30"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-10 text-sm text-slate-900 outline-none focus:border-[#0F6E56] focus:ring-4 focus:ring-[#0F6E56]/30"
                     placeholder="Minimum 8 characters"
                     required
                   />
@@ -140,7 +140,7 @@ export const AcceptInvite: React.FC = () => {
                     type="password"
                     value={confirm}
                     onChange={e => setConfirm(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none focus:border-[#FF9D00] focus:ring-4 focus:ring-[#FF9D00]/30"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none focus:border-[#0F6E56] focus:ring-4 focus:ring-[#0F6E56]/30"
                     placeholder="Re-enter password"
                     required
                   />
@@ -150,7 +150,7 @@ export const AcceptInvite: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-2 w-full rounded-xl bg-[#FF9D00] hover:bg-[#E08A00] py-4 text-sm font-bold text-white transition-all disabled:opacity-60"
+                className="mt-2 w-full rounded-xl bg-[#0F6E56] hover:bg-[#0A5F4A] py-4 text-sm font-bold text-white transition-all disabled:opacity-60"
               >
                 {loading ? 'Activating account…' : 'Activate account'}
               </button>

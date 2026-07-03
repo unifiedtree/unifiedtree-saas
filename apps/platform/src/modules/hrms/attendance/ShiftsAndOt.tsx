@@ -43,7 +43,7 @@ export const ShiftsAndOt: React.FC = () => {
             <select
               value={activeCompany}
               onChange={(e) => setCompanyId(e.target.value)}
-              className="rounded-lg border border-border-default bg-white py-2 pl-8 pr-3 text-sm focus:border-[#FF9D00] focus:outline-none"
+              className="rounded-lg border border-border-default bg-white py-2 pl-8 pr-3 text-sm focus:border-[#0F6E56] focus:outline-none"
             >
               {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>

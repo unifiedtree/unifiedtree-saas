@@ -29,8 +29,8 @@ export const EssDashboard: React.FC = () => {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
       {/* Greeting */}
-      <div className="rounded-2xl border border-[#FFD68A] bg-[#FFF4E1] p-5">
-        <p className="text-sm text-[#9A5600]">Good {greeting},</p>
+      <div className="rounded-2xl border border-[#6EE7B7] bg-[#E6F4F1] p-5">
+        <p className="text-sm text-[#064E3B]">Good {greeting},</p>
         <h1 className="mt-0.5 text-2xl font-bold text-text-primary">{user?.firstName ?? 'Employee'} {user?.lastName ?? ''}</h1>
         <p className="mt-1 text-sm text-text-secondary">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
@@ -54,7 +54,7 @@ export const EssDashboard: React.FC = () => {
         <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-text-primary">Leave Balances</h2>
-            <button onClick={() => navigate('/hrms/leave')} className="flex items-center gap-1 text-xs font-semibold text-[#C16E00] hover:text-[#9A5600]">
+            <button onClick={() => navigate('/hrms/leave')} className="flex items-center gap-1 text-xs font-semibold text-[#0A5240] hover:text-[#064E3B]">
               Apply leave <ArrowRight size={12} />
             </button>
           </div>
@@ -74,8 +74,8 @@ export const EssDashboard: React.FC = () => {
       <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FFF4E1]">
-              <ClipboardList size={15} className="text-[#FF9D00]" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E6F4F1]">
+              <ClipboardList size={15} className="text-[#0F6E56]" />
             </div>
             <div>
               <p className="text-sm font-semibold text-text-primary">Onboarding Tasks</p>
@@ -84,7 +84,7 @@ export const EssDashboard: React.FC = () => {
           </div>
           <button
             onClick={() => navigate('/hrms/onboarding/instances')}
-            className="flex items-center gap-1 text-xs font-semibold text-[#C16E00] hover:text-[#9A5600]"
+            className="flex items-center gap-1 text-xs font-semibold text-[#0A5240] hover:text-[#064E3B]"
           >
             Open <ArrowRight size={12} />
           </button>

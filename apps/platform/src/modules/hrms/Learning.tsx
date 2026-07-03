@@ -23,7 +23,7 @@ const ENROLLMENT_TONE: Record<EnrollmentStatus, PillTone> = {
 }
 
 const fmtDate = (d?: string) => (d ? format(new Date(d), 'd MMM yyyy') : '—')
-const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20'
+const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
 
 type Tab = 'programs' | 'my' | 'skills'
 
@@ -49,7 +49,7 @@ export const Learning: React.FC = () => {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#FF9D00] text-[#C16E00]' : 'border-transparent text-text-secondary hover:text-text-primary'
+              tab === t.key ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
             {t.label}
@@ -223,7 +223,7 @@ function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: bo
                         value={p.status}
                         onChange={(e) => onStatus(p.id, e.target.value as ProgramStatus)}
                         disabled={changeStatus.isPending}
-                        className="rounded-lg border border-border-default bg-white px-2 py-1 text-xs font-semibold text-text-primary focus:border-[#FF9D00] focus:outline-none"
+                        className="rounded-lg border border-border-default bg-white px-2 py-1 text-xs font-semibold text-text-primary focus:border-[#0F6E56] focus:outline-none"
                       >
                         {PROGRAM_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -371,7 +371,7 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm text-text-secondary">
-            <input type="checkbox" checked={certified} onChange={(e) => setCertified(e.target.checked)} className="h-4 w-4 rounded border-border-default text-[#FF9D00] focus:ring-[#FF9D00]" />
+            <input type="checkbox" checked={certified} onChange={(e) => setCertified(e.target.checked)} className="h-4 w-4 rounded border-border-default text-[#0F6E56] focus:ring-[#0F6E56]" />
             Certified
           </label>
           {certified && (
@@ -412,7 +412,7 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
                 <td>
                   <div className="flex items-center gap-2">
                     <div className="flex h-2 w-28 overflow-hidden rounded-full bg-bg-base">
-                      <div className="h-full rounded-full bg-[#FF9D00]" style={{ width: `${(Math.min(Math.max(s.proficiency, 0), 5) / 5) * 100}%` }} />
+                      <div className="h-full rounded-full bg-[#0F6E56]" style={{ width: `${(Math.min(Math.max(s.proficiency, 0), 5) / 5) * 100}%` }} />
                     </div>
                     <span className="text-xs font-semibold text-text-secondary">{s.proficiency}/5</span>
                   </div>
@@ -420,7 +420,7 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
                 <td>
                   {s.certified ? (
                     <span className="inline-flex items-center gap-1.5 text-sm text-text-primary">
-                      <Award size={14} className="text-[#C16E00]" />
+                      <Award size={14} className="text-[#0A5240]" />
                       {s.certificationName || 'Certified'}
                       {s.certifiedOn && <span className="text-xs text-text-tertiary">· {fmtDate(s.certifiedOn)}</span>}
                     </span>

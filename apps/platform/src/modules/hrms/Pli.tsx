@@ -40,7 +40,7 @@ export const Pli: React.FC = () => {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#FF9D00] text-[#C16E00]' : 'border-transparent text-text-secondary hover:text-text-primary'
+              tab === t.key ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
             {t.label}
@@ -175,12 +175,12 @@ function CreateAwardForm() {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20'
+  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
 
   return (
     <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
-        <Award size={16} className="text-[#C16E00]" />
+        <Award size={16} className="text-[#0A5240]" />
         <h3 className="text-sm font-semibold text-text-primary">Propose Incentive Award</h3>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

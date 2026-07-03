@@ -123,13 +123,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
                     onClick={cmd.action}
                     className={clsx(
                       'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
-                      selected === globalIdx ? 'bg-[#FFF4E1] text-[#C16E00]' : 'text-text-secondary hover:bg-[#FFF8EC]'
+                      selected === globalIdx ? 'bg-[#E6F4F1] text-[#0A5240]' : 'text-text-secondary hover:bg-[#ECFDF5]'
                     )}
                   >
-                    <span className={selected === globalIdx ? 'text-[#C16E00]' : 'text-text-tertiary'}>{cmd.icon}</span>
+                    <span className={selected === globalIdx ? 'text-[#0A5240]' : 'text-text-tertiary'}>{cmd.icon}</span>
                     <span className="flex-1 text-left">{cmd.label}</span>
                     {cmd.description && <span className="text-xs text-text-tertiary">{cmd.description}</span>}
-                    {selected === globalIdx && <ChevronRight size={14} className="text-[#C16E00]" />}
+                    {selected === globalIdx && <ChevronRight size={14} className="text-[#0A5240]" />}
                   </button>
                 )
               })}

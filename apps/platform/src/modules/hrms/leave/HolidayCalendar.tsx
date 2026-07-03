@@ -79,7 +79,7 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
               min={`${year}-01-01`}
               max={`${year}-12-31`}
               onChange={(e) => setForm((p) => ({ ...p, holidayDate: e.target.value }))}
-              className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] transition-colors"
+              className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#0F6E56] transition-colors"
             />
           </div>
           <div>
@@ -88,7 +88,7 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
               value={form.holidayName}
               onChange={(e) => setForm((p) => ({ ...p, holidayName: e.target.value }))}
               placeholder="e.g. Republic Day"
-              className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#FF9D00] transition-colors"
+              className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#0F6E56] transition-colors"
             />
           </div>
           <div>
@@ -96,7 +96,7 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
             <select
               value={form.holidayType}
               onChange={(e) => setForm((p) => ({ ...p, holidayType: e.target.value as HolidayType }))}
-              className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] transition-colors"
+              className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#0F6E56] transition-colors"
             >
               {Object.entries(HOLIDAY_TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
@@ -109,7 +109,7 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
               placeholder="Optional"
-              className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#FF9D00] transition-colors"
+              className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#0F6E56] transition-colors"
             />
           </div>
         </div>
@@ -168,7 +168,7 @@ export function HolidayCalendar() {
               <select
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
-                className="bg-white border border-border-default rounded-lg px-2.5 py-1.5 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] transition-colors"
+                className="bg-white border border-border-default rounded-lg px-2.5 py-1.5 text-sm text-text-primary focus:outline-none focus:border-[#0F6E56] transition-colors"
               >
                 {years.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>

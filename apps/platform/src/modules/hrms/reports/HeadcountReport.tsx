@@ -42,7 +42,7 @@ export function HeadcountReport() {
             type="date"
             value={asOf}
             onChange={(e) => set('asOf', e.target.value)}
-            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/20 transition-all"
+            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/20 transition-all"
           />
         </>
       }
@@ -54,7 +54,7 @@ export function HeadcountReport() {
             <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} />
             <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} allowDecimals={false} />
             <Tooltip
-              contentStyle={{ backgroundColor: '#ffffff', border: '1px solid var(--color-border-default, #FFD68A)', borderRadius: 8, fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+              contentStyle={{ backgroundColor: '#ffffff', border: '1px solid var(--color-border-default, #6EE7B7)', borderRadius: 8, fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
               labelStyle={{ color: '#111827', fontWeight: 600 }}
             />
             <Legend wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />

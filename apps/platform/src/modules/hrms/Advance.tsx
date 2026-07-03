@@ -39,7 +39,7 @@ export const Advance: React.FC = () => {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#FF9D00] text-[#C16E00]' : 'border-transparent text-text-secondary hover:text-text-primary'
+              tab === t.key ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
             {t.label}
@@ -149,7 +149,7 @@ function RequestTab({ onSubmitted }: { onSubmitted: () => void }) {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20'
+  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -170,7 +170,7 @@ function RequestTab({ onSubmitted }: { onSubmitted: () => void }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between rounded-2xl border border-[#FFD68A] bg-[#FFF8EC] px-5 py-4">
+      <div className="flex items-center justify-between rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-5 py-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Monthly Deduction</p>
           <p className="text-2xl font-bold text-text-primary">{inr(monthlyDeduction)}</p>

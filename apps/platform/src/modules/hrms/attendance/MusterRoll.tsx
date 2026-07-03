@@ -173,7 +173,7 @@ export const MusterRoll: React.FC = () => {
               value={date}
               max={today}
               onChange={(e) => e.target.value && setDate(e.target.value)}
-              className="rounded-lg border border-border-default bg-white py-2 pl-8 pr-3 text-sm text-text-primary focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20"
+              className="rounded-lg border border-border-default bg-white py-2 pl-8 pr-3 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20"
             />
           </div>
           <button
@@ -187,7 +187,7 @@ export const MusterRoll: React.FC = () => {
           {!isToday && (
             <button
               onClick={() => setDate(today)}
-              className="ml-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-[#C16E00] transition-colors hover:bg-[#FFF4E1]"
+              className="ml-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-[#0A5240] transition-colors hover:bg-[#E6F4F1]"
             >
               Today
             </button>
@@ -199,7 +199,7 @@ export const MusterRoll: React.FC = () => {
           <select
             value={deptId}
             onChange={(e) => setDeptId(e.target.value)}
-            className="rounded-lg border border-border-default bg-white py-2 pl-3 pr-8 text-sm text-text-primary focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20"
+            className="rounded-lg border border-border-default bg-white py-2 pl-3 pr-8 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20"
           >
             <option value="">All departments</option>
             {departments.map((d) => (
@@ -279,7 +279,7 @@ export const MusterRoll: React.FC = () => {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EEF0F3" />
                   <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6B7280' }} interval={0} angle={-20} textAnchor="end" height={48} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
-                  <Tooltip cursor={{ fill: '#FFF4E1' }} formatter={(v: number) => [`${v}`, 'Staff']} />
+                  <Tooltip cursor={{ fill: '#E6F4F1' }} formatter={(v: number) => [`${v}`, 'Staff']} />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                     {distribution.map((d) => <Cell key={d.key} fill={d.color} />)}
                   </Bar>

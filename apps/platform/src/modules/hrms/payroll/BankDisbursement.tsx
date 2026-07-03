@@ -140,7 +140,7 @@ export const BankDisbursement: React.FC = () => {
           <select
             value={companyId}
             onChange={(e) => setCompanyId(e.target.value)}
-            className="min-w-[200px] rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20"
+            className="min-w-[200px] rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20"
           >
             <option value="">All companies</option>
             {companies.map((c) => (
@@ -155,7 +155,7 @@ export const BankDisbursement: React.FC = () => {
             value={runId}
             onChange={(e) => setRunId(e.target.value)}
             disabled={runsLoading || runs.length === 0}
-            className="min-w-[260px] rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20 disabled:opacity-50"
+            className="min-w-[260px] rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20 disabled:opacity-50"
           >
             {runsLoading && <option value="">Loading runs…</option>}
             {!runsLoading && runs.length === 0 && <option value="">No payroll runs</option>}
@@ -228,7 +228,7 @@ export const BankDisbursement: React.FC = () => {
                     <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} />
                     <Tooltip
-                      cursor={{ fill: 'rgba(255,157,0,0.06)' }}
+                      cursor={{ fill: 'rgba(15,110,86,0.06)' }}
                       formatter={(v: number) => [`${v} employee${v === 1 ? '' : 's'}`, 'Count']}
                       contentStyle={{ borderRadius: 10, border: '1px solid #E5E7EB', fontSize: 12 }}
                     />
@@ -253,7 +253,7 @@ export const BankDisbursement: React.FC = () => {
                     {filtered.length} of {rows.length} employee{rows.length === 1 ? '' : 's'}
                   </span>
                   <span className="font-semibold text-text-primary">
-                    Total to credit: <span className="text-[#C16E00]">{inr(totals.total)}</span>
+                    Total to credit: <span className="text-[#0A5240]">{inr(totals.total)}</span>
                   </span>
                 </div>
               ) : undefined

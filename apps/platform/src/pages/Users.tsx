@@ -132,7 +132,7 @@ const UsersInner: React.FC = () => {
                                   title={failed && user.lastSendError ? user.lastSendError : undefined}
                                   className={clsx(
                                     'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors disabled:opacity-50',
-                                    failed ? 'text-[#B91C1C] hover:bg-[#FEE2E2]' : 'text-[#C16E00] hover:bg-[#FFF4E1]',
+                                    failed ? 'text-[#B91C1C] hover:bg-[#FEE2E2]' : 'text-[#0A5240] hover:bg-[#E6F4F1]',
                                   )}
                                 >
                                   <Send size={12} />
@@ -142,7 +142,7 @@ const UsersInner: React.FC = () => {
                             })()}
                             <button
                               onClick={() => setManageUser(user)}
-                              className="px-3 py-1.5 text-xs font-bold text-[#C16E00] hover:bg-[#FFF4E1] rounded-lg transition-colors"
+                              className="px-3 py-1.5 text-xs font-bold text-[#0A5240] hover:bg-[#E6F4F1] rounded-lg transition-colors"
                             >
                               Manage access
                             </button>

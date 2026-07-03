@@ -46,13 +46,13 @@ export function AttendanceSummaryReport() {
             type="date"
             value={from}
             onChange={(e) => set('from', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#FF9D00] transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#0F6E56] transition-all"
           />
           <input
             type="date"
             value={to}
             onChange={(e) => set('to', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#FF9D00] transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#0F6E56] transition-all"
           />
         </>
       }
@@ -69,7 +69,7 @@ export function AttendanceSummaryReport() {
               labelStyle={{ color: '#111827' }}
             />
             <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
-            <Bar dataKey="Present Days" fill="#FF9D00" />
+            <Bar dataKey="Present Days" fill="#0F6E56" />
             <Bar dataKey="Late Days"    fill="#C2410C" />
           </BarChart>
         </ResponsiveContainer>

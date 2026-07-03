@@ -21,21 +21,21 @@ export const PendingApproval: React.FC = () => {
   }, [])
 
   return (
-    <main className="min-h-screen bg-[#FFF8EC] px-4 py-16">
-      <section className="mx-auto max-w-3xl rounded-2xl border border-[#FFD68A] bg-white p-8 shadow-xl shadow-amber-100/70">
+    <main className="min-h-screen bg-[#ECFDF5] px-4 py-16">
+      <section className="mx-auto max-w-3xl rounded-2xl border border-[#6EE7B7] bg-white p-8 shadow-xl shadow-amber-100/70">
         <div className="mb-10 inline-flex items-center gap-3">
           <img
             src="/assets/unifiedtree-logo.png"
             alt=""
             aria-hidden="true"
-            className="h-10 w-10 rounded-xl bg-[#FF9D00] object-contain p-1.5"
+            className="h-10 w-10 rounded-xl bg-[#0F6E56] object-contain p-1.5"
           />
-          <span className="text-2xl font-black tracking-tight text-[#C16E00]">UnifiedTree</span>
+          <span className="text-2xl font-black tracking-tight text-[#0A5240]">UnifiedTree</span>
         </div>
-        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FFF4E1] text-[#C16E00]">
+        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#E6F4F1] text-[#0A5240]">
           <Clock size={34} />
         </div>
-        <p className="text-sm font-black uppercase tracking-[0.2em] text-[#C16E00]">
+        <p className="text-sm font-black uppercase tracking-[0.2em] text-[#0A5240]">
           Workspace pending approval
         </p>
         <h1 className="mt-3 text-4xl font-black tracking-tight text-text-primary">
@@ -46,9 +46,9 @@ export const PendingApproval: React.FC = () => {
           the requested modules manually.
         </p>
 
-        <div className="mt-8 rounded-2xl border border-[#FFD68A] bg-[#FFF4E1] p-5">
+        <div className="mt-8 rounded-2xl border border-[#6EE7B7] bg-[#E6F4F1] p-5">
           <p className="text-xs font-black uppercase tracking-wide text-text-tertiary">Workspace</p>
-          <p className="mt-1 text-xl font-black text-[#C16E00]">
+          <p className="mt-1 text-xl font-black text-[#0A5240]">
             {status ? `${status.subdomain}.unifiedtree.com` : 'Loading workspace...'}
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -66,13 +66,13 @@ export const PendingApproval: React.FC = () => {
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <button
             onClick={load}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#FF9D00] px-5 py-3 font-black text-white transition-colors hover:bg-[#E08A00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/30"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F6E56] px-5 py-3 font-black text-white transition-colors hover:bg-[#0A5F4A] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/30"
           >
             <RefreshCcw size={17} /> Refresh status
           </button>
           <Link
             to="/login"
-            className="inline-flex items-center justify-center rounded-xl border border-[#FFD68A] px-5 py-3 font-black text-[#C16E00] transition-colors hover:bg-[#FFF4E1] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/30"
+            className="inline-flex items-center justify-center rounded-xl border border-[#6EE7B7] px-5 py-3 font-black text-[#0A5240] transition-colors hover:bg-[#E6F4F1] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/30"
           >
             Back to login
           </Link>

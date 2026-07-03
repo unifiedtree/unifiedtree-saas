@@ -10,8 +10,9 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'https://erpinfrastructure-production.up.railway.app',
         changeOrigin: true,
+        secure: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
             proxyReq.removeHeader('origin')

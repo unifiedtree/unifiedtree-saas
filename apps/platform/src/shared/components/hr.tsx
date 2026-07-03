@@ -31,7 +31,7 @@ export function HrStatCard({
   loading?: boolean
 }) {
   return (
-    <div className="group rounded-xl border border-border-default bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#FFD68A] hover:shadow-[0_10px_28px_-10px_rgba(255,157,0,0.28)]">
+    <div className="group rounded-xl border border-border-default bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#6EE7B7] hover:shadow-[0_10px_28px_-10px_rgba(15,110,86,0.28)]">
       <div className="flex items-start justify-between">
         <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl', STAT_ICON[color])}>
           {icon}
@@ -98,7 +98,7 @@ export function HrPageHeader({
   )
 }
 
-// ── Amber primary / ghost buttons (client style) ─────────────────────────────
+// ── Green primary / ghost buttons (brand style) ─────────────────────────────
 export function HrButton({
   variant = 'primary', size = 'md', className, children, ...rest
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger'; size?: 'sm' | 'md' }) {
@@ -106,9 +106,9 @@ export function HrButton({
     <button
       {...rest}
       className={clsx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF9D00]/40 disabled:opacity-50',
+        'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E56]/40 disabled:opacity-50',
         size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2 text-sm',
-        variant === 'primary' && 'bg-[#FF9D00] text-white shadow-sm shadow-[#FF9D00]/30 hover:bg-[#E08A00]',
+        variant === 'primary' && 'bg-[#0F6E56] text-white shadow-sm shadow-[#0F6E56]/30 hover:bg-[#0A5240]',
         variant === 'ghost' && 'border border-border-default bg-white text-text-primary hover:bg-bg-base',
         variant === 'danger' && 'bg-[#EF4444] text-white hover:bg-[#DC2626]',
         className,
@@ -139,7 +139,7 @@ export function TableCard({
                 value={search.value}
                 onChange={(e) => search.onChange(e.target.value)}
                 placeholder={search.placeholder ?? 'Search…'}
-                className="w-full rounded-lg border border-border-default bg-white py-1.5 pl-8 pr-3 text-sm focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20"
+                className="w-full rounded-lg border border-border-default bg-white py-1.5 pl-8 pr-3 text-sm focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20"
               />
             </div>
           )}
@@ -207,7 +207,7 @@ export function HrTabs({ tabs, active, onChange, className }: {
             onClick={() => onChange(t.key)}
             className={clsx(
               '-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-semibold transition-colors',
-              sel ? 'border-[#FF9D00] text-[#C16E00]' : 'border-transparent text-text-secondary hover:text-text-primary',
+              sel ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary',
             )}
           >
             {t.label}

@@ -148,8 +148,8 @@ export const Templates: React.FC = () => {
                 <tr key={row.id} onClick={() => navigate(`/hrms/onboarding/templates/${row.id}`)} className="cursor-pointer">
                   <td>
                     <div className="flex items-center gap-2.5">
-                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#FFF4E1]">
-                        <ClipboardList size={13} className="text-[#FF9D00]" />
+                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#E6F4F1]">
+                        <ClipboardList size={13} className="text-[#0F6E56]" />
                       </div>
                       <div>
                         <p className="text-sm font-medium text-text-primary">{row.name}</p>

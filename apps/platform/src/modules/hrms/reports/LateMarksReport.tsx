@@ -63,13 +63,13 @@ export function LateMarksReport() {
             type="date"
             value={from}
             onChange={(e) => set('from', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#FF9D00] transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#0F6E56] transition-all"
           />
           <input
             type="date"
             value={to}
             onChange={(e) => set('to', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#FF9D00] transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#0F6E56] transition-all"
           />
         </>
       }
@@ -78,14 +78,14 @@ export function LateMarksReport() {
         <p className="text-xs text-text-tertiary mb-3">Top 15 offenders by total minutes late</p>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 16, left: 90, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#FFD68A" horizontal={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#6EE7B7" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 11, fill: '#94A3B8' }} />
             <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#94A3B8' }} width={90} />
             <Tooltip
-              contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #FFD68A', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #6EE7B7', borderRadius: 8, fontSize: 12 }}
               labelStyle={{ color: '#0F172A' }}
             />
-            <Bar dataKey="Total Late (min)" fill="#FF9D00" />
+            <Bar dataKey="Total Late (min)" fill="#0F6E56" />
           </BarChart>
         </ResponsiveContainer>
       </div>

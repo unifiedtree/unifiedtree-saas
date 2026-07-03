@@ -63,10 +63,10 @@ export const Dashboard: React.FC = () => {
       {/* Welcome banner */}
       <motion.div
         variants={fadeUp}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#7A4400] via-[#C16E00] to-[#FF9D00] p-8 text-white shadow-xl shadow-[#C16E00]/25 sm:p-10"
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#053B2E] via-[#0A5240] to-[#0F6E56] p-8 text-white shadow-xl shadow-[#0A5240]/25 sm:p-10"
       >
         <div className="absolute right-0 top-0 h-80 w-80 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/15 blur-[80px]" />
-        <div className="absolute bottom-0 left-0 h-80 w-80 -translate-x-1/3 translate-y-1/3 rounded-full bg-[#FFD68A]/25 blur-[80px]" />
+        <div className="absolute bottom-0 left-0 h-80 w-80 -translate-x-1/3 translate-y-1/3 rounded-full bg-[#6EE7B7]/25 blur-[80px]" />
         <div className="relative z-10 flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-white/90 backdrop-blur-md">
@@ -152,7 +152,7 @@ export const Dashboard: React.FC = () => {
           <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm lg:col-span-2">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-bold text-text-primary">Recent Attendance</h3>
-              <button onClick={() => navigate('/hrms/attendance')} className="flex items-center gap-1 text-xs font-semibold text-[#C16E00] hover:text-[#9A5600]">
+              <button onClick={() => navigate('/hrms/attendance')} className="flex items-center gap-1 text-xs font-semibold text-[#0A5240] hover:text-[#064E3B]">
                 View all <ArrowRight size={12} />
               </button>
             </div>
@@ -187,13 +187,13 @@ export const Dashboard: React.FC = () => {
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => navigate(path)}
-                className="group flex items-center gap-3.5 rounded-2xl border border-[#FFD68A] bg-[#FFF8EC] px-5 py-4 text-left transition-all duration-300 hover:border-[#FF9D00] hover:bg-[#FF9D00] hover:shadow-lg hover:shadow-[#FF9D00]/25"
+                className="group flex items-center gap-3.5 rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-5 py-4 text-left transition-all duration-300 hover:border-[#0F6E56] hover:bg-[#0F6E56] hover:shadow-lg hover:shadow-[#0F6E56]/25"
               >
-                <div className="rounded-xl bg-white p-2.5 text-[#C16E00] shadow-sm transition-colors group-hover:bg-white/20 group-hover:text-white">
+                <div className="rounded-xl bg-white p-2.5 text-[#0A5240] shadow-sm transition-colors group-hover:bg-white/20 group-hover:text-white">
                   <Icon size={20} />
                 </div>
                 <span className="flex-1 text-sm font-bold text-text-primary group-hover:text-white">{label}</span>
-                <ArrowRight size={16} className="text-[#C16E00]/50 transition-all group-hover:translate-x-1 group-hover:text-white" />
+                <ArrowRight size={16} className="text-[#0A5240]/50 transition-all group-hover:translate-x-1 group-hover:text-white" />
               </motion.button>
             )
           })}

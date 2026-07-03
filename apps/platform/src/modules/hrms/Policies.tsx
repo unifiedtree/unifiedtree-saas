@@ -40,7 +40,7 @@ export const Policies: React.FC = () => {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#FF9D00] text-[#C16E00]' : 'border-transparent text-text-secondary hover:text-text-primary'
+              tab === t.key ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
             {t.label}
@@ -230,13 +230,13 @@ function ManageTab() {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20'
+  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
   const saving = create.isPending || update.isPending
 
   return (
     <div className="space-y-5">
       {companies.length > 1 && !editingId && (
-        <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#FF9D00] focus:outline-none">
+        <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none">
           {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       )}
@@ -297,7 +297,7 @@ function ManageTab() {
                   <td className="text-text-secondary">{p.category || '—'}</td>
                   <td className="text-text-secondary">{p.version || '—'}</td>
                   <td>
-                    <button onClick={() => setDetailId(detailId === p.id ? null : p.id)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#C16E00] hover:text-[#9A5600]">
+                    <button onClick={() => setDetailId(detailId === p.id ? null : p.id)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0A5240] hover:text-[#064E3B]">
                       <Users size={14} /> {p.acknowledgementCount}
                     </button>
                   </td>

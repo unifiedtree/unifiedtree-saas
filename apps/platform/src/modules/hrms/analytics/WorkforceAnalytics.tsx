@@ -41,7 +41,7 @@ const GENDER_LABEL: Record<string, string> = {
 
 const TOOLTIP_STYLE = {
   backgroundColor: '#ffffff',
-  border: '1px solid var(--color-border-default, #FFD68A)',
+  border: '1px solid var(--color-border-default, #6EE7B7)',
   borderRadius: 8,
   fontSize: 12,
   boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
@@ -145,7 +145,7 @@ export const WorkforceAnalytics: React.FC = () => {
             value={activeCompanyId}
             onChange={(e) => setCompanyId(e.target.value)}
             disabled={loadingCompanies || companies.length === 0}
-            className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20 disabled:opacity-50"
+            className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20 disabled:opacity-50"
           >
             {companies.length === 0 && <option value="">No companies</option>}
             {companies.map((c) => (
@@ -281,7 +281,7 @@ export const WorkforceAnalytics: React.FC = () => {
               <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} unit="%" />
               <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#111827', fontWeight: 600 }} />
               <Legend wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
-              <Line type="monotone" dataKey="Attrition %" stroke="#FF9D00" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="Attrition %" stroke="#0F6E56" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         )}

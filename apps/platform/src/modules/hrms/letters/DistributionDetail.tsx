@@ -44,7 +44,7 @@ export function DistributionDetail() {
     <>
       Created {job.createdAt ? format(new Date(job.createdAt), 'dd MMM yyyy, HH:mm') : '—'}
       {running && (
-        <> · <span className="inline-flex items-center gap-1 text-[#C16E00]"><Loader2 size={12} className="animate-spin" /> live</span></>
+        <> · <span className="inline-flex items-center gap-1 text-[#0A5240]"><Loader2 size={12} className="animate-spin" /> live</span></>
       )}
     </>
   )

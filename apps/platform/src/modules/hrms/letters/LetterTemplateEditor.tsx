@@ -47,8 +47,8 @@ function ToolbarButton({
       className={clsx(
         'flex items-center justify-center w-7 h-7 rounded-lg text-xs font-medium transition-colors',
         active
-          ? 'bg-[#FFF4E1] text-[#C16E00]'
-          : 'text-text-tertiary hover:bg-[#FFF8EC] hover:text-text-primary',
+          ? 'bg-[#E6F4F1] text-[#0A5240]'
+          : 'text-text-tertiary hover:bg-[#ECFDF5] hover:text-text-primary',
       )}
     >
       {children}
@@ -82,7 +82,7 @@ function MergeFieldDropdown({ onInsert }: { onInsert: (key: string) => void }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-text-tertiary hover:bg-[#FFF8EC] hover:text-text-primary border border-border-default transition-colors"
+        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-text-tertiary hover:bg-[#ECFDF5] hover:text-text-primary border border-border-default transition-colors"
       >
         Insert field
         <ChevronDown size={11} className={clsx('transition-transform', open && 'rotate-180')} />
@@ -104,13 +104,13 @@ function MergeFieldDropdown({ onInsert }: { onInsert: (key: string) => void }) {
                       onInsert(f.key)
                       setOpen(false)
                     }}
-                    className="w-full flex items-start gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-[#FFF8EC] transition-colors group"
+                    className="w-full flex items-start gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-[#ECFDF5] transition-colors group"
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-text-secondary group-hover:text-text-primary truncate">
                         {f.label}
                       </p>
-                      <p className="text-xs text-[#C16E00] font-mono truncate">{`{{${f.key}}}`}</p>
+                      <p className="text-xs text-[#0A5240] font-mono truncate">{`{{${f.key}}}`}</p>
                     </div>
                   </button>
                 ))}
@@ -244,7 +244,7 @@ function PreviewPane({ templateId }: { templateId: string | undefined }) {
           <select
             value={employeeId}
             onChange={(e) => setEmployeeId(e.target.value)}
-            className="flex-1 bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/30 transition-colors"
+            className="flex-1 bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/30 transition-colors"
           >
             <option value="">{employees.length === 0 ? 'No employees yet' : 'Select an employee…'}</option>
             {employees.map((emp) => (
@@ -257,7 +257,7 @@ function PreviewPane({ templateId }: { templateId: string | undefined }) {
             type="button"
             onClick={handlePreview}
             disabled={previewMut.isPending || !templateId}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#FFF4E1] hover:bg-[#FFE9C7] border border-[#FFD68A] disabled:opacity-50 text-[#C16E00] text-sm font-medium rounded-xl transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#E6F4F1] hover:bg-[#FFE9C7] border border-[#6EE7B7] disabled:opacity-50 text-[#0A5240] text-sm font-medium rounded-xl transition-colors"
           >
             {previewMut.isPending ? (
               <Loader2 size={13} className="animate-spin" />
@@ -403,7 +403,7 @@ export const LetterTemplateEditor: React.FC = () => {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#FF9D00] hover:bg-[#E08A00] disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/30"
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#0F6E56] hover:bg-[#0A5F4A] disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/30"
         >
           {saving && <Loader2 size={13} className="animate-spin" />}
           {saving ? 'Saving…' : 'Save template'}
@@ -421,7 +421,7 @@ export const LetterTemplateEditor: React.FC = () => {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Standard Offer Letter"
-                className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/30 transition-colors"
+                className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/30 transition-colors"
               />
             </div>
 
@@ -433,7 +433,7 @@ export const LetterTemplateEditor: React.FC = () => {
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value as LetterType)}
-                  className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/30 transition-colors"
+                  className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/30 transition-colors"
                 >
                   {LETTER_TYPES.map((lt) => (
                     <option key={lt.value} value={lt.value}>{lt.label}</option>
@@ -448,7 +448,7 @@ export const LetterTemplateEditor: React.FC = () => {
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="e.g. Offer of Employment – {{employee.fullName}}"
-                  className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/30 transition-colors"
+                  className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/30 transition-colors"
                 />
               </div>
             </div>

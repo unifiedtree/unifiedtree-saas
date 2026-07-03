@@ -48,7 +48,7 @@ export function RecipientPicker({
           filtered.map((e) => (
             <label key={e.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer border-b border-border/40">
               <span className={clsx('w-4 h-4 rounded border flex items-center justify-center flex-shrink-0',
-                selected.has(e.id) ? 'bg-[#FF9D00] border-[#FF9D00]' : 'border-[#FFD68A]')}>
+                selected.has(e.id) ? 'bg-[#0F6E56] border-[#0F6E56]' : 'border-[#6EE7B7]')}>
                 {selected.has(e.id) && <Check size={11} className="text-white" />}
               </span>
               <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggle(e.id)} className="sr-only" />

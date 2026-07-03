@@ -20,7 +20,7 @@ const REPORT_CARDS: ReportCard[] = [
     to: '/hrms/reports/headcount',
     icon: <Users size={20} />,
     permCode: P.HRMS_REPORT_HEADCOUNT,
-    color: 'text-[#FF9D00]',
+    color: 'text-[#0F6E56]',
   },
   {
     title: 'Attrition',
@@ -74,13 +74,13 @@ export function ReportsIndex() {
           <Can key={card.to} code={card.permCode}>
             <Link
               to={card.to}
-              className="group flex flex-col gap-3 rounded-2xl border border-border-default bg-white p-5 shadow-sm transition-all hover:border-[#FFD68A] hover:bg-[#FFF4E1]/40 hover:shadow-md"
+              className="group flex flex-col gap-3 rounded-2xl border border-border-default bg-white p-5 shadow-sm transition-all hover:border-[#6EE7B7] hover:bg-[#E6F4F1]/40 hover:shadow-md"
             >
               <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-bg-base ${card.color}`}>
                 {card.icon}
               </div>
               <div>
-                <p className="text-sm font-semibold text-text-primary transition-colors group-hover:text-[#C16E00]">
+                <p className="text-sm font-semibold text-text-primary transition-colors group-hover:text-[#0A5240]">
                   {card.title}
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-text-secondary">{card.description}</p>

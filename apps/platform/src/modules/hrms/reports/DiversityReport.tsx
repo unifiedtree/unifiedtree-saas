@@ -14,7 +14,7 @@ const GENDER_COLORS: Record<string, string> = {
   FEMALE: '#EC4899',
   OTHER:  '#14B8A6',
 }
-const FALLBACK_COLORS = ['#FF9D00', '#4096FF', '#EC4899', '#14B8A6', '#22C55E']
+const FALLBACK_COLORS = ['#0F6E56', '#4096FF', '#EC4899', '#14B8A6', '#22C55E']
 
 const GENDER_TONES: Record<string, 'blue' | 'pink' | 'teal' | 'gray'> = {
   MALE:   'blue',
@@ -24,7 +24,7 @@ const GENDER_TONES: Record<string, 'blue' | 'pink' | 'teal' | 'gray'> = {
 
 const chartTooltipStyle = {
   backgroundColor: '#ffffff',
-  border: '1px solid #FFD68A',
+  border: '1px solid #6EE7B7',
   borderRadius: 8,
   fontSize: 12,
   color: '#0F172A',
@@ -113,7 +113,7 @@ export function DiversityReport() {
           <p className="text-xs text-text-secondary mb-3">By department</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={barData} margin={{ top: 4, right: 8, left: -10, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #FFD68A)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #6EE7B7)" />
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #94a3b8)' }} interval={0} angle={-30} textAnchor="end" height={45} />
               <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} allowDecimals={false} />
               <Tooltip

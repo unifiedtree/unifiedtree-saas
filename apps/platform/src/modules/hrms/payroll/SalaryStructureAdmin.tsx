@@ -200,7 +200,7 @@ export const SalaryStructureAdmin: React.FC = () => {
             <select
               value={companyId}
               onChange={(e) => { setCompanyId(e.target.value); setSelected(null) }}
-              className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20"
+              className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20"
             >
               <option value="">All companies</option>
               {(companiesQ.data ?? []).map((c) => (
@@ -432,7 +432,7 @@ export const SalaryStructureAdmin: React.FC = () => {
                             tickFormatter={(v: number) => inr(v)}
                           />
                           <Tooltip formatter={(v: number) => inr(v)} />
-                          <Line type="monotone" dataKey="ctc" stroke="#FF9D00" strokeWidth={2.5} dot={{ r: 3, fill: '#FF9D00' }} />
+                          <Line type="monotone" dataKey="ctc" stroke="#0F6E56" strokeWidth={2.5} dot={{ r: 3, fill: '#0F6E56' }} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>

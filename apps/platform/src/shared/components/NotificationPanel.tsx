@@ -71,7 +71,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-default">
           <div className="flex items-center gap-2">
-            <Bell size={18} className="text-[#FF9D00]" />
+            <Bell size={18} className="text-[#0F6E56]" />
             <h2 className="text-text-primary font-semibold text-sm">Notifications</h2>
             {unreadCount() > 0 && (
               <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-bold rounded-full">
@@ -83,13 +83,13 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
             {unreadCount() > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="flex items-center gap-1 text-xs text-[#C16E00] hover:text-[#7A4400] transition-colors"
+                className="flex items-center gap-1 text-xs text-[#0A5240] hover:text-[#053B2E] transition-colors"
               >
                 <Check size={12} />
                 Mark all read
               </button>
             )}
-            <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg hover:bg-[#FFF8EC] transition-colors">
+            <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg hover:bg-[#ECFDF5] transition-colors">
               <X size={16} />
             </button>
           </div>
@@ -103,7 +103,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
               onClick={() => setTab(t)}
               className={clsx(
                 'px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors',
-                tab === t ? 'bg-[#FFF4E1] text-[#C16E00] border border-[#FFD68A]' : 'text-text-secondary hover:text-text-primary hover:bg-[#FFF8EC]'
+                tab === t ? 'bg-[#E6F4F1] text-[#0A5240] border border-[#6EE7B7]' : 'text-text-secondary hover:text-text-primary hover:bg-[#ECFDF5]'
               )}
             >
               {t === 'priority' ? 'High Priority' : t}
@@ -128,12 +128,12 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
                       key={n.id}
                       className={clsx(
                         'relative flex gap-3 px-5 py-3.5 border-b border-border-default/40 cursor-pointer transition-colors',
-                        !n.isRead ? 'bg-[#FFF8EC] hover:bg-[#FFF4E1]' : 'hover:bg-bg-base'
+                        !n.isRead ? 'bg-[#ECFDF5] hover:bg-[#E6F4F1]' : 'hover:bg-bg-base'
                       )}
                       onClick={() => handleClick(n)}
                     >
                       {!n.isRead && (
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-[#FF9D00] rounded-full" />
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-[#0F6E56] rounded-full" />
                       )}
                       <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5', cfg.bg)}>
                         <Icon size={15} className={cfg.color} />
@@ -162,7 +162,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
           })}
           {filtered.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-center px-6">
-              <Bell size={32} className="text-[#FFD68A] mb-3" />
+              <Bell size={32} className="text-[#6EE7B7] mb-3" />
               <p className="text-text-secondary text-sm font-medium">No notifications</p>
               <p className="text-text-tertiary text-xs mt-1">
                 {tab === 'unread' ? "You're all caught up!" : 'Nothing here yet.'}
@@ -175,7 +175,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
         <div className="px-5 py-3 border-t border-border-default">
           <button
             onClick={() => { navigate('/audit-logs'); onClose() }}
-            className="w-full text-center text-xs text-[#C16E00] hover:text-[#7A4400] transition-colors py-1"
+            className="w-full text-center text-xs text-[#0A5240] hover:text-[#053B2E] transition-colors py-1"
           >
             View all activity in Audit Logs
           </button>

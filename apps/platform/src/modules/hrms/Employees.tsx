@@ -157,7 +157,7 @@ export const Employees: React.FC = () => {
             <select
               value={departmentId}
               onChange={(e) => { setDepartmentId(e.target.value); resetPage() }}
-              className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#FF9D00] focus:outline-none"
+              className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#0F6E56] focus:outline-none"
             >
               <option value="">All Departments</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -165,7 +165,7 @@ export const Employees: React.FC = () => {
             <select
               value={branchId}
               onChange={(e) => { setBranchId(e.target.value); resetPage() }}
-              className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#FF9D00] focus:outline-none"
+              className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#0F6E56] focus:outline-none"
             >
               <option value="">All Branches</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -173,14 +173,14 @@ export const Employees: React.FC = () => {
             <select
               value={status}
               onChange={(e) => { setStatus(e.target.value); resetPage() }}
-              className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#FF9D00] focus:outline-none"
+              className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#0F6E56] focus:outline-none"
             >
               {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
             {(search || departmentId || branchId || status) && (
               <button
                 onClick={() => { setSearch(''); setDepartmentId(''); setBranchId(''); setStatus(''); resetPage() }}
-                className="whitespace-nowrap px-2.5 py-1.5 text-sm font-semibold text-[#C16E00] hover:bg-[#FFF4E1] rounded-lg"
+                className="whitespace-nowrap px-2.5 py-1.5 text-sm font-semibold text-[#0A5240] hover:bg-[#E6F4F1] rounded-lg"
               >
                 Clear filters
               </button>

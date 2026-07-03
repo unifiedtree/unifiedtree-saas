@@ -18,7 +18,7 @@ function actionTone(action: string): PillTone {
   return 'gray'
 }
 
-const filterCls = 'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#FF9D00] focus:outline-none'
+const filterCls = 'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none'
 
 export const AuditLogs: React.FC = () => {
   const [actionFilter, setActionFilter] = useState('')
@@ -73,7 +73,7 @@ export const AuditLogs: React.FC = () => {
               <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(0) }} className={filterCls} />
               {hasFilters && (
                 <button onClick={() => { setActionFilter(''); setFrom(''); setTo(''); setPage(0) }}
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#C16E00] hover:bg-[#FFF4E1]">
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#0A5240] hover:bg-[#E6F4F1]">
                   <X size={14} /> Clear
                 </button>
               )}
@@ -124,7 +124,7 @@ export const AuditLogs: React.FC = () => {
                     <td className="hidden lg:table-cell"><span className="hr-mono">{row.ip ?? '—'}</span></td>
                     <td>
                       {row.diff ? (
-                        <button onClick={(e) => { e.stopPropagation(); setSelected(row) }} className="text-xs font-semibold text-[#C16E00] underline underline-offset-2">View</button>
+                        <button onClick={(e) => { e.stopPropagation(); setSelected(row) }} className="text-xs font-semibold text-[#0A5240] underline underline-offset-2">View</button>
                       ) : <span className="text-xs text-text-tertiary">—</span>}
                     </td>
                   </tr>
@@ -176,7 +176,7 @@ function EventDetail({ event }: { event: AuditEventDto }) {
 
       {parsedDiff && (
         <div>
-          <button onClick={() => setDiffOpen((o) => !o)} className="text-xs font-semibold text-[#C16E00]">
+          <button onClick={() => setDiffOpen((o) => !o)} className="text-xs font-semibold text-[#0A5240]">
             {diffOpen ? 'Hide diff ▲' : 'Show diff ▼'}
           </button>
           {diffOpen && (

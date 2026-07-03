@@ -13,14 +13,14 @@
   --bg-surface-raised:   #ffffff;
   --bg-surface-overlay:  rgba(255, 255, 255, 0.97);
   --bg-subtle:           #f4f4f6;
-  --bg-muted:            #fff4e1;
+  --bg-muted:            #D1FAE5;
 
-  /* ── Accent / Brand (Amber — client palette) ─────────── */
-  --accent-bg:           #fff4e1;
-  --accent-bg-strong:    #ffe8bf;
-  --accent-fg:           #ff9d00;
-  --accent-fg-strong:    #c16e00;
-  --accent-border:       #ffd68a;
+  /* ── Accent / Brand (Green — website palette) ─────────── */
+  --accent-bg:           #E6F4F1;
+  --accent-bg-strong:    #A7F3D0;
+  --accent-fg:           #0F6E56;
+  --accent-fg-strong:    #0A5240;
+  --accent-border:       #6EE7B7;
 
   /* ── Text ── 3-tier scale, all WCAG AA on white ──────────
      primary #1f2937 12.6:1 · secondary #4b5563 7.0:1 · tertiary #6b7280 4.83:1.
@@ -31,14 +31,14 @@
   --text-disabled:       #9ca3af;
   --text-inverse:        #ffffff;
   --text-on-accent:      #ffffff;
-  --text-link:           #c16e00;
+  --text-link:           #0A5240;
 
   /* ── Border ──────────────────────────────────────────── */
   --border-default:      #e5e7eb;
   --border-strong:       #d1d5db;
   --border-subtle:       #f3f4f6;
-  --border-focus:        #ff9d00;
-  --border-accent:       #ffd68a;
+  --border-focus:        #0F6E56;
+  --border-accent:       #6EE7B7;
 
   /* ── Status: Success ─────────────────────────────────── */
   --status-success-bg:     #dcfce7;
@@ -61,11 +61,11 @@
   --status-info-border:    #bfdbfe;
 
   /* ── Interactive ─────────────────────────────────────── */
-  --interactive-primary:        #ff9d00;
-  --interactive-primary-hover:  #c16e00;
-  --interactive-primary-active: #9a5600;
+  --interactive-primary:        #0F6E56;
+  --interactive-primary-hover:  #0A5240;
+  --interactive-primary-active: #064E3B;
   --interactive-secondary:      #f4f4f6;
-  --interactive-secondary-hover:#fff4e1;
+  --interactive-secondary-hover:#E6F4F1;
   --interactive-danger:         #ef4444;
   --interactive-danger-hover:   #dc2626;
   --interactive-ghost-hover:    #f1f5f9;
@@ -85,7 +85,7 @@
   --shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg:   0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-xl:   0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --shadow-glow: 0 0 0 3px rgb(255 157 0 / 0.25);
+  --shadow-glow: 0 0 0 3px rgb(15 110 86 / 0.25);
 
   /* ── Motion ──────────────────────────────────────────── */
   --motion-fast:   100ms ease;

@@ -337,7 +337,7 @@ export function PlatformShell() {
           className={({ isActive }) => clsx(
             'flex w-11 h-11 mx-auto items-center justify-center rounded-xl px-3 py-2.5 transition-all',
             !active && 'opacity-50 grayscale',
-            isActive && active ? 'bg-[#C16E00]/10 text-[#C16E00]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
+            isActive && active ? 'bg-[#0A5240]/10 text-[#0A5240]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
           )}
           title={item.label}
           onClick={e => {
@@ -363,10 +363,10 @@ export function PlatformShell() {
             onClick={() => toggleModule(item.key)}
             className={clsx(
               'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
-              hasActiveChild ? 'bg-slate-50 text-[#C16E00]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+              hasActiveChild ? 'bg-slate-50 text-[#0A5240]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
             )}
           >
-            <span className={hasActiveChild ? 'text-[#C16E00]' : 'text-slate-400'}>{item.icon}</span>
+            <span className={hasActiveChild ? 'text-[#0A5240]' : 'text-slate-400'}>{item.icon}</span>
             <span className="flex-1 text-left">{item.label}</span>
             {isOpen
               ? <ChevronDown size={14} className="text-slate-400" />
@@ -380,7 +380,7 @@ export function PlatformShell() {
                   to={child.path}
                   className={({ isActive }) => clsx(
                     'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-all',
-                    isActive ? 'bg-[#C16E00]/10 text-[#C16E00] font-bold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
+                    isActive ? 'bg-[#0A5240]/10 text-[#0A5240] font-bold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
                   )}
                 >
                   {child.icon}
@@ -400,7 +400,7 @@ export function PlatformShell() {
         className={({ isActive }) => clsx(
           'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
           !active ? 'cursor-default text-slate-400 hover:bg-slate-50' : isActive
-            ? 'bg-[#C16E00]/10 text-[#C16E00]'
+            ? 'bg-[#0A5240]/10 text-[#0A5240]'
             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
         )}
         onClick={e => {
@@ -411,7 +411,7 @@ export function PlatformShell() {
         }}
         title={collapsed ? item.label : undefined}
       >
-        <span className={clsx(active ? (location.pathname === item.path ? 'text-[#C16E00]' : 'text-slate-400') : 'text-slate-300')}>
+        <span className={clsx(active ? (location.pathname === item.path ? 'text-[#0A5240]' : 'text-slate-400') : 'text-slate-300')}>
           {item.icon}
         </span>
         {!collapsed && <span className="flex-1">{item.label}</span>}
@@ -432,10 +432,10 @@ export function PlatformShell() {
     <div className="flex h-full flex-col bg-white border-r border-slate-200 z-30 transition-all duration-300">
       {/* Logo — client HR mark (amber tree + wordmark) */}
       <div className={clsx('flex h-16 shrink-0 items-center gap-2.5 border-b border-slate-100 transition-all', collapsed ? 'justify-center px-2' : 'justify-start px-5')}>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#FFF4E1] text-[#FF9D00]">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#E6F4F1] text-[#0F6E56]">
           <TreePine size={19} />
         </div>
-        {!collapsed && <span className="text-[15px] font-bold tracking-tight text-[#FF9D00]">Unified Tree</span>}
+        {!collapsed && <span className="text-[15px] font-bold tracking-tight text-[#0F6E56]">Unified Tree</span>}
       </div>
 
       {/* Navigation */}
@@ -450,14 +450,14 @@ export function PlatformShell() {
             className={({ isActive }) => clsx(
               'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
               isActive
-                ? 'bg-[#C16E00]/10 text-[#C16E00] font-semibold'
+                ? 'bg-[#0A5240]/10 text-[#0A5240] font-semibold'
                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
               collapsed && 'justify-center px-0 w-11 h-11 mx-auto',
             )}
             title={collapsed ? item.label : undefined}
           >
             <span className={clsx(
-              location.pathname === item.path ? 'text-[#C16E00]' : 'text-slate-400 group-hover:text-[#C16E00] transition-colors',
+              location.pathname === item.path ? 'text-[#0A5240]' : 'text-slate-400 group-hover:text-[#0A5240] transition-colors',
             )}>
               {item.icon}
             </span>
@@ -524,14 +524,14 @@ export function PlatformShell() {
                 className={({ isActive }) => clsx(
                   'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
                   isActive
-                    ? 'bg-[#C16E00]/10 text-[#C16E00] font-semibold'
+                    ? 'bg-[#0A5240]/10 text-[#0A5240] font-semibold'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
                   collapsed && 'justify-center px-0 w-11 h-11 mx-auto',
                 )}
                 title={collapsed ? item.label : undefined}
               >
                 <span className={clsx(
-                  location.pathname === item.path ? 'text-[#C16E00]' : 'text-slate-400 group-hover:text-[#C16E00] transition-colors',
+                  location.pathname === item.path ? 'text-[#0A5240]' : 'text-slate-400 group-hover:text-[#0A5240] transition-colors',
                 )}>
                   {item.icon}
                 </span>
@@ -546,7 +546,7 @@ export function PlatformShell() {
       <div className="border-t border-slate-100 p-4 bg-slate-50">
         {!collapsed && user && (
           <div className="flex items-center gap-3 px-3 py-2.5 mb-2 rounded-xl bg-white border border-slate-200 shadow-sm">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#C16E00]/10 text-sm font-bold text-[#C16E00]">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A5240]/10 text-sm font-bold text-[#0A5240]">
               {(user.firstName?.[0] ?? '?').toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
@@ -554,7 +554,7 @@ export function PlatformShell() {
                 {user.firstName} {user.lastName}
               </p>
               {roleBadgeText && (
-                <span className="inline-block mt-0.5 rounded-full bg-[#C16E00]/10 px-2 py-0.5 text-[10px] font-semibold text-[#C16E00] leading-tight">
+                <span className="inline-block mt-0.5 rounded-full bg-[#0A5240]/10 px-2 py-0.5 text-[10px] font-semibold text-[#0A5240] leading-tight">
                   {roleBadgeText}
                 </span>
               )}
@@ -577,7 +577,7 @@ export function PlatformShell() {
   )
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F4F4F6] font-sans selection:bg-[#C16E00]/15 selection:text-[#C16E00]">
+    <div className="flex h-screen overflow-hidden bg-[#F4F4F6] font-sans selection:bg-[#0A5240]/15 selection:text-[#0A5240]">
       {/* Desktop Sidebar */}
       <aside
         className={clsx(
@@ -633,7 +633,7 @@ export function PlatformShell() {
             >
               <Menu size={20} />
             </button>
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors w-64 focus-within:ring-2 focus-within:ring-[#C16E00]/20 focus-within:border-[#C16E00]/50">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors w-64 focus-within:ring-2 focus-within:ring-[#0A5240]/20 focus-within:border-[#0A5240]/50">
               <Search size={14} className="text-slate-400" />
               <input
                 type="text"
@@ -646,7 +646,7 @@ export function PlatformShell() {
           <div className="flex items-center gap-3">
             {/* Role badge in header (visible on mobile where sidebar is hidden) */}
             {roleBadgeText && (
-              <span className="hidden sm:inline-flex rounded-full bg-[#C16E00]/10 px-2.5 py-1 text-xs font-semibold text-[#C16E00]">
+              <span className="hidden sm:inline-flex rounded-full bg-[#0A5240]/10 px-2.5 py-1 text-xs font-semibold text-[#0A5240]">
                 {roleBadgeText}
               </span>
             )}

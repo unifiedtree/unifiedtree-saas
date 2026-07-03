@@ -34,7 +34,7 @@ const STATUS_STYLE: Record<LetterStatus, { label: string; tone: PillTone }> = {
 }
 
 const inputClass =
-  'w-full bg-white border border-border-default rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#FF9D00] focus:ring-2 focus:ring-[#FF9D00]/20'
+  'w-full bg-white border border-border-default rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/20'
 
 function SendForm({
   letterId,
@@ -319,7 +319,7 @@ export const GeneratedLetterDetail: React.FC = () => {
                   className={clsx(
                     'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors w-full justify-center',
                     sendOpen
-                      ? 'bg-[#FF9D00] hover:bg-[#E08A00] text-white'
+                      ? 'bg-[#0F6E56] hover:bg-[#0A5F4A] text-white'
                       : 'border border-border-default bg-white hover:bg-bg-base text-text-primary',
                   )}
                 >

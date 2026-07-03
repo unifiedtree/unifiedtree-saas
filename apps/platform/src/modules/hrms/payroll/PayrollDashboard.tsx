@@ -145,12 +145,12 @@ export const PayrollDashboard: React.FC = () => {
                 />
                 <Tooltip
                   formatter={(v: number | string) => [inr(Number(v)), 'Net Pay']}
-                  cursor={{ fill: 'rgba(255,157,0,0.06)' }}
+                  cursor={{ fill: 'rgba(15,110,86,0.06)' }}
                   contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }}
                 />
                 <Bar dataKey="totalNet" radius={[6, 6, 0, 0]} maxBarSize={48}>
                   {chartData.map((d, i) => (
-                    <Cell key={i} fill={STATUS_COLOR[d.status] ?? '#FF9D00'} />
+                    <Cell key={i} fill={STATUS_COLOR[d.status] ?? '#0F6E56'} />
                   ))}
                 </Bar>
               </BarChart>

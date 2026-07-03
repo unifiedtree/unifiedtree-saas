@@ -33,7 +33,7 @@ export function ReportShell({
       <div className="flex items-start gap-3">
         <Link
           to="/hrms/reports"
-          className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border-default text-text-secondary transition-colors hover:border-[#FFD68A] hover:text-[#C16E00]"
+          className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border-default text-text-secondary transition-colors hover:border-[#6EE7B7] hover:text-[#0A5240]"
         >
           <ArrowLeft size={15} />
         </Link>
@@ -102,7 +102,7 @@ export function CompanySelector({ value, onChange }: CompanySelectorProps) {
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="min-w-[180px] rounded-xl border border-border-default bg-white px-3 py-2.5 text-sm text-text-primary transition-all focus:border-[#FF9D00] focus:outline-none focus:ring-2 focus:ring-[#FF9D00]/20"
+      className="min-w-[180px] rounded-xl border border-border-default bg-white px-3 py-2.5 text-sm text-text-primary transition-all focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20"
       disabled={isLoading}
     >
       <option value="">Select company…</option>

@@ -33,10 +33,10 @@ export const HrmsDashboard: React.FC = () => {
 
   const quickActions = [
     ...(canWriteEmployee ? [
-      { label: 'Add Employee', icon: Plus, path: '/hrms/employees', color: 'text-[#C16E00]', bg: 'bg-[#FFF4E1]' },
+      { label: 'Add Employee', icon: Plus, path: '/hrms/employees', color: 'text-[#0A5240]', bg: 'bg-[#E6F4F1]' },
     ] : []),
     ...(canManageOrg ? [
-      { label: 'Org Setup', icon: Building2, path: '/hrms/organization', color: 'text-[#C16E00]', bg: 'bg-[#FFF4E1]' },
+      { label: 'Org Setup', icon: Building2, path: '/hrms/organization', color: 'text-[#0A5240]', bg: 'bg-[#E6F4F1]' },
     ] : []),
     { label: 'Attendance', icon: Clock, path: '/hrms/attendance', color: 'text-emerald-600', bg: 'bg-emerald-100' },
     { label: 'Leave', icon: CalendarDays, path: '/hrms/leave', color: 'text-amber-600', bg: 'bg-amber-100' },
@@ -79,7 +79,7 @@ export const HrmsDashboard: React.FC = () => {
             <button
               key={a.label}
               onClick={() => navigate(a.path)}
-              className="flex flex-col items-center gap-2 p-4 bg-[#FFF4E1] hover:bg-[#FFD68A]/40 border border-[#FFD68A] rounded-xl transition-all"
+              className="flex flex-col items-center gap-2 p-4 bg-[#E6F4F1] hover:bg-[#6EE7B7]/40 border border-[#6EE7B7] rounded-xl transition-all"
             >
               <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center', a.bg)}>
                 <a.icon size={18} className={a.color} />
