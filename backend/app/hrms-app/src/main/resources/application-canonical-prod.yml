@@ -34,9 +34,30 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+    # Base 'canonical' profile turns SQL + bind-parameter logging ON for smoke
+    # debugging. In prod that logs every statement AND the actual bound PII
+    # values (emails, names, tenant ids) on every query — a perf drain and a
+    # PII-in-logs leak. Force it OFF here.
+    show-sql: false
     properties:
       hibernate:
         default_schema: ''
+        format_sql: false
+  # Bound multipart uploads (employee documents, letter attachments). Face
+  # images travel as base64 JSON, not multipart, but any document upload path
+  # must not be unbounded — an unbounded upload is a trivial memory-exhaustion
+  # DoS. 10 MB comfortably covers a scanned PDF / photo.
+  servlet:
+    multipart:
+      max-file-size: ${UNIFIEDTREE_MAX_UPLOAD_SIZE:10MB}
+      max-request-size: ${UNIFIEDTREE_MAX_REQUEST_SIZE:12MB}
+  # Graceful shutdown: on Cloud Run / rolling deploys the container gets a
+  # SIGTERM, then a grace window before SIGKILL. Draining in-flight requests
+  # (a punch, a payroll run) instead of dropping them is what makes deploys
+  # zero-downtime. Spring stops accepting new requests and lets running ones
+  # finish, up to the timeout below.
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
 unifiedtree:
   # Invitation / password-reset email links. In production these MUST point at
@@ -112,3 +133,58 @@ unifiedtree:
     # 32-byte AES-GCM key, base64. App refuses to start if missing.
     # Generate with: openssl rand -base64 32
     encryption-key:       ${UNIFIEDTREE_FACE_ENCRYPTION_KEY:}
+
+# =============================================================================
+# Production hardening — overrides base application.yml / application-canonical.yml
+# =============================================================================
+server:
+  # Bind graceful shutdown to the SIGTERM the orchestrator sends. Pairs with
+  # spring.lifecycle.timeout-per-shutdown-phase above.
+  shutdown: graceful
+
+# Actuator lockdown. Base application.yml exposes health,info,metrics,prometheus
+# with health show-details: always — i.e. /actuator/prometheus and /actuator/metrics
+# are world-readable and leak internal topology + per-endpoint latency, and the
+# health payload leaks DB/vendor details to anonymous callers. In prod, expose
+# ONLY health + info, and never reveal health internals to unauthenticated
+# callers. Cloud Run/GCP uptime checks only need HTTP 200 on /api/actuator/health.
+# (To scrape Prometheus later, expose it on a separate management port bound to
+# the private VPC, not the public ingress — documented in MONITORING.md.)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        # Kubernetes/Cloud Run style liveness + readiness groups, served at
+        # /api/actuator/health/liveness and /health/readiness.
+        enabled: true
+  info:
+    env:
+      enabled: false
+
+# Swagger / OpenAPI OFF in production. The base profile ships springdoc, which
+# publishes the full API surface at /swagger-ui.html + /v3/api-docs. That's a
+# reconnaissance aid for an attacker and has no place in a production build.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# Production logging. The base 'canonical' profile sets com.unifiedtree=DEBUG,
+# org.hibernate.SQL=DEBUG and the bind-parameter binder to TRACE (logs real PII).
+# Reset to production-sane levels here. Structured/JSON logging for Cloud Logging
+# is opt-in via LOGGING_PATTERN or a logback-spring.xml (see DEPLOYMENT.md).
+logging:
+  level:
+    root: INFO
+    com.unifiedtree: ${LOG_LEVEL_APP:INFO}
+    com.hrms: ${LOG_LEVEL_APP:INFO}
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+    org.springframework.security: ${LOG_LEVEL_SECURITY:INFO}

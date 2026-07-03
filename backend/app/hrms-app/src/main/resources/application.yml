@@ -157,7 +157,10 @@ hrms:
     geo-fence-radius-meters: ${GEO_FENCE_RADIUS:100}
   auth:
     otp:
-      debug-response-enabled: ${OTP_DEBUG_RESPONSE_ENABLED:true}
+      # Return the raw OTP in the API response. SECURITY: default OFF. Only a
+      # dev/smoke run should ever flip this on (OTP_DEBUG_RESPONSE_ENABLED=true).
+      # Leaving it on in prod hands out login codes over the wire.
+      debug-response-enabled: ${OTP_DEBUG_RESPONSE_ENABLED:false}
   ai:
     sidecar-url: ${AI_SIDECAR_URL:http://localhost:8093}
   kafka:
