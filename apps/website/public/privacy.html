@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — UnifiedTree HRMS</title>
+  <meta name="description" content="Privacy policy for the UnifiedTree HRMS mobile application by OUR UNIQUE." />
+  <style>
+    :root {
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #e5e5e5;
+      --accent: #0b5cd5;
+      --bg: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.65;
+    }
+    main {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 48px 24px 96px;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+    }
+    h1 {
+      font-size: 2.2rem;
+      margin: 0 0 8px;
+      letter-spacing: -0.5px;
+    }
+    h2 {
+      font-size: 1.35rem;
+      margin: 40px 0 12px;
+      letter-spacing: -0.2px;
+    }
+    h3 {
+      font-size: 1.05rem;
+      margin: 24px 0 8px;
+      color: var(--muted);
+    }
+    p, li { font-size: 1rem; }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 6px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .meta {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .callout {
+      background: #f6f8fc;
+      border-left: 4px solid var(--accent);
+      padding: 14px 18px;
+      margin: 20px 0;
+      border-radius: 4px;
+      font-size: 0.98rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th { background: #fafafa; font-weight: 600; }
+    footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Privacy Policy</h1>
+      <p class="meta">
+        <strong>Application:</strong> UnifiedTree HRMS<br />
+        <strong>Publisher:</strong> OUR UNIQUE<br />
+        <strong>Effective date:</strong> 4 July 2026<br />
+        <strong>Last updated:</strong> 4 July 2026
+      </p>
+    </header>
+
+    <section>
+      <p>
+        This Privacy Policy explains how <strong>OUR UNIQUE</strong> ("we," "us," or "our"),
+        the publisher of the <strong>UnifiedTree HRMS</strong> mobile application (the "App"),
+        collects, uses, discloses, and protects information about you when you use the App.
+        The App is provided to employees of organizations that have licensed our human-resource-management
+        platform ("Customers") to manage workforce attendance, leave, and related HR workflows.
+      </p>
+      <div class="callout">
+        In most deployments, your <strong>employer is the data controller</strong> of the
+        personal information processed through the App, and OUR UNIQUE acts as a data processor
+        on their behalf. Please also review your employer's internal privacy notice.
+      </div>
+    </section>
+
+    <h2>1. Information We Collect</h2>
+
+    <h3>1.1 Information you provide directly</h3>
+    <ul>
+      <li><strong>Account &amp; profile information</strong> — name, employer-issued email address, phone number, employee ID, department, designation, and profile photo (as configured by your employer).</li>
+      <li><strong>Authentication credentials</strong> — one-time passwords (OTPs) sent to your email or phone during login.</li>
+      <li><strong>Leave and correction requests</strong> — dates, reasons, supporting notes, and any attachments you upload.</li>
+      <li><strong>Support communications</strong> — any messages you send to us or through the App.</li>
+    </ul>
+
+    <h3>1.2 Biometric information</h3>
+    <ul>
+      <li><strong>Facial images and biometric templates</strong> — during face enrollment and each attendance check-in, the App captures still images of your face from multiple angles and derives a mathematical face template. The template is used to verify your identity when you punch in or out.</li>
+      <li><strong>Liveness signals</strong> — during enrollment and verification, the App may ask you to blink, turn your head, nod, or smile so the system can confirm a live human is present and reject spoofing attempts using photos or videos.</li>
+      <li><strong>On-device biometric authentication</strong> — if you enable Face ID or fingerprint login on your device, the App uses the operating system's biometric API to unlock the App locally. Fingerprints and Face ID templates <em>never leave your device</em> and are never transmitted to our servers.</li>
+    </ul>
+    <div class="callout">
+      Facial images and derived biometric templates are transmitted to our secure face-verification service and stored only for as long as you remain enrolled with your employer. See Section 5 (Retention) and Section 6 (Security) for details.
+    </div>
+
+    <h3>1.3 Location information</h3>
+    <ul>
+      <li><strong>Precise device location</strong> — when you punch in or out, the App reads your current GPS latitude and longitude to verify you are inside a work location (geofence) defined by your employer.</li>
+      <li>Location is <strong>only captured during an active attendance action</strong> or when you are viewing a live map screen. The App does not track your location in the background.</li>
+    </ul>
+
+    <h3>1.4 Attendance, leave, and work records</h3>
+    <ul>
+      <li>Punch-in and punch-out timestamps, check-in method (face / GPS / manual), the geofence associated with each punch, shift information, working hours, breaks, overtime, holidays observed, leave applications, and correction requests.</li>
+    </ul>
+
+    <h3>1.5 Information collected automatically</h3>
+    <ul>
+      <li><strong>Device information</strong> — device model, operating-system version, application version, unique installation identifier, and language settings.</li>
+      <li><strong>Diagnostic and performance data</strong> — crash reports, error logs, and basic usage events used to fix bugs and improve the App.</li>
+      <li><strong>Network information</strong> — IP address and general connection metadata used by our backend to route requests securely.</li>
+    </ul>
+
+    <h2>2. Permissions We Request</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Permission</th>
+          <th>Why we ask for it</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Camera</td>
+          <td>Capture facial images during face enrollment and attendance verification.</td>
+        </tr>
+        <tr>
+          <td>Precise location (foreground)</td>
+          <td>Verify you are within an approved work geofence when punching in or out.</td>
+        </tr>
+        <tr>
+          <td>Biometric (Face ID / fingerprint)</td>
+          <td>Optional quick unlock of the App on your device. Handled by the OS; nothing is sent to us.</td>
+        </tr>
+        <tr>
+          <td>Internet / network state</td>
+          <td>Send attendance data to our backend and receive updates.</td>
+        </tr>
+        <tr>
+          <td>Vibrate</td>
+          <td>Haptic feedback for user-interface interactions.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. How We Use Your Information</h2>
+    <ul>
+      <li>Authenticate you and provide access to the App.</li>
+      <li>Verify identity at each attendance check-in through face recognition and geofence validation.</li>
+      <li>Record and display attendance, leave, and related HR information for you and your employer.</li>
+      <li>Enable employer-side HR workflows such as approvals, corrections, and payroll inputs.</li>
+      <li>Diagnose crashes, monitor App performance, and improve reliability.</li>
+      <li>Detect and prevent fraud, spoofing, and unauthorized access.</li>
+      <li>Comply with legal, regulatory, and contractual obligations (including labor and workplace-safety laws).</li>
+    </ul>
+
+    <h2>4. Sharing of Information</h2>
+    <p>We share your information only in the following limited circumstances:</p>
+    <ul>
+      <li><strong>With your employer</strong> — attendance, leave, and profile information is made available to authorized personnel at your employer's organization, in line with the employment relationship and applicable laws.</li>
+      <li><strong>With our service providers</strong> — cloud infrastructure and face-verification providers acting on our behalf under confidentiality obligations. Current providers include:
+        <ul>
+          <li><strong>Railway</strong> — application and database hosting.</li>
+          <li><strong>Expo Application Services (EAS)</strong> — over-the-air App update delivery.</li>
+          <li><strong>Google LLC</strong> — App distribution via Google Play.</li>
+        </ul>
+      </li>
+      <li><strong>To comply with law</strong> — if required by court order, subpoena, or other legal process, or to protect the rights, property, or safety of OUR UNIQUE, our users, or the public.</li>
+      <li><strong>Business transfers</strong> — in connection with a merger, acquisition, financing, or sale of assets, subject to the acquiring party honoring this Privacy Policy.</li>
+    </ul>
+    <p>We do <strong>not</strong> sell your personal information. We do not use your information for advertising or share it with advertising networks.</p>
+
+    <h2>5. Data Retention</h2>
+    <ul>
+      <li><strong>Face templates and enrollment images</strong> — retained while you are an active employee of an enrolled Customer. Deleted, or securely disassociated from your identity, within a reasonable period after your enrollment is revoked or your employer terminates the service.</li>
+      <li><strong>Attendance and leave records</strong> — retained by your employer for the period they are legally required to keep employment records (typically several years). We host these records on their behalf until instructed to delete them.</li>
+      <li><strong>Diagnostic logs</strong> — automatically rotated after a short window (typically 30–90 days).</li>
+    </ul>
+
+    <h2>6. Security</h2>
+    <ul>
+      <li>All communication between the App and our servers is encrypted in transit using TLS.</li>
+      <li>Authentication tokens are stored inside the operating system's secure storage (iOS Keychain / Android Keystore) and are never written to insecure locations.</li>
+      <li>Access to biometric templates and personal data on our servers is restricted to authorized personnel on a need-to-know basis.</li>
+      <li>We conduct routine security reviews and patch known vulnerabilities in a timely manner.</li>
+    </ul>
+    <p>No security control is perfect. If we become aware of a data breach that materially affects you, we will notify you and, where required, the appropriate regulator, in accordance with applicable law.</p>
+
+    <h2>7. Your Rights and Choices</h2>
+    <p>Subject to applicable law (including India's Digital Personal Data Protection Act, 2023, and, where applicable, the EU GDPR), you may have the right to:</p>
+    <ul>
+      <li>Access the personal information we hold about you.</li>
+      <li>Correct inaccurate or outdated information.</li>
+      <li>Request deletion of your information (subject to legal and contractual retention obligations).</li>
+      <li>Object to or restrict certain processing.</li>
+      <li>Withdraw consent for biometric processing, in which case you will need to use an alternative attendance method offered by your employer.</li>
+      <li>Lodge a complaint with the applicable data-protection authority.</li>
+    </ul>
+    <p>Because your employer typically controls your data, most of these requests should be directed to your employer first. If your employer is unable to help, or you have questions about how OUR UNIQUE processes data on their behalf, contact us using the details in Section 11.</p>
+
+    <h2>8. Children's Privacy</h2>
+    <p>
+      The App is intended for use by employees who are of working age under applicable law and is not directed to
+      children under 13 (or the higher minimum age in your jurisdiction). We do not knowingly collect personal
+      information from children. If you believe a child has provided us with personal information, please contact us
+      and we will take steps to delete it.
+    </p>
+
+    <h2>9. International Data Transfers</h2>
+    <p>
+      Our infrastructure providers may process and store your information in data-center regions outside your country
+      of residence. Where we transfer information across borders, we take steps to ensure it receives an adequate level
+      of protection through contractual safeguards and provider certifications.
+    </p>
+
+    <h2>10. Changes to This Policy</h2>
+    <p>
+      We may update this Privacy Policy from time to time. When we make material changes, we will notify you through
+      the App or via the email address associated with your account and update the "Last updated" date at the top of
+      this page. Your continued use of the App after an update indicates your acceptance of the revised policy.
+    </p>
+
+    <h2>11. Contact Us</h2>
+    <p>If you have questions, concerns, or requests regarding this Privacy Policy or your personal data, contact:</p>
+    <p>
+      <strong>OUR UNIQUE</strong><br />
+      1, C-100, VSPM Phase 2, Gurudwara Road,<br />
+      Vanasthalipuram, Rangareddy,<br />
+      Hyderabad — 500070, India<br />
+      Email: <a href="mailto:unifiedtree@gmail.com">unifiedtree@gmail.com</a>
+    </p>
+
+    <footer>
+      &copy; 2026 OUR UNIQUE. All rights reserved.
+    </footer>
+  </main>
+</body>
+</html>
