@@ -3,6 +3,7 @@ package com.hrms.api.settings;
 import com.unifiedtree.settings.dto.SettingsDtos.CreateHolidayRequest;
 import com.unifiedtree.settings.dto.SettingsDtos.HolidayResponse;
 import com.unifiedtree.settings.dto.SettingsDtos.HrConfigResponse;
+import com.unifiedtree.settings.dto.SettingsDtos.NextEmployeeCodeResponse;
 import com.unifiedtree.settings.dto.SettingsDtos.UpdateHrConfigRequest;
 import com.unifiedtree.settings.service.HolidayService;
 import com.unifiedtree.settings.service.HrConfigurationService;
@@ -39,6 +40,19 @@ public class SettingsController {
     public HrConfigResponse updateHrConfig(@RequestParam UUID companyId,
                                            @Valid @RequestBody UpdateHrConfigRequest req) {
         return hrConfig.update(companyId, req);
+    }
+
+    /**
+     * Non-consuming preview of the NEXT employee code for a company. The
+     * employee-create form calls this on mount to pre-fill the code field
+     * (see EmployeeForm on web and the mobile employee-add flow).
+     * Does NOT increment the counter — the real increment happens inside
+     * WorkforceEmployeeService.create() so aborted forms never leave gaps.
+     */
+    @GetMapping("/employee-code/preview")
+    @PreAuthorize("isAuthenticated()")
+    public NextEmployeeCodeResponse previewNextEmployeeCode(@RequestParam UUID companyId) {
+        return hrConfig.previewNextEmployeeCode(companyId);
     }
 
     // -- Holiday calendar ----------------------------------------------------

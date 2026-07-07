@@ -53,4 +53,17 @@ public class HrConfiguration extends BaseEntity {
      */
     @Column(name = "weekend_days", columnDefinition = "integer[]")
     private Integer[] weekendDays = new Integer[] { 6, 7 };
+
+    // -- Employee code auto-increment format (V082) ---------------------------
+    // Format at issue time: "{prefix}-{next_number zero-padded to `padding` digits}".
+    // Backend atomically increments next_number so concurrent creates don't collide.
+
+    @Column(name = "employee_code_prefix", length = 10, nullable = false)
+    private String employeeCodePrefix = "EMP";
+
+    @Column(name = "employee_code_next_number", nullable = false)
+    private Long employeeCodeNextNumber = 1L;
+
+    @Column(name = "employee_code_padding", nullable = false)
+    private Integer employeeCodePadding = 4;
 }

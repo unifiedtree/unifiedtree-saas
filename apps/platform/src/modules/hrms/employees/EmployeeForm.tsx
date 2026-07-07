@@ -8,6 +8,7 @@ import { useCreateWorkforceEmployee, useUpdateWorkforceEmployee, useEmployeeDire
 import { useCompanies, useDepartments, useDesignations, useBranches, useGrades, useEmploymentTypes, useShifts } from '../api/useOrg'
 import { useTemplates } from '../onboarding/api/useOnboarding'
 import { sendInvite } from './api/useInvitation'
+import { useNextEmployeeCode } from '../api/useSettings'
 
 type FormStep = 'basic' | 'system' | 'work' | 'identity' | 'bank' | 'address' | 'emergency'
 
@@ -84,6 +85,11 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const { data: managerPage } = useEmployeeDirectory({ companyId: companyId || undefined, pageSize: 200 })
   const managers = (managerPage?.content ?? []).filter((m) => m.id !== employee?.id)
 
+  // Pre-fill Employee Code with the next auto-generated value from HR config
+  // whenever we're adding a NEW employee under a selected company. Field
+  // stays editable so admin can override for special cases.
+  const { data: nextCodePreview } = useNextEmployeeCode(isEdit ? undefined : companyId || undefined)
+
   const [step, setStep] = useState<FormStep>('basic')
   const [form, setForm] = useState({
     firstName: employee?.firstName ?? '',
@@ -123,6 +129,17 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     setForm((p) => ({ ...p, [key]: value }))
     if (errors[key]) setErrors((p) => ({ ...p, [key]: '' }))
   }
+
+  // Once we have a next-code preview (only fires in ADD mode), pre-fill the
+  // Employee Code field IF the admin hasn't already typed something. The
+  // field is editable so this only sets an initial suggestion.
+  React.useEffect(() => {
+    if (isEdit) return
+    if (!nextCodePreview?.preview) return
+    if (form.employeeCode) return
+    setForm((p) => (p.employeeCode ? p : { ...p, employeeCode: nextCodePreview.preview }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextCodePreview?.preview])
 
   const handleSubmit = async () => {
     if (createEmp.isPending || updateEmp.isPending) return
@@ -318,7 +335,15 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
 
           {step === 'work' && (
             <>
-              {!isEdit && <Field label="Employee Code"><Input value={form.employeeCode} onChange={(e) => set('employeeCode', e.target.value)} placeholder="Auto-generated if blank" /></Field>}
+              {!isEdit && (
+                <Field label="Employee ID">
+                  <Input
+                    value={form.employeeCode}
+                    onChange={(e) => set('employeeCode', e.target.value)}
+                    placeholder={nextCodePreview?.preview ?? 'Auto-generated on save'}
+                  />
+                </Field>
+              )}
               <Field label="Department">
                 <Sel value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
                   <option value="">Select department</option>

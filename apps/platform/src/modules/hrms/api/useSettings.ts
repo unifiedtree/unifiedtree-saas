@@ -46,3 +46,66 @@ export function useDeleteHoliday() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'settings', 'holidays'] }),
   })
 }
+
+// ── HR configuration (per-company) ─────────────────────────────────────────
+export interface HrConfigResponse {
+  id: string
+  companyId: string
+  fiscalYearStart?: string
+  defaultNoticePeriodDays?: number
+  probationPeriodMonths?: number
+  retirementAge?: number
+  enableLateAutoDeduction: boolean
+  lateGraceMinutes?: number
+  enforceGeofencingForMobile: boolean
+  allowWorkFromHome: boolean
+  workweekStartDay?: number
+  weekendDays?: number[]
+  employeeCodePrefix: string
+  employeeCodeNextNumber: number
+  employeeCodePadding: number
+}
+
+export function useHrConfig(companyId: string | undefined) {
+  return useQuery({
+    queryKey: ['hrms', 'settings', 'hr-config', companyId],
+    queryFn: () => apiJson<HrConfigResponse>(`/v1/settings/hr-configuration?companyId=${companyId}`),
+    enabled: !!companyId,
+    staleTime: 60_000,
+  })
+}
+
+export function useUpdateHrConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { companyId: string; body: Partial<Omit<HrConfigResponse, 'id' | 'companyId'>> }) =>
+      apiJson<HrConfigResponse>(`/v1/settings/hr-configuration?companyId=${input.companyId}`, {
+        method: 'PUT',
+        body: JSON.stringify(input.body),
+      }),
+    onSuccess: (_, vars) =>
+      qc.invalidateQueries({ queryKey: ['hrms', 'settings', 'hr-config', vars.companyId] }),
+  })
+}
+
+// Preview of the next auto-generated employee code (non-consuming — the
+// backend atomically issues + increments on the actual employee-create).
+export interface NextEmployeeCodePreview {
+  preview: string
+  prefix: string
+  nextNumber: number
+  padding: number
+}
+
+export function useNextEmployeeCode(companyId: string | undefined) {
+  return useQuery({
+    queryKey: ['hrms', 'settings', 'next-employee-code', companyId],
+    queryFn: () =>
+      apiJson<NextEmployeeCodePreview>(`/v1/settings/employee-code/preview?companyId=${companyId}`),
+    enabled: !!companyId,
+    // Re-fetch every time the form opens; another admin may have created an
+    // employee since we last saw a preview.
+    staleTime: 0,
+    gcTime: 0,
+  })
+}

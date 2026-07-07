@@ -17,6 +17,7 @@ import {
   type Company, type Designation, type Grade, type EmploymentTypeRecord, type Shift,
 } from '../api/useOrg'
 import { useEmployeeDirectory } from '../api/useWorkforce'
+import { useHrConfig, useUpdateHrConfig } from '../api/useSettings'
 
 type Tab = 'companies' | 'branches' | 'departments' | 'designations' | 'grades' | 'employment-types' | 'shifts'
 
@@ -214,6 +215,9 @@ function CompaniesTab() {
             <Field label="Currency"><Input value={form.currency} onChange={(e) => set('currency', e.target.value)} /></Field>
             <Field label="Country"><Input value={form.country} onChange={(e) => set('country', e.target.value)} /></Field>
           </div>
+
+          {editing ? <EmployeeCodeFormatSection companyId={editing.id} /> : null}
+
           <div className="flex gap-3 pt-2">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <Can code={P.ORG_COMPANY_WRITE}>
@@ -224,6 +228,113 @@ function CompaniesTab() {
           </div>
         </div>
       </SlideModal>
+    </div>
+  )
+}
+
+// ── Employee ID auto-increment format ─────────────────────────────────────
+// Two-input editor rendered inside Edit Company modal. Save is its own button
+// (separate from the Company Save) because it hits /v1/settings/hr-configuration
+// while the company fields hit /v1/companies. Live preview shows the next ID
+// that will be issued.
+function EmployeeCodeFormatSection({ companyId }: { companyId: string }) {
+  const { toast } = useToast()
+  const { data: cfg, isLoading } = useHrConfig(companyId)
+  const updateCfg = useUpdateHrConfig()
+  const [prefix, setPrefix] = React.useState('')
+  const [startNumberRaw, setStartNumberRaw] = React.useState('')
+  const [dirty, setDirty] = React.useState(false)
+
+  // Populate from server when it loads (only if the user hasn't started editing).
+  React.useEffect(() => {
+    if (cfg && !dirty) {
+      setPrefix(cfg.employeeCodePrefix ?? 'EMP')
+      // Represent the "starting number" as the exact user-visible string —
+      // padding is inferred from its length. So '001' → padding 3, '1001' → 4.
+      const pad = cfg.employeeCodePadding ?? 4
+      setStartNumberRaw(String(cfg.employeeCodeNextNumber ?? 1).padStart(pad, '0'))
+    }
+  }, [cfg, dirty])
+
+  const prefixOk = /^[A-Za-z0-9]{1,10}$/.test(prefix)
+  const numberOk = /^\d{1,8}$/.test(startNumberRaw) && Number(startNumberRaw) >= 1
+  const canSave  = prefixOk && numberOk && !updateCfg.isPending
+
+  const previewCode = prefixOk && numberOk
+    ? `${prefix.toUpperCase()}-${startNumberRaw}`
+    : '—'
+
+  const onSave = async () => {
+    try {
+      await updateCfg.mutateAsync({
+        companyId,
+        body: {
+          employeeCodePrefix: prefix.toUpperCase(),
+          employeeCodeNextNumber: Number(startNumberRaw),
+          employeeCodePadding: startNumberRaw.length,
+        },
+      })
+      toast('Employee ID format saved', 'success')
+      setDirty(false)
+    } catch {
+      toast('Failed to save employee ID format', 'error')
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="border-t border-border-default pt-4 mt-2">
+        <div className="text-xs text-text-tertiary">Loading employee ID format...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="border-t border-border-default pt-4 mt-2 space-y-3">
+      <div>
+        <h4 className="text-sm font-semibold text-text-primary">Employee ID auto-generation</h4>
+        <p className="text-xs text-text-secondary mt-0.5">
+          New employees get an auto-generated ID. Changes only affect employees created after saving.
+        </p>
+      </div>
+      <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
+        <Field label="Prefix">
+          <Input
+            value={prefix}
+            onChange={(e) => { setPrefix(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 10)); setDirty(true) }}
+            placeholder="UNI"
+            maxLength={10}
+          />
+        </Field>
+        <div className="pb-2 text-lg font-bold text-text-tertiary">-</div>
+        <Field label="Starting number">
+          <Input
+            value={startNumberRaw}
+            onChange={(e) => { setStartNumberRaw(e.target.value.replace(/\D/g, '').slice(0, 8)); setDirty(true) }}
+            placeholder="0001"
+            maxLength={8}
+          />
+        </Field>
+      </div>
+      <div className="flex items-center justify-between bg-bg-surface rounded-lg px-3 py-2">
+        <span className="text-xs text-text-secondary">Next employee will be:</span>
+        <span className="font-mono text-sm font-bold text-primary">{previewCode}</span>
+      </div>
+      <div className="flex justify-end">
+        <button
+          onClick={onSave}
+          disabled={!canSave || !dirty}
+          className={BTN_PRIMARY + ' disabled:opacity-50 disabled:cursor-not-allowed'}
+        >
+          {updateCfg.isPending ? 'Saving...' : 'Save Format'}
+        </button>
+      </div>
+      {!prefixOk && prefix.length > 0 && (
+        <p className="text-xs text-red-600">Prefix must be 1-10 letters or digits (no spaces or dashes).</p>
+      )}
+      {!numberOk && startNumberRaw.length > 0 && (
+        <p className="text-xs text-red-600">Starting number must be 1-8 digits.</p>
+      )}
     </div>
   )
 }

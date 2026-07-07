@@ -14,6 +14,7 @@ import com.hrms.employee.workforce.repository.WorkforceEmployeeRepository;
 import jakarta.persistence.criteria.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -21,6 +22,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Locale;
+import java.util.Map;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -240,11 +244,48 @@ public class WorkforceEmployeeService {
                 .orElse(null);
     }
 
-    // -- Generator: simple sequential code per company ----------------------
+    // -- Generator: per-company auto-increment (V082) -----------------------
+    // Reads the tenant/company's configured prefix + next number + padding
+    // from settings.hr_configuration and atomically increments the counter.
+    // Runs inside the surrounding @Transactional so a downstream failure in
+    // create() rolls back the counter bump too — no gaps under load.
     private String generateEmployeeCode(UUID companyId) {
-        // For now use UTC nano-timestamp suffix; production should use a per-company sequence
-        long suffix = System.nanoTime() % 100_000;
-        return "UT" + String.format("%05d", suffix);
+        Map<String, Object> row = incrementAndFetch(companyId);
+        if (row == null) {
+            // No config row yet for this company — seed one with defaults, then
+            // atomically increment on the SAME row. INSERT is idempotent via
+            // the (tenant_id, company_id) unique constraint.
+            jdbc.update("""
+                INSERT INTO settings.hr_configuration (id, tenant_id, company_id)
+                VALUES (gen_random_uuid(), current_tenant_id(), ?)
+                ON CONFLICT (tenant_id, company_id) DO NOTHING
+                """, companyId);
+            row = incrementAndFetch(companyId);
+        }
+        if (row == null) {
+            throw new BusinessRuleException(
+                    "Could not issue employee code — HR configuration missing for company " + companyId,
+                    "EMPLOYEE_CODE_CONFIG_MISSING");
+        }
+        String prefix = (String) row.get("prefix");
+        long issued   = ((Number) row.get("issued")).longValue();
+        int padding   = ((Number) row.get("padding")).intValue();
+        return prefix + "-" + String.format(Locale.ROOT, "%0" + padding + "d", issued);
+    }
+
+    private Map<String, Object> incrementAndFetch(UUID companyId) {
+        try {
+            return jdbc.queryForMap("""
+                UPDATE settings.hr_configuration
+                   SET employee_code_next_number = employee_code_next_number + 1
+                 WHERE company_id = ?
+                 RETURNING employee_code_prefix          AS prefix,
+                          employee_code_next_number - 1 AS issued,
+                          employee_code_padding         AS padding
+                """, companyId);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
     }
 
     // -- Mapping ------------------------------------------------------------
