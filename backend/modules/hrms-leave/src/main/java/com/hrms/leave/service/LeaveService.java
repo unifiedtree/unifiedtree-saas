@@ -14,8 +14,11 @@ import com.hrms.leave.repository.HolidayCalendarRepository;
 import com.hrms.leave.repository.LeaveBalanceRepository;
 import com.hrms.leave.repository.LeaveRequestRepository;
 import com.hrms.leave.repository.LeaveTypeRepository;
+import com.unifiedtree.notifications.events.LeaveDecidedEvent;
+import com.unifiedtree.notifications.events.LeaveRequestSubmittedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -50,6 +53,7 @@ public class LeaveService {
     private final LeaveRequestMapper leaveRequestMapper;
     private final LeaveBalanceMapper leaveBalanceMapper;
     private final JdbcTemplate jdbcTemplate;
+    private final ApplicationEventPublisher eventPublisher;
     private final boolean kafkaEnabled;
 
     public LeaveService(
@@ -61,6 +65,7 @@ public class LeaveService {
             LeaveRequestMapper leaveRequestMapper,
             LeaveBalanceMapper leaveBalanceMapper,
             JdbcTemplate jdbcTemplate,
+            ApplicationEventPublisher eventPublisher,
             @org.springframework.beans.factory.annotation.Value("${hrms.kafka.enabled:false}") boolean kafkaEnabled) {
         this.leaveTypeRepository = leaveTypeRepository;
         this.leaveBalanceRepository = leaveBalanceRepository;
@@ -70,6 +75,7 @@ public class LeaveService {
         this.leaveRequestMapper = leaveRequestMapper;
         this.leaveBalanceMapper = leaveBalanceMapper;
         this.jdbcTemplate = jdbcTemplate;
+        this.eventPublisher = eventPublisher;
         this.kafkaEnabled = kafkaEnabled;
     }
 
@@ -189,8 +195,23 @@ public class LeaveService {
 
         log.info("Leave request created id={} for employee={}", leaveRequest.getId(), employeeId);
 
-        // Publish Kafka event
         UUID tenantId = TenantContext.getTenantId();
+
+        // In-process Spring event → notif.notifications fan-out (see
+        // com.unifiedtree.notifications.listener.DomainEventListener). Runs
+        // AFTER_COMMIT so a rollback in this tx cannot leave a phantom
+        // notification. This is independent of the Kafka path below (Kafka is
+        // off on Railway; the notifications pipeline is always on).
+        try {
+            eventPublisher.publishEvent(new LeaveRequestSubmittedEvent(
+                    leaveRequest.getId(), employeeId, approverId, tenantId,
+                    leaveType.getName(), startDate, endDate, totalDays));
+        } catch (Exception ex) {
+            log.warn("Failed to publish LeaveRequestSubmittedEvent for {}: {}",
+                    leaveRequest.getId(), ex.getMessage());
+        }
+
+        // Publish Kafka event
         // CRITICAL: skip the Kafka publish when Kafka is disabled. Otherwise
         // kafkaTemplate.send() blocks for up to `max.block.ms` (~60s default)
         // trying to fetch producer metadata from a broker that doesn't exist —
@@ -292,6 +313,24 @@ public class LeaveService {
 
         leaveBalanceRepository.save(balance);
         leaveRequest = leaveRequestRepository.save(leaveRequest);
+
+        // In-process notification fan-out for the terminal decision.
+        try {
+            String ltName = leaveTypeRepository.findById(leaveRequest.getLeaveTypeId())
+                    .map(LeaveType::getName).orElse(null);
+            eventPublisher.publishEvent(new LeaveDecidedEvent(
+                    leaveRequest.getId(),
+                    leaveRequest.getEmployeeId(),
+                    leaveRequest.getTenantId(),
+                    approval.status() == ApprovalStatus.APPROVED,
+                    ltName,
+                    leaveRequest.getStartDate(),
+                    leaveRequest.getEndDate(),
+                    approval.comment()));
+        } catch (Exception ex) {
+            log.warn("Failed to publish LeaveDecidedEvent for {}: {}",
+                    leaveRequest.getId(), ex.getMessage());
+        }
 
         // Publish Kafka event (skipped when Kafka disabled — see applyLeave note).
         if (kafkaEnabled) {
@@ -431,9 +470,15 @@ public class LeaveService {
 
     @Transactional(readOnly = true)
     public PageResponse<LeaveRequestResponse> getPendingApprovalsForManager(UUID managerId, Pageable pageable) {
-        log.debug("Fetching pending approvals (L1) for manager={}", managerId);
-        Page<LeaveRequest> page = leaveRequestRepository
-                .findByApproverIdAndStatus(managerId, ApprovalStatus.PENDING, pageable);
+        // Broadened match: also returns leaves whose applicant's current
+        // reporting_manager_id or department head is `managerId`, not just
+        // those whose approver_id column was frozen to `managerId` at apply
+        // time. This prevents the "2nd leave never shows up" symptom that
+        // fires when the applicant's manager assignment changes between two
+        // applications, or when the apply-time fallback chain resolves to a
+        // different UUID (audit fix: leave-approval-invisibility).
+        log.debug("Fetching pending approvals (L1) for manager={} (broadened match)", managerId);
+        Page<LeaveRequest> page = leaveRequestRepository.findPendingForManager(managerId, pageable);
         return PageResponse.from(page, this::toResponseWithTypeName);
     }
 
@@ -464,7 +509,12 @@ public class LeaveService {
             req.setApproverId(managerId);
             req.setApproverComment(approval.comment());
             req.setApprovedAt(Instant.now());
-            return toResponseWithTypeName(leaveRequestRepository.save(req));
+            LeaveRequest saved = leaveRequestRepository.save(req);
+            // Terminal decision — notify the employee. (L1 APPROVED escalates
+            // to PENDING_L2 and does NOT notify the employee yet — they should
+            // only see "approved" after L2 signs off.)
+            publishLeaveDecidedSafely(saved, false, approval.comment());
+            return toResponseWithTypeName(saved);
         }
 
         if (approval.status() != ApprovalStatus.APPROVED) {
@@ -516,7 +566,28 @@ public class LeaveService {
         }
 
         leaveBalanceRepository.save(balance);
-        return toResponseWithTypeName(leaveRequestRepository.save(req));
+        LeaveRequest saved = leaveRequestRepository.save(req);
+        publishLeaveDecidedSafely(saved, saved.getStatus() == ApprovalStatus.APPROVED, approval.comment());
+        return toResponseWithTypeName(saved);
+    }
+
+    /** Best-effort publish of the notification event — never propagates. */
+    private void publishLeaveDecidedSafely(LeaveRequest req, boolean approved, String comment) {
+        try {
+            String ltName = leaveTypeRepository.findById(req.getLeaveTypeId())
+                    .map(LeaveType::getName).orElse(null);
+            eventPublisher.publishEvent(new LeaveDecidedEvent(
+                    req.getId(),
+                    req.getEmployeeId(),
+                    req.getTenantId(),
+                    approved,
+                    ltName,
+                    req.getStartDate(),
+                    req.getEndDate(),
+                    comment));
+        } catch (Exception ex) {
+            log.warn("Failed to publish LeaveDecidedEvent for {}: {}", req.getId(), ex.getMessage());
+        }
     }
 
     private void revertPendingBalance(LeaveRequest req) {

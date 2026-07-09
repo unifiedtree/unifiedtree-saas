@@ -43,6 +43,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -99,7 +101,14 @@ public class AttendanceController {
                 ctx.branchLon(),
                 ctx.geoFenceRadius());
 
-        if (!geoValidation.withinFence() && geofenceEnforce) {
+        // Approved-WFH override: an employee with an APPROVED WFH request that
+        // covers today's IST date is allowed to punch from any location. The
+        // face-recognition + FACE_MISMATCH checks in checkInJson still fire —
+        // WFH is a location override, not an identity-verification bypass.
+        boolean wfhDay = attendanceService.isApprovedWfhDay(
+                employeeId, LocalDate.now(ZoneId.of("Asia/Kolkata")));
+
+        if (!geoValidation.withinFence() && geofenceEnforce && !wfhDay) {
             throw new BusinessRuleException(
                     geoValidation.message() != null ? geoValidation.message() : "Outside allowed attendance zone.",
                     "OUTSIDE_GEOFENCE");
@@ -118,7 +127,8 @@ public class AttendanceController {
                 request.locationName() != null ? request.locationName() : ctx.branchName(),
                 request.zoneName(),
                 request.deviceId(),
-                request.clientEventId());
+                request.clientEventId(),
+                wfhDay);
         return ResponseEntity.ok(dto);
     }
 
@@ -238,19 +248,25 @@ public class AttendanceController {
             @AuthenticationPrincipal Jwt jwt) {
         LocalDate selectedDate = date != null ? date : LocalDate.now();
         List<Employee> employees = scopedEmployees(jwt, departmentId);
+        List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         List<AttendanceRecord> records = attendanceService.getRecordsForEmployeesOnDate(
-                employees.stream().map(Employee::getId).toList(), selectedDate);
+                employeeIds, selectedDate);
         Map<UUID, AttendanceRecord> byEmployee = records.stream()
                 .collect(Collectors.toMap(AttendanceRecord::getEmployeeId, Function.identity(), (a, b) -> a));
         Map<UUID, String> departmentNames = departmentNames(employees);
+        // One bulk lookup for shift end_time; used by both the per-row
+        // earlyCheckout flag and the aggregate countSummary tile.
+        Map<UUID, LocalTime> shiftEndByEmployee =
+                attendanceService.getShiftEndTimesForEmployees(employeeIds, selectedDate);
 
         List<StaffStatusResponse> staff = employees.stream()
-                .map(employee -> toStaffStatus(employee, byEmployee.get(employee.getId()), departmentNames))
+                .map(employee -> toStaffStatus(
+                        employee, byEmployee.get(employee.getId()), departmentNames, shiftEndByEmployee))
                 .sorted(Comparator.comparing(StaffStatusResponse::fullName))
                 .toList();
 
         return ResponseEntity.ok(new TeamDashboardResponse(
-                selectedDate, countSummary(employees, records), staff));
+                selectedDate, countSummary(employees, records, shiftEndByEmployee), staff));
     }
 
     @Operation(summary = "Manager/Admin chronological attendance activity log")
@@ -429,7 +445,8 @@ public class AttendanceController {
 
     private StaffStatusResponse toStaffStatus(Employee employee,
                                               AttendanceRecord record,
-                                              Map<UUID, String> departmentNames) {
+                                              Map<UUID, String> departmentNames,
+                                              Map<UUID, LocalTime> shiftEndByEmployee) {
         return new StaffStatusResponse(
                 employee.getId(),
                 employee.getEmployeeCode(),
@@ -445,10 +462,13 @@ public class AttendanceController {
                 record != null ? record.getCheckOutAt() : null,
                 record != null ? record.getLocationName() : null,
                 record != null ? record.getCheckInLatitude() : null,
-                record != null ? record.getCheckInLongitude() : null);
+                record != null ? record.getCheckInLongitude() : null,
+                isEarlyCheckout(record, shiftEndByEmployee));
     }
 
-    private AttendanceSummaryCounts countSummary(List<Employee> employees, List<AttendanceRecord> records) {
+    private AttendanceSummaryCounts countSummary(List<Employee> employees,
+                                                 List<AttendanceRecord> records,
+                                                 Map<UUID, LocalTime> shiftEndByEmployee) {
         long late = records.stream()
                 .filter(record -> record.getAttendanceStatus() != null && record.getAttendanceStatus().name().equals("LATE"))
                 .count();
@@ -461,7 +481,46 @@ public class AttendanceController {
         long marked = records.stream().filter(record -> record.getCheckInAt() != null).count();
         long present = Math.max(0, marked - late - halfDay - workFromHome);
         long notMarked = Math.max(0, employees.size() - marked);
-        return new AttendanceSummaryCounts(present, 0, late, halfDay, 0, workFromHome, notMarked, notMarked);
+        // Early Out = checked out strictly before the assigned shift end_time
+        // (IST wall-clock). See isEarlyCheckout for the exact predicate. An
+        // employee can be simultaneously PRESENT/LATE/HALF_DAY *and* an Early
+        // Out — the tile is a separate axis, not mutually exclusive with the
+        // status buckets, so we do not subtract it from present.
+        long earlyCheckout = records.stream()
+                .filter(record -> isEarlyCheckout(record, shiftEndByEmployee))
+                .count();
+        // onLeave and absent are still hardcoded; tracked in a follow-up ticket
+        // (leave-request integration not yet wired to the dashboard).
+        return new AttendanceSummaryCounts(present, 0, late, halfDay, earlyCheckout, workFromHome, notMarked, notMarked);
+    }
+
+    /**
+     * True when {@code record} has a non-null {@code check_out_at} whose IST
+     * wall-clock time is strictly before the employee's assigned shift
+     * {@code end_time}. Returns false when the record is null, the employee
+     * hasn't checked out, or we don't know their shift end (no active
+     * assignment on the date).
+     *
+     * <p>TODO night-shift wrap: shifts that span midnight (e.g. 22:00–06:00)
+     * are NOT correctly handled by the strict "before end_time" comparison
+     * because a 05:30 checkout looks "before 06:00" but is actually on-time,
+     * while a 21:00 checkout looks "not before 06:00" but is actually early.
+     * The same limitation already exists in AttendanceService.getShiftProfile
+     * (which only reads start_time + grace). Fixing this properly requires
+     * modelling shift wrap direction; accepted for the initial rollout since
+     * every current Unified tenant runs day shifts.
+     */
+    private static boolean isEarlyCheckout(AttendanceRecord record,
+                                           Map<UUID, LocalTime> shiftEndByEmployee) {
+        if (record == null || record.getCheckOutAt() == null) {
+            return false;
+        }
+        LocalTime end = shiftEndByEmployee.get(record.getEmployeeId());
+        if (end == null) {
+            return false;
+        }
+        LocalTime actual = record.getCheckOutAt().atZone(ZoneId.of("Asia/Kolkata")).toLocalTime();
+        return actual.isBefore(end);
     }
 
     private AttendanceLogResponse toLogResponse(AttendanceEventLog event,

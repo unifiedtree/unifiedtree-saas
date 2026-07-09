@@ -70,6 +70,13 @@ public final class FaceDtos {
             int samplesRequired,
             Double qualityScore,
             Double livenessScore,
+            /** Stable machine code for the rejection, e.g. FAIL_LOW_QUALITY /
+             *  FAIL_NO_FACE / FAIL_MULTIPLE_FACES / FAIL_LIVENESS / DUPLICATE_ANGLE
+             *  / FAIL_OTHER. Null when accepted. Lets the mobile app map to a
+             *  code-specific friendly message even if the server's default copy
+             *  is inaccurate for the actual signal (e.g. a low composite quality
+             *  score that isn't strictly about "blur" or "lighting"). */
+            String rejectionCode,
             String rejectionReason,
             List<CaptureAngle> remainingAngles
     ) {}

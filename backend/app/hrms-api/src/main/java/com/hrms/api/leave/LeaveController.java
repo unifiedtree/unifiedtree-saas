@@ -11,6 +11,7 @@ import com.hrms.leave.dto.LeaveTypeRequest;
 import com.hrms.leave.dto.LeaveTypeResponse;
 import com.hrms.leave.service.LeaveService;
 import com.hrms.leave.service.LeaveTypeService;
+import com.hrms.core.enums.EmploymentStatus;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
@@ -94,6 +95,29 @@ public class LeaveController {
                             "No approver available — assign this employee a reporting manager, set a "
                                     + "department head, or add an HR manager before applying for leave",
                             "NO_APPROVER_AVAILABLE"));
+        }
+        // Hard-validate that the resolved approver_id points at a real, active,
+        // same-tenant employee. Without this, a stale UUID (e.g. an approver
+        // that was set on the applicant record and later deleted, or a
+        // cross-tenant mismatch caused by a picker bug) would be frozen into
+        // leave_requests.approver_id and the request would silently rot in the
+        // approval queue. If the primary chain resolved to something invalid,
+        // fall through to the terminal fallback one more time so the request
+        // still routes somewhere a human will see it.
+        Employee resolvedApprover = employeeRepository.findById(approverId).orElse(null);
+        if (!isValidApprover(resolvedApprover, employee)) {
+            approverId = approverFallbackResolver.resolveTerminalApprover(employee.getTenantId())
+                    .orElseThrow(() -> new BusinessRuleException(
+                            "Resolved approver is not a valid active employee in this tenant; "
+                                    + "assign a reporting manager or department head before applying.",
+                            "APPROVER_INVALID"));
+            resolvedApprover = employeeRepository.findById(approverId).orElse(null);
+            if (!isValidApprover(resolvedApprover, employee)) {
+                throw new BusinessRuleException(
+                        "No valid active approver could be resolved for this employee; "
+                                + "please contact HR to set up the approval chain.",
+                        "APPROVER_INVALID");
+            }
         }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(leaveService.applyLeave(
@@ -333,6 +357,33 @@ public class LeaveController {
         departmentRepository.findAllById(departmentIds)
                 .forEach(department -> names.put(department.getId(), department.getName()));
         return names;
+    }
+
+    /**
+     * A resolved approver is valid when it points at a real employee in the
+     * same tenant as the applicant, and the employee's employment status is
+     * not one of the terminal / inactive states (EXITED / TERMINATED /
+     * RESIGNED / RETIRED / SUSPENDED). This defends against stale approver
+     * UUIDs left behind after HR terminates a manager but the org tree
+     * hasn't been re-linked yet.
+     */
+    private boolean isValidApprover(Employee approver, Employee applicant) {
+        if (approver == null || applicant == null) return false;
+        if (approver.getTenantId() == null || !approver.getTenantId().equals(applicant.getTenantId())) {
+            return false;
+        }
+        EmploymentStatus status = approver.getEmploymentStatus();
+        if (status == null) return true; // legacy rows: assume active
+        switch (status) {
+            case EXITED:
+            case TERMINATED:
+            case RESIGNED:
+            case RETIRED:
+            case SUSPENDED:
+                return false;
+            default:
+                return true;
+        }
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

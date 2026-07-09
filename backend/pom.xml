@@ -44,6 +44,7 @@
         <module>platform/platform-audit</module>
         <module>platform/platform-settings</module>
         <module>platform/hrms-notification</module>
+        <module>platform/platform-notifications</module>
         <module>platform/platform-saas</module>
 
         <!-- business modules -->
@@ -234,6 +235,11 @@
             <dependency>
                 <groupId>com.unifiedtree</groupId>
                 <artifactId>platform-saas</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.unifiedtree</groupId>
+                <artifactId>platform-notifications</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

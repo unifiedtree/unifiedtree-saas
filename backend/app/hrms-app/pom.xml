@@ -45,6 +45,7 @@
         <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-settings</artifactId></dependency>
         <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-rbac</artifactId></dependency>
         <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-saas</artifactId></dependency>
+        <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-notifications</artifactId></dependency>
         <dependency><groupId>com.unifiedtree</groupId><artifactId>attendance-face</artifactId></dependency>
 
         <!-- Runtime -->

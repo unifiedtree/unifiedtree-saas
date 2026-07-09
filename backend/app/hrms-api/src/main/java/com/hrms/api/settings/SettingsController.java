@@ -50,7 +50,7 @@ public class SettingsController {
      * WorkforceEmployeeService.create() so aborted forms never leave gaps.
      */
     @GetMapping("/employee-code/preview")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN') or hasAuthority('settings.read') or hasAuthority('employees.write')")
     public NextEmployeeCodeResponse previewNextEmployeeCode(@RequestParam UUID companyId) {
         return hrConfig.previewNextEmployeeCode(companyId);
     }

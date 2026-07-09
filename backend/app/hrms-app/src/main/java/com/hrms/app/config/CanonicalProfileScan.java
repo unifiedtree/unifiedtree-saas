@@ -127,6 +127,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.unifiedtree.auth.entity",
         "com.unifiedtree.rbac.entity",
         "com.unifiedtree.audit.entity",
+        "com.unifiedtree.notifications.entity",
         "com.hrms.api.invitation"
 })
 @EnableJpaRepositories(basePackages = {
@@ -151,6 +152,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.unifiedtree.auth.repository",
         "com.unifiedtree.rbac.repository",
         "com.unifiedtree.audit.repository",
+        "com.unifiedtree.notifications.repository",
         "com.hrms.api.invitation"
 })
 public class CanonicalProfileScan {

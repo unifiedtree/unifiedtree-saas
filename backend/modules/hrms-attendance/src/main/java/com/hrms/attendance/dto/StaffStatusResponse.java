@@ -16,6 +16,11 @@ public record StaffStatusResponse(
         Instant checkOutAt,
         String locationName,
         Double latitude,
-        Double longitude
+        Double longitude,
+        // True when the employee has a non-null check_out_at and that checkout,
+        // converted to IST wall-clock, is strictly before their assigned shift's
+        // end_time. Used by the mobile dashboard's Early Out tile and drill-down.
+        // Absent shift assignment / absent end_time / no checkout -> false.
+        boolean earlyCheckout
 ) {
 }

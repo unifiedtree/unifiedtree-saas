@@ -16,9 +16,11 @@ import com.unifiedtree.attendance.face.dto.FaceDtos.EnrollmentStatusResponse;
 import com.unifiedtree.attendance.face.dto.FaceDtos.VerifyRequest;
 import com.unifiedtree.attendance.face.dto.FaceDtos.VerifyResponse;
 import com.unifiedtree.attendance.face.worker.FaceWorkerClient;
+import com.unifiedtree.notifications.events.FaceEnrollmentEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -62,6 +64,7 @@ public class FaceService {
     private final FaceWriter writer;
     private final FaceWorkerClient worker;
     private final EmbeddingCipher cipher;
+    private final ApplicationEventPublisher eventPublisher;
 
     private final boolean enabled;
     private final double matchThreshold;
@@ -80,6 +83,7 @@ public class FaceService {
                        FaceWriter writer,
                        FaceWorkerClient worker,
                        EmbeddingCipher cipher,
+                       ApplicationEventPublisher eventPublisher,
                        @Value("${unifiedtree.face.enabled:true}") boolean enabled,
                        @Value("${unifiedtree.face.match-threshold:0.82}") double matchThreshold,
                        /* Best-vs-mean gap. The mean across all enrolled templates
@@ -104,6 +108,7 @@ public class FaceService {
         this.writer = writer;
         this.worker = worker;
         this.cipher = cipher;
+        this.eventPublisher = eventPublisher;
         this.enabled = enabled;
         this.matchThreshold = matchThreshold;
         this.matchMeanGap = Math.max(0.0, matchMeanGap);
@@ -159,8 +164,14 @@ public class FaceService {
         ensureEnabled();
         EnrollmentRow existing = loadEnrollment(tenantId, employeeId);
         if (existing != null && existing.status == EnrollmentStatus.LOCKED) {
+            // Notify the employee (in-app + push) that their enrollment is
+            // locked and needs admin intervention. Best-effort — never
+            // propagate; the primary failure signal to the caller is still
+            // the FACE_LOCKED HTTP 403.
+            publishFaceEventSafely(tenantId, employeeId, false,
+                    "Face enrolment is locked. Please ask your manager to reset it.");
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "FACE_LOCKED:Enrollment is locked; ask your manager to reset.");
+                    "FACE_LOCKED:" + friendlyRejectionCopy("FACE_LOCKED"));
         }
         UUID id = writer.upsertPendingEnrollment(tenantId, employeeId, SAMPLES_REQUIRED);
         List<Challenge> challenges = randomChallenges();
@@ -173,18 +184,19 @@ public class FaceService {
         EnrollmentRow row = loadEnrollment(tenantId, employeeId);
         if (row == null || !row.id.equals(req.enrollmentId())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "FACE_ENROLLMENT_NOT_FOUND:Start a new enrollment first.");
+                    "FACE_ENROLLMENT_NOT_FOUND:" + friendlyRejectionCopy("FACE_ENROLLMENT_NOT_FOUND"));
         }
         if (row.status == EnrollmentStatus.LOCKED) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "FACE_LOCKED:Ask your manager to reset enrollment.");
+                    "FACE_LOCKED:" + friendlyRejectionCopy("FACE_LOCKED"));
         }
 
         // Reject duplicate angle.
         if (capturedAngles(tenantId, employeeId).contains(req.captureAngle())) {
             return new EnrollmentSampleResponse(false, req.captureAngle(),
                     row.samplesCaptured, SAMPLES_REQUIRED, null, null,
-                    "Angle already captured. Continue with next angle.",
+                    "DUPLICATE_ANGLE",
+                    friendlyRejectionCopy("DUPLICATE_ANGLE"),
                     remainingAngles(tenantId, employeeId));
         }
 
@@ -202,7 +214,7 @@ public class FaceService {
                     null, str(req.challengePerformed()), req.deviceFingerprint(),
                     null, null, latency);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "FACE_WORKER_UNAVAILABLE:Face service is offline. Try again or request manual correction.");
+                    "FACE_WORKER_UNAVAILABLE:" + friendlyRejectionCopy("FACE_WORKER_UNAVAILABLE"));
         }
 
         Boolean faceDetected = result.boolField("face_detected");
@@ -212,24 +224,19 @@ public class FaceService {
         String embeddingBase64 = result.stringField("embedding_base64");
         Integer dim = (Integer) result.get("embedding_dim");
 
-        String rejection = null;
         String resultCode = "PASS";
         if (faceDetected == null || !faceDetected) {
             resultCode = "FAIL_NO_FACE";
-            rejection = "No face detected. Center your face and try again.";
         } else if (exactlyOne != null && !exactlyOne) {
             resultCode = "FAIL_MULTIPLE_FACES";
-            rejection = "More than one face detected. Capture alone.";
         } else if (quality == null || quality < minQuality) {
             resultCode = "FAIL_LOW_QUALITY";
-            rejection = "Face is blurry or too dark. Try better lighting.";
         } else if (requireLiveness && (liveness == null || liveness < livenessThreshold)) {
             resultCode = "FAIL_LIVENESS";
-            rejection = "Liveness check failed. Follow the angle instruction and try brighter light.";
         } else if (embeddingBase64 == null || dim == null) {
             resultCode = "FAIL_OTHER";
-            rejection = "Worker did not return an embedding.";
         }
+        String rejection = "PASS".equals(resultCode) ? null : friendlyRejectionCopy(resultCode);
 
         writer.recordVerificationEvent(tenantId, employeeId,
                 "ENROLLMENT_SAMPLE", resultCode, rejection,
@@ -239,7 +246,8 @@ public class FaceService {
 
         if (!"PASS".equals(resultCode)) {
             return new EnrollmentSampleResponse(false, req.captureAngle(),
-                    row.samplesCaptured, SAMPLES_REQUIRED, quality, liveness, rejection,
+                    row.samplesCaptured, SAMPLES_REQUIRED, quality, liveness,
+                    resultCode, rejection,
                     remainingAngles(tenantId, employeeId));
         }
 
@@ -254,7 +262,7 @@ public class FaceService {
 
         int newCaptured = row.samplesCaptured + 1;
         return new EnrollmentSampleResponse(true, req.captureAngle(),
-                newCaptured, SAMPLES_REQUIRED, quality, liveness, null,
+                newCaptured, SAMPLES_REQUIRED, quality, liveness, null, null,
                 remainingAnglesAfter(req.captureAngle(),
                         remainingAngles(tenantId, employeeId)));
     }
@@ -263,15 +271,34 @@ public class FaceService {
         EnrollmentRow row = loadEnrollment(tenantId, employeeId);
         if (row == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "FACE_ENROLLMENT_NOT_FOUND:Start enrollment first.");
+                    "FACE_ENROLLMENT_NOT_FOUND:" + friendlyRejectionCopy("FACE_ENROLLMENT_NOT_FOUND"));
         }
         if (row.samplesCaptured < SAMPLES_REQUIRED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "FACE_SAMPLES_INCOMPLETE:" + row.samplesCaptured + "/" + SAMPLES_REQUIRED + " samples captured.");
+                    "FACE_SAMPLES_INCOMPLETE:" + friendlyRejectionCopy("FACE_SAMPLES_INCOMPLETE"));
         }
         writer.markEnrollmentActive(row.id, actingUserId);
+        // Notify the employee that enrollment is done. Best-effort — a failed
+        // notification never breaks the enrollment response.
+        publishFaceEventSafely(tenantId, employeeId, true, null);
         return new EnrollmentCompleteResponse(EnrollmentStatus.ACTIVE, row.id,
                 row.samplesCaptured, "Enrollment complete. You can now punch in with your face.");
+    }
+
+    /**
+     * Publish a FaceEnrollmentEvent to the in-process bus for downstream
+     * notification fan-out. Wrapped so any listener failure (or a missing
+     * publisher in unit tests) can never break the face flow.
+     */
+    private void publishFaceEventSafely(UUID tenantId, UUID employeeId,
+                                        boolean success, String reason) {
+        try {
+            eventPublisher.publishEvent(new FaceEnrollmentEvent(
+                    tenantId, employeeId, success, reason));
+        } catch (Exception ex) {
+            log.warn("Failed to publish FaceEnrollmentEvent for employee={}: {}",
+                    employeeId, ex.getMessage());
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -287,25 +314,25 @@ public class FaceService {
                     modelVersion, null, str(req.challengePerformed()),
                     req.deviceFingerprint(), req.latitude(), req.longitude(), null);
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "FACE_NOT_ENROLLED:Enroll your face from the App to enable face punch-in.");
+                    "FACE_NOT_ENROLLED:" + friendlyRejectionCopy("FACE_NOT_ENROLLED"));
         }
         if (row.status == EnrollmentStatus.LOCKED) {
             writer.recordVerificationEvent(tenantId, employeeId, purpose,
-                    "FAIL_LOCKED", "Face verification locked after repeated failures.",
+                    "FAIL_LOCKED", friendlyRejectionCopy("FACE_LOCKED"),
                     null, null, null, modelName, modelVersion,
                     null, str(req.challengePerformed()), req.deviceFingerprint(),
                     req.latitude(), req.longitude(), null);
             throw new ResponseStatusException(HttpStatus.LOCKED,
-                    "FACE_LOCKED:Face verification is locked after repeated failed attempts. Ask your manager to reset it, then enroll again.");
+                    "FACE_LOCKED:" + friendlyRejectionCopy("FACE_LOCKED"));
         }
         if (row.status != EnrollmentStatus.ACTIVE) {
             writer.recordVerificationEvent(tenantId, employeeId, purpose,
-                    "FAIL_NOT_ENROLLED", "Face enrollment is not active.",
+                    "FAIL_NOT_ENROLLED", friendlyRejectionCopy("FACE_NOT_ENROLLED"),
                     null, null, null, modelName, modelVersion,
                     null, str(req.challengePerformed()), req.deviceFingerprint(),
                     req.latitude(), req.longitude(), null);
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "FACE_NOT_ENROLLED:Complete face enrollment before punch-in.");
+                    "FACE_NOT_ENROLLED:" + friendlyRejectionCopy("FACE_NOT_ENROLLED"));
         }
 
         List<float[]> candidates = loadActiveEmbeddings(tenantId, employeeId);
@@ -317,7 +344,7 @@ public class FaceService {
                     null, str(req.challengePerformed()), req.deviceFingerprint(),
                     req.latitude(), req.longitude(), null);
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "FACE_TEMPLATE_INCOMPLETE:Face enrollment is incomplete. Ask your manager to reset it, then enroll again.");
+                    "FACE_TEMPLATE_INCOMPLETE:" + friendlyRejectionCopy("FACE_TEMPLATE_INCOMPLETE"));
         }
         List<String> candidateBase64 = new ArrayList<>(candidates.size());
         int dim = candidates.isEmpty() ? 0 : candidates.get(0).length;
@@ -337,7 +364,7 @@ public class FaceService {
                     null, str(req.challengePerformed()), req.deviceFingerprint(),
                     req.latitude(), req.longitude(), latency);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "FACE_WORKER_UNAVAILABLE:Face service is offline. Try again or request manual correction.");
+                    "FACE_WORKER_UNAVAILABLE:" + friendlyRejectionCopy("FACE_WORKER_UNAVAILABLE"));
         }
 
         Boolean faceDetected = result.boolField("face_detected");
@@ -356,39 +383,46 @@ public class FaceService {
                     .orElse(Double.NaN);
         }
 
+        // resultCode = value written to the audit log's `result` column, which
+        // is constrained by ck_face_events_result (V034) to a fixed enum. We
+        // keep it "FAIL_MATCH" for both the "best-below-threshold" and the
+        // "inconsistent across templates" branches. wireCode is the code the
+        // client sees on the exception message and can be more specific (e.g.
+        // FAIL_MATCH_INCONSISTENT) so the mobile app can pick a distinct
+        // friendly message for each sub-case.
         String resultCode = "PASS";
-        String reason = null;
+        String wireCode = "PASS";
 
         if (faceDetected == null || !faceDetected) {
             resultCode = "FAIL_NO_FACE";
-            reason = "No face detected.";
+            wireCode = "FAIL_NO_FACE";
         } else if (exactlyOne != null && !exactlyOne) {
             resultCode = "FAIL_MULTIPLE_FACES";
-            reason = "More than one face detected.";
+            wireCode = "FAIL_MULTIPLE_FACES";
         } else if (quality != null && quality < minQuality) {
             resultCode = "FAIL_LOW_QUALITY";
-            reason = "Face image quality too low. Move closer or improve lighting.";
+            wireCode = "FAIL_LOW_QUALITY";
         } else if (requireLiveness && (liveness == null || liveness < livenessThreshold)) {
             resultCode = "FAIL_LIVENESS";
-            reason = "Liveness check failed - move into brighter light and keep your face centered.";
+            wireCode = "FAIL_LIVENESS";
         } else if (!hasStrictScoreDistribution(matchScores, workerCandidateCount, candidates.size())) {
             writer.recordVerificationEvent(tenantId, employeeId, purpose,
-                    "FAIL_OTHER", "Face worker returned an incomplete score distribution.",
+                    "FAIL_OTHER", friendlyRejectionCopy("FACE_WORKER_BAD_RESPONSE"),
                     matchScore, quality, liveness, modelName, modelVersion,
                     bucketize(matchScore), str(req.challengePerformed()),
                     req.deviceFingerprint(), req.latitude(), req.longitude(), latency);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "FACE_WORKER_BAD_RESPONSE:Face service returned incomplete match scores. Try again or request manual correction.");
+                    "FACE_WORKER_BAD_RESPONSE:" + friendlyRejectionCopy("FACE_WORKER_BAD_RESPONSE"));
         } else if (matchScore == null || matchScore < matchThreshold) {
             // Best single template did not pass. A stranger's face will almost
             // always end up here.
             resultCode = "FAIL_MATCH";
-            reason = "Face does not match enrolled employee.";
+            wireCode = "FAIL_MATCH";
         } else if (scoreMeanForQuorum == null || scoreMeanForQuorum < (matchThreshold - matchMeanGap)) {
             // Best was good but the average across the enrolled templates
             // is suspiciously low. Classic "one lucky angle" signature.
             resultCode = "FAIL_MATCH";
-            reason = "Face match inconsistent across enrolled angles.";
+            wireCode = "FAIL_MATCH_INCONSISTENT";
         } else if (!matchScores.isEmpty()) {
             // Quorum: need >= matchQuorum templates >= (matchThreshold - matchTemplateGap).
             double agreeFloor = matchThreshold - matchTemplateGap;
@@ -396,11 +430,11 @@ public class FaceService {
             int neededQuorum = Math.min(matchQuorum, matchScores.size());
             if (agree < neededQuorum) {
                 resultCode = "FAIL_MATCH";
-                reason = "Only " + agree + " of " + matchScores.size()
-                        + " enrolled angles agreed; need " + neededQuorum + ".";
+                wireCode = "FAIL_MATCH_INCONSISTENT";
             }
         }
 
+        String reason = "PASS".equals(wireCode) ? null : friendlyRejectionCopy(wireCode);
         String bucket = bucketize(matchScore);
 
         writer.recordVerificationEvent(tenantId, employeeId, purpose,
@@ -421,7 +455,7 @@ public class FaceService {
             case "FAIL_LIVENESS", "FAIL_MATCH" -> HttpStatus.FORBIDDEN;
             default -> HttpStatus.FORBIDDEN;
         };
-        throw new ResponseStatusException(httpStatus, resultCode + ":" + (reason == null ? "" : reason));
+        throw new ResponseStatusException(httpStatus, wireCode + ":" + reason);
     }
 
     /** Punch-in endpoint. For now: verify only. Actual attendance row creation
@@ -500,8 +534,41 @@ public class FaceService {
     private void ensureEnabled() {
         if (!enabled) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "FACE_DISABLED:Face verification is disabled on this deployment.");
+                    "FACE_DISABLED:" + friendlyRejectionCopy("FACE_DISABLED"));
         }
+    }
+
+    /**
+     * Canonical, user-facing copy for every code the face pipeline can raise.
+     * The mobile app has an identical table (utils/faceError.ts); keeping the
+     * strings verbatim here means:
+     *   - if the mobile is offline / hasn't been updated, the server-provided
+     *     sentence is already user-safe;
+     *   - if the mobile is up-to-date it will still prefer this copy over the
+     *     code-keyed fallback, so both sides converge on the same wording.
+     * Every line is action-oriented and never accuses the user of a specific
+     * signal (e.g. lighting) unless we actually measured that signal.
+     */
+    private static String friendlyRejectionCopy(String code) {
+        return switch (code) {
+            case "FAIL_NO_FACE" -> "We can't see a face in the frame. Point the front camera at your face and keep it inside the guide, then try again.";
+            case "FAIL_MULTIPLE_FACES" -> "More than one face is in the frame. Please make sure you're the only person visible before capturing.";
+            case "FAIL_LOW_QUALITY" -> "The photo wasn't sharp enough to read. Wipe the front lens, hold the phone steady, face even light, and try again.";
+            case "FAIL_LIVENESS" -> "We couldn't confirm a live face. Please blink (or follow the on-screen prompt) while looking at the camera, then try again.";
+            case "FAIL_MATCH" -> "That doesn't look like your enrolled face. Look straight at the camera in even light and try again. If this keeps happening, ask your manager to reset your face enrolment.";
+            case "FAIL_MATCH_INCONSISTENT" -> "Your face partially matched but not consistently. Try again looking straight at the camera. If it keeps failing, ask your manager to reset your face enrolment.";
+            case "FAIL_OTHER" -> "Something went wrong on our side while checking your face. Please try again in a moment.";
+            case "FACE_LOCKED" -> "Face verification is temporarily locked after several unsuccessful attempts. Please ask your manager to reset it.";
+            case "FACE_NOT_ENROLLED" -> "You haven't enrolled your face yet. Please open Face Enrolment first.";
+            case "FACE_TEMPLATE_INCOMPLETE" -> "Your face enrolment isn't complete. Please ask your manager to reset it and enrol again.";
+            case "FACE_ENROLLMENT_NOT_FOUND" -> "Your enrolment session expired. Please start face enrolment again from the beginning.";
+            case "FACE_SAMPLES_INCOMPLETE" -> "You still have more angles to capture before enrolment can finish.";
+            case "FACE_WORKER_UNAVAILABLE" -> "Face check service is temporarily unavailable. Please try again in a moment, or request a manual correction from the Requests tab.";
+            case "FACE_WORKER_BAD_RESPONSE", "FACE_WORKER_BAD_EMBEDDING" -> "We couldn't complete the face check just now. Please try again in a moment.";
+            case "FACE_DISABLED" -> "Face check is turned off for this workspace. Please contact your admin.";
+            case "DUPLICATE_ANGLE" -> "You've already captured this angle — continue with the next one.";
+            default -> "Face check couldn't complete. Please try again.";
+        };
     }
 
     private EnrollmentRow loadEnrollment(UUID tenantId, UUID employeeId) {
@@ -600,7 +667,7 @@ public class FaceService {
         byte[] bytes = Base64.getDecoder().decode(b64);
         if (bytes.length != dim * Float.BYTES) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "FACE_WORKER_BAD_EMBEDDING:Embedding dim mismatch.");
+                    "FACE_WORKER_BAD_EMBEDDING:" + friendlyRejectionCopy("FACE_WORKER_BAD_EMBEDDING"));
         }
         return com.unifiedtree.attendance.face.crypto.FloatBufferUtil.fromLittleEndianBytes(bytes);
     }

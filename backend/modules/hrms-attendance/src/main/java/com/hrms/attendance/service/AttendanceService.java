@@ -59,6 +59,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -121,7 +123,7 @@ public class AttendanceService {
                                      double latitude, double longitude,
                                      String faceBase64, String checkInMethodStr, UUID tenantId) {
         return checkInJson(employeeId, companyId, branchId, departmentId, latitude, longitude,
-                faceBase64, checkInMethodStr, tenantId, null, null, null, null);
+                faceBase64, checkInMethodStr, tenantId, null, null, null, null, false);
     }
 
     @Transactional
@@ -130,6 +132,20 @@ public class AttendanceService {
                                      String faceBase64, String checkInMethodStr, UUID tenantId,
                                      String locationName, String zoneName,
                                      String deviceId, String clientEventId) {
+        // Legacy 13-arg overload — preserved so any existing callers (tests,
+        // integration tests, canonical mirror) keep compiling. Defaults wfhDay
+        // to false so behaviour is unchanged.
+        return checkInJson(employeeId, companyId, branchId, departmentId, latitude, longitude,
+                faceBase64, checkInMethodStr, tenantId, locationName, zoneName, deviceId, clientEventId, false);
+    }
+
+    @Transactional
+    public AttendanceDto checkInJson(UUID employeeId, UUID companyId, UUID branchId, UUID departmentId,
+                                     double latitude, double longitude,
+                                     String faceBase64, String checkInMethodStr, UUID tenantId,
+                                     String locationName, String zoneName,
+                                     String deviceId, String clientEventId,
+                                     boolean wfhDay) {
         if (clientEventId != null && !clientEventId.isBlank()) {
             Optional<AttendanceRecord> syncedRecord = attendanceRecordRepository.findByClientEventId(clientEventId);
             if (syncedRecord.isPresent()) {
@@ -154,7 +170,11 @@ public class AttendanceService {
         record.setBranchId(branchId);
         record.setAttendanceDate(today);
         record.setCheckInAt(Instant.now());
-        record.setAttendanceType(AttendanceType.OFFICE);
+        // WFH punches record attendance_type=WFH so the team dashboard, calendar,
+        // and monthly stats bucket the day correctly (already surfaced in
+        // AttendanceController.countSummary as the "WFH" tile and in the mobile
+        // calendar/dashboard). Otherwise default to OFFICE.
+        record.setAttendanceType(wfhDay ? AttendanceType.WFH : AttendanceType.OFFICE);
         record.setAttendanceStatus(resolveStatus(record.getCheckInAt()));
         record.setCheckInMethod(method);
         record.setCheckInLatitude(latitude);
@@ -336,6 +356,38 @@ public class AttendanceService {
                     employeeId, java.sql.Date.valueOf(end), java.sql.Date.valueOf(start));
         } catch (Exception ex) { /* no leave overlay on failure */ }
         return dates;
+    }
+
+    /**
+     * True when {@code employeeId} has an APPROVED WFH request that covers
+     * {@code date} (IST). Read via JdbcTemplate to avoid a cross-module
+     * dependency on hrms-leave from hrms-attendance — the WFH pipeline lives
+     * in the leave module, but the attendance module owns the geofence-gate
+     * decision. Falls back to {@code false} on any failure (JdbcTemplate
+     * missing, table missing, exception) so a WFH-lookup hiccup never blocks
+     * a legitimate office punch.
+     *
+     * <p>Called from AttendanceController.checkIn BEFORE the OUTSIDE_GEOFENCE
+     * throw. It is intentionally NOT called for face-recognition validation —
+     * WFH is a location override, not an identity-verification bypass. If a
+     * WFH day is detected, the caller also passes wfhDay=true into
+     * checkInJson so the record's attendance_type is stamped WFH (not OFFICE).
+     */
+    @Transactional(readOnly = true)
+    public boolean isApprovedWfhDay(UUID employeeId, LocalDate date) {
+        if (jdbcTemplate == null || employeeId == null || date == null) return false;
+        try {
+            Integer hit = jdbcTemplate.query(
+                    "SELECT 1 FROM leave_mgmt.wfh_requests "
+                            + "WHERE employee_id = ? AND status = 'APPROVED' "
+                            + "AND from_date <= ? AND to_date >= ? LIMIT 1",
+                    rs -> rs.next() ? 1 : null,
+                    employeeId, java.sql.Date.valueOf(date), java.sql.Date.valueOf(date));
+            return hit != null;
+        } catch (Exception ex) {
+            log.debug("WFH lookup failed for employee {} on {}: {}", employeeId, date, ex.getMessage());
+            return false;
+        }
     }
 
     /** Company holiday dates within [start,end] for the employee's company. */
@@ -606,6 +658,72 @@ public class AttendanceService {
             log.debug("Shift profile lookup failed for employee {}: {}", employeeId, ex.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Bulk-fetch the current shift {@code end_time} for a batch of employees.
+     * Used by the dashboard's Early Out tile so we don't issue N+1 queries when
+     * computing early-checkout counts across the whole team. Returns one entry
+     * per employee whose active shift assignment (on {@code onDate}) has a
+     * non-null {@code end_time}. Employees without an assignment or without an
+     * end_time simply do not appear in the map — the caller treats absence as
+     * "cannot determine early out" and returns {@code false}.
+     *
+     * <p>NOTE: {@code shift_policies.end_time} is a naked wall-clock TIME; the
+     * caller must convert the record's UTC {@code check_out_at} to the IST
+     * zone before comparing. Cross-midnight (night) shifts are NOT handled —
+     * see the caller for the TODO.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, LocalTime> getShiftEndTimesForEmployees(List<UUID> employeeIds, LocalDate onDate) {
+        if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) {
+            return Map.of();
+        }
+        // Same "latest active assignment per employee" pattern as getShiftProfile,
+        // just expressed as a correlated subquery so it works across a batch.
+        String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
+        String sql = ("""
+                SELECT esa.employee_id, sp.end_time
+                  FROM attendance.employee_shift_assignments esa
+                  JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id
+                 WHERE esa.employee_id IN (%s)
+                   AND esa.effective_from <= ?
+                   AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
+                   AND sp.is_active = TRUE
+                   AND esa.effective_from = (
+                       SELECT MAX(esa2.effective_from)
+                         FROM attendance.employee_shift_assignments esa2
+                         JOIN attendance.shift_policies sp2 ON sp2.id = esa2.shift_policy_id
+                        WHERE esa2.employee_id = esa.employee_id
+                          AND esa2.effective_from <= ?
+                          AND (esa2.effective_to IS NULL OR esa2.effective_to >= ?)
+                          AND sp2.is_active = TRUE
+                   )
+                """).formatted(inClause);
+        Object[] args = new Object[employeeIds.size() + 4];
+        for (int i = 0; i < employeeIds.size(); i++) {
+            args[i] = employeeIds.get(i);
+        }
+        args[employeeIds.size()] = onDate;
+        args[employeeIds.size() + 1] = onDate;
+        args[employeeIds.size() + 2] = onDate;
+        args[employeeIds.size() + 3] = onDate;
+        Map<UUID, LocalTime> out = new HashMap<>();
+        try {
+            jdbcTemplate.query(sql, rs -> {
+                UUID eid = (UUID) rs.getObject("employee_id");
+                java.sql.Time t = rs.getTime("end_time");
+                if (eid != null && t != null) {
+                    out.put(eid, t.toLocalTime());
+                }
+            }, args);
+        } catch (Exception ex) {
+            // Match getShiftProfile: log-and-swallow so a schema hiccup doesn't
+            // 500 the whole dashboard. Callers treat empty map as "unknown" and
+            // simply report earlyCheckout = 0.
+            log.debug("Shift end times lookup failed for {} employees: {}", employeeIds.size(), ex.getMessage());
+        }
+        return out;
     }
 
     private Double lookupDailyTargetHours(UUID employeeId, LocalDate onDate) {

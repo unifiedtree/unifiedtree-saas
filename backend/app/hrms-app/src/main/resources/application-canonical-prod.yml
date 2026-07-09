@@ -134,6 +134,19 @@ unifiedtree:
     # Generate with: openssl rand -base64 32
     encryption-key:       ${UNIFIEDTREE_FACE_ENCRYPTION_KEY:}
 
+  # ---------------------------------------------------------------------
+  # In-app notifications + Expo push (platform-notifications module)
+  # ---------------------------------------------------------------------
+  # Expo Push accepts unauthenticated sends against exp.host; no API key is
+  # required for the current release. If we later want per-project
+  # rate-limit isolation we can add an EXPO_ACCESS_TOKEN header — for now
+  # the default is fine. Flip EXPO_PUSH_ENABLED=false to short-circuit
+  # every push send (in-app rows still persist).
+  push:
+    expo:
+      url:     ${EXPO_PUSH_URL:https://exp.host/--/api/v2/push/send}
+      enabled: ${EXPO_PUSH_ENABLED:true}
+
 # =============================================================================
 # Production hardening — overrides base application.yml / application-canonical.yml
 # =============================================================================
