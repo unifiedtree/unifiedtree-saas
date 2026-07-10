@@ -132,12 +132,18 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
 
   // Once we have a next-code preview (only fires in ADD mode), pre-fill the
   // Employee Code field IF the admin hasn't already typed something. The
-  // field is editable so this only sets an initial suggestion.
+  // field is editable so this only sets an initial suggestion. We remember
+  // the exact string we auto-filled so on submit we can tell whether the
+  // admin actually typed a custom code — if it's still the auto-fill, we
+  // send undefined so the backend's atomic counter fires. Sending the
+  // literal value would take the override branch and never increment.
+  const autoFilledCodeRef = React.useRef<string | null>(null)
   React.useEffect(() => {
     if (isEdit) return
     if (!nextCodePreview?.preview) return
     if (form.employeeCode) return
     setForm((p) => (p.employeeCode ? p : { ...p, employeeCode: nextCodePreview.preview }))
+    autoFilledCodeRef.current = nextCodePreview.preview
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextCodePreview?.preview])
 
@@ -182,7 +188,13 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
       } else {
         const result = await createEmp.mutateAsync({
           companyId,
-          employeeCode: form.employeeCode || undefined,
+          // Only forward if the admin manually edited the field; otherwise
+          // let the backend atomically issue the next code (see effect above).
+          employeeCode:
+            !form.employeeCode ||
+            (autoFilledCodeRef.current && form.employeeCode === autoFilledCodeRef.current)
+              ? undefined
+              : form.employeeCode,
           firstName: form.firstName,
           middleName: form.middleName || undefined,
           lastName: form.lastName || undefined,
