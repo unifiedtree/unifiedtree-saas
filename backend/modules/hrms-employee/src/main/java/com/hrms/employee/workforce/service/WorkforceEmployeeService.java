@@ -275,6 +275,29 @@ public class WorkforceEmployeeService {
 
     private Map<String, Object> incrementAndFetch(UUID companyId) {
         try {
+            // First, resync the counter to MAX(counter, actual_highest_in_use + 1).
+            // This handles three real-world cases where the counter would
+            // otherwise drift behind reality:
+            //   1. Excel/CSV bulk import that inserted codes past the counter
+            //   2. An admin who manually typed a code like SRC-500 as an override
+            //   3. Prefix change mid-way that landed on an already-used numeric range
+            // We look at ALL employees in this company whose code matches the
+            // configured prefix + one-or-more digits, extract the trailing
+            // number, and bump the counter if MAX(that number) + 1 is higher
+            // than what the counter currently holds. Then increment as usual.
+            jdbc.update("""
+                UPDATE settings.hr_configuration cfg
+                   SET employee_code_next_number = GREATEST(
+                     cfg.employee_code_next_number,
+                     COALESCE((
+                       SELECT MAX((regexp_replace(e.employee_code, '^' || cfg.employee_code_prefix || '-', ''))::bigint)
+                         FROM hrms.employees e
+                        WHERE e.company_id = cfg.company_id
+                          AND e.employee_code ~ ('^' || cfg.employee_code_prefix || '-[0-9]+$')
+                     ), 0) + 1
+                   )
+                 WHERE cfg.company_id = ?
+                """, companyId);
             return jdbc.queryForMap("""
                 UPDATE settings.hr_configuration
                    SET employee_code_next_number = employee_code_next_number + 1

@@ -5,6 +5,7 @@ import com.unifiedtree.settings.dto.SettingsDtos.NextEmployeeCodeResponse;
 import com.unifiedtree.settings.dto.SettingsDtos.UpdateHrConfigRequest;
 import com.unifiedtree.settings.entity.HrConfiguration;
 import com.unifiedtree.settings.repository.HrConfigurationRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,9 +18,11 @@ import java.util.UUID;
 public class HrConfigurationService {
 
     private final HrConfigurationRepository repository;
+    private final JdbcTemplate jdbc;
 
-    public HrConfigurationService(HrConfigurationRepository repository) {
+    public HrConfigurationService(HrConfigurationRepository repository, JdbcTemplate jdbc) {
         this.repository = repository;
+        this.jdbc = jdbc;
     }
 
     @Transactional(readOnly = true)
@@ -55,19 +58,37 @@ public class HrConfigurationService {
         return toResponse(repository.save(cfg));
     }
 
-    /** Non-consuming preview of what the next employee code will look like. */
-    @Transactional(readOnly = true)
+    /**
+     * Non-consuming preview of what the next employee code will look like.
+     *
+     * <p>Always computes the effective next number as MAX(counter,
+     * actual_highest_in_use_for_this_prefix + 1). This means the field on
+     * the Add Employee form always suggests a code that will NOT clash with
+     * an existing row — even if employees were imported from Excel with
+     * codes past the counter, or an admin manually saved SRC-500 as an
+     * override.
+     */
     public NextEmployeeCodeResponse previewNextEmployeeCode(UUID companyId) {
         HrConfiguration cfg = repository.findByCompanyId(companyId).orElseGet(() -> {
             HrConfiguration draft = new HrConfiguration();
             draft.setCompanyId(companyId);
             return draft;
         });
+        String prefix  = cfg.getEmployeeCodePrefix();
+        int padding    = cfg.getEmployeeCodePadding();
+        long counter   = cfg.getEmployeeCodeNextNumber();
+        Long dbHighest = jdbc.queryForObject("""
+            SELECT COALESCE(MAX((regexp_replace(e.employee_code, '^' || ? || '-', ''))::bigint), 0)
+              FROM hrms.employees e
+             WHERE e.company_id = ?
+               AND e.employee_code ~ ('^' || ? || '-[0-9]+$')
+            """, Long.class, prefix, companyId, prefix);
+        long effectiveNext = Math.max(counter, (dbHighest == null ? 0 : dbHighest) + 1);
         return new NextEmployeeCodeResponse(
-                formatCode(cfg.getEmployeeCodePrefix(), cfg.getEmployeeCodeNextNumber(), cfg.getEmployeeCodePadding()),
-                cfg.getEmployeeCodePrefix(),
-                cfg.getEmployeeCodeNextNumber(),
-                cfg.getEmployeeCodePadding());
+                formatCode(prefix, effectiveNext, padding),
+                prefix,
+                effectiveNext,
+                padding);
     }
 
     /**
