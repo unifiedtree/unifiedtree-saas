@@ -76,6 +76,12 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.audit",
         "com.hrms.api.attendance",
         "com.hrms.api.leave",
+        // WFH controller lives in its own package under api/wfh. Previously
+        // missing from this scan — the WfhController class was on the
+        // classpath but Spring never instantiated it as a bean, so POST
+        // /v1/wfh fell through to the default static-resource handler and
+        // clients saw a generic "The requested resource was not found" 404.
+        "com.hrms.api.wfh",
         "com.hrms.api.letters",
         "com.hrms.api.invitation",
         "com.hrms.api.mail",

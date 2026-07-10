@@ -207,6 +207,16 @@ public class LeaveController {
                 leaveService.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable)));
     }
 
+    @Operation(summary = "Get past leave decisions (approved/rejected/cancelled) for the current manager")
+    @GetMapping("/approvals/history")
+    @PreAuthorize("@perm.check('hrms.leave.approve.l1')")
+    public ResponseEntity<PageResponse<LeaveRequestResponse>> approvalsHistory(
+            @AuthenticationPrincipal Jwt jwt,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(enrichPage(
+                leaveService.getDecidedApprovalsForManager(extractEmployeeId(jwt), pageable)));
+    }
+
     @Operation(summary = "L1 manager approval — approve escalates to HR, reject closes")
     @PostMapping("/{requestId}/l1-decision")
     @PreAuthorize("@perm.check('hrms.leave.approve.l1')")

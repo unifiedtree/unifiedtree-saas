@@ -490,6 +490,13 @@ public class LeaveService {
         return PageResponse.from(page, this::toResponseWithTypeName);
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getDecidedApprovalsForManager(UUID managerId, Pageable pageable) {
+        log.debug("Fetching decided approvals history for manager={}", managerId);
+        Page<LeaveRequest> page = leaveRequestRepository.findDecidedForManager(managerId, pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
     @Transactional
     public LeaveRequestResponse approveL1(UUID requestId, UUID managerId, LeaveApprovalRequest approval) {
         log.info("L1 approval requestId={} managerId={} decision={}", requestId, managerId, approval.status());

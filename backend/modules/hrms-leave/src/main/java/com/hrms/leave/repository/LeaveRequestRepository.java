@@ -66,4 +66,35 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
         """,
         nativeQuery = true)
     Page<LeaveRequest> findPendingForManager(@Param("managerEmpId") UUID managerEmpId, Pageable pageable);
+
+    /**
+     * Approval-history query for a manager: returns leaves this manager has
+     * already DECIDED (APPROVED, REJECTED, CANCELLED — anything except PENDING).
+     * Same broadened match as {@link #findPendingForManager} — the manager
+     * "owns" a decided leave if they were its approver_id, its applicant's
+     * reporting_manager_id, or the applicant's department head — so an
+     * assignment change between apply and decision doesn't erase the history.
+     * Ordered by updatedAt DESC so the most-recent decision is on top.
+     */
+    @Query(value = """
+        SELECT lr.* FROM leave_mgmt.leave_requests lr
+        LEFT JOIN hrms.employees e   ON e.id = lr.employee_id
+        LEFT JOIN hrms.departments d ON d.id = e.department_id
+        WHERE lr.status <> 'PENDING'
+          AND ( lr.approver_id = :managerEmpId
+             OR e.reporting_manager_id = :managerEmpId
+             OR d.department_head_employee_id = :managerEmpId )
+        ORDER BY lr.updated_at DESC
+        """,
+        countQuery = """
+        SELECT COUNT(*) FROM leave_mgmt.leave_requests lr
+        LEFT JOIN hrms.employees e   ON e.id = lr.employee_id
+        LEFT JOIN hrms.departments d ON d.id = e.department_id
+        WHERE lr.status <> 'PENDING'
+          AND ( lr.approver_id = :managerEmpId
+             OR e.reporting_manager_id = :managerEmpId
+             OR d.department_head_employee_id = :managerEmpId )
+        """,
+        nativeQuery = true)
+    Page<LeaveRequest> findDecidedForManager(@Param("managerEmpId") UUID managerEmpId, Pageable pageable);
 }
