@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -61,13 +62,23 @@ public class AppNotificationService {
      * the current thread has a tenant bound (e.g. reactive contexts, tests).
      * Explicit is safer.
      */
-    @Transactional
+    /**
+     * REQUIRES_NEW: this is invoked from {@code DomainEventListener}'s
+     * {@code AFTER_COMMIT} handlers. Spring's default {@code REQUIRED} joins the
+     * just-committed outer transaction that's still bound to the thread — the
+     * entity gets attached to a persistence context that's about to be cleaned
+     * up WITHOUT flushing. {@code repo.save()} returns an ID but the row never
+     * lands in the DB (silent-fail). REQUIRES_NEW forces a fresh JDBC + JPA tx
+     * so the insert actually commits.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AppNotification create(UUID tenantId,
                                   UUID userId,
                                   AppNotificationType type,
                                   String title,
                                   String body,
                                   Map<String, Object> data) {
+        log.info("AppNotificationService.create ENTER tenant={} user={} type={}", tenantId, userId, type);
         if (tenantId == null || userId == null || type == null || title == null) {
             log.warn("skipping notification with missing required field (tenant={} user={} type={})",
                     tenantId, userId, type);
@@ -81,6 +92,7 @@ public class AppNotificationService {
         n.setBody(body);
         n.setData(data == null ? new HashMap<>() : new HashMap<>(data));
         AppNotification saved = repo.save(n);
+        log.info("AppNotificationService.create SAVED id={} user={} type={}", saved.getId(), userId, type);
 
         // Fire the push AFTER the current tx commits so a rollback in the
         // caller (e.g. leave-apply fails validation post-save) cannot leave
@@ -117,6 +129,56 @@ public class AppNotificationService {
         return repo.markAllRead(userId);
     }
 
+    /** User deletes a single notification (their own — enforced by user_id predicate). */
+    @Transactional
+    public void deleteOne(UUID userId, UUID notificationId) {
+        AppNotification n = repo.findByIdAndUserId(notificationId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Notification", notificationId));
+        repo.delete(n);
+    }
+
+    /** "Clear all read" — one-tap cleanup that removes every read row for the user. */
+    @Transactional
+    public int deleteAllRead(UUID userId) {
+        return repo.deleteAllReadForUser(userId);
+    }
+
+    /**
+     * Mark as read every unread notification tied to the given request id
+     * (leave/WFH/correction/shift-change). Called from the domain listener
+     * right after a decision fires — so the approver's "New leave request"
+     * alert clears itself the moment they act, even if they never opened the
+     * Alerts tab. Best-effort: failure is logged and swallowed, never blocks
+     * the primary decision path.
+     */
+    @Transactional
+    public int markReadByRequestId(String requestId) {
+        if (requestId == null || requestId.isBlank()) return 0;
+        List<AppNotification> rows = repo.findUnreadByRequestId(requestId);
+        if (rows.isEmpty()) return 0;
+        Instant now = Instant.now();
+        for (AppNotification n : rows) {
+            n.setReadAt(now);
+        }
+        repo.saveAll(rows);
+        return rows.size();
+    }
+
+    /**
+     * Sweep old notification rows so the table never balloons. Called by the
+     * nightly {@code NotificationCleanupJob}. Read rows older than {@code readRetentionDays}
+     * and unread rows older than {@code unreadRetentionDays} are deleted.
+     */
+    @Transactional
+    public int cleanupOldNotifications(long readRetentionDays, long unreadRetentionDays) {
+        Instant readCutoff = Instant.now().minus(java.time.Duration.ofDays(readRetentionDays));
+        Instant unreadCutoff = Instant.now().minus(java.time.Duration.ofDays(unreadRetentionDays));
+        int deleted = repo.deleteStale(readCutoff, unreadCutoff);
+        log.info("Notification cleanup: deleted {} rows (read>{}d OR unread>{}d)",
+                deleted, readRetentionDays, unreadRetentionDays);
+        return deleted;
+    }
+
     /**
      * Register (or update) an Expo push token for {@code userId}.
      *
@@ -133,6 +195,32 @@ public class AppNotificationService {
             tokenRepo.saveAll(foreign);
             log.info("Deactivated {} foreign device_token(s) for hand-off to user={}",
                     foreign.size(), userId);
+        }
+
+        // Deactivate every OTHER active token this user still has. If they had
+        // an earlier install of the app (or a different Expo project), the old
+        // token remains "active" in the DB and gets bundled with the new one
+        // in the same Expo push HTTP request — which Expo rejects with a
+        // PUSH_TOO_MANY_EXPERIENCE_IDS 400 because the tokens belong to
+        // different projects, silently dropping ALL push for that user. This
+        // exact bug bit us during the motivaite123 → suryakumar478 account
+        // migration on 2026-07-13. Keeping only the latest token per user
+        // sidesteps the multi-project mixing entirely. Trade-off: if a user
+        // legitimately uses two phones, only the most-recently-registered
+        // one receives push. Acceptable for a workforce HR app where each
+        // employee has one work phone.
+        List<DeviceToken> otherActive = tokenRepo.findByUserIdAndActiveTrue(userId);
+        int deactivated = 0;
+        for (DeviceToken t : otherActive) {
+            if (!t.getExpoPushToken().equals(req.expoPushToken()) && t.isActive()) {
+                t.setActive(false);
+                deactivated++;
+            }
+        }
+        if (deactivated > 0) {
+            tokenRepo.saveAll(otherActive);
+            log.info("Deactivated {} stale token(s) for user={} — keeping only the newly registered one",
+                    deactivated, userId);
         }
 
         DeviceToken t = tokenRepo.findByUserIdAndExpoPushToken(userId, req.expoPushToken())
