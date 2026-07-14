@@ -39,10 +39,13 @@ import com.hrms.core.enums.ApprovalStatus;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.core.tenant.TenantContext;
+import com.unifiedtree.notifications.events.CorrectionDecidedEvent;
+import com.unifiedtree.notifications.events.CorrectionSubmittedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -84,6 +87,7 @@ public class AttendanceService {
     private final GeoValidationService geoValidationService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final AttendanceMapper attendanceMapper;
+    private final ApplicationEventPublisher eventPublisher;
     private final double confidenceThreshold;
     private final boolean faceRecognitionEnabled;
     private final boolean kafkaEnabled;
@@ -100,6 +104,7 @@ public class AttendanceService {
             GeoValidationService geoValidationService,
             KafkaTemplate<String, Object> kafkaTemplate,
             AttendanceMapper attendanceMapper,
+            ApplicationEventPublisher eventPublisher,
             @Value("${hrms.face-recognition.confidence-threshold:0.92}") double confidenceThreshold,
             @Value("${hrms.face-recognition.enabled:true}") boolean faceRecognitionEnabled,
             @Value("${hrms.kafka.enabled:false}") boolean kafkaEnabled) {
@@ -112,6 +117,7 @@ public class AttendanceService {
         this.geoValidationService = geoValidationService;
         this.kafkaTemplate = kafkaTemplate;
         this.attendanceMapper = attendanceMapper;
+        this.eventPublisher = eventPublisher;
         this.confidenceThreshold = confidenceThreshold;
         this.faceRecognitionEnabled = faceRecognitionEnabled;
     }
@@ -175,7 +181,10 @@ public class AttendanceService {
         // AttendanceController.countSummary as the "WFH" tile and in the mobile
         // calendar/dashboard). Otherwise default to OFFICE.
         record.setAttendanceType(wfhDay ? AttendanceType.WFH : AttendanceType.OFFICE);
-        record.setAttendanceStatus(resolveStatus(record.getCheckInAt()));
+        // Late is measured against the employee's assigned shift start + grace
+        // (falls back to 09:30 if they have no shift).
+        LocalTime lateThreshold = lateThresholdFor(employeeId, record.getAttendanceDate());
+        record.setAttendanceStatus(resolveStatus(record.getCheckInAt(), lateThreshold));
         record.setCheckInMethod(method);
         record.setCheckInLatitude(latitude);
         record.setCheckInLongitude(longitude);
@@ -183,11 +192,23 @@ public class AttendanceService {
         record.setCheckInZoneName(zoneName);
         record.setDeviceId(deviceId);
         record.setClientEventId(clientEventId);
-        record.setLateByMinutes(calculateLateMinutes(record.getCheckInAt()));
+        record.setLateByMinutes(calculateLateMinutes(record.getCheckInAt(), lateThreshold));
 
         if (faceRecognitionEnabled && method == CheckInMethod.FACE_RECOGNITION
                 && faceBase64 != null && !faceBase64.isBlank()) {
-            byte[] faceBytes = Base64.getDecoder().decode(faceBase64);
+            // Tolerate a data-URI prefix + whitespace/newlines, and turn a
+            // malformed image into a clean 400 instead of an unhandled 500.
+            byte[] faceBytes;
+            try {
+                String b64 = faceBase64;
+                int comma = b64.indexOf(',');
+                if (b64.startsWith("data:") && comma >= 0) {
+                    b64 = b64.substring(comma + 1);
+                }
+                faceBytes = Base64.getMimeDecoder().decode(b64);
+            } catch (IllegalArgumentException ex) {
+                throw new BusinessRuleException("Invalid face image data", "FACE_IMAGE_INVALID");
+            }
             FaceRecognitionResult result = faceRecognitionClient.matchFace(employeeId, faceBytes);
             log.info("Face recognition: employee={}, matched={}, score={}", employeeId, result.matched(), result.confidenceScore());
             if (!result.matched() || result.confidenceScore() < confidenceThreshold) {
@@ -427,6 +448,9 @@ public class AttendanceService {
         // Holidays + approved leave are NOT absences and don't drag the score.
         java.util.Set<LocalDate> holidays = resolveHolidayDates(employeeId, start, end);
         java.util.Set<LocalDate> leaveDays = resolveApprovedLeaveDates(employeeId, start, end);
+        // Shift-aware "late" cutoff for this employee (their shift start + grace,
+        // or 09:30 if unassigned). Computed once — shift changes mid-period are rare.
+        LocalTime lateThreshold = lateThresholdFor(employeeId, null);
         LocalDate cursor = (joining != null && joining.isAfter(start)) ? joining : start;
         while (!cursor.isAfter(end) && !cursor.isAfter(today)) {
             DayOfWeek dow = cursor.getDayOfWeek();
@@ -438,7 +462,7 @@ public class AttendanceService {
             if (rec != null && rec.getCheckInAt() != null) {
                 presentDays++;
                 LocalTime checkInLocal = rec.getCheckInAt().atZone(IST).toLocalTime();
-                if (checkInLocal.isAfter(LATE_THRESHOLD)) lateDays++;
+                if (checkInLocal.isAfter(lateThreshold)) lateDays++;
                 else onTimeDays++;
             } else if (holidays.contains(cursor)) {
                 holidayDays++;
@@ -479,6 +503,8 @@ public class AttendanceService {
         // HOLIDAY (pink) / ON_LEAVE (blue) instead of red ABSENT.
         java.util.Set<LocalDate> holidays = resolveHolidayDates(employeeId, start, end);
         java.util.Set<LocalDate> leaveDays = resolveApprovedLeaveDates(employeeId, start, end);
+        // Shift-aware "late" cutoff (shift start + grace, or 09:30 if unassigned).
+        LocalTime lateThreshold = lateThresholdFor(employeeId, null);
 
         List<DayRecordResponse> result = new ArrayList<>();
         LocalDate cursor = start;
@@ -492,7 +518,7 @@ public class AttendanceService {
                 boolean beforeJoining = joining != null && cursor.isBefore(joining);
                 if (rec != null && rec.getCheckInAt() != null) {
                     LocalTime checkInLocal = rec.getCheckInAt().atZone(IST).toLocalTime();
-                    String status = checkInLocal.isAfter(LATE_THRESHOLD) ? "LATE" : "PRESENT";
+                    String status = checkInLocal.isAfter(lateThreshold) ? "LATE" : "PRESENT";
                     result.add(new DayRecordResponse(
                             cursor.toString(), status,
                             rec.getCheckInAt().toString(),
@@ -540,6 +566,8 @@ public class AttendanceService {
         java.util.Set<LocalDate> holidays = resolveHolidayDates(employeeId, monday, sunday);
         java.util.Set<LocalDate> leaveDays = resolveApprovedLeaveDates(employeeId, monday, sunday);
 
+        // Shift-aware "late" cutoff (shift start + grace, or 09:30 if unassigned).
+        LocalTime lateThreshold = lateThresholdFor(employeeId, null);
         List<WeeklyDayResponse> days = new ArrayList<>();
         double totalHours = 0, overtime = 0, totalArrivalMinutes = 0;
         int presentDays = 0, arrivalCount = 0;
@@ -559,10 +587,15 @@ public class AttendanceService {
                 continue;
             }
             // Future days, and days before the employee joined, are not absences.
-            // Render them as a neutral off-day cell (the mobile treats WEEKEND as
-            // neutral) rather than a red "Absent".
+            // Previously labeled "WEEKEND" purely so the mobile rendered them as
+            // a neutral cell — but the client (correctly) flagged that every
+            // non-work-off future day showed up as "Weekend" in the Day
+            // Breakdown card, which is wrong. Use a distinct UPCOMING status so
+            // the mobile can style neutrally without hijacking the real WEEKEND
+            // label (which now genuinely only marks the employee's configured
+            // week-off days).
             if (day.isAfter(today) || (joining != null && day.isBefore(joining))) {
-                days.add(new WeeklyDayResponse(day.toString(), 0, "WEEKEND", null, null, null));
+                days.add(new WeeklyDayResponse(day.toString(), 0, "UPCOMING", null, null, null));
                 continue;
             }
 
@@ -570,7 +603,7 @@ public class AttendanceService {
             if (rec != null && rec.getCheckInAt() != null) {
                 double h = rec.getWorkingHours() != null ? rec.getWorkingHours() : 0;
                 LocalTime checkInLocal = rec.getCheckInAt().atZone(IST).toLocalTime();
-                String status = checkInLocal.isAfter(LATE_THRESHOLD) ? "LATE" : "ON_TIME";
+                String status = checkInLocal.isAfter(lateThreshold) ? "LATE" : "ON_TIME";
                 totalHours += h;
                 overtime += Math.max(0, h - STANDARD_HOURS);
                 presentDays++;
@@ -781,13 +814,14 @@ public class AttendanceService {
             record.setAttendanceDate(today);
             record.setCheckInAt(checkInAt);
             record.setAttendanceType(AttendanceType.OFFICE);
-            record.setAttendanceStatus(resolveStatus(checkInAt));
+            LocalTime faceLateThreshold = lateThresholdFor(request.employeeId(), today);
+            record.setAttendanceStatus(resolveStatus(checkInAt, faceLateThreshold));
             record.setCheckInMethod(CheckInMethod.FACE_RECOGNITION);
             record.setCheckInLatitude(request.latitude());
             record.setCheckInLongitude(request.longitude());
             record.setBranchId(request.branchId());
             record.setFaceConfidenceScore(result.confidenceScore());
-            record.setLateByMinutes(calculateLateMinutes(checkInAt));
+            record.setLateByMinutes(calculateLateMinutes(checkInAt, faceLateThreshold));
             AttendanceRecord saved = attendanceRecordRepository.save(record);
             logEvent(saved, AttendanceEventType.CHECK_IN, request.latitude(), request.longitude(),
                     null, null, request.employeeId(), null);
@@ -897,7 +931,8 @@ public class AttendanceService {
             record.setCheckInAt(request.checkInAt());
             record.setCheckInLatitude(request.latitude());
             record.setCheckInLongitude(request.longitude());
-            record.setLateByMinutes(calculateLateMinutes(request.checkInAt()));
+            record.setLateByMinutes(calculateLateMinutes(request.checkInAt(),
+                    lateThresholdFor(request.employeeId(), request.attendanceDate())));
         }
         if (request.checkOutAt() != null) {
             record.setCheckOutAt(request.checkOutAt());
@@ -948,6 +983,18 @@ public class AttendanceService {
             logEvent(linked, AttendanceEventType.CORRECTION_REQUESTED, null, null,
                     linked.getLocationName(), null, employeeId, request.reason());
         }
+
+        // Notify the approver (reporting manager → dept head → HR/admin resolved
+        // in DomainEventListener). AFTER_COMMIT + try/catch so fan-out can never
+        // fail the correction submission itself.
+        try {
+            eventPublisher.publishEvent(new CorrectionSubmittedEvent(
+                    correction.getId(), employeeId, correction.getTenantId(),
+                    correction.getRequestedDate()));
+        } catch (Exception ex) {
+            log.warn("Failed to publish CorrectionSubmittedEvent for {}: {}",
+                    correction.getId(), ex.getMessage());
+        }
         return toCorrectionResponse(correction);
     }
 
@@ -991,7 +1038,18 @@ public class AttendanceService {
             applyApprovedCorrection(correction, approverEmployeeId, decision.comment());
         }
 
-        return toCorrectionResponse(correctionRequestRepository.save(correction));
+        AttendanceCorrectionRequest savedCorrection = correctionRequestRepository.save(correction);
+
+        try {
+            eventPublisher.publishEvent(new CorrectionDecidedEvent(
+                    savedCorrection.getId(), savedCorrection.getEmployeeId(), savedCorrection.getTenantId(),
+                    decision.status() == ApprovalStatus.APPROVED,
+                    savedCorrection.getRequestedDate(), decision.comment()));
+        } catch (Exception ex) {
+            log.warn("Failed to publish CorrectionDecidedEvent for {}: {}",
+                    savedCorrection.getId(), ex.getMessage());
+        }
+        return toCorrectionResponse(savedCorrection);
     }
 
     @Transactional(readOnly = true)
@@ -1097,22 +1155,51 @@ public class AttendanceService {
     }
 
     private AttendanceStatus resolveStatus(Instant checkInAt) {
+        return resolveStatus(checkInAt, LATE_THRESHOLD);
+    }
+
+    private AttendanceStatus resolveStatus(Instant checkInAt, LocalTime lateThreshold) {
         if (checkInAt == null) {
             return AttendanceStatus.NOT_MARKED;
         }
         LocalTime checkInLocal = checkInAt.atZone(IST).toLocalTime();
-        return checkInLocal.isAfter(LATE_THRESHOLD) ? AttendanceStatus.LATE : AttendanceStatus.ON_TIME;
+        return checkInLocal.isAfter(lateThreshold) ? AttendanceStatus.LATE : AttendanceStatus.ON_TIME;
     }
 
     private Integer calculateLateMinutes(Instant checkInAt) {
+        return calculateLateMinutes(checkInAt, LATE_THRESHOLD);
+    }
+
+    private Integer calculateLateMinutes(Instant checkInAt, LocalTime lateThreshold) {
         if (checkInAt == null) {
             return null;
         }
         LocalTime checkInLocal = checkInAt.atZone(IST).toLocalTime();
-        if (!checkInLocal.isAfter(LATE_THRESHOLD)) {
+        if (!checkInLocal.isAfter(lateThreshold)) {
             return 0;
         }
-        return (int) Duration.between(LATE_THRESHOLD, checkInLocal).toMinutes();
+        return (int) Duration.between(lateThreshold, checkInLocal).toMinutes();
+    }
+
+    /**
+     * Effective "late after" wall-clock time for an employee on a date: their
+     * assigned shift's start + grace period. Falls back to the default
+     * {@link #LATE_THRESHOLD} (09:30) when the employee has no shift or the
+     * lookup is unavailable — so unassigned employees behave exactly as before.
+     * Cross-midnight (night) shifts fall back to the default for now.
+     */
+    private LocalTime lateThresholdFor(UUID employeeId, LocalDate onDate) {
+        try {
+            ShiftProfile sp = getShiftProfile(employeeId, onDate != null ? onDate : LocalDate.now(IST));
+            if (sp != null && sp.scheduledStart() != null) {
+                LocalTime start = LocalTime.parse(sp.scheduledStart());
+                int grace = sp.graceMinutes() != null ? Math.max(0, sp.graceMinutes()) : 0;
+                return start.plusMinutes(grace);
+            }
+        } catch (Exception ex) {
+            log.debug("lateThresholdFor fallback for employee {}: {}", employeeId, ex.getMessage());
+        }
+        return LATE_THRESHOLD;
     }
 
     private Integer calculateOvertimeMinutes(Double workingHours) {

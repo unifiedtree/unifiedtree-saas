@@ -338,9 +338,16 @@ public class AttendanceController {
             @RequestParam(required = false) UUID departmentId,
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
-        ApprovalStatus approvalStatus = status == null || status.isBlank()
-                ? ApprovalStatus.PENDING
-                : ApprovalStatus.valueOf(status.toUpperCase());
+        // Tolerate an unknown/blank status param (e.g. an "All" tab label)
+        // instead of 500-ing on ApprovalStatus.valueOf — default to PENDING.
+        ApprovalStatus approvalStatus = ApprovalStatus.PENDING;
+        if (status != null && !status.isBlank()) {
+            try {
+                approvalStatus = ApprovalStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+                approvalStatus = ApprovalStatus.PENDING;
+            }
+        }
         List<Employee> employees = scopedEmployees(jwt, departmentId);
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         PageResponse<CorrectionRequestResponse> page =
@@ -395,14 +402,35 @@ public class AttendanceController {
         Employee current = employeeRepository.findById(currentEmployeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + currentEmployeeId));
 
-        List<Employee> employees = isAdmin(jwt)
-                ? employeeRepository.findActiveByCompany(current.getCompanyId())
-                : employeeRepository.findByManagerId(currentEmployeeId);
+        List<Employee> employees;
+        if (isAdmin(jwt)) {
+            // Admin + HR: organisation-wide, every active employee.
+            employees = employeeRepository.findActiveByCompany(current.getCompanyId());
+        } else {
+            // DEPT_MANAGER: everyone in the department(s) they head — not just
+            // direct reports whose reporting_manager_id points at them. A
+            // department head "owns" the whole department, so their dashboard
+            // shows every teammate in it. Fall back to legacy direct-report
+            // scope for managers who haven't been set as any dept's head yet.
+            List<UUID> ledDepartmentIds = departmentRepository
+                    .findByDepartmentHeadEmployeeId(currentEmployeeId).stream()
+                    .map(d -> d.getId())
+                    .toList();
+            if (!ledDepartmentIds.isEmpty()) {
+                List<Employee> companyEmployees =
+                        employeeRepository.findActiveByCompany(current.getCompanyId());
+                employees = companyEmployees.stream()
+                        .filter(e -> e.getDepartmentId() != null
+                                && ledDepartmentIds.contains(e.getDepartmentId()))
+                        .toList();
+            } else {
+                employees = employeeRepository.findByManagerId(currentEmployeeId);
+            }
+        }
 
-        // Exclude the caller (admin or manager) from the team list — admins and
-        // managers don't punch on this app, so counting them produces phantom
-        // "Not Marked / Absent" tiles. Without this, a brand-new workspace with
-        // only an admin shows the admin as Absent No-show.
+        // Exclude the caller from the team list — admins and managers don't
+        // punch on this app, so counting them produces phantom "Not Marked /
+        // Absent" tiles. (HR does punch, but they're rarely their own report.)
         employees = employees.stream()
                 .filter(employee -> !employee.getId().equals(currentEmployeeId))
                 .toList();
@@ -582,16 +610,27 @@ public class AttendanceController {
         // Java's string concatenation prints "null" for a null reference, so
         // (firstName + " " + lastName) became "Anil null" on the punch
         // success screen when lastName was missing. Compose explicitly from
-        // the non-null parts instead.
-        String first = employee.getFirstName();
-        String last = employee.getLastName();
+        // the non-null parts, and also drop the literal STRING "null" that
+        // legacy import rows sometimes carry in the DB (the frontend used
+        // to serialize `String(null)` on save, planting "null" as text).
+        return joinName(employee.getFirstName(), employee.getLastName());
+    }
+
+    /** Shared name-composer that guards against both real-null and "null"-string. */
+    static String joinName(String first, String last) {
         StringBuilder sb = new StringBuilder();
-        if (first != null && !first.isBlank()) sb.append(first.trim());
-        if (last != null && !last.isBlank()) {
+        if (isRealName(first)) sb.append(first.trim());
+        if (isRealName(last)) {
             if (sb.length() > 0) sb.append(' ');
             sb.append(last.trim());
         }
         return sb.toString();
+    }
+
+    private static boolean isRealName(String v) {
+        if (v == null) return false;
+        String t = v.trim();
+        return !t.isEmpty() && !t.equalsIgnoreCase("null") && !t.equalsIgnoreCase("undefined");
     }
 
     private UUID extractEmployeeId(Jwt jwt) {
