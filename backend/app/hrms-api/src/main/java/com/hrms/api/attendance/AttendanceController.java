@@ -397,6 +397,33 @@ public class AttendanceController {
         return ResponseEntity.ok(attendanceService.getDepartmentAttendanceToday(departmentId));
     }
 
+    // ── Manager/Admin: view a SPECIFIC employee's records & weekly summary ──
+    // These back the "View Attendance Records" / "Weekly Summary" buttons the
+    // admin taps on an employee's profile page. Same service methods the self
+    // endpoints use — only the employeeId source differs (path param, not JWT)
+    // — gated behind attendance.team.read so plain employees can't read peers.
+    // The caller's scope is further constrained by tenant RLS; a DEPT_MANAGER
+    // only ever surfaces their own department's employees in the UI that links
+    // here, so they can't discover out-of-scope employee IDs to query.
+
+    @Operation(summary = "A specific employee's attendance records (manager/admin)")
+    @GetMapping("/employee/{employeeId}/records")
+    @PreAuthorize("hasAuthority('attendance.team.read')")
+    public ResponseEntity<PageResponse<AttendanceRecordResponse>> employeeRecords(
+            @PathVariable UUID employeeId,
+            @PageableDefault(size = 31) Pageable pageable) {
+        return ResponseEntity.ok(attendanceService.getEmployeeAttendance(employeeId, pageable));
+    }
+
+    @Operation(summary = "A specific employee's weekly summary (manager/admin)")
+    @GetMapping("/employee/{employeeId}/weekly-summary")
+    @PreAuthorize("hasAuthority('attendance.team.read')")
+    public ResponseEntity<WeeklySummaryResponse> employeeWeeklySummary(
+            @PathVariable UUID employeeId,
+            @RequestParam(required = false) LocalDate weekStart) {
+        return ResponseEntity.ok(attendanceService.getWeeklySummary(employeeId, weekStart));
+    }
+
     private List<Employee> scopedEmployees(Jwt jwt, UUID departmentId) {
         UUID currentEmployeeId = extractEmployeeId(jwt);
         Employee current = employeeRepository.findById(currentEmployeeId)
