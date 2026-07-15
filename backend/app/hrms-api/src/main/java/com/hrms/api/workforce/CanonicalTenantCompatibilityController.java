@@ -70,6 +70,19 @@ public class CanonicalTenantCompatibilityController {
         return page(rows, page, size);
     }
 
+    /**
+     * Single-company fetch. The mobile Company Profile screen calls
+     * GET /v1/tenant/companies/{id}. In canonical runtime the legacy
+     * TenantController (which owned this route) is not scanned, so without
+     * this method the call 404'd and the app showed "Oops! Something went
+     * wrong". Backed by the same CompanyService the list endpoint uses.
+     */
+    @GetMapping("/companies/{companyId}")
+    @PreAuthorize("isAuthenticated()")
+    public MobileCompanyResponse getCompany(@PathVariable UUID companyId) {
+        return toCompany(companies.get(companyId));
+    }
+
     @GetMapping("/companies/{companyId}/departments")
     @PreAuthorize("isAuthenticated()")
     public List<MobileDepartmentResponse> listDepartments(@PathVariable UUID companyId) {
