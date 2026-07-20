@@ -7,6 +7,11 @@ import { PricingCalculator } from '../components/pricing/PricingCalculator'
 import { PricingCard } from '../components/pricing/PricingCard'
 import { presetPlans, faqItems } from '../data/pricing'
 
+// Hidden for now (per Anil, 2026-07-20): only HR & Employees is live, so the
+// Starter/Growth/Enterprise preset bundles are not shown yet. Flip to true to
+// bring them back once the other modules ship. Code is kept intentionally.
+const SHOW_PRESET_PLANS = false
+
 function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
   const [open, setOpen] = useState(false)
   return (
@@ -82,29 +87,31 @@ export function PricingPage() {
         </div>
       </section>
 
-      {/* Preset plans */}
-      <section className="py-20 bg-surface-2">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-14"
-          >
-            <span className="section-badge mb-4 inline-block">Plans</span>
-            <h2 className="font-heading font-bold text-text-primary text-3xl mb-3" style={{ letterSpacing: '-0.02em' }}>
-              Or choose a <span className="gradient-text">preset plan</span>
-            </h2>
-            <p className="text-text-secondary font-body">Pre-configured for common business sizes</p>
-          </motion.div>
+      {/* Preset plans — hidden until the other modules ship (see SHOW_PRESET_PLANS) */}
+      {SHOW_PRESET_PLANS && (
+        <section className="py-20 bg-surface-2">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-center mb-14"
+            >
+              <span className="section-badge mb-4 inline-block">Plans</span>
+              <h2 className="font-heading font-bold text-text-primary text-3xl mb-3" style={{ letterSpacing: '-0.02em' }}>
+                Or choose a <span className="gradient-text">preset plan</span>
+              </h2>
+              <p className="text-text-secondary font-body">Pre-configured for common business sizes</p>
+            </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {presetPlans.map((plan, i) => (
-              <PricingCard key={plan.id} plan={plan} index={i} />
-            ))}
+            <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+              {presetPlans.map((plan, i) => (
+                <PricingCard key={plan.id} plan={plan} index={i} />
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* FAQ */}
       <section className="py-20">

@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users, MapPin, Banknote, BarChart2, Package, Target,
-  ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart, X, Lock,
+  ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart, X, Lock, Plus, Minus,
 } from 'lucide-react'
 import { usePricingStore } from '../../store/pricingStore'
 import { useModulePlans, computeMonthlyTotal, type ModulePlan } from '../../lib/plans'
@@ -12,8 +12,6 @@ const iconMap: Record<string, React.ElementType> = {
   Users, MapPin, Banknote, BarChart2, Package, Target,
   ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart,
 }
-
-const SEAT_SNAPS = [1, 5, 10, 25, 50, 100, 250, 500]
 
 function AnimatedPrice({ value }: { value: number }) {
   return (
@@ -38,17 +36,12 @@ export function PricingCalculator() {
 
   const availableSelected = plans.filter((p) => p.status === 'AVAILABLE' && selectedPlanKeys.includes(p.key))
   const monthlyTotal = computeMonthlyTotal(plans, selectedPlanKeys, seats)
-  const annual = Math.round(monthlyTotal * 12 * 0.8)
 
-  // Index-based snap slider. The thumb moves in equal steps across the 8 snap
-  // points so it lines up with the evenly-spaced labels below. (A linear
-  // 1..500 range put the thumb near the middle while its "250" label sat far
-  // right — the reported misalignment.)
-  const seatIndex = SEAT_SNAPS.reduce(
-    (best, pt, i, arr) => (Math.abs(pt - seats) < Math.abs(arr[best] - seats) ? i : best),
-    0,
-  )
-  const fillPct = (seatIndex / (SEAT_SNAPS.length - 1)) * 100
+  // Per-user rates. Annual billing takes 10% off each plan's per-user price
+  // (e.g. HR & Employees 39 -> 35/user/mo) and is billed for 12 months.
+  const perUserMonthly = availableSelected.reduce((s, p) => s + p.priceInr, 0)
+  const perUserAnnual = availableSelected.reduce((s, p) => s + Math.round(p.priceInr * 0.9), 0)
+  const annualTotal = perUserAnnual * Math.max(1, seats) * 12
 
   return (
     <div className="grid lg:grid-cols-5 gap-8 items-start">
@@ -64,12 +57,12 @@ export function PricingCalculator() {
               </button>
             ))}
           </div>
-          {billingCycle === 'annual' && <span className="text-xs font-body font-semibold bg-success/15 text-success px-3 py-1.5 rounded-full">Save 20%</span>}
+          {billingCycle === 'annual' && <span className="text-xs font-body font-semibold bg-success/15 text-success px-3 py-1.5 rounded-full">Save 10%</span>}
         </div>
 
         {/* Plan cards */}
         <div>
-          <h3 className="font-heading font-bold text-text-primary text-lg mb-5">1. Choose your modules</h3>
+          <h3 className="font-heading font-bold text-text-primary text-lg mb-5">Choose your modules</h3>
           {isLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-surface border border-border animate-pulse" />)}
@@ -109,44 +102,6 @@ export function PricingCalculator() {
             </div>
           )}
         </div>
-
-        {/* Users (seats) slider */}
-        <div>
-          <h3 className="font-heading font-bold text-text-primary text-lg mb-5">2. Number of users</h3>
-          <div className="bg-surface rounded-2xl p-6 border border-border">
-            <div className="flex items-center justify-between mb-6">
-              <span className="text-sm text-text-secondary font-body">Users</span>
-              <motion.span key={seats} initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="text-2xl font-heading font-bold text-primary">
-                {seats.toLocaleString('en-IN')}
-              </motion.span>
-            </div>
-            <input
-              type="range" min={0} max={SEAT_SNAPS.length - 1} step={1} value={seatIndex}
-              onChange={(e) => setSeats(SEAT_SNAPS[parseInt(e.target.value)])}
-              className="w-full"
-              aria-label="Number of users"
-              style={{ background: `linear-gradient(to right, #0F6E56 0%, #0F6E56 ${fillPct}%, #E2E8F0 ${fillPct}%, #E2E8F0 100%)` }}
-            />
-            {/* Labels are placed at the exact thumb-centre of each stop
-                (12px = half the 24px thumb) so they sit directly under it. */}
-            <div className="relative h-5 mt-3">
-              {SEAT_SNAPS.map((pt, i) => {
-                const pos = i / (SEAT_SNAPS.length - 1)
-                return (
-                  <button
-                    key={pt}
-                    onClick={() => setSeats(pt)}
-                    style={{ left: `calc(12px + ${pos} * (100% - 24px))` }}
-                    className={`absolute top-0 -translate-x-1/2 text-[10px] font-body whitespace-nowrap ${seats === pt ? 'text-primary font-semibold' : 'text-text-secondary hover:text-primary'}`}
-                  >
-                    {pt}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="mt-4 text-xs text-text-secondary font-body text-center">Billed per user at each module's per-seat price.</p>
-          </div>
-        </div>
       </div>
 
       {/* RIGHT — sticky summary */}
@@ -157,6 +112,35 @@ export function PricingCalculator() {
             <p className="text-white/70 text-sm font-body">Updates in real-time</p>
           </div>
           <div className="p-6">
+            {/* Users stepper — admin sets team size right here in the summary */}
+            <div className="flex items-center justify-between mb-5 pb-5 border-b border-border">
+              <div>
+                <p className="text-sm font-heading font-bold text-text-primary">Users</p>
+                <p className="text-xs text-text-secondary font-body">Your team size</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button" aria-label="Decrease users"
+                  onClick={() => setSeats(seats - 1)} disabled={seats <= 1}
+                  className="w-9 h-9 rounded-lg border border-border bg-bg flex items-center justify-center text-text-primary hover:border-primary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95"
+                >
+                  <Minus size={16} />
+                </button>
+                <input
+                  type="number" min={1} value={seats} aria-label="Number of users"
+                  onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
+                  className="w-16 h-9 text-center rounded-lg border border-border bg-surface font-heading font-bold text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+                <button
+                  type="button" aria-label="Increase users"
+                  onClick={() => setSeats(seats + 1)}
+                  className="w-9 h-9 rounded-lg border border-border bg-bg flex items-center justify-center text-text-primary hover:border-primary hover:text-primary transition-all active:scale-95"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+
             {availableSelected.length === 0 ? (
               <div className="text-center py-8">
                 <div className="text-4xl mb-3">🌱</div>
@@ -176,9 +160,14 @@ export function PricingCalculator() {
                   ))}
                 </div>
                 <div className="border-t border-border pt-4">
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between items-center text-sm">
                     <span className="text-text-secondary font-body">Per user / month</span>
-                    <span className="font-body font-medium">₹<AnimatedPrice value={availableSelected.reduce((s, p) => s + p.priceInr, 0)} /></span>
+                    <span className="font-body font-medium flex items-center gap-1.5">
+                      {billingCycle === 'annual' && perUserAnnual < perUserMonthly && (
+                        <span className="text-text-secondary/60 line-through text-xs">₹{perUserMonthly}</span>
+                      )}
+                      ₹<AnimatedPrice value={billingCycle === 'annual' ? perUserAnnual : perUserMonthly} />
+                    </span>
                   </div>
                 </div>
                 <div className="border-t border-border mt-4 pt-4">
@@ -189,8 +178,8 @@ export function PricingCalculator() {
                     </div>
                   ) : (
                     <div className="flex justify-between items-center">
-                      <div><p className="font-heading font-bold text-text-primary">Annual Total</p><p className="text-xs text-success font-body">20% discount applied</p></div>
-                      <span className="font-heading font-bold text-primary text-2xl">₹<AnimatedPrice value={annual} /></span>
+                      <div><p className="font-heading font-bold text-text-primary">Annual Total</p><p className="text-xs text-success font-body">10% off · billed yearly</p></div>
+                      <span className="font-heading font-bold text-primary text-2xl">₹<AnimatedPrice value={annualTotal} /></span>
                     </div>
                   )}
                 </div>

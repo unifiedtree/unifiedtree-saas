@@ -83,6 +83,9 @@ export function SignupPage() {
   const companyName = watch('companyName');
   const seats = Number(watch('seats')) || 1;
   const monthlyTotal = computeMonthlyTotal(plans, purchasableSelected.map((p) => p.key), seats);
+  // Per-user rate of the selected plans (was hardcoded to ₹40) — comes from the DB.
+  const perUser = purchasableSelected.reduce((sum, p) => sum + p.priceInr, 0);
+  const basePrice = availablePlans[0]?.priceInr ?? perUser;
 
   useEffect(() => {
     if (companyName && !isEditingSubdomain) {
@@ -140,7 +143,7 @@ export function SignupPage() {
       }
 
       // 1. Create the Razorpay order. The backend computes the amount from the
-      //    DB (Rs 40/user * seats) — the browser never dictates the price.
+      //    DB (per-user price * seats) — the browser never dictates the price.
       const order = await createPaymentOrder({
         planKeys,
         seats: data.seats,
@@ -218,7 +221,7 @@ export function SignupPage() {
               <div className="text-left">
                 <span className="font-heading font-bold text-text-primary text-base block">{selectedPlanNames || 'No modules selected'}</span>
                 <span className="text-xs text-text-secondary font-body font-medium">
-                  {monthlyTotal > 0 ? `₹${monthlyTotal.toLocaleString('en-IN')}/mo · ${seats} user(s) · ₹40/user` : 'Select an available module'}
+                  {monthlyTotal > 0 ? `₹${monthlyTotal.toLocaleString('en-IN')}/mo · ${seats} user(s) · ₹${perUser}/user` : 'Select an available module'}
                 </span>
               </div>
             </div>
@@ -335,7 +338,7 @@ export function SignupPage() {
                 <div className="px-6 py-5 border-b border-border flex items-center justify-between bg-surface">
                   <div>
                     <h2 className="text-xl font-heading font-bold text-text-primary">Customize Modules</h2>
-                    <p className="text-sm text-text-secondary mt-1">₹40 per user / month · more modules coming soon</p>
+                    <p className="text-sm text-text-secondary mt-1">₹{basePrice} per user / month · more modules coming soon</p>
                   </div>
                   <button onClick={() => setIsModulesDrawerOpen(false)} className="p-2 rounded-full hover:bg-bg text-text-secondary"><X size={20} /></button>
                 </div>
