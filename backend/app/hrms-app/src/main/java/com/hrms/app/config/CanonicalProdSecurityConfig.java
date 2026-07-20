@@ -115,6 +115,10 @@ public class CanonicalProdSecurityConfig {
                     "/v1/public/workspace-status",
                     "/v1/public/module-request",
                     "/v1/public/module-toggle",
+                    // Public plan catalog + Razorpay checkout for paid signup
+                    "/v1/public/module-plans",
+                    "/v1/public/payment/config",
+                    "/v1/public/payment/create-order",
                     "/v1/accounts/auth/login",
                     "/v1/platform/auth/login"
                 ).permitAll()
