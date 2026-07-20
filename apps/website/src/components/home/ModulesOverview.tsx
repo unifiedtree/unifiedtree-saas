@@ -2,9 +2,9 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Users, MapPin, Banknote, BarChart2, Package, Target,
-  ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart, ArrowRight,
+  ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart, ArrowRight, Lock,
 } from 'lucide-react'
-import { modules } from '../../data/modules'
+import { useModulePlans } from '../../lib/plans'
 import { Button } from '../ui/Button'
 
 const iconMap: Record<string, React.ElementType> = {
@@ -14,6 +14,7 @@ const iconMap: Record<string, React.ElementType> = {
 
 export function ModulesOverview() {
   const navigate = useNavigate()
+  const { data: plans = [] } = useModulePlans()
 
   return (
     <section className="py-24 bg-bg">
@@ -38,29 +39,32 @@ export function ModulesOverview() {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {modules.map((mod, i) => {
-            const Icon = iconMap[mod.icon] ?? Users
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {plans.map((plan, i) => {
+            const Icon = iconMap[plan.icon ?? 'Users'] ?? Users
+            const available = plan.status === 'AVAILABLE'
             return (
               <motion.div
-                key={mod.id}
+                key={plan.key}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.15 }}
                 transition={{ duration: 0.5, delay: i * 0.06, ease: 'easeOut' }}
                 whileHover={{ y: -4, boxShadow: '0 12px 40px rgba(15,110,86,0.15)' }}
-                className="group bg-surface rounded-xl p-6 border border-border shadow-card hover:border-primary/40 transition-all duration-300 cursor-pointer"
+                className="group bg-surface rounded-xl p-6 border border-border shadow-card hover:border-primary/40 transition-all duration-300 cursor-pointer relative"
                 onClick={() => navigate('/modules')}
               >
+                {!available && (
+                  <span className="absolute top-4 right-4 text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1"><Lock size={9} /> Soon</span>
+                )}
                 <div className="w-11 h-11 rounded-xl bg-primary-light flex items-center justify-center mb-4 group-hover:bg-primary/15 transition-colors duration-200">
                   <Icon size={20} className="text-primary" />
                 </div>
-                <h3 className="font-heading font-bold text-text-primary text-base mb-2">{mod.name}</h3>
-                <p className="text-text-secondary font-body text-sm leading-relaxed mb-4 line-clamp-2">
-                  {mod.description}
-                </p>
+                <h3 className="font-heading font-bold text-text-primary text-base mb-1">{plan.displayName}</h3>
+                {plan.tagline && <p className="text-xs text-primary font-semibold mb-2">{plan.tagline}</p>}
+                <p className="text-text-secondary font-body text-sm leading-relaxed mb-4 line-clamp-2">{plan.description}</p>
                 <span className="text-primary text-sm font-body font-medium group-hover:underline inline-flex items-center gap-1">
-                  Learn more <ArrowRight size={14} />
+                  {available ? <>Learn more <ArrowRight size={14} /></> : 'Launching soon'}
                 </span>
               </motion.div>
             )

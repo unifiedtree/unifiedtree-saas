@@ -1,54 +1,37 @@
-import { create } from 'zustand'
-import { modules } from '../data/modules'
-import { getMultiplier } from '../data/pricing'
+import { create } from 'zustand';
 
+/**
+ * Selection state for the pricing / signup flow. Pure UI state only — the plan
+ * catalog and all prices come from the backend (useModulePlans), and the
+ * authoritative amount is computed server-side at checkout. This store just
+ * remembers which plans the visitor picked and how many users (seats) they
+ * entered, so the state survives navigating pricing -> signup.
+ */
 interface PricingState {
-  selectedModules: string[]
-  employeeCount: number
-  billingCycle: 'monthly' | 'annual'
-  toggleModule: (id: string) => void
-  setEmployeeCount: (count: number) => void
-  setBillingCycle: (cycle: 'monthly' | 'annual') => void
-  getBaseMonthly: () => number
-  getTotalPrice: () => number
-  isContactSales: () => boolean
+  selectedPlanKeys: string[];
+  seats: number;                       // number of users (per-seat billing)
+  billingCycle: 'monthly' | 'annual';
+  togglePlan: (key: string) => void;
+  setSelectedPlans: (keys: string[]) => void;
+  setSeats: (n: number) => void;
+  setBillingCycle: (c: 'monthly' | 'annual') => void;
 }
 
-export const usePricingStore = create<PricingState>((set, get) => ({
-  selectedModules: [],
-  employeeCount: 10,
+export const usePricingStore = create<PricingState>((set) => ({
+  selectedPlanKeys: [],
+  seats: 10,
   billingCycle: 'monthly',
 
-  toggleModule: (id: string) =>
+  togglePlan: (key: string) =>
     set((state) => ({
-      selectedModules: state.selectedModules.includes(id)
-        ? state.selectedModules.filter((m) => m !== id)
-        : [...state.selectedModules, id],
+      selectedPlanKeys: state.selectedPlanKeys.includes(key)
+        ? state.selectedPlanKeys.filter((k) => k !== key)
+        : [...state.selectedPlanKeys, key],
     })),
 
-  setEmployeeCount: (count: number) => set({ employeeCount: count }),
+  setSelectedPlans: (keys: string[]) => set({ selectedPlanKeys: keys }),
 
-  setBillingCycle: (cycle: 'monthly' | 'annual') => set({ billingCycle: cycle }),
+  setSeats: (n: number) => set({ seats: Math.max(1, Math.floor(n) || 1) }),
 
-  getBaseMonthly: () => {
-    const { selectedModules } = get()
-    return selectedModules.reduce((sum, id) => {
-      const mod = modules.find((m) => m.id === id)
-      return sum + (mod?.basePrice ?? 0)
-    }, 0)
-  },
-
-  getTotalPrice: () => {
-    const { employeeCount, billingCycle } = get()
-    const multiplier = getMultiplier(employeeCount)
-    if (multiplier === 'contact') return -1
-    const base = get().getBaseMonthly()
-    const monthly = Math.round(base * multiplier)
-    return billingCycle === 'annual' ? Math.round(monthly * 12 * 0.8) : monthly
-  },
-
-  isContactSales: () => {
-    const multiplier = getMultiplier(get().employeeCount)
-    return multiplier === 'contact'
-  },
-}))
+  setBillingCycle: (billingCycle) => set({ billingCycle }),
+}));

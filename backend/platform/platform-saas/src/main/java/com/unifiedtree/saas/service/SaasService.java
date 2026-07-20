@@ -75,19 +75,25 @@ public class SaasService {
     private final PasswordService passwords;
     private final String baseDomain;
     private final ApplicationEventPublisher events;
+    private final com.unifiedtree.saas.payment.PaymentService payments;
+    private final com.unifiedtree.saas.plans.ModulePlanService planService;
 
     public SaasService(JdbcTemplate jdbc,
                        SaasWriter writer,
                        JwtService jwt,
                        PasswordService passwords,
                        @Value("${unifiedtree.base-domain:unifiedtree.com}") String baseDomain,
-                       ApplicationEventPublisher events) {
+                       ApplicationEventPublisher events,
+                       com.unifiedtree.saas.payment.PaymentService payments,
+                       com.unifiedtree.saas.plans.ModulePlanService planService) {
         this.jdbc = jdbc;
         this.writer = writer;
         this.jwt = jwt;
         this.passwords = passwords;
         this.baseDomain = baseDomain;
         this.events = events;
+        this.payments = payments;
+        this.planService = planService;
     }
 
     // -- Public: subdomain availability -----------------------------------------------------------
@@ -115,9 +121,42 @@ public class SaasService {
     // -- Public: signup ---------------------------------------------------------------------------
 
     public SignupResponse createSignupRequest(SignupRequest req) {
+        // ----------------------------------------------------------------------
+        // Paywall. When Razorpay is configured (production) a verified paid order
+        // is MANDATORY to create a workspace, and the PAID plans dictate which
+        // modules get activated — the client's requestedModules cannot self-grant
+        // anything it did not pay for. When the gateway is not configured (local
+        // dev) we keep the original free path so nothing local breaks.
+        //
+        // Note: this gate is ONLY on NEW workspace creation. Existing workspaces,
+        // their logins, the platform-admin login and the Google-reviewer/test
+        // logins are entirely untouched.
+        // ----------------------------------------------------------------------
+        com.unifiedtree.saas.payment.PaymentService.PaidOrder paid = null;
+        List<String> modulesToActivate = normalizeModules(req.requestedModules());
+        if (payments.paywallActive()) {
+            SignupRequest.PaymentProof p = req.payment();
+            if (p == null || isBlank(p.razorpayOrderId()) || isBlank(p.razorpayPaymentId())
+                    || isBlank(p.razorpaySignature())) {
+                throw new ResponseStatusException(HttpStatus.PAYMENT_REQUIRED,
+                        "Payment is required to create a workspace");
+            }
+            paid = payments.verifyPaid(p.razorpayOrderId(), p.razorpayPaymentId(), p.razorpaySignature());
+            // Activated modules come from the plans that were actually paid for.
+            modulesToActivate = planService.expandModules(planService.requireAvailable(paid.planKeys()));
+        }
+
         UUID accountId = resolveOrCreateAccountId(req);
         String passwordHash = passwords.hash(req.password());
-        return createWorkspace(accountId, passwordHash, req);
+        SignupResponse resp = createWorkspace(accountId, passwordHash, req, modulesToActivate);
+
+        // Burn the order so a single successful payment can never mint a second
+        // workspace (idempotency / replay guard). Done after the tenant is
+        // persisted so a mid-flight failure leaves the order re-usable.
+        if (paid != null) {
+            payments.markConsumed(paid.orderId(), resp.tenantId());
+        }
+        return resp;
     }
 
     public SignupResponse createWorkspaceForAccount(UUID accountId, CreateWorkspaceRequest req) {
@@ -135,11 +174,14 @@ public class SaasService {
                 req.currency(),
                 req.companySize(),
                 req.primaryInterest(),
-                req.requestedModules());
-        return createWorkspace(account.accountId(), account.passwordHash(), signup);
+                req.requestedModules(),
+                null);
+        return createWorkspace(account.accountId(), account.passwordHash(), signup,
+                normalizeModules(req.requestedModules()));
     }
 
-    private SignupResponse createWorkspace(UUID accountId, String passwordHash, SignupRequest req) {
+    private SignupResponse createWorkspace(UUID accountId, String passwordHash, SignupRequest req,
+                                           List<String> modulesToActivate) {
         String subdomain = normalizeSubdomain(req.subdomain());
         if (subdomain.length() < 3) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Workspace address too short");
@@ -151,7 +193,7 @@ public class SaasService {
         if (!checkSubdomain(subdomain).available()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Workspace address already reserved");
         }
-        List<String> requestedModules = normalizeModules(req.requestedModules());
+        List<String> requestedModules = normalizeModules(modulesToActivate);
         if (requestedModules.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select at least one module");
         }
@@ -550,6 +592,10 @@ public class SaasService {
 
     private static String defaultText(String value, String fallback) {
         return (value == null || value.isBlank()) ? fallback : value.trim();
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private String resolveSubdomain(String subdomainParam, String tenantIdHeader,
