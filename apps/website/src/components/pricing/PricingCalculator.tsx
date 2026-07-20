@@ -40,12 +40,15 @@ export function PricingCalculator() {
   const monthlyTotal = computeMonthlyTotal(plans, selectedPlanKeys, seats)
   const annual = Math.round(monthlyTotal * 12 * 0.8)
 
-  const sliderMax = SEAT_SNAPS[SEAT_SNAPS.length - 1]
-  const sliderValue = Math.min(seats, sliderMax)
-  const snapToClosest = (val: number) => {
-    const closest = SEAT_SNAPS.reduce((a, b) => (Math.abs(b - val) < Math.abs(a - val) ? b : a))
-    setSeats(closest)
-  }
+  // Index-based snap slider. The thumb moves in equal steps across the 8 snap
+  // points so it lines up with the evenly-spaced labels below. (A linear
+  // 1..500 range put the thumb near the middle while its "250" label sat far
+  // right — the reported misalignment.)
+  const seatIndex = SEAT_SNAPS.reduce(
+    (best, pt, i, arr) => (Math.abs(pt - seats) < Math.abs(arr[best] - seats) ? i : best),
+    0,
+  )
+  const fillPct = (seatIndex / (SEAT_SNAPS.length - 1)) * 100
 
   return (
     <div className="grid lg:grid-cols-5 gap-8 items-start">
@@ -118,17 +121,28 @@ export function PricingCalculator() {
               </motion.span>
             </div>
             <input
-              type="range" min={SEAT_SNAPS[0]} max={sliderMax} step={1} value={sliderValue}
-              onChange={(e) => setSeats(parseInt(e.target.value))}
-              onMouseUp={(e) => snapToClosest(parseInt((e.target as HTMLInputElement).value))}
-              onTouchEnd={(e) => snapToClosest(parseInt((e.target as HTMLInputElement).value))}
+              type="range" min={0} max={SEAT_SNAPS.length - 1} step={1} value={seatIndex}
+              onChange={(e) => setSeats(SEAT_SNAPS[parseInt(e.target.value)])}
               className="w-full"
-              style={{ background: `linear-gradient(to right, #0F6E56 0%, #0F6E56 ${((sliderValue - SEAT_SNAPS[0]) / (sliderMax - SEAT_SNAPS[0])) * 100}%, #E2E8F0 ${((sliderValue - SEAT_SNAPS[0]) / (sliderMax - SEAT_SNAPS[0])) * 100}%, #E2E8F0 100%)` }}
+              aria-label="Number of users"
+              style={{ background: `linear-gradient(to right, #0F6E56 0%, #0F6E56 ${fillPct}%, #E2E8F0 ${fillPct}%, #E2E8F0 100%)` }}
             />
-            <div className="flex justify-between mt-3">
-              {SEAT_SNAPS.map((pt) => (
-                <button key={pt} onClick={() => setSeats(pt)} className={`text-[10px] font-body ${seats === pt ? 'text-primary font-semibold' : 'text-text-secondary hover:text-primary'}`}>{pt}</button>
-              ))}
+            {/* Labels are placed at the exact thumb-centre of each stop
+                (12px = half the 24px thumb) so they sit directly under it. */}
+            <div className="relative h-5 mt-3">
+              {SEAT_SNAPS.map((pt, i) => {
+                const pos = i / (SEAT_SNAPS.length - 1)
+                return (
+                  <button
+                    key={pt}
+                    onClick={() => setSeats(pt)}
+                    style={{ left: `calc(12px + ${pos} * (100% - 24px))` }}
+                    className={`absolute top-0 -translate-x-1/2 text-[10px] font-body whitespace-nowrap ${seats === pt ? 'text-primary font-semibold' : 'text-text-secondary hover:text-primary'}`}
+                  >
+                    {pt}
+                  </button>
+                )
+              })}
             </div>
             <p className="mt-4 text-xs text-text-secondary font-body text-center">Billed per user at each module's per-seat price.</p>
           </div>
