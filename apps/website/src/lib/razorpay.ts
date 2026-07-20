@@ -91,8 +91,9 @@ export async function openCheckout(opts: {
     name: 'UnifiedTree',
     // Real brand logo shown in the checkout header. Without this, Razorpay
     // draws a placeholder "U" tile from the first letter of `name`. Must be a
-    // public HTTPS URL (Razorpay fetches it server-side).
-    image: 'https://www.unifiedtree.com/UnifiedTreeLogo-withoutBG.png',
+    // public HTTPS URL (Razorpay fetches it server-side). This is the app
+    // icon (1024x1024) copied into public/checkout-logo.png.
+    image: 'https://www.unifiedtree.com/checkout-logo.png',
     description: opts.description,
     prefill: opts.prefill,
     theme: { color: '#0F6E56' },
