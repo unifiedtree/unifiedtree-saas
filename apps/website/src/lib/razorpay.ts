@@ -89,6 +89,10 @@ export async function openCheckout(opts: {
     amount: Math.round(opts.order.amountInr * 100), // paise (display only; order is authoritative)
     currency: opts.order.currency || 'INR',
     name: 'UnifiedTree',
+    // Real brand logo shown in the checkout header. Without this, Razorpay
+    // draws a placeholder "U" tile from the first letter of `name`. Must be a
+    // public HTTPS URL (Razorpay fetches it server-side).
+    image: 'https://www.unifiedtree.com/UnifiedTreeLogo-withoutBG.png',
     description: opts.description,
     prefill: opts.prefill,
     theme: { color: '#0F6E56' },
