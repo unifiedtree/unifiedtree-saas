@@ -29,7 +29,7 @@ export const StatCard: React.FC<StatCardProps> = ({
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
     whileHover={{ y: -3 }}
-    className="rounded-2xl border border-border-default bg-white p-5 shadow-md transition-all hover:border-[#0F6E56]/30 hover:shadow-lg"
+    className="rounded-2xl border border-border-default bg-white p-5 shadow-md transition-all hover:border-[#059669]/30 hover:shadow-lg"
   >
     <div className="mb-4 flex items-start justify-between">
       <div>

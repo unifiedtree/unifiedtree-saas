@@ -89,7 +89,7 @@ export function PricingCalculator() {
                     {isSelected && <div className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center"><span className="text-white text-[10px] font-bold">✓</span></div>}
                     {!available && <div className="absolute top-2 right-2 text-amber-500"><Lock size={13} /></div>}
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-2" style={{ backgroundColor: isSelected ? `${plan.color}25` : '#F1F5F9' }}>
-                      <Icon size={16} style={{ color: isSelected ? plan.color ?? '#0F6E56' : '#64748B' }} />
+                      <Icon size={16} style={{ color: isSelected ? plan.color ?? '#059669' : '#64748B' }} />
                     </div>
                     <p className={`text-xs font-body font-semibold leading-tight ${isSelected ? 'text-primary' : 'text-text-primary'}`}>{plan.displayName}</p>
                     {plan.tagline && <p className="text-[10px] text-text-secondary mt-0.5 leading-tight">{plan.tagline}</p>}

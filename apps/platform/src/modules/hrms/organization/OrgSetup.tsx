@@ -57,7 +57,7 @@ function DayToggle({ value, onChange }: { value: number; onChange: (v: number) =
           onClick={() => onChange(value ^ DAY_BITS[i])}
           className={clsx(
             'w-8 h-8 rounded-full text-xs font-medium transition-colors',
-            value & DAY_BITS[i] ? 'bg-[#0F6E56] text-white' : 'bg-bg-surface text-text-tertiary hover:text-text-primary'
+            value & DAY_BITS[i] ? 'bg-[#059669] text-white' : 'bg-bg-surface text-text-tertiary hover:text-text-primary'
           )}
         >{d}</button>
       ))}
@@ -79,7 +79,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input {...props}
-      className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#0F6E56] transition-colors"
+      className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#059669] transition-colors"
     />
   )
 }
@@ -104,9 +104,9 @@ function SlideModal({ open, onClose, title, children }: {
   )
 }
 
-const BTN_PRIMARY = 'flex-1 py-2.5 bg-[#0F6E56] hover:bg-[#0A5F4A] disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors'
+const BTN_PRIMARY = 'flex-1 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors'
 const BTN_CANCEL  = 'flex-1 py-2.5 border border-border-default text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors'
-const BTN_ADD     = 'flex items-center gap-2 px-4 py-2 bg-[#0F6E56] hover:bg-[#0A5F4A] disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors'
+const BTN_ADD     = 'flex items-center gap-2 px-4 py-2 bg-[#059669] hover:bg-[#047857] disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors'
 const BTN_ICON    = 'p-1.5 text-text-tertiary hover:text-text-secondary transition-colors'
 const BTN_DEL     = 'p-1.5 text-text-tertiary hover:text-red-600 transition-colors'
 
@@ -510,7 +510,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
       cell: (d) => (
         <Can code={P.HRMS_DEPARTMENT_WRITE} fallback={<span className="text-sm text-text-secondary">{empLabel(d.departmentHeadEmployeeId) || '—'}</span>}>
           <select value={d.departmentHeadEmployeeId ?? ''} onChange={(e) => handleSetHead(d.id, e.target.value)}
-            className="bg-bg-surface border border-border-default rounded-lg px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-[#0F6E56] max-w-[10rem]">
+            className="bg-bg-surface border border-border-default rounded-lg px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-[#059669] max-w-[10rem]">
             <option value="">None</option>
             {employees.map((emp) => (
               <option key={emp.id} value={emp.id}>{[emp.firstName, emp.lastName].filter(Boolean).join(' ')}</option>
@@ -565,7 +565,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
           <Field label="Description"><Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional" /></Field>
           <Field label="Department Head">
             <select value={form.departmentHeadEmployeeId} onChange={(e) => set('departmentHeadEmployeeId', e.target.value)}
-              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#0F6E56] transition-colors">
+              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#059669] transition-colors">
               <option value="">None</option>
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>{[emp.firstName, emp.lastName].filter(Boolean).join(' ')}</option>

@@ -63,26 +63,26 @@ export const Dashboard: React.FC = () => {
       {/* Welcome banner */}
       <motion.div
         variants={fadeUp}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#053B2E] via-[#0A5240] to-[#0F6E56] p-8 text-white shadow-xl shadow-[#0A5240]/25 sm:p-10"
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#E6F0E6] via-[#DCEAD9] to-[#CDE2C9] p-8 text-[#2B441D] shadow-lg shadow-[#2B441D]/5 sm:p-10"
       >
-        <div className="absolute right-0 top-0 h-80 w-80 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/15 blur-[80px]" />
-        <div className="absolute bottom-0 left-0 h-80 w-80 -translate-x-1/3 translate-y-1/3 rounded-full bg-[#6EE7B7]/25 blur-[80px]" />
+        <div className="absolute right-0 top-0 h-80 w-80 -translate-y-1/3 translate-x-1/4 rounded-full bg-white/40 blur-[80px]" />
+        <div className="absolute bottom-0 left-0 h-80 w-80 -translate-x-1/3 translate-y-1/3 rounded-full bg-[#B2D2AB]/30 blur-[80px]" />
         <div className="relative z-10 flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-white/90 backdrop-blur-md">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#2B441D]/15 bg-[#2B441D]/5 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-[#2B441D]/90 backdrop-blur-md">
               <Sparkles size={14} /> Welcome back
             </div>
-            <h1 className="mb-1.5 text-3xl font-bold tracking-tight sm:text-[34px]">
+            <h1 className="mb-1.5 text-3xl font-bold tracking-tight text-[#2B441D] sm:text-[34px]">
               {greeting}, {user?.firstName ?? 'there'} 👋
             </h1>
-            <p className="max-w-lg text-sm font-medium text-white/85 sm:text-[15px]">
+            <p className="max-w-lg text-sm font-medium text-[#2B441D]/80 sm:text-[15px]">
               {today} — here's what's happening across your workspace today.
             </p>
           </div>
-          <span className="hidden items-center gap-2 rounded-xl border border-white/15 bg-black/15 px-4 py-2.5 text-xs font-semibold backdrop-blur-md lg:flex">
+          <span className="hidden items-center gap-2 rounded-xl border border-[#2B441D]/15 bg-[#2B441D]/5 px-4 py-2.5 text-xs font-semibold backdrop-blur-md lg:flex text-[#2B441D]">
             <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#486B37] opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#355428]" />
             </span>
             All systems operational
           </span>
@@ -152,7 +152,7 @@ export const Dashboard: React.FC = () => {
           <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm lg:col-span-2">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-bold text-text-primary">Recent Attendance</h3>
-              <button onClick={() => navigate('/hrms/attendance')} className="flex items-center gap-1 text-xs font-semibold text-[#0A5240] hover:text-[#064E3B]">
+              <button onClick={() => navigate('/hrms/attendance')} className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]">
                 View all <ArrowRight size={12} />
               </button>
             </div>
@@ -187,13 +187,13 @@ export const Dashboard: React.FC = () => {
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => navigate(path)}
-                className="group flex items-center gap-3.5 rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-5 py-4 text-left transition-all duration-300 hover:border-[#0F6E56] hover:bg-[#0F6E56] hover:shadow-lg hover:shadow-[#0F6E56]/25"
+                className="group flex items-center gap-3.5 rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-5 py-4 text-left transition-all duration-300 hover:border-[#059669] hover:bg-[#059669] hover:shadow-lg hover:shadow-[#059669]/25"
               >
-                <div className="rounded-xl bg-white p-2.5 text-[#0A5240] shadow-sm transition-colors group-hover:bg-white/20 group-hover:text-white">
+                <div className="rounded-xl bg-white p-2.5 text-[#047857] shadow-sm transition-colors group-hover:bg-white/20 group-hover:text-white">
                   <Icon size={20} />
                 </div>
                 <span className="flex-1 text-sm font-bold text-text-primary group-hover:text-white">{label}</span>
-                <ArrowRight size={16} className="text-[#0A5240]/50 transition-all group-hover:translate-x-1 group-hover:text-white" />
+                <ArrowRight size={16} className="text-[#047857]/50 transition-all group-hover:translate-x-1 group-hover:text-white" />
               </motion.button>
             )
           })}

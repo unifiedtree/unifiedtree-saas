@@ -80,10 +80,11 @@ const ROLE_PRIORITY = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGE
 function RoleAwareLanding() {
   const roles = useSdkStore(s => s.user?.roles ?? [])
 
-  if (roles.includes('SUPER_ADMIN') || roles.includes('HR_MANAGER')) {
-    return <Navigate to="/dashboard" replace />
+  // Admins & managers land on the app launcher (Odoo-style) to choose an app.
+  if (roles.includes('SUPER_ADMIN') || roles.includes('HR_MANAGER') || roles.includes('FINANCE_LEAD')) {
+    return <Navigate to="/modules" replace />
   }
-  if (roles.includes('FINANCE_LEAD')) return <Navigate to="/hrms/reports" replace />
+  // Single-app users go straight to their home surface.
   if (roles.includes('DEPT_MANAGER')) return <Navigate to="/team" replace />
   if (roles.includes('EMPLOYEE'))     return <Navigate to="/me" replace />
 
@@ -152,10 +153,10 @@ export default function App() {
         <Route path="/users"      element={<RouteGuard anyOf={[P.WORKSPACE_USERS_READ]}><Users /></RouteGuard>} />
         <Route path="/roles"      element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN]}><Roles /></RouteGuard>} />
         <Route path="/audit-logs" element={<RouteGuard anyOf={[P.AUDIT_READ]}><AuditLogs /></RouteGuard>} />
-        {/* Admin-only Modules manager. Guarded on the module-management perms; the '*'
-            wildcard lets super-admins (who hold a wildcard-only grant) through, mirroring
-            the gating agent's admin definition (roles ∪ permissions.has('*')). */}
-        <Route path="/modules"    element={<RouteGuard anyOf={[P.PLATFORM_MODULE_MANAGE, P.TENANT_MODULE_ACTIVATE, '*']}><Modules /></RouteGuard>} />
+        {/* App launcher (Odoo-style). The universal post-login landing / app picker —
+            open to every authenticated user. Entering a specific app's routes is still
+            gated per-route below, so this only chooses where to go, never grants access. */}
+        <Route path="/modules"    element={<Modules />} />
         {/* AUTH-ONLY (intentional): Files is fully mock (no backend yet) — shows the
             ComingSoon placeholder, not real data. No permission to gate on until it ships. */}
         <Route path="/files"     element={<ComingSoon module="files" />} />

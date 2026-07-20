@@ -47,7 +47,7 @@ export const Payments: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="Total Received" value={`$${(totalReceived / 1000).toFixed(0)}k`} icon={CheckCircle} iconColor="text-emerald-400" iconBg="bg-emerald-500/10" />
         <StatCard title="Pending Payments" value={`$${(totalPending / 1000).toFixed(0)}k`} icon={Clock} iconColor="text-amber-400" iconBg="bg-amber-500/10" />
-        <StatCard title="Transactions" value={MOCK_PAYMENTS.length} icon={CreditCard} iconColor="text-[#0F6E56]" iconBg="bg-[#0F6E56]/10" />
+        <StatCard title="Transactions" value={MOCK_PAYMENTS.length} icon={CreditCard} iconColor="text-[#059669]" iconBg="bg-[#059669]/10" />
       </div>
 
       <div className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden">
@@ -65,7 +65,7 @@ export const Payments: React.FC = () => {
                 const sc = statusConfig[pay.status]
                 return (
                   <tr key={pay.id} className="border-b border-[#E2E8F0]/40 last:border-0 hover:bg-[#F8FAFC] transition-colors">
-                    <td className="px-4 py-3 text-[#0F6E56] font-mono text-xs">{pay.reference}</td>
+                    <td className="px-4 py-3 text-[#059669] font-mono text-xs">{pay.reference}</td>
                     <td className="px-4 py-3 text-[#0F172A]">{pay.customerName}</td>
                     <td className="px-4 py-3 text-[#64748B] font-mono text-xs">{pay.invoiceRef}</td>
                     <td className="px-4 py-3 text-[#0F172A] font-semibold">${pay.amount.toLocaleString()}</td>

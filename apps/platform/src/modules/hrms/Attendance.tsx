@@ -146,7 +146,7 @@ function TeamDashboardTab() {
         actions={
           <input
             type="date" value={date} onChange={(e) => setDate(e.target.value)}
-            className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#0F6E56] focus:outline-none"
+            className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#059669] focus:outline-none"
           />
         }
       >

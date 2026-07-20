@@ -57,7 +57,7 @@ export const DocumentVault: React.FC = () => {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary'
+              tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
             {t.label}
@@ -108,7 +108,7 @@ function DocumentTable({
               <tr key={d.id}>
                 {showOwner && <td><HrAvatar name={d.employeeName || 'Employee'} sub={d.employeeCode} seed={i} /></td>}
                 <td>
-                  <a href={d.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-medium text-text-primary hover:text-[#0A5240]">
+                  <a href={d.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-medium text-text-primary hover:text-[#047857]">
                     {d.title}
                     <ExternalLink size={13} className="text-text-tertiary" />
                   </a>
@@ -193,7 +193,7 @@ function AllDocumentsTab() {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
+  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
   return (
     <div className="space-y-4">
@@ -267,7 +267,7 @@ function UploadTab({ onUploaded }: { onUploaded: () => void }) {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
+  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
   return (
     <div className="max-w-2xl space-y-5">

@@ -73,7 +73,7 @@ export const ProbationSettings: React.FC = () => {
             aria-checked={autoExtend}
             onClick={() => { setAutoExtend(v => !v); setDirty(true) }}
             className={clsx('relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-              autoExtend ? 'bg-[#0F6E56]' : 'bg-border-strong')}
+              autoExtend ? 'bg-[#059669]' : 'bg-border-strong')}
           >
             <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
               style={{ transform: autoExtend ? 'translateX(18px)' : 'translateX(4px)' }} />

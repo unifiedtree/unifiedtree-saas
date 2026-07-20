@@ -109,7 +109,7 @@ export const NotificationTemplates: React.FC = () => {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
+  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
   const saving = create.isPending || update.isPending
 
   if (!canRead) {
@@ -181,7 +181,7 @@ export const NotificationTemplates: React.FC = () => {
 
           <div className="mt-4 flex items-center justify-between">
             <label className="flex items-center gap-2 text-sm text-text-secondary">
-              <input type="checkbox" checked={form.active} onChange={(e) => setField({ active: e.target.checked })} className="h-4 w-4 rounded border-border-default text-[#0F6E56] focus:ring-[#0F6E56]/30" />
+              <input type="checkbox" checked={form.active} onChange={(e) => setField({ active: e.target.checked })} className="h-4 w-4 rounded border-border-default text-[#059669] focus:ring-[#059669]/30" />
               Active
             </label>
             <HrButton onClick={handleSave} disabled={saving}>
@@ -220,7 +220,7 @@ export const NotificationTemplates: React.FC = () => {
                 {canWrite && (
                   <td>
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => startEdit(t)} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FFF3DD] hover:text-[#0A5240]" title="Edit">
+                      <button onClick={() => startEdit(t)} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FFF3DD] hover:text-[#047857]" title="Edit">
                         <Pencil size={14} />
                       </button>
                       <button onClick={() => handleDelete(t.id)} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Delete">

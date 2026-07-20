@@ -63,7 +63,7 @@ function GenerateLetterModal({
     }
   }
 
-  const selectCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none'
+  const selectCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none'
 
   return (
     <>
@@ -80,7 +80,7 @@ function GenerateLetterModal({
               </div>
               <div className="flex gap-3">
                 <button type="button" onClick={() => navigate('/hrms/letters/templates/new')}
-                  className="flex-1 rounded-xl bg-[#0F6E56] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0A5F4A]">
+                  className="flex-1 rounded-xl bg-[#059669] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#047857]">
                   Create template
                 </button>
                 <button type="button" onClick={onClose}
@@ -113,7 +113,7 @@ function GenerateLetterModal({
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="submit" disabled={generate.isPending}
-                  className="flex-1 rounded-xl bg-[#0F6E56] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0A5F4A] disabled:opacity-50">
+                  className="flex-1 rounded-xl bg-[#059669] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#047857] disabled:opacity-50">
                   {generate.isPending ? 'Generating…' : 'Generate'}
                 </button>
                 <button type="button" onClick={onClose}
@@ -217,8 +217,8 @@ export const GeneratedLetters: React.FC = () => {
                   <tr key={letter.id}>
                     <td>
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#E6F4F1]">
-                          <FileText size={13} className="text-[#0F6E56]" />
+                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#ECFDF5]">
+                          <FileText size={13} className="text-[#059669]" />
                         </div>
                         <span className="hr-mono" title={letter.employeeId}>{shortEmpId}</span>
                       </div>

@@ -53,12 +53,12 @@ export const ModuleComingSoon: React.FC = () => {
         <ArrowLeft size={15} /> Back
       </button>
       <div className="rounded-2xl border border-border-default bg-white p-10 text-center shadow-sm">
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E6F4F1] text-[#0F6E56]">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#ECFDF5] text-[#059669]">
           <Hammer size={26} />
         </div>
         <h1 className="text-xl font-bold text-text-primary">{entry.title}</h1>
         <p className="mx-auto mt-2 max-w-md text-sm text-text-secondary">{entry.desc}</p>
-        <span className="mt-5 inline-flex items-center rounded-full bg-[#E6F4F1] px-3 py-1 text-xs font-semibold text-[#0A5240]">
+        <span className="mt-5 inline-flex items-center rounded-full bg-[#ECFDF5] px-3 py-1 text-xs font-semibold text-[#047857]">
           Being built — coming soon
         </span>
       </div>

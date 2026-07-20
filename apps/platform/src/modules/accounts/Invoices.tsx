@@ -92,7 +92,7 @@ export const Invoices: React.FC = () => {
                 const sc = statusConfig[inv.status]
                 return (
                   <tr key={inv.id} className="border-b border-[#E2E8F0]/40 last:border-0 hover:bg-[#F8FAFC] transition-colors">
-                    <td className="px-4 py-3 text-[#0F6E56] font-mono font-medium">{inv.invoiceNumber}</td>
+                    <td className="px-4 py-3 text-[#059669] font-mono font-medium">{inv.invoiceNumber}</td>
                     <td className="px-4 py-3 text-[#0F172A]">{inv.customerName}</td>
                     <td className="px-4 py-3 text-[#0F172A] font-semibold">${inv.amount.toLocaleString()}</td>
                     <td className="px-4 py-3">
@@ -106,7 +106,7 @@ export const Invoices: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 text-xs">
-                        <button className="text-[#0F6E56] hover:text-[#0F6E56] transition-colors">View</button>
+                        <button className="text-[#059669] hover:text-[#059669] transition-colors">View</button>
                         {inv.status === 'DRAFT' && <button className="text-emerald-400 hover:text-emerald-300 transition-colors">Send</button>}
                       </div>
                     </td>

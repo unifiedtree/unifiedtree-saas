@@ -34,7 +34,7 @@ export const ForgotPassword: React.FC = () => {
         className="w-full max-w-[420px] bg-white rounded-3xl shadow-xl border border-slate-100 p-10"
       >
         <div className="flex items-center gap-2.5 mb-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F6E56]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#059669]">
             <span className="text-xl font-black text-white">U</span>
           </div>
           <span className="text-xl font-black tracking-tight text-slate-900">UnifiedTree</span>
@@ -50,7 +50,7 @@ export const ForgotPassword: React.FC = () => {
               If an account exists for <strong>{email}</strong>, a password reset link has been sent.
               Check your spam folder if you don't see it.
             </p>
-            <Link to="/login" className="text-sm font-semibold text-[#0A5240] hover:underline">
+            <Link to="/login" className="text-sm font-semibold text-[#047857] hover:underline">
               Back to login
             </Link>
           </div>
@@ -78,7 +78,7 @@ export const ForgotPassword: React.FC = () => {
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none focus:border-[#0F6E56] focus:ring-4 focus:ring-[#0F6E56]/30"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/30"
                     placeholder="you@company.com"
                     required
                   />
@@ -88,7 +88,7 @@ export const ForgotPassword: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-xl bg-[#0F6E56] hover:bg-[#0A5F4A] py-4 text-sm font-bold text-white transition-all disabled:opacity-60"
+                className="w-full rounded-xl bg-[#059669] hover:bg-[#047857] py-4 text-sm font-bold text-white transition-all disabled:opacity-60"
               >
                 {loading ? 'Sending…' : 'Send reset link'}
               </button>

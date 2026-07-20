@@ -83,7 +83,7 @@ export const Analytics: React.FC = () => {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         <StatCard title="Total Revenue" value="$4.41M" change="+22.4% YoY" changeType="positive" icon={DollarSign} iconColor="text-emerald-400" iconBg="bg-emerald-500/10" subtitle="FY 2024" />
-        <StatCard title="Active Users" value="9,847" change="+18.2% growth" changeType="positive" icon={Users} iconColor="text-[#0F6E56]" iconBg="bg-[#0F6E56]/10" subtitle="Across all tenants" />
+        <StatCard title="Active Users" value="9,847" change="+18.2% growth" changeType="positive" icon={Users} iconColor="text-[#059669]" iconBg="bg-[#059669]/10" subtitle="Across all tenants" />
         <StatCard title="MRR" value="$548K" change="+7.1% MoM" changeType="positive" icon={TrendingUp} iconColor="text-purple-400" iconBg="bg-purple-500/10" subtitle="Monthly recurring revenue" />
         <StatCard title="Avg Session" value="18.4 min" change="+2.1 min" changeType="positive" icon={Activity} iconColor="text-blue-400" iconBg="bg-blue-500/10" subtitle="Per active user" />
         <StatCard title="Total Transactions" value="28,492" change="+31.5% growth" changeType="positive" icon={ShoppingCart} iconColor="text-amber-400" iconBg="bg-amber-500/10" subtitle="This year" />

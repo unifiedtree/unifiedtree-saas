@@ -9,7 +9,7 @@ const testimonials = [
     company: 'Joshi Construction Pvt. Ltd.',
     role: 'CEO',
     initials: 'RJ',
-    color: '#0F6E56',
+    color: '#18280E',
   },
   {
     quote:
@@ -45,7 +45,7 @@ const testimonials = [
     company: 'Desai Retail Group',
     role: 'Managing Director',
     initials: 'KD',
-    color: '#14B8A6',
+    color: '#3A7D22',
   },
   {
     quote:

@@ -49,7 +49,7 @@ export const Customers: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title="Total Customers" value={MOCK_CUSTOMERS.length} icon={Users} iconColor="text-[#0F6E56]" iconBg="bg-[#0F6E56]/10" />
+        <StatCard title="Total Customers" value={MOCK_CUSTOMERS.length} icon={Users} iconColor="text-[#059669]" iconBg="bg-[#059669]/10" />
         <StatCard title="Active" value={active} icon={Users} iconColor="text-emerald-400" iconBg="bg-emerald-500/10" />
         <StatCard title="Total Revenue" value={`$${(totalRevenue / 1000).toFixed(0)}k`} icon={DollarSign} iconColor="text-purple-400" iconBg="bg-purple-500/10" />
       </div>

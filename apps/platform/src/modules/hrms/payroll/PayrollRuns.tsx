@@ -110,7 +110,7 @@ export const PayrollRuns: React.FC = () => {
         <div className="space-y-4">
           <Field label="Company" required>
             <select
-              className="w-full rounded-xl border border-border-default px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/30"
+              className="w-full rounded-xl border border-border-default px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#059669]/30"
               value={companyId}
               onChange={(e) => setCompanyId(e.target.value)}
             >
@@ -121,7 +121,7 @@ export const PayrollRuns: React.FC = () => {
           <div className="grid grid-cols-2 gap-4">
             <Field label="Month" required>
               <select
-                className="w-full rounded-xl border border-border-default px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/30"
+                className="w-full rounded-xl border border-border-default px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#059669]/30"
                 value={month}
                 onChange={(e) => setMonth(Number(e.target.value))}
               >

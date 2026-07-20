@@ -157,7 +157,7 @@ export const Employees: React.FC = () => {
             <select
               value={departmentId}
               onChange={(e) => { setDepartmentId(e.target.value); resetPage() }}
-              className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#0F6E56] focus:outline-none"
+              className="h-9 cursor-pointer rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] shadow-xs outline-none transition-[border-color,box-shadow] hover:border-[var(--border-strong)] focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12"
             >
               <option value="">All Departments</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -165,7 +165,7 @@ export const Employees: React.FC = () => {
             <select
               value={branchId}
               onChange={(e) => { setBranchId(e.target.value); resetPage() }}
-              className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#0F6E56] focus:outline-none"
+              className="h-9 cursor-pointer rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] shadow-xs outline-none transition-[border-color,box-shadow] hover:border-[var(--border-strong)] focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12"
             >
               <option value="">All Branches</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -173,14 +173,14 @@ export const Employees: React.FC = () => {
             <select
               value={status}
               onChange={(e) => { setStatus(e.target.value); resetPage() }}
-              className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#0F6E56] focus:outline-none"
+              className="h-9 cursor-pointer rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] shadow-xs outline-none transition-[border-color,box-shadow] hover:border-[var(--border-strong)] focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12"
             >
               {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
             {(search || departmentId || branchId || status) && (
               <button
                 onClick={() => { setSearch(''); setDepartmentId(''); setBranchId(''); setStatus(''); resetPage() }}
-                className="whitespace-nowrap px-2.5 py-1.5 text-sm font-semibold text-[#0A5240] hover:bg-[#E6F4F1] rounded-lg"
+                className="h-9 whitespace-nowrap rounded-lg px-3 text-sm font-medium text-[var(--accent-fg-strong)] transition-colors hover:bg-[var(--accent-bg)]"
               >
                 Clear filters
               </button>

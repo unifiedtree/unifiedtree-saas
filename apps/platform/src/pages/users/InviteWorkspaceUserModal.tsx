@@ -86,7 +86,7 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
             type="checkbox"
             checked={createEmployee}
             onChange={e => setCreateEmployee(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded accent-[#0F6E56]"
+            className="mt-0.5 h-4 w-4 rounded accent-[#059669]"
           />
           <span>
             <span className="block text-sm font-semibold text-slate-900">Also create HRMS employee</span>
@@ -123,7 +123,7 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
                           disabled={!active}
                           checked={selected.has(role.roleCode)}
                           onChange={() => toggleRole(role.roleCode)}
-                          className="h-4 w-4 rounded accent-[#0F6E56]"
+                          className="h-4 w-4 rounded accent-[#059669]"
                         />
                         {role.displayName}
                       </label>
@@ -132,7 +132,7 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
                   {!active && (
                     <p className="text-xs text-slate-500 pl-2.5 pt-0.5">
                       Activate this module to assign roles.{' '}
-                      <Link to="/settings" className="font-semibold text-[#0F6E56] hover:underline">
+                      <Link to="/settings" className="font-semibold text-[#059669] hover:underline">
                         Activate {MODULE_LABEL[moduleKey] ?? moduleKey} →
                       </Link>
                     </p>

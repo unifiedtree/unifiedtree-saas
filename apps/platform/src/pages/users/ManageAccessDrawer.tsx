@@ -101,7 +101,7 @@ export const ManageAccessDrawer: React.FC<Props> = ({ user, open, onClose }) => 
                             onClick={() => onToggle(role)}
                             className={clsx(
                               'relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50',
-                              granted ? 'bg-[#0F6E56]' : 'bg-slate-300',
+                              granted ? 'bg-[#059669]' : 'bg-slate-300',
                             )}
                           >
                             <span className={clsx(
@@ -118,7 +118,7 @@ export const ManageAccessDrawer: React.FC<Props> = ({ user, open, onClose }) => 
                   {!active && (
                     <p className="text-xs text-slate-500 pt-1">
                       Activate this module to assign roles.{' '}
-                      <Link to="/settings" className="font-semibold text-[#0F6E56] hover:underline">
+                      <Link to="/settings" className="font-semibold text-[#059669] hover:underline">
                         Activate {MODULE_LABEL[moduleKey] ?? moduleKey} →
                       </Link>
                     </p>

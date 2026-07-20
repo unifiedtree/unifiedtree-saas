@@ -4,38 +4,178 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Base resets ─────────────────────────────────────────────────────────── */
+/* ============================================================
+ * Base
+ * ========================================================== */
 *, *::before, *::after { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
   background-color: var(--bg-base);
   color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-feature-settings: 'ss01', 'cv11';
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: 'cv11', 'ss01';
+  font-variant-ligatures: contextual;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-/* ── Focus ring ──────────────────────────────────────────────────────────── */
-:focus-visible {
-  outline: 2px solid var(--accent-default);
-  outline-offset: 2px;
+/* Tighter, more confident headings across the app */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
-/* ── Custom scrollbar ────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: var(--border-default);
+/* Tabular numerals wherever numbers must align (tables, stats, money) */
+.tabular-nums,
+table td, table th,
+.hr-table td, .hr-table th {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ── Focus ring — keyboard only, emerald ─────────────────────
+   Many legacy elements use focus:outline-none; this restores a
+   consistent, accessible ring for keyboard users (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
   border-radius: 3px;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
-/* ── Selection ───────────────────────────────────────────────────────────── */
+/* ── Selection ───────────────────────────────────────────── */
 ::selection {
-  background: var(--accent-subtle);
-  color: var(--accent-default);
+  background: var(--accent-bg-strong);
+  color: var(--accent-fg-strong);
+}
+
+/* ── Scrollbars — slim, unobtrusive, theme-aware ─────────── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+  background-clip: content-box;
+}
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+
+/* ============================================================
+ * Utilities used across the app
+ * ========================================================== */
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+.text-gradient {
+  background: linear-gradient(120deg, #047857 0%, #059669 45%, #34d399 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.text-gradient-peach {
+  background: linear-gradient(120deg, #059669 0%, #10b981 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Frosted surface for overlays / sticky bars */
+.glass {
+  background: var(--bg-surface-overlay);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Decorative blurred background orb (login/marketing) */
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Subtle tactile press for buttons/cards */
+.btn-press {
+  transition: transform var(--motion-fast), box-shadow var(--motion-base), background-color var(--motion-base);
+}
+.btn-press:active { transform: scale(0.98); }
+
+.card-interactive {
+  transition: transform var(--motion-base), box-shadow var(--motion-base), border-color var(--motion-base);
+}
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border-strong);
+}
+
+/* ============================================================
+ * .hr-table — the shared list-screen table (used by 50+ screens).
+ * Redesigned here so every screen inherits the premium look at once:
+ * sticky header, uppercase micro-labels, hairline row dividers,
+ * calm hover, tabular numerals, comfortable 44px-ish rows.
+ * ========================================================== */
+.hr-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+.hr-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-surface);
+  text-align: left;
+  white-space: nowrap;
+  padding: 11px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-default);
+}
+.hr-table tbody td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+.hr-table tbody tr {
+  transition: background-color var(--motion-fast);
+}
+.hr-table tbody tr:hover td { background: var(--bg-subtle); }
+.hr-table tbody tr:last-child td { border-bottom: none; }
+.hr-table .hr-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ============================================================
+ * Reduced motion (WCAG 2.3.3)
+ * ========================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

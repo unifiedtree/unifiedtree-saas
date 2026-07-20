@@ -91,7 +91,7 @@ export const TeamDashboard: React.FC = () => {
           </div>
           <button
             onClick={() => navigate('/hrms/attendance')}
-            className="flex items-center gap-1 text-xs font-semibold text-[#0A5240] transition-colors hover:text-[#0A5F4A]"
+            className="flex items-center gap-1 text-xs font-semibold text-[#047857] transition-colors hover:text-[#047857]"
           >
             Full view <ArrowRight size={12} />
           </button>

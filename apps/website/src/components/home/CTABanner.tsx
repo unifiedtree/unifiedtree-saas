@@ -18,7 +18,7 @@ export function CTABanner() {
   const navigate = useNavigate()
 
   return (
-    <section className="relative py-24 overflow-hidden" style={{ background: 'linear-gradient(135deg, #E6F4F1 0%, #F8FAFC 60%, #E6F4F1 100%)' }}>
+    <section className="relative py-24 overflow-hidden" style={{ background: 'linear-gradient(135deg, #F4FAED 0%, #F8FAFC 60%, #F4FAED 100%)' }}>
       {/* Animated leaf particles */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {leaves.map((leaf, i) => (

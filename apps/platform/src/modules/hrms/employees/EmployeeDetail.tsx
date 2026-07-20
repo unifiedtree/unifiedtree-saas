@@ -208,7 +208,7 @@ function ActionModal({
           {children}
           <div className="flex gap-3 mt-4">
             <button onClick={onClose} className="flex-1 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">Cancel</button>
-            <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-2.5 bg-[#0F6E56] hover:bg-[#0A5F4A] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors">
+            <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors">
               {isLoading ? 'Processing…' : confirm}
             </button>
           </div>
@@ -1151,7 +1151,7 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
                   <td className="text-right">
                     <button
                       onClick={() => navigate(`/hrms/letters/generated/${l.id}`)}
-                      className="text-xs font-semibold text-[#0A5240] hover:text-[#0F6E56] transition-colors"
+                      className="text-xs font-semibold text-[#047857] hover:text-[#059669] transition-colors"
                     >
                       View
                     </button>
@@ -1271,7 +1271,7 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
               </select>
             </Field>
             <label className="flex items-center gap-2 text-sm text-text-primary">
-              <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} className="h-4 w-4 rounded accent-[#0F6E56]" /> PF applicable
+              <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} className="h-4 w-4 rounded accent-[#059669]" /> PF applicable
             </label>
             {ctcComponents.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-border">
@@ -1416,7 +1416,7 @@ export const EmployeeDetail: React.FC = () => {
       {/* Profile card */}
       <div className="bg-white border border-border rounded-2xl p-5">
         <div className="flex items-start gap-4">
-          <div className="w-16 h-16 bg-gradient-to-br from-[#0F6E56] to-[#0A5240] rounded-2xl flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
+          <div className="w-16 h-16 bg-gradient-to-br from-[#059669] to-[#047857] rounded-2xl flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
             {initials.toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">

@@ -22,7 +22,7 @@ const POSH_TONE: Record<PoshStatus, PillTone> = {
   RECEIVED: 'info', UNDER_INQUIRY: 'warn', RESOLVED: 'ok', DISMISSED: 'gray',
 }
 
-const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
+const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 const today = () => new Date().toISOString().slice(0, 10)
 const fmtDate = (d?: string) => (d ? format(new Date(d), 'd MMM yyyy') : '—')
 
@@ -54,7 +54,7 @@ export const Compliance: React.FC = () => {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-                tab === t.key ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary'
+                tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
               }`}
             >
               {t.label}
@@ -62,7 +62,7 @@ export const Compliance: React.FC = () => {
           ))}
         </div>
         {companies.length > 1 && (
-          <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none">
+          <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none">
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         )}
@@ -378,7 +378,7 @@ function PoshTab({ companyId }: { companyId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex items-start gap-2 rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-4 py-3">
-        <ShieldAlert size={16} className="mt-0.5 text-[#0A5240]" />
+        <ShieldAlert size={16} className="mt-0.5 text-[#047857]" />
         <p className="text-xs text-text-secondary">This register is confidential. Record only what is necessary and handle every entry in line with your POSH policy.</p>
       </div>
 
@@ -431,7 +431,7 @@ function PoshTab({ companyId }: { companyId: string }) {
                         value=""
                         onChange={(e) => { if (e.target.value) onAdvance(c.id, e.target.value as PoshStatus) }}
                         disabled={updateStatus.isPending}
-                        className="rounded-lg border border-border-default bg-white px-2 py-1.5 text-xs text-text-primary focus:border-[#0F6E56] focus:outline-none"
+                        className="rounded-lg border border-border-default bg-white px-2 py-1.5 text-xs text-text-primary focus:border-[#059669] focus:outline-none"
                       >
                         <option value="">Update status…</option>
                         {POSH_STATUSES.filter((s) => s !== c.status).map((s) => (

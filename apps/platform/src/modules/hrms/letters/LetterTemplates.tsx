@@ -122,8 +122,8 @@ export const LetterTemplates: React.FC = () => {
                   <tr key={tpl.id} onClick={() => navigate(`/hrms/letters/templates/${tpl.id}`)} className="cursor-pointer">
                     <td>
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#E6F4F1]">
-                          <FileText size={13} className="text-[#0F6E56]" />
+                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#ECFDF5]">
+                          <FileText size={13} className="text-[#059669]" />
                         </div>
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-text-primary">{tpl.name}</p>

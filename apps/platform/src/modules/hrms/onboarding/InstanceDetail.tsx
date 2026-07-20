@@ -194,7 +194,7 @@ export const InstanceDetail: React.FC = () => {
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-bg-base">
                 <div
-                  className="h-full rounded-full bg-[#0F6E56] transition-all duration-500"
+                  className="h-full rounded-full bg-[#059669] transition-all duration-500"
                   style={{ width: `${progress}%` }}
                 />
               </div>

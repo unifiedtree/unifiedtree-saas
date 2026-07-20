@@ -10,15 +10,15 @@ export function Skeleton({ className, rounded = false, ...props }: SkeletonProps
   return (
     <div
       className={cn(
-        'animate-pulse bg-gradient-to-r from-[var(--bg-muted)] via-[var(--bg-subtle)] to-[var(--bg-muted)]',
-        'bg-[length:200%_100%]',
+        'relative overflow-hidden bg-[var(--bg-subtle)] animate-pulse-subtle',
         rounded ? 'rounded-full' : 'rounded-md',
-        '[animation:shimmer_2s_ease-in-out_infinite]',
         className,
       )}
       aria-hidden="true"
       {...props}
-    />
+    >
+      <span className="pointer-events-none absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-black/[0.045] to-transparent dark:via-white/[0.06]" />
+    </div>
   );
 }
 

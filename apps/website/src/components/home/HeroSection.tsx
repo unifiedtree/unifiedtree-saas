@@ -24,185 +24,183 @@ const attendanceRows = [
 ]
 
 const statusColors: Record<string, string> = {
-  Present: 'bg-success/20 text-success',
-  Absent: 'bg-danger/20 text-danger',
-  'On Leave': 'bg-warning/20 text-warning',
+  Present: 'bg-lime/20 text-lime',
+  Absent: 'bg-danger/20 text-red-300',
+  'On Leave': 'bg-warning/20 text-amber-300',
 }
 
 const sidebarItems = ['Dashboard', 'HR', 'Attendance', 'Accounting', 'Inventory', 'CRM']
-const avatarColors = ['#0F6E56', '#22C55E', '#0A5240', '#16A34A', '#4ADE80']
+const avatarColors = ['#18280E', '#3A5A25', '#5B8C2A', '#274012', '#7CA83E']
 
 export function HeroSection() {
   const navigate = useNavigate()
 
   return (
-    <section className="min-h-screen bg-bg flex items-center pt-24 pb-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+    <section className="min-h-screen bg-[#EBF5DF] flex flex-col items-center justify-center pt-32 pb-12 relative overflow-hidden">
+      {/* Full-width bright white squircle background pattern */}
+      <div className="absolute inset-0 bg-squircle-grid-white pointer-events-none" />
+      {/* Fading gradient to hide the pattern at the bottom */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#EBF5DF]/80 to-[#EBF5DF] pointer-events-none" />
 
-          {/* LEFT — text (z-index ensures it stays on top) */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col items-center text-center relative z-10">
+        {/* Eyebrow */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.1, duration: 0.4 }}
+          className="inline-flex items-center gap-2 text-[#18280E]/60 text-sm font-mono mb-6"
+        >
+          <span className="text-[#84cc16]">•</span>
+          Meet the leading
+        </motion.div>
+
+        {/* H1 */}
+        <motion.h1
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: 'easeOut' }}
+          className="font-heading font-medium tracking-tight text-[#18280E] mb-6"
+          style={{ fontSize: 'clamp(3.5rem, 8vw, 6.5rem)', lineHeight: 1.1 }}
+        >
+          One Platform <br />
+          Unlimited Potential
+        </motion.h1>
+
+        {/* Subheadline */}
+        <motion.p
+           initial={{ opacity: 0, y: 30 }}
+           animate={{ opacity: 1, y: 0 }}
+           transition={{ duration: 0.7, delay: 0.1, ease: 'easeOut' }}
+           className="text-lg text-[#18280E]/70 font-body leading-relaxed mb-10 max-w-2xl mx-auto px-4"
+        >
+          UnifiedTree's platform of software and services lays the<br className="hidden sm:block" />
+          groundwork so you can focus on building the future.
+        </motion.p>
+
+        {/* CTAs */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.2, ease: 'easeOut' }}
+          className="flex flex-wrap justify-center gap-4 mb-20"
+        >
+          <Button size="lg" className="bg-[#18280E] text-white hover:bg-[#2A4718] border-none font-semibold rounded-xl px-8 shadow-md" onClick={() => navigate('/pricing')}>
+            Request a demo
+          </Button>
+          <Button size="lg" className="bg-white border border-[#E6EBDD] text-[#18280E] hover:bg-slate-50 rounded-xl px-8 transition-colors shadow-sm" variant="ghost">
+            Contact sales
+          </Button>
+        </motion.div>
+
+        {/* Dashboard mockup (centered and overlapping bottom) */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.35, ease: 'easeOut' }}
+          className="w-full max-w-5xl mx-auto px-4 sm:px-8 translate-y-8"
+        >
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
-            className="relative z-10"
+            animate={{ y: [0, -10, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+            className="bg-[#0F1B08] rounded-t-2xl shadow-2xl overflow-hidden border-t border-l border-r border-[#18280E]/10 w-full text-left"
           >
-            {/* Badge */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1, duration: 0.4 }}
-              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary text-primary text-sm font-body font-medium mb-6 bg-primary-light"
-            >
-              <span className="text-base">🌱</span>
-              India's First Offline-First ERP
-            </motion.div>
-
-            {/* H1 */}
-            <h1
-              className="font-heading font-extrabold text-text-primary mb-4"
-              style={{ fontSize: 'clamp(2.8rem, 5vw, 4.5rem)', lineHeight: 1.1 }}
-            >
-              Run Your Entire Business
-            </h1>
-
-            {/* Animated tagline */}
-            <div className="mb-6">
-              <AnimatedTagline />
+            {/* Window chrome */}
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-white/5">
+              <span className="w-3 h-3 rounded-full bg-[#FF5F56]" />
+              <span className="w-3 h-3 rounded-full bg-[#FFBD2E]" />
+              <span className="w-3 h-3 rounded-full bg-[#27C93F]" />
+              <span className="ml-3 text-xs text-slate-400 font-mono flex items-center gap-2">
+                <img src="/UnifiedTreeLogo.png" alt="UnifiedTree" className="h-4 w-auto brightness-0 invert opacity-70" />
+              </span>
             </div>
 
-            {/* Subheadline */}
-            <p className="text-lg text-text-secondary font-body leading-relaxed mb-8 max-w-lg">
-              UnifiedTree connects every department — HR, Finance, Sales, Inventory, and more —
-              through one living, breathing platform. Works even when you're offline.
-            </p>
-
-            {/* CTAs */}
-            <div className="flex flex-wrap gap-4 mb-10">
-              <Button size="lg" onClick={() => navigate('/pricing')}>
-                Start Free Trial <ArrowRight size={18} />
-              </Button>
-              <Button size="lg" variant="ghost">
-                <Play size={18} /> Watch Demo
-              </Button>
-            </div>
-
-            {/* Social proof */}
-            <div className="flex items-center gap-3">
-              <div className="flex -space-x-3">
-                {avatarColors.map((color, i) => (
+            <div className="flex bg-[#0A1205]">
+              {/* Sidebar */}
+              <div className="w-40 border-r border-white/10 p-4 flex-shrink-0 hidden md:block">
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Main Menu</div>
+                {sidebarItems.map((item, i) => (
                   <div
-                    key={i}
-                    className="w-9 h-9 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold"
-                    style={{ backgroundColor: color, zIndex: avatarColors.length - i }}
+                    key={item}
+                    className={`px-3 py-2.5 rounded-lg text-sm font-medium mb-1 transition-colors ${
+                      i === 0
+                        ? 'bg-white/10 text-white'
+                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    }`}
                   >
-                    {['P', 'A', 'R', 'K', 'S'][i]}
+                    {item}
                   </div>
                 ))}
               </div>
-              <p className="text-sm text-text-secondary font-body">
-                Trusted by <span className="font-semibold text-text-primary">2,400+</span> businesses across India
-              </p>
+
+              {/* Main content */}
+              <div className="flex-1 p-6 min-w-0 bg-[#0F1B08]">
+                <div className="flex items-center justify-between mb-6">
+                   <h2 className="text-xl font-semibold text-white">Dashboard</h2>
+                   <div className="flex items-center gap-3">
+                     <div className="w-8 h-8 rounded-full bg-white/10" />
+                     <div className="w-8 h-8 rounded-full bg-white/10" />
+                     <div className="w-8 h-8 rounded-full bg-white/10" />
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                  {/* KPI cards - Left Side */}
+                  <div className="col-span-1 lg:col-span-1 space-y-5">
+                    <div className="bg-[#1C2C16] rounded-xl p-5 border border-white/5 shadow-sm">
+                      <p className="text-sm text-slate-300 font-medium mb-2">Revenue being processed</p>
+                      <p className="text-3xl font-heading font-semibold text-white mb-1">₹24,60,000</p>
+                      <p className="text-xs text-lime">Last 1 month period</p>
+                    </div>
+                    <div className="bg-[#18280E]/50 rounded-xl p-5 border border-white/5 shadow-sm">
+                      <p className="text-sm text-slate-300 font-medium mb-2">Platform fees</p>
+                      <p className="text-2xl font-heading font-semibold text-white mb-1">₹12,450</p>
+                      <p className="text-xs text-slate-400">Last 1 month period</p>
+                    </div>
+                  </div>
+                  
+                  {/* Chart - Right Side */}
+                  <div className="col-span-1 lg:col-span-2 bg-[#F9F9F9] rounded-xl p-5 border border-white/10 text-slate-900 shadow-sm relative overflow-hidden">
+                    <div className="flex justify-between items-center mb-6">
+                      <p className="text-sm font-semibold text-slate-700">Your rewards</p>
+                      <div className="flex gap-2 text-xs font-medium text-slate-500">
+                         <span className="px-2 py-1 rounded-md hover:bg-slate-200 cursor-pointer">1d</span>
+                         <span className="px-2 py-1 rounded-md hover:bg-slate-200 cursor-pointer">1w</span>
+                         <span className="px-2 py-1 rounded-md bg-white shadow-sm text-slate-900 cursor-pointer">1m</span>
+                         <span className="px-2 py-1 rounded-md hover:bg-slate-200 cursor-pointer">1y</span>
+                         <span className="px-2 py-1 rounded-md hover:bg-slate-200 cursor-pointer">All</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-8 h-40">
+                       {/* Donut Chart Mockup */}
+                       <div className="relative w-32 h-32 rounded-full border-[12px] border-[#1C2C16] border-t-[#A3E635] border-r-[#FF9F1C] border-b-[#FF9F1C] flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-slate-900">₹271,783</div>
+                            <div className="text-[10px] text-slate-500">Total rewards</div>
+                          </div>
+                       </div>
+                       <div className="flex flex-col gap-3">
+                         <div className="flex items-center gap-2 text-sm text-slate-700 font-medium">
+                           <div className="w-2.5 h-2.5 rounded-sm bg-[#1C2C16]" /> Benefits offered
+                         </div>
+                         <div className="flex items-center gap-2 text-sm text-slate-700 font-medium">
+                           <div className="w-2.5 h-2.5 rounded-sm bg-[#FF9F1C]" /> Target variable pay
+                         </div>
+                         <div className="flex items-center gap-2">
+                           <div className="w-2.5 h-2.5 rounded-sm bg-[#FFBD2E]" />
+                           <div className="w-16 h-2 bg-slate-200 rounded-full" />
+                         </div>
+                         <div className="flex items-center gap-2">
+                           <div className="w-2.5 h-2.5 rounded-sm bg-[#A3E635]" />
+                           <div className="w-16 h-2 bg-slate-200 rounded-full" />
+                         </div>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </motion.div>
-
-          {/* RIGHT — dashboard mockup, strictly contained in its grid cell */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.25, ease: 'easeOut' }}
-            className="relative w-full"
-          >
-            <motion.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-              whileHover={{ y: 0, scale: 1.01 }}
-              className="bg-[#0F172A] rounded-2xl shadow-2xl overflow-hidden border border-white/10 w-full"
-            >
-              {/* Window chrome */}
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
-                <span className="w-3 h-3 rounded-full bg-[#FF5F56]" />
-                <span className="w-3 h-3 rounded-full bg-[#FFBD2E]" />
-                <span className="w-3 h-3 rounded-full bg-[#27C93F]" />
-                <span className="ml-3 text-xs text-slate-500 font-mono">app.unifiedtree.com</span>
-              </div>
-
-              <div className="flex">
-                {/* Sidebar */}
-                <div className="w-32 border-r border-white/10 p-3 flex-shrink-0">
-                  {sidebarItems.map((item, i) => (
-                    <div
-                      key={item}
-                      className={`px-3 py-2 rounded-lg text-xs font-mono mb-1 ${
-                        i === 0
-                          ? 'bg-primary text-white'
-                          : 'text-slate-400'
-                      }`}
-                    >
-                      {item}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Main content */}
-                <div className="flex-1 p-4 min-w-0">
-                  {/* KPI cards */}
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                      <p className="text-xs text-slate-400 font-mono mb-1">Revenue</p>
-                      <p className="text-lg font-heading font-bold text-white">₹24.6L</p>
-                      <p className="text-xs text-success">+12.4% ↑</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                      <p className="text-xs text-slate-400 font-mono mb-1">Employees</p>
-                      <p className="text-lg font-heading font-bold text-white">142</p>
-                      <p className="text-xs text-success">+3 this month</p>
-                    </div>
-                  </div>
-
-                  {/* Chart */}
-                  <div className="bg-white/5 rounded-xl p-3 border border-white/10 mb-4">
-                    <p className="text-xs text-slate-400 font-mono mb-2">Revenue Trend</p>
-                    <ResponsiveContainer width="100%" height={75}>
-                      <AreaChart data={revenueData}>
-                        <defs>
-                          <linearGradient id="heroGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#0F6E56" stopOpacity={0.5} />
-                            <stop offset="95%" stopColor="#0F6E56" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <XAxis dataKey="month" tick={{ fontSize: 8, fill: '#64748B' }} axisLine={false} tickLine={false} />
-                        <YAxis hide />
-                        <Tooltip
-                          contentStyle={{ background: '#1E293B', border: 'none', borderRadius: 8, fontSize: 10 }}
-                          labelStyle={{ color: '#94A3B8' }}
-                          itemStyle={{ color: '#22C55E' }}
-                        />
-                        <Area type="monotone" dataKey="revenue" stroke="#0F6E56" strokeWidth={2} fill="url(#heroGrad)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Attendance table */}
-                  <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
-                    <div className="px-3 py-2 border-b border-white/10">
-                      <p className="text-xs text-slate-400 font-mono">Today's Attendance</p>
-                    </div>
-                    {attendanceRows.map((row) => (
-                      <div key={row.name} className="flex items-center justify-between px-3 py-2 border-b border-white/5 last:border-0">
-                        <span className="text-xs text-slate-300 font-mono truncate">{row.name}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${statusColors[row.status]}`}>
-                          {row.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-
-        </div>
+        </motion.div>
       </div>
     </section>
   )

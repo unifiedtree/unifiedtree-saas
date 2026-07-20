@@ -4,28 +4,52 @@ import { cn } from '../cn';
 
 // ─── Badge ──────────────────────────────────────────────────────────────────
 const badgeVariants = cva(
-  'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors',
+  'inline-flex items-center gap-1.5 rounded-full font-medium whitespace-nowrap transition-colors',
   {
     variants: {
       tone: {
-        default:  'bg-[var(--bg-subtle)] text-[var(--text-secondary)]',
-        success:  'bg-[var(--status-success-bg)] text-[var(--status-success-fg)]',
-        warning:  'bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)]',
-        error:    'bg-[var(--status-error-bg)] text-[var(--status-error-fg)]',
-        info:     'bg-[var(--status-info-bg)] text-[var(--status-info-fg)]',
-        accent:   'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]',
+        default:  'bg-[var(--bg-subtle)] text-[var(--text-secondary)] ring-1 ring-inset ring-[var(--border-default)]',
+        neutral:  'bg-[var(--bg-subtle)] text-[var(--text-secondary)] ring-1 ring-inset ring-[var(--border-default)]',
+        success:  'bg-[var(--status-success-bg)] text-[var(--status-success-fg)] ring-1 ring-inset ring-[var(--status-success-border)]',
+        warning:  'bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)] ring-1 ring-inset ring-[var(--status-warning-border)]',
+        error:    'bg-[var(--status-error-bg)] text-[var(--status-error-fg)] ring-1 ring-inset ring-[var(--status-error-border)]',
+        info:     'bg-[var(--status-info-bg)] text-[var(--status-info-fg)] ring-1 ring-inset ring-[var(--status-info-border)]',
+        accent:   'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)] ring-1 ring-inset ring-[var(--accent-border)]',
+        solid:    'bg-[var(--accent-solid)] text-[var(--text-on-accent)]',
+      },
+      size: {
+        sm: 'px-2 py-0.5 text-2xs',
+        md: 'px-2.5 py-0.5 text-xs',
       },
     },
-    defaultVariants: { tone: 'default' },
+    defaultVariants: { tone: 'default', size: 'md' },
   },
 );
 
+const dotColor: Record<string, string> = {
+  default: 'bg-[var(--text-tertiary)]',
+  neutral: 'bg-[var(--text-tertiary)]',
+  success: 'bg-[var(--status-success-solid)]',
+  warning: 'bg-[var(--status-warning-solid)]',
+  error:   'bg-[var(--status-error-solid)]',
+  info:    'bg-[var(--status-info-solid)]',
+  accent:  'bg-[var(--accent-solid)]',
+  solid:   'bg-white',
+};
+
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLSpanElement>,
-    VariantProps<typeof badgeVariants> {}
+    VariantProps<typeof badgeVariants> {
+  dot?: boolean;
+}
 
-export function Badge({ className, tone, ...props }: BadgeProps) {
-  return <span className={cn(badgeVariants({ tone }), className)} {...props} />;
+export function Badge({ className, tone, size, dot, children, ...props }: BadgeProps) {
+  return (
+    <span className={cn(badgeVariants({ tone, size }), className)} {...props}>
+      {dot && <span className={cn('h-1.5 w-1.5 rounded-full', dotColor[tone ?? 'default'])} aria-hidden />}
+      {children}
+    </span>
+  );
 }
 
 // ─── Avatar ──────────────────────────────────────────────────────────────────
@@ -42,22 +66,20 @@ interface AvatarProps extends React.HTMLAttributes<HTMLSpanElement> {
   alt?: string;
   name?: string;
   size?: keyof typeof avatarSizes;
+  ring?: boolean;
 }
 
-export function Avatar({ src, alt, name, size = 'md', className, ...props }: AvatarProps) {
+export function Avatar({ src, alt, name, size = 'md', ring, className, ...props }: AvatarProps) {
   const initials = name
-    ? name
-        .split(' ')
-        .map(w => w[0])
-        .slice(0, 2)
-        .join('')
-        .toUpperCase()
+    ? name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
     : '?';
 
   return (
     <span
       className={cn(
-        'inline-flex flex-shrink-0 items-center justify-center rounded-full bg-[var(--accent-bg)] font-semibold text-[var(--accent-fg-strong)] overflow-hidden',
+        'inline-flex flex-shrink-0 items-center justify-center rounded-full overflow-hidden font-semibold',
+        'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]',
+        ring && 'ring-2 ring-[var(--bg-surface)] shadow-sm',
         avatarSizes[size],
         className,
       )}
@@ -73,11 +95,16 @@ export function Avatar({ src, alt, name, size = 'md', className, ...props }: Ava
 }
 
 // ─── Card ────────────────────────────────────────────────────────────────────
-export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  interactive?: boolean;
+}
+
+export function Card({ className, interactive, ...props }: CardProps) {
   return (
     <div
       className={cn(
-        'rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-xs',
+        'rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-sm',
+        interactive && 'card-interactive cursor-pointer',
         className,
       )}
       {...props}
@@ -86,13 +113,13 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
 }
 
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex flex-col gap-1 p-6 pb-4', className)} {...props} />;
+  return <div className={cn('flex flex-col gap-1 p-5 pb-3', className)} {...props} />;
 }
 
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h3
-      className={cn('text-base font-semibold leading-none tracking-tight text-[var(--text-primary)]', className)}
+      className={cn('text-md font-semibold leading-tight tracking-tight text-[var(--text-primary)]', className)}
       {...props}
     />
   );
@@ -103,12 +130,12 @@ export function CardDescription({ className, ...props }: React.HTMLAttributes<HT
 }
 
 export function CardContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('p-6 pt-0', className)} {...props} />;
+  return <div className={cn('p-5 pt-0', className)} {...props} />;
 }
 
 export function CardFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('flex items-center p-6 pt-0', className)} {...props} />
+    <div className={cn('flex items-center gap-2 border-t border-[var(--border-subtle)] p-5', className)} {...props} />
   );
 }
 

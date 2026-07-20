@@ -43,46 +43,48 @@ export function StatCard({
   return (
     <div
       className={cn(
-        'rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 shadow-xs',
+        'group rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 shadow-sm',
+        'transition-shadow duration-200 hover:shadow-md',
         className,
       )}
     >
-      <div className="flex items-start justify-between">
-        <p className="text-sm font-medium text-[var(--text-tertiary)]">{label}</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[13px] font-medium text-[var(--text-secondary)]">{label}</p>
         {Icon && (
-          <span className={cn('rounded-lg p-2', styles.bg)}>
-            <Icon size={16} className={styles.icon} />
+          <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', styles.bg)}>
+            <Icon size={17} className={styles.icon} />
           </span>
         )}
       </div>
 
-      <div className="mt-3">
+      <div className="mt-4">
         {isLoading ? (
           <>
             <Skeleton className="mb-2 h-8 w-24" />
             <Skeleton className="h-4 w-16" />
           </>
         ) : (
-          <>
-            <p className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+          <div className="flex items-end justify-between gap-2">
+            <p className="text-3xl font-semibold tabular-nums tracking-tight text-[var(--text-primary)]">
               {value}
             </p>
             {delta !== undefined && (
-              <div
+              <span
                 className={cn(
-                  'mt-1 flex items-center gap-1 text-xs font-medium',
-                  deltaIsPositive && 'text-[var(--status-success-fg)]',
-                  deltaIsNegative && 'text-[var(--status-error-fg)]',
-                  !deltaIsPositive && !deltaIsNegative && 'text-[var(--text-tertiary)]',
+                  'mb-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold',
+                  deltaIsPositive && 'bg-[var(--status-success-bg)] text-[var(--status-success-fg)]',
+                  deltaIsNegative && 'bg-[var(--status-error-bg)] text-[var(--status-error-fg)]',
+                  !deltaIsPositive && !deltaIsNegative && 'bg-[var(--bg-subtle)] text-[var(--text-tertiary)]',
                 )}
               >
                 <DeltaIcon size={12} />
-                <span>
-                  {delta > 0 ? '+' : ''}{delta}%{deltaLabel ? ` ${deltaLabel}` : ''}
-                </span>
-              </div>
+                {delta > 0 ? '+' : ''}{delta}%
+              </span>
             )}
-          </>
+          </div>
+        )}
+        {!isLoading && deltaLabel && (
+          <p className="mt-1.5 text-xs text-[var(--text-tertiary)]">{deltaLabel}</p>
         )}
       </div>
     </div>

@@ -307,7 +307,7 @@ export function IndustriesPage() {
 
                       {/* Testimonial */}
                       <div className="mt-7 p-5 rounded-xl border border-border relative"
-                        style={{ background: 'linear-gradient(135deg, rgba(15,110,86,0.04), rgba(29,185,133,0.02))' }}
+                        style={{ background: 'linear-gradient(135deg, rgba(5, 150, 105,0.04), rgba(29,185,133,0.02))' }}
                       >
                         <span className="absolute top-3 right-4 text-3xl text-primary/10 font-heading font-bold leading-none select-none">"</span>
                         <p className="text-sm text-text-secondary font-body leading-relaxed mb-3 relative z-10">

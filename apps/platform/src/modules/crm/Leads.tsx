@@ -24,7 +24,7 @@ const MOCK_LEADS: Lead[] = [
 
 const statusConfig: Record<Lead['status'], { label: string; color: string; bg: string; kanbanColor: string }> = {
   NEW: { label: 'New', color: 'text-blue-400', bg: 'bg-blue-500/10', kanbanColor: 'border-blue-500/40 bg-blue-500/5' },
-  CONTACTED: { label: 'Contacted', color: 'text-[#0F6E56]', bg: 'bg-[#0F6E56]/10', kanbanColor: 'border-indigo-500/40 bg-indigo-500/5' },
+  CONTACTED: { label: 'Contacted', color: 'text-[#059669]', bg: 'bg-[#059669]/10', kanbanColor: 'border-indigo-500/40 bg-indigo-500/5' },
   QUALIFIED: { label: 'Qualified', color: 'text-amber-400', bg: 'bg-amber-500/10', kanbanColor: 'border-amber-500/40 bg-amber-500/5' },
   PROPOSAL: { label: 'Proposal', color: 'text-purple-400', bg: 'bg-purple-500/10', kanbanColor: 'border-purple-500/40 bg-purple-500/5' },
   CONVERTED: { label: 'Converted', color: 'text-emerald-400', bg: 'bg-emerald-500/10', kanbanColor: 'border-emerald-500/40 bg-emerald-500/5' },
@@ -71,7 +71,7 @@ export const Leads: React.FC = () => {
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard title="New Leads" value={newLeads} icon={TrendingUp} iconColor="text-blue-400" iconBg="bg-blue-500/10" change="+3 this week" changeType="positive" />
-        <StatCard title="Contacted" value={contacted} icon={TrendingUp} iconColor="text-[#0F6E56]" iconBg="bg-[#0F6E56]/10" />
+        <StatCard title="Contacted" value={contacted} icon={TrendingUp} iconColor="text-[#059669]" iconBg="bg-[#059669]/10" />
         <StatCard title="Qualified" value={qualified} icon={TrendingUp} iconColor="text-amber-400" iconBg="bg-amber-500/10" />
         <StatCard title="Converted" value={converted} icon={TrendingUp} iconColor="text-emerald-400" iconBg="bg-emerald-500/10" change="+2 this month" changeType="positive" />
       </div>

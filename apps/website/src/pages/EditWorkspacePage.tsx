@@ -275,7 +275,7 @@ export function EditWorkspacePage() {
                       className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                       style={{
                         backgroundColor: isActive ? '#DCFCE7' : `${mod.color}14`,
-                        color: isActive ? '#16A34A' : mod.color,
+                        color: isActive ? '#3A7D22' : mod.color,
                       }}
                     >
                       <Icon size={18} />

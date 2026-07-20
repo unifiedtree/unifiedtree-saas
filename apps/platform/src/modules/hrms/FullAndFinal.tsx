@@ -41,7 +41,7 @@ export const FullAndFinal: React.FC = () => {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary'
+              tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
             {t.label}
@@ -203,7 +203,7 @@ function CreateTab({ onCreated }: { onCreated: () => void }) {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
+  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -258,10 +258,10 @@ function CreateTab({ onCreated }: { onCreated: () => void }) {
           </div>
         ))}
         <div className="flex gap-4">
-          <button onClick={() => setComponents((p) => [...p, emptyComponent('EARNING')])} className="flex items-center gap-1.5 text-sm font-semibold text-[#0A5240] hover:text-[#064E3B]">
+          <button onClick={() => setComponents((p) => [...p, emptyComponent('EARNING')])} className="flex items-center gap-1.5 text-sm font-semibold text-[#047857] hover:text-[#064E3B]">
             <Plus size={15} /> Add earning
           </button>
-          <button onClick={() => setComponents((p) => [...p, emptyComponent('DEDUCTION')])} className="flex items-center gap-1.5 text-sm font-semibold text-[#0A5240] hover:text-[#064E3B]">
+          <button onClick={() => setComponents((p) => [...p, emptyComponent('DEDUCTION')])} className="flex items-center gap-1.5 text-sm font-semibold text-[#047857] hover:text-[#064E3B]">
             <Plus size={15} /> Add deduction
           </button>
         </div>

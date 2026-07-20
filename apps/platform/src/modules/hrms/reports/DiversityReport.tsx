@@ -14,7 +14,7 @@ const GENDER_COLORS: Record<string, string> = {
   FEMALE: '#EC4899',
   OTHER:  '#14B8A6',
 }
-const FALLBACK_COLORS = ['#0F6E56', '#4096FF', '#EC4899', '#14B8A6', '#22C55E']
+const FALLBACK_COLORS = ['#059669', '#4096FF', '#EC4899', '#14B8A6', '#22C55E']
 
 const GENDER_TONES: Record<string, 'blue' | 'pink' | 'teal' | 'gray'> = {
   MALE:   'blue',

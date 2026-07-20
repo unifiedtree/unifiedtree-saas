@@ -42,7 +42,7 @@ export function HeadcountReport() {
             type="date"
             value={asOf}
             onChange={(e) => set('asOf', e.target.value)}
-            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/20 transition-all"
+            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-all"
           />
         </>
       }

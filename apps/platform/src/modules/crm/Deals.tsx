@@ -47,8 +47,8 @@ export const Deals: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white border border-[#E2E8F0] rounded-2xl p-5">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-9 h-9 bg-[#0F6E56]/10 rounded-xl flex items-center justify-center">
-              <DollarSign size={18} className="text-[#0F6E56]" />
+            <div className="w-9 h-9 bg-[#059669]/10 rounded-xl flex items-center justify-center">
+              <DollarSign size={18} className="text-[#059669]" />
             </div>
             <span className="text-xs text-[#64748B] uppercase tracking-wider">Total Pipeline</span>
           </div>

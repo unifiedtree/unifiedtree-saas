@@ -51,7 +51,7 @@ export const ProjectList: React.FC = () => {
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard title="Active" value={active} icon={Package} iconColor="text-emerald-400" iconBg="bg-emerald-500/10" />
         <StatCard title="Completed" value={completed} icon={Package} iconColor="text-[#64748B]" iconBg="bg-[#F1F5F9]/40" />
-        <StatCard title="Total Tasks" value={MOCK_PROJECTS.reduce((s, p) => s + p.tasksTotal, 0)} icon={TrendingUp} iconColor="text-[#0F6E56]" iconBg="bg-[#0F6E56]/10" />
+        <StatCard title="Total Tasks" value={MOCK_PROJECTS.reduce((s, p) => s + p.tasksTotal, 0)} icon={TrendingUp} iconColor="text-[#059669]" iconBg="bg-[#059669]/10" />
         <StatCard title="Team Members" value={MOCK_PROJECTS.reduce((s, p) => s + p.teamSize, 0)} icon={Users} iconColor="text-purple-400" iconBg="bg-purple-500/10" />
       </div>
 

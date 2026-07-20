@@ -1,162 +1,177 @@
-import React from 'react'
+import React, { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
-import {
-  Users, Clock, CreditCard, DollarSign, Package, TrendingUp,
-  ShoppingCart, BarChart3, Briefcase, Factory, Store, FileBarChart2,
-  Lock, ExternalLink, ArrowUpRight, Check, Sparkles,
-} from 'lucide-react'
-
-// ─── Canonical 12 modules (= website pricing ids) ──────────────────────────────
-// BUILT = a real product surface exists in the platform today (hrms, attendance).
-// Everything else is "coming-soon" once owned — the workspace can activate it, but
-// the in-app screens are not built yet, so an active-but-unbuilt module renders a
-// static "Coming soon" state rather than a live module.
-const BUILT_MODULES = new Set(['hrms', 'attendance'])
-
-interface ModuleDef {
-  key: string
-  label: string
-  description: string
-  icon: React.ReactNode
-}
-
-const MODULES: ModuleDef[] = [
-  { key: 'hrms',          label: 'HRMS',          description: 'Employees, org structure, onboarding, letters & reports.', icon: <Users size={22} /> },
-  { key: 'attendance',    label: 'Attendance',    description: 'Punch in/out, geofencing, shifts & timesheets.',          icon: <Clock size={22} /> },
-  { key: 'payroll',       label: 'Payroll',       description: 'Salary structures, payruns & payslips.',                  icon: <CreditCard size={22} /> },
-  { key: 'accounting',    label: 'Accounting',    description: 'Ledgers, invoices, payments & expenses.',                 icon: <DollarSign size={22} /> },
-  { key: 'inventory',     label: 'Inventory',     description: 'Stock, warehouses & item movements.',                     icon: <Package size={22} /> },
-  { key: 'crm',           label: 'CRM',           description: 'Leads, customers, deals & pipeline.',                     icon: <TrendingUp size={22} /> },
-  { key: 'purchase',      label: 'Purchase',      description: 'Purchase orders, vendors & procurement.',                 icon: <ShoppingCart size={22} /> },
-  { key: 'sales',         label: 'Sales',         description: 'Quotes, sales orders & fulfilment.',                      icon: <BarChart3 size={22} /> },
-  { key: 'projects',      label: 'Projects',      description: 'Projects, tasks & team boards.',                          icon: <Briefcase size={22} /> },
-  { key: 'manufacturing', label: 'Manufacturing', description: 'BOMs, work orders & production planning.',                icon: <Factory size={22} /> },
-  { key: 'pos',           label: 'POS',           description: 'Point of sale, registers & receipts.',                    icon: <Store size={22} /> },
-  { key: 'reports',       label: 'Reports',       description: 'Cross-module analytics & dashboards.',                    icon: <FileBarChart2 size={22} /> },
-]
+import { ArrowRight, Lock, Plus, Search, Sparkles, Check, ExternalLink } from 'lucide-react'
+import { APPS, ADMIN_APP, type AppDef } from '@/layouts/appConfig'
 
 type Status = 'active' | 'coming-soon' | 'locked'
 
-function statusOf(key: string, activeModules: string[]): Status {
-  const owned = activeModules.includes(key)
-  if (!owned) return 'locked'
-  return BUILT_MODULES.has(key) ? 'active' : 'coming-soon'
+function statusOf(app: AppDef, active: string[]): Status {
+  if (!active.includes(app.key)) return 'locked'
+  return app.built ? 'active' : 'coming-soon'
 }
 
-const STATUS_META: Record<Status, { label: string; badge: string; chipIcon: React.ReactNode }> = {
-  active:        { label: 'Active',      badge: 'bg-success-light text-success', chipIcon: <Check size={12} /> },
-  'coming-soon': { label: 'Coming soon', badge: 'bg-primary-light text-primary', chipIcon: <Sparkles size={12} /> },
-  locked:        { label: 'Locked',      badge: 'bg-bg text-text-tertiary',      chipIcon: <Lock size={12} /> },
-}
+const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
 
 export const Modules: React.FC = () => {
-  // Active-module set + tenant identity come from the bridged auth store, exactly as
-  // the sidebar gating uses them. (subdomain + adminEmail back the Edit-Workspace link.)
+  const navigate = useNavigate()
   const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
   const subdomain     = useLocalAuthStore(s => s.tenant?.subdomain ?? '')
-  const adminEmail    = useSdkStore(s => s.user?.email ?? '')
+  const user          = useSdkStore(s => s.user)
+  const permissions   = useSdkStore(s => s.permissions)
+  const roles: string[] = user?.roles ?? []
+  const isAdmin = roles.some(r => ADMIN_ROLES.includes(r)) || permissions.has('*')
 
-  // Opens the main website's Edit-Workspace page in a new tab. Mirrors the gating
-  // agent's pattern in PlatformShell — when `moduleKey` is provided we deep-link with
-  // `&add=<key>` so the website pre-selects that module to add; without it we land on
-  // the plain plan-management view.
+  const [query, setQuery] = useState('')
+
   const openEditWorkspace = (moduleKey?: string) => {
     const websiteUrl = import.meta.env.VITE_WEBSITE_URL || 'https://unifiedtree.com'
     const url =
       websiteUrl + '/edit-workspace?ws=' + encodeURIComponent(subdomain) +
-      '&email=' + encodeURIComponent(adminEmail) +
+      '&email=' + encodeURIComponent(user?.email ?? '') +
       (moduleKey ? '&add=' + encodeURIComponent(moduleKey) : '')
     window.open(url, '_blank', 'noopener')
   }
 
+  // Owned apps first, then the rest; Settings (admin) surfaces for admins only.
+  const apps = useMemo(() => {
+    const list = [...APPS]
+    if (isAdmin) list.push(ADMIN_APP as AppDef)
+    const q = query.trim().toLowerCase()
+    const filtered = q
+      ? list.filter(a => a.label.toLowerCase().includes(q) || a.description.toLowerCase().includes(q))
+      : list
+    return filtered.sort((a, b) => {
+      const rank = (x: AppDef) => (x.key === 'admin' ? 2 : activeModules.includes(x.key) ? 0 : 1)
+      return rank(a) - rank(b)
+    })
+  }, [isAdmin, query, activeModules])
+
+  const greeting = (() => {
+    const h = new Date().getHours()
+    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  })()
+  const firstName = user?.firstName || (user?.email ? user.email.split('@')[0] : 'there')
+
+  const enter = (app: AppDef, status: Status) => {
+    if (app.key === 'admin') return navigate(app.home)
+    if (status === 'locked') { if (isAdmin) openEditWorkspace(app.key); return }
+    navigate(app.home)
+  }
+
   return (
-    <div className="animate-fade-in p-4 sm:p-8">
-      {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-text-primary">Modules</h1>
-          <p className="mt-0.5 text-sm text-text-secondary">
-            Manage which modules are active in your workspace.
-          </p>
+    <div className="min-h-full bg-[var(--bg-base)]">
+      <div className="mx-auto max-w-6xl px-6 py-10 sm:px-8 sm:py-14">
+        {/* Header */}
+        <div className="animate-fade-up mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-[var(--accent-fg)]">{greeting}, {firstName}</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--text-primary)]">Choose an app</h1>
+            <p className="mt-1.5 text-sm text-[var(--text-secondary)]">
+              Open a workspace app to get started. Locked apps can be added to your plan any time.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search apps…"
+                className="h-10 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] pl-9 pr-3 text-sm text-[var(--text-primary)] shadow-xs outline-none transition-[border-color,box-shadow] focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12 sm:w-56"
+              />
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => openEditWorkspace()}
+                className="hidden h-10 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3.5 text-sm font-medium text-[var(--text-primary)] shadow-xs transition-colors hover:bg-[var(--bg-subtle)] sm:inline-flex"
+              >
+                Manage plan <ExternalLink size={14} />
+              </button>
+            )}
+          </div>
         </div>
-        <button
-          onClick={() => openEditWorkspace()}
-          className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
-        >
-          Manage plan
-          <ExternalLink size={15} />
-        </button>
-      </div>
 
-      {/* Module grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {MODULES.map(mod => {
-          const status = statusOf(mod.key, activeModules)
-          const meta = STATUS_META[status]
-          const locked = status === 'locked'
-
-          return (
-            <div
-              key={mod.key}
-              className={clsx(
-                'flex flex-col rounded-2xl border bg-surface p-5 transition-all',
-                locked ? 'border-default opacity-90' : 'border-default hover:shadow-card',
-              )}
-            >
-              <div className="mb-4 flex items-start justify-between">
-                <div
-                  className={clsx(
-                    'flex h-11 w-11 items-center justify-center rounded-xl',
-                    status === 'active' && 'bg-success-light text-success',
-                    status === 'coming-soon' && 'bg-primary-light text-primary',
-                    locked && 'bg-bg text-text-tertiary',
+        {/* App grid */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {apps.map((app, i) => {
+            const status = app.key === 'admin' ? 'active' : statusOf(app, activeModules)
+            const locked = status === 'locked'
+            const Icon = app.icon
+            return (
+              <button
+                key={app.key}
+                onClick={() => enter(app, status)}
+                disabled={locked && !isAdmin}
+                style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
+                className={clsx(
+                  'group animate-fade-up relative flex flex-col items-start rounded-2xl border p-5 text-left transition-all duration-200',
+                  locked
+                    ? 'border-[var(--border-subtle)] bg-[var(--bg-surface)]'
+                    : 'border-[var(--border-default)] bg-[var(--bg-surface)] shadow-sm hover:-translate-y-1 hover:border-[var(--accent-border)] hover:shadow-lg',
+                  locked && !isAdmin && 'cursor-default opacity-75',
+                )}
+              >
+                {/* status chip */}
+                <span className="absolute right-3 top-3">
+                  {status === 'active' && (
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)]" title="Active">
+                      <Check size={13} />
+                    </span>
                   )}
-                >
-                  {mod.icon}
-                </div>
+                  {status === 'coming-soon' && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent-fg-strong)]" title="Coming soon">
+                      <Sparkles size={11} /> Soon
+                    </span>
+                  )}
+                  {locked && (
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[var(--bg-subtle)] text-[var(--text-tertiary)]" title="Locked">
+                      <Lock size={12} />
+                    </span>
+                  )}
+                </span>
+
+                {/* icon */}
                 <span
                   className={clsx(
-                    'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold',
-                    meta.badge,
+                    'flex h-12 w-12 items-center justify-center rounded-xl transition-colors',
+                    locked
+                      ? 'bg-[var(--bg-subtle)] text-[var(--text-tertiary)]'
+                      : 'bg-[var(--accent-bg)] text-[var(--accent-fg)] group-hover:bg-[var(--accent-solid)] group-hover:text-white',
                   )}
                 >
-                  {meta.chipIcon}
-                  {meta.label}
+                  <Icon size={22} />
                 </span>
-              </div>
 
-              <h3 className={clsx('font-semibold', locked ? 'text-text-secondary' : 'text-text-primary')}>
-                {mod.label}
-              </h3>
-              <p className="mt-1 flex-1 text-sm text-text-secondary">{mod.description}</p>
-
-              {/* Locked → upsell to the website's Edit-Workspace (add this module). */}
-              {locked && (
-                <button
-                  onClick={() => openEditWorkspace(mod.key)}
-                  className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-xl border border-default px-4 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:border-primary hover:text-primary"
-                >
-                  Manage plan / Add module
-                  <ArrowUpRight size={15} />
-                </button>
-              )}
-
-              {status === 'coming-soon' && (
-                <p className="mt-4 rounded-xl bg-primary-light px-3 py-2 text-center text-xs font-medium text-primary">
-                  Activated — in-app experience coming soon
+                <h3 className={clsx('mt-4 text-[15px] font-semibold', locked ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)]')}>
+                  {app.label}
+                </h3>
+                <p className="mt-1 line-clamp-2 flex-1 text-xs leading-relaxed text-[var(--text-tertiary)]">
+                  {app.description}
                 </p>
-              )}
 
-              {status === 'active' && (
-                <p className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-xl bg-success-light px-3 py-2 text-center text-xs font-semibold text-success">
-                  <Check size={13} /> Active in your workspace
-                </p>
-              )}
-            </div>
-          )
-        })}
+                {/* footer affordance */}
+                <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold">
+                  {locked ? (
+                    isAdmin ? (
+                      <span className="inline-flex items-center gap-1 text-[var(--accent-fg-strong)]">
+                        <Plus size={13} /> Add to plan
+                      </span>
+                    ) : (
+                      <span className="text-[var(--text-tertiary)]">Not in your plan</span>
+                    )
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[var(--accent-fg-strong)] opacity-0 transition-opacity group-hover:opacity-100">
+                      Open <ArrowRight size={13} />
+                    </span>
+                  )}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

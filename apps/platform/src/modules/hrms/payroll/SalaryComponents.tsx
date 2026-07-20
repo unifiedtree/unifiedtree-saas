@@ -189,7 +189,7 @@ function ComponentDrawer({ editComponent, onClose }: ComponentDrawerProps) {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 rounded-xl bg-[#0F6E56] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0A5F4A] disabled:opacity-50"
+            className="flex-1 rounded-xl bg-[#059669] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#047857] disabled:opacity-50"
           >
             {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Component'}
           </button>
@@ -243,7 +243,7 @@ export const SalaryComponents: React.FC = () => {
           <div className="mb-4 flex gap-1 border-b border-border-default">
             {TABS.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${tab === t.key ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary'}`}>
+                className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'}`}>
                 {t.label}
               </button>
             ))}
@@ -273,7 +273,7 @@ export const SalaryComponents: React.FC = () => {
                       <Can code={P.PAYROLL_COMPONENTS_MANAGE}>
                         {!r.isSystem && (
                           <div className="flex items-center gap-1">
-                            <button onClick={() => setEditing(r)} title="Edit" className="rounded-lg p-1.5 text-text-tertiary hover:text-[#0A5240]"><Pencil size={15} /></button>
+                            <button onClick={() => setEditing(r)} title="Edit" className="rounded-lg p-1.5 text-text-tertiary hover:text-[#047857]"><Pencil size={15} /></button>
                             <button onClick={() => del.mutate(r.id, { onSuccess: () => toast('Component deleted', 'success'), onError: (e) => toast((e as Error).message, 'error') })} title="Delete" className="rounded-lg p-1.5 text-text-tertiary hover:text-rose-600"><Trash2 size={15} /></button>
                           </div>
                         )}

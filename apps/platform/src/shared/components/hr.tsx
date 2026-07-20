@@ -3,20 +3,23 @@ import { clsx } from 'clsx'
 import { Search } from 'lucide-react'
 
 /**
- * Reusable building blocks that match the client HR mockup's component patterns
- * exactly, so every HR list/detail screen shares one faithful look. All are
- * presentational — screens feed them live data from our React Query hooks.
+ * Reusable building blocks shared by every HR list/detail screen so they all
+ * share one premium, token-driven look. All are presentational — screens feed
+ * them live data from our React Query hooks.
+ *
+ * Brand colour comes from the design-system tokens (emerald). Status/semantic
+ * colours (success/warning/error/info) stay distinct for at-a-glance scanning.
  */
 
 // ── KPI stat card ──────────────────────────────────────────────────────────────
 type StatColor = 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'teal'
 const STAT_ICON: Record<StatColor, string> = {
-  blue:   'bg-[#DBEAFE] text-[#2563EB]',
-  green:  'bg-[#D1FAE5] text-[#10B981]',
-  orange: 'bg-[#FEF3C7] text-[#F59E0B]',
-  red:    'bg-[#FEE2E2] text-[#EF4444]',
-  purple: 'bg-[#EDE9FE] text-[#8B5CF6]',
-  teal:   'bg-[#CCFBF1] text-[#0F766E]',
+  green:  'bg-[var(--accent-bg)] text-[var(--accent-fg)]',
+  blue:   'bg-[#EFF6FF] text-[#2563EB]',
+  orange: 'bg-[#FFFBEB] text-[#D97706]',
+  red:    'bg-[#FEF2F2] text-[#DC2626]',
+  purple: 'bg-[#F5F3FF] text-[#7C3AED]',
+  teal:   'bg-[#F0FDFA] text-[#0D9488]',
 }
 
 export function HrStatCard({
@@ -31,23 +34,27 @@ export function HrStatCard({
   loading?: boolean
 }) {
   return (
-    <div className="group rounded-xl border border-border-default bg-white p-[18px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#6EE7B7] hover:shadow-[0_10px_28px_-10px_rgba(15,110,86,0.28)]">
+    <div className="group rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:shadow-md">
       <div className="flex items-start justify-between">
         <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl', STAT_ICON[color])}>
           {icon}
         </div>
         {trend && (
           <span className={clsx(
-            'rounded-full px-2 py-0.5 text-[11px] font-semibold',
-            trend.dir === 'up' ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#FEE2E2] text-[#B91C1C]',
+            'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+            trend.dir === 'up'
+              ? 'bg-[var(--status-success-bg)] text-[var(--status-success-fg)]'
+              : 'bg-[var(--status-error-bg)] text-[var(--status-error-fg)]',
           )}>
             {trend.dir === 'up' ? '↑' : '↓'} {trend.value}
           </span>
         )}
       </div>
-      <p className="mt-3.5 text-[26px] font-bold leading-none tracking-tight text-text-primary">{loading ? '—' : value}</p>
-      <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">{label}</p>
-      {sub && <p className="mt-1 text-xs text-text-secondary">{sub}</p>}
+      <p className="mt-4 text-[28px] font-semibold leading-none tracking-tight tabular-nums text-[var(--text-primary)]">
+        {loading ? <span className="inline-block h-7 w-16 animate-pulse-subtle rounded bg-[var(--bg-subtle)]" /> : value}
+      </p>
+      <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">{label}</p>
+      {sub && <p className="mt-1 text-xs text-[var(--text-secondary)]">{sub}</p>}
     </div>
   )
 }
@@ -55,23 +62,23 @@ export function HrStatCard({
 // ── Status pill ──────────────────────────────────────────────────────────────
 export type PillTone = 'ok' | 'warn' | 'info' | 'late' | 'purple' | 'red' | 'pink' | 'teal' | 'gray' | 'green' | 'orange' | 'blue'
 const PILL: Record<PillTone, string> = {
-  ok:     'bg-[#DCFCE7] text-[#15803D]',
-  green:  'bg-[#DCFCE7] text-[#15803D]',
-  warn:   'bg-[#FEF3C7] text-[#B45309]',
-  orange: 'bg-[#FFEDD5] text-[#C2410C]',
-  info:   'bg-[#DBEAFE] text-[#1D4ED8]',
-  blue:   'bg-[#DBEAFE] text-[#1D4ED8]',
-  late:   'bg-[#FED7AA] text-[#C2410C]',
-  purple: 'bg-[#F3E8FF] text-[#7C3AED]',
-  red:    'bg-[#FEE2E2] text-[#B91C1C]',
-  pink:   'bg-[#FCE7F3] text-[#BE185D]',
-  teal:   'bg-[#CCFBF1] text-[#0F766E]',
-  gray:   'bg-[#F4F4F6] text-[#6B7280]',
+  ok:     'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+  green:  'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+  warn:   'bg-amber-50 text-amber-700 ring-amber-600/20',
+  orange: 'bg-orange-50 text-orange-700 ring-orange-600/20',
+  info:   'bg-blue-50 text-blue-700 ring-blue-700/10',
+  blue:   'bg-blue-50 text-blue-700 ring-blue-700/10',
+  late:   'bg-orange-50 text-orange-700 ring-orange-600/20',
+  purple: 'bg-purple-50 text-purple-700 ring-purple-700/10',
+  red:    'bg-rose-50 text-rose-700 ring-rose-600/10',
+  pink:   'bg-pink-50 text-pink-700 ring-pink-700/10',
+  teal:   'bg-teal-50 text-teal-700 ring-teal-600/20',
+  gray:   'bg-slate-50 text-slate-600 ring-slate-500/10',
 }
 
 export function HrStatusPill({ tone = 'gray', children }: { tone?: PillTone; children: React.ReactNode }) {
   return (
-    <span className={clsx('inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold', PILL[tone])}>
+    <span className={clsx('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset', PILL[tone])}>
       {children}
     </span>
   )
@@ -87,11 +94,11 @@ export function HrPageHeader({
   actions?: React.ReactNode
 }) {
   return (
-    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        {crumb && <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{crumb}</p>}
-        <h1 className="text-[22px] font-bold leading-tight text-text-primary">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-sm text-text-secondary">{subtitle}</p>}
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        {crumb && <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{crumb}</p>}
+        <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-[var(--text-primary)]">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-[var(--text-secondary)]">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -106,11 +113,11 @@ export function HrButton({
     <button
       {...rest}
       className={clsx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E56]/40 disabled:opacity-50',
-        size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2 text-sm',
-        variant === 'primary' && 'bg-[#0F6E56] text-white shadow-sm shadow-[#0F6E56]/30 hover:bg-[#0A5240]',
-        variant === 'ghost' && 'border border-border-default bg-white text-text-primary hover:bg-bg-base',
-        variant === 'danger' && 'bg-[#EF4444] text-white hover:bg-[#DC2626]',
+        'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+        size === 'sm' ? 'h-8 px-3 text-xs' : 'h-9 px-4 text-sm',
+        variant === 'primary' && 'bg-[var(--interactive-primary)] text-white shadow-sm hover:bg-[var(--interactive-primary-hover)]',
+        variant === 'ghost' && 'border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs hover:bg-[var(--bg-subtle)] hover:border-[var(--border-strong)]',
+        variant === 'danger' && 'bg-[var(--interactive-danger)] text-white shadow-sm hover:bg-[var(--interactive-danger-hover)]',
         className,
       )}
     >
@@ -129,17 +136,17 @@ export function TableCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border-default bg-white shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-sm">
       {(search || actions) && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border-default bg-bg-base px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3.5 py-3">
           {search && (
             <div className="relative min-w-[220px] flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
               <input
                 value={search.value}
                 onChange={(e) => search.onChange(e.target.value)}
                 placeholder={search.placeholder ?? 'Search…'}
-                className="w-full rounded-lg border border-border-default bg-white py-1.5 pl-8 pr-3 text-sm focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20"
+                className="h-9 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-base)] py-1.5 pl-9 pr-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none transition-[border-color,box-shadow] focus:border-[var(--border-focus)] focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-[var(--accent-solid)]/12"
               />
             </div>
           )}
@@ -147,24 +154,24 @@ export function TableCard({
         </div>
       )}
       <div className="overflow-x-auto">{children}</div>
-      {footer && <div className="border-t border-border-default bg-bg-base px-4 py-3">{footer}</div>}
+      {footer && <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">{footer}</div>}
     </div>
   )
 }
 
 // ── Row avatar (colored initials + name/sub) ─────────────────────────────────
-const AV_COLORS = ['#6C5CE7', '#FF6B6B', '#22C55E', '#4096FF', '#F59E0B', '#EC4899', '#14B8A6', '#A855F7', '#06B6D4', '#84CC16']
+const AV_COLORS = ['#6C5CE7', '#E8590C', '#059669', '#2563EB', '#D97706', '#DB2777', '#0D9488', '#7C3AED', '#0891B2', '#65A30D']
 export function HrAvatar({ name, sub, seed = 0 }: { name: string; sub?: string; seed?: number }) {
   const initials = name.split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?'
   const bg = AV_COLORS[Math.abs(seed) % AV_COLORS.length]
   return (
     <div className="flex items-center gap-2.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: bg }}>
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white" style={{ background: bg }}>
         {initials}
       </div>
       <div className="min-w-0">
-        <p className="truncate text-[13px] font-semibold text-text-primary">{name}</p>
-        {sub && <p className="truncate text-xs text-text-tertiary">{sub}</p>}
+        <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{name}</p>
+        {sub && <p className="truncate text-xs text-[var(--text-tertiary)]">{sub}</p>}
       </div>
     </div>
   )
@@ -193,7 +200,7 @@ export function HrTabs({ tabs, active, onChange, className }: {
   }
   return (
     <div ref={ref} role="tablist" onKeyDown={onKeyDown}
-      className={clsx('mb-5 flex gap-1 border-b border-border-default', className)}>
+      className={clsx('mb-6 flex gap-1 border-b border-[var(--border-default)]', className)}>
       {tabs.map((t) => {
         const sel = t.key === active
         return (
@@ -206,8 +213,8 @@ export function HrTabs({ tabs, active, onChange, className }: {
             tabIndex={sel ? 0 : -1}
             onClick={() => onChange(t.key)}
             className={clsx(
-              '-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-semibold transition-colors',
-              sel ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary',
+              '-mb-px inline-flex items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors',
+              sel ? 'border-[var(--accent-solid)] text-[var(--accent-fg-strong)]' : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
             )}
           >
             {t.label}

@@ -19,7 +19,7 @@ const CYCLE_TONE: Record<CycleStatus, PillTone> = { DRAFT: 'gray', ACTIVE: 'ok',
 const REVIEW_TONE: Record<ReviewStatus, PillTone> = { PENDING: 'warn', SUBMITTED: 'ok', ACKNOWLEDGED: 'teal' }
 const GOAL_TONE: Record<GoalStatus, PillTone> = { ACTIVE: 'info', COMPLETED: 'ok', DROPPED: 'gray' }
 
-const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
+const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
 type Tab = 'goals' | 'reviews' | 'cycles' | 'admin'
 
@@ -47,7 +47,7 @@ export const Performance: React.FC = () => {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#0F6E56] text-[#0A5240]' : 'border-transparent text-text-secondary hover:text-text-primary'
+              tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
             }`}
           >
             {t.label}
@@ -159,7 +159,7 @@ function MyGoalsTab() {
                 <input
                   type="range" min={0} max={100} value={value}
                   onChange={(e) => setDrafts((p) => ({ ...p, [g.id]: parseInt(e.target.value, 10) }))}
-                  className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-bg-base accent-[#0F6E56]"
+                  className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-bg-base accent-[#059669]"
                 />
                 <span className="w-10 text-right text-sm font-semibold text-text-primary">{value}%</span>
                 <HrButton size="sm" variant={dirty ? 'primary' : 'ghost'} onClick={() => onSaveProgress(g.id, value)} disabled={!dirty || updateProgress.isPending}>
@@ -255,7 +255,7 @@ function MyReviewCard({ review }: { review: PerformanceReview }) {
         <div className="space-y-2 border-t border-border-default pt-3 text-sm">
           {review.overallRating != null && (
             <p className="flex items-center gap-1.5 font-semibold text-text-primary">
-              <Star size={15} className="text-[#0F6E56]" /> {review.overallRating} / 5
+              <Star size={15} className="text-[#059669]" /> {review.overallRating} / 5
             </p>
           )}
           {review.strengths && <p className="text-text-secondary"><span className="font-medium text-text-primary">Strengths: </span>{review.strengths}</p>}
@@ -440,7 +440,7 @@ function AdminReviewsTab({ canWrite }: { canWrite: boolean }) {
                 <td className="text-text-secondary">{r.reviewerName || '—'}</td>
                 <td className="font-semibold text-text-primary">
                   {r.overallRating != null ? (
-                    <span className="inline-flex items-center gap-1"><Star size={14} className="text-[#0F6E56]" />{r.overallRating}</span>
+                    <span className="inline-flex items-center gap-1"><Star size={14} className="text-[#059669]" />{r.overallRating}</span>
                   ) : '—'}
                 </td>
                 <td><HrStatusPill tone={REVIEW_TONE[r.status]}>{r.status}</HrStatusPill></td>

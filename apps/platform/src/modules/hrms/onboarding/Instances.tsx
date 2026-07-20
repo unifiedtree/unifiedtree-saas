@@ -57,7 +57,7 @@ export const Instances: React.FC = () => {
                 onClick={() => setStatus(f.value)}
                 className={
                   status === f.value
-                    ? 'rounded-md bg-[#E6F4F1] px-3 py-1 text-xs font-semibold text-[#0A5240]'
+                    ? 'rounded-md bg-[#ECFDF5] px-3 py-1 text-xs font-semibold text-[#047857]'
                     : 'rounded-md px-3 py-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary'
                 }
               >
@@ -106,7 +106,7 @@ export const Instances: React.FC = () => {
                     <td>
                       <div className="flex min-w-[140px] items-center gap-2">
                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-bg-base">
-                          <div className="h-full rounded-full bg-[#0F6E56] transition-all" style={{ width: `${pct}%` }} />
+                          <div className="h-full rounded-full bg-[#059669] transition-all" style={{ width: `${pct}%` }} />
                         </div>
                         <span className="whitespace-nowrap text-xs text-text-tertiary">{done}/{total}</span>
                       </div>

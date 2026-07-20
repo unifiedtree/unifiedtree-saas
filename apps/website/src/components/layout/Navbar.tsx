@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Menu, X, Users, MapPin, Banknote, BarChart2, Package,
   Target, ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart,
-  ChevronDown,
+  ChevronDown, ArrowRight,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { useAuthStore } from '../../store/authStore'
@@ -24,19 +24,12 @@ const navModules = [
   { id: 'reports',       name: 'Reports & BI',     icon: PieChart,     desc: 'Dashboards, KPIs, exports' },
 ]
 
-/** UnifiedTree logo from brand image */
-function UTLogo({ size = 32 }: { size?: number }) {
-  // TEMP: brand logo hidden — restore the <img> below to bring it back.
-  return <span style={{ height: size }} aria-hidden />
-  // return (
-  //   <img
-  //     src="/UnifiedTreeLogoWhite.png"
-  //     alt="UnifiedTree logo"
-  //     style={{ height: size, width: 'auto' }}
-  //     className="object-contain"
-  //   />
-  // )
-}
+const links = [
+  { label: 'Features',   to: '/features'   },
+  { label: 'Pricing',    to: '/pricing'     },
+  { label: 'Industries', to: '/industries'  },
+  { label: 'About',      to: '/about'       },
+]
 
 export function Navbar() {
   const [scrolled,      setScrolled]      = useState(false)
@@ -46,68 +39,50 @@ export function Navbar() {
   const { accountToken, logoutAccount } = useAuthStore()
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 60)
+    const onScroll = () => setScrolled(window.scrollY > 24)
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  const linkCls =
+    'px-4 py-2.5 text-base font-medium text-text-secondary hover:text-text-primary rounded-lg hover:bg-surface-2 transition-colors duration-150'
+
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
         scrolled
-          ? 'bg-[#0F6E56] backdrop-blur-md shadow-sm border-b border-border'
-          : 'bg-[#0F6E56]'
+          ? 'border-b border-border bg-[#F4FAED]/90 backdrop-blur-xl shadow-sm'
+          : 'border-b border-transparent bg-[#F4FAED] backdrop-blur-sm'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-
-          {/* ── Logo ───────────────────────────── */}
-          <Link to="/" className="flex items-center gap-2">
-            <UTLogo size={42} />
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className={`flex items-center justify-between transition-all duration-300 ${scrolled ? 'h-12 sm:h-14' : 'h-16 sm:h-20'}`}>
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-3">
+            <img src="/UnifiedTreeLogo.png" alt="UnifiedTree" className={`w-auto transition-all duration-300 ${scrolled ? 'h-6 sm:h-7' : 'h-8 sm:h-10'}`} />
           </Link>
 
-          {/* ── Desktop nav links ──────────────── */}
-          <div className="hidden lg:flex items-center gap-0.5">
-            {[
-              { label: 'Features',   to: '/features'   },
-              { label: 'Pricing',    to: '/pricing'     },
-              { label: 'Industries', to: '/industries'  },
-              { label: 'About',      to: '/about'       },
-            ].map((item) => (
-              <Link
-                key={item.label}
-                to={item.to}
-                className="px-4 py-2 text-sm font-body font-medium text-white hover:text-primary rounded-lg hover:bg-primary-light transition-all duration-150"
-              >
+          {/* Desktop nav links */}
+          <div className="hidden items-center gap-0.5 lg:flex">
+            {links.map((item) => (
+              <Link key={item.label} to={item.to} className={linkCls}>
                 {item.label}
               </Link>
             ))}
 
-            {/* ── Modules mega-menu ────────────── */}
-            {/*
-                Positioning strategy:
-                The trigger is inside the nav flex row.
-                The dropdown is 640 px wide and right-anchored to the
-                NAVBAR container edge (not the button) via a portal-like
-                fixed-width absolute panel with right: 0 on the wrapper.
-            */}
+            {/* Modules mega-menu */}
             <div
               className="relative"
               onMouseEnter={() => setModulesHover(true)}
               onMouseLeave={() => setModulesHover(false)}
             >
               <button
-                className="flex items-center gap-1 px-4 py-2 text-sm font-body font-medium text-white hover:text-primary rounded-lg hover:bg-primary-light transition-all duration-150"
+                className={`flex items-center gap-1 ${linkCls}`}
                 aria-haspopup="true"
                 aria-expanded={modulesHover}
               >
                 Modules
-                <motion.span
-                  animate={{ rotate: modulesHover ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="flex items-center"
-                >
+                <motion.span animate={{ rotate: modulesHover ? 180 : 0 }} transition={{ duration: 0.2 }} className="flex items-center">
                   <ChevronDown size={14} />
                 </motion.span>
               </button>
@@ -119,35 +94,26 @@ export function Navbar() {
                     animate={{ opacity: 1, y: 0,  scale: 1    }}
                     exit={  { opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.18, ease: 'easeOut' }}
-                    /*
-                      right: 0  → right edge of dropdown aligns with
-                      right edge of the trigger's nearest positioned
-                      ancestor (this relative div).
-                      We then shift it further right with a negative
-                      right value so it stays within the viewport and
-                      aligns nicely under the full nav.
-                    */
-                    className="absolute top-full right-0 mt-2 w-[660px] bg-white rounded-2xl shadow-card-hover border border-border p-6"
-                    style={{ right: '-320px' }}   /* centres panel under nav */
+                    className="absolute top-full mt-2 w-[660px] rounded-2xl border border-border bg-white p-5 shadow-card-hover"
+                    style={{ right: '-260px' }}
                   >
-                    {/* 4-col compact grid for tighter, friendlier layout */}
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-1.5">
                       {navModules.map((mod) => {
                         const Icon = mod.icon
                         return (
                           <Link
                             key={mod.id}
                             to="/modules"
-                            className="flex items-start gap-3 p-3 rounded-xl hover:bg-primary-light group transition-all duration-150"
+                            className="group flex items-start gap-3 rounded-xl p-3 transition-colors duration-150 hover:bg-primary-light"
                           >
-                            <div className="w-8 h-8 rounded-lg bg-primary-light flex items-center justify-center flex-shrink-0 group-hover:bg-primary/10 transition-colors mt-0.5">
-                              <Icon size={15} className="text-primary" />
+                            <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-light text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+                              <Icon size={16} />
                             </div>
                             <div className="min-w-0">
-                              <p className="text-sm font-body font-semibold text-text-primary group-hover:text-primary transition-colors leading-tight">
+                              <p className="text-sm font-semibold leading-tight text-text-primary transition-colors group-hover:text-primary">
                                 {mod.name}
                               </p>
-                              <p className="text-[11px] text-text-secondary mt-0.5 leading-snug line-clamp-2">
+                              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-text-secondary">
                                 {mod.desc}
                               </p>
                             </div>
@@ -155,18 +121,13 @@ export function Navbar() {
                         )
                       })}
                     </div>
-
-                    {/* Footer row */}
-                    <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
+                    <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
                       <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-success" />
-                        <span className="text-xs text-text-secondary font-body">12 modules · Mix and match</span>
+                        <span className="h-2 w-2 rounded-full bg-primary" />
+                        <span className="text-xs text-text-secondary">12 modules · Mix and match</span>
                       </div>
-                      <Link
-                        to="/modules"
-                        className="text-sm text-primary font-body font-semibold hover:underline inline-flex items-center gap-1"
-                      >
-                        View all modules →
+                      <Link to="/modules" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+                        View all modules <ArrowRight size={13} />
                       </Link>
                     </div>
                   </motion.div>
@@ -175,44 +136,31 @@ export function Navbar() {
             </div>
           </div>
 
-          {/* ── Desktop CTA ────────────────────── */}
-          <div className="hidden lg:flex items-center gap-3">
+          {/* Desktop CTA */}
+          <div className="hidden items-center gap-3 lg:flex">
             {accountToken ? (
               <>
-                <Link
-                  to="/workspaces"
-                  className="px-4 py-2 text-sm font-body font-medium text-white hover:text-primary hover:bg-primary-light rounded-lg transition-all duration-150"
-                >
-                  Workspaces
-                </Link>
+                <Link to="/workspaces" className={linkCls}>Workspaces</Link>
                 <button
-                  onClick={() => {
-                    logoutAccount()
-                    navigate('/login')
-                  }}
-                  className="px-4 py-2 text-sm font-body font-medium text-red-200 hover:text-red-100 transition-colors"
+                  onClick={() => { logoutAccount(); navigate('/login') }}
+                  className="px-4 py-2.5 text-base font-medium text-text-tertiary transition-colors hover:text-danger"
                 >
                   Sign Out
                 </button>
               </>
             ) : (
               <>
-                <Link
-                  to="/login"
-                  className="px-4 py-2 text-sm font-body font-medium text-white hover:text-primary hover:bg-primary-light rounded-lg transition-all duration-150"
-                >
-                  Sign In
-                </Link>
-                <Button size="sm" onClick={() => navigate('/pricing')} className="border-2 border-white/40 hover:border-white/60">
-                  Start Free Trial
+                <Link to="/login" className={linkCls}>Sign in</Link>
+                <Button size="lg" onClick={() => navigate('/pricing')} className="font-semibold px-6">
+                  Start free trial <ArrowRight size={18} />
                 </Button>
               </>
             )}
           </div>
 
-          {/* ── Mobile hamburger ───────────────── */}
+          {/* Mobile hamburger */}
           <button
-            className="lg:hidden p-2 rounded-lg text-text-secondary hover:text-primary hover:bg-primary-light transition-colors"
+            className="rounded-lg p-2 text-text-secondary transition-colors hover:bg-surface-2 hover:text-text-primary lg:hidden"
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label="Toggle menu"
           >
@@ -221,7 +169,7 @@ export function Navbar() {
         </div>
       </div>
 
-      {/* ── Mobile drawer ──────────────────────── */}
+      {/* Mobile drawer */}
       <AnimatePresence>
         {menuOpen && (
           <motion.div
@@ -229,62 +177,29 @@ export function Navbar() {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="lg:hidden overflow-hidden bg-white border-t border-border"
+            className="overflow-hidden border-t border-border bg-white lg:hidden"
           >
-            <div className="px-4 py-4 space-y-1">
-              {[
-                { label: 'Features',        to: '/features'         },
-                { label: 'Modules',         to: '/modules'          },
-                { label: 'Pricing',         to: '/pricing'          },
-                { label: 'Industries',      to: '/industries'       },
-                { label: 'About',           to: '/about'            },
-              ].map((item) => (
+            <div className="space-y-1 px-4 py-4">
+              {[...links, { label: 'Modules', to: '/modules' }].map((item) => (
                 <Link
                   key={item.label}
                   to={item.to}
-                  className="block px-4 py-3 text-sm font-body font-medium text-text-secondary hover:text-primary hover:bg-primary-light rounded-lg transition-all"
+                  className="block rounded-lg px-4 py-3 text-sm font-medium text-text-secondary transition-all hover:bg-primary-light hover:text-primary"
                   onClick={() => setMenuOpen(false)}
                 >
                   {item.label}
                 </Link>
               ))}
-              <div className="pt-3 space-y-2">
+              <div className="space-y-2 pt-3">
                 {accountToken ? (
                   <>
-                    <Link
-                      to="/workspaces"
-                      className="block w-full text-center px-4 py-3 border border-border rounded-lg text-sm font-medium text-text-secondary hover:border-primary hover:text-primary transition-all"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      Workspaces
-                    </Link>
-                    <button
-                      className="block w-full text-center px-4 py-3 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition-all"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        logoutAccount()
-                        navigate('/login')
-                      }}
-                    >
-                      Sign Out
-                    </button>
+                    <Link to="/workspaces" className="block w-full rounded-lg border border-border px-4 py-3 text-center text-sm font-medium text-text-secondary transition-all hover:border-primary hover:text-primary" onClick={() => setMenuOpen(false)}>Workspaces</Link>
+                    <button className="block w-full rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-medium text-danger transition-all hover:bg-red-100" onClick={() => { setMenuOpen(false); logoutAccount(); navigate('/login') }}>Sign Out</button>
                   </>
                 ) : (
                   <>
-                    <Link
-                      to="/login"
-                      className="block w-full text-center px-4 py-3 border border-border rounded-lg text-sm font-medium text-text-secondary hover:border-primary hover:text-primary transition-all"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      Sign In
-                    </Link>
-                    <Link
-                      to="/pricing"
-                      className="block w-full text-center px-4 py-3 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition-all"
-                      onClick={() => setMenuOpen(false)}
-                    >
-                      Start Free Trial
-                    </Link>
+                    <Link to="/login" className="block w-full rounded-lg border border-border px-4 py-3 text-center text-sm font-medium text-text-secondary transition-all hover:border-primary hover:text-primary" onClick={() => setMenuOpen(false)}>Sign in</Link>
+                    <Link to="/pricing" className="block w-full rounded-lg bg-primary px-4 py-3 text-center text-sm font-semibold text-white transition-all hover:bg-primary-dark" onClick={() => setMenuOpen(false)}>Start free trial</Link>
                   </>
                 )}
               </div>

@@ -12,6 +12,7 @@ import {
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
+import { GlobalSearch } from '@/shared/components/GlobalSearch'
 
 const SIDEBAR_KEY = 'ut.sidebar.collapsed'
 
@@ -151,12 +152,8 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'performance', label: 'Performance & Learning', icon: <Target size={18} />, module: 'hrms',
     children: [
-      { label: 'Employee Performance', path: '/hrms/performance', icon: <Target size={15} />,   visibleForRoles: [...R_ADMIN_MGR, ...R_ESS] },
-      { label: 'Appraisals & 360°',    path: '/hrms/performance',      icon: <Star size={15} />,     visibleForRoles: R_HR },
-      { label: 'KPI Tracking',         path: '/hrms/performance',    icon: <Target size={15} />,   visibleForRoles: R_ADMIN_MGR },
-      { label: 'Skill Matrix',         path: '/hrms/learning',    icon: <Database size={15} />, visibleForRoles: R_HR },
-      { label: 'Training Programs',    path: '/hrms/learning',        icon: <Award size={15} />,    visibleForRoles: R_HR },
-      { label: 'Certifications',       path: '/hrms/learning',  icon: <Award size={15} />,    visibleForRoles: R_HR },
+      { label: 'Performance Center',   path: '/hrms/performance', icon: <Target size={15} />,   visibleForRoles: [...R_ADMIN_MGR, ...R_ESS, ...R_HR] },
+      { label: 'Learning & Skills',    path: '/hrms/learning',    icon: <Award size={15} />,    visibleForRoles: R_HR },
     ],
   },
   {
@@ -172,8 +169,7 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'reports', label: 'Reports & Analytics', icon: <FileBarChart2 size={18} />, module: 'hrms',
     children: [
-      { label: 'Attendance & OT Reports', path: '/hrms/reports',                 icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN_MGR },
-      { label: 'Payroll Reports',         path: '/hrms/reports',    icon: <FileBarChart2 size={15} />, visibleForRoles: R_FIN },
+      { label: 'Reports Center',          path: '/hrms/reports',             icon: <FileBarChart2 size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_FIN] },
       { label: 'Workforce Analytics',     path: '/hrms/workforce-analytics', icon: <TrendingUp size={15} />,   visibleForRoles: R_ADMIN },
     ],
   },
@@ -251,6 +247,7 @@ const PLATFORM_ITEMS: NavItemDef[] = [
 export function PlatformShell() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const logout = useSdkStore(s => s.logout)
@@ -263,6 +260,19 @@ export function PlatformShell() {
 
   // Primary role for filtering and badge display
   const primaryRole = (ROLE_PRIORITY as readonly string[]).find(r => userRoles.includes(r)) ?? null
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(v => !v)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  React.useEffect(() => { setSearchOpen(false); setMobileOpen(false) }, [location.pathname])
 
   // ─── Admin detection (mirrors loginWithCredentials' admin-role set + wildcard perm) ──
   // Admin = SUPER_ADMIN/COMPANY_ADMIN/HR_MANAGER role OR a wildcard ('*') permission grant.
@@ -554,7 +564,7 @@ export function PlatformShell() {
                 {user.firstName} {user.lastName}
               </p>
               {roleBadgeText && (
-                <span className="inline-block mt-0.5 rounded-full bg-[#0A5240]/10 px-2 py-0.5 text-[10px] font-semibold text-[#0A5240] leading-tight">
+                <span className="inline-block mt-0.5 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600 shadow-sm">
                   {roleBadgeText}
                 </span>
               )}
@@ -633,12 +643,13 @@ export function PlatformShell() {
             >
               <Menu size={20} />
             </button>
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors w-64 focus-within:ring-2 focus-within:ring-[#0A5240]/20 focus-within:border-[#0A5240]/50">
+            <div onClick={() => setSearchOpen(true)} className="hidden sm:flex cursor-pointer items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors w-64 focus-within:ring-2 focus-within:ring-[#0A5240]/20 focus-within:border-[#0A5240]/50">
               <Search size={14} className="text-slate-400" />
               <input
                 type="text"
-                placeholder="Search everywhere... (?K)"
-                className="bg-transparent border-none outline-none text-sm w-full placeholder:text-slate-400 text-slate-900"
+                placeholder="Search everywhere... (⌘K)"
+                className="bg-transparent border-none outline-none text-sm w-full placeholder:text-slate-400 text-slate-900 pointer-events-none"
+                readOnly
               />
             </div>
           </div>
@@ -646,7 +657,7 @@ export function PlatformShell() {
           <div className="flex items-center gap-3">
             {/* Role badge in header (visible on mobile where sidebar is hidden) */}
             {roleBadgeText && (
-              <span className="hidden sm:inline-flex rounded-full bg-[#0A5240]/10 px-2.5 py-1 text-xs font-semibold text-[#0A5240]">
+              <span className="hidden sm:inline-flex rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 shadow-sm">
                 {roleBadgeText}
               </span>
             )}
@@ -663,6 +674,16 @@ export function PlatformShell() {
           <Outlet />
         </div>
       </main>
+      <AnimatePresence>
+        {searchOpen && (
+          <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[12vh]">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSearchOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.96, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: -10 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="relative w-full max-w-2xl overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-2xl">
+              <GlobalSearch onSelect={(res) => { navigate(res.path); setSearchOpen(false) }} />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

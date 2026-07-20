@@ -41,10 +41,10 @@ const milestones = [
 ]
 
 const team = [
-  { name: 'Arjun Mehta', role: 'CEO & Co-founder', initials: 'AM', color: '#0F6E56', bio: 'Ex-SAP. 14 years in enterprise ERP. Believes ERP should be as easy as WhatsApp.' },
+  { name: 'Arjun Mehta', role: 'CEO & Co-founder', initials: 'AM', color: '#18280E', bio: 'Ex-SAP. 14 years in enterprise ERP. Believes ERP should be as easy as WhatsApp.' },
   { name: 'Priya Krishnan', role: 'CTO & Co-founder', initials: 'PK', color: '#0A3D2F', bio: 'Ex-Zoho. Built the offline-sync engine from scratch. AWS certified architect.' },
   { name: 'Rohan Desai', role: 'CPO', initials: 'RD', color: '#1DB985', bio: 'Ex-Razorpay. Obsessed with reducing clicks. Has interviewed 500+ SME owners.' },
-  { name: 'Sneha Agarwal', role: 'Head of Finance Products', initials: 'SA', color: '#0F6E56', bio: 'Chartered Accountant. Designed the GST engine and payroll module. 10 years fintech.' },
+  { name: 'Sneha Agarwal', role: 'Head of Finance Products', initials: 'SA', color: '#18280E', bio: 'Chartered Accountant. Designed the GST engine and payroll module. 10 years fintech.' },
   { name: 'Vikram Nair', role: 'Head of Sales', initials: 'VN', color: '#0A3D2F', bio: 'Built the India GTM from 0 to 2,400+ customers. Knows every industrial estate in India.' },
   { name: 'Kavya Rao', role: 'Head of Customer Success', initials: 'KR', color: '#1DB985', bio: 'Ensures every customer goes live in under 48 hours. NPS score: 72.' },
 ]

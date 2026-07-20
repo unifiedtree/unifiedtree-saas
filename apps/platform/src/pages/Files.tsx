@@ -31,7 +31,7 @@ const FOLDERS = ['Home', 'HR Documents', 'Finance Reports', 'Marketing Assets', 
 
 const typeIcon = (type: FileItem['type']) => {
   switch (type) {
-    case 'folder': return <Folder size={28} className="text-[#0F6E56]" />
+    case 'folder': return <Folder size={28} className="text-[#059669]" />
     case 'pdf': return <FileText size={28} className="text-red-400" />
     case 'image': return <Image size={28} className="text-emerald-400" />
     case 'doc': return <FileText size={28} className="text-blue-400" />
@@ -42,7 +42,7 @@ const typeIcon = (type: FileItem['type']) => {
 
 const typeBg = (type: FileItem['type']) => {
   switch (type) {
-    case 'folder': return 'bg-[#0F6E56]/10'
+    case 'folder': return 'bg-[#059669]/10'
     case 'pdf': return 'bg-red-500/10'
     case 'image': return 'bg-emerald-500/10'
     case 'doc': return 'bg-blue-500/10'
@@ -86,10 +86,10 @@ export const Files: React.FC = () => {
                   onClick={() => setActiveFolder(folder)}
                   className={clsx(
                     'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-colors',
-                    activeFolder === folder ? 'bg-indigo-600/20 text-[#0F6E56] border border-indigo-500/20' : 'text-[#64748B] hover:text-[#0F172A] hover:bg-white/5'
+                    activeFolder === folder ? 'bg-indigo-600/20 text-[#059669] border border-indigo-500/20' : 'text-[#64748B] hover:text-[#0F172A] hover:bg-white/5'
                   )}
                 >
-                  <Folder size={15} className={activeFolder === folder ? 'text-[#0F6E56]' : 'text-[#64748B]'} />
+                  <Folder size={15} className={activeFolder === folder ? 'text-[#059669]' : 'text-[#64748B]'} />
                   {folder}
                 </button>
               ))}

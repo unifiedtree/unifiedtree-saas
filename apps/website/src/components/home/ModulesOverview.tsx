@@ -50,7 +50,7 @@ export function ModulesOverview() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.15 }}
                 transition={{ duration: 0.5, delay: i * 0.06, ease: 'easeOut' }}
-                whileHover={{ y: -4, boxShadow: '0 12px 40px rgba(15,110,86,0.15)' }}
+                whileHover={{ y: -4, boxShadow: '0 12px 40px rgba(5, 150, 105,0.15)' }}
                 className="group bg-surface rounded-xl p-6 border border-border shadow-card hover:border-primary/40 transition-all duration-300 cursor-pointer relative"
                 onClick={() => navigate('/modules')}
               >

@@ -7,7 +7,7 @@ import { presetPlans } from '../data/pricing'
 
 const perks = [
   { icon: Zap, label: 'Free access - core HRMS included', color: '#1DB985' },
-  { icon: Shield, label: 'No credit card required', color: '#0F6E56' },
+  { icon: Shield, label: 'No credit card required', color: '#18280E' },
   { icon: Clock, label: 'Workspace activates instantly', color: '#1DB985' },
 ]
 

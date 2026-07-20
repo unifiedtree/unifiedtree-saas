@@ -10,7 +10,7 @@ export const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
   ({ className, required, children, ...props }, ref) => (
     <label
       ref={ref}
-      className={cn('block text-sm font-medium text-[var(--text-primary)]', className)}
+      className={cn('block text-[13px] font-medium text-[var(--text-secondary)]', className)}
       {...props}
     >
       {children}
@@ -29,6 +29,15 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
   rightElement?: React.ReactNode;
 }
 
+const inputBase = [
+  'h-10 w-full rounded-lg border bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)]',
+  'placeholder:text-[var(--text-tertiary)] transition-[border-color,box-shadow] duration-150',
+  'border-[var(--border-default)] shadow-xs outline-none',
+  'focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12',
+  'disabled:cursor-not-allowed disabled:opacity-60 disabled:bg-[var(--bg-subtle)]',
+  'read-only:bg-[var(--bg-subtle)]',
+].join(' ');
+
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, invalid, leftElement, rightElement, ...props }, ref) => (
     <div className="relative flex items-center">
@@ -40,10 +49,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       <input
         ref={ref}
         className={cn(
-          'h-9 w-full rounded-lg border bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors',
-          'border-[var(--border-default)] focus:border-[var(--border-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]/20',
-          invalid && 'border-[var(--status-error-border)] focus:border-[var(--status-error-fg)] focus:ring-[var(--status-error-fg)]/20',
-          'disabled:cursor-not-allowed disabled:opacity-50',
+          inputBase,
+          invalid &&
+            'border-[var(--status-error-border)] focus:border-[var(--status-error-fg)] focus:ring-[var(--status-error-fg)]/12',
           leftElement && 'pl-9',
           rightElement && 'pr-9',
           className,
@@ -80,16 +88,13 @@ export function Field({ label, required, hint, error, children, className }: Fie
   const child = React.cloneElement(children, {
     id,
     'aria-describedby': describedBy,
-    // Use the standard aria attribute, and only pass `invalid` when true so a
-    // literal `invalid={false}` never reaches a native DOM element (React warns
-    // about non-boolean attributes). ui-kit inputs read `invalid` for styling.
     'aria-invalid': error ? true : undefined,
     invalid: error ? true : undefined,
     ...children.props,
   } as React.HTMLAttributes<HTMLElement>);
 
   return (
-    <div className={cn('flex flex-col gap-1', className)}>
+    <div className={cn('flex flex-col gap-1.5', className)}>
       {label && (
         <Label htmlFor={id} required={required}>
           {label}
@@ -100,7 +105,7 @@ export function Field({ label, required, hint, error, children, className }: Fie
         <p id={hintId} className="text-xs text-[var(--text-tertiary)]">{hint}</p>
       )}
       {error && (
-        <p id={errorId} role="alert" className="text-xs text-[var(--status-error-fg)]">{error}</p>
+        <p id={errorId} role="alert" className="text-xs font-medium text-[var(--status-error-fg)]">{error}</p>
       )}
     </div>
   );

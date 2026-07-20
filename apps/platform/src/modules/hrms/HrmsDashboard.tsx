@@ -1,7 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Users, UserCheck, Clock, CalendarDays, Building2, Plus, ArrowRight } from 'lucide-react'
-import { clsx } from 'clsx'
 import { HrPageHeader, HrStatCard, HrStatusPill, HrButton, TableCard, HrAvatar } from '@/shared/components/hr'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import { useCompanies } from './api/useOrg'
@@ -33,34 +32,45 @@ export const HrmsDashboard: React.FC = () => {
 
   const quickActions = [
     ...(canWriteEmployee ? [
-      { label: 'Add Employee', icon: Plus, path: '/hrms/employees', color: 'text-[#0A5240]', bg: 'bg-[#E6F4F1]' },
+      { label: 'Add Employee', icon: Plus, path: '/hrms/employees' },
     ] : []),
     ...(canManageOrg ? [
-      { label: 'Org Setup', icon: Building2, path: '/hrms/organization', color: 'text-[#0A5240]', bg: 'bg-[#E6F4F1]' },
+      { label: 'Org Setup', icon: Building2, path: '/hrms/organization' },
     ] : []),
-    { label: 'Attendance', icon: Clock, path: '/hrms/attendance', color: 'text-emerald-600', bg: 'bg-emerald-100' },
-    { label: 'Leave', icon: CalendarDays, path: '/hrms/leave', color: 'text-amber-600', bg: 'bg-amber-100' },
+    { label: 'Attendance', icon: Clock, path: '/hrms/attendance' },
+    { label: 'Leave', icon: CalendarDays, path: '/hrms/leave' },
   ]
 
+  const greeting = (() => {
+    const h = now.getHours()
+    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  })()
+
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6 font-body sm:p-8">
+    <div className="mx-auto max-w-7xl space-y-6 p-6 font-sans sm:p-8">
       <HrPageHeader
+        crumb={greeting}
         title="HRMS Overview"
         subtitle={activeCompany ? activeCompany.name : 'Human Resources Management System'}
+        actions={
+          <HrButton onClick={() => navigate('/hrms/employees')}>
+            <Plus size={15} /> Add employee
+          </HrButton>
+        }
       />
 
       {/* Stat grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div onClick={() => navigate('/hrms/employees')} className="cursor-pointer">
-          <HrStatCard icon={<Users size={18} />} color="blue" value={totalEmployees} label="Total Employees" />
+          <HrStatCard icon={<Users size={18} />} color="green" value={totalEmployees} label="Total Employees" />
         </div>
         <div onClick={() => navigate('/hrms/attendance')} className="cursor-pointer">
           <HrStatCard
             icon={<UserCheck size={18} />}
-            color="green"
+            color="blue"
             value={attendanceStats?.presentDays ?? '—'}
             label="Present Today"
-            sub={attendanceStats ? `Score ${attendanceStats.attendanceScore}%` : undefined}
+            sub={attendanceStats ? `Attendance score ${attendanceStats.attendanceScore}%` : undefined}
           />
         </div>
         <div onClick={() => navigate('/hrms/leave')} className="cursor-pointer">
@@ -71,41 +81,16 @@ export const HrmsDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Quick actions */}
-      <div className="bg-white border border-border-default rounded-xl p-4 shadow-sm">
-        <h2 className="text-sm font-bold text-text-primary mb-3">Quick Actions</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {quickActions.map((a) => (
-            <button
-              key={a.label}
-              onClick={() => navigate(a.path)}
-              className="flex flex-col items-center gap-2 p-4 bg-[#E6F4F1] hover:bg-[#6EE7B7]/40 border border-[#6EE7B7] rounded-xl transition-all"
-            >
-              <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center', a.bg)}>
-                <a.icon size={18} className={a.color} />
-              </div>
-              <span className="text-xs text-text-primary font-bold">{a.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Upcoming probations */}
-      {canSeeProbation && <UpcomingProbations />}
-
-      {/* Recent employees */}
-      {recentEmployees.length > 0 && (
-        <div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Recent employees */}
+        <div className="lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-text-primary">Recent Employees</h2>
+            <h2 className="text-md font-semibold tracking-tight text-[var(--text-primary)]">Recent Employees</h2>
+            <HrButton variant="ghost" size="sm" onClick={() => navigate('/hrms/employees')}>
+              View all <ArrowRight size={13} />
+            </HrButton>
           </div>
-          <TableCard
-            actions={
-              <HrButton variant="ghost" size="sm" onClick={() => navigate('/hrms/employees')}>
-                View all <ArrowRight size={12} />
-              </HrButton>
-            }
-          >
+          <TableCard>
             <table className="hr-table">
               <thead>
                 <tr>
@@ -115,7 +100,13 @@ export const HrmsDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {recentEmployees.map((emp, i) => {
+                {recentEmployees.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="py-12 text-center text-sm text-[var(--text-tertiary)]">
+                      No employees yet.
+                    </td>
+                  </tr>
+                ) : recentEmployees.map((emp, i) => {
                   const status = emp.employmentStatus
                   return (
                     <tr
@@ -126,7 +117,7 @@ export const HrmsDashboard: React.FC = () => {
                       <td>
                         <HrAvatar name={`${emp.firstName} ${emp.lastName ?? ''}`.trim()} seed={i} />
                       </td>
-                      <td className="text-text-secondary">{emp.email}</td>
+                      <td className="text-[var(--text-secondary)]">{emp.email}</td>
                       <td>
                         <HrStatusPill
                           tone={status === 'ACTIVE' ? 'ok' : status === 'PROBATION' ? 'warn' : 'gray'}
@@ -141,7 +132,29 @@ export const HrmsDashboard: React.FC = () => {
             </table>
           </TableCard>
         </div>
-      )}
+
+        {/* Quick actions */}
+        <div className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 shadow-sm">
+          <h2 className="mb-4 text-md font-semibold tracking-tight text-[var(--text-primary)]">Quick Actions</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {quickActions.map((a) => (
+              <button
+                key={a.label}
+                onClick={() => navigate(a.path)}
+                className="group flex flex-col items-start gap-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-[var(--accent-border)] hover:shadow-md"
+              >
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-[var(--accent-fg)] transition-colors group-hover:bg-[var(--accent-solid)] group-hover:text-white">
+                  <a.icon size={17} />
+                </span>
+                <span className="text-[13px] font-semibold text-[var(--text-primary)]">{a.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Upcoming probations */}
+      {canSeeProbation && <UpcomingProbations />}
     </div>
   )
 }

@@ -56,7 +56,7 @@ export function LeaveBalanceReport() {
           <select
             value={year}
             onChange={(e) => set('year', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#0F6E56] transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#059669] transition-all"
           >
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
@@ -76,7 +76,7 @@ export function LeaveBalanceReport() {
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Bar dataKey="used"      fill="#EF4444" />
-            <Bar dataKey="pending"   fill="#0F6E56" />
+            <Bar dataKey="pending"   fill="#059669" />
             <Bar dataKey="available" fill="#22C55E" />
           </BarChart>
         </ResponsiveContainer>

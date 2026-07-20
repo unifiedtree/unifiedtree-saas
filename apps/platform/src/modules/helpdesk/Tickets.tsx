@@ -103,7 +103,7 @@ export const Tickets: React.FC = () => {
                 const pc = priorityConfig[ticket.priority]
                 return (
                   <tr key={ticket.id} className="border-b border-[#E2E8F0]/40 last:border-0 hover:bg-[#F8FAFC] transition-colors cursor-pointer">
-                    <td className="px-4 py-3 text-[#0F6E56] font-mono font-medium">{ticket.ticketNumber}</td>
+                    <td className="px-4 py-3 text-[#059669] font-mono font-medium">{ticket.ticketNumber}</td>
                     <td className="px-4 py-3">
                       <p className="text-[#0F172A] font-medium max-w-xs truncate">{ticket.subject}</p>
                     </td>

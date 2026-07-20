@@ -164,7 +164,7 @@ function SubmitTab({ onSubmitted }: { onSubmitted: () => void }) {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/20'
+  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -210,7 +210,7 @@ function SubmitTab({ onSubmitted }: { onSubmitted: () => void }) {
             </div>
           </div>
         ))}
-        <button onClick={() => setItems((p) => [...p, emptyItem()])} className="flex items-center gap-1.5 text-sm font-semibold text-[#0A5240] hover:text-[#064E3B]">
+        <button onClick={() => setItems((p) => [...p, emptyItem()])} className="flex items-center gap-1.5 text-sm font-semibold text-[#047857] hover:text-[#064E3B]">
           <Plus size={15} /> Add line item
         </button>
       </div>
@@ -330,7 +330,7 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
     }
   }
 
-  const inputCls = 'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#0F6E56] focus:outline-none'
+  const inputCls = 'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none'
 
   return (
     <div className="space-y-4">

@@ -2,21 +2,20 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
+import {
+  ArrowRight, Eye, EyeOff, Lock, Mail, Check,
+  ShieldCheck, Clock3, BarChart3,
+} from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { apiJson, AuthResponse, currentSubdomain, WorkspaceStatus } from '@/core/api/client'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 20 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } },
-}
-
-const stagger = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } },
-}
+const HIGHLIGHTS = [
+  { icon: Clock3,     title: 'Attendance & leave', desc: 'Geofenced check-ins, shifts and approvals in one place.' },
+  { icon: BarChart3,  title: 'Payroll that runs itself', desc: 'Salary structures, PLI and payslips, automated.' },
+  { icon: ShieldCheck, title: 'Compliance built-in', desc: 'Statutory registers, muster rolls and audit trails.' },
+]
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate()
@@ -108,129 +107,188 @@ export const LoginPage: React.FC = () => {
     }
   }
 
+  const inputClass =
+    'w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] shadow-xs outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12'
+
   return (
-    <main className="flex min-h-screen bg-bg-base font-body relative overflow-hidden items-center justify-center p-4">
-      {/* Soft background elements */}
-      <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-[#E6F4F1] to-transparent pointer-events-none" />
-      <div className="absolute -top-48 -right-48 w-96 h-96 bg-[#0F6E56]/20 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-1/2 -left-48 w-96 h-96 bg-[#0A5240]/10 rounded-full blur-[100px] pointer-events-none" />
-      
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[440px] bg-white rounded-3xl shadow-xl shadow-[#0F6E56]/10 border border-[#6EE7B7]/50 p-8 sm:p-12 relative z-10"
-      >
-        {/* Logo */}
-        <div className="flex flex-col items-center justify-center gap-4 mb-8">
-          <img src="/UnifiedTreeLogo.png" alt="UnifiedTree Logo" className="h-12 w-auto object-contain" />
-          <div className="text-center">
-            <h2 className="text-2xl font-extrabold text-slate-900 font-heading tracking-tight mb-1">
-              Welcome back
-            </h2>
-            <p className="text-sm text-slate-500">
-              Sign in to your workspace <span className="font-semibold text-slate-700">{workspaceLabel}</span>
-            </p>
+    <main className="grid min-h-screen lg:grid-cols-[1.05fr_1fr] xl:grid-cols-[1.15fr_1fr]">
+      {/* ── Brand panel ─────────────────────────────────────────── */}
+      <div className="relative hidden overflow-hidden bg-[#053B2E] lg:flex lg:flex-col">
+        <div
+          className="absolute inset-0"
+          style={{ background: 'linear-gradient(150deg, #064E3B 0%, #047857 42%, #059669 100%)' }}
+        />
+        {/* decorative glow */}
+        <div className="orb -left-32 -top-24 h-96 w-96" style={{ background: 'rgba(52,211,153,0.35)' }} />
+        <div className="orb -bottom-40 -right-24 h-[28rem] w-[28rem]" style={{ background: 'rgba(6,78,59,0.6)' }} />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.15]"
+          style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.35) 1px, transparent 0)', backgroundSize: '28px 28px' }}
+        />
+
+        <div className="relative z-10 flex h-full flex-col p-12 xl:p-16">
+          {/* wordmark */}
+          <div className="flex items-center gap-3">
+            <img src="/UnifiedTreeLogoWhite.png" alt="Unified Tree" className="h-9 w-auto" />
+          </div>
+
+          {/* headline */}
+          <div className="mt-auto">
+            <motion.h1
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              className="max-w-md text-4xl font-semibold leading-[1.15] tracking-tight text-white"
+            >
+              The operating system for your people.
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+              className="mt-4 max-w-md text-[15px] leading-relaxed text-emerald-50/80"
+            >
+              HR, attendance, payroll and every connected module — unified into one calm, powerful workspace.
+            </motion.p>
+
+            <div className="mt-10 space-y-4">
+              {HIGHLIGHTS.map((h, i) => (
+                <motion.div
+                  key={h.title}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.16 + i * 0.08, ease: [0.16, 1, 0.3, 1] }}
+                  className="flex items-start gap-3.5"
+                >
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/12 text-emerald-100 ring-1 ring-white/15">
+                    <h.icon size={16} />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-white">{h.title}</p>
+                    <p className="text-[13px] text-emerald-50/70">{h.desc}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-auto flex items-center gap-2 pt-12 text-[13px] text-emerald-50/60">
+            <Check size={14} className="text-emerald-200" />
+            Trusted by modern teams to run their entire workforce.
           </div>
         </div>
+      </div>
 
-        {workspaceStatus && workspaceStatus.status !== 'ACTIVE' && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="mb-6 flex items-center gap-3 rounded-2xl border border-warning/20 bg-warning/10 px-4 py-3.5 text-sm font-medium text-warning"
-          >
-            <div className="w-2 h-2 rounded-full bg-warning animate-pulse" />
-            This workspace is pending approval.
-          </motion.div>
-        )}
+      {/* ── Form panel ──────────────────────────────────────────── */}
+      <div className="relative flex items-center justify-center bg-[var(--bg-surface)] px-6 py-12 sm:px-10">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full max-w-[400px]"
+        >
+          {/* Mobile brand mark */}
+          <div className="mb-8 flex items-center gap-2.5 lg:hidden">
+            <img src="/UnifiedTreeLogo.png" alt="Unified Tree" className="h-7 w-auto" />
+          </div>
 
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="mb-6 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3.5 text-sm font-medium text-danger text-center"
-          >
-            {error}
-          </motion.div>
-        )}
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">Welcome back</h2>
+            <p className="mt-1.5 text-sm text-[var(--text-secondary)]">
+              Sign in to <span className="font-medium text-[var(--text-primary)]">{workspaceLabel}</span>
+            </p>
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {needsWorkspace && (
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Workspace Domain
-              </label>
-              <input
-                type="text"
-                value={workspace}
-                onChange={(e) => setWorkspace(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#0F6E56] focus:bg-white focus:ring-4 focus:ring-[#0F6E56]/30"
-                placeholder="yourcompany"
-                autoComplete="off"
-                spellCheck={false}
-              />
+          {workspaceStatus && workspaceStatus.status !== 'ACTIVE' && (
+            <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3.5 py-3 text-sm font-medium text-[var(--status-warning-fg)]">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--status-warning-solid)]" />
+              This workspace is pending approval.
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Email Address
-            </label>
-            <div className="relative">
-              <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#0F6E56] focus:bg-white focus:ring-4 focus:ring-[#0F6E56]/30"
-                placeholder="you@company.com"
-                required
-              />
-            </div>
-          </div>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-5 rounded-lg border border-[var(--status-error-border)] bg-[var(--status-error-bg)] px-3.5 py-3 text-sm font-medium text-[var(--status-error-fg)]"
+            >
+              {error}
+            </motion.div>
+          )}
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Password
-              </label>
-              <Link to="/forgot-password" className="text-xs font-semibold text-[#0A5240] hover:underline">Forgot password?</Link>
-            </div>
-            <div className="relative">
-              <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type={showPwd ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-11 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-[#0F6E56] focus:bg-white focus:ring-4 focus:ring-[#0F6E56]/30"
-                placeholder="Enter password"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPwd((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 transition-colors hover:text-slate-700 rounded-lg"
-              >
-                {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {needsWorkspace && (
+              <div className="space-y-1.5">
+                <label className="block text-[13px] font-medium text-[var(--text-secondary)]">Workspace domain</label>
+                <input
+                  type="text"
+                  value={workspace}
+                  onChange={(e) => setWorkspace(e.target.value)}
+                  className={`${inputClass} px-3.5`}
+                  placeholder="yourcompany"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+            )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#0F6E56] hover:bg-[#0A5F4A] px-4 py-4 text-sm font-bold text-white shadow-lg shadow-[#0F6E56]/30 transition-all disabled:opacity-70 active:scale-[0.98]"
-          >
-            {loading ? 'Signing in...' : 'Sign in'}
-            {!loading && <ArrowRight size={18} />}
-          </button>
-        </form>
-        
-        <p className="mt-8 text-center text-sm text-slate-500">
-          Powered by{' '}
-          <a href="https://unifiedtree.com" className="font-semibold text-[#0A5240] hover:underline">UnifiedTree</a>
-        </p>
-      </motion.div>
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-[var(--text-secondary)]">Email address</label>
+              <div className="relative">
+                <Mail size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={`${inputClass} pl-10 pr-3.5`}
+                  placeholder="you@company.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[13px] font-medium text-[var(--text-secondary)]">Password</label>
+                <Link to="/forgot-password" className="text-[13px] font-medium text-[var(--text-link)] hover:underline">Forgot password?</Link>
+              </div>
+              <div className="relative">
+                <Lock size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`${inputClass} pl-10 pr-11`}
+                  placeholder="Enter your password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-secondary)]"
+                  aria-label={showPwd ? 'Hide password' : 'Show password'}
+                >
+                  {showPwd ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--interactive-primary)] text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-[var(--interactive-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 active:scale-[0.99] disabled:opacity-70"
+            >
+              {loading ? 'Signing in…' : 'Sign in'}
+              {!loading && <ArrowRight size={17} />}
+            </button>
+          </form>
+
+          <p className="mt-8 text-center text-[13px] text-[var(--text-tertiary)]">
+            Powered by{' '}
+            <a href="https://unifiedtree.com" className="font-medium text-[var(--text-link)] hover:underline">UnifiedTree</a>
+          </p>
+        </motion.div>
+      </div>
     </main>
   )
 }

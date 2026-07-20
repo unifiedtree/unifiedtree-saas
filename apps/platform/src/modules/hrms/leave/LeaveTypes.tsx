@@ -212,7 +212,7 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 py-2.5 bg-[#0F6E56] hover:bg-[#0A5F4A] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
+            className="flex-1 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
           >
             {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Leave Type'}
           </button>
@@ -229,8 +229,8 @@ function TypeRow({ type, onEdit, onDeactivate }: { type: LeaveTypeResponse; onEd
     <tr className={clsx(!type.isActive && 'opacity-60')}>
       <td>
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[#E6F4F1] flex items-center justify-center flex-shrink-0">
-            <Tag size={15} className="text-[#0A5240]" />
+          <div className="w-9 h-9 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
+            <Tag size={15} className="text-[#047857]" />
           </div>
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-text-primary">{type.name}</p>
@@ -252,7 +252,7 @@ function TypeRow({ type, onEdit, onDeactivate }: { type: LeaveTypeResponse; onEd
       <Can code={P.LEAVE_TYPE_WRITE}>
         <td className="text-right">
           <div className="inline-flex items-center gap-1">
-            <button onClick={() => onEdit(type)} title="Edit" className="p-1.5 text-text-tertiary hover:text-[#0A5240] rounded-lg hover:bg-bg-base transition-colors">
+            <button onClick={() => onEdit(type)} title="Edit" className="p-1.5 text-text-tertiary hover:text-[#047857] rounded-lg hover:bg-bg-base transition-colors">
               <Pencil size={14} />
             </button>
             <button onClick={() => onDeactivate(type)} title="Deactivate" className="p-1.5 text-text-tertiary hover:text-[#EF4444] rounded-lg hover:bg-bg-base transition-colors">

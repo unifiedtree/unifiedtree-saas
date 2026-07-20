@@ -71,7 +71,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-default">
           <div className="flex items-center gap-2">
-            <Bell size={18} className="text-[#0F6E56]" />
+            <Bell size={18} className="text-[#059669]" />
             <h2 className="text-text-primary font-semibold text-sm">Notifications</h2>
             {unreadCount() > 0 && (
               <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-bold rounded-full">
@@ -83,7 +83,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
             {unreadCount() > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="flex items-center gap-1 text-xs text-[#0A5240] hover:text-[#053B2E] transition-colors"
+                className="flex items-center gap-1 text-xs text-[#047857] hover:text-[#053B2E] transition-colors"
               >
                 <Check size={12} />
                 Mark all read
@@ -103,7 +103,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
               onClick={() => setTab(t)}
               className={clsx(
                 'px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors',
-                tab === t ? 'bg-[#E6F4F1] text-[#0A5240] border border-[#6EE7B7]' : 'text-text-secondary hover:text-text-primary hover:bg-[#ECFDF5]'
+                tab === t ? 'bg-[#ECFDF5] text-[#047857] border border-[#6EE7B7]' : 'text-text-secondary hover:text-text-primary hover:bg-[#ECFDF5]'
               )}
             >
               {t === 'priority' ? 'High Priority' : t}
@@ -128,12 +128,12 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
                       key={n.id}
                       className={clsx(
                         'relative flex gap-3 px-5 py-3.5 border-b border-border-default/40 cursor-pointer transition-colors',
-                        !n.isRead ? 'bg-[#ECFDF5] hover:bg-[#E6F4F1]' : 'hover:bg-bg-base'
+                        !n.isRead ? 'bg-[#ECFDF5] hover:bg-[#ECFDF5]' : 'hover:bg-bg-base'
                       )}
                       onClick={() => handleClick(n)}
                     >
                       {!n.isRead && (
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-[#0F6E56] rounded-full" />
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-[#059669] rounded-full" />
                       )}
                       <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5', cfg.bg)}>
                         <Icon size={15} className={cfg.color} />
@@ -175,7 +175,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
         <div className="px-5 py-3 border-t border-border-default">
           <button
             onClick={() => { navigate('/audit-logs'); onClose() }}
-            className="w-full text-center text-xs text-[#0A5240] hover:text-[#053B2E] transition-colors py-1"
+            className="w-full text-center text-xs text-[#047857] hover:text-[#053B2E] transition-colors py-1"
           >
             View all activity in Audit Logs
           </button>

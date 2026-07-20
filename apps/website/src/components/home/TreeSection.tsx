@@ -2,10 +2,10 @@ import { useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
 
 const treeCards = [
-  { emoji: '🌱', element: 'Roots',    meaning: 'Core Foundation',        erp: 'Database, Infrastructure, Core Modules',          color: '#0A5240' },
-  { emoji: '🪵', element: 'Trunk',    meaning: 'Central System',         erp: 'The Main ERP Engine connecting everything',        color: '#0F6E56' },
-  { emoji: '🌿', element: 'Branches', meaning: 'Departments',            erp: 'Finance, HR, Sales, Inventory, Supply Chain',      color: '#16A34A' },
-  { emoji: '🍃', element: 'Leaves',   meaning: 'End Users / Outputs',    erp: 'Reports, Dashboards, Insights, Transactions',      color: '#22C55E' },
+  { emoji: '🌱', element: 'Roots',    meaning: 'Core Foundation',        erp: 'Database, Infrastructure, Core Modules',          color: '#0F1B08' },
+  { emoji: '🪵', element: 'Trunk',    meaning: 'Central System',         erp: 'The Main ERP Engine connecting everything',        color: '#18280E' },
+  { emoji: '🌿', element: 'Branches', meaning: 'Departments',            erp: 'Finance, HR, Sales, Inventory, Supply Chain',      color: '#3A7D22' },
+  { emoji: '🍃', element: 'Leaves',   meaning: 'End Users / Outputs',    erp: 'Reports, Dashboards, Insights, Transactions',      color: '#5B8C2A' },
   { emoji: '🍎', element: 'Fruit',    meaning: 'Business Results',       erp: 'Profits, Growth, Productivity',                   color: '#F59E0B' },
   { emoji: '🔗', element: 'Unified',  meaning: 'One Connected Organism', erp: 'All modules working as ONE living system',         color: '#6366F1' },
 ]
@@ -72,7 +72,7 @@ export function TreeSection() {
                   initial={{ opacity: 0, x: 30 }}
                   animate={inView ? { opacity: 1, x: 0 } : {}}
                   transition={{ duration: 0.45, delay: 0.25 + i * 0.09, ease: 'easeOut' }}
-                  whileHover={{ x: 4, boxShadow: '0 4px 20px rgba(15,110,86,0.10)' }}
+                  whileHover={{ x: 4, boxShadow: '0 4px 20px rgba(5, 150, 105,0.10)' }}
                   className="bg-surface border-l-4 rounded-lg p-4 flex items-start gap-4 cursor-default shadow-sm"
                   style={{ borderLeftColor: card.color }}
                 >

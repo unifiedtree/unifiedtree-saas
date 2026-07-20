@@ -1,99 +1,140 @@
 /* ============================================================
- * UnifiedTree Design System — Semantic CSS Custom Properties
- * Light theme is the default; dark theme via [data-theme='dark']
- * Brand palette: Teal (Attendance-app — single source of truth)
- *   primary #0F6E56 · primaryDark #0A5240 · primaryLight #E6F4F1 · primaryMuted #1A8A6E
+ * UnifiedTree Design System — Semantic Design Tokens
+ * ------------------------------------------------------------
+ * Light theme is the default; dark theme via [data-theme='dark'].
+ *
+ * Brand: Emerald — the single source of truth for "primary".
+ *   primary #059669 · hover #047857 · active #065F46
+ *   tint #ECFDF5 · ink #171717
+ * Green is used ONLY for primary actions, active nav, focus,
+ * success, charts and highlights. Everything else is neutral.
+ *
+ * Contrast: all text tiers meet WCAG AA on their intended
+ * surface. Values are hand-tuned, not auto-generated.
  * ============================================================ */
 
 :root,
 [data-theme='light'] {
-  /* ── Backgrounds ─────────────────────────────────────── */
-  --bg-base:             #f4f4f6;
+  /* ── Backgrounds ─────────────────────────────────────────
+     A calm near-white canvas with pure-white raised surfaces.
+     The tiny step between base and surface is what makes cards
+     read as "lifted" without heavy borders. */
+  --bg-base:             #fafafa;
   --bg-surface:          #ffffff;
   --bg-surface-raised:   #ffffff;
-  --bg-surface-overlay:  rgba(255, 255, 255, 0.97);
-  --bg-subtle:           #f4f4f6;
-  --bg-muted:            #D1FAE5;
+  --bg-surface-overlay:  rgba(255, 255, 255, 0.85);
+  --bg-subtle:           #f5f5f5;
+  --bg-inset:            #fafafa;
+  --bg-muted:            #ecfdf5;
+  --bg-hover:            #f5f5f5;
 
-  /* ── Accent / Brand (Green — website palette) ─────────── */
-  --accent-bg:           #E6F4F1;
-  --accent-bg-strong:    #A7F3D0;
-  --accent-fg:           #0F6E56;
-  --accent-fg-strong:    #0A5240;
-  --accent-border:       #6EE7B7;
+  /* ── Accent / Brand (Emerald) ────────────────────────────── */
+  --accent-bg:           #ecfdf5;   /* emerald-50  — tint surface   */
+  --accent-bg-strong:    #a7f3d0;   /* emerald-200 — strong tint    */
+  --accent-fg:           #059669;   /* emerald-600 — primary        */
+  --accent-fg-strong:    #047857;   /* emerald-700 — on tint text   */
+  --accent-border:       #6ee7b7;   /* emerald-300                  */
+  --accent-solid:        #059669;
+  --accent-solid-hover:  #047857;
+  /* Aliases some app CSS references directly */
+  --accent-default:      #059669;
+  --accent-subtle:       #ecfdf5;
 
-  /* ── Text ── 3-tier scale, all WCAG AA on white ──────────
-     primary #1f2937 12.6:1 · secondary #4b5563 7.0:1 · tertiary #6b7280 4.83:1.
-     (tertiary was #9ca3af = 2.5:1, a contrast failure on hint/sub-label text.) */
-  --text-primary:        #1f2937;
-  --text-secondary:      #4b5563;
-  --text-tertiary:       #6b7280;
-  --text-disabled:       #9ca3af;
+  /* ── Text ── 4-tier neutral scale, AA on white ──────────────
+     primary #171717 17.4:1 · secondary #525252 8.1:1
+     tertiary #737373 4.74:1 · disabled #a3a3a3 (decorative). */
+  --text-primary:        #171717;
+  --text-secondary:      #525252;
+  --text-tertiary:       #737373;
+  --text-disabled:       #a3a3a3;
   --text-inverse:        #ffffff;
   --text-on-accent:      #ffffff;
-  --text-link:           #0A5240;
+  --text-link:           #047857;
 
-  /* ── Border ──────────────────────────────────────────── */
-  --border-default:      #e5e7eb;
-  --border-strong:       #d1d5db;
-  --border-subtle:       #f3f4f6;
-  --border-focus:        #0F6E56;
-  --border-accent:       #6EE7B7;
+  /* ── Border / Divider ────────────────────────────────────── */
+  --border-subtle:       #f5f5f5;
+  --border-default:      #e5e5e5;
+  --border-strong:       #d4d4d4;
+  --border-focus:        #059669;
+  --border-accent:       #6ee7b7;
 
-  /* ── Status: Success ─────────────────────────────────── */
-  --status-success-bg:     #dcfce7;
-  --status-success-fg:     #22c55e;
-  --status-success-border: #bbf7d0;
+  /* ── Status: Success (emerald family, distinct from brand) ── */
+  --status-success-bg:     #ecfdf5;
+  --status-success-fg:     #059669;
+  --status-success-solid:  #10b981;
+  --status-success-border: #a7f3d0;
 
-  /* ── Status: Warning ─────────────────────────────────── */
-  --status-warning-bg:     #fef3c7;
-  --status-warning-fg:     #f59e0b;
+  /* ── Status: Warning ─────────────────────────────────────── */
+  --status-warning-bg:     #fffbeb;
+  --status-warning-fg:     #b45309;
+  --status-warning-solid:  #f59e0b;
   --status-warning-border: #fde68a;
 
-  /* ── Status: Error ───────────────────────────────────── */
-  --status-error-bg:       #fee2e2;
-  --status-error-fg:       #ef4444;
+  /* ── Status: Error ───────────────────────────────────────── */
+  --status-error-bg:       #fef2f2;
+  --status-error-fg:       #dc2626;
+  --status-error-solid:    #ef4444;
   --status-error-border:   #fecaca;
 
-  /* ── Status: Info ────────────────────────────────────── */
-  --status-info-bg:        #dbeafe;
-  --status-info-fg:        #3b82f6;
+  /* ── Status: Info ────────────────────────────────────────── */
+  --status-info-bg:        #eff6ff;
+  --status-info-fg:        #2563eb;
+  --status-info-solid:     #3b82f6;
   --status-info-border:    #bfdbfe;
 
-  /* ── Interactive ─────────────────────────────────────── */
-  --interactive-primary:        #0F6E56;
-  --interactive-primary-hover:  #0A5240;
-  --interactive-primary-active: #064E3B;
-  --interactive-secondary:      #f4f4f6;
-  --interactive-secondary-hover:#E6F4F1;
-  --interactive-danger:         #ef4444;
-  --interactive-danger-hover:   #dc2626;
-  --interactive-ghost-hover:    #f1f5f9;
+  /* ── Interactive ─────────────────────────────────────────── */
+  --interactive-primary:        #059669;
+  --interactive-primary-hover:  #047857;
+  --interactive-primary-active: #065f46;
+  --interactive-secondary:      #ffffff;
+  --interactive-secondary-hover:#f5f5f5;
+  --interactive-danger:         #dc2626;
+  --interactive-danger-hover:   #b91c1c;
+  --interactive-ghost-hover:    #f5f5f5;
 
-  /* ── Radius Scale ────────────────────────────────────── */
+  /* ── Chart palette (emerald-led, harmonious) ─────────────── */
+  --chart-1: #059669;
+  --chart-2: #34d399;
+  --chart-3: #0d9488;
+  --chart-4: #64748b;
+  --chart-5: #f59e0b;
+  --chart-6: #6366f1;
+  --chart-grid: #ececec;
+
+  /* ── Typography ──────────────────────────────────────────── */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ── Radius Scale ────────────────────────────────────────── */
   --radius-xs:   4px;
   --radius-sm:   6px;
   --radius-md:   8px;
-  --radius-lg:   12px;
-  --radius-xl:   16px;
-  --radius-2xl:  20px;
+  --radius-lg:   10px;
+  --radius-xl:   14px;
+  --radius-2xl:  18px;
+  --radius-3xl:  24px;
   --radius-full: 9999px;
 
-  /* ── Shadow Scale ────────────────────────────────────── */
-  --shadow-xs:   0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-sm:   0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg:   0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl:   0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --shadow-glow: 0 0 0 3px rgb(15 110 86 / 0.25);
+  /* ── Shadow Scale ── soft, layered, low-opacity ("expensive") */
+  --shadow-xs:   0 1px 2px 0 rgb(16 24 40 / 0.04);
+  --shadow-sm:   0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06);
+  --shadow-md:   0 2px 4px -1px rgb(16 24 40 / 0.04), 0 6px 12px -2px rgb(16 24 40 / 0.08);
+  --shadow-lg:   0 4px 8px -2px rgb(16 24 40 / 0.05), 0 12px 24px -4px rgb(16 24 40 / 0.10);
+  --shadow-xl:   0 8px 16px -4px rgb(16 24 40 / 0.06), 0 24px 48px -8px rgb(16 24 40 / 0.14);
+  --shadow-2xl:  0 24px 48px -12px rgb(16 24 40 / 0.24);
+  --shadow-glow: 0 0 0 4px rgb(5 150 105 / 0.12);
+  --shadow-focus:0 0 0 3px rgb(5 150 105 / 0.16);
 
-  /* ── Motion ──────────────────────────────────────────── */
-  --motion-fast:   100ms ease;
-  --motion-base:   200ms ease;
-  --motion-slow:   300ms ease;
-  --motion-spring: 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* ── Motion ──────────────────────────────────────────────── */
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-fast:   120ms var(--ease-out);
+  --motion-base:   200ms var(--ease-out);
+  --motion-slow:   320ms var(--ease-out);
+  --motion-spring: 440ms cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* ── Z-Index Scale ───────────────────────────────────── */
+  /* ── Z-Index Scale ───────────────────────────────────────── */
   --z-base:           0;
   --z-raised:         10;
   --z-dropdown:       100;
@@ -105,64 +146,86 @@
   --z-tooltip:        700;
 }
 
-/* ── Dark Theme ──────────────────────────────────────────── */
+/* ── Dark Theme ─────────────────────────────────────────────
+   Neutral-cool near-black with emerald that lifts to stay
+   legible on dark surfaces. */
 [data-theme='dark'] {
-  --bg-base:             #0b1220;
-  --bg-surface:          #111a2b;
-  --bg-surface-raised:   #18233a;
-  --bg-surface-overlay:  rgba(17, 26, 43, 0.97);
-  --bg-subtle:           #18233a;
-  --bg-muted:            #1e2b21;
+  --bg-base:             #0a0a0a;
+  --bg-surface:          #141414;
+  --bg-surface-raised:   #1c1c1c;
+  --bg-surface-overlay:  rgba(20, 20, 20, 0.85);
+  --bg-subtle:           #1c1c1c;
+  --bg-inset:            #0a0a0a;
+  --bg-muted:            #052e22;
+  --bg-hover:            #1f1f1f;
 
-  --accent-bg:           #0c2e26;
-  --accent-bg-strong:    #0a5240;
-  --accent-fg:           #2ea183;
-  --accent-fg-strong:    #5fbba3;
-  --accent-border:       #0f6e56;
+  --accent-bg:           #052e22;
+  --accent-bg-strong:    #064e3b;
+  --accent-fg:           #34d399;
+  --accent-fg-strong:    #6ee7b7;
+  --accent-border:       #065f46;
+  --accent-solid:        #10b981;
+  --accent-solid-hover:  #34d399;
+  --accent-default:      #34d399;
+  --accent-subtle:       #052e22;
 
-  --text-primary:        #f1f5f9;
-  --text-secondary:      #94a3b8;
-  --text-tertiary:       #64748b;
-  --text-disabled:       #475569;
-  --text-inverse:        #0b1220;
-  --text-on-accent:      #ffffff;
-  --text-link:           #2ea183;
+  --text-primary:        #f5f5f5;
+  --text-secondary:      #a3a3a3;
+  --text-tertiary:       #737373;
+  --text-disabled:       #525252;
+  --text-inverse:        #0a0a0a;
+  --text-on-accent:      #052014;
+  --text-link:           #34d399;
 
-  --border-default:      #2a3650;
-  --border-strong:       #3b4a68;
-  --border-subtle:       #1c2740;
-  --border-focus:        #2ea183;
-  --border-accent:       #0f6e56;
+  --border-subtle:       #1f1f1f;
+  --border-default:      #292929;
+  --border-strong:       #3d3d3d;
+  --border-focus:        #34d399;
+  --border-accent:       #065f46;
 
-  --status-success-bg:     #0c2e1a;
-  --status-success-fg:     #4ade80;
-  --status-success-border: #166534;
+  --status-success-bg:     #052e22;
+  --status-success-fg:     #34d399;
+  --status-success-solid:  #10b981;
+  --status-success-border: #065f46;
 
-  --status-warning-bg:     #2a1e02;
+  --status-warning-bg:     #2a1e05;
   --status-warning-fg:     #fbbf24;
+  --status-warning-solid:  #f59e0b;
   --status-warning-border: #4a3508;
 
-  --status-error-bg:       #2a0e0e;
+  --status-error-bg:       #2a0f0f;
   --status-error-fg:       #f87171;
+  --status-error-solid:    #ef4444;
   --status-error-border:   #5b1717;
 
   --status-info-bg:        #0d1b2e;
   --status-info-fg:        #60a5fa;
-  --status-info-border:    #1a2e4a;
+  --status-info-solid:     #3b82f6;
+  --status-info-border:    #1e3a5f;
 
-  --interactive-primary:        #1a8a6e;
-  --interactive-primary-hover:  #2ea183;
-  --interactive-primary-active: #5fbba3;
-  --interactive-secondary:      #18233a;
-  --interactive-secondary-hover:#1e2b41;
-  --interactive-danger:         #f87171;
-  --interactive-danger-hover:   #fca5a5;
-  --interactive-ghost-hover:    #1e2b41;
+  --interactive-primary:        #10b981;
+  --interactive-primary-hover:  #34d399;
+  --interactive-primary-active: #6ee7b7;
+  --interactive-secondary:      #1c1c1c;
+  --interactive-secondary-hover:#262626;
+  --interactive-danger:         #ef4444;
+  --interactive-danger-hover:   #f87171;
+  --interactive-ghost-hover:    #1f1f1f;
 
-  --shadow-xs:   0 1px 2px 0 rgb(0 0 0 / 0.4);
-  --shadow-sm:   0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.4);
-  --shadow-md:   0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
-  --shadow-lg:   0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
-  --shadow-xl:   0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.4);
-  --shadow-glow: 0 0 0 3px rgb(15 110 86 / 0.3);
+  --chart-1: #34d399;
+  --chart-2: #10b981;
+  --chart-3: #2dd4bf;
+  --chart-4: #94a3b8;
+  --chart-5: #fbbf24;
+  --chart-6: #818cf8;
+  --chart-grid: #262626;
+
+  --shadow-xs:   0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow-sm:   0 1px 2px 0 rgb(0 0 0 / 0.5), 0 1px 3px 0 rgb(0 0 0 / 0.4);
+  --shadow-md:   0 2px 4px -1px rgb(0 0 0 / 0.5), 0 6px 12px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg:   0 4px 8px -2px rgb(0 0 0 / 0.5), 0 12px 24px -4px rgb(0 0 0 / 0.55);
+  --shadow-xl:   0 8px 16px -4px rgb(0 0 0 / 0.55), 0 24px 48px -8px rgb(0 0 0 / 0.6);
+  --shadow-2xl:  0 24px 48px -12px rgb(0 0 0 / 0.7);
+  --shadow-glow: 0 0 0 4px rgb(16 185 129 / 0.22);
+  --shadow-focus:0 0 0 3px rgb(16 185 129 / 0.28);
 }

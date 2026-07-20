@@ -194,7 +194,7 @@ function ApplyTab() {
       <button
         onClick={handleSubmit}
         disabled={applyLeave.isPending}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-[#0F6E56] hover:bg-[#0A5F4A] disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm"
+        className="w-full flex items-center justify-center gap-2 py-3 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm"
       >
         <Plus size={16} />
         {applyLeave.isPending ? 'Submitting...' : 'Apply for Leave'}
@@ -375,7 +375,7 @@ export const Leave: React.FC = () => {
 
       <div className="flex flex-wrap gap-1 bg-white border border-border-default p-1 rounded-xl w-fit">
         {tabs.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t.key ? 'bg-[#0F6E56] text-white shadow' : 'text-text-secondary hover:text-text-primary')}>
+          <button key={t.key} onClick={() => setTab(t.key)} className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t.key ? 'bg-[#059669] text-white shadow' : 'text-text-secondary hover:text-text-primary')}>
             {t.label}
           </button>
         ))}

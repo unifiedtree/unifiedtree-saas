@@ -201,17 +201,19 @@ export function SignupPage() {
     : 'Create Workspace';
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col font-body relative">
+    <div className="min-h-screen bg-[#EBF5DF] flex flex-col font-body relative">
       <Navbar />
-      <div className="flex-1 flex flex-col items-center pt-32 pb-24 px-4 sm:px-6 relative overflow-hidden">
-        <div className="absolute -top-48 -left-48 w-96 h-96 bg-primary-light rounded-full blur-[140px] opacity-60 pointer-events-none" />
-        <div className="absolute top-1/2 -right-48 w-96 h-96 bg-accent/10 rounded-full blur-[140px] opacity-40 pointer-events-none" />
 
+      {/* Background pattern matching Hero Section */}
+      <div className="absolute inset-0 bg-squircle-grid-white pointer-events-none h-[800px]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#EBF5DF]/80 to-[#EBF5DF] pointer-events-none h-[800px]" />
+
+      <div className="flex-1 flex flex-col items-center pt-40 pb-24 px-4 sm:px-6 relative z-10">
         <motion.div initial={{ opacity: 0, y: -15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="mb-10 text-center relative z-10">
-          <h1 className="text-4xl sm:text-5xl font-heading font-extrabold text-text-primary tracking-tight mb-3">
-            Create Your <span className="gradient-text">Workspace</span>
+          <h1 className="text-4xl sm:text-5xl font-heading font-extrabold text-[#18280E] tracking-tight mb-3">
+            Create Your Workspace
           </h1>
-          <p className="text-text-secondary font-body font-medium text-base">
+          <p className="text-[#18280E]/80 font-body font-medium text-base max-w-lg mx-auto">
             Pick your modules, choose your team size, and pay securely to activate instantly.
           </p>
         </motion.div>

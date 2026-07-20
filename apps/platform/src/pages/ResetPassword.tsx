@@ -21,7 +21,7 @@ export const ResetPassword: React.FC = () => {
         <div className="max-w-md text-center">
           <p className="text-2xl font-bold text-text-primary mb-2">Invalid link</p>
           <p className="text-text-secondary mb-4">This reset link is missing a token.</p>
-          <Link to="/forgot-password" className="text-[#0A5240] font-semibold hover:underline">
+          <Link to="/forgot-password" className="text-[#047857] font-semibold hover:underline">
             Request a new reset link →
           </Link>
         </div>
@@ -52,7 +52,7 @@ export const ResetPassword: React.FC = () => {
         className="w-full max-w-[420px] bg-white rounded-3xl shadow-xl border border-border-default p-10"
       >
         <div className="flex items-center gap-2.5 mb-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F6E56]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#059669]">
             <span className="text-xl font-black text-white">U</span>
           </div>
           <span className="text-xl font-black tracking-tight text-text-primary">UnifiedTree</span>
@@ -65,7 +65,7 @@ export const ResetPassword: React.FC = () => {
             <p className="text-sm text-text-secondary mb-6">You can now log in with your new password.</p>
             <Link
               to="/login"
-              className="inline-block rounded-xl bg-[#0F6E56] px-6 py-3 text-sm font-bold text-white hover:bg-[#0A5F4A] transition-colors"
+              className="inline-block rounded-xl bg-[#059669] px-6 py-3 text-sm font-bold text-white hover:bg-[#047857] transition-colors"
             >
               Go to login →
             </Link>
@@ -92,7 +92,7 @@ export const ResetPassword: React.FC = () => {
                     type={showPw ? 'text' : 'password'}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="w-full rounded-xl border border-border-default bg-bg-base py-3 pl-10 pr-10 text-sm text-text-primary outline-none focus:border-[#0F6E56] focus:ring-4 focus:ring-[#0F6E56]/30"
+                    className="w-full rounded-xl border border-border-default bg-bg-base py-3 pl-10 pr-10 text-sm text-text-primary outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/30"
                     placeholder="Minimum 8 characters"
                     required
                   />
@@ -113,7 +113,7 @@ export const ResetPassword: React.FC = () => {
                     type="password"
                     value={confirm}
                     onChange={e => setConfirm(e.target.value)}
-                    className="w-full rounded-xl border border-border-default bg-bg-base py-3 pl-10 pr-4 text-sm text-text-primary outline-none focus:border-[#0F6E56] focus:ring-4 focus:ring-[#0F6E56]/30"
+                    className="w-full rounded-xl border border-border-default bg-bg-base py-3 pl-10 pr-4 text-sm text-text-primary outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/30"
                     placeholder="Re-enter password"
                     required
                   />
@@ -123,7 +123,7 @@ export const ResetPassword: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-xl bg-[#0F6E56] hover:bg-[#0A5F4A] py-4 text-sm font-bold text-white transition-all disabled:opacity-60"
+                className="w-full rounded-xl bg-[#059669] hover:bg-[#047857] py-4 text-sm font-bold text-white transition-all disabled:opacity-60"
               >
                 {loading ? 'Updating…' : 'Update password'}
               </button>

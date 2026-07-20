@@ -106,7 +106,7 @@ export async function openCheckout(opts: {
     image: 'https://www.unifiedtree.com/checkout-logo.png',
     description: opts.description,
     prefill: opts.prefill,
-    theme: { color: '#0F6E56' },
+    theme: { color: '#059669' },
     handler: (response: RazorpaySuccess) => opts.onSuccess(response),
     modal: { ondismiss: () => opts.onDismiss?.() },
   });

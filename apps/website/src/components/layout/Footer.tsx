@@ -1,18 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Linkedin, Twitter, Github, Youtube, Mail, MessageCircle } from 'lucide-react'
-
-function TreeLogoSmall() {
-  // TEMP: brand logo hidden — restore the <img> below to bring it back.
-  return null
-  // return (
-  //   <img
-  //     src="/UnifiedTreeLogoWhite.png"
-  //     alt="UnifiedTree logo"
-  //     style={{ height: 40, width: 'auto' }}
-  //     className="object-contain"
-  //   />
-  // )
-}
+import { Linkedin, Twitter, Github, Youtube, Mail, MessageCircle, ArrowRight } from 'lucide-react'
 
 const columns = [
   {
@@ -20,18 +7,18 @@ const columns = [
     links: [
       { label: 'Modules', to: '/modules' },
       { label: 'Pricing', to: '/pricing' },
+      { label: 'Features', to: '/features' },
       { label: 'Changelog', to: '#' },
-      { label: 'Roadmap', to: '#' },
-      { label: 'Status Page', to: '#' },
+      { label: 'Status', to: '#' },
     ],
   },
   {
     title: 'Company',
     links: [
-      { label: 'About', to: '#' },
+      { label: 'About', to: '/about' },
+      { label: 'Industries', to: '/industries' },
       { label: 'Blog', to: '#' },
       { label: 'Careers', to: '#' },
-      { label: 'Press', to: '#' },
       { label: 'Partners', to: '#' },
     ],
   },
@@ -49,20 +36,16 @@ const columns = [
 
 export function Footer() {
   return (
-    <footer className="bg-[#0F6E56] text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12">
+    <footer className="border-t border-border bg-[#F4FAED]">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-5">
           {/* Brand col */}
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-2 mb-4">
-              <TreeLogoSmall />
-            </div>
-            <p className="text-white text-sm leading-relaxed max-w-xs mb-6">
-              One Root. Every Branch Connected.
-              <br />
-              India's first offline-first ERP platform built for growing businesses.
+            <img src="/UnifiedTreeLogo.png" alt="UnifiedTree" className="mb-4 h-8 w-auto" />
+            <p className="mb-6 max-w-xs text-sm leading-relaxed text-text-secondary">
+              One root. Every branch connected. India's first offline-first ERP platform built for growing businesses.
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               {[
                 { icon: Linkedin, href: '#', label: 'LinkedIn' },
                 { icon: Twitter, href: '#', label: 'Twitter' },
@@ -73,7 +56,7 @@ export function Footer() {
                   key={label}
                   href={href}
                   aria-label={label}
-                  className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center hover:bg-primary transition-colors duration-200"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-text-secondary transition-colors duration-200 hover:border-primary hover:bg-primary-light hover:text-primary"
                 >
                   <Icon size={16} />
                 </a>
@@ -84,7 +67,7 @@ export function Footer() {
           {/* Link columns */}
           {columns.map((col) => (
             <div key={col.title}>
-              <h4 className="text-base font-heading font-bold text-white mb-4 uppercase tracking-wider">
+              <h4 className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
                 {col.title}
               </h4>
               <ul className="space-y-3">
@@ -92,7 +75,7 @@ export function Footer() {
                   <li key={link.label}>
                     <Link
                       to={link.to}
-                      className="text-sm text-white hover:text-green-200 transition-colors duration-150"
+                      className="text-sm text-text-secondary transition-colors duration-150 hover:text-primary"
                     >
                       {link.label}
                     </Link>
@@ -104,34 +87,21 @@ export function Footer() {
 
           {/* Contact col */}
           <div>
-            <h4 className="text-base font-heading font-bold text-white mb-4 uppercase tracking-wider">
-              Contact
-            </h4>
+            <h4 className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Contact</h4>
             <ul className="space-y-3">
               <li>
-                <a
-                  href="mailto:support@unifiedtree.com"
-                  className="flex items-center gap-2 text-sm text-white hover:text-green-200 transition-colors"
-                >
-                  <Mail size={14} />
-                  support@unifiedtree.com
+                <a href="mailto:support@unifiedtree.com" className="flex items-center gap-2 text-sm text-text-secondary transition-colors hover:text-primary">
+                  <Mail size={14} /> support@unifiedtree.com
                 </a>
               </li>
               <li>
-                <a
-                  href="#"
-                  className="flex items-center gap-2 text-sm text-white hover:text-green-200 transition-colors"
-                >
-                  <MessageCircle size={14} />
-                  WhatsApp Support
+                <a href="#" className="flex items-center gap-2 text-sm text-text-secondary transition-colors hover:text-primary">
+                  <MessageCircle size={14} /> WhatsApp Support
                 </a>
               </li>
               <li>
-                <Link
-                  to="/pricing"
-                  className="inline-flex items-center gap-1 text-sm text-green-200 hover:text-white font-medium transition-colors"
-                >
-                  Book a Demo →
+                <Link to="/pricing" className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-colors hover:text-primary-dark">
+                  Book a demo <ArrowRight size={13} />
                 </Link>
               </li>
             </ul>
@@ -140,16 +110,12 @@ export function Footer() {
       </div>
 
       {/* Bottom bar */}
-      <div className="border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-xs text-white/70">
-            © 2026 UnifiedTree Technologies Pvt. Ltd. All rights reserved.
-          </p>
+      <div className="border-t border-border">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 sm:flex-row sm:px-6 lg:px-8">
+          <p className="text-xs text-text-tertiary">© 2026 UnifiedTree Technologies Pvt. Ltd. All rights reserved.</p>
           <div className="flex items-center gap-4">
             {['Privacy Policy', 'Terms of Service', 'Cookie Policy'].map((item) => (
-              <a key={item} href="#" className="text-xs text-white/70 hover:text-white transition-colors">
-                {item}
-              </a>
+              <a key={item} href="#" className="text-xs text-text-tertiary transition-colors hover:text-text-primary">{item}</a>
             ))}
           </div>
         </div>

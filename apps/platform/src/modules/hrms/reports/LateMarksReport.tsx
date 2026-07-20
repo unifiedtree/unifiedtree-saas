@@ -63,13 +63,13 @@ export function LateMarksReport() {
             type="date"
             value={from}
             onChange={(e) => set('from', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#0F6E56] transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#059669] transition-all"
           />
           <input
             type="date"
             value={to}
             onChange={(e) => set('to', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#0F6E56] transition-all"
+            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#059669] transition-all"
           />
         </>
       }
@@ -85,7 +85,7 @@ export function LateMarksReport() {
               contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #6EE7B7', borderRadius: 8, fontSize: 12 }}
               labelStyle={{ color: '#0F172A' }}
             />
-            <Bar dataKey="Total Late (min)" fill="#0F6E56" />
+            <Bar dataKey="Total Late (min)" fill="#059669" />
           </BarChart>
         </ResponsiveContainer>
       </div>

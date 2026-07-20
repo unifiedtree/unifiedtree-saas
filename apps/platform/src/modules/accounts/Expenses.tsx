@@ -57,7 +57,7 @@ export const Expenses: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard title="Total Expenses" value={`₹${(totalAmount / 1000).toFixed(1)}k`} icon={Receipt} iconColor="text-[#0F6E56]" iconBg="bg-[#0F6E56]/10" />
+        <StatCard title="Total Expenses" value={`₹${(totalAmount / 1000).toFixed(1)}k`} icon={Receipt} iconColor="text-[#059669]" iconBg="bg-[#059669]/10" />
         <StatCard title="Pending Review" value={pending} icon={Clock} iconColor="text-amber-400" iconBg="bg-amber-500/10" change="Needs action" changeType="negative" />
         <StatCard title="Approved" value={approved} icon={CheckCircle} iconColor="text-blue-400" iconBg="bg-blue-500/10" />
         <StatCard title="Reimbursed" value={`₹${(reimbursed / 1000).toFixed(1)}k`} icon={CheckCircle} iconColor="text-emerald-400" iconBg="bg-emerald-500/10" />

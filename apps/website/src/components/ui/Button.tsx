@@ -23,18 +23,18 @@ export function Button({
   fullWidth = false,
 }: ButtonProps) {
   const base =
-    'inline-flex items-center justify-center gap-2 font-body font-medium rounded-lg transition-all duration-200 cursor-pointer select-none'
+    'inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all duration-200 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2'
 
   const sizes = {
-    sm: 'px-4 py-2 text-sm',
-    md: 'px-6 py-3 text-base',
-    lg: 'px-8 py-4 text-lg',
+    sm: 'h-10 px-4 text-sm',
+    md: 'h-11 px-5 text-[15px]',
+    lg: 'h-[52px] px-7 text-base',
   }
 
   const variants = {
-    filled: 'bg-primary text-white hover:bg-primary-dark shadow-md hover:shadow-teal-lg btn-shimmer',
-    ghost: 'bg-transparent text-primary border-2 border-primary hover:bg-primary-light',
-    outline: 'bg-transparent text-text-secondary border border-border hover:border-primary hover:text-primary',
+    filled: 'bg-primary text-lime shadow-sm hover:shadow-teal-lg btn-shimmer',
+    ghost: 'bg-white text-primary border border-primary/25 hover:bg-primary-light hover:border-primary',
+    outline: 'bg-white text-text-secondary border border-border hover:border-primary hover:text-primary',
   }
 
   return (

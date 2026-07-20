@@ -25,7 +25,7 @@ function Chip({ active, label, onClick }: { active: boolean; label: string; onCl
   return (
     <button onClick={onClick}
       className={clsx('px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
-        active ? 'bg-[#0F6E56] border-[#0F6E56] text-white' : 'bg-white border-border text-text-secondary hover:text-text-primary hover:border-[#6EE7B7]')}>
+        active ? 'bg-[#059669] border-[#059669] text-white' : 'bg-white border-border text-text-secondary hover:text-text-primary hover:border-[#6EE7B7]')}>
       {label}
     </button>
   )
@@ -123,7 +123,7 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
         <div className="flex gap-1 px-5 py-3 border-b border-border">
           {STEPS.map((label, i) => (
             <div key={label} className={clsx('flex-1 text-center text-xs font-medium py-1.5 rounded-full',
-              step === i + 1 ? 'bg-[#0F6E56] text-white' : i + 1 < step ? 'text-[#0A5240]' : 'text-text-secondary')}>
+              step === i + 1 ? 'bg-[#059669] text-white' : i + 1 < step ? 'text-[#047857]' : 'text-text-secondary')}>
               {i + 1}. {label}
             </div>
           ))}
@@ -135,7 +135,7 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
             <>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">Letter template</label>
               <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}
-                className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/30">
+                className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30">
                 <option value="">{templates.length === 0 ? 'No active templates — create one first' : 'Select a template…'}</option>
                 {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
@@ -177,7 +177,7 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
                 <RecipientPicker employees={employees} selected={customIds} onChange={setCustomIds} />
               )}
 
-              <div className="p-3 bg-[#E6F4F1] border border-[#6EE7B7] rounded-xl text-sm text-[#0A5240]">
+              <div className="p-3 bg-[#ECFDF5] border border-[#6EE7B7] rounded-xl text-sm text-[#047857]">
                 This will send to <strong>{targeted.length}</strong> employee{targeted.length === 1 ? '' : 's'}.
                 {noEmail > 0 && <span className="text-amber-700"> {noEmail} have no email on file and will be skipped.</span>}
               </div>
@@ -190,18 +190,18 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">Title <span className="text-danger">*</span></label>
                 <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. November 2026 Salary Slips"
-                  className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/30" />
+                  className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">Email subject (optional)</label>
                 <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Defaults to a standard subject"
-                  className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/30" />
+                  className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">Message to recipients</label>
                 <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={5}
                   placeholder="e.g. Please find attached your salary slip for November 2026."
-                  className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/30 resize-none" />
+                  className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30 resize-none" />
                 <p className="text-xs text-text-secondary mt-1">Sent in the email body above the attached document.</p>
               </div>
             </>
@@ -235,12 +235,12 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
           )}
           {step < 4 ? (
             <button onClick={() => setStep((s) => (s + 1) as Step)} disabled={!canNext}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#0F6E56] hover:bg-[#0A5F4A] disabled:opacity-40 text-white font-medium rounded-xl text-sm">
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-40 text-white font-medium rounded-xl text-sm">
               Next <ChevronRight size={14} />
             </button>
           ) : (
             <button onClick={handleSend} disabled={create.isPending || targeted.length - noEmail < 1}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#0F6E56] hover:bg-[#0A5F4A] disabled:opacity-40 text-white font-medium rounded-xl text-sm">
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-40 text-white font-medium rounded-xl text-sm">
               {create.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               Send to {targeted.length - noEmail} employee{targeted.length - noEmail === 1 ? '' : 's'}
             </button>

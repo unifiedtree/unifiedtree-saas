@@ -71,7 +71,7 @@ function Stepper({ current }: { current: WizardStep }) {
                 s.n < active || current === 'done'
                   ? 'bg-[#15803D] border-[#15803D] text-white'
                   : s.n === active
-                  ? 'bg-[#0F6E56] border-[#0F6E56] text-white'
+                  ? 'bg-[#059669] border-[#059669] text-white'
                   : 'bg-white border-border-default text-text-tertiary',
               )}
             >
@@ -126,7 +126,7 @@ function DropZone({ file, disabled, onFile }: DropZoneProps) {
         'block border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors',
         disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
         isDragging
-          ? 'border-[#0F6E56] bg-[#E6F4F1]'
+          ? 'border-[#059669] bg-[#ECFDF5]'
           : file
           ? 'border-[#15803D]/50 bg-[#DCFCE7]/40'
           : 'border-border-default hover:border-[#6EE7B7] bg-bg-base',
@@ -275,9 +275,9 @@ export const EmployeeImport: React.FC = () => {
     <div className="space-y-6 max-w-3xl p-6 sm:p-8">
       {/* Header */}
       <nav className="flex items-center gap-1.5 text-xs text-text-tertiary">
-        <Link to="/hrms" className="hover:text-[#0A5240] transition-colors">HRMS</Link>
+        <Link to="/hrms" className="hover:text-[#047857] transition-colors">HRMS</Link>
         <ChevronRight size={12} />
-        <Link to="/hrms/employees" className="hover:text-[#0A5240] transition-colors">Employees</Link>
+        <Link to="/hrms/employees" className="hover:text-[#047857] transition-colors">Employees</Link>
         <ChevronRight size={12} />
         <span className="text-text-secondary">Import</span>
       </nav>
@@ -310,7 +310,7 @@ export const EmployeeImport: React.FC = () => {
             <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Required columns</p>
             <div className="flex flex-wrap gap-1.5">
               {['first_name', 'last_name', 'email', 'employment_type', 'date_of_joining'].map((col) => (
-                <code key={col} className="px-2 py-0.5 bg-[#E6F4F1] rounded text-xs text-[#0A5240]">{col}</code>
+                <code key={col} className="px-2 py-0.5 bg-[#ECFDF5] rounded text-xs text-[#047857]">{col}</code>
               ))}
             </div>
             <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mt-2">Optional columns</p>
@@ -338,7 +338,7 @@ export const EmployeeImport: React.FC = () => {
 
             <button
               onClick={() => setStep(2)}
-              className="px-4 py-2 text-[#0A5240] hover:text-[#0F6E56] text-sm font-medium transition-colors"
+              className="px-4 py-2 text-[#047857] hover:text-[#059669] text-sm font-medium transition-colors"
             >
               I have a file ready → Go to upload
             </button>
@@ -362,7 +362,7 @@ export const EmployeeImport: React.FC = () => {
                   validateMutation.reset()
                 }}
                 disabled={validateMutation.isPending}
-                className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/20 transition-colors"
+                className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-colors"
               >
                 {companies.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
@@ -387,7 +387,7 @@ export const EmployeeImport: React.FC = () => {
 
             {validateMutation.isPending && (
               <div className="flex items-center gap-3 text-text-secondary text-sm">
-                <Loader2 size={16} className="animate-spin text-[#0F6E56]" />
+                <Loader2 size={16} className="animate-spin text-[#059669]" />
                 Validating {file?.name}…
                 {validateMutation.uploadProgress > 0 && validateMutation.uploadProgress < 100 && (
                   <span className="text-xs text-text-secondary">{validateMutation.uploadProgress}%</span>
@@ -571,13 +571,13 @@ export const EmployeeImport: React.FC = () => {
       {/* Committing in progress */}
       {step === 3 && commitMutation.isPending && (
         <div className="bg-white border border-border-default rounded-2xl p-8 flex flex-col items-center gap-4">
-          <Loader2 size={32} className="animate-spin text-[#0F6E56]" />
+          <Loader2 size={32} className="animate-spin text-[#059669]" />
           <p className="text-text-primary font-medium">Creating employees…</p>
           {commitMutation.uploadProgress > 0 && commitMutation.uploadProgress < 100 && (
             <div className="w-full max-w-xs">
               <div className="h-1.5 bg-bg-base rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-[#0F6E56] transition-all duration-300"
+                  className="h-full bg-[#059669] transition-all duration-300"
                   style={{ width: `${commitMutation.uploadProgress}%` }}
                 />
               </div>
@@ -611,7 +611,7 @@ export const EmployeeImport: React.FC = () => {
             </HrButton>
             <button
               onClick={reset}
-              className="px-4 py-2 text-[#0A5240] hover:text-[#0F6E56] text-sm font-medium transition-colors"
+              className="px-4 py-2 text-[#047857] hover:text-[#059669] text-sm font-medium transition-colors"
             >
               Import more
             </button>

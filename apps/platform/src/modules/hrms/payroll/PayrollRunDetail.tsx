@@ -55,7 +55,7 @@ const PayslipBody: React.FC<{ runId: string; empId: string }> = ({ runId, empId 
         <span>Total deductions</span><span className="tabular-nums">{inr2(slip.totalDeductions)}</span>
       </div>
 
-      <div className="flex justify-between text-base font-bold text-[#0A5240] border-t-2 border-[#0A5240] pt-2 mt-2">
+      <div className="flex justify-between text-base font-bold text-[#047857] border-t-2 border-[#047857] pt-2 mt-2">
         <span>Net pay</span><span className="tabular-nums">{inr2(slip.netPay)}</span>
       </div>
 
@@ -155,7 +155,7 @@ export const PayrollRunDetail: React.FC = () => {
             </>
           )}
           {run.status === 'LOCKED' && (
-            <span className="flex items-center gap-1.5 text-sm text-[#0A5240] font-medium">
+            <span className="flex items-center gap-1.5 text-sm text-[#047857] font-medium">
               <CheckCircle2 size={16} /> Finalized · locked {fmtDate(run.lockedAt)}
             </span>
           )}
@@ -189,7 +189,7 @@ export const PayrollRunDetail: React.FC = () => {
         {(['overview', 'employees'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 capitalize ${
-              tab === t ? 'border-[#0A5240] text-[#0A5240]' : 'border-transparent text-slate-500 hover:text-slate-700'
+              tab === t ? 'border-[#047857] text-[#047857]' : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}>
             {t}
           </button>

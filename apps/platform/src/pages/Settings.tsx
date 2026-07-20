@@ -20,7 +20,7 @@ const Toggle: React.FC<{ enabled: boolean; onChange: (v: boolean) => void }> = (
     onClick={() => onChange(!enabled)}
     className={clsx(
       'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-      enabled ? 'bg-[#0F6E56]' : 'bg-bg-base border border-border-default'
+      enabled ? 'bg-[#059669]' : 'bg-bg-base border border-border-default'
     )}
   >
     <span className={clsx('inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform', enabled ? 'translate-x-5' : 'translate-x-1')} />
@@ -37,13 +37,13 @@ const ProfileTab: React.FC = () => {
       <div>
         <h3 className="text-text-primary font-semibold mb-4">Personal Information</h3>
         <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 bg-gradient-to-br from-[#0F6E56] to-[#0A5F4A] rounded-2xl flex items-center justify-center text-white text-xl font-bold">
+          <div className="w-16 h-16 bg-gradient-to-br from-[#059669] to-[#047857] rounded-2xl flex items-center justify-center text-white text-xl font-bold">
             {user?.firstName[0]}{user?.lastName[0]}
           </div>
           <div>
             <p className="text-text-primary font-medium">{user?.firstName} {user?.lastName}</p>
             <p className="text-text-secondary text-sm">{user?.email}</p>
-            <button className="mt-1 text-xs text-[#0A5240] hover:text-[#0A5F4A]">Change avatar</button>
+            <button className="mt-1 text-xs text-[#047857] hover:text-[#047857]">Change avatar</button>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -57,7 +57,7 @@ const ProfileTab: React.FC = () => {
               <label className="block text-xs font-medium text-text-tertiary mb-1.5">{label}</label>
               <input
                 defaultValue={value}
-                className="w-full bg-white border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/20 transition-all"
+                className="w-full bg-white border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-all"
               />
             </div>
           ))}
@@ -77,7 +77,7 @@ const ProfileTab: React.FC = () => {
               <input
                 defaultValue={value}
                 readOnly={label === 'Plan'}
-                className="w-full bg-white border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/20 transition-all read-only:opacity-60"
+                className="w-full bg-white border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-all read-only:opacity-60"
               />
             </div>
           ))}
@@ -102,7 +102,7 @@ const SecurityTab: React.FC = () => {
           {['Current Password', 'New Password', 'Confirm New Password'].map((label) => (
             <div key={label}>
               <label className="block text-xs font-medium text-text-tertiary mb-1.5">{label}</label>
-              <input type="password" className="w-full bg-white border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-[#0F6E56] focus:ring-2 focus:ring-[#0F6E56]/20 transition-all" />
+              <input type="password" className="w-full bg-white border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-all" />
             </div>
           ))}
           <HrButton>Update Password</HrButton>
@@ -200,7 +200,7 @@ const BillingTab: React.FC = () => {
   const tenant = useAuthStore((s) => s.tenant)
   const plans = [
     { key: 'STARTER', name: 'Starter', price: 29, icon: Star, features: ['Up to 25 users', '3 modules', '5GB storage', 'Email support'], color: 'border-border-default' },
-    { key: 'PROFESSIONAL', name: 'Professional', price: 79, icon: Zap, features: ['Up to 250 users', 'All modules', '100GB storage', 'Priority support', 'Advanced analytics'], color: 'border-[#0F6E56]', highlight: true },
+    { key: 'PROFESSIONAL', name: 'Professional', price: 79, icon: Zap, features: ['Up to 250 users', 'All modules', '100GB storage', 'Priority support', 'Advanced analytics'], color: 'border-[#059669]', highlight: true },
     { key: 'ENTERPRISE', name: 'Enterprise', price: 199, icon: Crown, features: ['Unlimited users', 'All modules', 'Unlimited storage', 'Dedicated support', 'Custom integrations', 'SLA guarantee'], color: 'border-[#6EE7B7]' },
   ]
 
@@ -208,17 +208,17 @@ const BillingTab: React.FC = () => {
     <div className="space-y-6">
       <div>
         <h3 className="text-text-primary font-semibold mb-1">Current Plan</h3>
-        <p className="text-text-secondary text-sm mb-4">You are on the <span className="text-[#0A5240] font-medium">{tenant?.planType}</span> plan</p>
+        <p className="text-text-secondary text-sm mb-4">You are on the <span className="text-[#047857] font-medium">{tenant?.planType}</span> plan</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {plans.map(({ key, name, price, icon: Icon, features, color, highlight }) => (
-            <div key={key} className={clsx('relative border rounded-2xl p-5 transition-colors', color, highlight ? 'bg-[#E6F4F1]' : 'bg-white')}>
+            <div key={key} className={clsx('relative border rounded-2xl p-5 transition-colors', color, highlight ? 'bg-[#ECFDF5]' : 'bg-white')}>
               {highlight && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-[#0F6E56] text-white text-[10px] font-bold rounded-full">MOST POPULAR</span>
+                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-[#059669] text-white text-[10px] font-bold rounded-full">MOST POPULAR</span>
               )}
               {tenant?.planType === key && (
                 <span className="absolute top-3 right-3"><HrStatusPill tone="ok">Current</HrStatusPill></span>
               )}
-              <Icon size={22} className={highlight ? 'text-[#0A5240]' : 'text-text-tertiary'} />
+              <Icon size={22} className={highlight ? 'text-[#047857]' : 'text-text-tertiary'} />
               <h4 className="text-text-primary font-bold mt-2">{name}</h4>
               <p className="text-2xl font-bold text-text-primary mt-1">${price}<span className="text-sm text-text-secondary font-normal">/mo</span></p>
               <ul className="mt-4 space-y-2">
@@ -230,7 +230,7 @@ const BillingTab: React.FC = () => {
                 ))}
               </ul>
               {tenant?.planType !== key && (
-                <button className={clsx('w-full mt-4 py-2 rounded-xl text-sm font-medium transition-colors', highlight ? 'bg-[#0F6E56] hover:bg-[#0A5F4A] text-white' : 'border border-border-default text-text-secondary hover:text-text-primary hover:border-[#6EE7B7]')}>
+                <button className={clsx('w-full mt-4 py-2 rounded-xl text-sm font-medium transition-colors', highlight ? 'bg-[#059669] hover:bg-[#047857] text-white' : 'border border-border-default text-text-secondary hover:text-text-primary hover:border-[#6EE7B7]')}>
                   Upgrade
                 </button>
               )}
@@ -256,7 +256,7 @@ const BillingTab: React.FC = () => {
               <div className="flex items-center gap-4">
                 <span className="text-sm text-text-primary font-medium">{b.amount}</span>
                 <HrStatusPill tone="ok">{b.status}</HrStatusPill>
-                <button className="text-xs text-[#0A5240] hover:text-[#0A5F4A]">Download</button>
+                <button className="text-xs text-[#047857] hover:text-[#047857]">Download</button>
               </div>
             </div>
           ))}
@@ -295,7 +295,7 @@ const IntegrationsTab: React.FC = () => {
               onClick={() => setConnected((prev) => ({ ...prev, [key]: !prev[key] }))}
               className={clsx(
                 'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                connected[key] ? 'border border-border-default text-text-secondary hover:text-[#B91C1C] hover:border-[#FCA5A5]' : 'bg-[#0F6E56] hover:bg-[#0A5F4A] text-white'
+                connected[key] ? 'border border-border-default text-text-secondary hover:text-[#B91C1C] hover:border-[#FCA5A5]' : 'bg-[#059669] hover:bg-[#047857] text-white'
               )}
             >
               {connected[key] ? 'Disconnect' : 'Connect'}
@@ -360,7 +360,7 @@ export const Settings: React.FC = () => {
                 onClick={() => setActiveTab(key)}
                 className={clsx(
                   'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors',
-                  activeTab === key ? 'bg-[#E6F4F1] text-[#0A5240] border border-[#6EE7B7]' : 'text-text-secondary hover:text-text-primary hover:bg-bg-base',
+                  activeTab === key ? 'bg-[#ECFDF5] text-[#047857] border border-[#6EE7B7]' : 'text-text-secondary hover:text-text-primary hover:bg-bg-base',
                   key === 'danger' && activeTab === key && 'bg-[#FEE2E2] text-[#B91C1C] border-[#FCA5A5]',
                   key === 'danger' && activeTab !== key && 'hover:text-[#B91C1C]'
                 )}

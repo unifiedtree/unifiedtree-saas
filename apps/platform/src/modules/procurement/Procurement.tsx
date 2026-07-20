@@ -331,8 +331,8 @@ export const Procurement: React.FC = () => {
               title="Total Orders"
               value={totalOrders}
               icon={ShoppingCart}
-              iconColor="text-[#0F6E56]"
-              iconBg="bg-[#0F6E56]/10"
+              iconColor="text-[#059669]"
+              iconBg="bg-[#059669]/10"
               change="+3 this week"
               changeType="positive"
             />
@@ -422,7 +422,7 @@ export const Procurement: React.FC = () => {
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <span className="text-[#0F6E56] font-mono font-medium">{order.orderNumber}</span>
+                            <span className="text-[#059669] font-mono font-medium">{order.orderNumber}</span>
                             <span className="text-slate-600 text-xs">({order.itemCount} items)</span>
                           </div>
                         </td>
@@ -457,7 +457,7 @@ export const Procurement: React.FC = () => {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3 text-xs">
-                            <button className="flex items-center gap-1 text-[#64748B] hover:text-[#0F6E56] transition-colors">
+                            <button className="flex items-center gap-1 text-[#64748B] hover:text-[#059669] transition-colors">
                               <Eye size={12} /> View
                             </button>
                             {order.status === 'DRAFT' && (
@@ -505,8 +505,8 @@ export const Procurement: React.FC = () => {
               title="Total Vendors"
               value={totalVendors}
               icon={Building2}
-              iconColor="text-[#0F6E56]"
-              iconBg="bg-[#0F6E56]/10"
+              iconColor="text-[#059669]"
+              iconBg="bg-[#059669]/10"
             />
             <StatCard
               title="Active Vendors"
@@ -551,8 +551,8 @@ export const Procurement: React.FC = () => {
                   {/* Card Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#0F6E56]/10 flex items-center justify-center flex-shrink-0">
-                        <Building2 size={18} className="text-[#0F6E56]" />
+                      <div className="w-10 h-10 rounded-xl bg-[#059669]/10 flex items-center justify-center flex-shrink-0">
+                        <Building2 size={18} className="text-[#059669]" />
                       </div>
                       <div>
                         <p className="text-[#0F172A] font-semibold text-sm leading-tight">{vendor.name}</p>
@@ -597,11 +597,11 @@ export const Procurement: React.FC = () => {
                     <div className="w-px h-8 bg-[#F1F5F9]" />
                     <div className="text-center">
                       <p className="text-xs text-[#64748B]">Total Value</p>
-                      <p className="text-sm font-bold text-[#0F6E56] mt-0.5">
+                      <p className="text-sm font-bold text-[#059669] mt-0.5">
                         ${(vendor.totalValue / 1000).toFixed(0)}k
                       </p>
                     </div>
-                    <button className="flex items-center gap-1 text-xs text-[#64748B] hover:text-[#0F6E56] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#0F6E56]/10">
+                    <button className="flex items-center gap-1 text-xs text-[#64748B] hover:text-[#059669] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#059669]/10">
                       <Eye size={12} /> View
                     </button>
                   </div>

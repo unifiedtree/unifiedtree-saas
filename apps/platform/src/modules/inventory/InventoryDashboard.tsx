@@ -66,7 +66,7 @@ export const InventoryDashboard: React.FC = () => {
         <StatCard title="In Stock" value={inStock} icon={Package} iconColor="text-emerald-400" iconBg="bg-emerald-500/10" />
         <StatCard title="Low Stock" value={lowStock} icon={AlertTriangle} iconColor="text-amber-400" iconBg="bg-amber-500/10" change="Reorder needed" changeType="negative" />
         <StatCard title="Out of Stock" value={outOfStock} icon={TrendingDown} iconColor="text-red-400" iconBg="bg-red-500/10" change="Action required" changeType="negative" />
-        <StatCard title="Total Value" value={`₹${(totalValue / 10000000).toFixed(1)}Cr`} icon={BarChart2} iconColor="text-[#0F6E56]" iconBg="bg-[#0F6E56]/10" />
+        <StatCard title="Total Value" value={`₹${(totalValue / 10000000).toFixed(1)}Cr`} icon={BarChart2} iconColor="text-[#059669]" iconBg="bg-[#059669]/10" />
       </div>
 
       <div className="relative max-w-sm">
@@ -90,7 +90,7 @@ export const InventoryDashboard: React.FC = () => {
                 const totalVal = item.quantity * item.unitPrice
                 return (
                   <tr key={item.id} className="border-b border-[#E2E8F0]/40 last:border-0 hover:bg-[#F8FAFC] transition-colors">
-                    <td className="px-4 py-3 text-[#0F6E56] font-mono text-xs">{item.sku}</td>
+                    <td className="px-4 py-3 text-[#059669] font-mono text-xs">{item.sku}</td>
                     <td className="px-4 py-3">
                       <p className="text-[#0F172A] font-medium">{item.name}</p>
                     </td>
