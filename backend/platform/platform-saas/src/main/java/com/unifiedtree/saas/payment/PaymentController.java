@@ -1,5 +1,6 @@
 package com.unifiedtree.saas.payment;
 
+import com.unifiedtree.saas.plans.BillingCycle;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,13 +39,16 @@ public class PaymentController {
     @PostMapping("/create-order")
     public CreateOrderResponse createOrder(@Valid @RequestBody CreateOrderRequest req) {
         int seats = req.seats() == null ? 1 : req.seats();
-        PaymentService.CreateOrderResult r = payments.createOrder(req.planKeys(), seats, req.subdomain(), req.email());
-        return new CreateOrderResponse(r.orderId(), r.amountInr(), r.seats(), r.currency(), r.keyId());
+        BillingCycle cycle = BillingCycle.from(req.billingCycle());
+        PaymentService.CreateOrderResult r = payments.createOrder(req.planKeys(), seats, cycle, req.subdomain(), req.email());
+        return new CreateOrderResponse(r.orderId(), r.amountInr(), r.seats(),
+                r.billingCycle(), r.periodMonths(), r.currency(), r.keyId());
     }
 
     public record CreateOrderRequest(
             @NotEmpty List<String> planKeys,
             @jakarta.validation.constraints.Min(1) Integer seats,   // number of users (billed at per-seat price)
+            String billingCycle,                                    // MONTHLY | ANNUAL (default MONTHLY)
             String subdomain,
             String email) {}
 
@@ -52,6 +56,8 @@ public class PaymentController {
             String orderId,
             BigDecimal amountInr,
             int seats,
+            String billingCycle,
+            int periodMonths,
             String currency,
             String keyId) {}
 

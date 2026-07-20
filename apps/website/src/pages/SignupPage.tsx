@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Edit2, User, Building, Mail, Phone, Lock, Globe, Languages, Users, Target, Check, X, Lock as LockIcon } from 'lucide-react';
 import { usePricingStore } from '../store/pricingStore';
-import { useModulePlans, computeMonthlyTotal, type ModulePlan } from '../lib/plans';
+import { useModulePlans, computeMonthlyTotal, effectiveUnit, type ModulePlan } from '../lib/plans';
 import { createPaymentOrder, openCheckout, type RazorpaySuccess } from '../lib/razorpay';
 import { API_BASE_URL } from '../lib/api';
 
@@ -58,6 +58,8 @@ export function SignupPage() {
   const selectedPlanKeys = usePricingStore((s) => s.selectedPlanKeys);
   const togglePlan = usePricingStore((s) => s.togglePlan);
   const storeSeats = usePricingStore((s) => s.seats);
+  const billingCycle = usePricingStore((s) => s.billingCycle);
+  const setBillingCycle = usePricingStore((s) => s.setBillingCycle);
 
   const availablePlans = plans.filter((p) => p.status === 'AVAILABLE');
   // Plans the visitor picked that are actually purchasable; default to the one
@@ -86,6 +88,10 @@ export function SignupPage() {
   // Per-user rate of the selected plans (was hardcoded to ₹40) — comes from the DB.
   const perUser = purchasableSelected.reduce((sum, p) => sum + p.priceInr, 0);
   const basePrice = availablePlans[0]?.priceInr ?? perUser;
+  // Cycle-aware amounts. Annual applies each plan's DB-driven discount, x12.
+  const perUserAnnual = purchasableSelected.reduce((sum, p) => sum + effectiveUnit(p, 'annual'), 0);
+  const cycleUnit = billingCycle === 'annual' ? perUserAnnual : perUser;
+  const chargeTotal = billingCycle === 'annual' ? perUserAnnual * seats * 12 : monthlyTotal;
 
   useEffect(() => {
     if (companyName && !isEditingSubdomain) {
@@ -147,6 +153,7 @@ export function SignupPage() {
       const order = await createPaymentOrder({
         planKeys,
         seats: data.seats,
+        billingCycle,
         subdomain: data.subdomain,
         email: data.adminEmail,
       });
@@ -156,7 +163,7 @@ export function SignupPage() {
       await openCheckout({
         order,
         name: 'UnifiedTree',
-        description: `${data.companyName} - ${data.seats} user(s)`,
+        description: `${data.companyName} - ${data.seats} user(s) - ${billingCycle}`,
         prefill: { name: data.adminName, email: data.adminEmail, contact: data.adminMobile },
         onDismiss: () => {
           setError('Payment was cancelled. Your workspace was not created.');
@@ -189,8 +196,8 @@ export function SignupPage() {
     }
   };
 
-  const priceLabel = monthlyTotal > 0
-    ? `Pay ₹${monthlyTotal.toLocaleString('en-IN')}/mo & Create Workspace`
+  const priceLabel = chargeTotal > 0
+    ? `Pay ₹${chargeTotal.toLocaleString('en-IN')}/${billingCycle === 'annual' ? 'yr' : 'mo'} & Create Workspace`
     : 'Create Workspace';
 
   return (
@@ -221,13 +228,26 @@ export function SignupPage() {
               <div className="text-left">
                 <span className="font-heading font-bold text-text-primary text-base block">{selectedPlanNames || 'No modules selected'}</span>
                 <span className="text-xs text-text-secondary font-body font-medium">
-                  {monthlyTotal > 0 ? `₹${monthlyTotal.toLocaleString('en-IN')}/mo · ${seats} user(s) · ₹${perUser}/user` : 'Select an available module'}
+                  {chargeTotal > 0 ? `₹${chargeTotal.toLocaleString('en-IN')}/${billingCycle === 'annual' ? 'yr' : 'mo'} · ${seats} user(s) · ₹${cycleUnit}/user/mo` : 'Select an available module'}
                 </span>
               </div>
             </div>
-            <button type="button" onClick={() => setIsModulesDrawerOpen(true)} className="px-5 py-2.5 rounded-xl bg-bg border border-border hover:border-primary/30 hover:bg-surface font-body font-bold text-xs text-text-primary transition-all shadow-sm active:scale-95">
-              Change modules
-            </button>
+            <div className="flex items-center gap-2.5">
+              {/* Monthly / Annual — annual applies the DB-driven discount */}
+              <div className="flex bg-bg rounded-xl p-0.5 border border-border">
+                {(['monthly', 'annual'] as const).map((c) => (
+                  <button
+                    key={c} type="button" onClick={() => setBillingCycle(c)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-body font-bold capitalize transition-all ${billingCycle === c ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-primary'}`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={() => setIsModulesDrawerOpen(true)} className="px-5 py-2.5 rounded-xl bg-bg border border-border hover:border-primary/30 hover:bg-surface font-body font-bold text-xs text-text-primary transition-all shadow-sm active:scale-95">
+                Change modules
+              </button>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="bg-surface rounded-3xl border border-border shadow-xl p-8 sm:p-12 relative z-10">

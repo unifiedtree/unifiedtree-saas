@@ -20,5 +20,6 @@ public record ModulePlanDto(
         String status,            // AVAILABLE | LAUNCHING_SOON | RETIRED
         int sortOrder,
         List<String> features,
-        List<String> includedModules
+        List<String> includedModules,
+        BigDecimal annualDiscountPct  // % off the per-user price when billed annually
 ) {}

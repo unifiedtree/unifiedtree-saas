@@ -5,7 +5,7 @@ import {
   ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart, X, Lock, Plus, Minus,
 } from 'lucide-react'
 import { usePricingStore } from '../../store/pricingStore'
-import { useModulePlans, computeMonthlyTotal, type ModulePlan } from '../../lib/plans'
+import { useModulePlans, computeMonthlyTotal, effectiveUnit, type ModulePlan } from '../../lib/plans'
 import { Button } from '../ui/Button'
 
 const iconMap: Record<string, React.ElementType> = {
@@ -37,10 +37,10 @@ export function PricingCalculator() {
   const availableSelected = plans.filter((p) => p.status === 'AVAILABLE' && selectedPlanKeys.includes(p.key))
   const monthlyTotal = computeMonthlyTotal(plans, selectedPlanKeys, seats)
 
-  // Per-user rates. Annual billing takes 10% off each plan's per-user price
-  // (e.g. HR & Employees 39 -> 35/user/mo) and is billed for 12 months.
-  const perUserMonthly = availableSelected.reduce((s, p) => s + p.priceInr, 0)
-  const perUserAnnual = availableSelected.reduce((s, p) => s + Math.round(p.priceInr * 0.9), 0)
+  // Per-user rates. Annual applies each plan's DB-driven discount (no hardcoded
+  // percentage) — see effectiveUnit — and is billed for 12 months.
+  const perUserMonthly = availableSelected.reduce((s, p) => s + effectiveUnit(p, 'monthly'), 0)
+  const perUserAnnual = availableSelected.reduce((s, p) => s + effectiveUnit(p, 'annual'), 0)
   const annualTotal = perUserAnnual * Math.max(1, seats) * 12
 
   return (

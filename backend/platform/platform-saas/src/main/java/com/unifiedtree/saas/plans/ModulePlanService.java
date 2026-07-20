@@ -8,6 +8,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -57,14 +58,16 @@ public class ModulePlanService {
                 rs.getString("status"),
                 rs.getInt("sort_order"),
                 features,
-                included);
+                included,
+                rs.getBigDecimal("annual_discount_pct"));
     };
 
     /** All plans, ordered for the pricing grid. */
     public List<ModulePlanDto> listPlans() {
         return jdbc.query("""
                 SELECT key, display_name, tagline, description, category, icon, color,
-                       price_inr, price_model, status, sort_order, features, included_modules
+                       price_inr, price_model, status, sort_order, features, included_modules,
+                       annual_discount_pct
                   FROM platform.module_plans
                  ORDER BY sort_order, display_name
                 """, ROW);
@@ -97,27 +100,76 @@ public class ModulePlanService {
     }
 
     /**
-     * Total price in rupees for the given AVAILABLE plans and seat count
-     * (server-authoritative). PER_SEAT plans bill price * seats; FLAT plans bill
-     * price once. Seats are clamped to at least 1.
+     * A plan's effective per-MONTH unit price for a billing cycle. Monthly is
+     * the catalog price; annual applies the plan's {@code annual_discount_pct}
+     * (DB-driven, not hardcoded) and rounds to the whole rupee — e.g. 39 at 10%
+     * becomes 35/user/month. The 12x is applied by the total, not here.
      */
-    public BigDecimal totalPriceInr(List<ModulePlanDto> plans, int seats) {
+    public BigDecimal effectiveMonthlyUnit(ModulePlanDto p, BillingCycle cycle) {
+        BigDecimal unit = p.priceInr() == null ? BigDecimal.ZERO : p.priceInr();
+        if (cycle == BillingCycle.ANNUAL) {
+            BigDecimal pct = p.annualDiscountPct() == null ? BigDecimal.ZERO : p.annualDiscountPct();
+            BigDecimal factor = BigDecimal.ONE.subtract(pct.movePointLeft(2)); // 1 - pct/100
+            unit = unit.multiply(factor).setScale(0, RoundingMode.HALF_UP);
+        }
+        return unit;
+    }
+
+    /** Effective per-user/month rate across the given plans (for the ledger). */
+    public BigDecimal unitPriceInr(List<ModulePlanDto> plans, BillingCycle cycle) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (ModulePlanDto p : plans) sum = sum.add(effectiveMonthlyUnit(p, cycle));
+        return sum;
+    }
+
+    /**
+     * Total rupees charged for the given AVAILABLE plans, seat count and billing
+     * cycle (server-authoritative). PER_SEAT plans bill unit * seats; FLAT plans
+     * bill the unit once; the whole line is multiplied by the months in the
+     * cycle (1 monthly, 12 annual). Seats are clamped to at least 1.
+     */
+    public BigDecimal totalPriceInr(List<ModulePlanDto> plans, int seats, BillingCycle cycle) {
+        BillingCycle c = cycle == null ? BillingCycle.MONTHLY : cycle;
         int s = Math.max(1, seats);
+        BigDecimal months = BigDecimal.valueOf(c.months());
         BigDecimal total = BigDecimal.ZERO;
         for (ModulePlanDto p : plans) {
-            BigDecimal unit = p.priceInr() == null ? BigDecimal.ZERO : p.priceInr();
+            BigDecimal unit = effectiveMonthlyUnit(p, c);
             BigDecimal line = "FLAT".equalsIgnoreCase(p.priceModel())
                     ? unit
                     : unit.multiply(BigDecimal.valueOf(s));
-            total = total.add(line);
+            total = total.add(line.multiply(months));
         }
         return total;
+    }
+
+    /** Backwards-compatible monthly total. */
+    public BigDecimal totalPriceInr(List<ModulePlanDto> plans, int seats) {
+        return totalPriceInr(plans, seats, BillingCycle.MONTHLY);
     }
 
     /** Union of functional module_catalog keys unlocked by the given plans. */
     public List<String> expandModules(List<ModulePlanDto> plans) {
         Set<String> mods = new LinkedHashSet<>();
         for (ModulePlanDto p : plans) mods.addAll(p.includedModules());
+        return new ArrayList<>(mods);
+    }
+
+    /**
+     * Same as {@link #expandModules} but from raw plan keys and WITHOUT the
+     * AVAILABLE check — used when activating a subscription from an already-paid
+     * order, where a plan going launching-soon later must not break activation.
+     */
+    public List<String> expandModulesLenient(List<String> planKeys) {
+        List<ModulePlanDto> all = listPlans();
+        Set<String> mods = new LinkedHashSet<>();
+        if (planKeys != null) {
+            for (String k : planKeys) {
+                if (k == null) continue;
+                all.stream().filter(p -> p.key().equalsIgnoreCase(k.trim())).findFirst()
+                        .ifPresent(p -> mods.addAll(p.includedModules()));
+            }
+        }
         return new ArrayList<>(mods);
     }
 

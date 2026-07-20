@@ -42,6 +42,8 @@ export interface CreateOrderResult {
   orderId: string;
   amountInr: number;
   seats: number;
+  billingCycle: string;   // MONTHLY | ANNUAL (echoed back by the server)
+  periodMonths: number;   // 1 monthly, 12 annual
   currency: string;
   keyId: string;
 }
@@ -49,6 +51,7 @@ export interface CreateOrderResult {
 export async function createPaymentOrder(input: {
   planKeys: string[];
   seats: number;
+  billingCycle?: 'monthly' | 'annual';
   subdomain?: string;
   email?: string;
 }): Promise<CreateOrderResult> {

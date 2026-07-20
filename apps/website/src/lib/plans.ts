@@ -16,6 +16,36 @@ export interface ModulePlan {
   sortOrder: number;
   features: string[];
   includedModules: string[];
+  annualDiscountPct: number; // % off the per-user price when billed annually (DB-driven)
+}
+
+/** Billing cycle used by the pricing page + checkout. */
+export type BillingCycle = 'monthly' | 'annual';
+
+/**
+ * Effective per-user/month price for a cycle. Annual applies the plan's
+ * DB-driven discount (no hardcoded percentage) and rounds to the whole rupee,
+ * matching the server (ModulePlanService.effectiveMonthlyUnit).
+ */
+export function effectiveUnit(plan: ModulePlan, cycle: BillingCycle): number {
+  if (cycle === 'annual') {
+    return Math.round(plan.priceInr * (1 - (plan.annualDiscountPct ?? 0) / 100));
+  }
+  return plan.priceInr;
+}
+
+/** Total charged for a cycle: per-user * seats * months (1 monthly, 12 annual). */
+export function computeCycleTotal(
+  plans: ModulePlan[],
+  selectedKeys: string[],
+  seats: number,
+  cycle: BillingCycle,
+): number {
+  const s = Math.max(1, seats || 1);
+  const months = cycle === 'annual' ? 12 : 1;
+  return plans
+    .filter((p) => selectedKeys.includes(p.key) && isPurchasable(p))
+    .reduce((sum, p) => sum + (p.priceModel === 'FLAT' ? effectiveUnit(p, cycle) : effectiveUnit(p, cycle) * s) * months, 0);
 }
 
 async function fetchModulePlans(): Promise<ModulePlan[]> {
