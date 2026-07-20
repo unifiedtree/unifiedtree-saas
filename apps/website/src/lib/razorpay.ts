@@ -63,6 +63,13 @@ export async function createPaymentOrder(input: {
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
+    // Transient gateway outage (Razorpay 5xx surfaced by us as 502/504) — a
+    // retry usually succeeds, so say so instead of a scary raw message. 503
+    // keeps its backend message so the local "gateway not configured" free
+    // fallback still triggers.
+    if (res.status === 502 || res.status === 504) {
+      throw new Error('The payment gateway is busy right now. Please try again in a moment.');
+    }
     throw new Error(data?.message || data?.error || `Could not start payment (${res.status})`);
   }
   return data as CreateOrderResult;

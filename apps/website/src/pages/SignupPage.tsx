@@ -338,6 +338,11 @@ export function SignupPage() {
                 <p className="text-xs text-text-secondary font-body mb-6">
                   By continuing you accept our <a href="#" className="text-primary font-semibold">Subscription Agreement</a> and <a href="#" className="text-primary font-semibold">Privacy Policy</a>. Payments are processed securely by Razorpay.
                 </p>
+                {error && (
+                  <div className="mb-5 mx-auto max-w-md text-sm text-danger font-body font-semibold flex items-center justify-center gap-2 bg-danger/5 border border-danger/20 rounded-xl px-4 py-3">
+                    <span className="w-1.5 h-1.5 rounded-full bg-danger flex-shrink-0" /> {error}
+                  </div>
+                )}
                 <button type="submit" disabled={loading} className="px-16 py-4 bg-primary text-white text-base font-body font-semibold rounded-xl hover:bg-primary-dark transition-all disabled:opacity-70 flex items-center justify-center gap-2.5 mx-auto min-w-[280px] shadow-teal active:scale-[0.99]">
                   {loading ? <Loader2 size={20} className="animate-spin" /> : priceLabel}
                 </button>
