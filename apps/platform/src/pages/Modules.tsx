@@ -1,9 +1,13 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
-import { ArrowRight, Lock, Plus, Search, Sparkles, Check, ExternalLink } from 'lucide-react'
+import {
+  ArrowRight, Lock, Plus, Search, Sparkles, Check, ExternalLink,
+  LogOut, UserCircle2, Users, ShieldAlert, FileText, ChevronUp, CreditCard, Settings,
+} from 'lucide-react'
 import { APPS, ADMIN_APP, type AppDef } from '@/layouts/appConfig'
 
 type Status = 'active' | 'coming-soon' | 'locked'
@@ -23,8 +27,21 @@ export const Modules: React.FC = () => {
   const permissions   = useSdkStore(s => s.permissions)
   const roles: string[] = user?.roles ?? []
   const isAdmin = roles.some(r => ADMIN_ROLES.includes(r)) || permissions.has('*')
+  const isSuperAdmin = roles.includes('SUPER_ADMIN') || permissions.has('*')
+  const logout = useSdkStore(s => s.logout)
 
   const [query, setQuery] = useState('')
+
+  // Bottom-left settings launcher (slides up)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!settingsOpen) return
+    const onClick = (e: MouseEvent) => { if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) setSettingsOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSettingsOpen(false) }
+    document.addEventListener('mousedown', onClick); document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey) }
+  }, [settingsOpen])
 
   const openEditWorkspace = (moduleKey?: string) => {
     const websiteUrl = import.meta.env.VITE_WEBSITE_URL || 'https://unifiedtree.com'
@@ -172,6 +189,69 @@ export const Modules: React.FC = () => {
             )
           })}
         </div>
+      </div>
+
+      {/* ── Bottom-left Settings launcher (slides up) ───────────────────────── */}
+      <div ref={settingsRef} className="fixed bottom-6 left-6 z-40">
+        <AnimatePresence>
+          {settingsOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.96 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              style={{ transformOrigin: 'bottom left' }}
+              className="absolute bottom-full left-0 mb-3 w-64 overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-xl"
+            >
+              <div className="border-b border-[var(--border-subtle)] px-3.5 py-3">
+                <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{firstName}</p>
+                <p className="truncate text-xs text-[var(--text-tertiary)]">{user?.email}</p>
+              </div>
+              <div className="p-1.5">
+                {[
+                  { label: 'My Profile',          icon: UserCircle2,  show: true,         onClick: () => navigate('/settings') },
+                  { label: 'Workspace Settings',  icon: Settings,     show: isAdmin,      onClick: () => navigate('/settings') },
+                  { label: 'Billing & Plan',      icon: CreditCard,   show: isAdmin,      onClick: () => navigate('/settings/billing') },
+                  { label: 'Users & Access',      icon: Users,        show: isSuperAdmin, onClick: () => navigate('/users') },
+                  { label: 'Roles & Permissions', icon: ShieldAlert,  show: isSuperAdmin, onClick: () => navigate('/roles') },
+                  { label: 'Audit Logs',          icon: FileText,     show: isSuperAdmin, onClick: () => navigate('/audit-logs') },
+                  { label: 'Manage Plan',         icon: ExternalLink, show: isAdmin,      onClick: () => openEditWorkspace() },
+                ].filter(i => i.show).map(item => (
+                  <button
+                    key={item.label}
+                    onClick={() => { item.onClick(); setSettingsOpen(false) }}
+                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+                  >
+                    <item.icon size={16} className="text-[var(--text-tertiary)]" />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="border-t border-[var(--border-subtle)] p-1.5">
+                <button
+                  onClick={() => { setSettingsOpen(false); logout() }}
+                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--status-error-fg)] transition-colors hover:bg-[var(--status-error-bg)]"
+                >
+                  <LogOut size={16} /> Sign out
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          onClick={() => setSettingsOpen(v => !v)}
+          className={clsx(
+            'flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold shadow-lg transition-all duration-200',
+            settingsOpen
+              ? 'border-[var(--accent-border)] bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]'
+              : 'border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--border-strong)] hover:shadow-xl',
+          )}
+        >
+          <Settings size={17} className={clsx('transition-transform duration-300', settingsOpen && 'rotate-90')} />
+          Settings
+          <ChevronUp size={15} className={clsx('text-[var(--text-tertiary)] transition-transform duration-200', settingsOpen && 'rotate-180')} />
+        </button>
       </div>
     </div>
   )

@@ -141,11 +141,21 @@ export function LoginPage() {
     <div className="min-h-screen flex flex-col bg-bg select-none">
       <Navbar />
       
-      <main className="flex-1 flex flex-col items-center justify-center pt-32 pb-20 hero-gradient relative overflow-hidden">
-        {/* Glow orbs & pattern */}
-        <div className="absolute top-10 -left-20 w-96 h-96 bg-accent rounded-full blur-[130px] opacity-20 pointer-events-none animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute bottom-10 -right-20 w-96 h-96 bg-primary-light rounded-full blur-[130px] opacity-15 pointer-events-none animate-pulse" style={{ animationDuration: '10s' }} />
-        <div className="absolute inset-0 opacity-10 pattern-dots" />
+      <main className="flex-1 flex flex-col items-center justify-center pt-32 pb-20 relative overflow-hidden bg-[#fafcfb]">
+        {/* Soft Ambient Mesh Gradients */}
+        <div className="absolute top-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
+        
+        {/* Subtle Dark Dot Pattern */}
+        <div 
+          className="absolute inset-0 pointer-events-none opacity-[0.04]"
+          style={{ 
+            backgroundImage: 'radial-gradient(#0f172a 1.5px, transparent 1.5px)',
+            backgroundSize: '32px 32px',
+          }} 
+        />
+        {/* Subtle dark gradient overlay */}
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-transparent via-transparent to-slate-900/[0.04]" />
 
         <motion.div
           initial={{ opacity: 0, y: 15 }}
@@ -155,7 +165,7 @@ export function LoginPage() {
         >
           {/* Back Button */}
           <div className="mb-6">
-            <Link to="/" className="inline-flex items-center gap-2 text-white/70 hover:text-white transition-colors font-body font-medium text-sm group">
+            <Link to="/" className="inline-flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors font-body font-medium text-sm group">
               <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
               Back to Home
             </Link>
