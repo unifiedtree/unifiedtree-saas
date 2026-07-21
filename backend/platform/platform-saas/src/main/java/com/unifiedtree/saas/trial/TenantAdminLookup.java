@@ -42,20 +42,23 @@ public class TenantAdminLookup {
     public List<AdminUser> findAdminUsers(UUID tenantId) {
         if (tenantId == null) return List.of();
         try {
+            // No display_name column on auth.user_credentials — the employee
+            // table owns names. Email address alone is fine for the mail-to
+            // header; the toName field in EmailMessage is nullable.
             return jdbc.query("""
-                    SELECT DISTINCT uc.employee_id, uc.email, uc.display_name
+                    SELECT DISTINCT uc.employee_id, uc.email
                       FROM rbac.user_roles ur
                       JOIN auth.user_credentials uc ON uc.id = ur.user_id
                      WHERE ur.tenant_id = ?
                        AND ur.role_id IN (?, ?)
                        AND uc.employee_id IS NOT NULL
                        AND uc.is_active = TRUE
-                     ORDER BY uc.display_name NULLS LAST
+                     ORDER BY uc.email
                     """,
                     (rs, n) -> new AdminUser(
                             rs.getObject("employee_id", UUID.class),
                             rs.getString("email"),
-                            rs.getString("display_name")),
+                            null),
                     tenantId, SUPER_ADMIN_ROLE_ID, OWNER_ROLE_ID);
         } catch (Exception ex) {
             log.warn("admin lookup failed for tenant={}: {}", tenantId, ex.getMessage());
