@@ -154,222 +154,135 @@ export function EditWorkspacePage() {
   const saving = pending.size > 0
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col font-body relative">
+    <div className="flex min-h-screen flex-col bg-bg font-body">
       <Navbar />
 
-      <div className="flex-1 flex flex-col items-center pt-32 pb-24 px-4 sm:px-6 relative overflow-hidden">
-        {/* Decorative background */}
-        <div className="absolute -top-48 -left-48 w-96 h-96 bg-primary-light rounded-full blur-[140px] opacity-60 pointer-events-none" />
-        <div className="absolute top-1/2 -right-48 w-96 h-96 bg-accent/10 rounded-full blur-[140px] opacity-40 pointer-events-none" />
-        <div className="absolute inset-0 opacity-[0.03] pattern-dots pointer-events-none" />
+      <main className="flex-1 px-4 pb-20 pt-28 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-6xl">
+          {/* Compact header */}
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="mb-8">
+            <span className="font-mono text-xs font-medium uppercase tracking-[0.08em] text-primary">Manage your workspace</span>
+            <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-text-primary sm:text-[38px]">Manage your modules</h1>
+            <p className="mt-1.5 text-text-secondary">Switch modules on or off — changes apply instantly, no refresh needed.</p>
+          </motion.div>
 
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="mb-10 text-center relative z-10"
-        >
-          <div className="section-badge mb-5 inline-flex">Manage your workspace</div>
-          <h1 className="text-4xl sm:text-5xl font-heading font-extrabold text-text-primary tracking-tight mb-3">
-            Manage <span className="gradient-text">Your Modules</span>
-          </h1>
-          <p className="text-text-secondary font-body font-medium text-base max-w-xl mx-auto">
-            Switch modules on or off for your workspace. Changes apply instantly — no refresh needed.
-          </p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="w-full max-w-4xl space-y-6 relative z-10"
-        >
-          {/* Workspace identity card (read-only) */}
-          <div className="bg-white/80 backdrop-blur-md border border-border shadow-md rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-            <div className="flex flex-col text-left gap-1">
-              <span className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
-                <Globe size={13} /> Your Workspace
-              </span>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-text-primary font-heading font-extrabold text-lg select-all bg-primary/10 px-2.5 py-0.5 rounded-lg">
-                  {ws || 'unknown'}
-                </span>
-                <span className="text-text-secondary font-body font-semibold text-base">.unifiedtree.com</span>
-              </div>
+          {!ws && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-warning/25 bg-warning/5 p-4 text-sm font-semibold text-warning">
+              <AlertTriangle size={16} className="shrink-0" />
+              We couldn't tell which workspace to manage. Open this page from your workspace's “Manage modules” link.
             </div>
-            {email && (
-              <div className="flex flex-col text-left sm:text-right gap-1">
-                <span className="text-xs font-bold text-text-secondary uppercase tracking-wider flex items-center gap-1.5 sm:justify-end">
-                  <Mail size={13} /> Admin
-                </span>
-                <span className="text-text-primary font-body font-semibold text-sm break-all">{email}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Module management */}
-          <div className="bg-surface rounded-3xl border border-border shadow-xl p-6 sm:p-9 relative">
-            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary to-accent rounded-t-3xl" />
-
-            {!ws && (
-              <div className="bg-warning/5 border border-warning/20 text-warning p-4 rounded-xl mb-6 text-sm font-body font-semibold flex items-center gap-3">
-                <AlertTriangle size={16} className="flex-shrink-0" />
-                We couldn't tell which workspace to manage. Open this page from your workspace's
-                “Manage modules” link to switch modules on or off.
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-danger/5 border border-danger/20 text-danger p-4 rounded-xl mb-6 text-sm font-body font-semibold flex items-center gap-3">
-                <span className="w-2 h-2 rounded-full bg-danger" />
-                {error}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="font-heading font-bold text-xl text-text-primary">Your modules</h2>
-              {statusLoading ? (
-                <span className="text-xs text-text-secondary font-body flex items-center gap-1.5">
-                  <Loader2 size={13} className="animate-spin" /> Loading your modules…
-                </span>
-              ) : saving ? (
-                <span className="text-xs text-primary font-body font-semibold flex items-center gap-1.5">
-                  <Loader2 size={13} className="animate-spin" /> Saving…
-                </span>
-              ) : (
-                <span className="text-xs text-text-secondary font-body flex items-center gap-1.5">
-                  <Check size={13} className="text-success" strokeWidth={3} /> Changes save automatically
-                </span>
-              )}
+          )}
+          {error && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-danger/25 bg-danger/5 p-4 text-sm font-semibold text-danger">
+              <span className="h-2 w-2 rounded-full bg-danger" /> {error}
             </div>
+          )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {modules.map((mod) => {
-                const Icon = ICON_MAP[mod.icon] || Package
-                const isActive = activeSet.has(mod.id)
-                const isPending = pending.has(mod.id)
-                const isBuilt = BUILT_MODULES.has(mod.id)
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px] lg:items-start">
+            {/* LEFT: module grid */}
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-md font-semibold text-text-primary">Your modules</h2>
+                {statusLoading ? (
+                  <span className="flex items-center gap-1.5 text-xs text-text-secondary"><Loader2 size={13} className="animate-spin" /> Loading…</span>
+                ) : saving ? (
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-primary"><Loader2 size={13} className="animate-spin" /> Saving…</span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-xs text-text-secondary"><Check size={13} className="text-success" strokeWidth={3} /> Saved automatically</span>
+                )}
+              </div>
 
-                return (
-                  <button
-                    type="button"
-                    key={mod.id}
-                    onClick={() => toggleModule(mod.id)}
-                    disabled={isPending || !ws}
-                    aria-pressed={isActive}
-                    title={isActive ? 'Click to remove this module' : 'Click to add this module'}
-                    className={`relative flex items-start gap-3.5 p-4 rounded-2xl border-2 text-left transition-all duration-200 ${
-                      isActive
-                        ? 'border-success bg-success/5 shadow-sm'
-                        : 'border-border hover:border-primary/40 hover:bg-bg/60'
-                    } ${
-                      isPending
-                        ? 'opacity-70 cursor-wait'
-                        : !ws
-                          ? 'opacity-60 cursor-not-allowed'
-                          : 'cursor-pointer'
-                    }`}
-                  >
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{
-                        backgroundColor: isActive ? '#DCFCE7' : `${mod.color}14`,
-                        color: isActive ? '#3A7D22' : mod.color,
-                      }}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {modules.map((mod) => {
+                  const Icon = ICON_MAP[mod.icon] || Package
+                  const isActive = activeSet.has(mod.id)
+                  const isPending = pending.has(mod.id)
+                  const isBuilt = BUILT_MODULES.has(mod.id)
+
+                  return (
+                    <button
+                      type="button"
+                      key={mod.id}
+                      onClick={() => toggleModule(mod.id)}
+                      disabled={isPending || !ws}
+                      aria-pressed={isActive}
+                      title={isActive ? 'Click to remove this module' : 'Click to add this module'}
+                      className={`relative flex items-start gap-3 rounded-2xl border p-3.5 text-left transition-all duration-200 ${
+                        isActive ? 'border-primary/40 bg-primary-light shadow-sm' : 'border-border bg-surface hover:border-primary/30 hover:shadow-card'
+                      } ${isPending ? 'cursor-wait opacity-70' : !ws ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                     >
-                      <Icon size={18} />
-                    </div>
-
-                    <div className="flex-1 min-w-0 pr-7">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3 className="font-heading font-bold text-sm text-text-primary truncate">{mod.name}</h3>
-                        {isBuilt ? (
-                          <span className="text-[10px] font-body font-bold px-1.5 py-0.5 rounded bg-success/10 text-success uppercase tracking-wide">
-                            Live now
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-body font-bold px-1.5 py-0.5 rounded bg-warning/10 text-warning uppercase tracking-wide">
-                            Coming soon
-                          </span>
-                        )}
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                        style={{ backgroundColor: isActive ? '#DCFCE7' : `${mod.color}14`, color: isActive ? '#3A7D22' : mod.color }}>
+                        <Icon size={18} />
                       </div>
-                      <p
-                        className="text-xs text-text-secondary leading-snug overflow-hidden"
-                        style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
-                      >
-                        {mod.description}
-                      </p>
-                      <span
-                        className={`inline-flex items-center gap-1 text-[11px] font-body font-bold mt-1.5 ${
-                          isActive ? 'text-success' : 'text-text-tertiary'
-                        }`}
-                      >
-                        {isActive ? (
-                          <>
-                            <Check size={11} strokeWidth={3} /> Active · tap to remove
-                          </>
-                        ) : (
-                          <>
-                            <Plus size={11} strokeWidth={3} /> Tap to add
-                          </>
-                        )}
-                      </span>
-                    </div>
 
-                    {/* Toggle indicator */}
-                    <div
-                      className={`absolute top-4 right-4 w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
-                        isActive
-                          ? 'bg-success border-success text-white'
-                          : 'border-slate-300 bg-white text-slate-400'
-                      }`}
-                    >
-                      {isPending ? (
-                        <Loader2 size={12} className="animate-spin" />
-                      ) : isActive ? (
-                        <Check size={13} strokeWidth={3} />
+                      <div className="min-w-0 flex-1 pr-6">
+                        <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+                          <h3 className="truncate text-sm font-semibold text-text-primary">{mod.name}</h3>
+                          {isBuilt ? (
+                            <span className="rounded bg-success/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-success">Live</span>
+                          ) : (
+                            <span className="rounded bg-warning/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-warning">Soon</span>
+                          )}
+                        </div>
+                        <p className="line-clamp-2 text-xs leading-snug text-text-secondary">{mod.description}</p>
+                        <span className={`mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold ${isActive ? 'text-success' : 'text-text-tertiary'}`}>
+                          {isActive ? <><Check size={11} strokeWidth={3} /> Active · tap to remove</> : <><Plus size={11} strokeWidth={3} /> Tap to add</>}
+                        </span>
+                      </div>
+
+                      <div className={`absolute right-3.5 top-3.5 flex h-6 w-6 items-center justify-center rounded-full border transition-colors ${
+                        isActive ? 'border-success bg-success text-white' : 'border-border bg-surface text-text-tertiary'
+                      }`}>
+                        {isPending ? <Loader2 size={12} className="animate-spin" /> : isActive ? <Check size={13} strokeWidth={3} /> : <Plus size={13} strokeWidth={3} />}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* RIGHT: sticky workspace panel */}
+            <aside className="lg:sticky lg:top-24">
+              <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
+                <div className="bg-primary px-5 py-4 text-white">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-100/80"><Globe size={12} /> Your workspace</p>
+                  <p className="mt-1 truncate font-bold text-lime">{ws || 'unknown'}<span className="font-normal text-emerald-100/70">.unifiedtree.com</span></p>
+                </div>
+                <div className="space-y-4 p-5">
+                  {email && (
+                    <div>
+                      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary"><Mail size={12} /> Admin</p>
+                      <p className="mt-0.5 break-all text-sm font-medium text-text-primary">{email}</p>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl bg-bg p-3.5">
+                    <div className="flex items-end justify-between">
+                      <span className="text-xs text-text-secondary">Active modules</span>
+                      <span className="text-lg font-bold text-text-primary">{statusLoading ? '—' : activeCount}<span className="text-xs font-normal text-text-secondary"> / {modules.length}</span></span>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border">
+                      <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${statusLoading ? 0 : (activeCount / modules.length) * 100}%` }} />
+                    </div>
+                    <div className="mt-2.5 text-xs font-semibold">
+                      {saving ? (
+                        <span className="flex items-center gap-1.5 text-primary"><Loader2 size={13} className="animate-spin" /> Saving changes…</span>
                       ) : (
-                        <Plus size={13} strokeWidth={3} />
+                        <span className="flex items-center gap-1.5 text-success"><Check size={13} strokeWidth={3} /> Up to date</span>
                       )}
                     </div>
-                  </button>
-                )
-              })}
-            </div>
+                  </div>
 
-            {/* How-it-works note */}
-            <div className="mt-6 flex items-start gap-2.5 bg-bg border border-border rounded-xl p-3.5">
-              <Check size={16} className="flex-shrink-0 mt-0.5 text-success" strokeWidth={3} />
-              <p className="text-xs text-text-secondary font-body leading-relaxed">
-                Tap any module to switch it on or off. Active modules show a green check and a highlighted
-                border — changes apply to your workspace instantly, so you can add or remove modules as
-                many times as you like without refreshing.
-              </p>
-            </div>
-
-            {/* Status summary */}
-            <div className="mt-7 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-border">
-              <span className="text-sm font-body font-semibold text-text-secondary">
-                {statusLoading
-                  ? 'Checking your modules…'
-                  : `${activeCount} of ${modules.length} ${activeCount === 1 ? 'module' : 'modules'} active`}
-              </span>
-              <span className="text-sm font-body font-semibold flex items-center gap-2">
-                {saving ? (
-                  <span className="text-primary flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin" /> Saving changes…
-                  </span>
-                ) : (
-                  <span className="text-success flex items-center gap-2">
-                    <Check size={16} strokeWidth={3} /> Up to date
-                  </span>
-                )}
-              </span>
-            </div>
+                  <p className="text-xs leading-relaxed text-text-tertiary">
+                    Tap any module to switch it on or off. Changes apply to your workspace instantly — add or remove as often as you like, no refresh needed.
+                  </p>
+                </div>
+              </div>
+            </aside>
           </div>
-        </motion.div>
-      </div>
+        </div>
+      </main>
 
       <Footer />
     </div>

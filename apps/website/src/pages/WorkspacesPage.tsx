@@ -48,11 +48,11 @@ export function WorkspacesPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <h1 className="text-3xl font-heading font-extrabold text-text-primary tracking-tight">
-              Your Workspaces
+            <h1 className="text-3xl font-bold tracking-tighter text-text-primary sm:text-[40px] sm:leading-none">
+              Your workspaces
             </h1>
-            <p className="text-text-secondary mt-1 text-sm sm:text-base">
-              Select a workspace to enter or create a new one to get started.
+            <p className="mt-2 text-sm text-text-secondary sm:text-base">
+              Select a workspace to enter, or create a new one to get started.
             </p>
           </motion.div>
 
@@ -61,7 +61,7 @@ export function WorkspacesPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4 }}
             onClick={() => navigate('/pricing')}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white hover:bg-primary-dark transition-all font-semibold text-sm shadow-sm hover:shadow shadow-primary/20"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-lime shadow-sm transition-all hover:bg-primary-dark hover:shadow-teal-lg"
           >
             <Plus size={18} />
             Create new workspace
@@ -87,7 +87,7 @@ export function WorkspacesPage() {
             <p className="text-text-secondary mb-8 text-lg max-w-md mx-auto">Create your first workspace to start managing your organization's HR and operations.</p>
             <button 
               onClick={() => navigate('/pricing')}
-              className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-primary text-white hover:bg-primary-dark transition-all font-semibold shadow-lg shadow-primary/25 hover:-translate-y-0.5"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-8 py-4 font-semibold text-lime shadow-lg transition-all hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-teal-lg"
             >
               <Plus size={20} />
               Create your first Workspace
@@ -155,7 +155,7 @@ export function WorkspacesPage() {
                 <button
                   onClick={() => handleEnterWorkspace(ws)}
                   disabled={enteringId === ws.tenantId}
-                  className="w-full flex items-center justify-between px-5 py-3.5 rounded-xl bg-surface-2 hover:bg-primary hover:text-white text-text-primary border border-border hover:border-transparent transition-all font-semibold group/btn disabled:opacity-50 disabled:hover:bg-surface-2 disabled:hover:text-text-primary disabled:hover:border-border mt-auto"
+                  className="mt-auto flex w-full items-center justify-between rounded-xl border border-border bg-surface-2 px-5 py-3.5 font-semibold text-text-primary transition-all hover:border-transparent hover:bg-primary hover:text-lime group/btn disabled:opacity-50 disabled:hover:bg-surface-2 disabled:hover:text-text-primary disabled:hover:border-border"
                 >
                   {enteringId === ws.tenantId ? (
                     <div className="flex items-center justify-center w-full gap-2">
@@ -165,7 +165,7 @@ export function WorkspacesPage() {
                   ) : (
                     <>
                       <span>Enter Workspace</span>
-                      <ArrowRight size={18} className="text-text-tertiary group-hover/btn:text-white group-hover/btn:translate-x-1 transition-all" />
+                      <ArrowRight size={18} className="text-text-tertiary transition-all group-hover/btn:translate-x-1 group-hover/btn:text-lime" />
                     </>
                   )}
                 </button>

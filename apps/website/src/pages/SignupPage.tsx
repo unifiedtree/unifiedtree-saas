@@ -226,50 +226,19 @@ export function SignupPage() {
           </p>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }} className="w-full max-w-4xl space-y-6">
-          {/* Selected plan + live price banner */}
-          <div className="bg-white/80 backdrop-blur-md border border-border shadow-md rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4 relative z-10">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center text-primary">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                </svg>
-              </div>
-              <div className="text-left">
-                <span className="font-heading font-bold text-text-primary text-base block">{selectedPlanNames || 'No modules selected'}</span>
-                <span className="text-xs text-text-secondary font-body font-medium">
-                  {chargeTotal > 0 ? `₹${chargeTotal.toLocaleString('en-IN')}/${billingCycle === 'annual' ? 'yr' : 'mo'} · ${seats} user(s) · ₹${cycleUnit}/user/mo` : 'Select an available module'}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5">
-              {/* Monthly / Annual — annual applies the DB-driven discount */}
-              <div className="flex bg-bg rounded-xl p-0.5 border border-border">
-                {(['monthly', 'annual'] as const).map((c) => (
-                  <button
-                    key={c} type="button" onClick={() => setBillingCycle(c)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-body font-bold capitalize transition-all ${billingCycle === c ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-primary'}`}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-              <button type="button" onClick={() => setIsModulesDrawerOpen(true)} className="px-5 py-2.5 rounded-xl bg-bg border border-border hover:border-primary/30 hover:bg-surface font-body font-bold text-xs text-text-primary transition-all shadow-sm active:scale-95">
-                Change modules
-              </button>
-            </div>
-          </div>
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }} className="w-full max-w-5xl">
+          {/* Checkout layout: fields on the left, sticky order summary on the right.
+              The <form> wraps BOTH columns so the submit button (in the summary) works. */}
+          <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
+            {/* ── LEFT: form fields ─────────────────────────────────────────── */}
+            <div className="rounded-3xl border border-border bg-surface p-6 shadow-card sm:p-8">
+              {error && (
+                <div className="mb-6 flex items-center gap-3 rounded-xl border border-danger/20 bg-danger/5 p-4 text-sm font-semibold text-danger">
+                  <span className="h-2 w-2 rounded-full bg-danger" />{error}
+                </div>
+              )}
 
-          <form onSubmit={handleSubmit(onSubmit)} className="bg-surface rounded-3xl border border-border shadow-xl p-8 sm:p-12 relative z-10">
-            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-primary to-accent rounded-t-3xl" />
-            {error && (
-              <div className="bg-danger/5 border border-danger/20 text-danger p-4 rounded-xl mb-8 text-sm font-body font-semibold flex items-center gap-3">
-                <span className="w-2 h-2 rounded-full bg-danger" />{error}
-              </div>
-            )}
-
-            <div className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <Field label="First and Last Name" icon={<User size={18} />} error={errors.adminName?.message} className="md:col-span-2">
                   <input {...register('adminName')} placeholder="John Doe" className={inputCls(!!errors.adminName)} />
                 </Field>
@@ -343,32 +312,60 @@ export function SignupPage() {
                   <select {...register('language')} className={selectCls}><option>English</option><option>Hindi</option></select>
                 </Field>
 
-                {/* Company Size removed — Number of Users covers team size. */}
-
                 <Field label="Primary Interest" icon={<Target size={18} />}>
                   <select {...register('primaryInterest')} className={selectCls}>
                     <option>Use it in my company</option><option>Offer it to my clients</option><option>Other</option>
                   </select>
                 </Field>
               </div>
-
-              <div className="pt-10 border-t border-border mt-8 text-center">
-                <p className="text-xs text-text-secondary font-body mb-6">
-                  By continuing you accept our <a href="#" className="text-primary font-semibold">Subscription Agreement</a> and <a href="#" className="text-primary font-semibold">Privacy Policy</a>. Payments are processed securely by Razorpay.
-                </p>
-                {error && (
-                  <div className="mb-5 mx-auto max-w-md text-sm text-danger font-body font-semibold flex items-center justify-center gap-2 bg-danger/5 border border-danger/20 rounded-xl px-4 py-3">
-                    <span className="w-1.5 h-1.5 rounded-full bg-danger flex-shrink-0" /> {error}
-                  </div>
-                )}
-                <button type="submit" disabled={loading} className="px-16 py-4 bg-primary text-white text-base font-body font-semibold rounded-xl hover:bg-primary-dark transition-all disabled:opacity-70 flex items-center justify-center gap-2.5 mx-auto min-w-[280px] shadow-teal active:scale-[0.99]">
-                  {loading ? <Loader2 size={20} className="animate-spin" /> : priceLabel}
-                </button>
-                <p className="text-center text-sm text-text-secondary font-body mt-6">
-                  Already have an account? <Link to="/login" className="text-primary font-semibold hover:underline">Sign In</Link>
-                </p>
-              </div>
             </div>
+
+            {/* ── RIGHT: sticky order summary + pay ─────────────────────────── */}
+            <aside className="lg:sticky lg:top-24">
+              <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
+                <div className="bg-primary px-5 py-4 text-white">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-100/80">Your plan</p>
+                  <p className="mt-0.5 truncate font-bold text-lime">{selectedPlanNames || 'No modules selected'}</p>
+                </div>
+
+                <div className="space-y-4 p-5">
+                  {/* Monthly / Annual — annual applies the DB-driven discount */}
+                  <div className="flex rounded-xl border border-border bg-bg p-0.5">
+                    {(['monthly', 'annual'] as const).map((c) => (
+                      <button key={c} type="button" onClick={() => setBillingCycle(c)}
+                        className={`flex-1 rounded-lg py-1.5 text-xs font-bold capitalize transition-all ${billingCycle === c ? 'bg-primary text-lime shadow-sm' : 'text-text-secondary hover:text-primary'}`}>
+                        {c}{c === 'annual' && <span className="ml-1 text-[9px] text-emerald-500">save</span>}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Price breakdown */}
+                  <div className="space-y-1.5 text-sm">
+                    <div className="flex justify-between text-text-secondary"><span>Per user / mo</span><span className="font-semibold text-text-primary">₹{cycleUnit.toLocaleString('en-IN')}</span></div>
+                    <div className="flex justify-between text-text-secondary"><span>Users</span><span className="font-semibold text-text-primary">{seats}</span></div>
+                    <div className="mt-2 flex items-end justify-between border-t border-border pt-3">
+                      <span className="text-text-secondary">Total</span>
+                      <span className="text-xl font-bold text-text-primary">₹{chargeTotal.toLocaleString('en-IN')}<span className="text-xs font-normal text-text-secondary">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span></span>
+                    </div>
+                  </div>
+
+                  <button type="button" onClick={() => setIsModulesDrawerOpen(true)} className="w-full rounded-xl border border-border bg-bg py-2.5 text-xs font-bold text-text-primary transition-all hover:border-primary/30 hover:bg-surface active:scale-[0.98]">
+                    Change modules
+                  </button>
+
+                  <button type="submit" disabled={loading} className="btn-shimmer flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold text-lime shadow-sm transition-all active:scale-[0.99] disabled:opacity-70">
+                    {loading ? <Loader2 size={18} className="animate-spin" /> : priceLabel}
+                  </button>
+
+                  <p className="text-center text-[11px] leading-relaxed text-text-tertiary">
+                    By continuing you accept our <a href="#" className="font-semibold text-primary">Subscription Agreement</a> &amp; <a href="#" className="font-semibold text-primary">Privacy Policy</a>. Secured by Razorpay.
+                  </p>
+                  <p className="text-center text-xs text-text-secondary">
+                    Already have an account? <Link to="/login" className="font-semibold text-primary hover:underline">Sign in</Link>
+                  </p>
+                </div>
+              </div>
+            </aside>
           </form>
         </motion.div>
 

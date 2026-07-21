@@ -5,15 +5,32 @@ import {
   Users, MapPin, Banknote, BarChart2, Package, Target,
   ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart,
   ArrowRight, Lock, Sparkles,
+  Factory, Store, Calculator, BarChart3, Contact, FolderKanban, Boxes, Fingerprint,
 } from 'lucide-react'
 import { useModulePlans, type ModulePlan } from '../../lib/plans'
 
 /* ------------------------------------------------------------------ */
-/*  Icon map                                                          */
+/*  Icon map (fallback, keyed by the plan.icon string from backend)   */
 /* ------------------------------------------------------------------ */
 const iconMap: Record<string, React.ElementType> = {
   Users, MapPin, Banknote, BarChart2, Package, Target,
   ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart,
+}
+
+/* Per-module icons — more representative than the generic fallbacks.   */
+const keyIconMap: Record<string, React.ElementType> = {
+  hrms:          Users,
+  attendance:    Fingerprint,
+  payroll:       Banknote,
+  accounting:    Calculator,
+  inventory:     Boxes,
+  crm:           Contact,
+  purchase:      ShoppingCart,
+  sales:         TrendingUp,
+  projects:      FolderKanban,
+  manufacturing: Factory,
+  pos:           Store,
+  reports:       BarChart3,
 }
 
 /* ------------------------------------------------------------------ */
@@ -94,7 +111,7 @@ function ModuleTile({
   scattered: boolean
   hasToggled: boolean
 }) {
-  const Icon = iconMap[plan.icon ?? 'Users'] ?? Users
+  const Icon = keyIconMap[plan.key] ?? iconMap[plan.icon ?? 'Users'] ?? Users
   const available = plan.status === 'AVAILABLE'
   const color = plan.color || '#18280E'
   const competitor = competitorMap[plan.key]
@@ -302,8 +319,8 @@ export function ModulesOverview() {
             <Sparkles size={16} className={`transition-colors duration-300 ${scattered ? 'text-amber-500' : 'text-primary'}`} />
             <button
               onClick={handleToggle}
-              className={`toggle-switch ${!scattered ? 'active' : ''}`}
-              aria-label="Toggle unified view"
+              className={`toggle-switch ${scattered ? 'active' : ''}`}
+              aria-label="Toggle: imagine without UnifiedTree"
             />
             <span className="text-sm font-body text-text-secondary select-none">
               {scattered ? (
