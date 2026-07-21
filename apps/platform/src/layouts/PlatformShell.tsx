@@ -1,13 +1,14 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Users, Calendar, Clock, Building2, ClipboardList,
-  Settings, LogOut, Menu, X, ChevronRight, ChevronDown,
-  UserCircle2, ShieldAlert, FileBarChart2, FileText, Bell, Search, Hexagon,
+  Settings, LogOut, Menu, ChevronRight, ChevronDown,
+  UserCircle2, ShieldAlert, FileBarChart2, FileText, Bell, Search,
   TrendingUp, CreditCard, Package, ShoppingCart, HelpCircle, Briefcase,
-  UserCheck, Star, Receipt, DollarSign, Lock, MapPin, TreePine,
-  Database, Target, Wallet, Plug, Award,
+  UserCheck, Star, Receipt, DollarSign, Lock, MapPin,
+  Database, Target, Wallet, Plug, Award, Shield, AlertTriangle,
+  PanelLeftClose, PanelLeft, LayoutGrid, ArrowLeft, Command,
 } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
@@ -16,70 +17,30 @@ import { GlobalSearch } from '@/shared/components/GlobalSearch'
 
 const SIDEBAR_KEY = 'ut.sidebar.collapsed'
 
-// Priority order: used for landing redirect and role badge display
 const ROLE_PRIORITY = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER', 'EMPLOYEE'] as const
 type PlatformRole = typeof ROLE_PRIORITY[number]
-
 const ROLE_LABELS: Record<PlatformRole | string, string> = {
-  SUPER_ADMIN:  'Super Admin',
-  HR_MANAGER:   'HR Manager',
-  FINANCE_LEAD: 'Finance Lead',
-  DEPT_MANAGER: 'Dept Manager',
-  EMPLOYEE:     'Employee',
+  SUPER_ADMIN: 'Super Admin', HR_MANAGER: 'HR Manager', FINANCE_LEAD: 'Finance Lead',
+  DEPT_MANAGER: 'Dept Manager', EMPLOYEE: 'Employee',
 }
 
-interface NavChild {
-  label: string
-  path: string
-  icon: React.ReactNode
-  visibleForRoles?: string[]
-}
+interface NavChild { label: string; path: string; icon: React.ReactNode; visibleForRoles?: string[] }
+interface NavItemDef { key: string; label: string; icon: React.ReactNode; path?: string; module?: string; visibleForRoles?: string[]; children?: NavChild[] }
 
-interface NavItemDef {
-  key: string
-  label: string
-  icon: React.ReactNode
-  path?: string
-  module?: string
-  visibleForRoles?: string[]
-  children?: NavChild[]
-}
-
-// ─── Top-level nav (above modules) ────────────────────────────────────────────
+// ─── Top-level nav (the HRMS app's flat links) ────────────────────────────────
 const NAV_ITEMS: NavItemDef[] = [
-  {
-    key: 'dashboard',
-    label: 'Overview',
-    icon: <LayoutDashboard size={18} />,
-    path: '/dashboard',
-    visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'],
-  },
-  {
-    key: 'myworkspace',
-    label: 'My Workspace',
-    icon: <UserCircle2 size={18} />,
-    path: '/me',
-    visibleForRoles: ['EMPLOYEE'],
-  },
-  {
-    key: 'myteam',
-    label: 'My Team',
-    icon: <Users size={18} />,
-    path: '/team',
-    visibleForRoles: ['DEPT_MANAGER'],
-  },
+  { key: 'dashboard',   label: 'Overview',     icon: <LayoutDashboard size={18} />, path: '/dashboard', visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'] },
+  { key: 'myworkspace', label: 'My Workspace', icon: <UserCircle2 size={18} />,     path: '/me',        visibleForRoles: ['EMPLOYEE'] },
+  { key: 'myteam',      label: 'My Team',      icon: <Users size={18} />,           path: '/team',      visibleForRoles: ['DEPT_MANAGER'] },
 ]
 
-// Role sets for nav-link visibility. NOTE: the real security boundary is the
-// per-route RouteGuard + per-endpoint RBAC; this only tunes which links a role sees.
 const R_ADMIN     = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD']
 const R_ADMIN_MGR = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER']
 const R_HR        = ['SUPER_ADMIN', 'HR_MANAGER']
 const R_FIN       = ['SUPER_ADMIN', 'FINANCE_LEAD', 'HR_MANAGER']
 const R_ESS       = ['EMPLOYEE']
 
-// ─── Module items: the client's 13 HR nav groups (all under the hrms module),
-//     followed by the sellable modules (locked/upsell). ────────────────────────
+// ─── Module items: HRMS nav groups (module 'hrms') + the sellable modules. ─────
 const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'company', label: 'Company Profile', icon: <Building2 size={18} />, module: 'hrms',
@@ -191,10 +152,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     ],
   },
   {
-    key: 'crm',
-    label: 'CRM',
-    icon: <TrendingUp size={18} />,
-    module: 'crm',
+    key: 'crm', label: 'CRM', icon: <TrendingUp size={18} />, module: 'crm',
     children: [
       { label: 'Leads',     path: '/crm/leads',     icon: <Star size={15} /> },
       { label: 'Customers', path: '/crm/customers', icon: <Users size={15} /> },
@@ -202,10 +160,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     ],
   },
   {
-    key: 'accounts',
-    label: 'Accounts',
-    icon: <DollarSign size={18} />,
-    module: 'accounts',
+    key: 'accounts', label: 'Accounts', icon: <DollarSign size={18} />, module: 'accounts',
     children: [
       { label: 'Invoices', path: '/accounts/invoices', icon: <FileText size={15} /> },
       { label: 'Payments', path: '/accounts/payments', icon: <CreditCard size={15} /> },
@@ -214,10 +169,7 @@ const MODULE_ITEMS: NavItemDef[] = [
   },
   { key: 'payroll', label: 'Payroll', icon: <CreditCard size={18} />, path: '/payroll', module: 'payroll' },
   {
-    key: 'projects',
-    label: 'Projects',
-    icon: <Package size={18} />,
-    module: 'projects',
+    key: 'projects', label: 'Projects', icon: <Package size={18} />, module: 'projects',
     children: [
       { label: 'All Projects', path: '/projects',       icon: <Package size={15} /> },
       { label: 'Task Board',   path: '/projects/board', icon: <ClipboardList size={15} /> },
@@ -226,464 +178,422 @@ const MODULE_ITEMS: NavItemDef[] = [
   { key: 'inventory',   label: 'Inventory',   icon: <Building2 size={18} />,    path: '/inventory',   module: 'inventory' },
   { key: 'procurement', label: 'Procurement', icon: <ShoppingCart size={18} />, path: '/procurement', module: 'procurement' },
   {
-    key: 'helpdesk',
-    label: 'Helpdesk',
-    icon: <HelpCircle size={18} />,
-    module: 'helpdesk',
+    key: 'helpdesk', label: 'Helpdesk', icon: <HelpCircle size={18} />, module: 'helpdesk',
     children: [
       { label: 'Tickets', path: '/helpdesk/tickets', icon: <ClipboardList size={15} /> },
     ],
   },
 ]
 
-// ─── Platform admin items ──────────────────────────────────────────────────────
+// ─── Platform admin items (the "Settings" app) ────────────────────────────────
 const PLATFORM_ITEMS: NavItemDef[] = [
   { key: 'users',    label: 'Users & Access', icon: <Users size={18} />,       path: '/users',      visibleForRoles: ['SUPER_ADMIN'] },
   { key: 'roles',    label: 'Roles & Perms',  icon: <ShieldAlert size={18} />, path: '/roles',      visibleForRoles: ['SUPER_ADMIN'] },
-  { key: 'audit',    label: 'Audit Logs',     icon: <Bell size={18} />,        path: '/audit-logs', visibleForRoles: ['SUPER_ADMIN'] },
-  { key: 'settings', label: 'Settings',       icon: <Settings size={18} />,    path: '/settings',   visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'] },
+  { key: 'audit',    label: 'Audit Logs',     icon: <FileText size={18} />,    path: '/audit-logs', visibleForRoles: ['SUPER_ADMIN'] },
+  { key: 'settings', label: 'Configuration',  icon: <Settings size={18} />,    path: '/settings',   visibleForRoles: ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'] },
 ]
+
+// ─── Workspace Settings nav (the "Settings" app — workspace-level, NOT a module) ──
+// Account + Workspace sections everyone with settings access sees; Administration
+// is super-admin only. Each maps to a route the shell drives.
+const SETTINGS_NAV: NavItemDef[] = [
+  { key: 's-profile',       label: 'Profile',             icon: <UserCircle2 size={18} />,  path: '/settings' },
+  { key: 's-security',      label: 'Security',            icon: <Shield size={18} />,        path: '/settings/security' },
+  { key: 's-notifications', label: 'Notifications',       icon: <Bell size={18} />,          path: '/settings/notifications' },
+  { key: 's-billing',       label: 'Billing & Plan',      icon: <CreditCard size={18} />,    path: '/settings/billing' },
+  { key: 's-integrations',  label: 'Integrations',        icon: <Plug size={18} />,          path: '/settings/integrations' },
+  { key: 's-users',         label: 'Users & Access',      icon: <Users size={18} />,         path: '/users',      visibleForRoles: ['SUPER_ADMIN'] },
+  { key: 's-roles',         label: 'Roles & Permissions', icon: <ShieldAlert size={18} />,   path: '/roles',      visibleForRoles: ['SUPER_ADMIN'] },
+  { key: 's-audit',         label: 'Audit Logs',          icon: <FileText size={18} />,      path: '/audit-logs', visibleForRoles: ['SUPER_ADMIN'] },
+  { key: 's-danger',        label: 'Danger Zone',         icon: <AlertTriangle size={18} />, path: '/settings/danger' },
+]
+
+// Non-HRMS modules become their own apps in the launcher / switcher.
+const NON_HRMS = MODULE_ITEMS.filter(m => m.module && m.module !== 'hrms')
+const HRMS_GROUPS = MODULE_ITEMS.filter(m => m.module === 'hrms')
+
+const ROW_BASE = 'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150'
+const ROW_IDLE = 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
+const ROW_ACTIVE = 'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]'
+
+function matchPath(pathname: string, p?: string) {
+  return !!p && (pathname === p || pathname.startsWith(p + '/'))
+}
+
+function ActiveBar({ show }: { show: boolean }) {
+  return <span aria-hidden className={clsx('absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--accent-solid)] transition-opacity duration-150', show ? 'opacity-100' : 'opacity-0')} />
+}
+
+function useDismiss(open: boolean, onClose: () => void) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', onClick); document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey) }
+  }, [open, onClose])
+  return ref
+}
 
 export function PlatformShell() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const logout = useSdkStore(s => s.logout)
   const user = useSdkStore(s => s.user)
-
   const hasModule = useLocalAuthStore(s => s.hasModule)
   const tenant = useSdkStore(s => s.tenant)
   const permissions = useSdkStore(s => s.permissions)
   const userRoles: string[] = user?.roles ?? []
-
-  // Primary role for filtering and badge display
   const primaryRole = (ROLE_PRIORITY as readonly string[]).find(r => userRoles.includes(r)) ?? null
 
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        setSearchOpen(v => !v)
-      }
+  // ⌘K global search
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(v => !v) }
     }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  React.useEffect(() => { setSearchOpen(false); setMobileOpen(false) }, [location.pathname])
+  useEffect(() => { setProfileOpen(false); setNotifOpen(false); setMobileOpen(false); setSwitcherOpen(false); setSearchOpen(false) }, [location.pathname])
 
-  // ─── Admin detection (mirrors loginWithCredentials' admin-role set + wildcard perm) ──
-  // Admin = SUPER_ADMIN/COMPANY_ADMIN/HR_MANAGER role OR a wildcard ('*') permission grant.
   const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
-  const isAdmin =
-    userRoles.some(r => ADMIN_ROLES.includes(r)) ||
-    permissions.has('*')
+  const isAdmin = userRoles.some(r => ADMIN_ROLES.includes(r)) || permissions.has('*')
+  const subdomain = tenant?.slug ?? ''
 
-  // Tenant subdomain + admin email — source for the Edit-Workspace deep link.
-  const subdomain  = tenant?.slug ?? ''
-  const adminEmail = user?.email ?? ''
-
-  // Opens the main website's Edit-Workspace page (to add/buy a module) in a new tab.
   const openEditWorkspace = (moduleKey: string) => {
     const websiteUrl = import.meta.env.VITE_WEBSITE_URL || 'https://unifiedtree.com'
-    window.open(
-      websiteUrl + '/edit-workspace?ws=' + encodeURIComponent(subdomain) +
-        '&email=' + encodeURIComponent(adminEmail) +
-        '&add=' + encodeURIComponent(moduleKey),
-      '_blank',
-      'noopener',
-    )
+    window.open(`${websiteUrl}/edit-workspace?ws=${encodeURIComponent(subdomain)}&email=${encodeURIComponent(user?.email ?? '')}&add=${encodeURIComponent(moduleKey)}`, '_blank', 'noopener')
   }
 
-  // Filter a nav item by visibleForRoles
   function isVisible(item: { visibleForRoles?: string[] }): boolean {
     if (!item.visibleForRoles || item.visibleForRoles.length === 0) return true
     if (!primaryRole) return false
     return item.visibleForRoles.includes(primaryRole)
   }
 
-  // Visible top-level nav items
-  const visibleNavItems = NAV_ITEMS.filter(isVisible)
+  // ─── Which app owns the current route → drives the scoped sidebar ───────────
+  const scope: string = (() => {
+    if (location.pathname.startsWith('/modules')) return 'launcher'
+    if (PLATFORM_ITEMS.some(p => matchPath(location.pathname, p.path))) return 'admin'
+    for (const m of NON_HRMS) {
+      const paths = m.children ? m.children.map(c => c.path) : (m.path ? [m.path] : [])
+      if (paths.some(p => matchPath(location.pathname, p))) return m.module!
+    }
+    return 'hrms'
+  })()
+  const isLauncher = scope === 'launcher'
 
-  // For module items: filter children by role visibility, then decide if the group shows
-  const visibleModuleItems = MODULE_ITEMS.map(m => ({
-    ...m,
-    children: m.children?.filter(isVisible),
-  })).filter(m => {
-    if (m.children) return (m.children.length > 0)
-    return true
-  })
+  // Current-app label + icon (for the sidebar header)
+  const appMeta: { label: string; icon: React.ReactNode } = (() => {
+    if (scope === 'admin') return { label: 'Settings', icon: <Settings size={14} /> }
+    if (scope === 'hrms') return { label: 'HRMS', icon: <LayoutDashboard size={14} /> }
+    const m = NON_HRMS.find(x => x.module === scope)
+    return { label: m?.label ?? 'App', icon: m ? React.cloneElement(m.icon as React.ReactElement, { size: 14 }) : <LayoutGrid size={14} /> }
+  })()
 
-  const activeModules   = visibleModuleItems.filter(m => hasModule(m.module ?? ''))
-  // Locked modules are surfaced ONLY to admins. Managers/Employees see active modules only.
-  const lockedModules   = isAdmin
-    ? visibleModuleItems.filter(m => !hasModule(m.module ?? ''))
-    : []
-  const displayedLocked = lockedModules.slice(0, 2)
-  const hiddenLocked    = lockedModules.slice(2)
-
-  const visiblePlatformItems = PLATFORM_ITEMS.filter(isVisible)
-  const showPlatformSection  = visiblePlatformItems.length > 0
+  // Scoped navigation (only the current app's items)
+  const scoped: { flat: NavItemDef[]; groups: NavItemDef[] } = (() => {
+    if (scope === 'admin') return { flat: SETTINGS_NAV.filter(isVisible), groups: [] }
+    if (scope === 'hrms') {
+      const groups = HRMS_GROUPS.map(m => ({ ...m, children: m.children?.filter(isVisible) })).filter(m => (m.children ? m.children.length > 0 : true))
+      return { flat: NAV_ITEMS.filter(isVisible), groups }
+    }
+    const m = NON_HRMS.find(x => x.module === scope)
+    if (!m) return { flat: NAV_ITEMS.filter(isVisible), groups: HRMS_GROUPS }
+    const flat: NavItemDef[] = m.children
+      ? m.children.map(c => ({ key: c.path, label: c.label, icon: c.icon, path: c.path }))
+      : [{ key: m.key, label: m.label, icon: m.icon, path: m.path }]
+    return { flat, groups: [] }
+  })()
 
   const [openModules, setOpenModules] = useState<string[]>(() => {
-    const active = visibleModuleItems.find(m => m.children?.some(c => location.pathname.startsWith(c.path)))
+    const active = HRMS_GROUPS.find(m => m.children?.some(c => location.pathname.startsWith(c.path)))
     return active ? [active.key] : []
   })
-  const [showLockedDropdown, setShowLockedDropdown] = useState(false)
+  const toggleModule = (key: string) => setOpenModules(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
 
-  const toggleModule = (key: string) =>
-    setOpenModules(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  const profileRef = useDismiss(profileOpen, () => setProfileOpen(false))
+  const notifRef = useDismiss(notifOpen, () => setNotifOpen(false))
+  const switcherRef = useDismiss(switcherOpen, () => setSwitcherOpen(false))
 
-  // ─── Render helpers ────────────────────────────────────────────────────────
+  const roleLabel = primaryRole ? (ROLE_LABELS[primaryRole] ?? primaryRole) : null
+  const extraRoles = userRoles.filter(r => r !== primaryRole && ROLE_LABELS[r] !== undefined).length
+  const roleBadgeText = roleLabel ? (extraRoles > 0 ? `${roleLabel} +${extraRoles}` : roleLabel) : null
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || 'Account'
+  const initial = (user?.firstName?.[0] ?? user?.email?.[0] ?? '?').toUpperCase()
 
-  const renderModuleItem = (item: NavItemDef, active: boolean) => {
+  // ─── App-switcher (Odoo-style grid popover) ─────────────────────────────────
+  const SWITCHER_APPS = [
+    { key: 'hrms', label: 'HRMS', icon: <LayoutGrid size={17} />, home: '/dashboard', owned: hasModule('hrms') },
+    ...NON_HRMS.map(m => ({ key: m.module!, label: m.label, icon: React.cloneElement(m.icon as React.ReactElement, { size: 17 }), home: m.children?.[0]?.path ?? m.path ?? '/', owned: hasModule(m.module!) })),
+    ...(isAdmin ? [{ key: 'admin', label: 'Settings', icon: <Settings size={17} />, home: '/settings', owned: true }] : []),
+  ]
+  const openApp = (key: string, home: string, owned: boolean) => {
+    setSwitcherOpen(false)
+    if (owned) navigate(home)
+    else if (isAdmin) openEditWorkspace(key)
+  }
+
+  const AppSwitcher = () => (
+    <div className="relative" ref={switcherRef}>
+      <button onClick={() => setSwitcherOpen(v => !v)} title="Switch app" className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]">
+        <LayoutGrid size={18} />
+      </button>
+      <AnimatePresence>
+        {switcherOpen && (
+          <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute left-0 top-11 z-dropdown w-[300px] overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-3.5 py-2.5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">Apps</p>
+              <button onClick={() => { navigate('/modules'); setSwitcherOpen(false) }} className="text-xs font-medium text-[var(--text-link)] hover:underline">Browse all</button>
+            </div>
+            <div className="grid grid-cols-3 gap-1 p-2">
+              {SWITCHER_APPS.map(app => {
+                const active = app.key === scope
+                return (
+                  <button key={app.key} onClick={() => openApp(app.key, app.home, app.owned)}
+                    className={clsx('flex flex-col items-center gap-1.5 rounded-lg p-2.5 text-center transition-colors', active ? 'bg-[var(--accent-bg)]' : 'hover:bg-[var(--bg-subtle)]')}>
+                    <span className={clsx('relative flex h-9 w-9 items-center justify-center rounded-lg', app.owned ? 'bg-[var(--accent-bg)] text-[var(--accent-fg)]' : 'bg-[var(--bg-subtle)] text-[var(--text-tertiary)]')}>
+                      {app.icon}
+                      {!app.owned && <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--bg-surface)] text-[var(--text-tertiary)] ring-1 ring-[var(--border-default)]"><Lock size={8} /></span>}
+                    </span>
+                    <span className={clsx('text-[11px] font-medium leading-tight', app.owned ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]')}>{app.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+
+  const Logo = () => (
+    <button onClick={() => navigate('/modules')} className="flex items-center gap-2.5" title="Back to apps">
+      <img src="/UnifiedTreeLogo.png" alt="Unified Tree" className="h-7 w-auto" />
+    </button>
+  )
+
+  // ─── Nav renderers ──────────────────────────────────────────────────────────
+  const renderFlat = (item: NavItemDef) => (
+    <NavLink key={item.key} to={item.path!} end={['/dashboard', '/me', '/team', '/settings'].includes(item.path!)}
+      className={({ isActive }) => clsx(ROW_BASE, isActive ? ROW_ACTIVE : ROW_IDLE, collapsed && 'mx-auto h-10 w-10 justify-center px-0')}
+      title={collapsed ? item.label : undefined}>
+      {({ isActive }) => (<>
+        {!collapsed && <ActiveBar show={isActive} />}
+        <span className={clsx('shrink-0', isActive ? 'text-[var(--accent-fg)]' : 'text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]')}>{item.icon}</span>
+        {!collapsed && <span>{item.label}</span>}
+      </>)}
+    </NavLink>
+  )
+
+  const renderGroup = (item: NavItemDef) => {
     if (collapsed) {
       return (
-        <NavLink
-          key={item.key}
-          to={item.path ?? (item.children?.[0]?.path ?? '/')}
-          className={({ isActive }) => clsx(
-            'flex w-11 h-11 mx-auto items-center justify-center rounded-xl px-3 py-2.5 transition-all',
-            !active && 'opacity-50 grayscale',
-            isActive && active ? 'bg-[#0A5240]/10 text-[#0A5240]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
-          )}
-          title={item.label}
-          onClick={e => {
-            if (!active) {
-              e.preventDefault()
-              openEditWorkspace(item.module ?? item.key)
-            }
-          }}
-        >
+        <NavLink key={item.key} to={item.children?.[0]?.path ?? '/'} title={item.label}
+          className={({ isActive }) => clsx('relative mx-auto flex h-10 w-10 items-center justify-center rounded-lg transition-colors', isActive ? 'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]' : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]')}>
           {item.icon}
         </NavLink>
       )
     }
-
-    if (item.children && active) {
-      const isOpen = openModules.includes(item.key)
-      const hasActiveChild = item.children.some(c =>
-        location.pathname === c.path || location.pathname.startsWith(c.path + '/'),
-      )
-      return (
-        <div key={item.key}>
-          <button
-            onClick={() => toggleModule(item.key)}
-            className={clsx(
-              'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
-              hasActiveChild ? 'bg-slate-50 text-[#0A5240]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-            )}
-          >
-            <span className={hasActiveChild ? 'text-[#0A5240]' : 'text-slate-400'}>{item.icon}</span>
-            <span className="flex-1 text-left">{item.label}</span>
-            {isOpen
-              ? <ChevronDown size={14} className="text-slate-400" />
-              : <ChevronRight size={14} className="text-slate-400" />}
-          </button>
-          {isOpen && (
-            <div className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l-2 border-slate-100 pl-3">
-              {item.children.map(child => (
-                <NavLink
-                  key={child.path + child.label}
-                  to={child.path}
-                  className={({ isActive }) => clsx(
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-all',
-                    isActive ? 'bg-[#0A5240]/10 text-[#0A5240] font-bold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
-                  )}
-                >
-                  {child.icon}
-                  {child.label}
-                </NavLink>
-              ))}
-            </div>
-          )}
-        </div>
-      )
-    }
-
+    const isOpen = openModules.includes(item.key)
+    const hasActiveChild = item.children!.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
     return (
-      <NavLink
-        key={item.key}
-        to={item.path ?? '/'}
-        className={({ isActive }) => clsx(
-          'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
-          !active ? 'cursor-default text-slate-400 hover:bg-slate-50' : isActive
-            ? 'bg-[#0A5240]/10 text-[#0A5240]'
-            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-        )}
-        onClick={e => {
-          if (!active) {
-            e.preventDefault()
-            openEditWorkspace(item.module ?? item.key)
-          }
-        }}
-        title={collapsed ? item.label : undefined}
-      >
-        <span className={clsx(active ? (location.pathname === item.path ? 'text-[#0A5240]' : 'text-slate-400') : 'text-slate-300')}>
-          {item.icon}
-        </span>
-        {!collapsed && <span className="flex-1">{item.label}</span>}
-        {!collapsed && !active && <Lock size={12} className="text-slate-300" />}
-      </NavLink>
+      <div key={item.key}>
+        <button onClick={() => toggleModule(item.key)} className={clsx(ROW_BASE, 'w-full', hasActiveChild ? 'text-[var(--text-primary)]' : ROW_IDLE)}>
+          <span className={clsx('shrink-0', hasActiveChild ? 'text-[var(--accent-fg)]' : 'text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]')}>{item.icon}</span>
+          <span className="flex-1 text-left">{item.label}</span>
+          <ChevronRight size={14} className={clsx('text-[var(--text-tertiary)] transition-transform duration-200', isOpen && 'rotate-90')} />
+        </button>
+        <AnimatePresence initial={false}>
+          {isOpen && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="overflow-hidden">
+              <div className="ml-[22px] mb-1 mt-0.5 space-y-0.5 border-l border-[var(--border-default)] pl-3">
+                {item.children!.map(child => (
+                  <NavLink key={child.path + child.label} to={child.path}
+                    className={({ isActive }) => clsx('group flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] transition-colors', isActive ? 'font-semibold text-[var(--accent-fg-strong)]' : 'font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
+                    {({ isActive }) => (<>
+                      <span className={clsx('h-1.5 w-1.5 shrink-0 rounded-full transition-colors', isActive ? 'bg-[var(--accent-solid)]' : 'bg-[var(--border-strong)] group-hover:bg-[var(--text-tertiary)]')} />
+                      <span className="truncate">{child.label}</span>
+                    </>)}
+                  </NavLink>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     )
   }
 
-  // ─── Role badge ────────────────────────────────────────────────────────────
-  const roleLabel    = primaryRole ? (ROLE_LABELS[primaryRole] ?? primaryRole) : null
-  const extraRoles   = userRoles.filter(r => r !== primaryRole && (ROLE_LABELS[r] !== undefined)).length
-  const roleBadgeText = roleLabel
-    ? (extraRoles > 0 ? `${roleLabel} +${extraRoles}` : roleLabel)
-    : null
+  const profileMenu = (
+    <>
+      <div className="border-b border-[var(--border-subtle)] px-3.5 py-3">
+        <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{fullName}</p>
+        <p className="truncate text-xs text-[var(--text-tertiary)]">{user?.email}</p>
+      </div>
+      <div className="p-1.5">
+        <button onClick={() => navigate('/settings')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><UserCircle2 size={16} /> My Profile</button>
+        <button onClick={() => navigate('/modules')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><LayoutGrid size={16} /> All apps</button>
+      </div>
+      <div className="border-t border-[var(--border-subtle)] p-1.5">
+        <button onClick={logout} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--status-error-fg)] hover:bg-[var(--status-error-bg)]"><LogOut size={16} /> Sign out</button>
+      </div>
+    </>
+  )
 
-  // ─── Sidebar content ───────────────────────────────────────────────────────
+  // ─── Sidebar ────────────────────────────────────────────────────────────────
   const sidebarContent = (
-    <div className="flex h-full flex-col bg-white border-r border-slate-200 z-30 transition-all duration-300">
-      {/* Logo — client HR mark (amber tree + wordmark) */}
-      <div className={clsx('flex h-16 shrink-0 items-center gap-2.5 border-b border-slate-100 transition-all', collapsed ? 'justify-center px-2' : 'justify-start px-5')}>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#E6F4F1] text-[#0F6E56]">
-          <TreePine size={19} />
-        </div>
-        {!collapsed && <span className="text-[15px] font-bold tracking-tight text-[#0F6E56]">Unified Tree</span>}
+    <div className="flex h-full flex-col border-r border-[var(--border-default)] bg-[var(--bg-surface)]">
+      <div className={clsx('flex h-16 shrink-0 items-center border-b border-[var(--border-subtle)]', collapsed ? 'flex-col justify-center gap-1 px-2' : 'justify-between px-4')}>
+        {collapsed ? (
+          <button onClick={() => navigate('/modules')} title="Back to apps" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-solid)] text-white shadow-sm"><LayoutGrid size={18} /></button>
+        ) : (<><Logo /><AppSwitcher /></>)}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1 scrollbar-hide">
+      {!collapsed && (
+        <div className="flex items-center gap-2 px-4 pb-1 pt-3">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--accent-bg)] text-[var(--accent-fg)]">{appMeta.icon}</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">{appMeta.label}</span>
+        </div>
+      )}
 
-        {/* Top-level nav (Overview / My Workspace / My Team) */}
-        {visibleNavItems.map(item => (
-          <NavLink
-            key={item.key}
-            to={item.path!}
-            end={item.path === '/dashboard' || item.path === '/me' || item.path === '/team'}
-            className={({ isActive }) => clsx(
-              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
-              isActive
-                ? 'bg-[#0A5240]/10 text-[#0A5240] font-semibold'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-              collapsed && 'justify-center px-0 w-11 h-11 mx-auto',
-            )}
-            title={collapsed ? item.label : undefined}
-          >
-            <span className={clsx(
-              location.pathname === item.path ? 'text-[#0A5240]' : 'text-slate-400 group-hover:text-[#0A5240] transition-colors',
-            )}>
-              {item.icon}
-            </span>
-            {!collapsed && <span>{item.label}</span>}
-          </NavLink>
-        ))}
-
-        {!collapsed && (
-          <p className="px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
-            Modules
-          </p>
-        )}
-        {collapsed && <div className="w-8 h-px bg-slate-200 mx-auto my-4" />}
-
-        {activeModules.map(m => renderModuleItem(m, true))}
-
-        {lockedModules.length > 0 && !collapsed && (
-          <div className="w-full h-px bg-slate-100 my-4" />
-        )}
-
-        {displayedLocked.map(m => renderModuleItem(m, false))}
-
-        {!collapsed && hiddenLocked.length > 0 && (
-          <div className="mt-1">
-            <button
-              onClick={() => setShowLockedDropdown(!showLockedDropdown)}
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <Hexagon size={18} className="text-slate-400" />
-                <span>Other Locked Modules</span>
-              </div>
-              <ChevronDown size={14} className={clsx('transition-transform text-slate-400', showLockedDropdown && 'rotate-180')} />
-            </button>
-            <AnimatePresence>
-              {showLockedDropdown && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden mt-1"
-                >
-                  <div className="space-y-1">
-                    {hiddenLocked.map(m => renderModuleItem(m, false))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-
-        {showPlatformSection && (
-          <>
-            {!collapsed && (
-              <p className="px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
-                Platform Admin
-              </p>
-            )}
-            {collapsed && <div className="w-8 h-px bg-slate-200 mx-auto my-4" />}
-            {visiblePlatformItems.map(item => (
-              <NavLink
-                key={item.key}
-                to={item.path!}
-                className={({ isActive }) => clsx(
-                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all group relative',
-                  isActive
-                    ? 'bg-[#0A5240]/10 text-[#0A5240] font-semibold'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-                  collapsed && 'justify-center px-0 w-11 h-11 mx-auto',
-                )}
-                title={collapsed ? item.label : undefined}
-              >
-                <span className={clsx(
-                  location.pathname === item.path ? 'text-[#0A5240]' : 'text-slate-400 group-hover:text-[#0A5240] transition-colors',
-                )}>
-                  {item.icon}
-                </span>
-                {!collapsed && <span>{item.label}</span>}
-              </NavLink>
-            ))}
-          </>
-        )}
+      <nav className="scrollbar-hide flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
+        {scoped.flat.map(renderFlat)}
+        {scoped.groups.length > 0 && scoped.flat.length > 0 && <div className="my-2 h-px bg-[var(--border-subtle)]" />}
+        {scoped.groups.map(renderGroup)}
       </nav>
 
-      {/* User profile + role badge + sign out */}
-      <div className="border-t border-slate-100 p-4 bg-slate-50">
-        {!collapsed && user && (
-          <div className="flex items-center gap-3 px-3 py-2.5 mb-2 rounded-xl bg-white border border-slate-200 shadow-sm">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A5240]/10 text-sm font-bold text-[#0A5240]">
-              {(user.firstName?.[0] ?? '?').toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-slate-900">
-                {user.firstName} {user.lastName}
-              </p>
-              {roleBadgeText && (
-                <span className="inline-block mt-0.5 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600 shadow-sm">
-                  {roleBadgeText}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-        <button
-          onClick={logout}
-          className={clsx(
-            'flex w-full items-center gap-3 rounded-xl py-2.5 text-sm font-medium text-slate-600 hover:bg-rose-50 hover:text-rose-600 transition-colors group',
-            collapsed ? 'justify-center px-0 w-11 h-11 mx-auto' : 'px-3',
+      <div className="relative border-t border-[var(--border-subtle)] p-3" ref={profileRef}>
+        <AnimatePresence>
+          {profileOpen && !collapsed && (
+            <motion.div initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.98 }} transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute bottom-[72px] left-3 right-3 z-dropdown overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
+              {profileMenu}
+            </motion.div>
           )}
-          title="Log out"
-        >
-          <LogOut size={18} className="text-slate-400 group-hover:text-rose-500 group-hover:scale-110 transition-all" />
-          {!collapsed && <span>Sign out</span>}
-        </button>
+        </AnimatePresence>
+        {collapsed ? (
+          <button onClick={logout} title="Sign out" className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--status-error-bg)] hover:text-[var(--status-error-fg)]"><LogOut size={18} /></button>
+        ) : (
+          <button onClick={() => setProfileOpen(v => !v)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--bg-subtle)]">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-sm font-semibold text-[var(--accent-fg-strong)]">{initial}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">{fullName}</span>
+              {roleBadgeText && <span className="block truncate text-[11px] text-[var(--text-tertiary)]">{roleBadgeText}</span>}
+            </span>
+            <ChevronDown size={15} className={clsx('shrink-0 text-[var(--text-tertiary)] transition-transform', profileOpen && 'rotate-180')} />
+          </button>
+        )}
       </div>
     </div>
   )
 
+  const searchModal = (
+    <AnimatePresence>
+      {searchOpen && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[12vh]">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSearchOpen(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <motion.div initial={{ opacity: 0, scale: 0.96, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: -10 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="relative w-full max-w-2xl overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-2xl">
+            <GlobalSearch onSelect={(res) => { navigate(res.path); setSearchOpen(false) }} />
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  )
+
+  // ─── Launcher mode: full-width, top bar only ────────────────────────────────
+  if (isLauncher) {
+    return (
+      <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg-base)] font-sans text-[var(--text-primary)]">
+        <header className="sticky top-0 z-sticky flex h-16 shrink-0 items-center justify-between gap-4 border-b border-[var(--border-default)] bg-[var(--bg-surface-overlay)] px-4 backdrop-blur-xl sm:px-6">
+          <div className="flex items-center gap-2"><AppSwitcher /><Logo /></div>
+          <div className="relative flex items-center gap-1.5" ref={profileRef}>
+            {roleBadgeText && <span className="mr-1 hidden items-center rounded-full bg-[var(--accent-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-fg-strong)] ring-1 ring-inset ring-[var(--accent-border)] sm:inline-flex">{roleBadgeText}</span>}
+            <button onClick={() => setProfileOpen(v => !v)} className="flex h-9 items-center gap-2 rounded-lg pl-1 pr-2 transition-colors hover:bg-[var(--bg-subtle)]">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-sm font-semibold text-[var(--accent-fg-strong)]">{initial}</span>
+              <span className="hidden text-[13px] font-semibold text-[var(--text-primary)] sm:block">{fullName}</span>
+              <ChevronDown size={15} className="text-[var(--text-tertiary)]" />
+            </button>
+            <AnimatePresence>
+              {profileOpen && (
+                <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={{ duration: 0.15 }} className="absolute right-0 top-12 z-dropdown w-56 overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
+                  {profileMenu}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </header>
+        <div className="flex-1 overflow-auto"><Outlet /></div>
+        {searchModal}
+      </div>
+    )
+  }
+
+  // ─── App mode: sidebar + header + content ───────────────────────────────────
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F4F4F6] font-sans selection:bg-[#0A5240]/15 selection:text-[#0A5240]">
-      {/* Desktop Sidebar */}
-      <aside
-        className={clsx(
-          'hidden md:block shrink-0 transition-all duration-300 relative',
-          collapsed ? 'w-[80px]' : 'w-[280px]',
-        )}
-      >
+    <div className="flex h-screen overflow-hidden bg-[var(--bg-base)] font-sans text-[var(--text-primary)]">
+      <aside className={clsx('relative hidden shrink-0 transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] md:block', collapsed ? 'w-[76px]' : 'w-[272px]')}>
         {sidebarContent}
-        <button
-          onClick={() => {
-            const next = !collapsed
-            setCollapsed(next)
-            localStorage.setItem(SIDEBAR_KEY, String(next))
-          }}
-          className="absolute -right-3 top-20 flex h-6 w-6 items-center justify-center rounded-full bg-white border border-slate-200 text-slate-400 shadow-sm hover:text-slate-700 hover:border-slate-300 transition-all z-40"
-        >
-          <ChevronRight size={14} className={clsx('transition-transform duration-300', !collapsed && 'rotate-180')} />
+        <button onClick={() => { const next = !collapsed; setCollapsed(next); localStorage.setItem(SIDEBAR_KEY, String(next)) }} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="absolute -right-3 top-[74px] z-fixed flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] shadow-sm transition-colors hover:text-[var(--text-primary)]">
+          {collapsed ? <PanelLeft size={13} /> : <PanelLeftClose size={13} />}
         </button>
       </aside>
 
-      {/* Mobile Sidebar */}
       <AnimatePresence>
-        {mobileOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setMobileOpen(false)}
-              className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm md:hidden"
-            />
-            <motion.aside
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 z-50 w-[280px] md:hidden"
-            >
-              {sidebarContent}
-            </motion.aside>
-          </>
-        )}
+        {mobileOpen && (<>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMobileOpen(false)} className="fixed inset-0 z-modal-backdrop bg-black/40 backdrop-blur-sm md:hidden" />
+          <motion.aside initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', damping: 26, stiffness: 240 }} className="fixed inset-y-0 left-0 z-modal w-[272px] md:hidden">{sidebarContent}</motion.aside>
+        </>)}
       </AnimatePresence>
 
-      {/* Main Content */}
-      <main className="flex min-w-0 flex-1 flex-col relative overflow-hidden">
-        {/* Top Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 backdrop-blur-md px-4 sm:px-8 z-10">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setMobileOpen(true)}
-              className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg md:hidden"
-            >
-              <Menu size={20} />
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-sticky flex h-16 shrink-0 items-center justify-between gap-4 border-b border-[var(--border-default)] bg-[var(--bg-surface-overlay)] px-4 backdrop-blur-xl sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <button onClick={() => setMobileOpen(true)} className="-ml-1 rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] md:hidden" aria-label="Open menu"><Menu size={20} /></button>
+            <button onClick={() => navigate('/modules')} className="hidden items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] md:inline-flex" title="Back to apps"><ArrowLeft size={15} /> Apps</button>
+            <div className="hidden h-5 w-px bg-[var(--border-default)] md:block" />
+            <button onClick={() => setSearchOpen(true)} className="group hidden h-9 w-full max-w-md items-center gap-2.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-base)] px-3 text-left transition-colors hover:border-[var(--border-strong)] sm:flex">
+              <Search size={15} className="shrink-0 text-[var(--text-tertiary)]" />
+              <span className="flex-1 text-sm text-[var(--text-tertiary)]">Search {appMeta.label}…</span>
+              <kbd className="hidden items-center gap-0.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)] lg:inline-flex"><Command size={10} /> K</kbd>
             </button>
-            <div onClick={() => setSearchOpen(true)} className="hidden sm:flex cursor-pointer items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors w-64 focus-within:ring-2 focus-within:ring-[#0A5240]/20 focus-within:border-[#0A5240]/50">
-              <Search size={14} className="text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search everywhere... (⌘K)"
-                className="bg-transparent border-none outline-none text-sm w-full placeholder:text-slate-400 text-slate-900 pointer-events-none"
-                readOnly
-              />
-            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Role badge in header (visible on mobile where sidebar is hidden) */}
-            {roleBadgeText && (
-              <span className="hidden sm:inline-flex rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 shadow-sm">
-                {roleBadgeText}
-              </span>
-            )}
-            <button className="relative p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors">
-              <Bell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 border-2 border-white" />
-            </button>
+          <div className="flex items-center gap-1.5">
+            {roleBadgeText && <span className="mr-1 hidden items-center rounded-full bg-[var(--accent-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-fg-strong)] ring-1 ring-inset ring-[var(--accent-border)] sm:inline-flex">{roleBadgeText}</span>}
+            <div className="relative" ref={notifRef}>
+              <button onClick={() => setNotifOpen(v => !v)} className="relative rounded-lg p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]" aria-label="Notifications">
+                <Bell size={18} />
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[var(--status-error-solid)] ring-2 ring-[var(--bg-surface)]" />
+              </button>
+              <AnimatePresence>
+                {notifOpen && (
+                  <motion.div initial={{ opacity: 0, y: -8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.98 }} transition={{ duration: 0.16 }} className="absolute right-0 top-12 z-dropdown w-80 overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
+                    <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3"><p className="text-sm font-semibold text-[var(--text-primary)]">Notifications</p><span className="rounded-full bg-[var(--bg-subtle)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-tertiary)]">0 new</span></div>
+                    <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--bg-subtle)]"><Bell size={18} className="text-[var(--text-tertiary)]" /></div>
+                      <p className="text-sm font-medium text-[var(--text-secondary)]">You're all caught up</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            <button onClick={() => navigate('/me')} className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent-bg)] text-sm font-semibold text-[var(--accent-fg-strong)] sm:hidden" aria-label="Profile">{initial}</button>
           </div>
         </header>
-
-        {/* Page Content */}
-        <div className="flex-1 overflow-auto relative z-0">
-          <div className="absolute inset-0 bg-[url('/grid-bg.svg')] bg-repeat opacity-[0.03] pointer-events-none" />
-          <Outlet />
-        </div>
+        <div className="flex-1 overflow-auto"><Outlet /></div>
       </main>
-      <AnimatePresence>
-        {searchOpen && (
-          <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[12vh]">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSearchOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.96, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: -10 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="relative w-full max-w-2xl overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-2xl">
-              <GlobalSearch onSelect={(res) => { navigate(res.path); setSearchOpen(false) }} />
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {searchModal}
     </div>
   )
 }

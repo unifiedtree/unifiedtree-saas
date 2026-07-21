@@ -113,23 +113,30 @@ export const LoginPage: React.FC = () => {
   return (
     <main className="grid min-h-screen lg:grid-cols-[1.05fr_1fr] xl:grid-cols-[1.15fr_1fr]">
       {/* ── Brand panel ─────────────────────────────────────────── */}
-      <div className="relative hidden overflow-hidden bg-[#053B2E] lg:flex lg:flex-col">
+      <div className="relative hidden overflow-hidden bg-[#fafcfb] lg:flex lg:flex-col border-r border-gray-100">
         <div
           className="absolute inset-0"
-          style={{ background: 'linear-gradient(150deg, #064E3B 0%, #047857 42%, #059669 100%)' }}
+          style={{ background: 'linear-gradient(145deg, #f0fdf4 0%, #ffffff 100%)' }}
         />
         {/* decorative glow */}
-        <div className="orb -left-32 -top-24 h-96 w-96" style={{ background: 'rgba(52,211,153,0.35)' }} />
-        <div className="orb -bottom-40 -right-24 h-[28rem] w-[28rem]" style={{ background: 'rgba(6,78,59,0.6)' }} />
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.15]"
-          style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.35) 1px, transparent 0)', backgroundSize: '28px 28px' }}
+        <div 
+          className="absolute -top-1/4 -left-1/4 h-[800px] w-[800px] rounded-full blur-[100px] pointer-events-none" 
+          style={{ background: 'radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, transparent 70%)' }} 
+        />
+        <div 
+          className="absolute -bottom-1/4 -right-1/4 h-[800px] w-[800px] rounded-full blur-[100px] pointer-events-none" 
+          style={{ background: 'radial-gradient(circle, rgba(4, 120, 87, 0.08) 0%, transparent 70%)' }} 
+        />
+        {/* Soft center ambient glow to replace pattern */}
+        <div 
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[600px] w-[600px] rounded-full blur-[120px] pointer-events-none mix-blend-multiply" 
+          style={{ background: 'radial-gradient(circle, rgba(16, 185, 129, 0.04) 0%, transparent 60%)' }} 
         />
 
         <div className="relative z-10 flex h-full flex-col p-12 xl:p-16">
           {/* wordmark */}
           <div className="flex items-center gap-3">
-            <img src="/UnifiedTreeLogoWhite.png" alt="Unified Tree" className="h-9 w-auto" />
+            <img src="/UnifiedTreeLogo.png" alt="Unified Tree" className="h-9 w-auto" />
           </div>
 
           {/* headline */}
@@ -138,7 +145,7 @@ export const LoginPage: React.FC = () => {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              className="max-w-md text-4xl font-semibold leading-[1.15] tracking-tight text-white"
+              className="max-w-md text-4xl font-semibold leading-[1.15] tracking-tight text-gray-900"
             >
               The operating system for your people.
             </motion.h1>
@@ -146,7 +153,7 @@ export const LoginPage: React.FC = () => {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-              className="mt-4 max-w-md text-[15px] leading-relaxed text-emerald-50/80"
+              className="mt-4 max-w-md text-[15px] leading-relaxed text-gray-600"
             >
               HR, attendance, payroll and every connected module — unified into one calm, powerful workspace.
             </motion.p>
@@ -160,32 +167,37 @@ export const LoginPage: React.FC = () => {
                   transition={{ duration: 0.5, delay: 0.16 + i * 0.08, ease: [0.16, 1, 0.3, 1] }}
                   className="flex items-start gap-3.5"
                 >
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/12 text-emerald-100 ring-1 ring-white/15">
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 shadow-sm">
                     <h.icon size={16} />
                   </span>
                   <div>
-                    <p className="text-sm font-semibold text-white">{h.title}</p>
-                    <p className="text-[13px] text-emerald-50/70">{h.desc}</p>
+                    <p className="text-sm font-semibold text-gray-900">{h.title}</p>
+                    <p className="text-[13px] text-gray-500">{h.desc}</p>
                   </div>
                 </motion.div>
               ))}
             </div>
           </div>
 
-          <div className="mt-auto flex items-center gap-2 pt-12 text-[13px] text-emerald-50/60">
-            <Check size={14} className="text-emerald-200" />
+          <div className="mt-auto flex items-center gap-2 pt-12 text-[13px] text-gray-500 font-medium">
+            <Check size={14} className="text-emerald-500" />
             Trusted by modern teams to run their entire workforce.
           </div>
         </div>
       </div>
 
       {/* ── Form panel ──────────────────────────────────────────── */}
-      <div className="relative flex items-center justify-center bg-[var(--bg-surface)] px-6 py-12 sm:px-10">
+      <div className="relative flex items-center justify-center bg-[#f8faf9] px-6 py-12 sm:px-10 overflow-hidden">
+        {/* Right side ambient glows */}
+        <div className="absolute -top-[20%] -right-[10%] h-[600px] w-[600px] rounded-full bg-emerald-500 opacity-[0.04] blur-[100px] pointer-events-none" />
+        <div className="absolute -bottom-[20%] -left-[10%] h-[500px] w-[500px] rounded-full bg-teal-500 opacity-[0.03] blur-[100px] pointer-events-none" />
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9IiMwMDAiLz48L3N2Zz4=')] opacity-[0.02] pointer-events-none" />
+
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="w-full max-w-[400px]"
+          className="w-full max-w-[440px] relative z-10 bg-white p-8 sm:p-10 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100"
         >
           {/* Mobile brand mark */}
           <div className="mb-8 flex items-center gap-2.5 lg:hidden">

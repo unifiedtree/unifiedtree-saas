@@ -80,13 +80,10 @@ const ROLE_PRIORITY = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGE
 function RoleAwareLanding() {
   const roles = useSdkStore(s => s.user?.roles ?? [])
 
-  // Admins & managers land on the app launcher (Odoo-style) to choose an app.
-  if (roles.includes('SUPER_ADMIN') || roles.includes('HR_MANAGER') || roles.includes('FINANCE_LEAD')) {
-    return <Navigate to="/modules" replace />
-  }
-  // Single-app users go straight to their home surface.
-  if (roles.includes('DEPT_MANAGER')) return <Navigate to="/team" replace />
-  if (roles.includes('EMPLOYEE'))     return <Navigate to="/me" replace />
+  // Every authenticated user lands on the app launcher (Odoo-style) — so the
+  // website → workspace SSO hand-off drops straight into "modules", no second
+  // login and no role-specific detour. Each app's routes stay per-route gated.
+  if (roles.length > 0) return <Navigate to="/modules" replace />
 
   return <Navigate to="/no-access" replace />
 }
@@ -144,7 +141,8 @@ export default function App() {
         <Route path="/analytics" element={<ComingSoon module="analytics" />} />
         {/* Gated on any settings capability so non-admins (e.g. plain EMPLOYEE) get a clean
             "Access Restricted" instead of an empty page; matches the sidebar's Settings gate. */}
-        <Route path="/settings"  element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ]}><Settings /></RouteGuard>} />
+        <Route path="/settings"      element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ]}><Settings /></RouteGuard>} />
+        <Route path="/settings/:tab" element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ]}><Settings /></RouteGuard>} />
         {/* Platform-admin pages. These were previously reachable by direct URL for any
             authenticated user (the sidebar hid them by role, and the backend 403'd the
             data fetch — so a non-admin saw a broken "failed to load" page rather than a

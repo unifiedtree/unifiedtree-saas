@@ -1,19 +1,23 @@
 import React, { useState } from 'react'
-import { User, Shield, Bell, CreditCard, Plug, AlertTriangle, Check, Zap, Crown, Star } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { Check, Zap, Crown, Star } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '@/core/auth/authStore'
 import { HrPageHeader, HrButton, HrStatusPill } from '@/shared/components/hr'
 
 type TabKey = 'profile' | 'security' | 'notifications' | 'billing' | 'integrations' | 'danger'
 
-const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-  { key: 'profile', label: 'Profile', icon: <User size={15} /> },
-  { key: 'security', label: 'Security', icon: <Shield size={15} /> },
-  { key: 'notifications', label: 'Notifications', icon: <Bell size={15} /> },
-  { key: 'billing', label: 'Billing', icon: <CreditCard size={15} /> },
-  { key: 'integrations', label: 'Integrations', icon: <Plug size={15} /> },
-  { key: 'danger', label: 'Danger Zone', icon: <AlertTriangle size={15} /> },
-]
+// The settings *navigation* now lives in the app shell (workspace-scoped);
+// this page just renders the section named in the URL (/settings/:tab).
+const TAB_META: Record<TabKey, { label: string; desc: string }> = {
+  profile:       { label: 'Profile',        desc: 'Your account and organization details.' },
+  security:      { label: 'Security',       desc: 'Password, two-factor and active sessions.' },
+  notifications: { label: 'Notifications',  desc: 'Email and in-app notification preferences.' },
+  billing:       { label: 'Billing & Plan', desc: 'Your subscription, plan and invoices.' },
+  integrations:  { label: 'Integrations',   desc: 'Connect external tools and services.' },
+  danger:        { label: 'Danger Zone',    desc: 'Irreversible, workspace-wide actions.' },
+}
+const VALID_TABS = Object.keys(TAB_META) as TabKey[]
 
 const Toggle: React.FC<{ enabled: boolean; onChange: (v: boolean) => void }> = ({ enabled, onChange }) => (
   <button
@@ -332,7 +336,9 @@ const DangerTab: React.FC = () => (
 )
 
 export const Settings: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabKey>('profile')
+  const { tab } = useParams<{ tab?: string }>()
+  const active: TabKey = VALID_TABS.includes(tab as TabKey) ? (tab as TabKey) : 'profile'
+  const meta = TAB_META[active]
 
   const tabContent: Record<TabKey, React.ReactNode> = {
     profile: <ProfileTab />,
@@ -344,38 +350,10 @@ export const Settings: React.FC = () => {
   }
 
   return (
-    <div className="animate-fade-in max-w-7xl mx-auto p-6 sm:p-8">
-      <HrPageHeader
-        crumb="Settings"
-        title="Settings"
-        subtitle="Manage your account and workspace preferences"
-      />
-      <div className="flex gap-6">
-        {/* Sidebar */}
-        <div className="w-52 flex-shrink-0">
-          <nav className="space-y-0.5">
-            {tabs.map(({ key, label, icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={clsx(
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors',
-                  activeTab === key ? 'bg-[#ECFDF5] text-[#047857] border border-[#6EE7B7]' : 'text-text-secondary hover:text-text-primary hover:bg-bg-base',
-                  key === 'danger' && activeTab === key && 'bg-[#FEE2E2] text-[#B91C1C] border-[#FCA5A5]',
-                  key === 'danger' && activeTab !== key && 'hover:text-[#B91C1C]'
-                )}
-              >
-                {icon}
-                {label}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 bg-white border border-border-default rounded-2xl p-6 min-h-[500px]">
-          {tabContent[activeTab]}
-        </div>
+    <div className="animate-fade-in mx-auto max-w-4xl p-6 sm:p-8">
+      <HrPageHeader crumb="Workspace Settings" title={meta.label} subtitle={meta.desc} />
+      <div className="rounded-2xl border border-border-default bg-white p-6">
+        {tabContent[active]}
       </div>
     </div>
   )
