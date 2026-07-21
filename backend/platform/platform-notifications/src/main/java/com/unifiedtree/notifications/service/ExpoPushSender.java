@@ -68,11 +68,33 @@ public class ExpoPushSender {
      * {@link com.unifiedtree.notifications.config.NotificationsAsyncConfig}.
      */
     public void sendAfterCommit(UUID userId, String title, String body, Map<String, Object> data) {
-        if (!enabled) return;
-        Runnable task = () -> executor.execute(() -> deliver(userId, title, body, data));
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+        if (!enabled) {
+            log.info("Expo push: sendAfterCommit called but enabled=false, skipping");
+            return;
+        }
+        // Read from BOTH TenantContext classes — the one TenantAwareDataSource
+        // reads is com.unifiedtree.security.tenant.TenantContext; the request
+        // pipeline usually populates both, but read defensively so we still
+        // pick up the tenant if only one was set.
+        java.util.UUID t = com.unifiedtree.security.tenant.TenantContext.getTenantId();
+        if (t == null) t = com.hrms.core.tenant.TenantContext.getTenantId();
+        final java.util.UUID tenantId = t;
+        boolean syncActive = TransactionSynchronizationManager.isSynchronizationActive();
+        log.info("Expo push: sendAfterCommit ENTER user={} tenant={} syncActive={}", userId, tenantId, syncActive);
+        Runnable task = () -> {
+            try {
+                log.info("Expo push: submitting to executor user={}", userId);
+                executor.execute(() -> deliver(tenantId, userId, title, body, data));
+            } catch (Exception ex) {
+                log.warn("Expo push: executor.execute failed user={}: {}", userId, ex.getMessage());
+            }
+        };
+        if (syncActive) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override public void afterCommit() { task.run(); }
+                @Override public void afterCommit() {
+                    log.info("Expo push: afterCommit fired user={}", userId);
+                    task.run();
+                }
             });
         } else {
             // No tx — dispatch immediately to the executor (still async).
@@ -81,13 +103,30 @@ public class ExpoPushSender {
     }
 
     /** Package-private for testing. */
-    void deliver(UUID userId, String title, String body, Map<String, Object> data) {
+    void deliver(java.util.UUID tenantId, UUID userId, String title, String body, Map<String, Object> data) {
+        // Executor thread has no TenantContext by default; propagate the one
+        // captured on the calling thread so the RLS-protected device_tokens
+        // read actually returns rows.
+        //
+        // CRITICAL: TenantAwareDataSource reads from
+        // com.unifiedtree.security.tenant.TenantContext (same package as itself),
+        // NOT com.hrms.core.tenant.TenantContext. Setting only the latter left
+        // the datasource seeing a null tenant → SET LOCAL app.tenant_id was
+        // skipped → RLS returned zero rows → "no active device tokens" fired
+        // even though the row was there. Set BOTH to be safe.
+        boolean tenantSet = false;
+        if (tenantId != null) {
+            com.unifiedtree.security.tenant.TenantContext.setTenantId(tenantId);
+            com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+            tenantSet = true;
+        }
         try {
             List<DeviceToken> tokens = tokenRepo.findByUserIdAndActiveTrue(userId);
             if (tokens.isEmpty()) {
-                log.debug("no active device tokens for user={}, skipping push", userId);
+                log.info("Expo push: no active device tokens for user={} (tenant={}), skipping", userId, tenantId);
                 return;
             }
+            log.info("Expo push: dispatching {} token(s) to user={} title=\"{}\"", tokens.size(), userId, title);
             List<Map<String, Object>> messages = new ArrayList<>(tokens.size());
             for (DeviceToken t : tokens) {
                 Map<String, Object> msg = new HashMap<>();
@@ -120,6 +159,11 @@ public class ExpoPushSender {
             // Push failures never surface to the caller — they already got their
             // in-app notification row. Log for observability only.
             log.warn("Expo push failed for user {}: {}", userId, e.getMessage());
+        } finally {
+            if (tenantSet) {
+                com.unifiedtree.security.tenant.TenantContext.clear();
+                com.hrms.core.tenant.TenantContext.clear();
+            }
         }
     }
 

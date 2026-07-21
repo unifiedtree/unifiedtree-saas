@@ -51,8 +51,11 @@ public class AuditController {
 
         UUID actorUserId = tryParseUuid(actor);
         UUID entityId    = tryParseUuid(resourceId);
-        Instant fromInstant = from != null ? Instant.parse(from) : null;
-        Instant toInstant   = to   != null ? Instant.parse(to)   : null;
+        // Tolerate a malformed from/to (optional filters) instead of 500-ing on
+        // Instant.parse — an unparseable value simply drops that bound.
+        Instant fromInstant = null, toInstant = null;
+        try { if (from != null && !from.isBlank()) fromInstant = Instant.parse(from); } catch (java.time.format.DateTimeParseException ignored) {}
+        try { if (to   != null && !to.isBlank())   toInstant   = Instant.parse(to);   } catch (java.time.format.DateTimeParseException ignored) {}
 
         PageRequest pageable = PageRequest.of(page, effectiveSize, Sort.by(Sort.Direction.DESC, "occurredAt"));
         Page<AuditEvent> result = auditService.query(

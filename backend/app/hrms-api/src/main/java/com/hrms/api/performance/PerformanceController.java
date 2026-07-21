@@ -203,7 +203,7 @@ public class PerformanceController {
     }
 
     private String fullName(Employee employee) {
-        return employee != null ? (employee.getFirstName() + " " + employee.getLastName()).trim() : null;
+        return employee != null ? (employee.getFirstName() + " " + (employee.getLastName() == null ? "" : employee.getLastName())).trim() : null;
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

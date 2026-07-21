@@ -111,22 +111,30 @@ unifiedtree:
     # worker container boots. Previously capped at 750ms which a cold worker
     # could never meet. Kept well under the mobile 60s checkin timeout.
     worker-connect-timeout-ms: ${UNIFIEDTREE_FACE_WORKER_CONNECT_TIMEOUT_MS:12000}
-    # Identity match floor. SFace mapped 0.85 corresponds to roughly raw
-    # cosine 0.70 - a high-security default for attendance punch-in.
-    match-threshold:      ${UNIFIEDTREE_FACE_MATCH_THRESHOLD:0.85}
+    # Identity match floor. 0.85 (raw cosine ~0.70) was rejecting genuine
+    # faces under everyday lighting/angle variance — well above SFace's own
+    # recommended operating point (~0.68 in this 0..1 space). 0.75 keeps a
+    # comfortable margin above that recommendation (secure) while no longer
+    # punishing correct faces. Tune per tenant later via the env var.
+    match-threshold:      ${UNIFIEDTREE_FACE_MATCH_THRESHOLD:0.75}
     # Best-vs-mean gap: across all enrolled templates the arithmetic mean
     # must be >= match-threshold - this value. Defends against single-angle
     # lucky matches by impostors.
     match-mean-gap:       ${UNIFIEDTREE_FACE_MATCH_MEAN_GAP:0.05}
     # Quorum: how loose an enrolled template can score and still "agree".
     match-template-gap:   ${UNIFIEDTREE_FACE_MATCH_TEMPLATE_GAP:0.04}
-    # Number of agreeing templates required for PASS. With 5 enrolled
-    # angles, default 4 forces a stranger to fool the model on 4 of 5.
-    match-quorum:         ${UNIFIEDTREE_FACE_MATCH_QUORUM:4}
-    min-quality:          ${UNIFIEDTREE_FACE_MIN_QUALITY:0.60}
+    # Number of agreeing templates required for PASS. Enrollment now captures
+    # 3 angles (not 5), so quorum 4 collapsed to "all 3 must agree" — the
+    # strictest possible, a big source of false rejects. 2-of-3 still blocks
+    # a stranger who can only fool one angle, while tolerating a bad frame.
+    match-quorum:         ${UNIFIEDTREE_FACE_MATCH_QUORUM:2}
+    min-quality:          ${UNIFIEDTREE_FACE_MIN_QUALITY:0.55}
     require-liveness:     ${UNIFIEDTREE_FACE_REQUIRE_LIVENESS:true}
     liveness-threshold:   ${UNIFIEDTREE_FACE_LIVENESS_THRESHOLD:0.35}
-    lockout-failure-count: ${UNIFIEDTREE_FACE_LOCKOUT_FAILURES:5}
+    # A locked enrolment now auto-clears after a cooldown (see face.lockout-
+    # cooldown-minutes) so a run of bad frames no longer needs a manager.
+    lockout-failure-count: ${UNIFIEDTREE_FACE_LOCKOUT_FAILURES:8}
+    lockout-cooldown-minutes: ${UNIFIEDTREE_FACE_LOCKOUT_COOLDOWN_MINUTES:30}
     model-name:           ${UNIFIEDTREE_FACE_MODEL_NAME:sface}
     model-version:        ${UNIFIEDTREE_FACE_MODEL_VERSION:sface-1.0}
     raw-image-retention-days: ${UNIFIEDTREE_FACE_RAW_RETENTION_DAYS:7}

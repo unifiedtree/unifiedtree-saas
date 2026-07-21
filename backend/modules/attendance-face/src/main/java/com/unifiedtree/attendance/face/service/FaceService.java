@@ -75,6 +75,7 @@ public class FaceService {
     private final boolean requireLiveness;
     private final double livenessThreshold;
     private final int lockoutFailureCount;
+    private final long lockoutCooldownMinutes;
     private final String modelName;
     private final String modelVersion;
     private final Random rng = new Random();
@@ -102,6 +103,10 @@ public class FaceService {
                        @Value("${unifiedtree.face.require-liveness:true}") boolean requireLiveness,
                        @Value("${unifiedtree.face.liveness-threshold:0.30}") double livenessThreshold,
                        @Value("${unifiedtree.face.lockout-failure-count:5}") int lockoutFailureCount,
+                       /* A LOCKED enrolment auto-clears this many minutes after it
+                          locked, so an employee is never stuck waiting for a
+                          manager. 0 disables auto-unlock (manager-only). */
+                       @Value("${unifiedtree.face.lockout-cooldown-minutes:30}") long lockoutCooldownMinutes,
                        @Value("${unifiedtree.face.model-name:sface}") String modelName,
                        @Value("${unifiedtree.face.model-version:sface-1.0}") String modelVersion) {
         this.jdbc = jdbc;
@@ -114,6 +119,7 @@ public class FaceService {
         this.matchMeanGap = Math.max(0.0, matchMeanGap);
         this.matchTemplateGap = Math.max(0.0, matchTemplateGap);
         this.matchQuorum = Math.max(1, matchQuorum);
+        this.lockoutCooldownMinutes = Math.max(0, lockoutCooldownMinutes);
         this.minQuality = minQuality;
         this.requireLiveness = requireLiveness;
         this.livenessThreshold = livenessThreshold;
@@ -163,7 +169,7 @@ public class FaceService {
     public EnrollmentStartResponse startEnrollment(UUID tenantId, UUID employeeId, EnrollmentStartRequest req) {
         ensureEnabled();
         EnrollmentRow existing = loadEnrollment(tenantId, employeeId);
-        if (existing != null && existing.status == EnrollmentStatus.LOCKED) {
+        if (stillLocked(tenantId, employeeId, existing)) {
             // Notify the employee (in-app + push) that their enrollment is
             // locked and needs admin intervention. Best-effort — never
             // propagate; the primary failure signal to the caller is still
@@ -186,7 +192,7 @@ public class FaceService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "FACE_ENROLLMENT_NOT_FOUND:" + friendlyRejectionCopy("FACE_ENROLLMENT_NOT_FOUND"));
         }
-        if (row.status == EnrollmentStatus.LOCKED) {
+        if (stillLocked(tenantId, employeeId, row)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "FACE_LOCKED:" + friendlyRejectionCopy("FACE_LOCKED"));
         }
@@ -316,7 +322,7 @@ public class FaceService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "FACE_NOT_ENROLLED:" + friendlyRejectionCopy("FACE_NOT_ENROLLED"));
         }
-        if (row.status == EnrollmentStatus.LOCKED) {
+        if (stillLocked(tenantId, employeeId, row)) {
             writer.recordVerificationEvent(tenantId, employeeId, purpose,
                     "FAIL_LOCKED", friendlyRejectionCopy("FACE_LOCKED"),
                     null, null, null, modelName, modelVersion,
@@ -574,7 +580,7 @@ public class FaceService {
     private EnrollmentRow loadEnrollment(UUID tenantId, UUID employeeId) {
         try {
             return jdbc.queryForObject("""
-                SELECT id, status, samples_captured, consecutive_failures, enrolled_at
+                SELECT id, status, samples_captured, consecutive_failures, enrolled_at, locked_at
                   FROM attendance.face_enrollments
                  WHERE tenant_id = ? AND employee_id = ?
                 """, (rs, n) -> new EnrollmentRow(
@@ -582,7 +588,8 @@ public class FaceService {
                     EnrollmentStatus.valueOf(rs.getString("status")),
                     rs.getInt("samples_captured"),
                     rs.getInt("consecutive_failures"),
-                    rs.getTimestamp("enrolled_at") == null ? null : rs.getTimestamp("enrolled_at").toInstant()),
+                    rs.getTimestamp("enrolled_at") == null ? null : rs.getTimestamp("enrolled_at").toInstant(),
+                    rs.getTimestamp("locked_at") == null ? null : rs.getTimestamp("locked_at").toInstant()),
                 tenantId, employeeId);
         } catch (EmptyResultDataAccessException e) {
             return null;
@@ -678,5 +685,32 @@ public class FaceService {
     }
 
     private record EnrollmentRow(UUID id, EnrollmentStatus status,
-                                 int samplesCaptured, int consecutiveFailures, Instant enrolledAt) {}
+                                 int samplesCaptured, int consecutiveFailures, Instant enrolledAt,
+                                 Instant lockedAt) {}
+
+    /**
+     * True when the enrolment should still be treated as LOCKED. A lock older
+     * than {@code lockoutCooldownMinutes} is cleared automatically (status back
+     * to ACTIVE, failure counter reset — templates are kept) so the employee can
+     * retry without a manager. {@code lockoutCooldownMinutes <= 0} disables the
+     * auto-unlock, preserving the old manager-only behaviour.
+     */
+    private boolean stillLocked(UUID tenantId, UUID employeeId, EnrollmentRow row) {
+        if (row == null || row.status() != EnrollmentStatus.LOCKED) {
+            return false;
+        }
+        Instant lockedAt = row.lockedAt();
+        if (lockoutCooldownMinutes > 0 && lockedAt != null
+                && java.time.Duration.between(lockedAt, Instant.now()).toMinutes() >= lockoutCooldownMinutes) {
+            try {
+                writer.clearLock(tenantId, employeeId);
+                log.info("Auto-unlocked face enrolment for employee {} after {}-min cooldown",
+                        employeeId, lockoutCooldownMinutes);
+                return false;
+            } catch (Exception ex) {
+                log.warn("Auto-unlock failed for employee {}: {}", employeeId, ex.getMessage());
+            }
+        }
+        return true;
+    }
 }

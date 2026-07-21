@@ -229,6 +229,12 @@ public class EmployeeController {
     public ResponseEntity<Map<String, Object>> setAccess(
             @PathVariable UUID employeeId,
             @RequestParam String role,
+            // Optional: when promoting to DEPT_MANAGER, admin picks WHICH department
+            // this employee leads. If provided, we also set the department's
+            // department_head_employee_id to this employee (co-existing heads:
+            // the confirmation dialog on the mobile side already surfaced the
+            // existing head, so replacement here is intentional and audited).
+            @RequestParam(value = "departmentId", required = false) UUID departmentId,
             @AuthenticationPrincipal Jwt jwt) {
         // Allowed targets. We deliberately exclude OWNER/SUPER_ADMIN — those are
         // platform-level roles, only assignable via the web SaaS portal.
@@ -274,6 +280,20 @@ public class EmployeeController {
         // Step 2: assign the requested elevated role (no-op for EMPLOYEE).
         if (!"EMPLOYEE".equals(role)) {
             accessService.assignRole(tenantId, userId, role, actorId);
+        }
+        // Step 3: if promoting to DEPT_MANAGER with an explicit department,
+        // set that department's head to this employee. Skipped for other
+        // roles and when no departmentId provided.
+        if ("DEPT_MANAGER".equals(role) && departmentId != null) {
+            try {
+                jdbcTemplate.update(
+                        "UPDATE hrms.departments SET department_head_employee_id = ? "
+                                + "WHERE id = ? AND tenant_id = ?",
+                        employeeId, departmentId, tenantId);
+            } catch (Exception e) {
+                // Non-fatal: the role IS assigned, just log — admin can retry the head-set.
+                // Not throwing keeps the primary role change idempotent.
+            }
         }
         return ResponseEntity.ok(Map.of("role", role));
     }

@@ -146,7 +146,7 @@ public class LegacyAttendanceExtrasController {
                     return new LiveLocationResponse(
                             record.getEmployeeId(),
                             emp != null ? emp.getEmployeeCode() : null,
-                            emp != null ? (emp.getFirstName() + " " + emp.getLastName()).trim() : null,
+                            emp != null ? (emp.getFirstName() + " " + (emp.getLastName() == null ? "" : emp.getLastName())).trim() : null,
                             emp != null ? emp.getJobTitle() : null,
                             emp != null ? emp.getProfilePhotoUrl() : null,
                             record.getCheckInLatitude(),

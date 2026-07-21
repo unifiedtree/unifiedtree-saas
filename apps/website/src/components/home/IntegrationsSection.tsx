@@ -1,18 +1,25 @@
 import { motion } from 'framer-motion'
 
-const integrations = [
-  { name: 'Razorpay', color: '#3395FF', bg: '#E8F2FF' },
-  { name: 'Stripe', color: '#635BFF', bg: '#EFEEFD' },
+type Integration = {
+  name: string
+  color: string
+  bg: string
+  slug?: string
+}
+
+const integrations: Integration[] = [
+  { name: 'Razorpay', color: '#3395FF', bg: '#E8F2FF', slug: 'razorpay' },
+  { name: 'Stripe', color: '#635BFF', bg: '#EFEEFD', slug: 'stripe' },
   { name: 'Tally', color: '#003399', bg: '#E6EBF7' },
-  { name: 'QuickBooks', color: '#2CA01C', bg: '#E8F5E6' },
-  { name: 'Google Workspace', color: '#EA4335', bg: '#FDECEA' },
-  { name: 'Slack', color: '#4A154B', bg: '#F0E8F0' },
-  { name: 'WhatsApp', color: '#25D366', bg: '#E6FAF0' },
-  { name: 'AWS S3', color: '#FF9900', bg: '#FFF4E5' },
-  { name: 'Shopify', color: '#96BF48', bg: '#EFF5E5' },
+  { name: 'QuickBooks', color: '#2CA01C', bg: '#E8F5E6', slug: 'quickbooks' },
+  { name: 'Google Workspace', color: '#EA4335', bg: '#FDECEA', slug: 'googleworkspace' },
+  { name: 'Slack', color: '#4A154B', bg: '#F0E8F0', slug: 'slack' },
+  { name: 'WhatsApp', color: '#25D366', bg: '#E6FAF0', slug: 'whatsapp' },
+  { name: 'AWS S3', color: '#FF9900', bg: '#FFF4E5', slug: 'amazons3' },
+  { name: 'Shopify', color: '#96BF48', bg: '#EFF5E5', slug: 'shopify' },
   { name: 'GST Portal', color: '#004E9A', bg: '#E5EEF7' },
   { name: 'MSG91', color: '#FF6B35', bg: '#FFEEE8' },
-  { name: 'Leaflet Maps', color: '#199900', bg: '#E5F5E5' },
+  { name: 'Leaflet Maps', color: '#199900', bg: '#E5F5E5', slug: 'leaflet' },
 ]
 
 export function IntegrationsSection() {
@@ -48,17 +55,25 @@ export function IntegrationsSection() {
               whileHover={{ scale: 1.06, y: -3 }}
               className="group bg-surface rounded-xl p-5 border border-border shadow-card hover:shadow-card-hover transition-all duration-300 flex flex-col items-center gap-2 cursor-pointer"
             >
-              {/* Logo circle */}
               <div
                 className="w-12 h-12 rounded-xl flex items-center justify-center mb-1 transition-all duration-300"
                 style={{ backgroundColor: integration.bg }}
               >
-                <span
-                  className="text-xs font-heading font-extrabold"
-                  style={{ color: integration.color, fontSize: '10px', textAlign: 'center', lineHeight: '1.2' }}
-                >
-                  {integration.name.split(' ')[0].slice(0, 3).toUpperCase()}
-                </span>
+                {integration.slug ? (
+                  <img
+                    src={`https://cdn.simpleicons.org/${integration.slug}`}
+                    alt={`${integration.name} logo`}
+                    loading="lazy"
+                    className="w-7 h-7 object-contain"
+                  />
+                ) : (
+                  <span
+                    className="font-heading font-extrabold"
+                    style={{ color: integration.color, fontSize: '10px', textAlign: 'center', lineHeight: '1.2' }}
+                  >
+                    {integration.name.split(' ')[0].slice(0, 3).toUpperCase()}
+                  </span>
+                )}
               </div>
               <span className="text-xs font-body font-medium text-text-secondary group-hover:text-primary transition-colors text-center leading-tight">
                 {integration.name}

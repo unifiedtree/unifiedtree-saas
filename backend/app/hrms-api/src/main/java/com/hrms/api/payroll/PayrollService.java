@@ -70,9 +70,11 @@ public class PayrollService {
     public record CreateComponentRequest(
         @jakarta.validation.constraints.NotBlank String code,
         @jakarta.validation.constraints.NotBlank String name,
+        @jakarta.validation.constraints.NotBlank
         @jakarta.validation.constraints.Pattern(regexp = "EARNING|DEDUCTION|EMPLOYER_CONTRIBUTION|REIMBURSEMENT",
             message = "invalid category") String category,
         Boolean isStatutory, Boolean isTaxable,
+        @jakarta.validation.constraints.NotBlank
         @jakarta.validation.constraints.Pattern(regexp = "FIXED|PERCENT_OF_BASIC|PERCENT_OF_GROSS|FORMULA|STATUTORY",
             message = "invalid computationType") String computationType,
         BigDecimal percentValue, Integer displayOrder) {}
@@ -248,7 +250,12 @@ public class PayrollService {
         if (req.employeeId() == null || req.ctcAnnual() == null || req.effectiveFrom() == null) {
             throw new BusinessRuleException("employeeId, ctcAnnual and effectiveFrom are required", "INVALID_STRUCTURE");
         }
-        LocalDate effFrom = LocalDate.parse(req.effectiveFrom());
+        LocalDate effFrom;
+        try {
+            effFrom = LocalDate.parse(req.effectiveFrom());
+        } catch (java.time.format.DateTimeParseException ex) {
+            throw new BusinessRuleException("effectiveFrom must be an ISO date (yyyy-MM-dd)", "INVALID_EFFECTIVE_FROM");
+        }
         // Demote the existing current structure (TRUE -> NULL leaves the unique slot).
         jdbc.update("""
             UPDATE payroll.employee_salary_structures

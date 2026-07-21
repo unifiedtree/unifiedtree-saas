@@ -13,4 +13,11 @@ public interface WorkforceDepartmentRepository extends JpaRepository<Department,
     List<Department> findAllByCompanyIdAndActiveTrueOrderByNameAsc(UUID companyId);
     Optional<Department> findByCompanyIdAndNameIgnoreCase(UUID companyId, String name);
     boolean existsByCompanyIdAndNameIgnoreCase(UUID companyId, String name);
+
+    /**
+     * Departments where this employee is the current head. Used by the
+     * attendance dashboard to scope a DEPT_MANAGER's team view to every
+     * teammate in the department(s) they lead, not just direct reports.
+     */
+    List<Department> findByDepartmentHeadEmployeeId(UUID departmentHeadEmployeeId);
 }

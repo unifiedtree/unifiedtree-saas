@@ -126,7 +126,7 @@ public class PliController {
 
     private PliAwardResponse enrich(PliAwardResponse r, Employee employee) {
         String employeeName = employee != null
-                ? (employee.getFirstName() + " " + employee.getLastName()).trim()
+                ? (employee.getFirstName() + " " + (employee.getLastName() == null ? "" : employee.getLastName())).trim()
                 : null;
         String employeeCode = employee != null ? employee.getEmployeeCode() : null;
         return new PliAwardResponse(

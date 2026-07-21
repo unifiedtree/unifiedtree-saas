@@ -177,7 +177,7 @@ public class ComplianceController {
 
     private ComplianceItemResponse enrich(ComplianceItemResponse r, Employee owner) {
         String ownerName = owner != null
-                ? (owner.getFirstName() + " " + owner.getLastName()).trim()
+                ? (owner.getFirstName() + " " + (owner.getLastName() == null ? "" : owner.getLastName())).trim()
                 : null;
         String ownerCode = owner != null ? owner.getEmployeeCode() : null;
         return new ComplianceItemResponse(
