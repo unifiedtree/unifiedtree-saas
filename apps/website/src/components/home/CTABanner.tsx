@@ -58,7 +58,7 @@ export function CTABanner() {
           </p>
 
           <div className="flex flex-wrap gap-4 justify-center">
-            <Button size="lg" onClick={() => navigate('/pricing')}>
+            <Button size="lg" onClick={() => navigate('/trial-signup')}>
               Start Free Trial <ArrowRight size={18} />
             </Button>
             <Button size="lg" variant="ghost" onClick={() => navigate('/pricing')}>

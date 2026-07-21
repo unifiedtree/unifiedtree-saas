@@ -73,7 +73,7 @@ export function StartFreeTrialPage() {
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              onClick={() => navigate('/signup')}
+              onClick={() => navigate('/trial-signup')}
               className="inline-flex items-center gap-3 px-12 py-4 bg-primary text-white rounded-xl font-body font-bold text-lg hover:bg-primary-dark transition-all shadow-teal hover:shadow-teal-lg btn-shimmer"
             >
               Create Free Account <ArrowRight size={20} />
@@ -188,7 +188,7 @@ export function StartFreeTrialPage() {
                 </ul>
 
                 <button
-                  onClick={() => navigate('/signup')}
+                  onClick={() => navigate('/trial-signup')}
                   className={`w-full py-3.5 rounded-xl text-sm font-body font-bold transition-all duration-300 ${
                     plan.popular
                       ? 'bg-primary text-white hover:bg-primary-dark shadow-teal hover:shadow-teal-lg active:scale-98 transform btn-shimmer'

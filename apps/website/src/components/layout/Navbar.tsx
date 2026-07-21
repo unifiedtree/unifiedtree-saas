@@ -151,7 +151,7 @@ export function Navbar() {
             ) : (
               <>
                 <Link to="/login" className={linkCls}>Sign in</Link>
-                <Button size="lg" onClick={() => navigate('/pricing')} className="font-semibold px-6">
+                <Button size="lg" onClick={() => navigate('/trial-signup')} className="font-semibold px-6">
                   Start free trial <ArrowRight size={18} />
                 </Button>
               </>
@@ -199,7 +199,7 @@ export function Navbar() {
                 ) : (
                   <>
                     <Link to="/login" className="block w-full rounded-lg border border-border px-4 py-3 text-center text-sm font-medium text-text-secondary transition-all hover:border-primary hover:text-primary" onClick={() => setMenuOpen(false)}>Sign in</Link>
-                    <Link to="/pricing" className="block w-full rounded-lg bg-primary px-4 py-3 text-center text-sm font-semibold text-white transition-all hover:bg-primary-dark" onClick={() => setMenuOpen(false)}>Start free trial</Link>
+                    <Link to="/trial-signup" className="block w-full rounded-lg bg-primary px-4 py-3 text-center text-sm font-semibold text-white transition-all hover:bg-primary-dark" onClick={() => setMenuOpen(false)}>Start free trial</Link>
                   </>
                 )}
               </div>

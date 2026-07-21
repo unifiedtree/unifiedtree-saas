@@ -77,6 +77,8 @@ public class SaasService {
     private final ApplicationEventPublisher events;
     private final com.unifiedtree.saas.payment.PaymentService payments;
     private final com.unifiedtree.saas.plans.ModulePlanService planService;
+    private final com.unifiedtree.saas.trial.BillingSettingsService billingSettings;
+    private final com.unifiedtree.saas.trial.TrialSubscriptionService trials;
 
     public SaasService(JdbcTemplate jdbc,
                        SaasWriter writer,
@@ -85,7 +87,9 @@ public class SaasService {
                        @Value("${unifiedtree.base-domain:unifiedtree.com}") String baseDomain,
                        ApplicationEventPublisher events,
                        com.unifiedtree.saas.payment.PaymentService payments,
-                       com.unifiedtree.saas.plans.ModulePlanService planService) {
+                       com.unifiedtree.saas.plans.ModulePlanService planService,
+                       com.unifiedtree.saas.trial.BillingSettingsService billingSettings,
+                       com.unifiedtree.saas.trial.TrialSubscriptionService trials) {
         this.jdbc = jdbc;
         this.writer = writer;
         this.jwt = jwt;
@@ -94,6 +98,8 @@ public class SaasService {
         this.events = events;
         this.payments = payments;
         this.planService = planService;
+        this.billingSettings = billingSettings;
+        this.trials = trials;
     }
 
     // -- Public: subdomain availability -----------------------------------------------------------
@@ -133,8 +139,29 @@ public class SaasService {
         // logins are entirely untouched.
         // ----------------------------------------------------------------------
         com.unifiedtree.saas.payment.PaymentService.PaidOrder paid = null;
+        boolean isTrial = "TRIAL".equalsIgnoreCase(req.mode());
         List<String> modulesToActivate = normalizeModules(req.requestedModules());
-        if (payments.paywallActive()) {
+        List<String> trialPlanKeys = List.of();
+
+        if (isTrial) {
+            // TRIAL path: free workspace, no payment. The trial covers whatever
+            // AVAILABLE plans the visitor picked (client-supplied plan keys);
+            // launching-soon plans are rejected by requireAvailable. Duration
+            // comes from platform.billing_settings (DB-driven, default 7 days).
+            if (!billingSettings.current().trialEnabled()) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Free trials are currently disabled. Please subscribe to continue.");
+            }
+            trialPlanKeys = normalizeModules(req.requestedModules());
+            if (trialPlanKeys.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Pick at least one module for your free trial");
+            }
+            // Fail fast on launching-soon / unknown plans BEFORE we create the
+            // tenant so signup never half-succeeds.
+            var trialPlans = planService.requireAvailable(trialPlanKeys);
+            modulesToActivate = planService.expandModules(trialPlans);
+        } else if (payments.paywallActive()) {
             SignupRequest.PaymentProof p = req.payment();
             if (p == null || isBlank(p.razorpayOrderId()) || isBlank(p.razorpayPaymentId())
                     || isBlank(p.razorpaySignature())) {
@@ -150,10 +177,15 @@ public class SaasService {
         String passwordHash = passwords.hash(req.password());
         SignupResponse resp = createWorkspace(accountId, passwordHash, req, modulesToActivate);
 
-        // Burn the order so a single successful payment can never mint a second
-        // workspace (idempotency / replay guard). Done after the tenant is
-        // persisted so a mid-flight failure leaves the order re-usable.
-        if (paid != null) {
+        if (isTrial) {
+            // Write the durable TRIAL subscription (visible in platform.subscriptions
+            // with plan_type='TRIAL', status='ACTIVE', current_period_end = now + trial_days).
+            trials.createTrial(resp.tenantId(), resp.subdomain(), req.adminEmail(),
+                    trialPlanKeys, 1);
+        } else if (paid != null) {
+            // Burn the order so a single successful payment can never mint a second
+            // workspace (idempotency / replay guard). Done after the tenant is
+            // persisted so a mid-flight failure leaves the order re-usable.
             payments.markConsumed(paid.orderId(), resp.tenantId());
         }
         return resp;
@@ -175,7 +207,8 @@ public class SaasService {
                 req.companySize(),
                 req.primaryInterest(),
                 req.requestedModules(),
-                null);
+                null,     // payment: not applicable for existing-account flow
+                null);    // mode: PAID (default)
         return createWorkspace(account.accountId(), account.passwordHash(), signup,
                 normalizeModules(req.requestedModules()));
     }

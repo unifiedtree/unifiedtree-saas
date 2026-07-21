@@ -5,6 +5,7 @@ import { ModulesPage } from './pages/ModulesPage'
 import { PricingPage } from './pages/PricingPage'
 import { LoginPage } from './pages/LoginPage'
 import { SignupPage } from './pages/SignupPage'
+import { TrialSignupPage } from './pages/TrialSignupPage'
 import { FeaturesPage } from './pages/FeaturesPage'
 
 import { AboutPage } from './pages/AboutPage'
@@ -45,6 +46,7 @@ function AnimatedRoutes() {
       <Route path="/start-free-trial"  element={<PageTransition><StartFreeTrialPage /></PageTransition>} />
       <Route path="/login"             element={<PageTransition><LoginPage /></PageTransition>} />
       <Route path="/signup"            element={<PageTransition><SignupPage /></PageTransition>} />
+      <Route path="/trial-signup"      element={<PageTransition><TrialSignupPage /></PageTransition>} />
 
       {/* Account & Workspace Routes */}
       <Route path="/workspaces"        element={<PageTransition><WorkspacesPage /></PageTransition>} />

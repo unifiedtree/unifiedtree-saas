@@ -35,10 +35,14 @@ public final class SaasDtos {
             @Size(max = 100) String primaryInterest,
             @NotEmpty List<String> requestedModules,
             // Razorpay proof of payment. Required only when the paywall is
-            // configured (production); the backend re-verifies it server-side
-            // and derives the activated modules from the PAID plans, so a
-            // client cannot self-grant modules it did not pay for.
-            PaymentProof payment
+            // configured (production) AND mode != "TRIAL"; the backend re-verifies
+            // it server-side and derives the activated modules from the PAID
+            // plans, so a client cannot self-grant modules it did not pay for.
+            PaymentProof payment,
+            // "PAID" (default, requires payment when paywall active) or "TRIAL"
+            // (skips payment; workspace created with a fixed-length trial
+            // subscription per platform.billing_settings). Null == PAID.
+            String mode
     ) {
         public record PaymentProof(
                 String razorpayOrderId,

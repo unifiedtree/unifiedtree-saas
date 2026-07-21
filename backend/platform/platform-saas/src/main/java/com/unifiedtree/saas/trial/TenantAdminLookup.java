@@ -1,0 +1,67 @@
+package com.unifiedtree.saas.trial;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Look up the workspace-admin users of a tenant. Used by the trial lifecycle
+ * job to fan out "trial ending" / "trial expired" notifications to everyone
+ * who can actually act on them.
+ *
+ * <p>The returned UUIDs are {@code auth.user_credentials.employee_id} — that
+ * matches the convention used elsewhere for {@code notif.notifications.user_id}
+ * (see {@code DomainEventListener}), so notifications appear in the right
+ * user's inbox on the mobile client without any extra plumbing.
+ *
+ * <p>Signup grants BOTH {@code SUPER_ADMIN} and {@code OWNER} to the workspace
+ * admin, so we look up either. {@code DISTINCT} covers the overlap.
+ */
+@Component
+public class TenantAdminLookup {
+
+    private static final Logger log = LoggerFactory.getLogger(TenantAdminLookup.class);
+
+    // Same UUIDs SaasWriter grants at signup.
+    private static final UUID SUPER_ADMIN_ROLE_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID OWNER_ROLE_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000010");
+
+    private final JdbcTemplate jdbc;
+
+    public TenantAdminLookup(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /** Employee IDs (the id notifications key off) + email addresses of every active admin. */
+    public List<AdminUser> findAdminUsers(UUID tenantId) {
+        if (tenantId == null) return List.of();
+        try {
+            return jdbc.query("""
+                    SELECT DISTINCT uc.employee_id, uc.email, uc.display_name
+                      FROM rbac.user_roles ur
+                      JOIN auth.user_credentials uc ON uc.id = ur.user_id
+                     WHERE ur.tenant_id = ?
+                       AND ur.role_id IN (?, ?)
+                       AND uc.employee_id IS NOT NULL
+                       AND uc.is_active = TRUE
+                     ORDER BY uc.display_name NULLS LAST
+                    """,
+                    (rs, n) -> new AdminUser(
+                            rs.getObject("employee_id", UUID.class),
+                            rs.getString("email"),
+                            rs.getString("display_name")),
+                    tenantId, SUPER_ADMIN_ROLE_ID, OWNER_ROLE_ID);
+        } catch (Exception ex) {
+            log.warn("admin lookup failed for tenant={}: {}", tenantId, ex.getMessage());
+            return List.of();
+        }
+    }
+
+    public record AdminUser(UUID employeeId, String email, String displayName) {}
+}
