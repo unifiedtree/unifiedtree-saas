@@ -9,8 +9,12 @@ import com.hrms.leave.dto.WfhRequestRequest;
 import com.hrms.leave.dto.WfhRequestResponse;
 import com.hrms.leave.entity.WfhRequest;
 import com.hrms.leave.repository.WfhRequestRepository;
+import com.unifiedtree.notifications.events.WfhCancelledEvent;
+import com.unifiedtree.notifications.events.WfhDecidedEvent;
+import com.unifiedtree.notifications.events.WfhRequestSubmittedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -33,9 +37,12 @@ public class WfhService {
     private static final Logger log = LoggerFactory.getLogger(WfhService.class);
 
     private final WfhRequestRepository repository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public WfhService(WfhRequestRepository repository) {
+    public WfhService(WfhRequestRepository repository,
+                      ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -100,6 +107,17 @@ public class WfhService {
         WfhRequest saved = repository.save(entity);
         log.info("WFH requested id={} employee={} approver={} range={}..{}",
                 saved.getId(), employeeId, approverId, saved.getFromDate(), saved.getToDate());
+
+        // In-process notification fan-out → notif.notifications (see
+        // DomainEventListener). AFTER_COMMIT, so a rollback here leaves no
+        // phantom notification. Wrapped so a fan-out failure never fails apply.
+        try {
+            eventPublisher.publishEvent(new WfhRequestSubmittedEvent(
+                    saved.getId(), employeeId, approverId, saved.getTenantId(),
+                    saved.getFromDate(), saved.getToDate()));
+        } catch (Exception ex) {
+            log.warn("Failed to publish WfhRequestSubmittedEvent for {}: {}", saved.getId(), ex.getMessage());
+        }
         return toResponse(saved);
     }
 
@@ -125,6 +143,15 @@ public class WfhService {
         entity.setDecisionNote(comment);
         WfhRequest saved = repository.save(entity);
         log.info("WFH decided id={} decision={} approver={}", saved.getId(), decision, approverId);
+
+        try {
+            eventPublisher.publishEvent(new WfhDecidedEvent(
+                    saved.getId(), saved.getEmployeeId(), saved.getTenantId(),
+                    decision == ApprovalStatus.APPROVED,
+                    saved.getFromDate(), saved.getToDate(), comment));
+        } catch (Exception ex) {
+            log.warn("Failed to publish WfhDecidedEvent for {}: {}", saved.getId(), ex.getMessage());
+        }
         return toResponse(saved);
     }
 
@@ -144,13 +171,28 @@ public class WfhService {
         }
         entity.setStatus(ApprovalStatus.CANCELLED);
         entity.setDecidedAt(Instant.now());
-        repository.save(entity);
-        log.info("WFH cancelled id={} by employee={}", entity.getId(), employeeId);
+        WfhRequest saved = repository.save(entity);
+        log.info("WFH cancelled id={} by employee={}", saved.getId(), employeeId);
+
+        try {
+            eventPublisher.publishEvent(new WfhCancelledEvent(
+                    saved.getId(), employeeId, saved.getApproverId(), saved.getTenantId(),
+                    saved.getFromDate(), saved.getToDate()));
+        } catch (Exception ex) {
+            log.warn("Failed to publish WfhCancelledEvent for {}: {}", saved.getId(), ex.getMessage());
+        }
     }
 
     @Transactional(readOnly = true)
     public PageResponse<WfhRequestResponse> getMyRequests(UUID employeeId, Pageable pageable) {
         Page<WfhRequest> page = repository.findByEmployeeIdOrderByFromDateDesc(employeeId, pageable);
+        return PageResponse.from(page, this::toResponse);
+    }
+
+    /** Tenant-wide pending WFH queue for admin/HR. RLS scopes to the caller's tenant. */
+    @Transactional(readOnly = true)
+    public PageResponse<WfhRequestResponse> getAllPending(Pageable pageable) {
+        Page<WfhRequest> page = repository.findAllPending(pageable);
         return PageResponse.from(page, this::toResponse);
     }
 

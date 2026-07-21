@@ -197,14 +197,24 @@ public class LeaveController {
 
     // ─── L1 Manager approval ────────────────────────────────────────────────
 
-    @Operation(summary = "Get pending L1 leave approvals for the current manager")
+    @Operation(summary = "Get pending L1 leave approvals — broadens to ALL PENDING in tenant if caller has L2/HR authority")
     @GetMapping("/approvals/pending")
     @PreAuthorize("@perm.check('hrms.leave.approve.l1')")
     public ResponseEntity<PageResponse<LeaveRequestResponse>> pendingApprovals(
             @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(
-                leaveService.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable)));
+        // Admin / HR see EVERY pending request in the tenant, not just the ones
+        // routed to them personally — a new hire with no reporting manager gets
+        // routed to HR, and the admin needs to see it too. Detected by the
+        // L2 approve authority (COMPANY_ADMIN + HR_MANAGER have it, plain
+        // DEPT_MANAGER does not, so managers keep their personal-scope view).
+        boolean adminOrHr = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
+        PageResponse<LeaveRequestResponse> page = adminOrHr
+                ? leaveService.getAllPending(pageable)
+                : leaveService.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable);
+        return ResponseEntity.ok(enrichPage(page));
     }
 
     @Operation(summary = "Get past leave decisions (approved/rejected/cancelled) for the current manager")
@@ -329,9 +339,12 @@ public class LeaveController {
     private LeaveRequestResponse enrich(LeaveRequestResponse r,
                                         Employee employee,
                                         Map<UUID, String> departmentNames) {
+        // Null-safe join: a null last name must render as "Anil", never
+        // "Anil null" (Java concatenates a null reference as the text "null").
         String employeeName = employee != null
-                ? (employee.getFirstName() + " " + employee.getLastName()).trim()
+                ? ((nz(employee.getFirstName()) + " " + nz(employee.getLastName())).trim())
                 : null;
+        if (employeeName != null && employeeName.isBlank()) employeeName = null;
         String employeeCode = employee != null ? employee.getEmployeeCode() : null;
         String departmentName = employee != null && employee.getDepartmentId() != null
                 ? departmentNames.get(employee.getDepartmentId())
@@ -352,6 +365,11 @@ public class LeaveController {
                 r.approverComment(),
                 r.approvedAt(),
                 r.createdAt());
+    }
+
+    /** Null/blank-safe string: turns a null into "" so name joins never emit the text "null". */
+    private static String nz(String s) {
+        return s == null ? "" : s.trim();
     }
 
     private Map<UUID, String> departmentNames(java.util.Collection<Employee> employees) {

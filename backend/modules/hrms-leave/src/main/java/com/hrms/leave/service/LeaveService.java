@@ -15,6 +15,7 @@ import com.hrms.leave.repository.LeaveBalanceRepository;
 import com.hrms.leave.repository.LeaveRequestRepository;
 import com.hrms.leave.repository.LeaveTypeRepository;
 import com.unifiedtree.notifications.events.LeaveDecidedEvent;
+import com.unifiedtree.notifications.events.LeaveRequestCancelledEvent;
 import com.unifiedtree.notifications.events.LeaveRequestSubmittedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,8 +123,10 @@ public class LeaveService {
             throw new BusinessRuleException("End date must not be before start date", "INVALID_LEAVE_DATES");
         }
 
-        // Check min notice days
-        long noticeDays = LocalDate.now().until(startDate).getDays();
+        // Check min notice days — must be the TOTAL elapsed days, not
+        // Period.getDays() (which is only the day-of-month component, so a
+        // start date one month out reads as 0 days' notice and wrongly rejects).
+        long noticeDays = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), startDate);
         if (noticeDays < leaveType.getMinNoticeDays()) {
             throw new BusinessRuleException(
                     "Minimum notice of %d day(s) required before leave start date".formatted(leaveType.getMinNoticeDays()),
@@ -431,6 +434,19 @@ public class LeaveService {
         leaveBalanceRepository.save(balance);
         leaveRequestRepository.save(leaveRequest);
 
+        // Notify the approver so a cancelled request never lingers in their queue.
+        try {
+            String ltName = leaveTypeRepository.findById(leaveRequest.getLeaveTypeId())
+                    .map(LeaveType::getName).orElse(null);
+            eventPublisher.publishEvent(new LeaveRequestCancelledEvent(
+                    leaveRequest.getId(), employeeId, leaveRequest.getApproverId(),
+                    leaveRequest.getTenantId(), ltName,
+                    leaveRequest.getStartDate(), leaveRequest.getEndDate()));
+        } catch (Exception ex) {
+            log.warn("Failed to publish LeaveRequestCancelledEvent for {}: {}",
+                    leaveRequest.getId(), ex.getMessage());
+        }
+
         if (kafkaEnabled) {
             try {
                 UUID tid = leaveRequest.getTenantId();
@@ -465,6 +481,13 @@ public class LeaveService {
     public PageResponse<LeaveRequestResponse> getMyLeaves(UUID employeeId, Pageable pageable) {
         log.debug("Fetching leave requests for employee={}", employeeId);
         Page<LeaveRequest> page = leaveRequestRepository.findByEmployeeId(employeeId, pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
+    /** Tenant-wide pending queue for admin/HR — every PENDING leave in the tenant (RLS scopes). */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getAllPending(Pageable pageable) {
+        Page<LeaveRequest> page = leaveRequestRepository.findAllPending(pageable);
         return PageResponse.from(page, this::toResponseWithTypeName);
     }
 

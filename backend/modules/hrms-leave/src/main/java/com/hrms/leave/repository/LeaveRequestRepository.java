@@ -68,6 +68,17 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
     Page<LeaveRequest> findPendingForManager(@Param("managerEmpId") UUID managerEmpId, Pageable pageable);
 
     /**
+     * Tenant-wide pending queue. Returns EVERY pending leave in the current
+     * tenant (RLS enforces the tenant scope automatically). Used when the
+     * caller is HR/admin — they need to see requests that route to their
+     * reports too, not just their own direct approvals.
+     */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status = 'PENDING' ORDER BY lr.created_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status = 'PENDING'",
+        nativeQuery = true)
+    Page<LeaveRequest> findAllPending(Pageable pageable);
+
+    /**
      * Approval-history query for a manager: returns leaves this manager has
      * already DECIDED (APPROVED, REJECTED, CANCELLED — anything except PENDING).
      * Same broadened match as {@link #findPendingForManager} — the manager

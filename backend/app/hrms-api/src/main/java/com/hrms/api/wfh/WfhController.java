@@ -132,14 +132,19 @@ public class WfhController {
 
     // ─── Manager approval ────────────────────────────────────────────────────
 
-    @Operation(summary = "Get pending WFH approvals for the current manager")
+    @Operation(summary = "Pending WFH approvals — broadens to tenant-wide if caller is admin/HR (has leave.approve.l2)")
     @GetMapping("/pending-approvals")
     @PreAuthorize("hasAuthority('wfh.approve')")
     public ResponseEntity<PageResponse<WfhRequestResponse>> pendingApprovals(
             @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(
-                service.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable)));
+        boolean adminOrHr = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
+        PageResponse<WfhRequestResponse> page = adminOrHr
+                ? service.getAllPending(pageable)
+                : service.getPendingApprovalsForManager(extractEmployeeId(jwt), pageable);
+        return ResponseEntity.ok(enrichPage(page));
     }
 
     @Operation(summary = "Approve a WFH request")

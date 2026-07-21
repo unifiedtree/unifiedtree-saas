@@ -174,6 +174,26 @@ public class FaceWriter {
             """, tenantId, employeeId);
     }
 
+    /**
+     * Auto-unlock an aged-out lock: restore a LOCKED enrolment to ACTIVE and
+     * reset the failure counter, KEEPING the enrolled templates (unlike
+     * {@link #adminReset} which wipes them). Only touches rows still LOCKED, so
+     * it's a safe no-op if the row was reset/re-enrolled in the meantime.
+     */
+    @Transactional
+    public void clearLock(UUID tenantId, UUID employeeId) {
+        jdbc.update("""
+            UPDATE attendance.face_enrollments
+               SET status = 'ACTIVE',
+                   consecutive_failures = 0,
+                   locked_at = NULL,
+                   locked_reason = NULL,
+                   updated_at = now(),
+                   version = version + 1
+             WHERE tenant_id = ? AND employee_id = ? AND status = 'LOCKED'
+            """, tenantId, employeeId);
+    }
+
     @Transactional
     public void adminReset(UUID tenantId, UUID employeeId, UUID actingAdminId, String reason) {
         // Revoke existing templates; the next enrollment-start call recreates the row.

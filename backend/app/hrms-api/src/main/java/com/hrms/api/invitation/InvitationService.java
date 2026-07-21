@@ -10,10 +10,12 @@ import com.unifiedtree.rbac.entity.Role;
 import com.unifiedtree.rbac.entity.UserRole;
 import com.unifiedtree.rbac.repository.RoleRepository;
 import com.unifiedtree.rbac.repository.UserRoleRepository;
+import com.unifiedtree.notifications.events.EmployeeWelcomeEvent;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +45,7 @@ public class InvitationService {
     private final AuthService canonicalAuthService;
     private final InvitationEmailSender emailSender;
     private final JdbcTemplate jdbc;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${unifiedtree.mail.invite-url-base:${unifiedtree.invitation.platform-base-url:http://localhost:3001}}")
     private String platformBaseUrl;
@@ -54,7 +57,8 @@ public class InvitationService {
                              PasswordService passwordService,
                              AuthService canonicalAuthService,
                              InvitationEmailSender emailSender,
-                             JdbcTemplate jdbc) {
+                             JdbcTemplate jdbc,
+                             ApplicationEventPublisher eventPublisher) {
         this.credRepo            = credRepo;
         this.userRoleRepo        = userRoleRepo;
         this.roleRepo            = roleRepo;
@@ -63,6 +67,7 @@ public class InvitationService {
         this.canonicalAuthService = canonicalAuthService;
         this.emailSender         = emailSender;
         this.jdbc                = jdbc;
+        this.eventPublisher      = eventPublisher;
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -250,6 +255,19 @@ public class InvitationService {
         String tenantName = loadTenantName(tenantId);
         String tenantSlug = loadTenantSlug(tenantId);
         List<String> activeModules = loadActiveModules(tenantId);
+
+        // Welcome notification for the freshly-activated employee. Only for real
+        // employee accounts (workspace-admin invites have no employee record).
+        // AFTER_COMMIT + try/catch → never blocks activation.
+        if (creds.getEmployeeId() != null) {
+            try {
+                eventPublisher.publishEvent(new EmployeeWelcomeEvent(
+                        tenantId, creds.getEmployeeId(), tenantName));
+            } catch (Exception ex) {
+                log.warn("Failed to publish EmployeeWelcomeEvent for {}: {}",
+                        creds.getEmployeeId(), ex.getMessage());
+            }
+        }
 
         return new AcceptInviteResponse(
             loginResp.accessToken(), loginResp.refreshToken(),

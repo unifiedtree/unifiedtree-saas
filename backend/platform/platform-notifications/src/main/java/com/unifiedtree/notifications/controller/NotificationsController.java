@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -67,6 +68,20 @@ public class NotificationsController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> markAllRead(@AuthenticationPrincipal Jwt jwt) {
         service.markAllRead(extractUserId(jwt));
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        service.deleteOne(extractUserId(jwt), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/read")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> deleteAllRead(@AuthenticationPrincipal Jwt jwt) {
+        service.deleteAllRead(extractUserId(jwt));
         return ResponseEntity.noContent().build();
     }
 

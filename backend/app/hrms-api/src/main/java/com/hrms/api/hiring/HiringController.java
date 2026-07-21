@@ -157,7 +157,7 @@ public class HiringController {
 
     private JobRequisitionResponse enrich(JobRequisitionResponse r, Employee employee) {
         String managerName = employee != null
-                ? (employee.getFirstName() + " " + employee.getLastName()).trim()
+                ? (employee.getFirstName() + " " + (employee.getLastName() == null ? "" : employee.getLastName())).trim()
                 : null;
         return new JobRequisitionResponse(
                 r.id(), r.companyId(), r.title(), r.departmentId(), r.openings(),

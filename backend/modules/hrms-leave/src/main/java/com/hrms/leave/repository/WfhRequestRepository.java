@@ -49,6 +49,12 @@ public interface WfhRequestRepository extends JpaRepository<WfhRequest, UUID> {
         nativeQuery = true)
     Page<WfhRequest> findPendingForManager(@Param("managerEmpId") UUID managerEmpId, Pageable pageable);
 
+    /** Tenant-wide pending queue (RLS scopes to caller's tenant). Used by admin/HR. */
+    @Query(value = "SELECT wr.* FROM leave_mgmt.wfh_requests wr WHERE wr.status = 'PENDING' ORDER BY wr.created_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.wfh_requests wr WHERE wr.status = 'PENDING'",
+        nativeQuery = true)
+    Page<WfhRequest> findAllPending(Pageable pageable);
+
     /**
      * Any existing WFH request for the same employee that overlaps
      * [{@code fromDate}, {@code toDate}] and is currently in one of the

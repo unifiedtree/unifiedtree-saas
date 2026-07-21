@@ -54,6 +54,12 @@ public class NotificationTemplateController {
                     .map(Employee::getCompanyId)
                     .orElse(null);
         }
+        if (companyId == null) {
+            // company_id is NOT NULL — reject with a clear 400 rather than
+            // letting a null reach the INSERT and surface as a 500.
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "companyId is required");
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(templateService.createTemplate(companyId, request));
     }

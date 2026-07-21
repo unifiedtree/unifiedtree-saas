@@ -14,6 +14,8 @@
   <dependencies>
     <dependency><groupId>com.hrms</groupId><artifactId>hrms-core</artifactId></dependency>
     <dependency><groupId>com.unifiedtree</groupId><artifactId>shared-security</artifactId></dependency>
+    <!-- Notification events (in-process fanout to notif.notifications) -->
+    <dependency><groupId>com.unifiedtree</groupId><artifactId>platform-notifications</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-jpa</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-validation</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-webflux</artifactId></dependency>
