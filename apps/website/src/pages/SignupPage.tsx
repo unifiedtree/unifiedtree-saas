@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Edit2, User, Building, Mail, Phone, Lock, Globe, Languages, Users, Target, Check, X, Lock as LockIcon } from 'lucide-react';
+import { Loader2, Edit2, User, Building, Mail, Phone, Lock, Globe, Languages, Users, Target, Check, X, Lock as LockIcon, AlertCircle } from 'lucide-react';
 import { usePricingStore } from '../store/pricingStore';
 import { useModulePlans, computeMonthlyTotal, effectiveUnit, type ModulePlan } from '../lib/plans';
 import { createPaymentOrder, openCheckout, type RazorpaySuccess } from '../lib/razorpay';
+import { COUNTRIES } from '../data/countries';
+import { useSubdomainAvailability } from '../lib/subdomainCheck';
 import { API_BASE_URL } from '../lib/api';
 
 import { Navbar } from '../components/layout/Navbar';
@@ -25,7 +27,6 @@ const signupSchema = z.object({
   seats: z.coerce.number().int().min(1, 'At least 1 user'),
   country: z.string().min(1, 'Country is required'),
   language: z.string().min(1, 'Language is required'),
-  companySize: z.string().min(1, 'Company size is required'),
   primaryInterest: z.string().min(1, 'Interest is required'),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'Passwords do not match',
@@ -52,6 +53,9 @@ export function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isEditingSubdomain, setIsEditingSubdomain] = useState(false);
+  // Once the user has edited the subdomain, never overwrite it from
+  // companyName again (fixes the "domain reverts on blur" bug).
+  const subdomainTouched = useRef(false);
   const [isModulesDrawerOpen, setIsModulesDrawerOpen] = useState(false);
 
   const { data: plans = [] } = useModulePlans();
@@ -77,12 +81,13 @@ export function SignupPage() {
       seats: storeSeats,
       country: 'India',
       language: 'English',
-      companySize: '1 - 5 employees',
       primaryInterest: 'Use it in my company',
     },
   });
 
   const companyName = watch('companyName');
+  const subdomainValue = watch('subdomain');
+  const availability = useSubdomainAvailability(subdomainValue);
   const seats = Number(watch('seats')) || 1;
   const monthlyTotal = computeMonthlyTotal(plans, purchasableSelected.map((p) => p.key), seats);
   // Per-user rate of the selected plans (was hardcoded to ₹40) — comes from the DB.
@@ -94,10 +99,12 @@ export function SignupPage() {
   const chargeTotal = billingCycle === 'annual' ? perUserAnnual * seats * 12 : monthlyTotal;
 
   useEffect(() => {
-    if (companyName && !isEditingSubdomain) {
-      const slug = companyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-      if (slug.length >= 3) setValue('subdomain', slug);
-    }
+    // Auto-derive subdomain only until the user takes over. After they've
+    // manually edited (or clicked the edit pencil) we never overwrite.
+    if (subdomainTouched.current || isEditingSubdomain) return;
+    if (!companyName) return;
+    const slug = companyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    if (slug.length >= 3) setValue('subdomain', slug);
   }, [companyName, isEditingSubdomain, setValue]);
 
   // Submit the signup with proof of payment. Returns on success (opens the
@@ -110,11 +117,12 @@ export function SignupPage() {
       adminEmail: data.adminEmail,
       adminMobile: data.adminMobile,
       password: data.password,
-      industry: data.companySize,
+      industry: null,
       country: data.country,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       currency: 'INR',
-      companySize: data.companySize,
+      // Company Size field removed from UI; backend still accepts null.
+      companySize: null,
       primaryInterest: data.primaryInterest,
       requestedModules: modulesForSignup,
       payment: payment
@@ -270,25 +278,37 @@ export function SignupPage() {
                   <input {...register('companyName')} placeholder="Acme Corp" className={inputCls(!!errors.companyName)} />
                 </Field>
 
-                {/* Subdomain */}
-                <div className="md:col-span-2 bg-primary/5 border border-primary/10 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex flex-col text-left">
-                    <span className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Your Workspace Domain</span>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {!isEditingSubdomain ? (
-                        <>
-                          <span className="text-text-primary font-heading font-extrabold text-lg bg-primary/10 px-2.5 py-0.5 rounded-lg">{watch('subdomain') || 'yourcompany'}</span>
-                          <span className="text-text-secondary font-body font-semibold text-base">.unifiedtree.com</span>
-                          <button type="button" onClick={() => setIsEditingSubdomain(true)} className="ml-2 text-primary p-1.5 bg-white border border-border shadow-sm rounded-lg"><Edit2 size={13} /></button>
-                        </>
-                      ) : (
-                        <div className="flex items-center gap-2 w-full max-w-xs">
-                          <input {...register('subdomain')} autoFocus onBlur={() => setIsEditingSubdomain(false)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setIsEditingSubdomain(false); } }} className="border border-primary rounded-lg px-2.5 py-1 text-sm text-text-primary font-heading font-bold w-full bg-white" />
-                          <span className="text-text-secondary font-body font-bold">.unifiedtree.com</span>
-                        </div>
-                      )}
+                {/* Subdomain — live availability check against the backend */}
+                <div className="md:col-span-2 bg-primary/5 border border-primary/10 rounded-2xl p-5 flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-col text-left">
+                      <span className="text-xs font-bold text-primary uppercase tracking-wider mb-1">Your Workspace Domain</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {!isEditingSubdomain ? (
+                          <>
+                            <span className="text-text-primary font-heading font-extrabold text-lg bg-primary/10 px-2.5 py-0.5 rounded-lg">{subdomainValue || 'yourcompany'}</span>
+                            <span className="text-text-secondary font-body font-semibold text-base">.unifiedtree.com</span>
+                            <button type="button" onClick={() => { subdomainTouched.current = true; setIsEditingSubdomain(true); }} className="ml-2 text-primary p-1.5 bg-white border border-border shadow-sm rounded-lg"><Edit2 size={13} /></button>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-2 w-full max-w-xs">
+                            <input
+                              {...register('subdomain', { onChange: () => { subdomainTouched.current = true; } })}
+                              autoFocus
+                              onBlur={() => setIsEditingSubdomain(false)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setIsEditingSubdomain(false); } }}
+                              className="border border-primary rounded-lg px-2.5 py-1 text-sm text-text-primary font-heading font-bold w-full bg-white"
+                            />
+                            <span className="text-text-secondary font-body font-bold">.unifiedtree.com</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
+                    <SubdomainStatusBadge state={availability.state} />
                   </div>
+                  {(availability.reason && availability.state !== 'available' && availability.state !== 'idle') && (
+                    <p className="text-xs font-body text-text-secondary">{availability.reason}</p>
+                  )}
                 </div>
                 {errors.subdomain && <span className="text-danger text-xs md:col-span-2 -mt-2">{errors.subdomain.message}</span>}
 
@@ -315,7 +335,7 @@ export function SignupPage() {
 
                 <Field label="Country" icon={<Globe size={18} />}>
                   <select {...register('country')} className={selectCls}>
-                    <option>India</option><option>United States</option><option>United Kingdom</option>
+                    {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </Field>
 
@@ -323,11 +343,7 @@ export function SignupPage() {
                   <select {...register('language')} className={selectCls}><option>English</option><option>Hindi</option></select>
                 </Field>
 
-                <Field label="Company Size" icon={<Users size={18} />}>
-                  <select {...register('companySize')} className={selectCls}>
-                    <option>1 - 5 employees</option><option>5 - 20 employees</option><option>20 - 50 employees</option><option>50+ employees</option>
-                  </select>
-                </Field>
+                {/* Company Size removed — Number of Users covers team size. */}
 
                 <Field label="Primary Interest" icon={<Target size={18} />}>
                   <select {...register('primaryInterest')} className={selectCls}>
@@ -420,6 +436,18 @@ export function SignupPage() {
 }
 
 // -- small presentational helpers -------------------------------------------
+
+function SubdomainStatusBadge({ state }: { state: 'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'error' }) {
+  if (state === 'idle') return null;
+  const map = {
+    checking:  { icon: <Loader2 size={14} className="animate-spin" />, text: 'Checking…',       cls: 'bg-slate-100 text-slate-600' },
+    available: { icon: <Check size={14} />,                            text: 'Available',       cls: 'bg-emerald-100 text-emerald-700' },
+    taken:     { icon: <X size={14} />,                                text: 'Already taken',   cls: 'bg-red-100 text-red-700' },
+    invalid:   { icon: <AlertCircle size={14} />,                      text: 'Invalid',         cls: 'bg-amber-100 text-amber-700' },
+    error:     { icon: <AlertCircle size={14} />,                      text: 'Could not check', cls: 'bg-slate-100 text-slate-600' },
+  }[state];
+  return <span className={`inline-flex items-center gap-1.5 text-[11px] font-body font-semibold px-2.5 py-1 rounded-full ${map.cls}`}>{map.icon}{map.text}</span>;
+}
 
 function Field({ label, icon, error, className, children }: { label: string; icon: React.ReactNode; error?: string; className?: string; children: React.ReactNode }) {
   return (
