@@ -35,7 +35,7 @@ export function ModulesPage() {
               Every module is designed to work standalone or in perfect harmony with the rest.
             </p>
             <div className="flex flex-wrap gap-3 justify-center text-sm font-body">
-              {['12 Modules', 'India-compliant', 'Offline-capable', 'GST Ready', 'API Access'].map((tag) => (
+              {['12 Modules', 'Multi-region compliance', 'Offline-capable', 'Tax Ready', 'API Access'].map((tag) => (
                 <span key={tag} className="px-4 py-1.5 bg-white/10 text-white rounded-full font-medium border border-white/20">
                   {tag}
                 </span>

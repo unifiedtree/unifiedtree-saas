@@ -43,7 +43,7 @@ export function Footer() {
           <div className="lg:col-span-2">
             <img src="/UnifiedTreeLogo.png" alt="UnifiedTree" className="mb-4 h-8 w-auto" />
             <p className="mb-6 max-w-xs text-sm leading-relaxed text-text-secondary">
-              One root. Every branch connected. India's first offline-first ERP platform built for growing businesses.
+              One root. Every branch connected. The offline-first ERP platform built for growing businesses.
             </p>
             <div className="flex items-center gap-2.5">
               {[
@@ -100,7 +100,7 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <Link to="/pricing" className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-colors hover:text-primary-dark">
+                <Link to="/talk-to-us?intent=demo" className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-colors hover:text-primary-dark">
                   Book a demo <ArrowRight size={13} />
                 </Link>
               </li>

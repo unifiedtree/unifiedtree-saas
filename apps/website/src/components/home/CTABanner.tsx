@@ -61,7 +61,7 @@ export function CTABanner() {
             <Button size="lg" onClick={() => navigate('/trial-signup')}>
               Start Free Trial <ArrowRight size={18} />
             </Button>
-            <Button size="lg" variant="ghost" onClick={() => navigate('/pricing')}>
+            <Button size="lg" variant="ghost" onClick={() => navigate('/talk-to-us?intent=demo')}>
               Book a Demo
             </Button>
           </div>

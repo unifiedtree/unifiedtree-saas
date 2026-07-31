@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -8,12 +8,17 @@ import {
 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { useAuthStore } from '../../store/authStore'
+import { useScrollDirection } from '../../hooks/useScrollDirection'
 
+// Mega-menu module descriptions. Kept region-agnostic — the earlier copy
+// mentioned Indian payroll acronyms (PF/ESI/TDS) and GST, which prospects
+// outside India read as "not for me". Statutory specifics live in the
+// per-region Compliance section on the Features page, not the mega-menu.
 const navModules = [
   { id: 'hr',            name: 'HR & Employees',  icon: Users,        desc: 'Employee records & org chart' },
   { id: 'attendance',    name: 'Attendance',       icon: MapPin,       desc: 'GPS & face capture, offline sync' },
-  { id: 'payroll',       name: 'Payroll',          icon: Banknote,     desc: 'PF, ESI, TDS, payslips' },
-  { id: 'accounting',    name: 'Accounting',       icon: BarChart2,    desc: 'GST invoicing & bank reconciliation' },
+  { id: 'payroll',       name: 'Payroll',          icon: Banknote,     desc: 'Payroll, statutory deductions & payslips' },
+  { id: 'accounting',    name: 'Accounting',       icon: BarChart2,    desc: 'Tax invoicing & bank reconciliation' },
   { id: 'inventory',     name: 'Inventory',        icon: Package,      desc: 'Stock, warehouses, batch tracking' },
   { id: 'crm',           name: 'CRM',              icon: Target,       desc: 'Leads, pipeline, quotations' },
   { id: 'purchase',      name: 'Purchase',         icon: ShoppingCart, desc: 'POs, GRN, vendor management' },
@@ -32,34 +37,32 @@ const links = [
 ]
 
 export function Navbar() {
-  const [scrolled,      setScrolled]      = useState(false)
   const [menuOpen,      setMenuOpen]      = useState(false)
   const [modulesHover,  setModulesHover]  = useState(false)
   const navigate = useNavigate()
   const { accountToken, logoutAccount } = useAuthStore()
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24)
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
+  // Hide the header while scrolling DOWN, show it back the moment the reader
+  // scrolls up even a little — matches the client's ask (they explicitly
+  // rejected the earlier "shrink the logo" approach). Disabled while the
+  // mobile drawer is open so its close button never disappears under a
+  // slide-out header.
+  const { hidden } = useScrollDirection({ disabled: menuOpen })
 
   const linkCls =
     'px-4 py-2.5 text-base font-medium text-text-secondary hover:text-text-primary rounded-lg hover:bg-surface-2 transition-colors duration-150'
 
   return (
     <nav
-      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'border-b border-border bg-[#F4FAED]/90 backdrop-blur-xl shadow-sm'
-          : 'border-b border-transparent bg-[#F4FAED] backdrop-blur-sm'
+      className={`fixed inset-x-0 top-0 z-50 border-b border-border bg-[#F4FAED]/90 backdrop-blur-xl shadow-sm transform-gpu transition-transform duration-300 ease-out ${
+        hidden ? '-translate-y-full' : 'translate-y-0'
       }`}
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className={`flex items-center justify-between transition-all duration-300 ${scrolled ? 'h-12 sm:h-14' : 'h-16 sm:h-20'}`}>
-          {/* Logo */}
+        <div className="flex h-16 items-center justify-between sm:h-20">
+          {/* Logo — fixed size; no more shrink-on-scroll. */}
           <Link to="/" className="flex items-center gap-3">
-            <img src="/UnifiedTreeLogo.png" alt="UnifiedTree" className={`w-auto transition-all duration-300 ${scrolled ? 'h-6 sm:h-7' : 'h-8 sm:h-10'}`} />
+            <img src="/UnifiedTreeLogo.png" alt="UnifiedTree" className="h-8 w-auto sm:h-10" />
           </Link>
 
           {/* Desktop nav links */}

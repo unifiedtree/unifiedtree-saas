@@ -84,10 +84,10 @@ export function HeroSection() {
           transition={{ duration: 0.7, delay: 0.2, ease: 'easeOut' }}
           className="flex flex-wrap justify-center gap-4 mb-20"
         >
-          <Button size="lg" className="bg-[#18280E] text-white hover:bg-[#2A4718] border-none font-semibold rounded-xl px-8 shadow-md" onClick={() => navigate('/pricing')}>
+          <Button size="lg" className="bg-[#18280E] text-white hover:bg-[#2A4718] border-none font-semibold rounded-xl px-8 shadow-md" onClick={() => navigate('/talk-to-us?intent=demo')}>
             Request a demo
           </Button>
-          <Button size="lg" className="bg-white border border-[#E6EBDD] text-[#18280E] hover:bg-slate-50 rounded-xl px-8 transition-colors shadow-sm" variant="ghost">
+          <Button size="lg" className="bg-white border border-[#E6EBDD] text-[#18280E] hover:bg-slate-50 rounded-xl px-8 transition-colors shadow-sm" variant="ghost" onClick={() => navigate('/talk-to-us?intent=sales')}>
             Contact sales
           </Button>
         </motion.div>

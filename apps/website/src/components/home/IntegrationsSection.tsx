@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { Clock } from 'lucide-react'
 
 type Integration = {
   name: string
@@ -17,8 +18,11 @@ const integrations: Integration[] = [
   { name: 'WhatsApp', color: '#25D366', bg: '#E6FAF0', slug: 'whatsapp' },
   { name: 'AWS S3', color: '#FF9900', bg: '#FFF4E5', slug: 'amazons3' },
   { name: 'Shopify', color: '#96BF48', bg: '#EFF5E5', slug: 'shopify' },
-  { name: 'GST Portal', color: '#004E9A', bg: '#E5EEF7' },
-  { name: 'MSG91', color: '#FF6B35', bg: '#FFEEE8' },
+  // India-specific presets — tagged so international prospects don't assume
+  // these are the only options. The generic Payments / Email / SMS providers
+  // above cover other regions.
+  { name: 'GST Portal (India)', color: '#004E9A', bg: '#E5EEF7' },
+  { name: 'MSG91 (India SMS)', color: '#FF6B35', bg: '#FFEEE8' },
   { name: 'Leaflet Maps', color: '#199900', bg: '#E5F5E5', slug: 'leaflet' },
 ]
 
@@ -33,9 +37,19 @@ export function IntegrationsSection() {
           transition={{ duration: 0.6 }}
           className="text-center mb-14"
         >
-          <span className="text-primary font-body font-semibold text-sm uppercase tracking-widest mb-3 block">
-            Integrations
-          </span>
+          {/* Eyebrow row with a "Launching soon" pill — the integrations
+              themselves ship as fixtures; the live in-product wiring lands
+              in a later release. Setting the expectation up front so a
+              prospect doesn't sign up expecting the "Connect Slack" button
+              to work today. */}
+          <div className="mb-3 flex items-center justify-center gap-2">
+            <span className="text-primary font-body font-semibold text-sm uppercase tracking-widest">
+              Integrations
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 whitespace-nowrap">
+              <Clock size={9} /> Launching soon
+            </span>
+          </div>
           <h2 className="font-heading font-bold text-text-primary" style={{ fontSize: 'clamp(2rem, 3.5vw, 3rem)' }}>
             Connects with tools you already use
           </h2>
@@ -89,7 +103,7 @@ export function IntegrationsSection() {
           transition={{ delay: 0.4 }}
           className="text-center text-sm text-text-secondary mt-10 font-body"
         >
-          + REST API for custom integrations · Webhooks · Zapier coming soon
+          + REST API for custom integrations · Webhooks · Zapier — full integrations suite launching soon
         </motion.p>
       </div>
     </section>

@@ -13,7 +13,7 @@ const testimonials = [
   },
   {
     quote:
-      "The GST invoicing in the Accounting module saves my team 12+ hours every month. Auto-generated GSTR-1 reports and e-way bills — no manual work at all. Absolutely brilliant.",
+      "The tax-compliant invoicing in the Accounting module saves my team 12+ hours every month. Auto-generated returns and shipping documents — no manual work at all. Absolutely brilliant.",
     name: 'Anjali Krishnamurthy',
     company: 'Krishnamurthy Textiles',
     role: 'CFO',
@@ -22,7 +22,7 @@ const testimonials = [
   },
   {
     quote:
-      "We switched from three different software tools to UnifiedTree. Now our HR, payroll, and inventory all talk to each other. PF and ESI calculations are automatic. Zero errors.",
+      "We switched from three different software tools to UnifiedTree. Now our HR, payroll, and inventory all talk to each other. Statutory calculations are automatic. Zero errors.",
     name: 'Vikram Patel',
     company: 'VPL Industries',
     role: 'Operations Head',

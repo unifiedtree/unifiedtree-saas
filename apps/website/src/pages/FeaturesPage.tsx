@@ -17,10 +17,10 @@ const pillars = [
   },
   {
     icon: ShieldCheck,
-    title: 'India-Compliant by Default',
+    title: 'Statutory Compliance Built-In',
     description:
-      'GST invoicing, e-way bills, GSTR-1/3B filing, TDS, PF, ESI — all built in. Stay compliant without hiring a compliance specialist.',
-    points: ['GST e-invoicing & e-way bills', 'GSTR-1, GSTR-3B ready', 'PF, ESI, TDS automation', 'Form 16 & payslip generation'],
+      'Tax-compliant invoicing, statutory payroll deductions, and country-specific filings — all built in. Stay compliant without hiring a specialist. Region packs available, starting with India (GST, PF, ESI, TDS).',
+    points: ['Tax-compliant e-invoicing', 'Region-specific return filings', 'Automated statutory deductions', 'Payslip & year-end tax forms'],
   },
   {
     icon: Smartphone,
@@ -88,10 +88,10 @@ export function FeaturesPage() {
             >
               Built for the way
               <br />
-              <span className="text-accent">Indian businesses actually work.</span>
+              <span className="text-accent">growing businesses actually work.</span>
             </h1>
             <p className="text-lg text-white/75 font-body max-w-2xl mx-auto">
-              From offline attendance in remote factories to GST e-filing from an accountant's desk —
+              From offline attendance in remote factories to tax filings from an accountant's desk —
               UnifiedTree is engineered for real-world conditions, not demo environments.
             </p>
           </motion.div>

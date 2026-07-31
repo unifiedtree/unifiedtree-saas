@@ -34,7 +34,7 @@ export const presetPlans = [
     modules: ['HR & Employees', 'Attendance', 'Accounting'],
     storage: '5 GB storage',
     support: 'Email support',
-    extras: ['Offline PWA attendance', 'GST invoicing', 'Basic reports'],
+    extras: ['Offline PWA attendance', 'Tax invoicing', 'Basic reports'],
     popular: false,
     cta: 'Create Free Workspace',
   },
@@ -50,7 +50,7 @@ export const presetPlans = [
     extras: [
       'Live location tracking',
       'API access',
-      'GST e-filing integration',
+      'Tax e-filing integration (India: GSTR-1/3B)',
       'Custom dashboards',
       'WhatsApp notifications',
     ],
@@ -104,8 +104,8 @@ export const faqItems = [
     a: 'The Attendance and POS modules are fully offline-capable (PWA). Data syncs automatically when connectivity is restored.',
   },
   {
-    q: 'Do you support GST e-filing?',
-    a: 'Yes. The Accounting module supports GSTR-1, GSTR-3B, and e-way bill generation, with direct GST portal integration.',
+    q: 'Do you support local tax e-filing?',
+    a: 'Yes. Region compliance packs ship with the Accounting module. The India pack supports GSTR-1, GSTR-3B, and e-way bill generation with direct GST portal integration; other regions are on the roadmap.',
   },
   {
     q: 'What happens after signup?',
