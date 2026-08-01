@@ -23,7 +23,10 @@ const keyIconMap: Record<string, React.ElementType> = {
 export function ModulesGrid() {
   const [activeCategory, setActiveCategory] = useState<string>('all')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const { data: plans = [], isLoading } = useModulePlans()
+  const { data: allPlans = [], isLoading } = useModulePlans()
+  // Same filter as PricingCalculator: RETIRED rows are kept in the DB so
+  // legacy tenants don't lose their selection, but hidden from prospects.
+  const plans = allPlans.filter((p) => p.status !== 'RETIRED')
   const selectedPlanKeys = usePricingStore((s) => s.selectedPlanKeys)
   const togglePlan = usePricingStore((s) => s.togglePlan)
   const navigate = useNavigate()

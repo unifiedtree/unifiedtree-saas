@@ -63,7 +63,11 @@ export function TrialSignupPage() {
   // companyName. Fixes the "domain reverts to company slug on blur" bug.
   const subdomainTouched = useRef(false);
 
-  const { data: plans = [] } = useModulePlans();
+  const { data: allPlans = [] } = useModulePlans();
+  // Hide RETIRED so a stale Zustand entry from before a merge/rename doesn't
+  // surface a phantom module in the checkout summary that the backend will
+  // reject at requireAvailable().
+  const plans = allPlans.filter((p) => p.status !== 'RETIRED');
   const selectedPlanKeys = usePricingStore((s) => s.selectedPlanKeys);
   const storeSeats = usePricingStore((s) => s.seats);
 

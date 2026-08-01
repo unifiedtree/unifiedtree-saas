@@ -58,7 +58,11 @@ export function SignupPage() {
   const subdomainTouched = useRef(false);
   const [isModulesDrawerOpen, setIsModulesDrawerOpen] = useState(false);
 
-  const { data: plans = [] } = useModulePlans();
+  const { data: allPlans = [] } = useModulePlans();
+  // Hide RETIRED so a stale Zustand entry from before a merge/rename doesn't
+  // surface a phantom module in the checkout summary that the backend will
+  // reject at requireAvailable().
+  const plans = allPlans.filter((p) => p.status !== 'RETIRED');
   const selectedPlanKeys = usePricingStore((s) => s.selectedPlanKeys);
   const togglePlan = usePricingStore((s) => s.togglePlan);
   const storeSeats = usePricingStore((s) => s.seats);

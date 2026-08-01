@@ -2,15 +2,21 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users, MapPin, Banknote, BarChart2, Package, Target,
-  ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart, X, Lock, Plus, Minus,
+  ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart,
+  Truck, Warehouse, Megaphone,
+  X, Lock, Plus, Minus, CheckCircle2,
 } from 'lucide-react'
 import { usePricingStore } from '../../store/pricingStore'
 import { useModulePlans, computeMonthlyTotal, effectiveUnit, type ModulePlan } from '../../lib/plans'
 import { Button } from '../ui/Button'
 
+// Keep this in sync with the `icon` string values seeded in platform.module_plans.
+// New modules added 2026-07-31: Truck (SCM), Warehouse (inventory-warehouse),
+// Megaphone (Marketing). Unknown values fall back to Users (see plan render).
 const iconMap: Record<string, React.ElementType> = {
   Users, MapPin, Banknote, BarChart2, Package, Target,
   ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart,
+  Truck, Warehouse, Megaphone,
 }
 
 function AnimatedPrice({ value }: { value: number }) {
@@ -33,6 +39,17 @@ export function PricingCalculator() {
   const setSeats = usePricingStore((s) => s.setSeats)
   const billingCycle = usePricingStore((s) => s.billingCycle)
   const setBillingCycle = usePricingStore((s) => s.setBillingCycle)
+
+  // Never show RETIRED plans on the pricing page. They still exist in
+  // platform.module_plans so that a handful of legacy tenants who selected
+  // them before the merge don't lose their selection, but new prospects
+  // should only see the current catalog.
+  const visiblePlans = plans.filter((p) => p.status !== 'RETIRED')
+  // Included = the baseline bundle (HR, Attendance, Payroll today). They're
+  // rendered as a small always-on row above the add-on toggle grid so
+  // prospects see what ships with every subscription BEFORE picking add-ons.
+  const includedPlans = visiblePlans.filter((p) => p.included === true)
+  const addonPlans = visiblePlans.filter((p) => p.included !== true)
 
   const availableSelected = plans.filter((p) => p.status === 'AVAILABLE' && selectedPlanKeys.includes(p.key))
   const monthlyTotal = computeMonthlyTotal(plans, selectedPlanKeys, seats)
@@ -60,16 +77,51 @@ export function PricingCalculator() {
           {billingCycle === 'annual' && <span className="text-xs font-body font-semibold bg-success/15 text-success px-3 py-1.5 rounded-full">Save 10%</span>}
         </div>
 
-        {/* Plan cards */}
+        {/* Included baseline — always-on cards that ship with every plan */}
+        {!isLoading && includedPlans.length > 0 && (
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <h3 className="font-heading font-bold text-text-primary text-lg">Included in every plan</h3>
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary-light px-2 py-0.5 text-[10px] font-bold text-primary">
+                <CheckCircle2 size={9} /> Always on
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {includedPlans.map((plan) => {
+                const Icon = iconMap[plan.icon ?? 'Users'] ?? Users
+                return (
+                  <div
+                    key={plan.key}
+                    className="relative p-4 rounded-xl border-2 border-primary/40 bg-primary-light/50 text-left"
+                  >
+                    <div className="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary">
+                      <CheckCircle2 size={11} className="text-white" />
+                    </div>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-2" style={{ backgroundColor: `${plan.color ?? '#059669'}25` }}>
+                      <Icon size={16} style={{ color: plan.color ?? '#059669' }} />
+                    </div>
+                    <p className="text-xs font-body font-semibold leading-tight text-primary">{plan.displayName}</p>
+                    {plan.tagline && <p className="text-[10px] text-text-secondary mt-0.5 leading-tight">{plan.tagline}</p>}
+                    <p className="text-[11px] mt-1 font-semibold text-primary">Included</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Add-on modules — the existing toggle grid */}
         <div>
-          <h3 className="font-heading font-bold text-text-primary text-lg mb-5">Choose your modules</h3>
+          <h3 className="font-heading font-bold text-text-primary text-lg mb-5">
+            {includedPlans.length > 0 ? 'Add-on modules' : 'Choose your modules'}
+          </h3>
           {isLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-surface border border-border animate-pulse" />)}
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {plans.map((plan) => {
+              {addonPlans.map((plan) => {
                 const Icon = iconMap[plan.icon ?? 'Users'] ?? Users
                 const available = plan.status === 'AVAILABLE'
                 const isSelected = available && selectedPlanKeys.includes(plan.key)

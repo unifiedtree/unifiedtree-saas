@@ -59,7 +59,8 @@ public class ModulePlanService {
                 rs.getInt("sort_order"),
                 features,
                 included,
-                rs.getBigDecimal("annual_discount_pct"));
+                rs.getBigDecimal("annual_discount_pct"),
+                rs.getBoolean("is_included"));
     };
 
     /** All plans, ordered for the pricing grid. */
@@ -67,7 +68,7 @@ public class ModulePlanService {
         return jdbc.query("""
                 SELECT key, display_name, tagline, description, category, icon, color,
                        price_inr, price_model, status, sort_order, features, included_modules,
-                       annual_discount_pct
+                       annual_discount_pct, is_included
                   FROM platform.module_plans
                  ORDER BY sort_order, display_name
                 """, ROW);

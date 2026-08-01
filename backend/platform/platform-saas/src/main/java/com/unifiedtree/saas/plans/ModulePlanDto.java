@@ -21,5 +21,9 @@ public record ModulePlanDto(
         int sortOrder,
         List<String> features,
         List<String> includedModules,
-        BigDecimal annualDiscountPct  // % off the per-user price when billed annually
+        BigDecimal annualDiscountPct, // % off the per-user price when billed annually
+        // Baseline modules included in every subscription (HR, Attendance, Payroll
+        // today). Website groups them under an "Included in every plan" header,
+        // distinct from the add-on toggle grid.
+        boolean included
 ) {}

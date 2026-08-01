@@ -235,7 +235,9 @@ function ConnectingLines({ visible }: { visible: boolean }) {
 /* ------------------------------------------------------------------ */
 export function ModulesOverview() {
   const navigate = useNavigate()
-  const { data: plans = [] } = useModulePlans()
+  const { data: allPlans = [] } = useModulePlans()
+  // Hide RETIRED — same filter as PricingCalculator / ModulesGrid.
+  const plans = allPlans.filter((p) => p.status !== 'RETIRED')
   const [scattered, setScattered] = useState(false)
   const [hasToggled, setHasToggled] = useState(false)
   const sectionRef = useRef<HTMLDivElement>(null)
