@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { useAuthStore } from '../../store/authStore'
 
 const leaves = [
   { left: '5%', delay: '0s', duration: '8s', size: 18 },
@@ -16,6 +17,13 @@ const leaves = [
 
 export function CTABanner() {
   const navigate = useNavigate()
+  // Signed-in visitors already have an account (and at least one workspace,
+  // since a workspace is created at signup). Pitching "Start Free Trial /
+  // Book a Demo" at them reads as broken — they've already converted. Hide
+  // the whole banner in that case rather than show buttons that would just
+  // route them into a signup form they can't complete.
+  const accountToken = useAuthStore((s) => s.accountToken)
+  if (accountToken) return null
 
   return (
     <section className="relative py-24 overflow-hidden" style={{ background: 'linear-gradient(135deg, #F4FAED 0%, #F8FAFC 60%, #F4FAED 100%)' }}>

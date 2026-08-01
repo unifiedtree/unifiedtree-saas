@@ -1,9 +1,10 @@
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Check, ArrowRight, Zap, Shield, Clock } from 'lucide-react'
 import { Navbar } from '../components/layout/Navbar'
 import { Footer } from '../components/layout/Footer'
 import { presetPlans } from '../data/pricing'
+import { useAuthStore } from '../store/authStore'
 
 const perks = [
   { icon: Zap, label: 'Free access - core HRMS included', color: '#1DB985' },
@@ -19,6 +20,11 @@ const steps = [
 
 export function StartFreeTrialPage() {
   const navigate = useNavigate()
+  // The whole page is a trial pitch — pointless for someone who already has
+  // an account and workspace. Send them to their workspaces list instead of
+  // rendering a landing that ends in a signup form they can't complete.
+  const accountToken = useAuthStore((s) => s.accountToken)
+  if (accountToken) return <Navigate to="/workspaces" replace />
 
   return (
     <div className="min-h-screen bg-bg">
