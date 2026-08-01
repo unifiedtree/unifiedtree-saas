@@ -17,11 +17,10 @@ export interface ModulePlan {
   features: string[];
   includedModules: string[];
   annualDiscountPct: number; // % off the per-user price when billed annually (DB-driven)
-  /** Baseline modules that ship with every subscription (HR, Attendance,
-   *  Payroll today). Website renders them in a separate "Included in every
-   *  plan" section, distinct from the add-on toggle grid. Derived from the
-   *  is_included boolean on platform.module_plans; safe fallback to false
-   *  when the backend hasn't yet been redeployed with the new field. */
+  /** Backend still emits this from `platform.module_plans.is_included`, but
+   *  the flag was a misinterpretation of the client's ask and is now false
+   *  on every row. Kept in the interface so the JSON shape stays 1:1 with
+   *  the DTO; no frontend rendering path reads it. */
   included?: boolean;
 }
 

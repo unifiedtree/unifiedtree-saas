@@ -69,19 +69,11 @@ export function SignupPage() {
   const billingCycle = usePricingStore((s) => s.billingCycle);
   const setBillingCycle = usePricingStore((s) => s.setBillingCycle);
 
-  // AVAILABLE plans MINUS the "Included in every plan" baseline. Anything
-  // flagged is_included=true is bundled into the subscription (see
-  // PricingCalculator's non-toggleable "Included" section); putting it into
-  // the billable set here would double-charge — the page just told the
-  // visitor HR was included, but the fallback below would silently add
-  // hr-employees to planKeys and Razorpay would collect ₹40/user for it.
-  // The backend also enforces this (totalPriceInr treats is_included as ₹0),
-  // but stripping here keeps the UI summary honest too.
-  const availablePlans = plans.filter((p) => p.status === 'AVAILABLE' && p.included !== true);
-  // Plans the visitor picked that are actually purchasable ADD-ONS. If they
-  // arrived without any add-on selection, we send an EMPTY list; the backend
-  // rejects that with a clear "select at least one plan" error rather than
-  // us secretly picking a plan for them.
+  const availablePlans = plans.filter((p) => p.status === 'AVAILABLE');
+  // Plans the visitor picked that are actually purchasable. If they arrived
+  // without any selection, we send an EMPTY list; the backend rejects that
+  // with a clear "select at least one plan" error rather than us secretly
+  // picking a plan for them.
   const purchasableSelected: ModulePlan[] = availablePlans.filter((p) => selectedPlanKeys.includes(p.key));
   const selectedPlanNames = purchasableSelected.map((p) => p.displayName).join(', ');
 
@@ -395,36 +387,24 @@ export function SignupPage() {
                 <div className="flex-1 overflow-y-auto p-6 space-y-3">
                   {plans.map((plan) => {
                     const available = plan.status === 'AVAILABLE';
-                    const included = plan.included === true;
-                    // Included plans (HR / Attendance / Payroll) can't be
-                    // toggled in the drawer either — they ship with every
-                    // subscription. Rendering them WITH the ₹40/mo tag + a
-                    // no-op toggle reads as broken (toggle click has no
-                    // visible effect because `purchasableSelected` filters
-                    // included out). Render them non-clickable with an
-                    // "Included" badge instead.
-                    const isSelected = available && !included && purchasableSelected.some((p) => p.key === plan.key);
-                    const clickable = available && !included;
+                    const isSelected = available && purchasableSelected.some((p) => p.key === plan.key);
                     return (
                       <div
                         key={plan.key}
-                        onClick={() => clickable && togglePlan(plan.key)}
+                        onClick={() => available && togglePlan(plan.key)}
                         className={`relative flex items-start gap-4 p-4 rounded-xl border-2 transition-all ${
-                          included ? 'border-primary/40 bg-primary-light/40 cursor-default'
-                            : !available ? 'border-border bg-bg/50 opacity-70 cursor-not-allowed'
+                          !available ? 'border-border bg-bg/50 opacity-70 cursor-not-allowed'
                             : isSelected ? 'border-primary bg-primary/5 cursor-pointer'
                             : 'border-border hover:border-primary/30 hover:bg-surface cursor-pointer'
                         }`}
                       >
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isSelected || included ? 'bg-primary text-white' : 'bg-primary-light text-primary'}`}>
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-primary text-white' : 'bg-primary-light text-primary'}`}>
                           <span className="text-sm font-heading font-extrabold">{plan.displayName.charAt(0)}</span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1 gap-2">
                             <h3 className="font-heading font-bold text-sm text-text-primary truncate">{plan.displayName}</h3>
-                            {included ? (
-                              <span className="text-[10px] font-bold text-primary bg-primary-light px-2 py-0.5 rounded-full whitespace-nowrap flex items-center gap-1"><Check size={9} strokeWidth={3} /> Included</span>
-                            ) : available ? (
+                            {available ? (
                               <span className="text-xs font-bold text-primary whitespace-nowrap">₹{plan.priceInr}/user/mo</span>
                             ) : (
                               <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full whitespace-nowrap flex items-center gap-1"><LockIcon size={9} /> Launching soon</span>
@@ -433,7 +413,7 @@ export function SignupPage() {
                           {plan.tagline && <p className="text-[11px] text-primary font-semibold mb-0.5">{plan.tagline}</p>}
                           <p className="text-xs text-text-secondary leading-snug">{plan.description}</p>
                         </div>
-                        {clickable && (
+                        {available && (
                           <div className={`absolute top-4 right-4 w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? 'bg-primary border-primary text-white' : 'border-slate-300'}`}>
                             {isSelected && <Check size={12} strokeWidth={3} />}
                           </div>
