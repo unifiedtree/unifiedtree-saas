@@ -395,24 +395,36 @@ export function SignupPage() {
                 <div className="flex-1 overflow-y-auto p-6 space-y-3">
                   {plans.map((plan) => {
                     const available = plan.status === 'AVAILABLE';
-                    const isSelected = available && purchasableSelected.some((p) => p.key === plan.key);
+                    const included = plan.included === true;
+                    // Included plans (HR / Attendance / Payroll) can't be
+                    // toggled in the drawer either — they ship with every
+                    // subscription. Rendering them WITH the ₹40/mo tag + a
+                    // no-op toggle reads as broken (toggle click has no
+                    // visible effect because `purchasableSelected` filters
+                    // included out). Render them non-clickable with an
+                    // "Included" badge instead.
+                    const isSelected = available && !included && purchasableSelected.some((p) => p.key === plan.key);
+                    const clickable = available && !included;
                     return (
                       <div
                         key={plan.key}
-                        onClick={() => available && togglePlan(plan.key)}
+                        onClick={() => clickable && togglePlan(plan.key)}
                         className={`relative flex items-start gap-4 p-4 rounded-xl border-2 transition-all ${
-                          !available ? 'border-border bg-bg/50 opacity-70 cursor-not-allowed'
+                          included ? 'border-primary/40 bg-primary-light/40 cursor-default'
+                            : !available ? 'border-border bg-bg/50 opacity-70 cursor-not-allowed'
                             : isSelected ? 'border-primary bg-primary/5 cursor-pointer'
                             : 'border-border hover:border-primary/30 hover:bg-surface cursor-pointer'
                         }`}
                       >
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-primary text-white' : 'bg-primary-light text-primary'}`}>
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isSelected || included ? 'bg-primary text-white' : 'bg-primary-light text-primary'}`}>
                           <span className="text-sm font-heading font-extrabold">{plan.displayName.charAt(0)}</span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1 gap-2">
                             <h3 className="font-heading font-bold text-sm text-text-primary truncate">{plan.displayName}</h3>
-                            {available ? (
+                            {included ? (
+                              <span className="text-[10px] font-bold text-primary bg-primary-light px-2 py-0.5 rounded-full whitespace-nowrap flex items-center gap-1"><Check size={9} strokeWidth={3} /> Included</span>
+                            ) : available ? (
                               <span className="text-xs font-bold text-primary whitespace-nowrap">₹{plan.priceInr}/user/mo</span>
                             ) : (
                               <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full whitespace-nowrap flex items-center gap-1"><LockIcon size={9} /> Launching soon</span>
@@ -421,7 +433,7 @@ export function SignupPage() {
                           {plan.tagline && <p className="text-[11px] text-primary font-semibold mb-0.5">{plan.tagline}</p>}
                           <p className="text-xs text-text-secondary leading-snug">{plan.description}</p>
                         </div>
-                        {available && (
+                        {clickable && (
                           <div className={`absolute top-4 right-4 w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? 'bg-primary border-primary text-white' : 'border-slate-300'}`}>
                             {isSelected && <Check size={12} strokeWidth={3} />}
                           </div>
