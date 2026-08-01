@@ -73,6 +73,11 @@ export function TrialSignupPage() {
 
   const availablePlans = plans.filter((p) => p.status === 'AVAILABLE');
   // Default to the one AVAILABLE plan if they arrived without a selection.
+  // Trial does NOT charge, so the .slice(0,1) fallback is safe here (unlike
+  // paid Signup, where it silently billed an included plan — see
+  // SignupPage.tsx). If a visitor lands here from the navbar "Start free
+  // trial" button without picking anything on /pricing, we still seed a
+  // plan so the trial workspace has at least one module to preview.
   const chosenPlans: ModulePlan[] = (() => {
     const picked = availablePlans.filter((p) => selectedPlanKeys.includes(p.key));
     return picked.length ? picked : availablePlans.slice(0, 1);

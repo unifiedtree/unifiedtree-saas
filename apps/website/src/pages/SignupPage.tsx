@@ -69,14 +69,20 @@ export function SignupPage() {
   const billingCycle = usePricingStore((s) => s.billingCycle);
   const setBillingCycle = usePricingStore((s) => s.setBillingCycle);
 
-  const availablePlans = plans.filter((p) => p.status === 'AVAILABLE');
-  // Plans the visitor picked that are actually purchasable; default to the one
-  // available plan (HR & Employees) if they arrived without a selection.
-  const purchasableSelected: ModulePlan[] = (() => {
-    const picked = availablePlans.filter((p) => selectedPlanKeys.includes(p.key));
-    if (picked.length) return picked;
-    return availablePlans.slice(0, 1);
-  })();
+  // AVAILABLE plans MINUS the "Included in every plan" baseline. Anything
+  // flagged is_included=true is bundled into the subscription (see
+  // PricingCalculator's non-toggleable "Included" section); putting it into
+  // the billable set here would double-charge — the page just told the
+  // visitor HR was included, but the fallback below would silently add
+  // hr-employees to planKeys and Razorpay would collect ₹40/user for it.
+  // The backend also enforces this (totalPriceInr treats is_included as ₹0),
+  // but stripping here keeps the UI summary honest too.
+  const availablePlans = plans.filter((p) => p.status === 'AVAILABLE' && p.included !== true);
+  // Plans the visitor picked that are actually purchasable ADD-ONS. If they
+  // arrived without any add-on selection, we send an EMPTY list; the backend
+  // rejects that with a clear "select at least one plan" error rather than
+  // us secretly picking a plan for them.
+  const purchasableSelected: ModulePlan[] = availablePlans.filter((p) => selectedPlanKeys.includes(p.key));
   const selectedPlanNames = purchasableSelected.map((p) => p.displayName).join(', ');
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<SignupData>({

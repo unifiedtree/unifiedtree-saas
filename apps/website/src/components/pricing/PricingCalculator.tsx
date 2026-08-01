@@ -51,8 +51,18 @@ export function PricingCalculator() {
   const includedPlans = visiblePlans.filter((p) => p.included === true)
   const addonPlans = visiblePlans.filter((p) => p.included !== true)
 
-  const availableSelected = plans.filter((p) => p.status === 'AVAILABLE' && selectedPlanKeys.includes(p.key))
-  const monthlyTotal = computeMonthlyTotal(plans, selectedPlanKeys, seats)
+  // Billing summary MUST derive from addonPlans, not raw `plans`. An
+  // included plan (HR, Attendance, Payroll) sitting in Zustand
+  // `selectedPlanKeys` — e.g. because the visitor toggled it on before the
+  // is_included flag was flipped, or from an old session — would otherwise
+  // appear here as a billable line-item with no way to remove it (the left
+  // column shows it in the non-toggle "Included in every plan" section, so
+  // there's no ✕ button rendered for it). Using addonPlans keeps the summary
+  // in lock-step with what the visitor can actually see and manage.
+  const billableKeys = new Set(addonPlans.map((p) => p.key))
+  const billableSelectedKeys = selectedPlanKeys.filter((k) => billableKeys.has(k))
+  const availableSelected = addonPlans.filter((p) => p.status === 'AVAILABLE' && billableSelectedKeys.includes(p.key))
+  const monthlyTotal = computeMonthlyTotal(addonPlans, billableSelectedKeys, seats)
 
   // Per-user rates. Annual applies each plan's DB-driven discount (no hardcoded
   // percentage) — see effectiveUnit — and is billed for 12 months.

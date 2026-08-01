@@ -105,8 +105,17 @@ public class ModulePlanService {
      * the catalog price; annual applies the plan's {@code annual_discount_pct}
      * (DB-driven, not hardcoded) and rounds to the whole rupee — e.g. 39 at 10%
      * becomes 35/user/month. The 12x is applied by the total, not here.
+     *
+     * <p>SAFETY GUARANTEE: modules flagged {@code is_included = true} always
+     * price at ₹0 regardless of what {@code price_inr} the row carries. Those
+     * are the baseline bundle the marketing site labels "Included in every
+     * plan" (HR / Attendance / Payroll today); charging for one of them —
+     * even if the frontend accidentally sends it in the paid checkout —
+     * would be a billing bug that undermines the promise on the pricing
+     * page. This is the enforcement point; do not trust the client.
      */
     public BigDecimal effectiveMonthlyUnit(ModulePlanDto p, BillingCycle cycle) {
+        if (p.included()) return BigDecimal.ZERO;
         BigDecimal unit = p.priceInr() == null ? BigDecimal.ZERO : p.priceInr();
         if (cycle == BillingCycle.ANNUAL) {
             BigDecimal pct = p.annualDiscountPct() == null ? BigDecimal.ZERO : p.annualDiscountPct();
