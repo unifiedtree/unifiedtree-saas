@@ -11,6 +11,7 @@ import { createPaymentOrder, openCheckout, type RazorpaySuccess } from '../lib/r
 import { COUNTRIES } from '../data/countries';
 import { useSubdomainAvailability } from '../lib/subdomainCheck';
 import { API_BASE_URL } from '../lib/api';
+import { friendlyServerError } from '../lib/errors';
 
 import { Navbar } from '../components/layout/Navbar';
 
@@ -21,7 +22,10 @@ const signupSchema = z.object({
   companyName: z.string().min(2, 'Company name is required'),
   subdomain: z.string().min(3, 'At least 3 chars').regex(/^[a-z0-9-]+$/, 'Lowercase letters, numbers, and hyphens only'),
   adminEmail: z.string().email('Valid email required'),
-  adminMobile: z.string().min(10, 'Valid phone number required'),
+  adminMobile: z.string()
+    .min(10, 'Please enter your phone number (at least 10 digits)')
+    .max(20, 'Phone number is too long (max 20 characters)')
+    .regex(/^[+\d\s()-]+$/, 'Use only digits, spaces, +, ( ), and -'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string().min(1, 'Confirm your password'),
   seats: z.coerce.number().int().min(1, 'At least 1 user'),
@@ -183,7 +187,7 @@ export function SignupPage() {
           try {
             await submitSignup(data, modulesForSignup, r);
           } catch (e: any) {
-            setError(e.message || 'Payment succeeded but workspace creation failed. Please contact support.');
+            setError(friendlyServerError(e?.message) || 'Payment succeeded but workspace creation failed. Please contact support.');
             setLoading(false);
           }
         },
@@ -197,10 +201,10 @@ export function SignupPage() {
           await submitSignup(data, modulesForSignup.length ? modulesForSignup : ['hrms'], null);
           return;
         } catch (e2: any) {
-          setError(e2.message);
+          setError(friendlyServerError(e2?.message));
         }
       } else {
-        setError(err.message);
+        setError(friendlyServerError(err?.message));
       }
       setLoading(false);
     }
