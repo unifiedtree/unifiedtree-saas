@@ -1,5 +1,6 @@
 package com.unifiedtree.saas.payment;
 
+import com.unifiedtree.saas.payment.subscription.SubscriptionService;
 import com.unifiedtree.saas.plans.BillingCycle;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
@@ -25,9 +26,11 @@ import java.util.List;
 public class PaymentController {
 
     private final PaymentService payments;
+    private final SubscriptionService subscriptions;
 
-    public PaymentController(PaymentService payments) {
+    public PaymentController(PaymentService payments, SubscriptionService subscriptions) {
         this.payments = payments;
+        this.subscriptions = subscriptions;
     }
 
     /** Whether the paywall is active — lets the website decide the CTA copy. */
@@ -62,4 +65,39 @@ public class PaymentController {
             String keyId) {}
 
     public record PaymentConfigResponse(boolean paywallActive) {}
+
+    // -- 2. autopay (Razorpay Subscriptions) ---------------------------------
+
+    /**
+     * Create a Razorpay subscription and return its id + the short_url the
+     * customer follows to authorise the mandate (UPI Autopay / card 2FA).
+     * The ledger row on {@code platform.subscriptions} is written by the
+     * webhook handler once Razorpay confirms activation.
+     */
+    @PostMapping("/create-subscription")
+    public CreateSubscriptionResponse createSubscription(@Valid @RequestBody CreateSubscriptionRequest req) {
+        int seats = req.seats() == null ? 1 : req.seats();
+        BillingCycle cycle = BillingCycle.from(req.billingCycle());
+        SubscriptionService.CreateSubscriptionResult r = subscriptions.createSubscription(
+                req.planKeys(), seats, cycle, req.subdomain(), req.email());
+        return new CreateSubscriptionResponse(
+                r.subscriptionId(), r.shortUrl(), r.razorpayPlanId(),
+                r.unitPaise(), r.seats(), r.billingCycle(), r.keyId());
+    }
+
+    public record CreateSubscriptionRequest(
+            @NotEmpty List<String> planKeys,
+            @jakarta.validation.constraints.Min(1) Integer seats,
+            String billingCycle,   // MONTHLY | ANNUAL
+            String subdomain,
+            String email) {}
+
+    public record CreateSubscriptionResponse(
+            String subscriptionId,
+            String shortUrl,
+            String razorpayPlanId,
+            long unitPaise,
+            int seats,
+            String billingCycle,
+            String keyId) {}
 }
