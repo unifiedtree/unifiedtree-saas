@@ -9,6 +9,7 @@ import { usePricingStore } from '../store/pricingStore';
 import { useModulePlans, computeMonthlyTotal, effectiveUnit, type ModulePlan } from '../lib/plans';
 import { createPaymentOrder, openCheckout, type RazorpaySuccess } from '../lib/razorpay';
 import { COUNTRIES } from '../data/countries';
+import { PhoneField } from '../components/forms/PhoneField';
 import { useSubdomainAvailability } from '../lib/subdomainCheck';
 import { API_BASE_URL } from '../lib/api';
 import { friendlyServerError } from '../lib/errors';
@@ -22,10 +23,11 @@ const signupSchema = z.object({
   companyName: z.string().min(2, 'Company name is required'),
   subdomain: z.string().min(3, 'At least 3 chars').regex(/^[a-z0-9-]+$/, 'Lowercase letters, numbers, and hyphens only'),
   adminEmail: z.string().email('Valid email required'),
+  // E.164 shape: '+<countrycode><digits>', max 15 digits per ITU spec.
+  // The PhoneField component composes this — the user picks a country from
+  // the dropdown and types only their local digits.
   adminMobile: z.string()
-    .min(10, 'Please enter your phone number (at least 10 digits)')
-    .max(20, 'Phone number is too long (max 20 characters)')
-    .regex(/^[+\d\s()-]+$/, 'Use only digits, spaces, +, ( ), and -'),
+    .regex(/^\+\d{7,15}$/, 'Please enter a valid phone number'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string().min(1, 'Confirm your password'),
   seats: z.coerce.number().int().min(1, 'At least 1 user'),
@@ -291,9 +293,15 @@ export function SignupPage() {
                   <input {...register('adminEmail')} type="email" placeholder="you@company.com" className={inputCls(!!errors.adminEmail)} />
                 </Field>
 
-                <Field label="Phone Number" icon={<Phone size={18} />} error={errors.adminMobile?.message}>
-                  <input {...register('adminMobile')} placeholder="+91 9876543210" className={inputCls(!!errors.adminMobile)} />
-                </Field>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-body font-semibold text-text-primary">Phone Number</label>
+                  <PhoneField
+                    value={watch('adminMobile') || ''}
+                    onChange={(v) => setValue('adminMobile', v, { shouldValidate: true, shouldDirty: true })}
+                    error={errors.adminMobile?.message}
+                  />
+                  {errors.adminMobile && <span className="text-danger text-xs">{errors.adminMobile.message}</span>}
+                </div>
 
                 <Field label="Password" icon={<Lock size={18} />} error={errors.password?.message}>
                   <input {...register('password')} type="password" placeholder="Create a password" className={inputCls(!!errors.password)} />
