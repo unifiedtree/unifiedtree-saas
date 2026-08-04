@@ -8,8 +8,6 @@ const columns = [
       { label: 'Modules', to: '/modules' },
       { label: 'Pricing', to: '/pricing' },
       { label: 'Features', to: '/features' },
-      { label: 'Changelog', to: '#' },
-      { label: 'Status', to: '#' },
     ],
   },
   {
@@ -17,21 +15,22 @@ const columns = [
     links: [
       { label: 'About', to: '/about' },
       { label: 'Industries', to: '/industries' },
-      { label: 'Blog', to: '#' },
-      { label: 'Careers', to: '#' },
-      { label: 'Partners', to: '#' },
+      { label: 'Careers', to: '/careers' },
     ],
   },
   {
     title: 'Resources',
     links: [
-      { label: 'Documentation', to: '#' },
-      { label: 'API Reference', to: '#' },
-      { label: 'Community', to: '#' },
-      { label: 'Help Center', to: '#' },
-      { label: 'Security', to: '#' },
+      { label: 'Help Center', to: '/help' },
+      { label: 'Security', to: '/security' },
     ],
   },
+]
+
+const legalLinks = [
+  { label: 'Privacy Policy', to: '/privacy' },
+  { label: 'Terms of Service', to: '/terms' },
+  { label: 'Cookie Policy', to: '/cookies' },
 ]
 
 export function Footer() {
@@ -112,10 +111,10 @@ export function Footer() {
       {/* Bottom bar */}
       <div className="border-t border-border">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 sm:flex-row sm:px-6 lg:px-8">
-          <p className="text-xs text-text-tertiary">© 2026 UnifiedTree Technologies Pvt. Ltd. All rights reserved.</p>
+          <p className="text-xs text-text-tertiary">© 2026 Our Unique. All rights reserved.</p>
           <div className="flex items-center gap-4">
-            {['Privacy Policy', 'Terms of Service', 'Cookie Policy'].map((item) => (
-              <a key={item} href="#" className="text-xs text-text-tertiary transition-colors hover:text-text-primary">{item}</a>
+            {legalLinks.map((item) => (
+              <Link key={item.label} to={item.to} className="text-xs text-text-tertiary transition-colors hover:text-text-primary">{item.label}</Link>
             ))}
           </div>
         </div>

@@ -12,6 +12,12 @@ import { TalkToUsPage } from './pages/TalkToUsPage'
 import { AboutPage } from './pages/AboutPage'
 import { IndustriesPage } from './pages/IndustriesPage'
 import { StartFreeTrialPage } from './pages/StartFreeTrialPage'
+import { CareersPage } from './pages/CareersPage'
+import { HelpCenterPage } from './pages/HelpCenterPage'
+import { SecurityPage } from './pages/SecurityPage'
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
+import { TermsPage } from './pages/TermsPage'
+import { CookiePolicyPage } from './pages/CookiePolicyPage'
 import { WorkspacesPage } from './pages/WorkspacesPage'
 import { WorkspaceLayout } from './components/WorkspaceLayout'
 import { DashboardPage } from './pages/DashboardPage'
@@ -45,6 +51,12 @@ function AnimatedRoutes() {
       <Route path="/talk-to-us"        element={<PageTransition><TalkToUsPage /></PageTransition>} />
       <Route path="/about"             element={<PageTransition><AboutPage /></PageTransition>} />
       <Route path="/industries"        element={<PageTransition><IndustriesPage /></PageTransition>} />
+      <Route path="/careers"           element={<PageTransition><CareersPage /></PageTransition>} />
+      <Route path="/help"              element={<PageTransition><HelpCenterPage /></PageTransition>} />
+      <Route path="/security"          element={<PageTransition><SecurityPage /></PageTransition>} />
+      <Route path="/privacy"           element={<PageTransition><PrivacyPolicyPage /></PageTransition>} />
+      <Route path="/terms"             element={<PageTransition><TermsPage /></PageTransition>} />
+      <Route path="/cookies"           element={<PageTransition><CookiePolicyPage /></PageTransition>} />
       <Route path="/start-free-trial"  element={<PageTransition><StartFreeTrialPage /></PageTransition>} />
       <Route path="/login"             element={<PageTransition><LoginPage /></PageTransition>} />
       <Route path="/signup"            element={<PageTransition><SignupPage /></PageTransition>} />
