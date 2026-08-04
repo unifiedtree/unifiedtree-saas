@@ -15,12 +15,15 @@ Adds:
 """
 import subprocess, psycopg2
 
+# DDL requires OWNER on the target tables — use postgres superuser (ut_app
+# can't ALTER TABLE platform.subscriptions). New tables get explicit GRANTs
+# to ut_app so the app can read/write them.
 pw = subprocess.check_output(
-    "gcloud secrets versions access latest --secret=DB_PASSWORD --project=unifiedtree-445cd",
+    "gcloud secrets versions access latest --secret=POSTGRES_ROOT_PASSWORD --project=unifiedtree-445cd",
     shell=True).decode().strip()
 
 conn = psycopg2.connect(host="127.0.0.1", port=15432, dbname="railway",
-                        user="ut_app", password=pw, connect_timeout=10)
+                        user="postgres", password=pw, connect_timeout=10)
 conn.autocommit = False
 cur = conn.cursor()
 
@@ -74,6 +77,13 @@ STATEMENTS = [
     CREATE INDEX IF NOT EXISTS ix_razorpay_webhook_sub
       ON platform.razorpay_webhook_events(subscription_id)
       WHERE subscription_id IS NOT NULL;
+    """,
+    # 5. GRANT the app role access to the new tables
+    """
+    GRANT SELECT, INSERT, UPDATE, DELETE ON platform.razorpay_plans TO ut_app;
+    """,
+    """
+    GRANT SELECT, INSERT, UPDATE, DELETE ON platform.razorpay_webhook_events TO ut_app;
     """,
 ]
 
