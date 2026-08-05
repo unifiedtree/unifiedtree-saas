@@ -73,4 +73,11 @@ COMMENT ON TABLE platform.subscriptions IS
     'Created when a paid Razorpay order is consumed into a workspace.';
 
 -- 4. Grants (ut_app is NOSUPERUSER/NOBYPASSRLS; platform.* is not RLS-guarded).
-GRANT SELECT, INSERT, UPDATE, DELETE ON platform.subscriptions TO ut_app;
+--    Guarded so the migration also runs where no ut_app role exists
+--    (integration-test containers, fresh local dev DB). Same pattern as V084.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ut_app') THEN
+        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.subscriptions TO ut_app;
+    END IF;
+END $$;

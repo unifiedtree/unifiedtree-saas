@@ -165,5 +165,12 @@ ON CONFLICT (key) DO UPDATE SET
 --    platform.* tables are NOT RLS-protected (platform-global), so ut_app just
 --    needs table DML. Mirrors the grant pattern in DEPLOY.md for new tables.
 -- ----------------------------------------------------------------------------
-GRANT SELECT, INSERT, UPDATE, DELETE ON platform.module_plans TO ut_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON platform.payments      TO ut_app;
+-- Guarded so the migration also runs on databases that have no ut_app role
+-- (integration-test containers, a fresh local dev DB). Same pattern as V084.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ut_app') THEN
+        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.module_plans TO ut_app;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.payments     TO ut_app;
+    END IF;
+END $$;
