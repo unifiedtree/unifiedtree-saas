@@ -169,6 +169,16 @@ hrms:
 unifiedtree:
   base-domain: ${UNIFIEDTREE_BASE_DOMAIN:unifiedtree.com}
 
+  face:
+    # EmbeddingCipher is an unconditional @Component and its @PostConstruct
+    # rejects anything that does not base64-decode to EXACTLY 32 bytes — even
+    # when hrms.face-recognition.enabled=false. Declaring it here (rather than
+    # only in application-canonical.yml) means every profile boots with a
+    # working value instead of failing the whole application context.
+    # Deployments override this with the UNIFIEDTREE_FACE_ENCRYPTION_KEY env
+    # var, which takes precedence over this file. The fallback is dev-only.
+    encryption-key: ${UNIFIEDTREE_FACE_ENCRYPTION_KEY:ZGV2LW9ubHktZG8tbm90LXVzZS1pbi1wcm9kISEhISE=}
+
   mail:
     # Provider selector: 'smtp' (default — Mailpit/Gmail) or 'brevo' (REST API).
     provider: ${MAIL_PROVIDER:smtp}

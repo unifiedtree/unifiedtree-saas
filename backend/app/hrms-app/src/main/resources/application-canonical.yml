@@ -86,4 +86,10 @@ unifiedtree:
     model-name: sface
     model-version: sface-1.0
     raw-image-retention-days: 7
-    encryption-key: "ZGV2LW9ubHktZG8tbm90LXVzZS1pbi1wcm9kdWN0aW9uISE="
+    # AES-256: EmbeddingCipher requires the decoded key to be EXACTLY 32 bytes
+    # or it throws at @PostConstruct and the whole context fails to start.
+    # The previous literal here decoded to 35 bytes, so any environment that
+    # did not override it (integration tests, a fresh local run) died on boot.
+    # Real deployments override this via the UNIFIEDTREE_FACE_ENCRYPTION_KEY
+    # env var, which outranks this file; the fallback is dev-only.
+    encryption-key: ${UNIFIEDTREE_FACE_ENCRYPTION_KEY:ZGV2LW9ubHktZG8tbm90LXVzZS1pbi1wcm9kISEhISE=}
