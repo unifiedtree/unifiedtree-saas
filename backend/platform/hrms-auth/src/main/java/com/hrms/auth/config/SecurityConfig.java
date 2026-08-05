@@ -40,6 +40,10 @@ public class SecurityConfig {
             "/v1/auth/refresh",
             "/v1/auth/forgot-password",
             "/v1/public/**",
+            // Razorpay webhook receiver — a third party cannot present our
+            // JWT, so it authenticates by HMAC signature inside the
+            // controller instead (see SubscriptionWebhookController).
+            "/v1/webhooks/razorpay",
             "/v1/platform/auth/login",
             "/v3/api-docs/**",
             "/swagger-ui/**",

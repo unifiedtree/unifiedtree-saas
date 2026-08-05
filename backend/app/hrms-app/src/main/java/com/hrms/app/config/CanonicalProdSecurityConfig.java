@@ -119,6 +119,18 @@ public class CanonicalProdSecurityConfig {
                     "/v1/public/module-plans",
                     "/v1/public/payment/config",
                     "/v1/public/payment/create-order",
+                    // Autopay: create a Razorpay subscription for the buyer to
+                    // authorise. Same trust model as create-order — the amount
+                    // is computed server-side from module_plans, never taken
+                    // from the caller.
+                    "/v1/public/payment/create-subscription",
+                    // Razorpay webhook receiver. MUST be unauthenticated:
+                    // Razorpay is a third party and cannot present our JWT.
+                    // It is not unprotected — SubscriptionWebhookController
+                    // verifies an HMAC-SHA256 signature over the raw body
+                    // using RAZORPAY_WEBHOOK_SECRET and rejects anything that
+                    // does not match, so an unsigned request gets nowhere.
+                    "/v1/webhooks/razorpay",
                     "/v1/accounts/auth/login",
                     "/v1/platform/auth/login"
                 ).permitAll()
