@@ -163,6 +163,20 @@
                     </includes>
                     <environmentVariables>
                         <DOCKER_HOST>tcp://127.0.0.1:2375</DOCKER_HOST>
+                        <!--
+                          The ITs run with profiles canonical,canonical-prod, and
+                          application-canonical-prod.yml deliberately declares
+                          `encryption-key: ${UNIFIEDTREE_FACE_ENCRYPTION_KEY:}`
+                          with an EMPTY default so a real production boot fails
+                          fast rather than silently protecting biometric
+                          embeddings with a well-known dev key. That strictness
+                          is correct and must stay, so the tests supply the key
+                          themselves here instead of weakening the prod profile.
+                          Must base64-decode to exactly 32 bytes (AES-256) or
+                          EmbeddingCipher's @PostConstruct aborts the context.
+                          This value is test-only: "0123456789abcdef0123456789abcdef".
+                        -->
+                        <UNIFIEDTREE_FACE_ENCRYPTION_KEY>MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=</UNIFIEDTREE_FACE_ENCRYPTION_KEY>
                     </environmentVariables>
                     <argLine>-DDOCKER_HOST=tcp://127.0.0.1:2375 -Dapi.version=1.44</argLine>
                 </configuration>
