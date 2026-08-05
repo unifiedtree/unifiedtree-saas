@@ -88,8 +88,11 @@ public class SubscriptionWebhookController {
         }
 
         String eventId = optText(root, "id");                          // "evt_xxx" — Razorpay's event id
-        String eventType = optText(root, "event");                     // e.g. "subscription.charged"
+        String eventType = optText(root, "event");                     // e.g. "subscription.charged" / "payment.captured"
+        // Subscription events carry payload.subscription.entity; payment events
+        // carry payload.payment.entity. Peek both and let dispatch decide.
         JsonNode subNode = root.path("payload").path("subscription").path("entity");
+        JsonNode payNode = root.path("payload").path("payment").path("entity");
         String subscriptionId = subNode.isMissingNode() ? null : optText(subNode, "id");
 
         if (eventId == null || eventType == null) {
@@ -110,7 +113,7 @@ public class SubscriptionWebhookController {
         }
 
         try {
-            dispatch(eventType, subscriptionId, subNode);
+            dispatch(eventType, subscriptionId, subNode, payNode);
         } catch (Exception e) {
             // Log & swallow — the event is already in the ledger. Do NOT 5xx
             // back to Razorpay (they'd retry and hit the idempotency guard,
@@ -121,20 +124,68 @@ public class SubscriptionWebhookController {
         return ResponseEntity.ok("ok");
     }
 
-    private void dispatch(String eventType, String subscriptionId, JsonNode subNode) {
-        if (subscriptionId == null) {
-            log.info("Webhook {} has no subscription id; ignoring", eventType);
-            return;
-        }
+    private void dispatch(String eventType, String subscriptionId, JsonNode subNode, JsonNode payNode) {
         switch (eventType) {
-            case "subscription.activated", "subscription.charged", "subscription.resumed" -> onActive(subscriptionId, subNode);
-            case "subscription.pending"    -> onPending(subscriptionId, subNode);
-            case "subscription.halted"     -> onHalted(subscriptionId);
-            case "subscription.completed"  -> onCompleted(subscriptionId);
-            case "subscription.cancelled"  -> onCancelled(subscriptionId);
-            case "subscription.paused"     -> onPaused(subscriptionId);
+            // Subscription lifecycle (autopay path)
+            case "subscription.authenticated" -> log.info("Subscription {} authenticated (mandate approved, awaiting first charge)", subscriptionId);
+            case "subscription.activated", "subscription.charged", "subscription.resumed" -> {
+                if (subscriptionId != null) onActive(subscriptionId, subNode);
+            }
+            case "subscription.pending" -> { if (subscriptionId != null) onPending(subscriptionId, subNode); }
+            case "subscription.halted"  -> { if (subscriptionId != null) onHalted(subscriptionId); }
+            case "subscription.completed" -> { if (subscriptionId != null) onCompleted(subscriptionId); }
+            case "subscription.cancelled" -> { if (subscriptionId != null) onCancelled(subscriptionId); }
+            case "subscription.paused"    -> { if (subscriptionId != null) onPaused(subscriptionId); }
+
+            // One-time payment lifecycle (safety net for the Orders flow —
+            // browser callback usually reaches us first via PaymentService.verifyPaid,
+            // but if the tab crashed between capture and signup submit these events
+            // let us reconcile stuck orders.)
+            case "payment.captured" -> onPaymentCaptured(payNode);
+            case "payment.failed"   -> onPaymentFailed(payNode);
+            case "order.paid"       -> log.info("Order {} fully paid (webhook)", optText(payNode, "order_id"));
+
             default -> log.debug("Webhook {} — no handler wired; ledger row kept", eventType);
         }
+    }
+
+    // -- one-time payment safety-net handlers ---------------------------------
+
+    private void onPaymentCaptured(JsonNode payNode) {
+        if (payNode == null || payNode.isMissingNode()) return;
+        String orderId   = optText(payNode, "order_id");
+        String paymentId = optText(payNode, "id");
+        if (orderId == null || paymentId == null) return;
+
+        // Flip CREATED -> PAID as a safety net. If the browser flow already
+        // consumed this order into a workspace (status='CONSUMED'), the WHERE
+        // clause protects us; the row is already handled and we don't touch it.
+        int rows = jdbc.update("""
+                UPDATE platform.payments
+                   SET status = 'PAID',
+                       razorpay_payment_id = COALESCE(razorpay_payment_id, ?),
+                       signature_verified  = TRUE,
+                       paid_at = COALESCE(paid_at, now())
+                 WHERE razorpay_order_id = ? AND status = 'CREATED'
+                """, paymentId, orderId);
+        if (rows > 0) {
+            log.info("Payment {} captured (webhook safety net) — order {} marked PAID", paymentId, orderId);
+        } else {
+            log.debug("Payment {} captured — order {} already {} (webhook is redundant)", paymentId, orderId,
+                    "PAID or CONSUMED");
+        }
+    }
+
+    private void onPaymentFailed(JsonNode payNode) {
+        if (payNode == null || payNode.isMissingNode()) return;
+        String orderId   = optText(payNode, "order_id");
+        String paymentId = optText(payNode, "id");
+        String reason    = optText(payNode, "error_description");
+        // Deliberately do NOT flip the ledger row to a FAILED state — the user
+        // can still retry with a different payment method against the same
+        // order id. Just log for observability + let ops notice via the audit
+        // trail in razorpay_webhook_events.
+        log.warn("Payment {} failed on order {} — reason: {}", paymentId, orderId, reason);
     }
 
     private void onActive(String subscriptionId, JsonNode subNode) {
