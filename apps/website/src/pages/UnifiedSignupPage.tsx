@@ -12,7 +12,7 @@ import {
 import { usePricingStore } from '../store/pricingStore'
 import { useAuthStore } from '../store/authStore'
 import { useModulePlans, effectiveUnit, type ModulePlan } from '../lib/plans'
-import { API_BASE_URL } from '../lib/api'
+import { API_BASE_URL, api } from '../lib/api'
 import { friendlyServerError } from '../lib/errors'
 import { Navbar } from '../components/layout/Navbar'
 import { COUNTRIES } from '../data/countries'
@@ -105,6 +105,7 @@ export function UnifiedSignupPage() {
   const account        = useAuthStore((s) => s.account)
   const workspaces     = useAuthStore((s) => s.workspaces)
   const loadWorkspaces = useAuthStore((s) => s.loadWorkspaces)
+  const setAccountAuth = useAuthStore((s) => s.setAccountAuth)
 
   // Ensure workspaces are loaded when we hit this page (so we can force the
   // mode correctly for signed-in visitors).
@@ -299,9 +300,42 @@ export function UnifiedSignupPage() {
         const s: StatusResponse = await res.json()
         if (s.status === 'PROVISIONED' && s.tenantId) {
           clearInterval(iv)
-          const url = workspaceLoginUrl(s.subdomain, email, s.workspaceUrl)
-          window.open(url, '_blank', 'noopener,noreferrer')
-          navigate('/')
+          // Auto-login on the account we just created with the password the
+          // user typed at signup, then land them on /workspaces where the
+          // new workspace tile is visible immediately. Previous behaviour
+          // dumped them back on the marketing home with no signal that
+          // signup had succeeded — reads as "nothing happened".
+          //
+          // Signed-in signup path (accountToken already set) skips the
+          // login POST: they were authenticated before submit, and
+          // loadWorkspaces() below refreshes the list so the new tile
+          // appears without them having to re-login.
+          const password = watch('password')
+          try {
+            if (!accountToken && password) {
+              const resp = await api.post('/v1/accounts/auth/login', {
+                email, password,
+              })
+              setAccountAuth(resp.accessToken, resp.account, resp.workspaces)
+            } else if (accountToken) {
+              // Refresh workspaces so the newly-created one shows up on /workspaces.
+              await loadWorkspaces().catch(() => {})
+            }
+          } catch (loginErr) {
+            // Login failed for some reason (rare — the account was just
+            // created). Fall back to opening the workspace's own login
+            // page so the user can proceed manually.
+            const url = workspaceLoginUrl(s.subdomain, email, s.workspaceUrl)
+            window.open(url, '_blank', 'noopener,noreferrer')
+            navigate('/login?next=/workspaces')
+            return
+          }
+          setWaitingForMandate(false)
+          navigate('/workspaces')
+          return
+          // NOTE: intentionally NOT opening the workspace subdomain in a new
+          // tab here — /workspaces has a "Launch workspace" action per tile
+          // that JIT-mints a workspace token, which is the safer entry point.
         } else if (s.status === 'FAILED' || s.status === 'EXPIRED' || s.status === 'CANCELLED') {
           clearInterval(iv)
           setWaitingForMandate(false)
