@@ -92,7 +92,6 @@ public class MandateProvisioningService {
                     p.country(),
                     p.timezone(),
                     p.currency(),
-                    p.primaryInterest(),
                     p.planKeys());
         } catch (Exception e) {
             pending.markFailed(pendingSignupId,

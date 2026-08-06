@@ -167,7 +167,6 @@ public class SubscriptionSignupController {
                     req.timezone(),
                     req.currency() == null ? "INR" : req.currency(),
                     req.language(),
-                    req.primaryInterest(),
                     req.planKeys(),
                     seats,
                     cycle == BillingCycle.ANNUAL ? "yearly" : "monthly",
@@ -295,7 +294,6 @@ public class SubscriptionSignupController {
             @Size(max = 50)  String timezone,
             @Size(max = 10)  String currency,
             @Size(max = 30)  String language,
-            @Size(max = 100) String primaryInterest,
 
             @NotEmpty List<String> planKeys,
             @Min(1) Integer seats,

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
-import { ChevronDown, Search, Phone } from 'lucide-react'
+import { ChevronDown, Search } from 'lucide-react'
 import { DIAL_CODES, DEFAULT_DIAL_CODE, findDialByCode, type DialCode } from '../../data/dialCodes'
 
 interface Props {
@@ -73,7 +73,6 @@ export function PhoneField({ value, onChange, error, onCountryChange, className 
           <span className="tabular-nums text-text-secondary">+{selected.dial}</span>
           <ChevronDown size={14} className={`text-text-tertiary transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>
-        <div className="flex items-center px-3 text-text-tertiary"><Phone size={16} /></div>
         <input
           type="tel"
           inputMode="tel"
@@ -81,7 +80,7 @@ export function PhoneField({ value, onChange, error, onCountryChange, className 
           value={local}
           onChange={(e) => setLocal(e.target.value.replace(/\D/g, ''))}
           placeholder="9876543210"
-          className="flex-1 min-w-0 py-3 pr-3 text-sm font-body text-text-primary placeholder:text-text-tertiary bg-transparent outline-none"
+          className="flex-1 min-w-0 py-3 px-3 text-sm font-body text-text-primary placeholder:text-text-tertiary bg-transparent outline-none"
         />
       </div>
 

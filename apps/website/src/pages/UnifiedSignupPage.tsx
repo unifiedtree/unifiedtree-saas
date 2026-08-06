@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Loader2, User, Building, Mail, Lock, Globe, Languages, Users, Target,
+  Loader2, User, Building, Mail, Lock, Globe, Languages, Users,
   Edit2, Sparkles, Check, X as XIcon, AlertCircle, ChevronDown, ChevronUp,
   Receipt, ArrowRight,
 } from 'lucide-react'
@@ -42,7 +42,6 @@ const signupSchema = z.object({
   seats: z.coerce.number().int().min(1, 'At least 1 user'),
   country: z.string().min(1, 'Country is required'),
   language: z.string().min(1, 'Language is required'),
-  primaryInterest: z.string().min(1, 'Interest is required'),
   // Optional company / tax details — soft-warned only, no format constraint.
   pan: z.string().optional(),
   gstin: z.string().optional(),
@@ -151,7 +150,6 @@ export function UnifiedSignupPage() {
       seats: storeSeats,
       country: 'India',
       language: 'English',
-      primaryInterest: 'Use it in my company',
       adminEmail: account?.email || '',
     },
   })
@@ -214,7 +212,6 @@ export function UnifiedSignupPage() {
         timezone:       Intl.DateTimeFormat().resolvedOptions().timeZone,
         currency:       'INR',
         language:       data.language,
-        primaryInterest: data.primaryInterest,
         planKeys,
         seats,
         billingCycle,        // 'monthly' | 'annual' (backend normalises to yearly)
@@ -475,21 +472,11 @@ export function UnifiedSignupPage() {
                 </Field>
               </div>
 
-              {/* Language + Interest */}
-              <div className="grid md:grid-cols-2 gap-5">
-                <Field label="Language" icon={<Languages size={18} />} error={errors.language?.message}>
-                  <select {...register('language')} className={inputCls(!!errors.language)}>
-                    <option>English</option><option>Hindi</option><option>Tamil</option><option>Telugu</option>
-                  </select>
-                </Field>
-                <Field label="Primary Interest" icon={<Target size={18} />} error={errors.primaryInterest?.message}>
-                  <select {...register('primaryInterest')} className={inputCls(!!errors.primaryInterest)}>
-                    <option>Use it in my company</option>
-                    <option>Evaluate for a client</option>
-                    <option>Just exploring</option>
-                  </select>
-                </Field>
-              </div>
+              <Field label="Language" icon={<Languages size={18} />} error={errors.language?.message}>
+                <select {...register('language')} className={inputCls(!!errors.language)}>
+                  <option>English</option><option>Hindi</option><option>Tamil</option><option>Telugu</option>
+                </select>
+              </Field>
 
               {/* Optional company / tax details */}
               <div className="border-t border-border pt-4">

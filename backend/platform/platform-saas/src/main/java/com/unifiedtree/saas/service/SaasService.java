@@ -117,9 +117,21 @@ public class SaasService {
             return new SubdomainCheckResponse(subdomain, false,
                     "This workspace address is reserved. Please choose another.");
         }
-        boolean exists = Boolean.TRUE.equals(jdbc.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM platform.tenants WHERE subdomain = ?)",
-                Boolean.class, subdomain));
+        // A subdomain is unavailable if it's either
+        //   (a) already provisioned into platform.tenants, OR
+        //   (b) currently being claimed by a pending_signups row that hasn't
+        //       finished the Razorpay mandate yet (24h reservation window).
+        // The stash-time index on pending_signups is what actually enforces
+        // uniqueness, but the availability probe MUST see both so the form
+        // doesn't say "Available" and then 409 on submit.
+        boolean exists = Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM platform.tenants        WHERE lower(subdomain) = ?
+                    UNION ALL
+                    SELECT 1 FROM platform.pending_signups
+                     WHERE lower(subdomain) = ? AND status = 'AWAITING_MANDATE'
+                )
+                """, Boolean.class, subdomain, subdomain));
         return new SubdomainCheckResponse(subdomain, !exists,
                 exists ? "This workspace address is already reserved." : "Available");
     }
@@ -227,7 +239,6 @@ public class SaasService {
             String country,
             String timezone,
             String currency,
-            String primaryInterest,
             java.util.List<String> planKeys) {
         UUID accountId = accountIdOrNull != null ? accountIdOrNull : UUID.randomUUID();
         String passwordHash = passwordHashOrNull != null && !passwordHashOrNull.isBlank()
@@ -240,7 +251,7 @@ public class SaasService {
 
         // Reuse the existing SignupRequest shape so createWorkspace does not need
         // to be rewritten. Fields we don't have from a pending row (industry,
-        // companySize) stay null — they are optional in the DTO anyway.
+        // companySize, primaryInterest) stay null — they are optional in the DTO.
         SignupRequest signup = new SignupRequest(
                 companyName,
                 subdomain,
@@ -253,7 +264,7 @@ public class SaasService {
                 timezone,
                 currency == null ? "INR" : currency,
                 null,                    // companySize
-                primaryInterest,
+                null,                    // primaryInterest (removed from public signup)
                 planKeys,
                 null,                    // payment proof: not used for autopay path
                 null);                   // mode: not used for autopay path
