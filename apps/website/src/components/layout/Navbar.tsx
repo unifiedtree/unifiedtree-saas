@@ -9,6 +9,8 @@ import {
 import { Button } from '../ui/Button'
 import { useAuthStore } from '../../store/authStore'
 import { useScrollDirection } from '../../hooks/useScrollDirection'
+import { CtaButton } from '../common/CtaButton'
+import { WorkspaceBootstrap } from './WorkspaceBootstrap'
 
 // Mega-menu module descriptions. Kept region-agnostic — the earlier copy
 // mentioned Indian payroll acronyms (PF/ESI/TDS) and GST, which prospects
@@ -154,12 +156,15 @@ export function Navbar() {
             ) : (
               <>
                 <Link to="/login" className={linkCls}>Sign in</Link>
-                <Button size="lg" onClick={() => navigate('/trial-signup')} className="font-semibold px-6">
-                  Start free trial <ArrowRight size={18} />
-                </Button>
+                <CtaButton
+                  trialLabel="Start free trial"
+                  paidLabel="Create workspace"
+                  className="font-semibold px-6"
+                />
               </>
             )}
           </div>
+          <WorkspaceBootstrap />
 
           {/* Mobile hamburger */}
           <button
@@ -202,7 +207,9 @@ export function Navbar() {
                 ) : (
                   <>
                     <Link to="/login" className="block w-full rounded-lg border border-border px-4 py-3 text-center text-sm font-medium text-text-secondary transition-all hover:border-primary hover:text-primary" onClick={() => setMenuOpen(false)}>Sign in</Link>
-                    <Link to="/trial-signup" className="block w-full rounded-lg bg-primary px-4 py-3 text-center text-sm font-semibold text-white transition-all hover:bg-primary-dark" onClick={() => setMenuOpen(false)}>Start free trial</Link>
+                    <div className="w-full" onClick={() => setMenuOpen(false)}>
+                      <CtaButton trialLabel="Start free trial" paidLabel="Create workspace" className="w-full text-center justify-center" />
+                    </div>
                   </>
                 )}
               </div>

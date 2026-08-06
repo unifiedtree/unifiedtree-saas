@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Check, Zap } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { useCtaMode } from '../../hooks/useCtaMode'
 
 interface PricingCardProps {
   plan: {
@@ -22,6 +23,10 @@ interface PricingCardProps {
 
 export function PricingCard({ plan, index }: PricingCardProps) {
   const navigate = useNavigate()
+  // Route the CTA through the global trial-vs-paid rule so a signed-in
+  // visitor with a workspace lands on the paid form, and everyone else
+  // lands on the trial form.
+  const { href } = useCtaMode()
 
   return (
     <motion.div
@@ -102,7 +107,7 @@ export function PricingCard({ plan, index }: PricingCardProps) {
           variant={plan.popular ? 'outline' : 'filled'}
           fullWidth
           size="lg"
-          onClick={() => navigate(plan.id === 'enterprise' ? '/signup' : '/signup')}
+          onClick={() => navigate(href)}
           className={plan.popular ? '!bg-white !text-primary !border-white hover:!bg-white/90 shadow-lg' : ''}
         >
           {plan.cta}

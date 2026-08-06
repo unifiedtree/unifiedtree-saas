@@ -1,11 +1,10 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { HomePage } from './pages/HomePage'
 import { ModulesPage } from './pages/ModulesPage'
 import { PricingPage } from './pages/PricingPage'
 import { LoginPage } from './pages/LoginPage'
-import { SignupPage } from './pages/SignupPage'
-import { TrialSignupPage } from './pages/TrialSignupPage'
+import { UnifiedSignupPage } from './pages/UnifiedSignupPage'
 import { FeaturesPage } from './pages/FeaturesPage'
 import { TalkToUsPage } from './pages/TalkToUsPage'
 
@@ -59,8 +58,9 @@ function AnimatedRoutes() {
       <Route path="/cookies"           element={<PageTransition><CookiePolicyPage /></PageTransition>} />
       <Route path="/start-free-trial"  element={<PageTransition><StartFreeTrialPage /></PageTransition>} />
       <Route path="/login"             element={<PageTransition><LoginPage /></PageTransition>} />
-      <Route path="/signup"            element={<PageTransition><SignupPage /></PageTransition>} />
-      <Route path="/trial-signup"      element={<PageTransition><TrialSignupPage /></PageTransition>} />
+      <Route path="/signup"            element={<PageTransition><UnifiedSignupPage /></PageTransition>} />
+      {/* Legacy trial URL — bookmarks + marketing links preserved. */}
+      <Route path="/trial-signup"      element={<Navigate to="/signup?mode=trial" replace />} />
 
       {/* Account & Workspace Routes */}
       <Route path="/workspaces"        element={<PageTransition><WorkspacesPage /></PageTransition>} />

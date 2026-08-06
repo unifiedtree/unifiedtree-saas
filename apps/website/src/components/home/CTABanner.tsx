@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
 import { Button } from '../ui/Button'
-import { useAuthStore } from '../../store/authStore'
+import { CtaButton } from '../common/CtaButton'
+import { useCtaMode } from '../../hooks/useCtaMode'
 
 const leaves = [
   { left: '5%', delay: '0s', duration: '8s', size: 18 },
@@ -17,13 +17,7 @@ const leaves = [
 
 export function CTABanner() {
   const navigate = useNavigate()
-  // Signed-in visitors already have an account (and at least one workspace,
-  // since a workspace is created at signup). Pitching "Start Free Trial /
-  // Book a Demo" at them reads as broken — they've already converted. Hide
-  // the whole banner in that case rather than show buttons that would just
-  // route them into a signup form they can't complete.
-  const accountToken = useAuthStore((s) => s.accountToken)
-  if (accountToken) return null
+  const { mode } = useCtaMode()
 
   return (
     <section className="relative py-24 overflow-hidden" style={{ background: 'linear-gradient(135deg, #F4FAED 0%, #F8FAFC 60%, #F4FAED 100%)' }}>
@@ -53,30 +47,36 @@ export function CTABanner() {
           viewport={{ once: true, amount: 0.4 }}
           transition={{ duration: 0.7, ease: 'easeOut' }}
         >
-          {/* Decorative top element */}
           <div className="flex justify-center mb-6">
             <div className="w-16 h-1 rounded-full bg-primary opacity-40" />
           </div>
 
           <h2 className="font-heading font-bold text-text-primary mb-4" style={{ fontSize: 'clamp(2rem, 3.5vw, 3rem)' }}>
-            Ready to grow your business like a tree?
+            {mode === 'trial'
+              ? 'Ready to grow your business like a tree?'
+              : 'Ready to add another workspace?'}
           </h2>
           <p className="text-lg text-text-secondary font-body mb-10 max-w-xl mx-auto">
-            Join 2,400+ companies. Start free. No credit card required.
+            {mode === 'trial'
+              ? 'Join 2,400+ companies. Start free. No credit card required.'
+              : 'Spin up a workspace for a new team or entity in minutes.'}
           </p>
 
           <div className="flex flex-wrap gap-4 justify-center">
-            <Button size="lg" onClick={() => navigate('/trial-signup')}>
-              Start Free Trial <ArrowRight size={18} />
-            </Button>
+            <CtaButton
+              trialLabel="Start Free Trial"
+              paidLabel="Create Workspace"
+            />
             <Button size="lg" variant="ghost" onClick={() => navigate('/talk-to-us?intent=demo')}>
               Book a Demo
             </Button>
           </div>
 
-          <p className="mt-6 text-sm text-text-secondary font-body">
-            14-day free trial · No credit card · Cancel anytime
-          </p>
+          {mode === 'trial' && (
+            <p className="mt-6 text-sm text-text-secondary font-body">
+              7-day free trial · Autopay activates on day 8 · Cancel anytime
+            </p>
+          )}
         </motion.div>
       </div>
     </section>

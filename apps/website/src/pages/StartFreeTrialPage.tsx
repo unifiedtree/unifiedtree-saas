@@ -20,11 +20,15 @@ const steps = [
 
 export function StartFreeTrialPage() {
   const navigate = useNavigate()
-  // The whole page is a trial pitch — pointless for someone who already has
-  // an account and workspace. Send them to their workspaces list instead of
-  // rendering a landing that ends in a signup form they can't complete.
+  // Trial is a one-per-account privilege. Anon and signed-in-with-zero-
+  // workspaces are BOTH eligible and still see the pitch. Only signed-in
+  // users who already own a workspace get sent back to /workspaces —
+  // they've used their trial and belong on the paid create-workspace flow.
   const accountToken = useAuthStore((s) => s.accountToken)
-  if (accountToken) return <Navigate to="/workspaces" replace />
+  const workspaces = useAuthStore((s) => s.workspaces)
+  if (accountToken && workspaces.length >= 1) {
+    return <Navigate to="/workspaces" replace />
+  }
 
   return (
     <div className="min-h-screen bg-bg">
@@ -79,7 +83,7 @@ export function StartFreeTrialPage() {
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              onClick={() => navigate('/trial-signup')}
+              onClick={() => navigate('/signup?mode=trial')}
               className="inline-flex items-center gap-3 px-12 py-4 bg-primary text-white rounded-xl font-body font-bold text-lg hover:bg-primary-dark transition-all shadow-teal hover:shadow-teal-lg btn-shimmer"
             >
               Create Free Account <ArrowRight size={20} />
@@ -194,7 +198,7 @@ export function StartFreeTrialPage() {
                 </ul>
 
                 <button
-                  onClick={() => navigate('/trial-signup')}
+                  onClick={() => navigate('/signup?mode=trial')}
                   className={`w-full py-3.5 rounded-xl text-sm font-body font-bold transition-all duration-300 ${
                     plan.popular
                       ? 'bg-primary text-white hover:bg-primary-dark shadow-teal hover:shadow-teal-lg active:scale-98 transform btn-shimmer'
