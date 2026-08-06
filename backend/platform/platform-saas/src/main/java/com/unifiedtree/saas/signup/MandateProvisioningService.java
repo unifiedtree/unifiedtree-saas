@@ -173,7 +173,11 @@ public class MandateProvisioningService {
                 p.planKeys().toArray(new String[0]),
                 p.planKeys().toArray(new String[0]),   // modules snapshot; catalog expansion lives on tenant_modules
                 p.seats(),
-                p.billingCycle(), unitInr,
+                // platform.subscriptions.billing_cycle CHECK requires uppercase
+                // ('MONTHLY' | 'ANNUAL'); pending_signups.billing_cycle stores the
+                // lowercase Razorpay period ('monthly' | 'yearly'). Map here rather
+                // than at stash time so pending_signups keeps its own CHECK intact.
+                mapCycleToSubscriptions(p.billingCycle()), unitInr,
                 initialStatus,
                 currentEnd, chargeAt,
                 p.razorpaySubscriptionId(), method,
@@ -210,6 +214,21 @@ public class MandateProvisioningService {
     }
 
     private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
+
+    /**
+     * Two tables, two casing conventions:
+     *   platform.pending_signups.billing_cycle  CHECK IN ('monthly','yearly')  (Razorpay period)
+     *   platform.subscriptions.billing_cycle    CHECK IN ('MONTHLY','ANNUAL')  (our enum)
+     * Historical accident; mapping here keeps both CHECKs valid.
+     */
+    private static String mapCycleToSubscriptions(String pendingCycle) {
+        if (pendingCycle == null) return "MONTHLY";
+        return switch (pendingCycle.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "yearly", "annual" -> "ANNUAL";
+            case "monthly", "month" -> "MONTHLY";
+            default -> "MONTHLY";   // safe default; CHECK will still accept it
+        };
+    }
 
     private static String optStr(JsonNode n, String field) {
         if (n == null) return null;
