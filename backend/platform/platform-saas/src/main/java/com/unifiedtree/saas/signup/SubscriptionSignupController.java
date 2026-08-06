@@ -214,7 +214,39 @@ public class SubscriptionSignupController {
                 : null;
         return new PendingSignupStatusResponse(
                 p.status(), p.tenantId(), workspaceUrl, p.subdomain(),
-                p.failureReason());
+                humaniseFailureReason(p.status(), p.failureReason()));
+    }
+
+    /**
+     * Translate the raw failure_reason we recorded (which usually starts with
+     * "provisioning failed: PSQLException ...") into something safe to show a
+     * customer waiting on a spinner. The raw text stays in the DB for ops;
+     * this method only shapes the wire response.
+     *
+     * <p>We match on well-known substrings first (RLS violation, duplicate
+     * subdomain, check-constraint), and fall back to a generic message
+     * otherwise. Never returns null when {@code status='FAILED'} — the
+     * frontend uses non-null failureReason as its "show the error" signal.
+     */
+    static String humaniseFailureReason(String status, String rawReason) {
+        if (!"FAILED".equals(status)) return null;
+        if (rawReason == null || rawReason.isBlank()) {
+            return "We couldn't finish creating your workspace. Our team has been notified — please try again in a few minutes or contact support@unifiedtree.com.";
+        }
+        String lower = rawReason.toLowerCase(Locale.ROOT);
+        if (lower.contains("already reserved") || lower.contains("duplicate key") || lower.contains("unique constraint")) {
+            return "That workspace address was just taken. Please cancel and pick a different one.";
+        }
+        if (lower.contains("row-level security") || lower.contains("row level security") || lower.contains("violates row-level")) {
+            return "We hit a permissions error while creating your workspace. Support has been notified — please contact support@unifiedtree.com.";
+        }
+        if (lower.contains("check constraint") || lower.contains("violates check")) {
+            return "Some of the details you entered don't fit our billing rules. Please cancel and re-try, or contact support@unifiedtree.com if the problem persists.";
+        }
+        if (lower.contains("timeout") || lower.contains("timed out") || lower.contains("connection")) {
+            return "The payment provider took too long to confirm your mandate. Please try the signup again — your card was not charged.";
+        }
+        return "We couldn't finish creating your workspace. Our team has been notified — please try again in a few minutes or contact support@unifiedtree.com.";
     }
 
     /**

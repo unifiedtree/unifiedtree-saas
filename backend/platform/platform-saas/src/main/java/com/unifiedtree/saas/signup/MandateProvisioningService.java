@@ -96,28 +96,51 @@ public class MandateProvisioningService {
             return null;
         }
 
-        SignupResponse resp;
-        try {
-            resp = saas.provisionFromPending(
-                    p.accountId(),
-                    p.passwordHash(),
-                    p.companyName(),
-                    p.subdomain(),
-                    p.adminName(),
-                    p.email(),
-                    p.phone(),
-                    p.country(),
-                    p.timezone(),
-                    p.currency(),
-                    p.planKeys());
-        } catch (Exception e) {
-            pending.markFailed(pendingSignupId,
-                    "provisioning failed: " + e.getClass().getSimpleName() + " " + e.getMessage());
-            log.error("provisionFromPending({}) — createWorkspace threw: {}", pendingSignupId, e.getMessage(), e);
-            throw e;   // let the webhook handler log + let the ledger show FAILED so ops can inspect
-        }
+        // Orphan-tenant recovery. Downstream INSERTs into
+        // platform.subscriptions are NOT in the same transaction as
+        // writer.signup (writer.signup runs in its own tx to satisfy RLS —
+        // see class-level javadoc). If the subscription INSERT failed on a
+        // prior delivery, writer.signup already committed a tenant row for
+        // this subdomain, but pending is still AWAITING_MANDATE. A naive
+        // retry would call writer.signup again and 409 on the unique index
+        // on platform.tenants(lower(subdomain)) — the classic "orphan
+        // tenant, cannot heal itself" trap.
+        //
+        // Detect that here: if a tenant already exists for this subdomain,
+        // skip the writer and reuse the existing tenant_id. The downstream
+        // subscription INSERT below is already idempotent (ON CONFLICT on
+        // razorpay_subscription_id), so on the next webhook retry the whole
+        // path completes.
+        UUID tenantId = findExistingTenantId(p.subdomain());
+        boolean isRecovery = tenantId != null;
 
-        UUID tenantId = resp.tenantId();
+        if (isRecovery) {
+            log.warn("provisionFromPending({}) — RECOVERY: tenant={} already exists for subdomain '{}' " +
+                     "(prior attempt died between writer.signup and subscription INSERT); " +
+                     "skipping writer and completing downstream inserts",
+                    pendingSignupId, tenantId, p.subdomain());
+        } else {
+            try {
+                SignupResponse resp = saas.provisionFromPending(
+                        p.accountId(),
+                        p.passwordHash(),
+                        p.companyName(),
+                        p.subdomain(),
+                        p.adminName(),
+                        p.email(),
+                        p.phone(),
+                        p.country(),
+                        p.timezone(),
+                        p.currency(),
+                        p.planKeys());
+                tenantId = resp.tenantId();
+            } catch (Exception e) {
+                pending.markFailed(pendingSignupId,
+                        "provisioning failed: " + e.getClass().getSimpleName() + " " + e.getMessage());
+                log.error("provisionFromPending({}) — createWorkspace threw: {}", pendingSignupId, e.getMessage(), e);
+                throw e;   // let the webhook handler log + let the ledger show FAILED so ops can inspect
+            }
+        }
 
         // Mirror optional company/tax details onto platform.tenants (columns
         // added in this migration). Do it here rather than in SaasWriter to
@@ -185,9 +208,47 @@ public class MandateProvisioningService {
 
         pending.markProvisioned(pendingSignupId, tenantId);
 
-        log.info("provisionFromPending({}) OK  tenant={} status={} sub={} trigger={}",
-                pendingSignupId, tenantId, initialStatus, p.razorpaySubscriptionId(), triggerEvent);
+        // Publish the welcome-email event only after markProvisioned
+        // succeeds. If any of the intervening steps (writer.signup,
+        // tenants pan/gstin UPDATE, subscriptions INSERT) failed, we
+        // never reach here and the user does NOT get a "workspace ready"
+        // email for a broken workspace. On the orphan-recovery branch
+        // the workspace already exists — the customer never got the
+        // email on the first attempt, so firing it here (once) is right.
+        //
+        // Wrapped: mail-side failure must NEVER fail the webhook
+        // handler; ops can resend from the audit trail.
+        try {
+            saas.publishWorkspaceCreated(saas.buildWorkspaceCreatedEvent(
+                    tenantId, p.accountId(), p.subdomain(),
+                    p.adminName(), p.email(), p.companyName(),
+                    p.planKeys()));
+        } catch (Exception mailErr) {
+            log.warn("provisionFromPending({}) — welcome-event publish failed (workspace is fine, email skipped): {}",
+                    pendingSignupId, mailErr.getMessage());
+        }
+
+        log.info("provisionFromPending({}) OK  tenant={} status={} sub={} trigger={} recovery={}",
+                pendingSignupId, tenantId, initialStatus, p.razorpaySubscriptionId(), triggerEvent, isRecovery);
         return tenantId;
+    }
+
+    /**
+     * Look for an existing tenant claim on {@code subdomain}, returning its
+     * id or {@code null} if the row is absent. Used by the orphan-tenant
+     * recovery path — see {@link #provisionFromPending}. Case-insensitive
+     * match on {@code lower(subdomain)}, mirroring the writer's uniqueness
+     * contract.
+     */
+    private UUID findExistingTenantId(String subdomain) {
+        if (subdomain == null || subdomain.isBlank()) return null;
+        try {
+            return jdbc.queryForObject(
+                    "SELECT id FROM platform.tenants WHERE lower(subdomain) = lower(?)",
+                    UUID.class, subdomain);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
     }
 
     /**

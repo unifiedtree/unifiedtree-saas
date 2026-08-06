@@ -187,7 +187,13 @@ public class SaasService {
 
         UUID accountId = resolveOrCreateAccountId(req);
         String passwordHash = passwords.hash(req.password());
-        SignupResponse resp = createWorkspace(accountId, passwordHash, req, modulesToActivate);
+        // publishWorkspaceCreated=true — this legacy path is fully synchronous
+        // (no separate webhook-driven downstream), so firing the welcome email
+        // inline is the whole completion signal. (The legacy /signup-request
+        // endpoint that reached this method returns 410 GONE now, but
+        // paywallActive / trial branches keep it wired for admin backfills.)
+        SignupResponse resp = createWorkspace(accountId, passwordHash, req, modulesToActivate,
+                /*publishWorkspaceCreated=*/ true);
 
         if (isTrial) {
             // Write the durable TRIAL subscription (visible in platform.subscriptions
@@ -268,7 +274,40 @@ public class SaasService {
                 planKeys,
                 null,                    // payment proof: not used for autopay path
                 null);                   // mode: not used for autopay path
-        return createWorkspace(accountId, passwordHash, signup, modulesToActivate);
+        // publishWorkspaceCreated=false — the webhook path
+        // (MandateProvisioningService) fires the WorkspaceCreatedEvent itself,
+        // AFTER the downstream subscription-ledger INSERT + markProvisioned
+        // succeed. That way a partial-provisioning failure never triggers a
+        // "workspace ready" email for a workspace that isn't actually usable.
+        return createWorkspace(accountId, passwordHash, signup, modulesToActivate, /*publishWorkspaceCreated=*/ false);
+    }
+
+    /**
+     * Publish {@link WorkspaceCreatedEvent} on behalf of an external caller
+     * (currently {@link com.unifiedtree.saas.signup.MandateProvisioningService})
+     * that provisioned a workspace via {@link #provisionFromPending} and needs
+     * to defer the welcome-email side-effect until after downstream inserts
+     * commit. Fire-and-forget — the caller is expected to swallow exceptions
+     * so a mail-side hiccup doesn't fail the provisioning path.
+     */
+    public void publishWorkspaceCreated(WorkspaceCreatedEvent event) {
+        events.publishEvent(event);
+    }
+
+    /**
+     * Build the {@link WorkspaceCreatedEvent} payload for a workspace that
+     * was just provisioned via {@link #provisionFromPending}. Kept here (not
+     * on the caller) so {@link #workspaceUrl(String)} and the base-domain
+     * value are single-sourced.
+     */
+    public WorkspaceCreatedEvent buildWorkspaceCreatedEvent(
+            UUID tenantId, UUID accountId, String subdomain,
+            String adminName, String adminEmail, String companyName,
+            List<String> activeModules) {
+        return new WorkspaceCreatedEvent(
+                tenantId, accountId, subdomain,
+                subdomain + "." + baseDomain, workspaceUrl(subdomain),
+                adminName, adminEmail, companyName, activeModules);
     }
 
     public SignupResponse createWorkspaceForAccount(UUID accountId, CreateWorkspaceRequest req) {
@@ -289,12 +328,17 @@ public class SaasService {
                 req.requestedModules(),
                 null,     // payment: not applicable for existing-account flow
                 null);    // mode: PAID (default)
+        // publishWorkspaceCreated=true — this path is a single synchronous
+        // request from an authenticated account; there's no separate provisioning
+        // step downstream, so firing the welcome email inline is the whole
+        // completion signal.
         return createWorkspace(account.accountId(), account.passwordHash(), signup,
-                normalizeModules(req.requestedModules()));
+                normalizeModules(req.requestedModules()), /*publishWorkspaceCreated=*/ true);
     }
 
     private SignupResponse createWorkspace(UUID accountId, String passwordHash, SignupRequest req,
-                                           List<String> modulesToActivate) {
+                                           List<String> modulesToActivate,
+                                           boolean publishWorkspaceCreated) {
         String subdomain = normalizeSubdomain(req.subdomain());
         if (subdomain.length() < 3) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Workspace address too short");
@@ -339,13 +383,20 @@ public class SaasService {
 
         // Fire-and-forget welcome email — listener lives in hrms-api where MailService is.
         // Wrapped: a mail-side failure must NEVER fail the signup transaction.
-        try {
-            events.publishEvent(new WorkspaceCreatedEvent(
-                    tenantId, accountId, subdomain,
-                    subdomain + "." + baseDomain, workspaceUrl(subdomain),
-                    req.adminName(), req.adminEmail(), req.companyName(),
-                    requestedModules));
-        } catch (Exception ignored) { /* no-op; signup must not depend on email */ }
+        //
+        // Skipped when publishWorkspaceCreated=false (webhook path) — the caller
+        // (MandateProvisioningService) fires the event itself AFTER the
+        // subscription-ledger INSERT and markProvisioned succeed, so a broken
+        // partial workspace never triggers a "workspace ready" mail.
+        if (publishWorkspaceCreated) {
+            try {
+                events.publishEvent(new WorkspaceCreatedEvent(
+                        tenantId, accountId, subdomain,
+                        subdomain + "." + baseDomain, workspaceUrl(subdomain),
+                        req.adminName(), req.adminEmail(), req.companyName(),
+                        requestedModules));
+            } catch (Exception ignored) { /* no-op; signup must not depend on email */ }
+        }
 
         return new SignupResponse(
                 accountId,
