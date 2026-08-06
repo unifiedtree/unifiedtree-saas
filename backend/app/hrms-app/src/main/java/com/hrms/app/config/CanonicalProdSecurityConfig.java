@@ -124,6 +124,12 @@ public class CanonicalProdSecurityConfig {
                     // is computed server-side from module_plans, never taken
                     // from the caller.
                     "/v1/public/payment/create-subscription",
+                    // Unified signup: creates the pending signup + Razorpay
+                    // subscription in one call, returns short_url to the
+                    // browser. Workspace is provisioned by the webhook only
+                    // AFTER Razorpay confirms mandate authentication (hard-gate).
+                    "/v1/public/subscription-signup",
+                    "/v1/public/subscription-signup/status",
                     // Razorpay webhook receiver. MUST be unauthenticated:
                     // Razorpay is a third party and cannot present our JWT.
                     // It is not unprotected — SubscriptionWebhookController

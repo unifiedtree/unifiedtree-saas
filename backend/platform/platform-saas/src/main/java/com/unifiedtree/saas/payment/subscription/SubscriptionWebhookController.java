@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unifiedtree.saas.payment.RazorpayClient;
 import com.unifiedtree.saas.payment.RazorpayProperties;
+import com.unifiedtree.saas.signup.MandateProvisioningService;
+import com.unifiedtree.saas.signup.PendingSignupService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -20,6 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Razorpay webhook receiver. One endpoint, verifies HMAC signature, dispatches
@@ -54,11 +58,17 @@ public class SubscriptionWebhookController {
     private final JdbcTemplate jdbc;
     private final RazorpayClient razorpay;
     private final RazorpayProperties props;
+    private final PendingSignupService pending;
+    private final MandateProvisioningService provisioning;
 
-    public SubscriptionWebhookController(JdbcTemplate jdbc, RazorpayClient razorpay, RazorpayProperties props) {
+    public SubscriptionWebhookController(JdbcTemplate jdbc, RazorpayClient razorpay, RazorpayProperties props,
+                                         PendingSignupService pending,
+                                         MandateProvisioningService provisioning) {
         this.jdbc = jdbc;
         this.razorpay = razorpay;
         this.props = props;
+        this.pending = pending;
+        this.provisioning = provisioning;
     }
 
     /**
@@ -127,14 +137,44 @@ public class SubscriptionWebhookController {
     private void dispatch(String eventType, String subscriptionId, JsonNode subNode, JsonNode payNode) {
         switch (eventType) {
             // Subscription lifecycle (autopay path)
-            case "subscription.authenticated" -> log.info("Subscription {} authenticated (mandate approved, awaiting first charge)", subscriptionId);
+            case "subscription.authenticated" -> {
+                // TRIAL: this is the workspace-creation trigger (start_at is 7 days
+                // out so no charge yet). PAID: does not fire when start_at is null;
+                // if it does, provisioning is still correct (we always want the
+                // workspace created as soon as the mandate is in place).
+                if (subscriptionId != null) tryProvision(subscriptionId, subNode, "subscription.authenticated");
+            }
             case "subscription.activated", "subscription.charged", "subscription.resumed" -> {
-                if (subscriptionId != null) onActive(subscriptionId, subNode);
+                if (subscriptionId != null) {
+                    // PAID flow lands here first (no start_at, so activated fires
+                    // as soon as the first charge succeeds). If we have not
+                    // provisioned yet from an earlier authenticated event, do it
+                    // now — idempotent by pending_signup_id.
+                    tryProvision(subscriptionId, subNode, eventType);
+                    onActive(subscriptionId, subNode);
+                }
             }
             case "subscription.pending" -> { if (subscriptionId != null) onPending(subscriptionId, subNode); }
-            case "subscription.halted"  -> { if (subscriptionId != null) onHalted(subscriptionId); }
+            case "subscription.halted"  -> {
+                if (subscriptionId != null) {
+                    onHalted(subscriptionId);
+                    // 7-day grace before workspace read-only lock — same policy
+                    // for trial-to-paid conversion failure and normal renewal
+                    // failure.
+                    provisioning.applyGrace(subscriptionId, Instant.now());
+                }
+            }
             case "subscription.completed" -> { if (subscriptionId != null) onCompleted(subscriptionId); }
-            case "subscription.cancelled" -> { if (subscriptionId != null) onCancelled(subscriptionId); }
+            case "subscription.cancelled" -> {
+                if (subscriptionId != null) {
+                    onCancelled(subscriptionId);
+                    // If a mandate is cancelled BEFORE provisioning, mark the
+                    // pending row too so its subdomain reservation releases.
+                    pending.findByRazorpaySubscriptionId(subscriptionId)
+                           .filter(p -> "AWAITING_MANDATE".equals(p.status()))
+                           .ifPresent(p -> pending.markCancelled(p.id()));
+                }
+            }
             case "subscription.paused"    -> { if (subscriptionId != null) onPaused(subscriptionId); }
 
             // One-time payment lifecycle (safety net for the Orders flow —
@@ -147,6 +187,37 @@ public class SubscriptionWebhookController {
 
             default -> log.debug("Webhook {} — no handler wired; ledger row kept", eventType);
         }
+    }
+
+    /**
+     * Resolve the pending signup for this Razorpay subscription and hand it
+     * to {@link MandateProvisioningService#provisionFromPending}.
+     *
+     * <p>Primary key: {@code razorpay_subscription_id} on pending_signups
+     * (unique). Fallback: {@code notes.pending_signup_id} on the entity
+     * payload (in case a proxy stripped {@code notes} — unlikely, but
+     * belt-and-suspenders). Idempotent — pending row's status guard blocks
+     * a second workspace on replay.
+     */
+    private void tryProvision(String subscriptionId, JsonNode subNode, String triggerEvent) {
+        Optional<PendingSignupService.PendingSignup> row =
+                pending.findByRazorpaySubscriptionId(subscriptionId);
+        if (row.isEmpty()) {
+            String fromNotes = optText(subNode.path("notes"), "pending_signup_id");
+            if (fromNotes != null) {
+                try {
+                    row = pending.findById(UUID.fromString(fromNotes));
+                } catch (IllegalArgumentException ignored) {
+                    // malformed UUID in notes — treat as no match
+                }
+            }
+        }
+        if (row.isEmpty()) {
+            log.debug("Webhook {} for subscription {} — no pending row (may be a subscription created outside our flow)",
+                    triggerEvent, subscriptionId);
+            return;
+        }
+        provisioning.provisionFromPending(row.get().id(), subNode, triggerEvent);
     }
 
     // -- one-time payment safety-net handlers ---------------------------------

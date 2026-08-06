@@ -191,6 +191,75 @@ public class SaasService {
         return resp;
     }
 
+    /**
+     * Workspace-creation entry point for the unified autopay signup flow.
+     *
+     * <p>Called from the Razorpay webhook (via MandateProvisioningService)
+     * once the customer's mandate is authenticated. Everything the webhook
+     * needs — validated form fields, pre-hashed password, chosen modules,
+     * account id if the caller was signed in — was stashed in
+     * {@code platform.pending_signups} at signup time; this method reads
+     * those fields and drives {@link #createWorkspace} the same way
+     * {@link #createWorkspaceForAccount} does for authenticated additions.
+     *
+     * <p>Account resolution:
+     * <ul>
+     *   <li>{@code accountId} non-null (existing signed-in user adding a
+     *       workspace) — reuse that account.</li>
+     *   <li>{@code accountId} null (fresh signup) — generate a random UUID;
+     *       {@link SaasWriter#signup} upserts the platform.accounts row with
+     *       {@code ON CONFLICT DO NOTHING}. The TRIAL-mode duplicate-email
+     *       gate at the signup endpoint prevents the collision case here.</li>
+     * </ul>
+     *
+     * <p>Not idempotent by itself — the caller (webhook) enforces
+     * "one workspace per pending_signup" via the pending row's status
+     * transition and a lookup-before-provision check.
+     */
+    public SignupResponse provisionFromPending(
+            UUID accountIdOrNull,
+            String passwordHashOrNull,       // null when accountId is non-null (existing account)
+            String companyName,
+            String subdomain,
+            String adminName,
+            String adminEmail,
+            String adminMobile,
+            String country,
+            String timezone,
+            String currency,
+            String primaryInterest,
+            java.util.List<String> planKeys) {
+        UUID accountId = accountIdOrNull != null ? accountIdOrNull : UUID.randomUUID();
+        String passwordHash = passwordHashOrNull != null && !passwordHashOrNull.isBlank()
+                ? passwordHashOrNull
+                : "webhook-provisioned-no-plaintext-available";  // placeholder for signed-in adds
+
+        // Fan plan keys out to catalog module keys the way the endpoint used to.
+        java.util.List<String> modulesToActivate =
+                planService.expandModules(planService.requireAvailable(planKeys));
+
+        // Reuse the existing SignupRequest shape so createWorkspace does not need
+        // to be rewritten. Fields we don't have from a pending row (industry,
+        // companySize) stay null — they are optional in the DTO anyway.
+        SignupRequest signup = new SignupRequest(
+                companyName,
+                subdomain,
+                adminName,
+                adminEmail,
+                adminMobile,
+                "webhook-provisioned",   // password: unused — SaasWriter uses the hash we pass separately
+                null,                    // industry
+                country,
+                timezone,
+                currency == null ? "INR" : currency,
+                null,                    // companySize
+                primaryInterest,
+                planKeys,
+                null,                    // payment proof: not used for autopay path
+                null);                   // mode: not used for autopay path
+        return createWorkspace(accountId, passwordHash, signup, modulesToActivate);
+    }
+
     public SignupResponse createWorkspaceForAccount(UUID accountId, CreateWorkspaceRequest req) {
         AccountForWorkspace account = loadAccountForWorkspace(accountId);
         SignupRequest signup = new SignupRequest(

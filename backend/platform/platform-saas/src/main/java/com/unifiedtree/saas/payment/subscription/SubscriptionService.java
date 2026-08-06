@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -82,6 +84,32 @@ public class SubscriptionService {
     public CreateSubscriptionResult createSubscription(List<String> planKeys, int seats,
                                                        BillingCycle cycle,
                                                        String subdomain, String email) {
+        return createSubscription(planKeys, seats, cycle, subdomain, email, null, null);
+    }
+
+    /**
+     * Extended overload used by the unified signup flow.
+     *
+     * @param startAt          non-null → Razorpay defers the first charge until
+     *                         this instant (used for the 7-day trial). null →
+     *                         first charge fires immediately when the mandate
+     *                         is authorised (paid signup).
+     * @param pendingSignupId  UUID of the platform.pending_signups row this
+     *                         subscription belongs to. Serialised into
+     *                         Razorpay's opaque `notes` map so the webhook can
+     *                         find the pending row on activation. Optional
+     *                         (null-safe) for callers that don't need it.
+     *
+     * <p><b>Cadence guarantee</b>: {@code period} is <i>always</i> monthly or
+     * yearly (never weekly). {@code startAt} shifts the FIRST charge only; the
+     * recurring cycle stays monthly/annual. Trial + monthly = charge on day 8,
+     * next on day ~38, next on day ~68 — never every 7 days.
+     */
+    public CreateSubscriptionResult createSubscription(List<String> planKeys, int seats,
+                                                       BillingCycle cycle,
+                                                       String subdomain, String email,
+                                                       Instant startAt,
+                                                       String pendingSignupId) {
         if (!props.isConfigured()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Payment gateway is not configured");
         }
@@ -115,19 +143,32 @@ public class SubscriptionService {
 
         String rzpPlanId = ensureRazorpayPlan(moduleKey, c, plan.displayName(), unitPaise);
 
+        // Notes echoed back on every webhook event. Include everything the
+        // webhook may need to correlate: primary key (pending_signup_id),
+        // human context (subdomain/email/cycle), and price/plan for audits.
+        Map<String, Object> notes = new HashMap<>();
+        notes.put("subdomain",   subdomain == null ? "" : subdomain);
+        notes.put("email",       email == null ? "" : email);
+        notes.put("plan_key",    moduleKey);
+        notes.put("cycle",       c.name());
+        notes.put("seats",       String.valueOf(billedSeats));
+        if (pendingSignupId != null && !pendingSignupId.isBlank()) {
+            notes.put("pending_signup_id", pendingSignupId);
+        }
+
         int totalCount = c == BillingCycle.ANNUAL ? TOTAL_COUNT_ANNUAL : TOTAL_COUNT_MONTHLY;
+        // Razorpay wants seconds-since-epoch. Passing null tells the client to
+        // omit start_at, so the subscription becomes active as soon as the
+        // customer authenticates the mandate (paid flow).
+        Long startAtEpoch = startAt == null ? null : startAt.getEpochSecond();
+
         RazorpayClient.SubscriptionView view = razorpay.createSubscription(
                 rzpPlanId, billedSeats, totalCount, /*customerNotify=*/ 1,
-                Map.of(
-                        "subdomain",   subdomain == null ? "" : subdomain,
-                        "email",       email == null ? "" : email,
-                        "plan_key",    moduleKey,
-                        "cycle",       c.name(),
-                        "seats",       String.valueOf(billedSeats)));
+                startAtEpoch, notes);
 
         if (props.isLive()) {
-            log.info("Razorpay LIVE subscription created {} plan={} seats={} cycle={} unitPaise={}",
-                    view.id(), rzpPlanId, billedSeats, c.name(), unitPaise);
+            log.info("Razorpay LIVE subscription created {} plan={} seats={} cycle={} unitPaise={} startAt={}",
+                    view.id(), rzpPlanId, billedSeats, c.name(), unitPaise, startAtEpoch);
         }
         return new CreateSubscriptionResult(
                 view.id(), view.shortUrl(), rzpPlanId,
@@ -194,6 +235,25 @@ public class SubscriptionService {
                  WHERE razorpay_subscription_id = ? AND status <> 'CANCELLED'
                 """, razorpaySubscriptionId);
         log.info("Subscription {} cancelled (cancelAtCycleEnd={})", razorpaySubscriptionId, cancelAtCycleEnd);
+    }
+
+    /**
+     * Cancel a subscription that is still in the pre-mandate state
+     * ("created" or "authenticated"), before any workspace was provisioned.
+     * Used by the abandonment sweep and by the endpoint when an intent is
+     * abandoned. Idempotent — a Razorpay error (e.g. already cancelled) is
+     * logged rather than raised because there is no ledger row to keep in
+     * sync yet.
+     */
+    public void cancelPreAuth(String razorpaySubscriptionId) {
+        if (razorpaySubscriptionId == null || razorpaySubscriptionId.isBlank()) return;
+        try {
+            razorpay.cancelSubscription(razorpaySubscriptionId, /*cancelAtCycleEnd=*/ false);
+            log.info("Pre-auth subscription {} cancelled", razorpaySubscriptionId);
+        } catch (Exception e) {
+            log.warn("cancelPreAuth({}) — Razorpay refused (probably already cancelled): {}",
+                    razorpaySubscriptionId, e.getMessage());
+        }
     }
 
     public record CreateSubscriptionResult(String subscriptionId, String shortUrl, String razorpayPlanId,

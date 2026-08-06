@@ -197,6 +197,12 @@ public class RazorpayClient {
         }
     }
 
+    /** Backwards-compatible overload (no start_at). */
+    public SubscriptionView createSubscription(String planId, int quantity, int totalCount,
+                                               int customerNotify, Map<String, Object> notes) {
+        return createSubscription(planId, quantity, totalCount, customerNotify, null, notes);
+    }
+
     /**
      * Create a Razorpay Subscription against an existing plan.
      *
@@ -204,21 +210,31 @@ public class RazorpayClient {
      * @param quantity        number of billed seats (multiplier on the per-unit plan price)
      * @param totalCount      how many billing cycles (e.g. 60 for a 5-year cap)
      * @param customerNotify  1 = Razorpay emails/SMS charge notifications; 0 = we handle it
+     * @param startAtEpochSec Optional unix-epoch-seconds for when the FIRST charge fires.
+     *                        Null → activate immediately on mandate authentication (paid flow).
+     *                        Non-null → defer first charge until this instant (trial flow).
+     *                        The <b>recurring period</b> (monthly / yearly) is unchanged; this
+     *                        only shifts the initial charge — cadence is dictated by the Plan.
      * @param notes           opaque map echoed on webhooks; put our tenant/plan ids here
      * @return {@link SubscriptionView} — id + short_url the customer follows to authorise the mandate
      */
     @SuppressWarnings("unchecked")
     public SubscriptionView createSubscription(String planId, int quantity, int totalCount,
-                                               int customerNotify, Map<String, Object> notes) {
+                                               int customerNotify, Long startAtEpochSec,
+                                               Map<String, Object> notes) {
         if (!props.isConfigured()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Payment gateway not configured");
         }
-        Map<String, Object> body = Map.of(
-                "plan_id",         planId,
-                "quantity",        quantity,
-                "total_count",     totalCount,
-                "customer_notify", customerNotify,
-                "notes",           notes == null ? Map.of() : notes);
+        // Build the body incrementally — Map.of() cannot hold optional keys.
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("plan_id",         planId);
+        body.put("quantity",        quantity);
+        body.put("total_count",     totalCount);
+        body.put("customer_notify", customerNotify);
+        body.put("notes",           notes == null ? Map.of() : notes);
+        if (startAtEpochSec != null && startAtEpochSec > 0) {
+            body.put("start_at", startAtEpochSec);
+        }
         try {
             Map<String, Object> resp = http.post()
                     .uri("/subscriptions")
