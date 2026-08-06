@@ -7,6 +7,8 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
@@ -110,7 +112,13 @@ public class PendingSignupService {
      * Flip the intent to PROVISIONED and store the created tenant id. Idempotent —
      * re-invoking with the same {@code (id, tenantId)} is a no-op because the
      * UPDATE's WHERE clause excludes rows already PROVISIONED.
+     *
+     * <p>{@code REQUIRES_NEW} so this always runs in its own transaction — the
+     * caller path (webhook -&gt; MandateProvisioningService) can invoke this AFTER
+     * a rolled-back inner tx; without a fresh tx we'd fail with
+     * "current transaction is aborted, commands ignored until end of transaction block".
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markProvisioned(UUID id, UUID tenantId) {
         int rows = jdbc.update("""
                 UPDATE platform.pending_signups
@@ -120,6 +128,8 @@ public class PendingSignupService {
         if (rows > 0) log.info("pending_signup {} -> PROVISIONED tenant={}", id, tenantId);
     }
 
+    /** Same REQUIRES_NEW rationale as {@link #markProvisioned}. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markFailed(UUID id, String reason) {
         jdbc.update("""
                 UPDATE platform.pending_signups
@@ -130,6 +140,8 @@ public class PendingSignupService {
         log.warn("pending_signup {} -> FAILED  reason={}", id, reason);
     }
 
+    /** Same REQUIRES_NEW rationale as {@link #markProvisioned}. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markCancelled(UUID id) {
         jdbc.update("""
                 UPDATE platform.pending_signups

@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -55,8 +54,26 @@ public class MandateProvisioningService {
      * {@code payload.subscription.entity} block from the webhook — used to
      * populate {@code current_period_end} / {@code next_charge_at} on the
      * platform.subscriptions row without a separate Razorpay fetch.
+     *
+     * <p><b>Deliberately NOT @Transactional.</b> SaasWriter.signup is the
+     * RLS-sensitive step and MUST run in its own fresh transaction so the
+     * {@code SET LOCAL app.tenant_id} hook (fired at connection lease by
+     * TenantAwareDataSource) matches the rows it inserts. Wrapping this
+     * method in @Transactional leashes the writer into a parent connection
+     * that was leased BEFORE {@link com.unifiedtree.security.tenant.TenantContext#setTenantId}
+     * had a value, causing every RLS-protected insert (org.companies,
+     * hrms.*, auth.user_credentials, ...) to violate its row policy — the
+     * exact PSQLException the synthetic E2E test caught after the
+     * webhook-parsing bug had already been fixed. The javadoc on
+     * SaasWriter.signup warns about this contract; the initial version of
+     * this class ignored it.
+     *
+     * <p>Downstream inserts (subscriptions ledger row, tenants
+     * pan/gstin update, markProvisioned) each auto-commit — a partial
+     * failure between them and the writer leaves the tenant present but
+     * the subscription ledger unfilled. Rare and manually reconcilable;
+     * better than every signup rolling back on RLS.
      */
-    @Transactional
     public UUID provisionFromPending(UUID pendingSignupId, JsonNode subscriptionEntity, String triggerEvent) {
         Optional<PendingSignupService.PendingSignup> maybe = pending.findById(pendingSignupId);
         if (maybe.isEmpty()) {
