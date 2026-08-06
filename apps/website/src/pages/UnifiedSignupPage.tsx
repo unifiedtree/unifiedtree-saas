@@ -187,10 +187,37 @@ export function UnifiedSignupPage() {
   const [waitingForMandate, setWaitingForMandate] = useState(false)
   const [checkoutTab, setCheckoutTab] = useState<Window | null>(null)
 
+  // Cancel a previously-created pending signup on the backend. Used both by
+  // the "Cancel and edit my details" overlay button and BEFORE every new
+  // submit when we have a leftover pendingSignupId — otherwise the old
+  // Razorpay subscription sits around, its UPI mandate registration blocks
+  // the new one ("Autopay already exists" on GPay), and its pending row
+  // holds the subdomain reservation ("That workspace URL is already being
+  // claimed" on the next submit).
+  const cancelPending = async (id: string): Promise<void> => {
+    try {
+      await fetch(`${API_BASE_URL}/v1/public/subscription-signup/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendingSignupId: id }),
+      })
+      // Ignore response — endpoint is idempotent and we're best-effort here.
+    } catch { /* network blip is fine; 24h expiry sweep is the safety net */ }
+  }
+
   const onSubmit = async (data: SignupData) => {
     setError('')
     setLoading(true)
     try {
+      // If we're re-submitting after the user changed their mind on the
+      // waiting overlay (or edited any field), cancel the previous attempt
+      // BEFORE creating a new subscription. Prevents subdomain-reservation
+      // 409s and UPI-side "Autopay already exists" errors.
+      if (pendingSignupId) {
+        await cancelPending(pendingSignupId)
+        setPendingSignupId(null)
+      }
+
       const planKeys = chosenPlans.map((p) => p.key)
       if (planKeys.length === 0) {
         throw new Error('Please pick at least one module for your workspace.')
@@ -357,7 +384,15 @@ export function UnifiedSignupPage() {
                   I'm on the Razorpay tab → focus it
                 </button>
                 <button
-                  onClick={() => { setWaitingForMandate(false); setPendingSignupId(null) }}
+                  onClick={async () => {
+                    // Tell the backend to cancel the Razorpay subscription
+                    // and release the subdomain reservation BEFORE we close
+                    // the overlay — otherwise the next submit collides.
+                    const id = pendingSignupId
+                    setWaitingForMandate(false)
+                    setPendingSignupId(null)
+                    if (id) await cancelPending(id)
+                  }}
                   className="text-xs text-text-tertiary hover:text-text-secondary py-2"
                 >
                   Cancel and edit my details
