@@ -106,11 +106,14 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
 
         response.setStatus(HttpStatus.PAYMENT_REQUIRED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        // Escape every string interpolated into the JSON body — status is a
+        // controlled DB enum today, but future refactors mustn't create a
+        // silent JSON-injection foot-cannon by echoing a fresh field raw.
         response.getWriter().write(
-                "{\"error\":\"subscription_lapsed\",\"status\":\"" + sub.status() + "\","
+                "{\"error\":\"subscription_lapsed\",\"status\":\"" + escape(sub.status()) + "\","
                         + (sub.graceUntil() == null
                             ? "\"graceExpiredAt\":null,"
-                            : "\"graceExpiredAt\":\"" + sub.graceUntil().toString() + "\",")
+                            : "\"graceExpiredAt\":\"" + escape(sub.graceUntil().toString()) + "\",")
                         + "\"message\":\"" + escape(d.reason()) + "\"}");
         return false;
     }
@@ -166,8 +169,11 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
     }
 
     private static boolean isAlwaysAllowed(String path) {
+        // Match on segment boundaries so /v1/subscription does NOT accidentally
+        // allow /v1/subscriptions (which doesn't exist today, but might tomorrow
+        // as a per-tenant subscriptions listing that ought to be gated).
         for (String prefix : ALWAYS_ALLOWED_PREFIXES) {
-            if (path.startsWith(prefix)) return true;
+            if (path.equals(prefix) || path.startsWith(prefix + "/")) return true;
         }
         return false;
     }
