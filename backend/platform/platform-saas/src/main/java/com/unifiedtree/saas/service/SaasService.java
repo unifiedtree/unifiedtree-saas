@@ -303,7 +303,19 @@ public class SaasService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Workspace address '" + subdomain + "' is reserved. Please choose another.");
         }
-        if (!checkSubdomain(subdomain).available()) {
+        // Uniqueness check for the ACTUAL create — only look at
+        // platform.tenants. NOT the fuller checkSubdomain() used by the
+        // /subdomains/check endpoint, which also examines pending_signups
+        // AWAITING_MANDATE reservations: on the provisioning path we ARE
+        // the owner of the AWAITING_MANDATE row and would 409 against
+        // ourselves. Race-safety with other pending signups is enforced
+        // upstream by the partial UNIQUE index on
+        //   pending_signups(lower(subdomain)) WHERE status='AWAITING_MANDATE'
+        // so no two can hold the same reservation concurrently.
+        boolean alreadyProvisioned = Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM platform.tenants WHERE lower(subdomain) = ?)",
+                Boolean.class, subdomain));
+        if (alreadyProvisioned) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Workspace address already reserved");
         }
         List<String> requestedModules = normalizeModules(modulesToActivate);
