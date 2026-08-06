@@ -166,7 +166,8 @@ public class MandateProvisioningService {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'INR', ?,
                         now(), COALESCE(to_timestamp(?), now()), to_timestamp(?),
                         ?, TRUE, ?, ?, ?, now(), now())
-                ON CONFLICT (razorpay_subscription_id) DO NOTHING
+                ON CONFLICT (razorpay_subscription_id)
+                    WHERE razorpay_subscription_id IS NOT NULL DO NOTHING
                 """,
                 UUID.randomUUID(), tenantId, p.subdomain(), p.email(),
                 p.planKeys().toArray(new String[0]),
