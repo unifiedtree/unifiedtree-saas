@@ -11,6 +11,7 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.SQLException;
@@ -74,7 +75,21 @@ public class PlanChangeService {
      * {@code start_at}, matching the per-workspace-trial semantic the client
      * asked for on 2026-08-07 ("still 7-day free trial ... only starts when
      * autopay is set up").
+     *
+     * <p><b>@Transactional is REQUIRED.</b> TenantAwareDataSource sets every
+     * leased connection to autoCommit=false whenever TenantContext is set
+     * (so SET LOCAL app.tenant_id survives inside the transaction). Without
+     * a Spring transaction boundary, the INSERT completes without error but
+     * is silently ROLLED BACK when the connection returns to the pool and
+     * Hikari resets autoCommit to true. This bug ate a live customer's setup
+     * attempt on 2026-08-07 — the log printed "plan-change created" (INSERT
+     * succeeded) but the row vanished seconds later. Same class of bug as
+     * dabf88a on MandateProvisioningService, opposite direction: there we
+     * had to REMOVE @Transactional because it started BEFORE TenantContext
+     * was set; here we ADD @Transactional because the controller call site
+     * runs AFTER TenantContextFilter has already set the context.
      */
+    @Transactional
     public CreateResult create(UUID tenantId, UUID initiatorAccountId,
                                List<PlanItem> items, BillingCycle cycle,
                                String subdomain, String email) {
@@ -173,7 +188,14 @@ public class PlanChangeService {
      * calling twice with the same request id is a no-op after the first
      * successful run (the row's status flips to ACTIVATED and the second
      * call short-circuits).
+     *
+     * <p>@Transactional so the multi-row upsert into tenant_modules + the
+     * final status flip commit together (or roll back together on error).
+     * TenantContext is null on the webhook thread (Razorpay is anonymous),
+     * so autoCommit stays true when leased — Spring's @Transactional still
+     * forces autoCommit=false and manages commit/rollback itself.
      */
+    @Transactional
     public void activate(UUID planChangeRequestId) {
         Row r = requireRow(planChangeRequestId);
         if ("ACTIVATED".equals(r.status)) {
@@ -218,6 +240,7 @@ public class PlanChangeService {
                 planChangeRequestId, r.tenantId, items.size());
     }
 
+    @Transactional
     public void markFailed(UUID id, String reason) {
         jdbc.update("""
                 UPDATE platform.plan_change_requests
@@ -226,6 +249,7 @@ public class PlanChangeService {
                 """, reason, id);
     }
 
+    @Transactional
     public void markCancelled(UUID id) {
         jdbc.update("""
                 UPDATE platform.plan_change_requests
