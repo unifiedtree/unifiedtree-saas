@@ -159,11 +159,15 @@ public class WorkspacePlanController {
     // -- helpers --------------------------------------------------------------
 
     private void requireAdmin(JwtClaims claims) {
-        // Both role names align with rbac.roles seed data. SUPER_ADMIN + OWNER
-        // roles map to the same "workspace admin" bucket for plan changes.
+        // STRICT admin-only for billing / plan changes. HR_MANAGER is
+        // intentionally EXCLUDED — an HR manager can approve leaves and
+        // edit employees, but must not be able to authorise a Razorpay
+        // mandate that will charge the workspace's account. Only the
+        // workspace owner + platform-declared admin roles can do that.
+        // (Client clarification, 2026-08-07.)
         boolean isAdmin = claims.roles().stream()
                 .anyMatch(r -> "SUPER_ADMIN".equals(r) || "OWNER".equals(r)
-                        || "COMPANY_ADMIN".equals(r) || "HR_MANAGER".equals(r));
+                        || "COMPANY_ADMIN".equals(r));
         if (!isAdmin) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only workspace admins can manage the plan");

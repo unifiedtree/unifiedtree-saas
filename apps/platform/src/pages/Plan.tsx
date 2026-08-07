@@ -29,10 +29,12 @@ import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 
 type BillingCycle = 'monthly' | 'annual'
 
-// Same admin bucket that Modules.tsx uses for the tile-click gating. Includes
-// HR_MANAGER on top of the two "true" admin roles because in this codebase
-// HR managers routinely handle plan/user changes; matches the launcher UX.
-const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
+// STRICT admin-only for plan / billing changes. HR_MANAGER is intentionally
+// excluded — Modules.tsx uses a wider set (adds HR_MANAGER) for tile-click
+// entry into apps, which is a UX permission, not a billing one. Only the
+// workspace owner + explicit admin roles can authorise a mandate that will
+// charge the workspace's account. (Client clarification, 2026-08-07.)
+const ADMIN_ROLES = ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN']
 const POLL_INTERVAL_MS = 2500
 const POLL_MAX_MS = 30 * 60 * 1000  // 30 min
 
