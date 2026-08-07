@@ -219,14 +219,12 @@ export function ModulesGrid() {
               </>
             )}
 
-            <button
-              onClick={() => navigate('/pricing')}
-              disabled={selectedPlans.length === 0}
-              className="btn-shimmer mt-5 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-lime shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Configure your plan <ArrowRight size={16} />
-            </button>
-            <p className="mt-2 text-center text-[11px] text-text-tertiary">14-day free trial · no card required</p>
+            {/* No signup CTA here. /modules is a read-only informational
+                surface — the only signup entry point is the Navbar
+                "Start Free Trial" button (client decision 2026-08-07). */}
+            <p className="mt-5 text-center text-[11px] text-text-tertiary">
+              Modules unlock inside your workspace after autopay setup.
+            </p>
           </div>
         </div>
       </aside>

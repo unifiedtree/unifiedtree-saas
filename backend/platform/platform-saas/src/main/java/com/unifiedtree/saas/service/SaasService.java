@@ -336,9 +336,70 @@ public class SaasService {
                 normalizeModules(req.requestedModules()), /*publishWorkspaceCreated=*/ true);
     }
 
+    /**
+     * Free-workspace creation. Synchronous, no payment, no Razorpay round-trip,
+     * no trial timer running yet. The workspace is created with ZERO active
+     * modules — the admin unlocks + pays inside the workspace via the
+     * {@code /plan} page (which sets up autopay and starts the per-workspace
+     * 7-day trial at mandate authentication).
+     *
+     * <p>Multiple free workspaces per account are supported. The account row
+     * is reused when email + password match; a new UUID is minted otherwise.
+     * Signed-in callers pass their existing accountId + null passwordHash.
+     */
+    public SignupResponse createFreeWorkspace(
+            UUID accountIdOrNull,
+            String passwordHashOrNull,       // null when accountId is non-null (existing account)
+            String companyName,
+            String subdomain,
+            String adminName,
+            String adminEmail,
+            String adminMobile,
+            String country,
+            String timezone,
+            String currency) {
+
+        UUID accountId = accountIdOrNull != null ? accountIdOrNull : UUID.randomUUID();
+        String passwordHash = passwordHashOrNull != null && !passwordHashOrNull.isBlank()
+                ? passwordHashOrNull
+                : "free-signup-no-password-available";  // placeholder for signed-in adds
+
+        SignupRequest signup = new SignupRequest(
+                companyName,
+                subdomain,
+                adminName,
+                adminEmail,
+                adminMobile,
+                "free-signup",           // password: unused — SaasWriter uses the hash we pass separately
+                null,                    // industry
+                country,
+                timezone,
+                currency == null ? "INR" : currency,
+                null,                    // companySize
+                null,                    // primaryInterest
+                java.util.List.of(),     // no modules requested
+                null,                    // payment proof: not applicable
+                null);                   // mode: not applicable
+
+        // publishWorkspaceCreated=true — this path is a single synchronous
+        // request; no separate provisioning step downstream.
+        // allowEmptyModules=true — zero-module workspace is the whole point.
+        return createWorkspace(accountId, passwordHash, signup,
+                java.util.List.of(), /*publishWorkspaceCreated=*/ true,
+                /*allowEmptyModules=*/ true);
+    }
+
     private SignupResponse createWorkspace(UUID accountId, String passwordHash, SignupRequest req,
                                            List<String> modulesToActivate,
                                            boolean publishWorkspaceCreated) {
+        return createWorkspace(accountId, passwordHash, req, modulesToActivate,
+                publishWorkspaceCreated, /*allowEmptyModules=*/ false);
+    }
+
+    private SignupResponse createWorkspace(UUID accountId, String passwordHash, SignupRequest req,
+                                           List<String> modulesToActivate,
+                                           boolean publishWorkspaceCreated,
+                                           boolean allowEmptyModules) {
         String subdomain = normalizeSubdomain(req.subdomain());
         if (subdomain.length() < 3) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Workspace address too short");
@@ -363,10 +424,12 @@ public class SaasService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Workspace address already reserved");
         }
         List<String> requestedModules = normalizeModules(modulesToActivate);
-        if (requestedModules.isEmpty()) {
+        if (requestedModules.isEmpty() && !allowEmptyModules) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select at least one module");
         }
-        ensureModulesExist(requestedModules);
+        if (!requestedModules.isEmpty()) {
+            ensureModulesExist(requestedModules);
+        }
 
         UUID tenantId = UUID.randomUUID();
         UUID userId   = UUID.randomUUID();
@@ -430,6 +493,18 @@ public class SaasService {
         } catch (EmptyResultDataAccessException e) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account token is no longer valid");
         }
+    }
+
+    /**
+     * Public overload for callers that don't have a full SignupRequest —
+     * takes email + plaintext password directly and returns the account id
+     * to use (existing if email+password match, freshly minted UUID otherwise).
+     * Throws 409 when an account exists but the password doesn't match.
+     */
+    public UUID resolveOrCreateAccountId(String email, String plaintextPassword) {
+        return resolveOrCreateAccountId(new SignupRequest(
+                "", "", "", email, "", plaintextPassword,
+                null, null, null, null, null, null, java.util.List.of(), null, null));
     }
 
     private UUID resolveOrCreateAccountId(SignupRequest req) {

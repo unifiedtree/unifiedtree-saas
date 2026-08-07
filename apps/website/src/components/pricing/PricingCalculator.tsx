@@ -9,7 +9,6 @@ import {
 import { usePricingStore } from '../../store/pricingStore'
 import { useModulePlans, computeMonthlyTotal, effectiveUnit, type ModulePlan } from '../../lib/plans'
 import { Button } from '../ui/Button'
-import { CtaButton } from '../common/CtaButton'
 
 // Keep this in sync with the `icon` string values seeded in platform.module_plans.
 // New modules added 2026-07-31: Truck (SCM), Warehouse (inventory-warehouse),
@@ -211,18 +210,12 @@ export function PricingCalculator() {
                 </div>
               </>
             )}
-            <div className="mt-6 space-y-3">
-              {/* Global rule: anon / signed-in-with-zero-workspaces sees TRIAL,
-                  signed-in-with-workspaces sees PAID with the computed total. */}
-              <div className="w-full [&_a]:w-full [&_a]:justify-center">
-                <CtaButton
-                  className="w-full justify-center"
-                  trialLabel="Start 7-day Free Trial"
-                  paidLabel={`Pay ₹${monthlyTotal.toLocaleString('en-IN')}/${billingCycle === 'annual' ? 'yr' : 'mo'} & Create Workspace`}
-                />
-              </div>
-              <p className="text-xs text-text-secondary font-body text-center">Secure payment via Razorpay · activate instantly</p>
-            </div>
+            {/* No signup CTA here. /pricing is a read-only informational
+                surface — the only signup entry point is the Navbar
+                "Start Free Trial" button (client decision 2026-08-07). */}
+            <p className="mt-6 text-xs text-text-tertiary font-body text-center">
+              Modules are unlocked and autopay is set up inside your workspace.
+            </p>
           </div>
         </div>
       </div>

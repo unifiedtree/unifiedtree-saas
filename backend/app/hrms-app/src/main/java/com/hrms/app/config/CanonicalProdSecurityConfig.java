@@ -131,6 +131,11 @@ public class CanonicalProdSecurityConfig {
                     "/v1/public/subscription-signup",
                     "/v1/public/subscription-signup/status",
                     "/v1/public/subscription-signup/cancel",
+                    // Free-workspace signup: synchronous, no payment, no
+                    // Razorpay round-trip. Workspace is created immediately
+                    // with ZERO active modules; the admin unlocks + pays
+                    // inside the workspace via the /plan page.
+                    "/v1/public/free-signup",
                     // Razorpay webhook receiver. MUST be unauthenticated:
                     // Razorpay is a third party and cannot present our JWT.
                     // It is not unprotected — SubscriptionWebhookController

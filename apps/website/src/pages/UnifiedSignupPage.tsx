@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Loader2, User, Building, Mail, Lock, Globe, Languages, Users,
+  Loader2, User, Building, Mail, Lock, Globe, Users,
   Edit2, Sparkles, Check, X as XIcon, AlertCircle, ChevronDown, ChevronUp,
   Receipt, ArrowRight,
 } from 'lucide-react'
@@ -41,7 +41,6 @@ const signupSchema = z.object({
   confirmPassword: z.string().optional(),
   seats: z.coerce.number().int().min(1, 'At least 1 user'),
   country: z.string().min(1, 'Country is required'),
-  language: z.string().min(1, 'Language is required'),
   // Optional company / tax details — soft-warned only, no format constraint.
   pan: z.string().optional(),
   gstin: z.string().optional(),
@@ -66,6 +65,15 @@ interface SignupResponse {
   checkoutShortUrl: string
   mode: 'TRIAL' | 'PAID'
   keyId: string
+}
+
+/** Response from POST /v1/public/free-signup — the workspace is already
+ *  created; no polling required. */
+interface FreeSignupResponse {
+  tenantId: string
+  subdomain: string
+  workspaceUrl: string
+  email: string
 }
 
 interface StatusResponse {
@@ -150,7 +158,6 @@ export function UnifiedSignupPage() {
     defaultValues: {
       seats: storeSeats,
       country: 'India',
-      language: 'English',
       adminEmail: account?.email || '',
     },
   })
@@ -210,6 +217,73 @@ export function UnifiedSignupPage() {
     setError('')
     setLoading(true)
     try {
+      // Require password only when NOT signed in.
+      if (!accountToken && (!data.password || data.password.length < 8)) {
+        throw new Error('Password is required (min 8 characters).')
+      }
+
+      // ------------------------------------------------------------------
+      // TRIAL = "Create Free Workspace" flow
+      // ------------------------------------------------------------------
+      // Synchronous POST to /v1/public/free-signup — no Razorpay round-trip,
+      // no mandate, no polling. Workspace is created with ZERO active
+      // modules; the admin unlocks + pays inside the workspace on the
+      // /plan page. Multiple free workspaces per account allowed.
+      if (mode === 'trial') {
+        const body = {
+          companyName: data.companyName,
+          subdomain:   data.subdomain,
+          adminName:   data.adminName,
+          adminEmail:  data.adminEmail,
+          adminMobile: data.adminMobile,
+          password:    accountToken ? undefined : data.password,
+          country:     data.country,
+          timezone:    Intl.DateTimeFormat().resolvedOptions().timeZone,
+          currency:    'INR',
+        }
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (accountToken) headers['Authorization'] = `Bearer ${accountToken}`
+
+        const res = await fetch(`${API_BASE_URL}/v1/public/free-signup`, {
+          method: 'POST', headers, body: JSON.stringify(body),
+        })
+        const text = await res.text()
+        const parsed: FreeSignupResponse | { message?: string } = text ? JSON.parse(text) : {}
+        if (!res.ok) {
+          throw new Error((parsed as { message?: string }).message || `Signup failed (${res.status})`)
+        }
+        const r = parsed as FreeSignupResponse
+
+        // Auto-login on the account we just created (or the pre-existing
+        // one when signed in) so the visitor lands on /workspaces with a
+        // session already established. Then navigate them to their new
+        // workspace tile — they click Launch to enter.
+        try {
+          if (!accountToken && data.password) {
+            const resp = await api.post('/v1/accounts/auth/login', {
+              email: data.adminEmail, password: data.password,
+            })
+            setAccountAuth(resp.accessToken, resp.account, resp.workspaces)
+          } else if (accountToken) {
+            await loadWorkspaces().catch(() => {})
+          }
+        } catch { /* rare — the account was just created; user can login manually */ }
+
+        // Open the new workspace directly (client asked: "redirects to
+        // their company.unifiedtree.com"). Fall back to /workspaces if the
+        // workspace URL isn't returned for some reason.
+        if (r.workspaceUrl) {
+          const loginUrl = workspaceLoginUrl(r.subdomain, r.email || data.adminEmail, r.workspaceUrl)
+          window.location.href = loginUrl
+        } else {
+          navigate('/workspaces')
+        }
+        return
+      }
+
+      // ------------------------------------------------------------------
+      // PAID = autopay Razorpay Subscription flow (unchanged)
+      // ------------------------------------------------------------------
       // If we're re-submitting after the user changed their mind on the
       // waiting overlay (or edited any field), cancel the previous attempt
       // BEFORE creating a new subscription. Prevents subdomain-reservation
@@ -223,10 +297,6 @@ export function UnifiedSignupPage() {
       if (planKeys.length === 0) {
         throw new Error('Please pick at least one module for your workspace.')
       }
-      // Require password only when NOT signed in.
-      if (!accountToken && (!data.password || data.password.length < 8)) {
-        throw new Error('Password is required (min 8 characters).')
-      }
 
       const body = {
         mode: mode.toUpperCase(),
@@ -239,7 +309,6 @@ export function UnifiedSignupPage() {
         country:        data.country,
         timezone:       Intl.DateTimeFormat().resolvedOptions().timeZone,
         currency:       'INR',
-        language:       data.language,
         planKeys,
         seats,
         billingCycle,        // 'monthly' | 'annual' (backend normalises to yearly)
@@ -357,16 +426,6 @@ export function UnifiedSignupPage() {
 
   const [showTaxDetails, setShowTaxDetails] = useState(false)
 
-  const trialSubline = useMemo(() => {
-    if (mode !== 'trial') return null
-    if (chargeTotal === 0) {
-      return `Free for ${TRIAL_DAYS} days. Autopay activates after — you can cancel anytime.`
-    }
-    const cycleLabel = billingCycle === 'annual' ? 'year' : 'month'
-    const amount = billingCycle === 'annual' ? perUserAnnual * seats * 12 : perUser * seats
-    return `You won't be charged today. Autopay of ₹${amount.toLocaleString('en-IN')}/${cycleLabel} starts after your ${TRIAL_DAYS}-day trial.`
-  }, [mode, billingCycle, chargeTotal, perUser, perUserAnnual, seats])
-
   return (
     <div className="min-h-screen bg-bg">
       <Navbar />
@@ -377,15 +436,15 @@ export function UnifiedSignupPage() {
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-body font-semibold uppercase tracking-[0.1em] text-white/70 bg-white/[0.08] border border-white/10 mb-4">
-              {mode === 'trial' ? <><Sparkles size={12} /> 7-day free trial</> : <><Receipt size={12} /> Paid workspace</>}
+              {mode === 'trial' ? <><Sparkles size={12} /> Free workspace</> : <><Receipt size={12} /> Paid workspace</>}
             </span>
             <h1 className="font-heading font-extrabold text-white mb-3"
                 style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-              {mode === 'trial' ? 'Start your free trial' : 'Create your workspace'}
+              {mode === 'trial' ? 'Create your free workspace' : 'Create your workspace'}
             </h1>
             <p className="text-base text-white/75 font-body max-w-xl mx-auto">
               {mode === 'trial'
-                ? 'Set up your workspace instantly. Autopay activates after 7 days — no charge today.'
+                ? 'Instant setup, no card required. Pick modules and start your 7-day trial from inside the workspace.'
                 : 'Pick your modules, choose your team size, and pay securely to activate instantly.'}
             </p>
           </motion.div>
@@ -439,8 +498,8 @@ export function UnifiedSignupPage() {
 
       {/* Form */}
       <section className="py-12">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-8">
+        <div className={mode === 'trial' ? 'max-w-2xl mx-auto px-4 sm:px-6 lg:px-8' : 'max-w-6xl mx-auto px-4 sm:px-6 lg:px-8'}>
+          <div className={mode === 'trial' ? '' : 'grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-8'}>
 
             <form onSubmit={handleSubmit(onSubmit)} className="premium-card p-8 space-y-5">
               {error && (
@@ -529,23 +588,19 @@ export function UnifiedSignupPage() {
                 </div>
               )}
 
-              {/* Seats + Country */}
-              <div className="grid md:grid-cols-2 gap-5">
-                <Field label="Number of Users" icon={<Users size={18} />} error={errors.seats?.message}>
-                  <input {...register('seats', { valueAsNumber: true })} type="number" min={1} className={inputCls(!!errors.seats)} />
-                </Field>
+              {/* Seats (PAID only — TRIAL picks seats per-module inside the workspace) + Country */}
+              <div className={mode === 'trial' ? '' : 'grid md:grid-cols-2 gap-5'}>
+                {mode !== 'trial' && (
+                  <Field label="Number of Users" icon={<Users size={18} />} error={errors.seats?.message}>
+                    <input {...register('seats', { valueAsNumber: true })} type="number" min={1} className={inputCls(!!errors.seats)} />
+                  </Field>
+                )}
                 <Field label="Country" icon={<Globe size={18} />} error={errors.country?.message}>
                   <select {...register('country')} className={inputCls(!!errors.country)}>
                     {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </Field>
               </div>
-
-              <Field label="Language" icon={<Languages size={18} />} error={errors.language?.message}>
-                <select {...register('language')} className={inputCls(!!errors.language)}>
-                  <option>English</option><option>Hindi</option><option>Tamil</option><option>Telugu</option>
-                </select>
-              </Field>
 
               {/* Optional company / tax details */}
               <div className="border-t border-border pt-4">
@@ -577,7 +632,7 @@ export function UnifiedSignupPage() {
                   By continuing you accept our <a href="/terms" className="font-semibold underline">Subscription Agreement</a> and{' '}
                   <a href="/privacy" className="font-semibold underline">Privacy Policy</a>.
                   {mode === 'trial'
-                    ? ' You won\'t be charged during the 7-day trial.'
+                    ? ' No card required. Modules unlock when you set up autopay inside your workspace.'
                     : ' Autopay activates today with immediate first charge.'}
                 </p>
                 <button
@@ -587,12 +642,14 @@ export function UnifiedSignupPage() {
                 >
                   {loading && <Loader2 size={16} className="animate-spin" />}
                   {mode === 'trial'
-                    ? (loading ? 'Setting up mandate…' : 'Pay ₹0 & Start 7-day Free Trial')
+                    ? (loading ? 'Creating your workspace…' : 'Create Free Workspace')
                     : (loading ? 'Opening Razorpay…' : `Pay ₹${chargeTotal.toLocaleString('en-IN')}/${billingCycle === 'annual' ? 'yr' : 'mo'} & Create Workspace`)}
                   {!loading && <ArrowRight size={16} />}
                 </button>
-                {trialSubline && (
-                  <p className="text-xs text-text-secondary text-center mt-3">{trialSubline}</p>
+                {mode === 'trial' && (
+                  <p className="text-xs text-text-secondary text-center mt-3">
+                    Instant workspace. Pick modules + start your 7-day trial from inside — no charge until then.
+                  </p>
                 )}
                 <p className="text-center text-sm text-text-secondary mt-4">
                   {accountToken
@@ -602,7 +659,13 @@ export function UnifiedSignupPage() {
               </div>
             </form>
 
-            {/* Right sidebar — highlighted plan summary */}
+            {/* Right sidebar — PAID only. TRIAL creates a free workspace via
+                /v1/public/free-signup and picks modules / seats inside on
+                the workspace's /plan page, so no plan summary here.
+                Styling below is the teammate's forest-header redesign
+                (bc5bd55) with the trial branch dropped since mode is
+                narrowed to 'paid' inside this gate. */}
+            {mode === 'paid' && (
             <aside>
               <div className="sticky top-24 overflow-hidden rounded-2xl border-2 border-primary/20 bg-surface shadow-teal-lg">
                 {/* Forest header makes the summary the visual anchor */}
@@ -630,27 +693,12 @@ export function UnifiedSignupPage() {
                   <div className="space-y-2 text-sm mb-4">
                     <Row k="Per user / month" v={`₹${cycleUnit}`} />
                     <Row k="Users" v={String(seats)} />
-                    {mode === 'trial' ? (
-                      <>
-                        <div className="mt-2 border-t border-border pt-3 flex items-center justify-between">
-                          <span className="text-sm text-text-secondary">Due today</span>
-                          <span className="font-heading font-bold text-primary text-2xl">₹0</span>
-                        </div>
-                        <div className="flex items-start gap-2 rounded-lg bg-primary-light px-3 py-2">
-                          <Sparkles size={13} className="mt-0.5 shrink-0 text-primary" />
-                          <p className="text-[11px] leading-snug text-primary-dark">
-                            Autopay of <span className="font-semibold">₹{(billingCycle === 'annual' ? perUserAnnual * seats * 12 : perUser * seats).toLocaleString('en-IN')}/{billingCycle === 'annual' ? 'yr' : 'mo'}</span> begins after your {TRIAL_DAYS}-day trial. Cancel anytime.
-                          </p>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="mt-2 flex items-end justify-between border-t border-border pt-3">
-                        <span className="text-text-secondary">Total {billingCycle === 'annual' ? 'per year' : 'per month'}</span>
-                        <span className="font-heading font-bold text-primary text-2xl">
-                          ₹{chargeTotal.toLocaleString('en-IN')}<span className="text-sm font-normal text-text-secondary">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
-                        </span>
-                      </div>
-                    )}
+                    <div className="mt-2 flex items-end justify-between border-t border-border pt-3">
+                      <span className="text-text-secondary">Total {billingCycle === 'annual' ? 'per year' : 'per month'}</span>
+                      <span className="font-heading font-bold text-primary text-2xl">
+                        ₹{chargeTotal.toLocaleString('en-IN')}<span className="text-sm font-normal text-text-secondary">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
+                      </span>
+                    </div>
                   </div>
 
                   <Link to="/pricing" className="block rounded-xl border border-border py-2.5 text-center text-sm font-body font-semibold text-text-secondary transition-colors hover:border-primary hover:text-primary">
@@ -660,6 +708,7 @@ export function UnifiedSignupPage() {
                 </div>
               </div>
             </aside>
+            )}
 
           </div>
         </div>

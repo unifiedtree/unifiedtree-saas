@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   Menu, X, Users, MapPin, Banknote, BarChart2, Package,
   Target, ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart,
+  Truck, Warehouse, Megaphone,
   ChevronDown, ArrowRight,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
@@ -11,25 +12,15 @@ import { useAuthStore } from '../../store/authStore'
 import { useScrollDirection } from '../../hooks/useScrollDirection'
 import { CtaButton } from '../common/CtaButton'
 import { WorkspaceBootstrap } from './WorkspaceBootstrap'
+import { useModulePlans } from '../../lib/plans'
 
-// Mega-menu module descriptions. Kept region-agnostic — the earlier copy
-// mentioned Indian payroll acronyms (PF/ESI/TDS) and GST, which prospects
-// outside India read as "not for me". Statutory specifics live in the
-// per-region Compliance section on the Features page, not the mega-menu.
-const navModules = [
-  { id: 'hr',            name: 'HR & Employees',  icon: Users,        desc: 'Employee records & org chart' },
-  { id: 'attendance',    name: 'Attendance',       icon: MapPin,       desc: 'GPS & face capture, offline sync' },
-  { id: 'payroll',       name: 'Payroll',          icon: Banknote,     desc: 'Payroll, statutory deductions & payslips' },
-  { id: 'accounting',    name: 'Accounting',       icon: BarChart2,    desc: 'Tax invoicing & bank reconciliation' },
-  { id: 'inventory',     name: 'Inventory',        icon: Package,      desc: 'Stock, warehouses, batch tracking' },
-  { id: 'crm',           name: 'CRM',              icon: Target,       desc: 'Leads, pipeline, quotations' },
-  { id: 'purchase',      name: 'Purchase',         icon: ShoppingCart, desc: 'POs, GRN, vendor management' },
-  { id: 'sales',         name: 'Sales',            icon: TrendingUp,   desc: 'Orders, delivery, pricing' },
-  { id: 'projects',      name: 'Projects',         icon: Kanban,       desc: 'Tasks, milestones, timelines' },
-  { id: 'manufacturing', name: 'Manufacturing',    icon: Settings,     desc: 'BOM, work orders, MRP' },
-  { id: 'pos',           name: 'Point of Sale',    icon: Monitor,      desc: 'Billing, receipts, offline mode' },
-  { id: 'reports',       name: 'Reports & BI',     icon: PieChart,     desc: 'Dashboards, KPIs, exports' },
-]
+// Icon lookup: the DB stores an icon *name* per plan (module_plans.icon)
+// and PricingCalculator uses the same map. Unknown names fall back to Users.
+const iconMap: Record<string, React.ElementType> = {
+  Users, MapPin, Banknote, BarChart2, Package, Target,
+  ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart,
+  Truck, Warehouse, Megaphone,
+}
 
 const links = [
   { label: 'Features',   to: '/features'   },
@@ -43,6 +34,16 @@ export function Navbar() {
   const [modulesHover,  setModulesHover]  = useState(false)
   const navigate = useNavigate()
   const { accountToken, logoutAccount } = useAuthStore()
+
+  // Modules mega-menu content — same source as /pricing and /modules pages:
+  // platform.module_plans via the useModulePlans query. Filters RETIRED and
+  // sorts by DB sort_order so ordering matches every other module surface
+  // (client explicitly wants the merged view here, not the raw 12 modules).
+  const { data: allPlans = [] } = useModulePlans()
+  const navPlans = allPlans
+    .filter((p) => p.status !== 'RETIRED')
+    .slice()
+    .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999))
 
   // Hide the header while scrolling DOWN, show it back the moment the reader
   // scrolls up even a little — matches the client's ask (they explicitly
@@ -103,33 +104,40 @@ export function Navbar() {
                     style={{ right: '-260px' }}
                   >
                     <div className="grid grid-cols-3 gap-1.5">
-                      {navModules.map((mod) => {
-                        const Icon = mod.icon
-                        return (
-                          <Link
-                            key={mod.id}
-                            to="/modules"
-                            className="group flex items-start gap-3 rounded-xl p-3 transition-colors duration-150 hover:bg-primary-light"
-                          >
-                            <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-light text-primary transition-colors group-hover:bg-primary group-hover:text-white">
-                              <Icon size={16} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold leading-tight text-text-primary transition-colors group-hover:text-primary">
-                                {mod.name}
-                              </p>
-                              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-text-secondary">
-                                {mod.desc}
-                              </p>
-                            </div>
-                          </Link>
-                        )
-                      })}
+                      {navPlans.length === 0
+                        ? Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="h-14 animate-pulse rounded-xl bg-surface" />
+                          ))
+                        : navPlans.map((plan) => {
+                            const Icon = (plan.icon && iconMap[plan.icon]) || Users
+                            const desc = plan.tagline || plan.description || ''
+                            return (
+                              <Link
+                                key={plan.key}
+                                to="/modules"
+                                className="group flex items-start gap-3 rounded-xl p-3 transition-colors duration-150 hover:bg-primary-light"
+                              >
+                                <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-light text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+                                  <Icon size={16} />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold leading-tight text-text-primary transition-colors group-hover:text-primary">
+                                    {plan.displayName}
+                                  </p>
+                                  <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-text-secondary">
+                                    {desc}
+                                  </p>
+                                </div>
+                              </Link>
+                            )
+                          })}
                     </div>
                     <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
                       <div className="flex items-center gap-2">
                         <span className="h-2 w-2 rounded-full bg-primary" />
-                        <span className="text-xs text-text-secondary">12 modules · Mix and match</span>
+                        <span className="text-xs text-text-secondary">
+                          {navPlans.length > 0 ? `${navPlans.length} modules · Mix and match` : 'Loading modules…'}
+                        </span>
                       </div>
                       <Link to="/modules" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
                         View all modules <ArrowRight size={13} />
