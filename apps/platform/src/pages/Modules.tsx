@@ -25,7 +25,7 @@ interface Tile {
   icon: LucideIcon
   status: Status
   home: string                         // route when opened (active tiles only)
-  rank: number                         // sort key (active tiles surface first)
+  sortOrder: number                    // preserved from module_plans.sort_order
 }
 
 /**
@@ -35,6 +35,13 @@ interface Tile {
  *                          has at least one of plan.includedModules active
  *          = 'locked'      otherwise
  *   home   = first APPS.home for an includedModule with built=true, fallback /dashboard
+ *
+ * Ordering uses the DB's sort_order verbatim so the launcher matches
+ * /pricing exactly — HR/Attendance/Payroll (sort_order=1) at the top,
+ * launching-soon modules in DB order below. Not re-ranking by status:
+ * that put HR (locked, rank 2) BELOW all the launching-soon tiles
+ * (rank 1) on a fresh workspace, which the client flagged as wrong on
+ * 2026-08-07 ("HR is at the last, keep it at the top").
  */
 function planToTile(plan: ModulePlan, activeModules: string[]): Tile {
   const Icon = (plan.icon && iconMap[plan.icon]) || Users
@@ -55,7 +62,7 @@ function planToTile(plan: ModulePlan, activeModules: string[]): Tile {
     icon: Icon,
     status,
     home: primaryApp?.home ?? '/dashboard',
-    rank: status === 'active' ? 0 : status === 'coming-soon' ? 1 : 2,
+    sortOrder: plan.sortOrder ?? 999,
   }
 }
 
@@ -96,7 +103,11 @@ export const Modules: React.FC = () => {
   }
 
   // Tile grid = merged sellable plans (RETIRED-filtered) + Settings pseudo-tile.
-  // Sorted: active first, coming-soon next, locked, then Settings pinned last.
+  // Sort strategy: DB sort_order preserved (matches /pricing exactly, so HR
+  // = 1 lands at the top), with Settings pinned to the very end via a large
+  // synthetic sortOrder. Do NOT re-rank by status — that put HR (locked,
+  // higher rank) BELOW every launching-soon tile on a fresh workspace and
+  // the client explicitly flagged it on 2026-08-07.
   const tiles = useMemo<Tile[]>(() => {
     const planTiles = plans
       .filter(p => p.status !== 'RETIRED')
@@ -110,14 +121,14 @@ export const Modules: React.FC = () => {
         icon: ADMIN_APP.icon,
         status: 'active',
         home: ADMIN_APP.home,
-        rank: 3,   // pinned after every plan tile
+        sortOrder: 9_999,   // pinned to the very end
       })
     }
     const q = query.trim().toLowerCase()
     const filtered = q
       ? list.filter(t => t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q))
       : list
-    return filtered.slice().sort((a, b) => a.rank - b.rank)
+    return filtered.slice().sort((a, b) => a.sortOrder - b.sortOrder)
   }, [plans, isAdmin, query, activeModules])
 
   const greeting = (() => {

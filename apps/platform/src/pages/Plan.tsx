@@ -5,6 +5,7 @@ import {
   AlertCircle, Lock,
 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
 import { useModulePlans, iconMap, effectiveUnit, type ModulePlan } from '@/core/api/modulePlans'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
@@ -28,7 +29,10 @@ import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 
 type BillingCycle = 'monthly' | 'annual'
 
-const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN']
+// Same admin bucket that Modules.tsx uses for the tile-click gating. Includes
+// HR_MANAGER on top of the two "true" admin roles because in this codebase
+// HR managers routinely handle plan/user changes; matches the launcher UX.
+const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
 const POLL_INTERVAL_MS = 2500
 const POLL_MAX_MS = 30 * 60 * 1000  // 30 min
 
@@ -52,11 +56,15 @@ export const Plan: React.FC = () => {
   const [searchParams] = useSearchParams()
   const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
   const tenantName    = useLocalAuthStore(s => s.tenant?.name ?? 'your workspace')
-  // Local auth store's User type has a single `role` string. SDK exposes an
-  // array on `useSdkStore().user.roles` — keep both narrow to avoid a
-  // second store dependency on this page.
-  const role          = useLocalAuthStore(s => s.user?.role ?? '')
-  const isAdmin       = ADMIN_ROLES.includes(role)
+  // Roles + permissions come from the SDK auth store (same source Modules.tsx
+  // reads). The LOCAL auth store's User type has a single `role` field that
+  // is often empty for SUPER_ADMIN sessions — reading it caused a false
+  // "Only admins can manage the plan" gate on 2026-08-07 for admins who
+  // actually held the role in the SDK store.
+  const sdkUser      = useSdkStore(s => s.user)
+  const permissions  = useSdkStore(s => s.permissions)
+  const roles: string[] = sdkUser?.roles ?? []
+  const isAdmin      = roles.some(r => ADMIN_ROLES.includes(r)) || permissions.has('*')
 
   const { data: allPlans = [], isLoading } = useModulePlans()
   const plans = useMemo(
