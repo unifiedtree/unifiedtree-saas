@@ -60,15 +60,18 @@ public class SubscriptionWebhookController {
     private final RazorpayProperties props;
     private final PendingSignupService pending;
     private final MandateProvisioningService provisioning;
+    private final PlanChangeService planChanges;
 
     public SubscriptionWebhookController(JdbcTemplate jdbc, RazorpayClient razorpay, RazorpayProperties props,
                                          PendingSignupService pending,
-                                         MandateProvisioningService provisioning) {
+                                         MandateProvisioningService provisioning,
+                                         PlanChangeService planChanges) {
         this.jdbc = jdbc;
         this.razorpay = razorpay;
         this.props = props;
         this.pending = pending;
         this.provisioning = provisioning;
+        this.planChanges = planChanges;
     }
 
     /**
@@ -183,6 +186,12 @@ public class SubscriptionWebhookController {
                     pending.findByRazorpaySubscriptionId(subscriptionId)
                            .filter(p -> "AWAITING_MANDATE".equals(p.status()))
                            .ifPresent(p -> pending.markCancelled(p.id()));
+                    // Same for in-workspace plan-change requests — they
+                    // hold no subdomain reservation but the CANCELLED status
+                    // keeps the UI polling honest.
+                    planChanges.findByRazorpaySubscriptionId(subscriptionId)
+                            .filter(p -> "AWAITING_MANDATE".equals(p.status()))
+                            .ifPresent(p -> planChanges.markCancelled(p.id()));
                 }
             }
             case "subscription.paused"    -> { if (subscriptionId != null) onPaused(subscriptionId); }
@@ -200,16 +209,41 @@ public class SubscriptionWebhookController {
     }
 
     /**
-     * Resolve the pending signup for this Razorpay subscription and hand it
-     * to {@link MandateProvisioningService#provisionFromPending}.
+     * Resolve the pending intent for this Razorpay subscription and route
+     * it to the right service:
+     * <ul>
+     *   <li>{@code plan_change_requests} row → in-workspace autopay setup,
+     *       activate modules on the EXISTING tenant via
+     *       {@link PlanChangeService#activate}.</li>
+     *   <li>{@code pending_signups} row → new-workspace signup, provision
+     *       via {@link MandateProvisioningService#provisionFromPending}.</li>
+     * </ul>
+     * The two tables never collide on razorpay_subscription_id (Razorpay
+     * ids are globally unique), so first-match wins deterministically.
      *
-     * <p>Primary key: {@code razorpay_subscription_id} on pending_signups
-     * (unique). Fallback: {@code notes.pending_signup_id} on the entity
-     * payload (in case a proxy stripped {@code notes} — unlikely, but
-     * belt-and-suspenders). Idempotent — pending row's status guard blocks
-     * a second workspace on replay.
+     * <p>Fallback: {@code notes.pending_signup_id} on the entity payload for
+     * both paths — belt-and-suspenders against a proxy stripping {@code notes}.
+     * Idempotent — each service's status guard blocks a second run on replay.
      */
     private void tryProvision(String subscriptionId, JsonNode subNode, String triggerEvent) {
+        // 1. In-workspace plan-change first — this is the "existing tenant
+        //    adds modules" path (Phase 3 of the 2026-08-07 client asks).
+        Optional<PlanChangeService.PlanChangeRequest> pcr =
+                planChanges.findByRazorpaySubscriptionId(subscriptionId);
+        if (pcr.isEmpty()) {
+            String fromNotes = optText(subNode.path("notes"), "pending_signup_id");
+            if (fromNotes != null) {
+                try {
+                    pcr = planChanges.findById(UUID.fromString(fromNotes));
+                } catch (IllegalArgumentException ignored) { }
+            }
+        }
+        if (pcr.isPresent()) {
+            planChanges.activate(pcr.get().id());
+            return;
+        }
+
+        // 2. Fresh-workspace signup — the original webhook target.
         Optional<PendingSignupService.PendingSignup> row =
                 pending.findByRazorpaySubscriptionId(subscriptionId);
         if (row.isEmpty()) {

@@ -5,16 +5,58 @@ import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
 import {
-  ArrowRight, Lock, Plus, Search, Sparkles, Check, ExternalLink,
+  ArrowRight, Lock, Plus, Search, Sparkles, Check,
   LogOut, UserCircle2, Users, ShieldAlert, FileText, ChevronUp, CreditCard, Settings,
+  type LucideIcon,
 } from 'lucide-react'
-import { APPS, ADMIN_APP, type AppDef } from '@/layouts/appConfig'
+import { APPS, ADMIN_APP } from '@/layouts/appConfig'
+import { useModulePlans, iconMap, type ModulePlan } from '@/core/api/modulePlans'
 
 type Status = 'active' | 'coming-soon' | 'locked'
 
-function statusOf(app: AppDef, active: string[]): Status {
-  if (!active.includes(app.key)) return 'locked'
-  return app.built ? 'active' : 'coming-soon'
+/** A single tile in the launcher grid. Built from either a ModulePlan
+ *  fetched from the backend (merged sellable-plans view) or the special
+ *  admin/settings pseudo-app. Keeps the render code shape-agnostic. */
+interface Tile {
+  key: string                          // stable react key + click identifier
+  planKey?: string                     // module_plans.key when this is a plan tile
+  label: string
+  description: string
+  icon: LucideIcon
+  status: Status
+  home: string                         // route when opened (active tiles only)
+  rank: number                         // sort key (active tiles surface first)
+}
+
+/**
+ * Convert a backend ModulePlan row into a launcher tile.
+ *   status = 'coming-soon' when plan.status === 'LAUNCHING_SOON'
+ *          = 'active'      when plan.status === 'AVAILABLE' AND the tenant
+ *                          has at least one of plan.includedModules active
+ *          = 'locked'      otherwise
+ *   home   = first APPS.home for an includedModule with built=true, fallback /dashboard
+ */
+function planToTile(plan: ModulePlan, activeModules: string[]): Tile {
+  const Icon = (plan.icon && iconMap[plan.icon]) || Users
+  const anyActive = plan.includedModules.some(mk => activeModules.includes(mk))
+  const primaryApp = plan.includedModules
+    .map(mk => APPS.find(a => a.key === mk && a.built))
+    .find(Boolean)
+  const status: Status = plan.status === 'LAUNCHING_SOON'
+    ? 'coming-soon'
+    : plan.status === 'AVAILABLE' && anyActive
+      ? (primaryApp ? 'active' : 'coming-soon')
+      : 'locked'
+  return {
+    key: plan.key,
+    planKey: plan.key,
+    label: plan.displayName,
+    description: plan.tagline || plan.description || '',
+    icon: Icon,
+    status,
+    home: primaryApp?.home ?? '/dashboard',
+    rank: status === 'active' ? 0 : status === 'coming-soon' ? 1 : 2,
+  }
 }
 
 const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
@@ -22,13 +64,16 @@ const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
 export const Modules: React.FC = () => {
   const navigate = useNavigate()
   const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
-  const subdomain     = useLocalAuthStore(s => s.tenant?.subdomain ?? '')
   const user          = useSdkStore(s => s.user)
   const permissions   = useSdkStore(s => s.permissions)
   const roles: string[] = user?.roles ?? []
   const isAdmin = roles.some(r => ADMIN_ROLES.includes(r)) || permissions.has('*')
   const isSuperAdmin = roles.includes('SUPER_ADMIN') || permissions.has('*')
   const logout = useSdkStore(s => s.logout)
+
+  // Backend-driven merged view — same source as the marketing site's
+  // /pricing and Navbar mega-menu (platform.module_plans, RETIRED-filtered).
+  const { data: plans = [], isLoading: plansLoading } = useModulePlans()
 
   const [query, setQuery] = useState('')
 
@@ -43,28 +88,37 @@ export const Modules: React.FC = () => {
     return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey) }
   }, [settingsOpen])
 
-  const openEditWorkspace = (moduleKey?: string) => {
-    const websiteUrl = import.meta.env.VITE_WEBSITE_URL || 'https://unifiedtree.com'
-    const url =
-      websiteUrl + '/edit-workspace?ws=' + encodeURIComponent(subdomain) +
-      '&email=' + encodeURIComponent(user?.email ?? '') +
-      (moduleKey ? '&add=' + encodeURIComponent(moduleKey) : '')
-    window.open(url, '_blank', 'noopener')
+  /** Open the IN-WORKSPACE plan configurator. Client-decision 2026-08-07:
+   *  Manage Plan must stay inside the workspace — the old external redirect
+   *  to unifiedtree.com/edit-workspace was confusing and marketing-branded. */
+  const openPlan = (planKey?: string) => {
+    navigate(planKey ? `/plan?add=${encodeURIComponent(planKey)}` : '/plan')
   }
 
-  // Owned apps first, then the rest; Settings (admin) surfaces for admins only.
-  const apps = useMemo(() => {
-    const list = [...APPS]
-    if (isAdmin) list.push(ADMIN_APP as AppDef)
+  // Tile grid = merged sellable plans (RETIRED-filtered) + Settings pseudo-tile.
+  // Sorted: active first, coming-soon next, locked, then Settings pinned last.
+  const tiles = useMemo<Tile[]>(() => {
+    const planTiles = plans
+      .filter(p => p.status !== 'RETIRED')
+      .map(p => planToTile(p, activeModules))
+    const list: Tile[] = [...planTiles]
+    if (isAdmin) {
+      list.push({
+        key: 'admin',
+        label: ADMIN_APP.label,
+        description: ADMIN_APP.description,
+        icon: ADMIN_APP.icon,
+        status: 'active',
+        home: ADMIN_APP.home,
+        rank: 3,   // pinned after every plan tile
+      })
+    }
     const q = query.trim().toLowerCase()
     const filtered = q
-      ? list.filter(a => a.label.toLowerCase().includes(q) || a.description.toLowerCase().includes(q))
+      ? list.filter(t => t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q))
       : list
-    return filtered.sort((a, b) => {
-      const rank = (x: AppDef) => (x.key === 'admin' ? 2 : activeModules.includes(x.key) ? 0 : 1)
-      return rank(a) - rank(b)
-    })
-  }, [isAdmin, query, activeModules])
+    return filtered.slice().sort((a, b) => a.rank - b.rank)
+  }, [plans, isAdmin, query, activeModules])
 
   const greeting = (() => {
     const h = new Date().getHours()
@@ -72,10 +126,10 @@ export const Modules: React.FC = () => {
   })()
   const firstName = user?.firstName || (user?.email ? user.email.split('@')[0] : 'there')
 
-  const enter = (app: AppDef, status: Status) => {
-    if (app.key === 'admin') return navigate(app.home)
-    if (status === 'locked') { if (isAdmin) openEditWorkspace(app.key); return }
-    navigate(app.home)
+  const enter = (tile: Tile) => {
+    if (tile.status === 'locked') { if (isAdmin) openPlan(tile.planKey); return }
+    if (tile.status === 'coming-soon') return  // no-op — the "Soon" chip is the whole message
+    navigate(tile.home)
   }
 
   return (
@@ -102,25 +156,32 @@ export const Modules: React.FC = () => {
             </div>
             {isAdmin && (
               <button
-                onClick={() => openEditWorkspace()}
+                onClick={() => openPlan()}
                 className="hidden h-10 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3.5 text-sm font-medium text-[var(--text-primary)] shadow-xs transition-colors hover:bg-[var(--bg-subtle)] sm:inline-flex"
               >
-                Manage plan <ExternalLink size={14} />
+                Manage plan <ArrowRight size={14} />
               </button>
             )}
           </div>
         </div>
 
         {/* App grid */}
+        {plansLoading && tiles.length === 0 ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-40 animate-pulse rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]" />
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {apps.map((app, i) => {
-            const status = app.key === 'admin' ? 'active' : statusOf(app, activeModules)
+          {tiles.map((tile, i) => {
+            const { status } = tile
             const locked = status === 'locked'
-            const Icon = app.icon
+            const Icon = tile.icon
             return (
               <button
-                key={app.key}
-                onClick={() => enter(app, status)}
+                key={tile.key}
+                onClick={() => enter(tile)}
                 disabled={locked && !isAdmin}
                 style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
                 className={clsx(
@@ -163,10 +224,10 @@ export const Modules: React.FC = () => {
                 </span>
 
                 <h3 className={clsx('mt-4 text-[15px] font-semibold', locked ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)]')}>
-                  {app.label}
+                  {tile.label}
                 </h3>
                 <p className="mt-1 line-clamp-2 flex-1 text-xs leading-relaxed text-[var(--text-tertiary)]">
-                  {app.description}
+                  {tile.description}
                 </p>
 
                 {/* footer affordance */}
@@ -179,6 +240,8 @@ export const Modules: React.FC = () => {
                     ) : (
                       <span className="text-[var(--text-tertiary)]">Not in your plan</span>
                     )
+                  ) : status === 'coming-soon' ? (
+                    <span className="text-[var(--text-tertiary)]">Launching soon</span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[var(--accent-fg-strong)] opacity-0 transition-opacity group-hover:opacity-100">
                       Open <ArrowRight size={13} />
@@ -189,6 +252,7 @@ export const Modules: React.FC = () => {
             )
           })}
         </div>
+        )}
       </div>
 
       {/* ── Bottom-left Settings launcher (slides up) ───────────────────────── */}
@@ -215,7 +279,7 @@ export const Modules: React.FC = () => {
                   { label: 'Users & Access',      icon: Users,        show: isSuperAdmin, onClick: () => navigate('/users') },
                   { label: 'Roles & Permissions', icon: ShieldAlert,  show: isSuperAdmin, onClick: () => navigate('/roles') },
                   { label: 'Audit Logs',          icon: FileText,     show: isSuperAdmin, onClick: () => navigate('/audit-logs') },
-                  { label: 'Manage Plan',         icon: ExternalLink, show: isAdmin,      onClick: () => openEditWorkspace() },
+                  { label: 'Manage Plan',         icon: CreditCard,   show: isAdmin,      onClick: () => openPlan() },
                 ].filter(i => i.show).map(item => (
                   <button
                     key={item.label}

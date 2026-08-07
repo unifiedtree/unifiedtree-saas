@@ -10,6 +10,7 @@ import { AuditLogs } from '@/pages/AuditLogs'
 import { Users } from '@/pages/Users'
 import { Roles } from '@/pages/Roles'
 import { Modules } from '@/pages/Modules'
+import { Plan } from '@/pages/Plan'
 import { PendingApproval } from '@/pages/PendingApproval'
 import { NoAccess } from '@/pages/NoAccess'
 import { AcceptInvite } from '@/pages/AcceptInvite'
@@ -155,6 +156,10 @@ export default function App() {
             open to every authenticated user. Entering a specific app's routes is still
             gated per-route below, so this only chooses where to go, never grants access. */}
         <Route path="/modules"    element={<Modules />} />
+        {/* In-workspace plan configurator + autopay setup. Admin-only; the
+            page itself renders a "you must be an admin" guard for non-admins,
+            so no RouteGuard wrapper needed (permissions vary per workspace). */}
+        <Route path="/plan"       element={<Plan />} />
         {/* AUTH-ONLY (intentional): Files is fully mock (no backend yet) — shows the
             ComingSoon placeholder, not real data. No permission to gate on until it ships. */}
         <Route path="/files"     element={<ComingSoon module="files" />} />
