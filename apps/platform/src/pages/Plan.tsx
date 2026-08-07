@@ -7,6 +7,8 @@ import {
 import { clsx } from 'clsx'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
+// useSdkStore.getState() is used inline for the hard-refresh in the polling
+// loop's ACTIVATED branch — see below.
 import { useModulePlans, iconMap, effectiveUnit, type ModulePlan } from '@/core/api/modulePlans'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 
@@ -182,14 +184,21 @@ export const Plan: React.FC = () => {
         )
         if (s.status === 'ACTIVATED') {
           clearInterval(iv)
-          // Refresh the cached Tenant's activeModules from the backend so the
-          // launcher tile flips from LOCKED to ACTIVE the moment the user
-          // lands — no page reload required. This was a real symptom for a
-          // customer on 2026-08-07: mandate approved + tenant_modules rows
-          // written by the webhook, but the /modules grid still showed
-          // "locked" because the local Zustand cache had the pre-activation
-          // module list. Refetch, then navigate.
-          try { await refreshTenant() } catch { /* best-effort, next reload picks it up */ }
+          // Hard refresh of SDK auth state so SDK.modules AND SDK.permissions
+          // AND the local Tenant all update atomically from the authenticated
+          // /v1/canonical-auth/me endpoint. This addresses two 2026-08-07
+          // symptoms in one go:
+          //   1. /modules grid was still showing HR as locked after the
+          //      webhook activated it (local Zustand had stale activeModules).
+          //   2. Newly-activated module pages 403'd because SDK.permissions
+          //      hadn't picked up the new RBAC codes.
+          // SDK.hydrate() re-fetches /me and updates both; the AuthProvider
+          // bridge propagates the SDK's fresh state into the local store, so
+          // Modules.tsx's Zustand selector re-renders the tile grid without
+          // a full page reload. refreshTenant() kept as a belt-and-suspenders
+          // update to the local store in case hydrate fails.
+          try { await useSdkStore.getState().hydrate() } catch { /* fall through to refreshTenant */ }
+          try { await refreshTenant() } catch { /* best-effort */ }
           setAwaitingMandate(false)
           navigate('/modules')
         } else if (s.status === 'FAILED' || s.status === 'CANCELLED' || s.status === 'EXPIRED') {

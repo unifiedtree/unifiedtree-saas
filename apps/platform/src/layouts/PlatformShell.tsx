@@ -247,7 +247,12 @@ export function PlatformShell() {
   const navigate = useNavigate()
   const logout = useSdkStore(s => s.logout)
   const user = useSdkStore(s => s.user)
-  const hasModule = useLocalAuthStore(s => s.hasModule)
+  // Subscribe to activeModules directly (reactive slice) instead of the
+  // stable hasModule function reference — otherwise this shell won't
+  // re-render when a new module activates, and the app-switcher would
+  // keep showing a locked pill until an unrelated re-render triggers.
+  const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
+  const hasModule = (k: string) => activeModules.includes(k)
   const tenant = useSdkStore(s => s.tenant)
   const permissions = useSdkStore(s => s.permissions)
   const userRoles: string[] = user?.roles ?? []

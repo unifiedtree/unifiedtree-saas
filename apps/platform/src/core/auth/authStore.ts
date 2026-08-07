@@ -56,15 +56,25 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   refreshTenant: async () => {
     const { tenant } = get()
     if (!tenant) return
+    // Prefer the AUTHENTICATED /v1/canonical-auth/me — uses TenantContext
+    // from the JWT and CAN'T 404 on subdomain misses. Fall back to
+    // /v1/public/workspace-status (subdomain-resolved) if /me is unavailable
+    // for any reason. Client-reported symptom 2026-08-07: the subdomain path
+    // silently 404s on hosts where currentSubdomain() returns empty (e.g.
+    // reviewer test URLs), and the catch here swallows it, so activeModules
+    // stays stale.
+    try {
+      const me = await apiJson<{ activeModules?: string[] }>('/v1/canonical-auth/me')
+      if (me?.activeModules) {
+        set({ tenant: { ...tenant, activeModules: me.activeModules } })
+        return
+      }
+    } catch { /* fall through */ }
     const subdomain = currentSubdomain() || tenant.subdomain
     try {
       const status = await apiJson<WorkspaceStatus>('/v1/public/workspace-status', {
         headers: subdomain ? { 'X-Tenant-Subdomain': subdomain } : {},
       })
-      // Merge — keep id/name/subdomain/planType/etc. from the cached Tenant
-      // (they don't change on a plan activation) but replace activeModules
-      // with the freshly-fetched list so the launcher grid flips locked→active
-      // without a full page reload.
       set({
         tenant: {
           ...tenant,

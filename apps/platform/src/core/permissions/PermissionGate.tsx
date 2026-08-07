@@ -15,7 +15,10 @@ export const PermissionGate: React.FC<PermissionGateProps> = ({
   children,
 }) => {
   const hasPermission = useAuthStore((s) => s.hasPermission)
-  const hasModule = useAuthStore((s) => s.hasModule)
+  // Reactive slice selector — see usePermissions.ts comment for why the
+  // stable `s.hasModule` reference doesn't re-render on activeModules change.
+  const activeModules = useAuthStore((s) => s.tenant?.activeModules ?? [])
+  const hasModule = (k: string) => activeModules.includes(k)
 
   if (moduleKey && !hasModule(moduleKey)) return <>{fallback}</>
   if (permission && !hasPermission(permission)) return <>{fallback}</>

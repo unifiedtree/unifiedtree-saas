@@ -1,9 +1,12 @@
 package com.hrms.api.saas;
 
+import com.unifiedtree.saas.payment.RazorpayClient;
+import com.unifiedtree.saas.payment.subscription.SubscriptionStateReconciler;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -19,6 +22,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Blocks workspace API access when the tenant's subscription is HALTED past
@@ -73,10 +77,33 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
             "/swagger-ui"
     );
 
-    private final JdbcTemplate jdbc;
+    /** After a HALTED-past-grace guard-check has verified with Razorpay that
+     *  the customer really is unpaid, cache the deny for this many seconds so
+     *  a rapid burst of requests (e.g. a browser polling every 5s) does not
+     *  hammer Razorpay's API. Reset the moment onActive lands or an admin
+     *  re-mandates. Short enough that a genuine "just paid via UPI" is
+     *  restored within a minute. */
+    private static final long DENY_CACHE_TTL_SECONDS = 60;
 
-    public SubscriptionAccessGuard(JdbcTemplate jdbc) {
+    private final JdbcTemplate jdbc;
+    /** Optional deps — the guard degrades gracefully to today's behavior if
+     *  either is missing (the constructor injection makes them nullable so
+     *  tests / older build wiring don't have to provide them). */
+    private final RazorpayClient razorpay;
+    private final SubscriptionStateReconciler reconciler;
+
+    /** Per-tenant recent-deny cache: tenantId -> epoch-seconds-of-last-check.
+     *  ConcurrentHashMap is fine; the guard runs on the request thread, no
+     *  cross-request sharing beyond the map itself. */
+    private final ConcurrentHashMap<UUID, Long> recentDenyCache = new ConcurrentHashMap<>();
+
+    @Autowired
+    public SubscriptionAccessGuard(JdbcTemplate jdbc,
+                                   RazorpayClient razorpay,
+                                   SubscriptionStateReconciler reconciler) {
         this.jdbc = jdbc;
+        this.razorpay = razorpay;
+        this.reconciler = reconciler;
     }
 
     @Override
@@ -98,8 +125,43 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
         SubStatus sub = loadStatus(tenantId);
         if (sub == null) return true;   // grandfathered: no subscription row, no gating
 
-        AccessDecision d = evaluate(sub, Instant.now());
+        Instant now = Instant.now();
+        AccessDecision d = evaluate(sub, now);
         if (d.allowed()) return true;
+
+        // SAFETY CHECK — before writing 402, if we can talk to Razorpay
+        // verify the customer really is unpaid. Client's explicit ask
+        // (2026-08-07): "we should not stop giving access even though we
+        // got received amount". Motivation: a lost / delayed subscription.charged
+        // webhook would leave OUR ledger in HALTED past grace while Razorpay
+        // has the customer as ACTIVE. Without this check, we'd 402 a paying
+        // customer. With it, we detect the mismatch, promote our row to
+        // ACTIVE via the shared reconciler, and let the request through.
+        //
+        // Only fires for HALTED subscriptions with a razorpay_subscription_id
+        // and only once every DENY_CACHE_TTL_SECONDS per tenant so a hammered
+        // 402 loop can't hammer Razorpay too. Terminal statuses (CANCELLED /
+        // COMPLETED / EXPIRED) are NEVER auto-restored — a customer who
+        // legitimately cancelled must re-subscribe.
+        if ("HALTED".equals(sub.status())
+                && sub.razorpaySubscriptionId() != null
+                && !sub.razorpaySubscriptionId().isBlank()
+                && razorpay != null && reconciler != null
+                && !recentlyChecked(tenantId, now)) {
+            String upstream = reconciler.reconcileFromRazorpay(sub.razorpaySubscriptionId(), razorpay);
+            recentDenyCache.put(tenantId, now.getEpochSecond());
+            // Re-read our ledger — reconcileFromRazorpay may have promoted us
+            // to ACTIVE if Razorpay says the charge went through.
+            SubStatus fresh = loadStatus(tenantId);
+            if (fresh != null) {
+                AccessDecision d2 = evaluate(fresh, now);
+                if (d2.allowed()) {
+                    log.info("subscription-guard AUTO-RESTORE  tenant={} was={} now={} razorpay={}",
+                            tenantId, sub.status(), fresh.status(), upstream);
+                    return true;
+                }
+            }
+        }
 
         log.info("subscription-guard BLOCK  tenant={} status={} graceUntil={} path={}",
                 tenantId, sub.status(), sub.graceUntil(), path);
@@ -116,6 +178,11 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
                             : "\"graceExpiredAt\":\"" + escape(sub.graceUntil().toString()) + "\",")
                         + "\"message\":\"" + escape(d.reason()) + "\"}");
         return false;
+    }
+
+    private boolean recentlyChecked(UUID tenantId, Instant now) {
+        Long last = recentDenyCache.get(tenantId);
+        return last != null && (now.getEpochSecond() - last) < DENY_CACHE_TTL_SECONDS;
     }
 
     // -- decision -------------------------------------------------------------
@@ -144,15 +211,21 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
     private SubStatus loadStatus(UUID tenantId) {
         // Newest row wins if there are multiple (shouldn't happen — one active
         // subscription per tenant — but be safe on ORDER BY).
+        // razorpay_subscription_id included so the guard can double-check
+        // with Razorpay before locking out a HALTED-past-grace customer.
         try {
             return jdbc.queryForObject("""
-                    SELECT status, grace_until FROM platform.subscriptions
+                    SELECT status, grace_until, razorpay_subscription_id
+                      FROM platform.subscriptions
                      WHERE tenant_id = ?
                      ORDER BY updated_at DESC NULLS LAST, created_at DESC
                      LIMIT 1
                     """, (rs, n) -> {
                 Timestamp t = rs.getTimestamp("grace_until");
-                return new SubStatus(rs.getString("status"), t == null ? null : t.toInstant());
+                return new SubStatus(
+                        rs.getString("status"),
+                        t == null ? null : t.toInstant(),
+                        rs.getString("razorpay_subscription_id"));
             }, tenantId);
         } catch (EmptyResultDataAccessException e) {
             return null;
@@ -184,7 +257,10 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
 
     // -- records --------------------------------------------------------------
 
-    public record SubStatus(String status, Instant graceUntil) {}
+    public record SubStatus(String status, Instant graceUntil, String razorpaySubscriptionId) {
+        /** Convenience for tests that only care about status + grace. */
+        public SubStatus(String status, Instant graceUntil) { this(status, graceUntil, null); }
+    }
 
     public record AccessDecision(boolean allowed, String reason) {
         static AccessDecision allow() { return new AccessDecision(true, null); }

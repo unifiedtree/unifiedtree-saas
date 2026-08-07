@@ -61,17 +61,20 @@ public class SubscriptionWebhookController {
     private final PendingSignupService pending;
     private final MandateProvisioningService provisioning;
     private final PlanChangeService planChanges;
+    private final SubscriptionStateReconciler reconciler;
 
     public SubscriptionWebhookController(JdbcTemplate jdbc, RazorpayClient razorpay, RazorpayProperties props,
                                          PendingSignupService pending,
                                          MandateProvisioningService provisioning,
-                                         PlanChangeService planChanges) {
+                                         PlanChangeService planChanges,
+                                         SubscriptionStateReconciler reconciler) {
         this.jdbc = jdbc;
         this.razorpay = razorpay;
         this.props = props;
         this.pending = pending;
         this.provisioning = provisioning;
         this.planChanges = planChanges;
+        this.reconciler = reconciler;
     }
 
     /**
@@ -164,23 +167,28 @@ public class SubscriptionWebhookController {
                     // provisioned yet from an earlier authenticated event, do it
                     // now — idempotent by pending_signup_id.
                     tryProvision(subscriptionId, subNode, eventType);
-                    onActive(subscriptionId, subNode);
+                    // Delegates to SubscriptionStateReconciler so the guard +
+                    // reconciliation cron write identical row shapes.
+                    // onActive now ALSO clears grace_until (no more stale
+                    // grace landmine on halt→active→halt bounces).
+                    reconciler.onActive(subscriptionId, subNode);
                 }
             }
-            case "subscription.pending" -> { if (subscriptionId != null) onPending(subscriptionId, subNode); }
+            case "subscription.pending" -> { if (subscriptionId != null) reconciler.onPending(subscriptionId, subNode); }
             case "subscription.halted"  -> {
                 if (subscriptionId != null) {
-                    onHalted(subscriptionId);
-                    // 7-day grace before workspace read-only lock — same policy
-                    // for trial-to-paid conversion failure and normal renewal
-                    // failure.
-                    provisioning.applyGrace(subscriptionId, Instant.now());
+                    // onHalted stamps status='HALTED' AND sets grace_until =
+                    // now+7d unconditionally (bounces get a fresh window each
+                    // time). Grace lockout is enforced at request-time by
+                    // SubscriptionAccessGuard which now double-checks with
+                    // Razorpay before returning 402 in case we missed a charge.
+                    reconciler.onHalted(subscriptionId);
                 }
             }
-            case "subscription.completed" -> { if (subscriptionId != null) onCompleted(subscriptionId); }
+            case "subscription.completed" -> { if (subscriptionId != null) reconciler.onCompleted(subscriptionId); }
             case "subscription.cancelled" -> {
                 if (subscriptionId != null) {
-                    onCancelled(subscriptionId);
+                    reconciler.onCancelled(subscriptionId);
                     // If a mandate is cancelled BEFORE provisioning, mark the
                     // pending row too so its subdomain reservation releases.
                     pending.findByRazorpaySubscriptionId(subscriptionId)
@@ -194,7 +202,15 @@ public class SubscriptionWebhookController {
                             .ifPresent(p -> planChanges.markCancelled(p.id()));
                 }
             }
-            case "subscription.paused"    -> { if (subscriptionId != null) onPaused(subscriptionId); }
+            case "subscription.paused"    -> { if (subscriptionId != null) reconciler.onPaused(subscriptionId); }
+            case "subscription.updated"   -> {
+                // Mid-cycle changes made via Razorpay dashboard (seat count,
+                // plan swap, quantity edit). Sync payload into our ledger so
+                // tenant_modules.seats + platform.subscriptions.seats don't
+                // drift. Status stays whatever the accompanying event set —
+                // this handler is refresh-only.
+                if (subscriptionId != null) reconciler.onUpdated(subscriptionId, subNode);
+            }
 
             // One-time payment lifecycle (safety net for the Orders flow —
             // browser callback usually reaches us first via PaymentService.verifyPaid,
@@ -303,78 +319,10 @@ public class SubscriptionWebhookController {
         log.warn("Payment {} failed on order {} — reason: {}", paymentId, orderId, reason);
     }
 
-    private void onActive(String subscriptionId, JsonNode subNode) {
-        Long currentEnd = optLong(subNode, "current_end");
-        Long chargeAt   = optLong(subNode, "charge_at");
-        String method   = optText(subNode, "payment_method");
-        int rows = jdbc.update("""
-                UPDATE platform.subscriptions SET
-                    status         = 'ACTIVE',
-                    halted_at      = NULL,
-                    current_period_end = COALESCE(to_timestamp(?), current_period_end),
-                    next_charge_at = to_timestamp(?),
-                    payment_method = COALESCE(?, payment_method),
-                    updated_at     = now()
-                 WHERE razorpay_subscription_id = ?
-                """, currentEnd, chargeAt, method, subscriptionId);
-        if (rows == 0) log.info("Webhook active for {} — no ledger row yet (activation before signup write)", subscriptionId);
-        else log.info("Subscription {} -> ACTIVE (nextCharge={}, method={})", subscriptionId, chargeAt, method);
-    }
-
-    private void onPending(String subscriptionId, JsonNode subNode) {
-        Long chargeAt = optLong(subNode, "charge_at");
-        jdbc.update("""
-                UPDATE platform.subscriptions SET
-                    status = 'PAST_DUE',
-                    next_charge_at = to_timestamp(?),
-                    updated_at = now()
-                 WHERE razorpay_subscription_id = ?
-                """, chargeAt, subscriptionId);
-        log.info("Subscription {} -> PAST_DUE (Razorpay retrying charge)", subscriptionId);
-    }
-
-    private void onHalted(String subscriptionId) {
-        // Razorpay exhausted its own retries. Start the 7-day grace timer;
-        // the grace-period job flips workspace access to read-only on day 8.
-        jdbc.update("""
-                UPDATE platform.subscriptions SET
-                    status     = 'HALTED',
-                    halted_at  = COALESCE(halted_at, now()),
-                    updated_at = now()
-                 WHERE razorpay_subscription_id = ?
-                """, subscriptionId);
-        log.warn("Subscription {} -> HALTED (grace period timer started)", subscriptionId);
-    }
-
-    private void onCompleted(String subscriptionId) {
-        jdbc.update("""
-                UPDATE platform.subscriptions SET
-                    status     = 'COMPLETED',
-                    updated_at = now()
-                 WHERE razorpay_subscription_id = ?
-                """, subscriptionId);
-        log.info("Subscription {} -> COMPLETED (all charges done)", subscriptionId);
-    }
-
-    private void onCancelled(String subscriptionId) {
-        jdbc.update("""
-                UPDATE platform.subscriptions SET
-                    status     = 'CANCELLED',
-                    updated_at = now()
-                 WHERE razorpay_subscription_id = ?
-                """, subscriptionId);
-        log.info("Subscription {} -> CANCELLED", subscriptionId);
-    }
-
-    private void onPaused(String subscriptionId) {
-        jdbc.update("""
-                UPDATE platform.subscriptions SET
-                    status     = 'PAUSED',
-                    updated_at = now()
-                 WHERE razorpay_subscription_id = ?
-                """, subscriptionId);
-        log.info("Subscription {} -> PAUSED", subscriptionId);
-    }
+    // NOTE: onActive/onPending/onHalted/onCompleted/onCancelled/onPaused/
+    // onUpdated moved to SubscriptionStateReconciler @Service — same SQL
+    // shapes now used by the webhook controller, the request-time access
+    // guard, and the reconciliation cron so all three writers cannot drift.
 
     private static String optText(JsonNode n, String field) {
         JsonNode v = n.get(field);

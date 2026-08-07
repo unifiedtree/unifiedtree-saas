@@ -102,7 +102,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const location = useLocation()
   const tenant   = useAuthStore((s) => s.tenant)
   const user     = useAuthStore((s) => s.user)
-  const hasModule = useAuthStore((s) => s.hasModule)
+  // Subscribe to activeModules directly (reactive slice) instead of the
+  // stable hasModule function reference — otherwise this component won't
+  // re-render when a new module activates. Client-reported symptom
+  // 2026-08-07: HR just activated but sidebar entry stays greyed out until
+  // an unrelated re-render.
+  const activeModules = useAuthStore((s) => s.tenant?.activeModules ?? [])
+  const hasModule = (k: string) => activeModules.includes(k)
   const hasPermission = useAuthStore((s) => s.hasPermission)
   const [openModules, setOpenModules] = useState<string[]>(() => {
     // Open the module corresponding to the current URL on initial load
