@@ -47,6 +47,13 @@ public class SubscriptionStateReconciler {
      * later halt cycle starts a fresh 7-day window (the previous COALESCE
      * pattern on grace_until could leave a stale expired-grace value that
      * silently locks a bouncing customer out).
+     *
+     * <p>next_charge_at and payment_method both use COALESCE — Razorpay
+     * doesn't always report them on every event (e.g. a subscription.updated
+     * carries the payload but may omit fields), so a NULL from optLong or an
+     * empty string from optText must NOT wipe the stored value. The optText
+     * helper below normalises empty to null so COALESCE actually keeps the
+     * existing column instead of overwriting it with "".
      */
     public void onActive(String subscriptionId, JsonNode subNode) {
         Long currentEnd = optLong(subNode, "current_end");
@@ -58,7 +65,7 @@ public class SubscriptionStateReconciler {
                     halted_at             = NULL,
                     grace_until           = NULL,
                     current_period_end    = COALESCE(to_timestamp(?), current_period_end),
-                    next_charge_at        = to_timestamp(?),
+                    next_charge_at        = COALESCE(to_timestamp(?), next_charge_at),
                     payment_method        = COALESCE(?, payment_method),
                     last_reconciled_at    = now(),
                     last_razorpay_status  = 'active',
@@ -81,7 +88,7 @@ public class SubscriptionStateReconciler {
         int rows = jdbc.update("""
                 UPDATE platform.subscriptions SET
                     status                = 'PAST_DUE',
-                    next_charge_at        = to_timestamp(?),
+                    next_charge_at        = COALESCE(to_timestamp(?), next_charge_at),
                     last_reconciled_at    = now(),
                     last_razorpay_status  = 'pending',
                     reconcile_error       = NULL,
@@ -208,12 +215,19 @@ public class SubscriptionStateReconciler {
             applyRazorpayStatus(subscriptionId, v);
             return v.status();
         } catch (RuntimeException e) {
+            // Even on failure, gate against terminal-status rows so a
+            // transient Razorpay 5xx during a lookup for a CANCELLED
+            // subscription doesn't bump updated_at / stamp reconcile_error
+            // on a supposedly-frozen row (would misrepresent our audit
+            // trail and contradict the class invariant).
             jdbc.update("""
                     UPDATE platform.subscriptions SET
                         last_reconciled_at = now(),
                         reconcile_error    = ?,
                         updated_at         = now()
                      WHERE razorpay_subscription_id = ?
+                       AND status NOT IN (""" + TERMINAL_STATUSES_SQL_LIST + """
+                                                                        )
                     """, e.getMessage(), subscriptionId);
             log.warn("reconcile({}) failed: {}", subscriptionId, e.getMessage());
             return null;
@@ -221,17 +235,44 @@ public class SubscriptionStateReconciler {
     }
 
     /**
-     * Map Razorpay's status string to the appropriate mutator. Kept small +
-     * declarative so the mapping matches the webhook dispatch 1:1.
+     * Map Razorpay's status string to the appropriate mutator. Matches the
+     * webhook dispatch 1:1 (SubscriptionWebhookController.dispatch):
+     *   active     → onActive (charged, subscription running)
+     *   pending    → onPending (charge failed, Razorpay retrying)
+     *   halted     → onHalted (all retries exhausted)
+     *   completed  → onCompleted (all planned cycles done)
+     *   cancelled  → onCancelled
+     *   paused     → onPaused
+     * <ul>
+     *   <li><b>authenticated</b> is intentionally NOT mapped to onActive.
+     *   Razorpay reports {@code authenticated} for a mandate that's been
+     *   approved but has not yet been charged (TRIAL start_at futures,
+     *   pre-first-charge PAID). Promoting that to ACTIVE would wrongly
+     *   restore a legitimately-HALTED subscription just because the
+     *   original mandate approval still shows up in the state machine.
+     *   No-op is the correct behavior — the follow-up {@code subscription.charged}
+     *   event (via webhook or a later reconciliation sweep) is what should
+     *   promote to ACTIVE.</li>
+     *   <li>Fake JsonNode uses {@code null} for missing scalar fields (not
+     *   0L or ""), so {@code optLong} / {@code optText} return null and
+     *   the COALESCE clauses in onActive/onPending preserve the existing
+     *   column values. An empty payment_method would otherwise wipe the
+     *   stored value because COALESCE treats "" as non-null.</li>
+     * </ul>
      */
     private void applyRazorpayStatus(String subscriptionId, RazorpayClient.SubscriptionView v) {
         String status = v.status() == null ? "" : v.status().toLowerCase(java.util.Locale.ROOT);
-        JsonNode fakeNode = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode()
-                .put("current_end", v.currentEnd() == null ? 0L : v.currentEnd())
-                .put("charge_at",   v.chargeAt()   == null ? 0L : v.chargeAt())
-                .put("payment_method", v.paymentMethod() == null ? "" : v.paymentMethod());
+        com.fasterxml.jackson.databind.node.ObjectNode fakeNode =
+                com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+        if (v.currentEnd()    != null) fakeNode.put("current_end",    v.currentEnd());
+        if (v.chargeAt()      != null) fakeNode.put("charge_at",      v.chargeAt());
+        if (v.paymentMethod() != null && !v.paymentMethod().isBlank())
+            fakeNode.put("payment_method", v.paymentMethod());
         switch (status) {
-            case "active", "authenticated" -> onActive(subscriptionId, fakeNode);
+            case "active"                  -> onActive(subscriptionId, fakeNode);
+            case "authenticated"           -> log.debug(
+                    "reconcile({}) upstream=authenticated — mandate approved, no charge yet; no state change",
+                    subscriptionId);
             case "pending"                 -> onPending(subscriptionId, fakeNode);
             case "halted"                  -> onHalted(subscriptionId);
             case "completed"               -> onCompleted(subscriptionId);
@@ -246,7 +287,11 @@ public class SubscriptionStateReconciler {
     private static String optText(JsonNode n, String field) {
         if (n == null || n.isMissingNode()) return null;
         JsonNode f = n.get(field);
-        return (f == null || f.isNull()) ? null : f.asText();
+        if (f == null || f.isNull()) return null;
+        String v = f.asText();
+        // Normalise empty/blank to null so downstream COALESCE actually
+        // preserves the existing column instead of overwriting with "".
+        return (v == null || v.isBlank()) ? null : v;
     }
 
     private static Long optLong(JsonNode n, String field) {
