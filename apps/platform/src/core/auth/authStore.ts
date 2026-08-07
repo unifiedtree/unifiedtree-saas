@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { setAccessToken, clearAccessToken } from '@unifiedtree/sdk'
+import { apiJson, currentSubdomain, type WorkspaceStatus } from '@/core/api/client'
 import type { User, Tenant } from '@/types'
 
 interface AuthState {
@@ -13,6 +14,11 @@ interface AuthState {
   hasPermission: (permission: string) => boolean
   hasModule: (moduleKey: string) => boolean
   setLoading: (loading: boolean) => void
+  /** Re-fetch this workspace's status (activeModules, tenant status) from
+   *  the backend and merge into the cached Tenant. Used after in-workspace
+   *  autopay activation so the launcher grid reflects the newly-unlocked
+   *  modules without a full page reload. Idempotent; no-op if not signed in. */
+  refreshTenant: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()((set, get) => ({
@@ -46,4 +52,28 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   setLoading: (loading) => set({ isLoading: loading }),
+
+  refreshTenant: async () => {
+    const { tenant } = get()
+    if (!tenant) return
+    const subdomain = currentSubdomain() || tenant.subdomain
+    try {
+      const status = await apiJson<WorkspaceStatus>('/v1/public/workspace-status', {
+        headers: subdomain ? { 'X-Tenant-Subdomain': subdomain } : {},
+      })
+      // Merge — keep id/name/subdomain/planType/etc. from the cached Tenant
+      // (they don't change on a plan activation) but replace activeModules
+      // with the freshly-fetched list so the launcher grid flips locked→active
+      // without a full page reload.
+      set({
+        tenant: {
+          ...tenant,
+          activeModules: status.activeModules ?? tenant.activeModules,
+        },
+      })
+    } catch {
+      // Best-effort — a network blip should NOT log the user out. The next
+      // reload picks up the fresh state anyway.
+    }
+  },
 }))

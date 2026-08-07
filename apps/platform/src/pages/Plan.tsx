@@ -56,8 +56,9 @@ interface StatusResponse {
 export const Plan: React.FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
-  const tenantName    = useLocalAuthStore(s => s.tenant?.name ?? 'your workspace')
+  const activeModules  = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
+  const tenantName     = useLocalAuthStore(s => s.tenant?.name ?? 'your workspace')
+  const refreshTenant  = useLocalAuthStore(s => s.refreshTenant)
   // Roles + permissions come from the SDK auth store (same source Modules.tsx
   // reads). The LOCAL auth store's User type has a single `role` field that
   // is often empty for SUPER_ADMIN sessions — reading it caused a false
@@ -181,9 +182,14 @@ export const Plan: React.FC = () => {
         )
         if (s.status === 'ACTIVATED') {
           clearInterval(iv)
-          // Land the admin back on the launcher — the newly-active modules
-          // will render as tiles (their tenant_modules rows are inserted
-          // by the webhook), and the 7-day trial timer has started.
+          // Refresh the cached Tenant's activeModules from the backend so the
+          // launcher tile flips from LOCKED to ACTIVE the moment the user
+          // lands — no page reload required. This was a real symptom for a
+          // customer on 2026-08-07: mandate approved + tenant_modules rows
+          // written by the webhook, but the /modules grid still showed
+          // "locked" because the local Zustand cache had the pre-activation
+          // module list. Refetch, then navigate.
+          try { await refreshTenant() } catch { /* best-effort, next reload picks it up */ }
           setAwaitingMandate(false)
           navigate('/modules')
         } else if (s.status === 'FAILED' || s.status === 'CANCELLED' || s.status === 'EXPIRED') {
