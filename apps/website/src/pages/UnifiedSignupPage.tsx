@@ -420,7 +420,7 @@ export function UnifiedSignupPage() {
                     <p className="text-xs text-danger mt-2 flex items-center gap-1"><XIcon size={12} /> {availability.reason}</p>
                   )}
                   {availability.state === 'available' && (
-                    <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1"><Check size={12} /> Available</p>
+                    <p className="text-xs text-primary mt-2 flex items-center gap-1 font-semibold"><Check size={12} /> Available</p>
                   )}
                 </div>
                 {errors.subdomain && <span className="text-danger text-xs mt-1 block">{errors.subdomain.message}</span>}
@@ -481,9 +481,14 @@ export function UnifiedSignupPage() {
               {/* Optional company / tax details */}
               <div className="border-t border-border pt-4">
                 <button type="button" onClick={() => setShowTaxDetails((v) => !v)}
-                        className="flex items-center gap-2 text-sm text-text-secondary hover:text-primary transition-colors">
-                  {showTaxDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  Add tax / billing details (optional)
+                        className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${showTaxDetails ? 'border-primary/30 bg-primary-light' : 'border-primary/15 bg-primary-light/60 hover:border-primary/30 hover:bg-primary-light'}`}>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-primary"><Receipt size={16} /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-text-primary">Add tax / billing details</span>
+                    <span className="block text-xs text-text-secondary">PAN, GSTIN &amp; billing address — optional</span>
+                  </span>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">Optional</span>
+                  {showTaxDetails ? <ChevronUp size={16} className="text-primary" /> : <ChevronDown size={16} className="text-primary" />}
                 </button>
                 {showTaxDetails && (
                   <div className="grid md:grid-cols-2 gap-4 mt-4">
@@ -509,7 +514,7 @@ export function UnifiedSignupPage() {
                 <button
                   type="submit"
                   disabled={loading || availability.state === 'taken'}
-                  className="w-full rounded-xl bg-primary text-white font-body font-bold py-4 hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors flex items-center justify-center gap-2"
+                  className="w-full rounded-xl bg-primary text-lime font-body font-bold py-4 hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors flex items-center justify-center gap-2"
                 >
                   {loading && <Loader2 size={16} className="animate-spin" />}
                   {mode === 'trial'
@@ -528,59 +533,62 @@ export function UnifiedSignupPage() {
               </div>
             </form>
 
-            {/* Right sidebar */}
-            <aside className="space-y-5">
-              <div className="premium-card p-6 sticky top-24">
-                <p className="text-[11px] font-body font-semibold uppercase tracking-wider text-text-tertiary mb-1">
-                  Your plan
-                </p>
-                <h3 className="font-heading font-bold text-primary text-lg mb-4">
-                  {chosenPlanNames || 'No modules selected'}
-                </h3>
-
-                {/* Cycle toggle (used for both trial and paid: sets the recurring cadence) */}
-                <div className="inline-flex bg-bg rounded-lg p-1 mb-4 w-full">
-                  <button type="button" onClick={() => setBillingCycle('monthly')}
-                          className={`flex-1 px-3 py-1.5 rounded text-xs font-semibold transition-colors ${billingCycle === 'monthly' ? 'bg-primary text-white' : 'text-text-secondary'}`}>
-                    Monthly
-                  </button>
-                  <button type="button" onClick={() => setBillingCycle('annual')}
-                          className={`flex-1 px-3 py-1.5 rounded text-xs font-semibold transition-colors ${billingCycle === 'annual' ? 'bg-primary text-white' : 'text-text-secondary'}`}>
-                    Annual <span className="text-lime-400">save</span>
-                  </button>
+            {/* Right sidebar — highlighted plan summary */}
+            <aside>
+              <div className="sticky top-24 overflow-hidden rounded-2xl border-2 border-primary/20 bg-surface shadow-teal-lg">
+                {/* Forest header makes the summary the visual anchor */}
+                <div className="bg-primary px-6 py-4">
+                  <p className="text-[11px] font-body font-semibold uppercase tracking-wider text-white/70">Your plan</p>
+                  <h3 className="font-heading font-bold text-lime text-lg leading-tight">
+                    {chosenPlanNames || 'No modules selected'}
+                  </h3>
                 </div>
 
-                <div className="space-y-2 text-sm mb-4">
-                  <Row k="Per user / month" v={`₹${cycleUnit}`} />
-                  <Row k="Users" v={String(seats)} />
-                  {mode === 'trial' ? (
-                    <>
-                      <div className="border-t border-border pt-2 mt-2" />
-                      <div className="flex items-center justify-between">
-                        <span className="text-text-secondary text-xs">Today</span>
-                        <span className="font-heading font-bold text-emerald-600 text-2xl">₹0</span>
-                      </div>
-                      <p className="text-[11px] text-text-tertiary leading-snug">
-                        Autopay of ₹{(billingCycle === 'annual' ? perUserAnnual * seats * 12 : perUser * seats).toLocaleString('en-IN')} / {billingCycle === 'annual' ? 'yr' : 'mo'} begins after your {TRIAL_DAYS}-day trial.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="border-t border-border pt-2 mt-2" />
-                      <div className="flex items-center justify-between">
+                <div className="p-6">
+                  {/* Cycle toggle — Annual carries a Save 10% badge */}
+                  <div className="inline-flex w-full rounded-lg bg-bg p-1 mb-4">
+                    <button type="button" onClick={() => setBillingCycle('monthly')}
+                            className={`flex-1 rounded px-3 py-1.5 text-xs font-semibold transition-colors ${billingCycle === 'monthly' ? 'bg-primary text-white' : 'text-text-secondary'}`}>
+                      Monthly
+                    </button>
+                    <button type="button" onClick={() => setBillingCycle('annual')}
+                            className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-semibold transition-colors ${billingCycle === 'annual' ? 'bg-primary text-white' : 'text-text-secondary'}`}>
+                      Annual
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${billingCycle === 'annual' ? 'bg-lime text-primary' : 'bg-lime/25 text-primary-dark'}`}>Save 10%</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 text-sm mb-4">
+                    <Row k="Per user / month" v={`₹${cycleUnit}`} />
+                    <Row k="Users" v={String(seats)} />
+                    {mode === 'trial' ? (
+                      <>
+                        <div className="mt-2 border-t border-border pt-3 flex items-center justify-between">
+                          <span className="text-sm text-text-secondary">Due today</span>
+                          <span className="font-heading font-bold text-primary text-2xl">₹0</span>
+                        </div>
+                        <div className="flex items-start gap-2 rounded-lg bg-primary-light px-3 py-2">
+                          <Sparkles size={13} className="mt-0.5 shrink-0 text-primary" />
+                          <p className="text-[11px] leading-snug text-primary-dark">
+                            Autopay of <span className="font-semibold">₹{(billingCycle === 'annual' ? perUserAnnual * seats * 12 : perUser * seats).toLocaleString('en-IN')}/{billingCycle === 'annual' ? 'yr' : 'mo'}</span> begins after your {TRIAL_DAYS}-day trial. Cancel anytime.
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-2 flex items-end justify-between border-t border-border pt-3">
                         <span className="text-text-secondary">Total {billingCycle === 'annual' ? 'per year' : 'per month'}</span>
                         <span className="font-heading font-bold text-primary text-2xl">
-                          ₹{chargeTotal.toLocaleString('en-IN')}<span className="text-sm text-text-secondary">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
+                          ₹{chargeTotal.toLocaleString('en-IN')}<span className="text-sm font-normal text-text-secondary">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
                         </span>
                       </div>
-                    </>
-                  )}
-                </div>
+                    )}
+                  </div>
 
-                <Link to="/pricing" className="block text-center rounded-xl border border-border py-2.5 text-sm font-body font-semibold text-text-secondary hover:border-primary hover:text-primary">
-                  Change modules
-                </Link>
-                <p className="text-[11px] text-text-tertiary text-center mt-3">Secured by Razorpay.</p>
+                  <Link to="/pricing" className="block rounded-xl border border-border py-2.5 text-center text-sm font-body font-semibold text-text-secondary transition-colors hover:border-primary hover:text-primary">
+                    Change modules
+                  </Link>
+                  <p className="mt-3 text-center text-[11px] text-text-tertiary">Secured by Razorpay.</p>
+                </div>
               </div>
             </aside>
 

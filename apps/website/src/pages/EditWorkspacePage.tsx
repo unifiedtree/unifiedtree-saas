@@ -212,7 +212,7 @@ export function EditWorkspacePage() {
                       } ${isPending ? 'cursor-wait opacity-70' : !ws ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                        style={{ backgroundColor: isActive ? '#DCFCE7' : `${mod.color}14`, color: isActive ? '#3A7D22' : mod.color }}>
+                        style={{ backgroundColor: isActive ? '#ECECEA' : `${mod.color}14`, color: isActive ? '#0B0D0C' : mod.color }}>
                         <Icon size={18} />
                       </div>
 

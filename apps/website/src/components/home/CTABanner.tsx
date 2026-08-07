@@ -20,19 +20,20 @@ export function CTABanner() {
   const { mode } = useCtaMode()
 
   return (
-    <section className="relative py-24 overflow-hidden" style={{ background: 'linear-gradient(135deg, #F4FAED 0%, #F8FAFC 60%, #F4FAED 100%)' }}>
+    <section className="relative py-24 overflow-hidden" style={{ background: 'linear-gradient(135deg, #F5F5F3 0%, #F8FAFC 60%, #F5F5F3 100%)' }}>
       {/* Animated leaf particles */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {leaves.map((leaf, i) => (
           <div
             key={i}
-            className="leaf-particle absolute bottom-0 text-primary select-none"
+            className="leaf-particle absolute bottom-0 select-none"
             style={{
               left: leaf.left,
               animationDuration: leaf.duration,
               animationDelay: leaf.delay,
               fontSize: leaf.size,
               opacity: 0,
+              filter: 'grayscale(1)',
             }}
           >
             🍃

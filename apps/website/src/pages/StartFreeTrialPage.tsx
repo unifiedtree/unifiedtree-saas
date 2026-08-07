@@ -8,7 +8,7 @@ import { useAuthStore } from '../store/authStore'
 
 const perks = [
   { icon: Zap, label: 'Free access - core HRMS included', color: '#1DB985' },
-  { icon: Shield, label: 'No credit card required', color: '#18280E' },
+  { icon: Shield, label: 'No credit card required', color: '#0B0D0C' },
   { icon: Clock, label: 'Workspace activates instantly', color: '#1DB985' },
 ]
 
@@ -37,7 +37,7 @@ export function StartFreeTrialPage() {
       {/* Hero */}
       <section className="pt-32 pb-24 relative overflow-hidden bg-gradient-to-br from-primary-light via-bg to-primary-light/40">
         {/* Decorative elements */}
-        <div className="absolute top-10 -left-20 w-80 h-80 bg-accent rounded-full blur-[110px] opacity-20 pointer-events-none animate-pulse" style={{ animationDuration: '6s' }} />
+        <div className="absolute top-10 -left-20 w-80 h-80 bg-lime rounded-full blur-[110px] opacity-20 pointer-events-none animate-pulse" style={{ animationDuration: '6s' }} />
         <div className="absolute bottom-10 -right-20 w-80 h-80 bg-primary-light rounded-full blur-[110px] opacity-35 pointer-events-none" />
         <div className="absolute inset-0 opacity-[0.03] pattern-dots pointer-events-none" />
 

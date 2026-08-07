@@ -11,7 +11,7 @@ export function ModulesPage() {
       {/* Hero */}
       <section className="pt-32 pb-20 hero-gradient relative overflow-hidden">
         <div className="absolute inset-0 pattern-dots" />
-        <div className="absolute glow-orb w-[500px] h-[500px] bg-accent top-[-200px] left-[30%]" />
+        <div className="absolute glow-orb w-[500px] h-[500px] bg-lime top-[-200px] left-[30%]" />
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
           <motion.div
@@ -28,7 +28,7 @@ export function ModulesPage() {
             >
               All the tools your business needs.
               <br />
-              <span className="text-accent">In one tree.</span>
+              <span className="text-lime">In one tree.</span>
             </h1>
             <p className="text-lg text-white/75 font-body max-w-2xl mx-auto mb-8">
               Browse all 12 modules. Activate only what you need. Mix and match to build your perfect ERP.

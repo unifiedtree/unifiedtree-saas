@@ -3,22 +3,22 @@
 @tailwind utilities;
 
 :root {
-  --primary: #18280E;
-  --primary-dark: #0F1B08;
-  --primary-light: #F4FAED;
-  --accent: #5B8C2A;
+  --primary: #0B0D0C;
+  --primary-dark: #060706;
+  --primary-light: #F5F5F3;
+  --accent: #2A2D2B;
   --lime: #A3E635;
-  --ink: #090F05;
-  --tint: #F4FAED;
+  --ink: #0A0B0A;
+  --tint: #F5F5F3;
   --bg: #FFFFFF;
   --surface: #FFFFFF;
-  --text-primary: #090F05;
-  --text-secondary: #5C6553;
+  --text-primary: #0A0B0A;
+  --text-secondary: #57595A;
   --success: #3A7D22;
   --danger: #C0362C;
   --warning: #B4791A;
-  --border: #E6EBDD;
-  --surface-2: #F4FAED;
+  --border: #E7E7E4;
+  --surface-2: #F5F5F3;
 }
 
 * { box-sizing: border-box; }
@@ -65,17 +65,17 @@ code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
   100% { background-position: 200% center; }
 }
 .btn-shimmer {
-  background: linear-gradient(90deg, #18280E 0%, #18280E 42%, #2C4718 50%, #18280E 58%, #18280E 100%);
+  background: linear-gradient(90deg, #0B0D0C 0%, #0B0D0C 42%, #26292B 50%, #0B0D0C 58%, #0B0D0C 100%);
   background-size: 200% auto;
   transition: background-position 0.5s ease;
 }
 .btn-shimmer:hover { animation: shimmer 1.6s linear infinite; }
 
-/* Section gradients */
-.hero-gradient { background: linear-gradient(135deg, #0F1B08 0%, #18280E 60%, #274012 100%); }
-.bg-green-gradient { background: linear-gradient(135deg, #18280E 0%, #274012 100%); }
+/* Section gradients — near-black ink (dark surfaces reserved for header/footer/heros) */
+.hero-gradient { background: linear-gradient(135deg, #060706 0%, #0B0D0C 55%, #17191B 100%); }
+.bg-green-gradient { background: linear-gradient(135deg, #0B0D0C 0%, #1A1C1E 100%); }
 .text-gradient {
-  background: linear-gradient(120deg, #18280E 0%, #3A5A25 55%, #5B8C2A 100%);
+  background: linear-gradient(120deg, #0B0D0C 0%, #26292B 55%, #3A3D3B 100%);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
 }
@@ -89,13 +89,14 @@ code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
 }
 .leaf-particle { animation: floatUp linear infinite; pointer-events: none; }
 
-.glow-orb { position: absolute; border-radius: 50%; filter: blur(120px); pointer-events: none; opacity: 0.5; }
+/* Faint lime halo on the near-black bands — a subtle ambient accent, not a wash */
+.glow-orb { position: absolute; border-radius: 50%; filter: blur(140px); pointer-events: none; opacity: 0.18; }
 
 /* Ruler / tick backdrop (Spade-style) */
 .bg-grid {
   background-image:
-    linear-gradient(to right, rgba(9,15,5,0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(9,15,5,0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(10,11,10,0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(10,11,10,0.05) 1px, transparent 1px);
   background-size: 44px 44px;
 }
 
@@ -118,11 +119,11 @@ code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
 /* Scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #C9D3BC; border-radius: 9999px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb { background: #D2D2CF; border-radius: 9999px; border: 3px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background: var(--primary); background-clip: content-box; }
 
 /* Selection — lime on ink */
-::selection { background: #D9F0A3; color: #18280E; }
+::selection { background: #D9F0A3; color: #0B0D0C; }
 
 /* Focus ring */
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
@@ -139,13 +140,13 @@ input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 22px; height: 22px; border-radius: 50%;
   background: var(--primary); cursor: pointer;
-  box-shadow: 0 2px 8px rgba(24, 40, 14, 0.4); transition: box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(11, 13, 12, 0.4); transition: box-shadow 0.2s;
 }
-input[type="range"]::-webkit-slider-thumb:hover { box-shadow: 0 4px 16px rgba(24, 40, 14, 0.5); }
+input[type="range"]::-webkit-slider-thumb:hover { box-shadow: 0 4px 16px rgba(11, 13, 12, 0.5); }
 input[type="range"]::-moz-range-thumb {
   width: 22px; height: 22px; border-radius: 50%;
   background: var(--primary); cursor: pointer; border: none;
-  box-shadow: 0 2px 8px rgba(24, 40, 14, 0.4);
+  box-shadow: 0 2px 8px rgba(11, 13, 12, 0.4);
 }
 
 /* Handwriting font for competitor annotations */
@@ -169,7 +170,7 @@ input[type="range"]::-moz-range-thumb {
 
 /* Connecting dots pattern for unified state */
 .bg-connected-dots {
-  background-image: radial-gradient(circle, rgba(24,40,14,0.08) 1.5px, transparent 1.5px);
+  background-image: radial-gradient(circle, rgba(11,13,12,0.08) 1.5px, transparent 1.5px);
   background-size: 32px 32px;
 }
 
@@ -179,7 +180,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .module-tile-glow:hover {
   transform: translateY(-6px) scale(1.04);
-  box-shadow: 0 16px 40px -8px rgba(24, 40, 14, 0.18);
+  box-shadow: 0 16px 40px -8px rgba(11, 13, 12, 0.18);
 }
 
 /* Strikethrough for competitor names */
@@ -193,13 +194,13 @@ input[type="range"]::-moz-range-thumb {
 .toggle-switch {
   width: 52px; height: 28px;
   border-radius: 14px;
-  background: #E6EBDD;
+  background: #E7E7E4;
   position: relative;
   cursor: pointer;
   transition: background 0.3s ease;
   border: none; padding: 0;
 }
-.toggle-switch.active { background: #18280E; }
+.toggle-switch.active { background: #0B0D0C; }
 .toggle-switch::after {
   content: '';
   position: absolute;
@@ -211,6 +212,56 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 0 1px 4px rgba(0,0,0,0.15);
 }
 .toggle-switch.active::after { transform: translateX(24px); }
+
+/* ── Card / surface primitives (70% neutral) ─────────────────────────── */
+.premium-card {
+  background: #FFFFFF;
+  border: 1px solid #E7E7E4;
+  border-radius: 20px;
+  box-shadow: 0 1px 2px rgba(9, 15, 5, 0.04), 0 10px 30px -14px rgba(9, 15, 5, 0.12);
+}
+
+/* Icon chip — ink on neutral tint */
+.icon-box {
+  background: #F5F5F3;
+  color: #0B0D0C;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Eyebrow / section badge — lime-bordered tint pill */
+.section-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0B0D0C;
+  background: #F5F5F3;
+  border: 1px solid #E7E7E4;
+  padding: 6px 12px;
+  border-radius: 9999px;
+}
+
+/* Gradient headline text (ink → grey) */
+.gradient-text {
+  background: linear-gradient(120deg, #0B0D0C 0%, #26292B 55%, #3A3D3B 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Dotted backdrop for dark hero bands (white dots) */
+.pattern-dots {
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.16) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

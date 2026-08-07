@@ -11,33 +11,36 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Structural green (buttons, dark accents, icons)
-        primary: '#18280E',
-        'primary-dark': '#0F1B08',
-        'primary-darker': '#090F05',
-        'primary-light': '#F4FAED',
-        'primary-muted': '#3A5A25',
-        accent: '#5B8C2A',
-        // Lime pop — used sparingly on CTAs & highlights
+        // Structural ink (buttons, dark surfaces, icons). The palette shifted
+        // off forest-green to a near-black "ink" so the site reads as
+        // ink + neutral + a lime pop — no green in the UI chrome.
+        primary: '#0B0D0C',
+        'primary-dark': '#060706',
+        'primary-darker': '#000000',
+        'primary-light': '#F5F5F3',
+        'primary-muted': '#2A2D2B',
+        // Neutral dark for subtle gradients (was a green accent).
+        accent: '#2A2D2B',
+        // Lime pop — the single accent, used sparingly on CTAs & highlights
         lime: '#A3E635',
         'lime-soft': '#D9F0A3',
-        forest: '#18280E',
-        ink: '#090F05',
-        tint: '#F4FAED',
-        'tint-2': '#EAF3DE',
+        forest: '#0B0D0C',
+        ink: '#0A0B0A',
+        tint: '#F5F5F3',
+        'tint-2': '#ECECEA',
         bg: '#FFFFFF',
         surface: '#FFFFFF',
-        'surface-2': '#F4FAED',
-        // Green-tinted neutral text ramp
-        'text-primary': '#090F05',
-        'text-secondary': '#5C6553',
-        'text-tertiary': '#8A9280',
+        'surface-2': '#F5F5F3',
+        // Neutral text ramp
+        'text-primary': '#0A0B0A',
+        'text-secondary': '#57595A',
+        'text-tertiary': '#8A8C8A',
         success: '#3A7D22',
         danger: '#C0362C',
         warning: '#B4791A',
         info: '#2563EB',
-        border: '#E6EBDD',
-        'border-light': '#F1F5EA',
+        border: '#E7E7E4',
+        'border-light': '#F2F2F0',
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
@@ -78,7 +81,7 @@ const config: Config = {
         'glow-brand': '0 24px 60px -22px rgba(24,40,14,0.5)',
       },
       backgroundImage: {
-        'brand-gradient': 'linear-gradient(135deg, #0F1B08 0%, #18280E 60%, #274012 100%)',
+        'brand-gradient': 'linear-gradient(135deg, #060706 0%, #0B0D0C 60%, #17191B 100%)',
       },
     },
   },

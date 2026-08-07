@@ -56,7 +56,7 @@ export function Navbar() {
 
   return (
     <nav
-      className={`fixed inset-x-0 top-0 z-50 border-b border-border bg-[#F4FAED]/90 backdrop-blur-xl shadow-sm transform-gpu transition-transform duration-300 ease-out ${
+      className={`fixed inset-x-0 top-0 z-50 border-b border-border bg-[#F5F5F3]/90 backdrop-blur-xl shadow-sm transform-gpu transition-transform duration-300 ease-out ${
         hidden ? '-translate-y-full' : 'translate-y-0'
       }`}
     >

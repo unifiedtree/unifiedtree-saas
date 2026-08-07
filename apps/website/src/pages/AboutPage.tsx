@@ -40,7 +40,7 @@ export function AboutPage() {
       <section className="pt-32 pb-24 hero-gradient relative overflow-hidden">
         {/* Decorative elements */}
         <div className="absolute inset-0 pattern-dots" />
-        <div className="absolute glow-orb w-[500px] h-[500px] bg-accent top-[-200px] right-[-100px]" />
+        <div className="absolute glow-orb w-[500px] h-[500px] bg-lime top-[-200px] right-[-100px]" />
         <div className="absolute glow-orb w-[300px] h-[300px] bg-primary bottom-[-100px] left-[10%]" />
 
         <div className="absolute inset-0 opacity-[0.06]">

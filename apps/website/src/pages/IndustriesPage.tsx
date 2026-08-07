@@ -198,7 +198,7 @@ export function IndustriesPage() {
       {/* Hero */}
       <section className="pt-32 pb-24 hero-gradient relative overflow-hidden">
         <div className="absolute inset-0 pattern-dots" />
-        <div className="absolute glow-orb w-[500px] h-[500px] bg-accent top-[-200px] right-[-100px]" />
+        <div className="absolute glow-orb w-[500px] h-[500px] bg-lime top-[-200px] right-[-100px]" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
           <motion.div
@@ -215,7 +215,7 @@ export function IndustriesPage() {
             >
               One platform.
               <br />
-              <span className="text-accent">Every industry.</span>
+              <span className="text-lime">Every industry.</span>
             </h1>
             <p className="text-lg text-white/75 font-body max-w-2xl mx-auto">
               UnifiedTree is trusted across 8 major industries. Same platform, purpose-built

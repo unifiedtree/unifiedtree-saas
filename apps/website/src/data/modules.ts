@@ -42,7 +42,7 @@ export const modules: Module[] = [
       'Overtime & late-arrival tracking',
     ],
     basePrice: 599,
-    color: '#18280E',
+    color: '#0B0D0C',
   },
   {
     id: 'payroll',

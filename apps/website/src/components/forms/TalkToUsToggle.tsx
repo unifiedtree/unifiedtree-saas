@@ -13,7 +13,7 @@ export function TalkToUsToggle({
   onChange: (v: TalkIntent) => void
 }) {
   const base = 'flex-1 py-2.5 text-sm font-semibold rounded-lg transition-colors'
-  const active = 'bg-[#18280E] text-white'
+  const active = 'bg-[#0B0D0C] text-white'
   const idle = 'text-text-secondary hover:text-text-primary'
   return (
     <div

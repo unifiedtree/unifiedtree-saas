@@ -9,7 +9,7 @@ const testimonials = [
     company: 'Joshi Construction Pvt. Ltd.',
     role: 'CEO',
     initials: 'RJ',
-    color: '#18280E',
+    color: '#0B0D0C',
   },
   {
     quote:

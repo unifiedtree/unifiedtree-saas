@@ -71,7 +71,7 @@ export function FeaturesPage() {
       {/* Hero */}
       <section className="pt-32 pb-24 hero-gradient relative overflow-hidden">
         <div className="absolute inset-0 pattern-dots" />
-        <div className="absolute glow-orb w-[500px] h-[500px] bg-accent top-[-200px] left-[30%]" />
+        <div className="absolute glow-orb w-[500px] h-[500px] bg-lime top-[-200px] left-[30%]" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
           <motion.div
@@ -88,7 +88,7 @@ export function FeaturesPage() {
             >
               Built for the way
               <br />
-              <span className="text-accent">growing businesses actually work.</span>
+              <span className="text-lime">growing businesses actually work.</span>
             </h1>
             <p className="text-lg text-white/75 font-body max-w-2xl mx-auto">
               From offline attendance in remote factories to tax filings from an accountant's desk —
@@ -135,10 +135,8 @@ export function FeaturesPage() {
         </div>
       </section>
 
-      {/* Technical features grid */}
-      <section className="py-24 bg-green-gradient pattern-dots relative overflow-hidden">
-        <div className="absolute glow-orb w-[400px] h-[400px] bg-accent top-[-100px] right-[10%]" />
-
+      {/* Technical features grid — light section (dark green reserved for header/footer) */}
+      <section className="py-24 bg-surface-2 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -146,10 +144,10 @@ export function FeaturesPage() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="font-heading font-bold text-white text-3xl mb-3" style={{ letterSpacing: '-0.02em' }}>
+            <h2 className="font-heading font-bold text-text-primary text-3xl mb-3" style={{ letterSpacing: '-0.02em' }}>
               Enterprise-grade. Startup-friendly.
             </h2>
-            <p className="text-white/60 font-body">Security and reliability built into every layer.</p>
+            <p className="text-text-secondary font-body">Security and reliability built into every layer.</p>
           </motion.div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {technicalFeatures.map((feat, i) => {
@@ -162,7 +160,7 @@ export function FeaturesPage() {
                   viewport={{ once: true }}
                   transition={{ delay: i * 0.06 }}
                   whileHover={{ y: -3, scale: 1.02 }}
-                  className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl text-center transition-all duration-300 shadow-md hover:shadow-lg"
+                  className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl text-center border border-border transition-all duration-300 shadow-sm hover:shadow-md"
                 >
                   <div className="icon-box w-11 h-11">
                     <Icon size={18} className="text-primary" />
