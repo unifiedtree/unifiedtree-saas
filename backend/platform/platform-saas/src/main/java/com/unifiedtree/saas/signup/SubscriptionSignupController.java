@@ -214,7 +214,87 @@ public class SubscriptionSignupController {
                 : null;
         return new PendingSignupStatusResponse(
                 p.status(), p.tenantId(), workspaceUrl, p.subdomain(),
-                p.failureReason());
+                humaniseFailureReason(p.status(), p.failureReason()));
+    }
+
+    /**
+     * Translate the raw failure_reason we recorded (which usually starts with
+     * "provisioning failed: PSQLException ...") into something safe to show a
+     * customer waiting on a spinner. The raw text stays in the DB for ops;
+     * this method only shapes the wire response.
+     *
+     * <p>We match on well-known substrings first (RLS violation, duplicate
+     * subdomain, check-constraint), and fall back to a generic message
+     * otherwise. Never returns null when {@code status='FAILED'} — the
+     * frontend uses non-null failureReason as its "show the error" signal.
+     */
+    static String humaniseFailureReason(String status, String rawReason) {
+        if (!"FAILED".equals(status)) return null;
+        if (rawReason == null || rawReason.isBlank()) {
+            return "We couldn't finish creating your workspace. Our team has been notified — please try again in a few minutes or contact support@unifiedtree.com.";
+        }
+        String lower = rawReason.toLowerCase(Locale.ROOT);
+        if (lower.contains("already reserved") || lower.contains("duplicate key") || lower.contains("unique constraint")) {
+            return "That workspace address was just taken. Please cancel and pick a different one.";
+        }
+        if (lower.contains("row-level security") || lower.contains("row level security") || lower.contains("violates row-level")) {
+            return "We hit a permissions error while creating your workspace. Support has been notified — please contact support@unifiedtree.com.";
+        }
+        if (lower.contains("check constraint") || lower.contains("violates check")) {
+            return "Some of the details you entered don't fit our billing rules. Please cancel and re-try, or contact support@unifiedtree.com if the problem persists.";
+        }
+        if (lower.contains("timeout") || lower.contains("timed out") || lower.contains("connection")) {
+            return "The payment provider took too long to confirm your mandate. Please try the signup again — your card was not charged.";
+        }
+        return "We couldn't finish creating your workspace. Our team has been notified — please try again in a few minutes or contact support@unifiedtree.com.";
+    }
+
+    /**
+     * User-initiated cancel. Called by the frontend when the visitor clicks
+     * "Cancel and edit my details" during the mandate-waiting overlay, OR
+     * when they submit the form with fresh values while an earlier
+     * {@code pendingSignupId} is still open.
+     *
+     * <p>Effect (only meaningful while status = AWAITING_MANDATE):
+     * <ul>
+     *   <li>Cancels the Razorpay subscription — {@link SubscriptionService#cancelPreAuth}
+     *       tells Razorpay to withdraw the mandate registration. Without this
+     *       step the UPI app sees a stale mandate request from us and refuses
+     *       to register a new one with "Autopay already exists".</li>
+     *   <li>Flips {@code platform.pending_signups.status} to CANCELLED, which
+     *       releases the partial UNIQUE index on
+     *       {@code lower(subdomain) WHERE status='AWAITING_MANDATE'} — the
+     *       subdomain becomes available for the next attempt immediately.</li>
+     * </ul>
+     *
+     * <p>Idempotent: PROVISIONED / FAILED / CANCELLED / EXPIRED rows are no-ops
+     * (200 OK) so the browser can safely retry.
+     */
+    @PostMapping("/cancel")
+    public ResponseEntity<CancelResponse> cancel(@RequestBody CancelRequest req) {
+        if (req == null || req.pendingSignupId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "pendingSignupId is required");
+        }
+        PendingSignupService.PendingSignup p = pending.findById(req.pendingSignupId()).orElse(null);
+        if (p == null) {
+            // Idempotent: unknown id likely means the browser already succeeded
+            // in cancelling and lost track. Don't 404 — the caller just wants
+            // to be sure the row is dead.
+            return ResponseEntity.ok(new CancelResponse("ALREADY_GONE", null));
+        }
+        if (!"AWAITING_MANDATE".equals(p.status())) {
+            // Already terminal — nothing more to do, and definitely don't try
+            // to cancel a subscription that's ACTIVE / CHARGED / PROVISIONED.
+            return ResponseEntity.ok(new CancelResponse("NOOP_" + p.status(), p.subdomain()));
+        }
+
+        // Best-effort Razorpay cancel — logs + swallows on error inside
+        // cancelPreAuth so a Razorpay-side hiccup doesn't leave our row stuck.
+        subscriptions.cancelPreAuth(p.razorpaySubscriptionId());
+        pending.markCancelled(p.id());
+        log.info("subscription-signup cancel  pending={} razorpay_sub={} subdomain={}",
+                p.id(), p.razorpaySubscriptionId(), p.subdomain());
+        return ResponseEntity.ok(new CancelResponse("CANCELLED", p.subdomain()));
     }
 
     // -- helpers --------------------------------------------------------------
@@ -324,4 +404,13 @@ public class SubscriptionSignupController {
             String subdomain,
             String failureReason
     ) {}
+
+    public record CancelRequest(UUID pendingSignupId) {}
+    /**
+     * status one of:
+     *   CANCELLED       — we did the work (cancelled Razorpay + freed subdomain)
+     *   NOOP_&lt;prev&gt;    — row was already terminal (prev = PROVISIONED/FAILED/EXPIRED/CANCELLED)
+     *   ALREADY_GONE    — pendingSignupId not found in DB
+     */
+    public record CancelResponse(String status, String subdomain) {}
 }

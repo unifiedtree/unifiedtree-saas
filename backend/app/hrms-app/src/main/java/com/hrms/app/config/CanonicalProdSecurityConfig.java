@@ -130,6 +130,7 @@ public class CanonicalProdSecurityConfig {
                     // AFTER Razorpay confirms mandate authentication (hard-gate).
                     "/v1/public/subscription-signup",
                     "/v1/public/subscription-signup/status",
+                    "/v1/public/subscription-signup/cancel",
                     // Razorpay webhook receiver. MUST be unauthenticated:
                     // Razorpay is a third party and cannot present our JWT.
                     // It is not unprotected — SubscriptionWebhookController

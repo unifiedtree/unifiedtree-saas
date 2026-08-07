@@ -79,7 +79,9 @@ public class SubscriptionWebhookController {
     @PostMapping(value = "/razorpay", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> receive(@RequestBody byte[] rawBody,
                                           @RequestHeader(value = "X-Razorpay-Signature", required = false)
-                                          String signature) {
+                                          String signature,
+                                          @RequestHeader(value = "X-Razorpay-Event-Id", required = false)
+                                          String eventIdHeader) {
         if (!props.isWebhookConfigured()) {
             log.warn("Webhook received but RAZORPAY_WEBHOOK_SECRET is not configured; refusing");
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("webhook not configured");
@@ -97,7 +99,14 @@ public class SubscriptionWebhookController {
             return ResponseEntity.badRequest().body("bad body");
         }
 
-        String eventId = optText(root, "id");                          // "evt_xxx" — Razorpay's event id
+        // Razorpay's actual webhook body does NOT carry a top-level `id`. The
+        // unique event id lives in the X-Razorpay-Event-Id HEADER. We tried
+        // body.id first as a fallback (some proxies / test rigs re-serialise
+        // and injecting it into the body is a common pattern), but the
+        // authoritative source is the header.
+        String eventId = eventIdHeader != null && !eventIdHeader.isBlank()
+                ? eventIdHeader
+                : optText(root, "id");
         String eventType = optText(root, "event");                     // e.g. "subscription.charged" / "payment.captured"
         // Subscription events carry payload.subscription.entity; payment events
         // carry payload.payment.entity. Peek both and let dispatch decide.
@@ -106,7 +115,8 @@ public class SubscriptionWebhookController {
         String subscriptionId = subNode.isMissingNode() ? null : optText(subNode, "id");
 
         if (eventId == null || eventType == null) {
-            log.warn("Webhook missing id/event — accepting silently to prevent retries");
+            log.warn("Webhook missing id/event — eventIdHeader={} eventInBody={} — accepting silently",
+                    eventIdHeader, eventType);
             return ResponseEntity.accepted().body("ignored");
         }
 
