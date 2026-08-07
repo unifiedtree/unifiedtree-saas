@@ -175,12 +175,56 @@ public class WorkspacePlanController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing JWT");
         }
         UUID tenantId  = uuidClaim(jwt, "tenant_id", "tenantId");
-        UUID accountId = uuidClaim(jwt, "account_id", "accountId");
         if (tenantId == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "JWT missing tenant_id");
         }
+        // Workspace JWTs (issued by hrms-auth's JwtTokenProvider) carry
+        // `sub` = auth_user_id, `tenant_id`, `email`, `roles` — but NOT
+        // account_id. Resolve the account id by looking up
+        // platform.account_workspaces(tenant_id, auth_user_id); fall back to
+        // the tenant's owner_account_id if no membership row (defensive —
+        // any authenticated user on this workspace MUST have a row).
+        UUID userId = uuidClaim(jwt, "sub");
+        UUID accountId = resolveAccountId(tenantId, userId);
+        if (accountId == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Your account isn't linked to this workspace — please sign out and back in.");
+        }
         List<String> roles = rolesClaim(jwt);
         return new JwtClaims(tenantId, accountId, roles);
+    }
+
+    /**
+     * Two-step lookup for the initiating account id:
+     *   1. platform.account_workspaces by (tenant_id, auth_user_id) —
+     *      the "membership" row that maps a workspace user to their
+     *      platform account. Present for every ACTIVE workspace user.
+     *   2. Fallback: platform.tenants.owner_account_id — used only if
+     *      the membership row is missing (data drift / manually-inserted
+     *      test tenant). Not the primary path.
+     */
+    private UUID resolveAccountId(UUID tenantId, UUID userId) {
+        if (userId != null) {
+            try {
+                String s = jdbc.queryForObject("""
+                        SELECT account_id::text
+                          FROM platform.account_workspaces
+                         WHERE tenant_id = ? AND auth_user_id = ? AND status = 'ACTIVE'
+                         LIMIT 1
+                        """, String.class, tenantId, userId);
+                if (s != null) return UUID.fromString(s);
+            } catch (EmptyResultDataAccessException ignored) { /* fall through */ }
+        }
+        try {
+            String s = jdbc.queryForObject("""
+                    SELECT owner_account_id::text
+                      FROM platform.tenants
+                     WHERE id = ?
+                    """, String.class, tenantId);
+            return s == null ? null : UUID.fromString(s);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
     }
 
     private static UUID uuidClaim(Jwt jwt, String... names) {
