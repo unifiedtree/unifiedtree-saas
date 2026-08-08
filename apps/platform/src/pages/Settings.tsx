@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { Check, Zap, Crown, Star } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Check, Zap, Crown, Star, Sparkles } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAuthStore } from '@/core/auth/authStore'
+import { apiJson } from '@/core/api/client'
 import { HrPageHeader, HrButton, HrStatusPill } from '@/shared/components/hr'
 
 type TabKey = 'profile' | 'security' | 'notifications' | 'billing' | 'integrations' | 'danger'
@@ -200,78 +201,150 @@ const NotificationsTab: React.FC = () => {
   )
 }
 
+interface BillingSubDto {
+  primaryPlanKey: string | null
+  planKeys: string[]
+  seats: number
+  billingCycle: string | null
+  unitPriceInr: number | null
+  amountInr: number | null
+  status: string
+  nextChargeAt: string | null
+  graceUntil: string | null
+  razorpaySubscriptionId: string | null
+  billed: boolean
+}
+
+/**
+ * Real billing state for this workspace.
+ *
+ * Replaces a hardcoded mock that showed three USD tiers ($29 / $79 / $199),
+ * a "PROFESSIONAL" badge and three invented invoices (INV-00089 and friends).
+ * None of it existed: pricing is per-module in rupees from
+ * platform.module_plans (HR is ₹39/user/month), there are no such tiers, and
+ * no invoice with those numbers was ever issued. A customer reading that page
+ * was being shown fabricated financial records.
+ *
+ * Everything here now comes from GET /v1/workspace/plan/current, the same
+ * endpoint /plan uses, so the two screens cannot disagree. Billing history is
+ * deliberately absent rather than faked — real invoices need Razorpay's
+ * invoice API, which is not wired yet.
+ */
 const BillingTab: React.FC = () => {
-  const tenant = useAuthStore((s) => s.tenant)
-  const plans = [
-    { key: 'STARTER', name: 'Starter', price: 29, icon: Star, features: ['Up to 25 users', '3 modules', '5GB storage', 'Email support'], color: 'border-border-default' },
-    { key: 'PROFESSIONAL', name: 'Professional', price: 79, icon: Zap, features: ['Up to 250 users', 'All modules', '100GB storage', 'Priority support', 'Advanced analytics'], color: 'border-[#059669]', highlight: true },
-    { key: 'ENTERPRISE', name: 'Enterprise', price: 199, icon: Crown, features: ['Unlimited users', 'All modules', 'Unlimited storage', 'Dedicated support', 'Custom integrations', 'SLA guarantee'], color: 'border-[#6EE7B7]' },
-  ]
+  const navigate = useNavigate()
+  const [subs, setSubs] = useState<BillingSubDto[] | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    apiJson<{ subscriptions: BillingSubDto[] }>('/v1/workspace/plan/current')
+      .then((r) => { if (alive) { setSubs(r.subscriptions ?? []); setFailed(false) } })
+      .catch(() => { if (alive) { setSubs([]); setFailed(true) } })
+    return () => { alive = false }
+  }, [])
+
+  const fmtDate = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null
+
+  const pill = (s: BillingSubDto) =>
+    !s.billed                 ? { tone: 'warn' as const, text: 'No autopay set up' } :
+    s.status === 'ACTIVE'     ? { tone: 'ok'   as const, text: 'Active' } :
+    s.status === 'TRIALING'   ? { tone: 'ok'   as const, text: '7-day trial' } :
+    s.status === 'PAST_DUE'   ? { tone: 'warn' as const, text: 'Payment retrying' } :
+    s.status === 'HALTED'     ? { tone: 'red'  as const, text: 'Payment failed' } :
+                                { tone: 'warn' as const, text: s.status }
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-text-primary font-semibold mb-1">Current Plan</h3>
-        <p className="text-text-secondary text-sm mb-4">You are on the <span className="text-[#047857] font-medium">{tenant?.planType}</span> plan</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {plans.map(({ key, name, price, icon: Icon, features, color, highlight }) => (
-            <div key={key} className={clsx('relative border rounded-2xl p-5 transition-colors', color, highlight ? 'bg-[#ECFDF5]' : 'bg-white')}>
-              {highlight && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-[#059669] text-white text-[10px] font-bold rounded-full">MOST POPULAR</span>
-              )}
-              {tenant?.planType === key && (
-                <span className="absolute top-3 right-3"><HrStatusPill tone="ok">Current</HrStatusPill></span>
-              )}
-              <Icon size={22} className={highlight ? 'text-[#047857]' : 'text-text-tertiary'} />
-              <h4 className="text-text-primary font-bold mt-2">{name}</h4>
-              <p className="text-2xl font-bold text-text-primary mt-1">${price}<span className="text-sm text-text-secondary font-normal">/mo</span></p>
-              <ul className="mt-4 space-y-2">
-                {features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-xs text-text-secondary">
-                    <Check size={12} className="text-[#15803D] flex-shrink-0" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              {tenant?.planType !== key && (
-                <button className={clsx('w-full mt-4 py-2 rounded-xl text-sm font-medium transition-colors', highlight ? 'bg-[#059669] hover:bg-[#047857] text-white' : 'border border-border-default text-text-secondary hover:text-text-primary hover:border-[#6EE7B7]')}>
-                  Upgrade
-                </button>
-              )}
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-text-primary font-semibold mb-1">Your plan</h3>
+            <p className="text-text-secondary text-sm">Modules, seats and billing for this workspace.</p>
+          </div>
+          <button onClick={() => navigate('/plan')}
+                  className="px-4 py-2 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-sm font-medium">
+            Manage plan
+          </button>
         </div>
-      </div>
-      <div className="border-t border-border-default pt-6">
-        <h3 className="text-text-primary font-semibold mb-4">Billing History</h3>
-        <div className="space-y-2">
-          {[
-            { date: 'Dec 1, 2024', amount: '$79.00', status: 'Paid', invoice: 'INV-00089' },
-            { date: 'Nov 1, 2024', amount: '$79.00', status: 'Paid', invoice: 'INV-00076' },
-            { date: 'Oct 1, 2024', amount: '$79.00', status: 'Paid', invoice: 'INV-00063' },
-          ].map((b) => (
-            <div key={b.invoice} className="flex items-center justify-between p-3.5 bg-white border border-border-default rounded-xl">
-              <div className="flex items-center gap-4">
-                <div>
-                  <p className="text-sm font-medium text-text-primary">{b.date}</p>
-                  <p className="text-xs text-text-secondary">{b.invoice}</p>
+
+        {subs === null ? (
+          <div className="h-24 animate-pulse rounded-2xl border border-border-default bg-white" />
+        ) : failed ? (
+          <div className="rounded-2xl border border-[#FCA5A5] bg-[#FEF2F2] p-5 text-sm text-[#B91C1C]">
+            We couldn't load your billing details just now. Open Manage plan to see the latest.
+          </div>
+        ) : subs.length === 0 ? (
+          <div className="rounded-2xl border border-border-default bg-white p-6 text-center">
+            <p className="text-sm font-medium text-text-primary">No modules on autopay yet</p>
+            <p className="mt-1 text-xs text-text-secondary">
+              Pick the modules your team needs and set up autopay — the first 7 days are free.
+            </p>
+            <button onClick={() => navigate('/plan')}
+                    className="mt-4 px-4 py-2 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-sm font-medium">
+              Choose modules
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {subs.map((s) => {
+              const p = pill(s)
+              const next = fmtDate(s.nextChargeAt)
+              return (
+                <div key={s.razorpaySubscriptionId ?? s.primaryPlanKey}
+                     className="flex flex-wrap items-center justify-between gap-3 p-5 bg-white border border-border-default rounded-2xl">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-text-primary">
+                        {s.planKeys.join(', ') || s.primaryPlanKey}
+                      </p>
+                      <HrStatusPill tone={p.tone}>{p.text}</HrStatusPill>
+                    </div>
+                    <p className="mt-1 text-xs text-text-secondary">
+                      {s.seats > 0
+                        ? <><span className="tabular-nums">{s.seats}</span> seats</>
+                        : <>Seat count not set</>}
+                      {s.billed && s.amountInr != null && (
+                        <> · <span className="tabular-nums">₹{s.amountInr.toLocaleString('en-IN')}</span>
+                          /{s.billingCycle === 'ANNUAL' ? 'yr' : 'mo'}</>
+                      )}
+                      {next && <> · next charge {next}</>}
+                      {!s.billed && <> · unlocked, but nothing is being charged</>}
+                    </p>
+                  </div>
+                  <button onClick={() => navigate('/plan')}
+                          className="px-3 py-1.5 rounded-lg border border-border-default text-xs font-medium text-text-secondary hover:text-text-primary hover:border-[#6EE7B7]">
+                    {s.billed ? 'Change seats' : 'Set up autopay'}
+                  </button>
                 </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-text-primary font-medium">{b.amount}</span>
-                <HrStatusPill tone="ok">{b.status}</HrStatusPill>
-                <button className="text-xs text-[#047857] hover:text-[#047857]">Download</button>
-              </div>
-            </div>
-          ))}
-        </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-border-default pt-6">
+        <h3 className="text-text-primary font-semibold mb-2">Invoices</h3>
+        <p className="text-text-secondary text-sm">
+          Razorpay emails an invoice to your registered address after every successful
+          charge. Downloadable invoice history is coming to this page soon.
+        </p>
       </div>
     </div>
   )
 }
 
+/**
+ * Integrations roadmap.
+ *
+ * None of these are built yet. This tab previously rendered a working-looking
+ * "Connect" button whose only effect was flipping a local useState — and it
+ * shipped with Slack, Zapier and Stripe pre-marked "Connected", so an admin
+ * would reasonably believe their workspace was wired to services it has never
+ * spoken to. The list is kept (it is the real roadmap) but presented honestly
+ * as launching soon, with no control that pretends to do something.
+ */
 const IntegrationsTab: React.FC = () => {
-  const [connected, setConnected] = useState<Record<string, boolean>>({ slack: true, github: false, jira: false, zapier: true, stripe: true, salesforce: false })
   const integrations = [
     { key: 'slack', name: 'Slack', desc: 'Send notifications to Slack channels', logo: '🔔' },
     { key: 'github', name: 'GitHub', desc: 'Link commits and PRs to projects', logo: '🐙' },
@@ -283,28 +356,22 @@ const IntegrationsTab: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <p className="text-text-secondary text-sm mb-4">Connect external tools and services to extend UnifiedTree functionality.</p>
+      <p className="text-text-secondary text-sm mb-4">
+        Connect external tools and services to extend UnifiedTree functionality.
+        These integrations are on the roadmap and will light up here as they ship.
+      </p>
       {integrations.map(({ key, name, desc, logo }) => (
-        <div key={key} className="flex items-center justify-between p-4 bg-white border border-border-default rounded-xl">
+        <div key={key} className="flex items-center justify-between p-4 bg-white border border-border-default rounded-xl opacity-75">
           <div className="flex items-center gap-4">
-            <span className="text-2xl">{logo}</span>
+            <span className="text-2xl grayscale">{logo}</span>
             <div>
               <p className="text-sm font-medium text-text-primary">{name}</p>
               <p className="text-xs text-text-secondary">{desc}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {connected[key] && <HrStatusPill tone="ok">Connected</HrStatusPill>}
-            <button
-              onClick={() => setConnected((prev) => ({ ...prev, [key]: !prev[key] }))}
-              className={clsx(
-                'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                connected[key] ? 'border border-border-default text-text-secondary hover:text-[#B91C1C] hover:border-[#FCA5A5]' : 'bg-[#059669] hover:bg-[#047857] text-white'
-              )}
-            >
-              {connected[key] ? 'Disconnect' : 'Connect'}
-            </button>
-          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ECFDF5] px-3 py-1 text-[11px] font-semibold text-[#047857]">
+            <Sparkles size={11} /> Launching soon
+          </span>
         </div>
       ))}
     </div>

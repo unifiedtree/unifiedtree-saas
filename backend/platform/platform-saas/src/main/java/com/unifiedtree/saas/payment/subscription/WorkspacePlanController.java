@@ -178,7 +178,7 @@ public class WorkspacePlanController {
         }
 
         List<PlanChangeService.ActiveSub> subs = plans.listActiveSubscriptions(claims.tenantId());
-        List<ActiveSubDto> dtos = subs.stream().map(s -> new ActiveSubDto(
+        List<ActiveSubDto> dtos = new java.util.ArrayList<>(subs.stream().map(s -> new ActiveSubDto(
                 s.primaryPlanKey(),
                 s.planKeys(),
                 s.seats(),
@@ -190,8 +190,25 @@ public class WorkspacePlanController {
                 s.nextChargeAt(),
                 s.haltedAt(),
                 s.graceUntil(),
-                s.razorpaySubscriptionId()
-        )).toList();
+                s.razorpaySubscriptionId(),
+                /*billed=*/ true
+        )).toList());
+
+        // Plans the workspace demonstrably owns (modules ACTIVE) but which
+        // nothing is billing for. Without these, a tenant whose modules were
+        // activated before activate() started writing the ledger — or whose
+        // mandate was later cancelled — sees an empty "current plan" and is
+        // invited to buy from scratch something /modules already shows as
+        // unlocked. They render as owned-but-unbilled so the admin can see
+        // the real state and start autopay, rather than silently duplicating.
+        for (PlanChangeService.OwnedUnbilled o : plans.findOwnedButUnbilled(claims.tenantId())) {
+            dtos.add(new ActiveSubDto(
+                    o.planKey(), List.of(o.planKey()), o.seats(),
+                    null, null, null,
+                    "NO_AUTOPAY",
+                    null, null, null, null, null,
+                    /*billed=*/ false));
+        }
         return ResponseEntity.ok(new CurrentSubscriptionsResponse(dtos));
     }
 
@@ -449,6 +466,17 @@ public class WorkspacePlanController {
 
     public record CurrentSubscriptionsResponse(List<ActiveSubDto> subscriptions) {}
 
+    /**
+     * One line in "Your current plan".
+     *
+     * @param billed {@code true} for a real {@code platform.subscriptions} row —
+     *               money is flowing, seats can be changed on the existing
+     *               mandate. {@code false} for a plan whose modules are ACTIVE
+     *               with no billing behind them (mandate cancelled, or activated
+     *               before the ledger write existed): status is
+     *               {@code NO_AUTOPAY}, every billing field is null, and the UI
+     *               must offer "set up autopay" rather than seat controls.
+     */
     public record ActiveSubDto(
             String primaryPlanKey,
             List<String> planKeys,
@@ -461,7 +489,8 @@ public class WorkspacePlanController {
             java.time.Instant nextChargeAt,
             java.time.Instant haltedAt,
             java.time.Instant graceUntil,
-            String razorpaySubscriptionId
+            String razorpaySubscriptionId,
+            boolean billed
     ) {}
 
     private record JwtClaims(UUID tenantId, UUID accountId, List<String> roles) {}

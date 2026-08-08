@@ -72,15 +72,24 @@ interface ActiveSubDto {
   primaryPlanKey: string | null
   planKeys: string[]
   seats: number
-  billingCycle: string        // 'MONTHLY' | 'ANNUAL'
+  billingCycle: string | null   // 'MONTHLY' | 'ANNUAL' — null when unbilled
   unitPriceInr: number | null
   amountInr: number | null
-  status: string              // 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'HALTED' | 'PAUSED' | 'GRACE'
+  /** 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'HALTED' | 'PAUSED' | 'GRACE' | 'NO_AUTOPAY' */
+  status: string
   currentPeriodEnd: string | null   // ISO
   nextChargeAt: string | null        // ISO
   haltedAt: string | null            // ISO
   graceUntil: string | null          // ISO
-  razorpaySubscriptionId: string
+  razorpaySubscriptionId: string | null
+  /**
+   * false = the workspace HAS these modules unlocked but nothing is billing
+   * for them (mandate cancelled, or activated before the ledger write
+   * existed). Every billing field is null in that case, there is no mandate
+   * to adjust, and the card must offer "set up autopay" instead of seat
+   * controls. Derived server-side from platform.tenant_modules.
+   */
+  billed: boolean
 }
 
 interface ChangeSeatsResponse {
@@ -158,9 +167,21 @@ export const Plan: React.FC = () => {
   const [changingPlanKey, setChangingPlanKey] = useState<string | null>(null)
   const [changeMessage, setChangeMessage] = useState('')
 
-  // The set of planKeys that are already active on this workspace — used to
-  // filter the seat picker so admins cannot pick the same plan twice.
-  const activePlanKeys = useMemo(() => new Set(activeSubs.flatMap(s => s.planKeys)), [activeSubs])
+  // Two different questions, two different sets — conflating them breaks one
+  // case or the other:
+  //
+  //   ownedPlanKeys  — "is this already shown in Your current plan?"  Used to
+  //                    hide it from the picker so the same plan is not listed
+  //                    twice on one screen. Includes unbilled plans.
+  //   billedPlanKeys — "would buying this charge them a second time?"  Used to
+  //                    keep it out of the summary and the Pay request. ONLY
+  //                    billed plans, because a plan whose modules are active
+  //                    with no mandate is precisely one the admin still needs
+  //                    to be able to pay for.
+  const ownedPlanKeys = useMemo(
+    () => new Set(activeSubs.flatMap(s => s.planKeys)), [activeSubs])
+  const billedPlanKeys = useMemo(
+    () => new Set(activeSubs.filter(s => s.billed).flatMap(s => s.planKeys)), [activeSubs])
 
   // Distinguishes "this workspace owns nothing" from "we could not find out".
   // Treating a failed fetch as an empty list is dangerous here: activePlanKeys
@@ -193,11 +214,11 @@ export const Plan: React.FC = () => {
   // on their current-plan card instead of the setup form).
   useEffect(() => {
     const add = searchParams.get('add')
-    if (add && available.some(p => p.key === add) && !activePlanKeys.has(add) && !seatsByPlan[add]) {
+    if (add && available.some(p => p.key === add) && !billedPlanKeys.has(add) && !seatsByPlan[add]) {
       setSeatsByPlan(prev => ({ ...prev, [add]: 1 }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [available.length, searchParams, activePlanKeys.size])
+  }, [available.length, searchParams, billedPlanKeys.size])
 
   // -- derived pricing ------------------------------------------------------
   // Filters OUT plans the workspace already owns. Without this, a stray
@@ -209,10 +230,10 @@ export const Plan: React.FC = () => {
   // even decrement the stale entry back to zero. Belt-and-suspenders here.
   const selectedPlans: Array<{ plan: ModulePlan; seats: number }> = useMemo(() => {
     return available
-      .filter(p => !activePlanKeys.has(p.key))
+      .filter(p => !billedPlanKeys.has(p.key))
       .map(p => ({ plan: p, seats: seatsByPlan[p.key] ?? 0 }))
       .filter(x => x.seats > 0)
-  }, [available, seatsByPlan, activePlanKeys])
+  }, [available, seatsByPlan, billedPlanKeys])
 
   const monthlyTotal = useMemo(() => {
     return selectedPlans.reduce((sum, { plan, seats }) => {
@@ -244,7 +265,11 @@ export const Plan: React.FC = () => {
   // used primaryPlanKey ?? '' which meant two subs with null primaryPlanKey
   // collided on the same '' slot — clicking + on sub A moved sub B's stepper
   // and Cancel wiped both.
-  const bucketKey = (sub: ActiveSubDto) => sub.razorpaySubscriptionId
+  // Unbilled rows have no subscription id, so fall back to the plan key. Still
+  // unique per card (a plan appears at most once) and never collides with a
+  // real sub_XXX id.
+  const bucketKey = (sub: ActiveSubDto) =>
+    sub.razorpaySubscriptionId ?? `unbilled:${sub.primaryPlanKey ?? ''}`
   const currentPendingSeats = (key: string, current: number) =>
     pendingSeatChanges[key] ?? current
   const seatsDelta = (key: string, current: number) =>
@@ -562,12 +587,16 @@ export const Plan: React.FC = () => {
               // changeSeatCount will 409 — pre-disable the +/- so the admin
               // doesn't hit an opaque error. They should re-authorise the
               // mandate first (surface a clearer CTA below when useful).
-              const seatChangeAllowed = (sub.status === 'ACTIVE' || sub.status === 'TRIALING')
+              // Unbilled plans have no mandate to prorate against, so seat
+              // controls are meaningless — they get a "set up autopay" CTA.
+              const seatChangeAllowed = sub.billed
+                  && (sub.status === 'ACTIVE' || sub.status === 'TRIALING')
                   && !!sub.primaryPlanKey
               const nextCharge = sub.nextChargeAt
                 ? new Date(sub.nextChargeAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
                 : null
               const statusPill =
+                sub.status === 'NO_AUTOPAY' ? { text: 'No autopay set up', cls: 'bg-amber-100 text-amber-800' } :
                 sub.status === 'ACTIVE'    ? { text: 'Active',       cls: 'bg-[var(--status-success-bg)] text-[var(--status-success-fg)]' } :
                 sub.status === 'TRIALING'  ? { text: '7-day trial',  cls: 'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]' } :
                 sub.status === 'PAST_DUE'  ? { text: 'Payment retrying', cls: 'bg-amber-100 text-amber-800' } :
@@ -575,7 +604,7 @@ export const Plan: React.FC = () => {
                 sub.status === 'PAUSED'    ? { text: 'Paused',       cls: 'bg-slate-100 text-slate-700' } :
                                              { text: sub.status,     cls: 'bg-slate-100 text-slate-700' }
               return (
-                <div key={sub.razorpaySubscriptionId}
+                <div key={bkey}
                      className="rounded-xl border-2 border-[var(--accent-border)] bg-[var(--bg-surface)] p-5 shadow-sm">
                   <div className="flex items-start gap-4">
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-[var(--accent-fg)]">
@@ -587,27 +616,62 @@ export const Plan: React.FC = () => {
                         <span className={clsx('rounded-full px-2 py-0.5 text-[10px] font-semibold', statusPill.cls)}>{statusPill.text}</span>
                       </div>
                       <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                        <span className="tabular-nums">{sub.seats}</span> seats · <span className="tabular-nums">₹{(sub.amountInr ?? 0).toLocaleString('en-IN')}</span>/{cycleLabel}
-                        {nextCharge && <> · next charge {nextCharge}</>}
+                        {/* seats is 0 for most legacy activations — the column
+                            was only populated once the in-workspace flow began
+                            writing it. Printing "0 seats" reads as a fault, so
+                            say nothing rather than something wrong. */}
+                        {sub.seats > 0
+                          ? <><span className="tabular-nums">{sub.seats}</span> seats</>
+                          : <>Seat count not set</>}
+                        {sub.billed ? (
+                          <>
+                            {' · '}<span className="tabular-nums">₹{(sub.amountInr ?? 0).toLocaleString('en-IN')}</span>/{cycleLabel}
+                            {nextCharge && <> · next charge {nextCharge}</>}
+                          </>
+                        ) : (
+                          <> · unlocked, but nothing is being charged</>
+                        )}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <button onClick={() => bumpPending(bkey, sub.seats, -1)}
-                              disabled={isChanging || pending <= 1 || !seatChangeAllowed}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] disabled:cursor-not-allowed disabled:opacity-40">
-                        <Minus size={14} />
-                      </button>
-                      <div className="h-8 w-14 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-center text-sm font-medium leading-8 text-[var(--text-primary)] tabular-nums">
-                        {pending}
+                    {sub.billed ? (
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => bumpPending(bkey, sub.seats, -1)}
+                                disabled={isChanging || pending <= 1 || !seatChangeAllowed}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] disabled:cursor-not-allowed disabled:opacity-40">
+                          <Minus size={14} />
+                        </button>
+                        <div className="h-8 w-14 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-center text-sm font-medium leading-8 text-[var(--text-primary)] tabular-nums">
+                          {pending}
+                        </div>
+                        <button onClick={() => bumpPending(bkey, sub.seats, +1)}
+                                disabled={isChanging || pending >= 999 || !seatChangeAllowed}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] disabled:cursor-not-allowed disabled:opacity-40">
+                          <Plus size={14} />
+                        </button>
                       </div>
-                      <button onClick={() => bumpPending(bkey, sub.seats, +1)}
-                              disabled={isChanging || pending >= 999 || !seatChangeAllowed}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] disabled:cursor-not-allowed disabled:opacity-40">
-                        <Plus size={14} />
+                    ) : (
+                      // No mandate behind this plan — the only useful action is
+                      // to start one. Pre-fills the picker with the seat count
+                      // they already have so they are not re-entering it.
+                      <button
+                        onClick={() => {
+                          if (!sub.primaryPlanKey) return
+                          setSeatsByPlan(s => ({ ...s, [sub.primaryPlanKey!]: Math.max(1, sub.seats) }))
+                          document.getElementById('plan-summary')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        }}
+                        className="shrink-0 rounded-lg bg-[var(--accent-solid)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90">
+                        Set up autopay
                       </button>
-                    </div>
+                    )}
                   </div>
-                  {!seatChangeAllowed && sub.status !== 'ACTIVE' && sub.status !== 'TRIALING' && (
+                  {!sub.billed && (
+                    <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+                      These modules are unlocked and your team can use them, but there is no
+                      active autopay behind them — so nothing is being charged. Set up autopay
+                      to put this plan on a proper billing cycle.
+                    </div>
+                  )}
+                  {sub.billed && !seatChangeAllowed && sub.status !== 'ACTIVE' && sub.status !== 'TRIALING' && (
                     <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
                       Seat changes are paused while your autopay is <b>{sub.status.toLowerCase()}</b>.
                       Please update your payment method first — the +/- controls will re-enable
@@ -647,7 +711,7 @@ export const Plan: React.FC = () => {
           {/* Modules — only the ones NOT already active. Already-active plans
               have their own card above with +/- seat controls. */}
           <div className="space-y-3">
-            {activeSubs.length > 0 && plans.filter(p => !activePlanKeys.has(p.key)).length > 0 && (
+            {activeSubs.length > 0 && plans.filter(p => !ownedPlanKeys.has(p.key)).length > 0 && (
               <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
                 Add another module
               </p>
@@ -667,7 +731,7 @@ export const Plan: React.FC = () => {
                 <div key={i} className="h-24 animate-pulse rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]" />
               ))
             ) : (
-              plans.filter(p => !activePlanKeys.has(p.key)).map(plan => {
+              plans.filter(p => !ownedPlanKeys.has(p.key)).map(plan => {
                 const isAvailable = plan.status === 'AVAILABLE'
                 const seats = seatsByPlan[plan.key] ?? 0
                 const isSelected = seats > 0
@@ -741,7 +805,7 @@ export const Plan: React.FC = () => {
           </div>
 
           {/* Plan summary */}
-          <aside className="lg:sticky lg:top-6 lg:self-start">
+          <aside id="plan-summary" className="lg:sticky lg:top-6 lg:self-start">
             <div className="overflow-hidden rounded-2xl border-2 border-[var(--accent-border)] bg-[var(--bg-surface)] shadow-sm">
               <div className="bg-[var(--accent-solid)] px-5 py-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">Your plan</p>

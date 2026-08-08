@@ -18,7 +18,9 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -821,6 +823,76 @@ public class PlanChangeService {
         }, tenantId);
         return out;
     }
+
+    /**
+     * Plans this tenant demonstrably OWNS (every module the plan unlocks is
+     * ACTIVE in {@code platform.tenant_modules}) but which have no billing row
+     * in {@code platform.subscriptions}.
+     *
+     * <p><b>Why this exists.</b> {@code /plan} used to answer "what do you
+     * already have?" purely from the subscriptions ledger, while {@code /modules}
+     * answers it from {@code tenant_modules}. Those two can disagree, and in
+     * production they did: a tenant that activated through the in-workspace
+     * flow before {@code activate()} started writing the ledger has ACTIVE
+     * modules and no subscription row. The result was a workspace with HR
+     * visibly unlocked on one page and offered for sale from scratch on the
+     * other, with no way to see or manage what it already had.
+     *
+     * <p>Reading the modules table closes that gap for every affected tenant
+     * at once, including ones nobody has noticed yet — which a one-off data
+     * backfill could not do, since we cannot go resetting live customers'
+     * rows.
+     *
+     * <p>Deliberately NOT used by the duplicate-purchase guard. Owning modules
+     * without a billing row is exactly the state where the customer SHOULD be
+     * able to buy: their mandate was cancelled or never charged. Blocking them
+     * would lock them out of ever paying. Only a real billing row means money
+     * is already flowing and a second purchase would double-charge.
+     *
+     * @return one entry per owned-but-unbilled plan, seats taken from the
+     *         highest seat count across the plan's modules
+     */
+    public List<OwnedUnbilled> findOwnedButUnbilled(UUID tenantId) {
+        Map<String, Integer> activeModules = new java.util.HashMap<>();
+        jdbc.query("""
+                SELECT module_key, COALESCE(seats, 0) AS seats
+                  FROM platform.tenant_modules
+                 WHERE tenant_id = ? AND status = 'ACTIVE'
+                """, rs -> {
+            activeModules.put(rs.getString("module_key"), rs.getInt("seats"));
+        }, tenantId);
+        if (activeModules.isEmpty()) return List.of();
+
+        // Plans already carrying a billing row — those render from the ledger.
+        Set<String> billed = new java.util.HashSet<>();
+        for (ActiveSub s : listActiveSubscriptions(tenantId)) billed.addAll(s.planKeys());
+
+        List<OwnedUnbilled> out = new java.util.ArrayList<>();
+        for (ModulePlanDto plan : planService.listPlans()) {
+            // AVAILABLE only. The catalog also carries RETIRED plans (crm,
+            // sales, pos, accounting-inventory — superseded by bundles) and
+            // LAUNCHING_SOON ones, and legacy tenants have their modules
+            // switched on. Surfacing those would put a card on the page for
+            // every one of them, each offering a "set up autopay" button that
+            // create() rejects with 400 because you cannot buy a plan that is
+            // not on sale. One live tenant matched ten such plans.
+            if (!"AVAILABLE".equalsIgnoreCase(plan.status())) continue;
+            List<String> needed = plan.includedModules();
+            // A plan that unlocks nothing would "match" every tenant vacuously.
+            if (needed == null || needed.isEmpty()) continue;
+            if (billed.contains(plan.key())) continue;
+            // Every module the plan grants must be live — partial overlap is
+            // not ownership.
+            if (!activeModules.keySet().containsAll(needed)) continue;
+            int seats = needed.stream().mapToInt(m -> activeModules.getOrDefault(m, 0)).max().orElse(0);
+            out.add(new OwnedUnbilled(plan.key(), plan.displayName(), needed, seats));
+        }
+        return out;
+    }
+
+    /** A plan whose modules are live but which nothing is billing for. */
+    public record OwnedUnbilled(String planKey, String displayName,
+                                List<String> modules, int seats) {}
 
     private ActiveSub findActiveSubscriptionForPlan(UUID tenantId, String planKey) {
         try {
