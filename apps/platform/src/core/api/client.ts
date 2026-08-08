@@ -17,6 +17,15 @@ export type AuthResponse = {
   employeeId?: string
   tenantId: string
   email: string
+  /**
+   * The signed-in person's real name, resolved server-side from
+   * hrms.employees (AuthService reads first_name/last_name via
+   * credentials.employee_id). These were missing from this type, so the login
+   * page could not pass them on and every session fell back to the email
+   * local-part — "Chakri Chikkala" displayed as "Shurya.kumar063".
+   */
+  firstName?: string
+  lastName?: string
   roles: string[]
   permissions?: string[]
 }

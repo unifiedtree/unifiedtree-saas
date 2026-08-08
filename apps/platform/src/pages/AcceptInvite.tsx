@@ -51,6 +51,8 @@ export const AcceptInvite: React.FC = () => {
         token:         res.accessToken,
         userId:        res.userId,
         email:         res.email,
+        firstName:     res.firstName,   // else the SDK falls back to the email local-part
+        lastName:      res.lastName,
         roles:         res.roles,
         permissions:   res.permissions,
         tenantId:      res.tenantId,

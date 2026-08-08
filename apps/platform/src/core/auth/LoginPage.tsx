@@ -92,6 +92,11 @@ export const LoginPage: React.FC = () => {
         token:         auth.accessToken,
         userId:        auth.userId || auth.employeeId || '',
         email:         auth.email,
+        // The backend resolves these from hrms.employees. Omitting them made
+        // the SDK fall back to the email local-part, so a workspace created by
+        // "Chakri Chikkala" greeted them as "Shurya.kumar063".
+        firstName:     auth.firstName,
+        lastName:      auth.lastName,
         roles:         auth.roles,
         permissions:   auth.permissions ?? [],
         tenantId:      status.tenantId,

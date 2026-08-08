@@ -8,6 +8,10 @@ export interface AcceptInviteResponse {
   employeeId?: string
   tenantId: string
   email: string
+  /** Resolved server-side from hrms.employees — pass through to the auth
+   *  store or the session falls back to showing the email local-part. */
+  firstName?: string
+  lastName?: string
   roles: string[]
   permissions: string[]
   tenantSlug: string

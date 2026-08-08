@@ -337,7 +337,15 @@ public class RazorpayClient {
         if (scheduleChangeAt != null) body.put("schedule_change_at", scheduleChangeAt);
         body.put("customer_notify", customerNotify);
         try {
-            Map<String, Object> resp = http.post()
+            // PATCH, not POST. Razorpay's update-subscription API is
+            // `PATCH /v1/subscriptions/:id`; POST on that path matches no route
+            // and their gateway answers 404 {"message":"no Route matched with
+            // those values"} — which surfaced to customers as a generic 502
+            // "Could not update subscription" on every single seat change.
+            // (POST is correct for the *sub-resource* actions like
+            // /subscriptions/:id/cancel below, which is where the confusion
+            // came from.)
+            Map<String, Object> resp = http.patch()
                     .uri("/subscriptions/{id}", subscriptionId)
                     .header("Authorization", basicAuthHeader())
                     .header("Content-Type", "application/json")

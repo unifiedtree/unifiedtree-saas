@@ -704,8 +704,9 @@ public class PlanChangeService {
         //         commit-time hook below never fires for it.
         //     (b) Razorpay succeeded but our COMMIT then failed (network
         //         partition at commit). Caught by registerDriftAlarm.
+        SubscriptionService.QuantityChange change;
         try {
-            subscriptions.updateQuantity(sub.razorpaySubscriptionId, newSeats);
+            change = subscriptions.updateQuantity(sub.razorpaySubscriptionId, newSeats);
         } catch (RuntimeException e) {
             log.error("SEAT_DRIFT_AMBIGUOUS tenant={} sub={} plan={} attempted {} -> {} : "
                       + "Razorpay call failed with no applied/not-applied signal ({}). "
@@ -717,13 +718,26 @@ public class PlanChangeService {
         registerDriftAlarm(tenantId, sub.razorpaySubscriptionId, sub.seats, newSeats);
 
         int diff = newSeats - sub.seats;
-        log.info("plan-change SEAT UPDATE tenant={} plan={} seats {} -> {} (diff {})",
-                tenantId, planKey, sub.seats, newSeats, diff);
+        log.info("plan-change SEAT UPDATE tenant={} plan={} seats {} -> {} (diff {}, proratedNow={})",
+                tenantId, planKey, sub.seats, newSeats, diff, change.proratedNow());
+
+        // Tell them what will actually happen. During the free trial nothing
+        // is charged today whichever way the count moves, and promising a
+        // "prorated charge" there would be simply untrue.
+        String message;
+        if (!change.proratedNow()) {
+            message = diff > 0
+                ? "Updated to " + newSeats + " seats. You're still in your free trial, so nothing is charged "
+                  + "now — your first payment will be for " + newSeats + " seats."
+                : "Updated to " + newSeats + " seats. You're still in your free trial — your first payment "
+                  + "will be for " + newSeats + " seats.";
+        } else {
+            message = diff > 0
+                ? "Razorpay will charge the prorated difference for " + diff + " more seat(s) on your existing mandate."
+                : "Seats reduced — the credit will be applied at your next renewal.";
+        }
         return new ChangeResult(sub.razorpaySubscriptionId, sub.seats, newSeats,
-                /*charged*/ true,
-                diff > 0
-                    ? "Razorpay will charge the prorated difference for " + diff + " more seat(s) on your existing mandate."
-                    : "Seats reduced — the credit will be applied at your next renewal.");
+                /*charged*/ change.proratedNow(), message);
     }
 
     /**

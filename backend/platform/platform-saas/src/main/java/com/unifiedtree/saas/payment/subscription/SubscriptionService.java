@@ -235,23 +235,61 @@ public class SubscriptionService {
      * updates our local {@code tenant_modules.seats} + {@code platform.subscriptions}
      * ledger to reflect the intent.
      */
-    public RazorpayClient.SubscriptionView updateQuantity(String razorpaySubscriptionId, int newSeats) {
+    public QuantityChange updateQuantity(String razorpaySubscriptionId, int newSeats) {
         if (newSeats < 1 || newSeats > 999) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Seat count must be between 1 and 999");
         }
-        RazorpayClient.SubscriptionView view = razorpay.updateSubscription(
+        // Ask Razorpay what state the subscription is actually in before
+        // deciding how to change it. Our own ledger says ACTIVE from the
+        // moment the mandate is authorised, but Razorpay distinguishes:
+        //
+        //   authenticated -> mandate approved, FIRST CHARGE NOT YET TAKEN.
+        //                    This is every workspace inside its 7-day free
+        //                    trial. No cycle has begun, so there is nothing to
+        //                    prorate; asking for schedule_change_at="now"
+        //                    charges a difference against a cycle that does
+        //                    not exist. The new seat count should simply be
+        //                    what the first charge bills.
+        //   active        -> money has been taken for the current cycle, so a
+        //                    seat increase genuinely owes a prorated top-up.
+        //
+        // Sending "now" unconditionally was wrong for the trial case, which is
+        // where most seat changes will happen — a customer sizing their team
+        // during the free week.
+        String upstream;
+        try {
+            upstream = String.valueOf(razorpay.fetchSubscription(razorpaySubscriptionId).status())
+                    .toLowerCase(java.util.Locale.ROOT);
+        } catch (RuntimeException e) {
+            // Do not guess. Proration is a money decision; if we cannot read
+            // the state, refuse rather than risk charging against the wrong
+            // assumption.
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Could not read your subscription from Razorpay. Please try again in a moment.");
+        }
+        boolean chargedYet = "active".equals(upstream);
+        String scheduleChangeAt = chargedYet ? "now" : null;
+
+        razorpay.updateSubscription(
                 razorpaySubscriptionId,
                 newSeats,
                 /*planId*/ null,
-                /*scheduleChangeAt*/ "now",
+                scheduleChangeAt,
                 /*customerNotify*/ 1);
-        if (props.isLive()) {
-            log.info("Razorpay LIVE subscription {} quantity updated to {} (proration now)",
-                    razorpaySubscriptionId, newSeats);
-        }
-        return view;
+
+        log.info("Razorpay subscription {} quantity -> {} (upstream={}, proration={})",
+                razorpaySubscriptionId, newSeats, upstream, chargedYet ? "now" : "at first charge");
+        return new QuantityChange(newSeats, chargedYet, upstream);
     }
+
+    /**
+     * @param proratedNow true when Razorpay will charge the difference against
+     *                    the current cycle immediately; false when the
+     *                    subscription has not been charged yet (free trial) and
+     *                    the new count simply applies to the first charge.
+     */
+    public record QuantityChange(int newSeats, boolean proratedNow, String upstreamStatus) {}
 
     // -- 3. cancel -------------------------------------------------------------
 
