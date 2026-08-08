@@ -85,16 +85,22 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.letters",
         "com.hrms.api.invitation",
         "com.hrms.api.mail",
-        // Trial lifecycle (TrialLifecycleJob's 08:30 IST sweep +
-        // TrialNotificationService). Was omitted, so under canonical-prod
-        // neither bean was ever instantiated: the @Scheduled sweep never
-        // registered, trials were never flipped ACTIVE -> EXPIRED, and no
-        // trial-ending or trial-expired notification has ever been sent in
-        // production. Safe to scan — the package holds exactly these two
-        // classes, both JdbcTemplate-based against platform.* / notif.*,
-        // with no legacy public.*-targeting entities of the kind that keep
-        // com.hrms.api.saas out of this list.
-        "com.hrms.api.trial",
+        // com.hrms.api.trial is INTENTIONALLY absent.
+        //
+        // It holds TrialLifecycleJob + TrialNotificationService, which act on
+        // platform.subscriptions rows with plan_type='TRIAL' — mandate-less
+        // free trials created by the old marketing-site signup. That flow is
+        // retired: PublicSaasController./signup-request now returns 410 GONE
+        // ("Signup now requires an autopay mandate"), so no new TRIAL row can
+        // be created. The only trial the product offers today is the 7-day
+        // one behind an authorised autopay mandate, and activate() writes
+        // those as plan_type='PAID' — which this job does not look at.
+        //
+        // Scanning the package would therefore do nothing useful and one
+        // harmful thing: it would flip whatever legacy TRIAL rows remain to
+        // EXPIRED, and EXPIRED is a 402 in SubscriptionAccessGuard's decision
+        // table. Enable this only alongside reintroducing a mandate-less
+        // trial, and audit the leftover rows first.
         "com.hrms.api.modulereq",
         "com.hrms.api.access",
         "com.hrms.api.probation",

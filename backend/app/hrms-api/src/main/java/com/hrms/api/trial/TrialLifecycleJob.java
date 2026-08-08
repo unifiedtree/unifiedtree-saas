@@ -37,9 +37,15 @@ public class TrialLifecycleJob {
 
     /**
      * Trials that lapsed more than this many days ago are flipped to EXPIRED
-     * silently, without an email. Protects the first-ever run of this job
-     * (see {@link #processExpired}) from mailing the entire historical
-     * backlog at once.
+     * silently, without an email.
+     *
+     * <p>Latent safety for whenever this job is first switched on. It has
+     * never run in production — {@code com.hrms.api.trial} is deliberately
+     * absent from {@code CanonicalProfileScan} because the mandate-less trial
+     * it serves is retired (see that class for the full reasoning). So its
+     * first real sweep, whenever that happens, will meet the entire
+     * historical backlog at once. Flipping those rows is correct bookkeeping;
+     * emailing someone that a trial they forgot about ended weeks ago is not.
      */
     private static final int BACKFILL_GRACE_DAYS = 2;
 
