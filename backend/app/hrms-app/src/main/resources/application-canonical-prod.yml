@@ -94,8 +94,24 @@ unifiedtree:
     # start, rather than running with a known weak secret.
     secret: ${UNIFIEDTREE_JWT_SECRET:CHANGE_ME}
     issuer: ${UNIFIEDTREE_JWT_ISSUER:unifiedtree}
-    access-ttl-minutes:  ${UNIFIEDTREE_JWT_ACCESS_TTL_MIN:720}   # 12h — long enough for a full working session (refresh endpoint not yet implemented)
-    refresh-ttl-days:    ${UNIFIEDTREE_JWT_REFRESH_TTL_DAYS:7}
+    access-ttl-minutes:  ${UNIFIEDTREE_JWT_ACCESS_TTL_MIN:720}   # 12h. Short-lived on purpose; the app renews silently on launch.
+    # 90 days, not 7.
+    #
+    # The refresh token IS the session. At 7 days, an employee who took two
+    # weeks' leave came back to a dead session — and because the token rotates
+    # on every use, the clock only slides while you keep opening the app, which
+    # is precisely what someone on leave is not doing. A workforce app has to
+    # survive annual leave, sick leave and a phone left in a drawer.
+    #
+    # This is not a weaker posture than the 7 days it replaces:
+    #   - the token is opaque and random, stored in Keychain/Keystore,
+    #   - it ROTATES on every refresh, so a stolen copy dies the moment the real
+    #     device next syncs, and it can be revoked server-side at any time,
+    #   - the 12-hour access token is what actually gates every API call,
+    #   - the app itself is behind the biometric lock.
+    # It is the same trade-off WhatsApp and every banking app make: long-lived
+    # device trust, short-lived request credentials.
+    refresh-ttl-days:    ${UNIFIEDTREE_JWT_REFRESH_TTL_DAYS:90}
 
   # ---------------------------------------------------------------------
   # Face verification (canonical attendance.face_* + Python worker)
