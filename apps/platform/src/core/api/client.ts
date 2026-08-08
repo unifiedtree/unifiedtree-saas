@@ -101,7 +101,9 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
   } catch (err) {
     clearTimeout(timer)
     if ((err as Error).name === 'AbortError') {
-      throw new Error('The server took too long to respond. Please try again.')
+      // Keep the AbortError as `cause` — the friendly copy is for the user, but
+      // the original is what makes a timeout debuggable in error reporting.
+      throw new Error('The server took too long to respond. Please try again.', { cause: err })
     }
     throw err
   }

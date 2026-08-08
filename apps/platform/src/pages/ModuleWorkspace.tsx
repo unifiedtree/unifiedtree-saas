@@ -90,7 +90,6 @@ const nf = (n: number) => n.toLocaleString('en-IN')
 const cr = (n: number) => `₹${n.toFixed(2)} Cr`
 const lakh = (n: number) => `₹${nf(n)} L`
 const pct = (n: number) => `${n}%`
-const hrs = (n: number) => `${nf(n)} h`
 const units = (n: number) => `${nf(n)} u`
 
 // ─────────────────────────────────────────────────────────────────────────────
