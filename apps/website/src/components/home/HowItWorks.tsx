@@ -1,5 +1,14 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Building2, Puzzle, Users } from 'lucide-react'
+
+/**
+ * Onboarding told as a numbered journey rather than three equal cards.
+ *
+ * The emerald chips sit ON a dashed rail that runs left-to-right across the
+ * desktop layout, so the eye is walked through the sequence; each step's ghost
+ * number sits behind its copy at 10% emerald to keep the count legible without
+ * competing with the headline.
+ */
 
 const steps = [
   {
@@ -25,62 +34,107 @@ const steps = [
   },
 ]
 
+/** Emerald dashes for the rail that links one step to the next. */
+const RAIL_DASHES =
+  'repeating-linear-gradient(90deg, rgba(5,150,105,0.42) 0 10px, rgba(5,150,105,0) 10px 20px)'
+
+const EASE = [0.16, 1, 0.3, 1] as const
+
 export function HowItWorks() {
+  const reduce = useReducedMotion()
+
   return (
-    <section className="py-24 bg-bg">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="relative overflow-hidden bg-tint py-24 lg:py-32">
+      {/* Soft light off the horizon, so the band isn't a flat wash of mint. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
+        style={{
+          background:
+            'radial-gradient(60% 100% at 50% 0%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 70%)',
+        }}
+      />
+
+      <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: reduce ? 0 : 26 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-16"
+          transition={{ duration: 0.6, ease: EASE }}
+          className="mx-auto max-w-3xl text-center"
         >
-          <span className="text-primary font-body font-semibold text-sm uppercase tracking-widest mb-3 block">
+          <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
             How it works
           </span>
-          <h2 className="font-heading font-bold text-text-primary" style={{ fontSize: 'clamp(2rem, 3.5vw, 3rem)' }}>
+          <h2
+            className="font-heading font-extrabold text-text-primary"
+            style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', lineHeight: 1.05, letterSpacing: '-0.035em' }}
+          >
             Up and running in 3 simple steps
           </h2>
+          <p className="mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-text-secondary">
+            No implementation project and no consultants. Create the account, switch on the
+            modules that matter, and bring your people in.
+          </p>
         </motion.div>
 
-        <div className="relative">
-          {/* Connecting dashed line (desktop) */}
-          <div className="hidden lg:block absolute top-16 left-[calc(16.67%+2rem)] right-[calc(16.67%+2rem)] h-px">
-            <div className="w-full h-full border-t-2 border-dashed border-primary/30" />
-          </div>
+        <ol className="mt-20 grid grid-cols-1 gap-x-8 gap-y-14 lg:mt-24 lg:grid-cols-3">
+          {steps.map((step, i) => {
+            const Icon = step.icon
+            const isLast = i === steps.length - 1
 
-          <div className="grid lg:grid-cols-3 gap-8">
-            {steps.map((step, i) => {
-              const Icon = step.icon
-              return (
-                <motion.div
-                  key={step.number}
-                  initial={{ opacity: 0, y: 40 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.3 }}
-                  transition={{ duration: 0.6, delay: i * 0.15, ease: 'easeOut' }}
-                  className="relative"
+            return (
+              <motion.li
+                key={step.number}
+                initial={{ opacity: 0, y: reduce ? 0 : 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.25 }}
+                transition={{ duration: 0.6, delay: reduce ? 0 : i * 0.09, ease: EASE }}
+                className="relative"
+              >
+                {/* The rail — runs from this chip into the next column's chip. */}
+                {!isLast && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute left-[76px] top-[31px] hidden h-0.5 lg:block"
+                    style={{ width: 'calc(100% + 2rem - 76px)', backgroundImage: RAIL_DASHES }}
+                  />
+                )}
+
+                {/* Chip sits on the rail and masks it, which reads as a stop on the route. */}
+                <span className="relative z-10 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-white shadow-[0_14px_30px_-14px_rgba(5,150,105,0.8)] ring-1 ring-inset ring-white/20">
+                  <Icon size={26} strokeWidth={1.9} />
+                </span>
+
+                <div
+                  className={`relative mt-7 overflow-hidden rounded-3xl border border-border bg-white p-8 shadow-card transition-all duration-300 ${
+                    reduce ? 'hover:shadow-card-hover' : 'hover:-translate-y-1 hover:shadow-card-hover'
+                  }`}
                 >
-                  <div className="bg-surface rounded-2xl p-8 border border-border shadow-card hover:shadow-card-hover transition-shadow duration-300 text-center">
-                    {/* Number badge */}
-                    <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center mx-auto mb-5 relative z-10">
-                      <span className="text-white font-heading font-bold text-lg">{step.number}</span>
-                    </div>
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute right-5 top-3 select-none font-heading font-extrabold leading-none text-primary/10"
+                    style={{ fontSize: 'clamp(4rem, 6vw, 5.5rem)', letterSpacing: '-0.05em' }}
+                  >
+                    {step.number}
+                  </span>
 
-                    {/* Icon */}
-                    <div className="w-12 h-12 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-5">
-                      <Icon size={22} className="text-primary" />
-                    </div>
-
-                    <h3 className="font-heading font-bold text-text-primary text-xl mb-3">{step.title}</h3>
-                    <p className="text-text-secondary font-body leading-relaxed">{step.description}</p>
+                  <div className="relative z-10">
+                    <h3
+                      className="font-heading text-xl font-bold text-text-primary"
+                      style={{ letterSpacing: '-0.025em' }}
+                    >
+                      {step.title}
+                    </h3>
+                    <p className="mt-3 text-[16px] leading-relaxed text-text-secondary">
+                      {step.description}
+                    </p>
                   </div>
-                </motion.div>
-              )
-            })}
-          </div>
-        </div>
+                </div>
+              </motion.li>
+            )
+          })}
+        </ol>
       </div>
     </section>
   )

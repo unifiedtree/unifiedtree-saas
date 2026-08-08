@@ -74,6 +74,7 @@ import { LeaveBalanceReport } from '@/modules/hrms/reports/LeaveBalanceReport'
 import { LateMarksReport } from '@/modules/hrms/reports/LateMarksReport'
 import { DiversityReport } from '@/modules/hrms/reports/DiversityReport'
 import { EmployeeImport } from '@/modules/hrms/employees/EmployeeImport'
+import { ModuleWorkspace } from '@/pages/ModuleWorkspace'
 
 // Priority order: highest privilege wins when resolving landing page
 const ROLE_PRIORITY = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER', 'EMPLOYEE'] as const
@@ -122,6 +123,19 @@ export default function App() {
       <Route path="/accept-invite"    element={<AcceptInvite />} />
       <Route path="/forgot-password"  element={<ForgotPassword />} />
       <Route path="/reset-password"   element={<ResetPassword />} />
+
+      {/* Module-workspace showcase. Rendered OUTSIDE <PlatformShell> on purpose:
+          the page brings its own chrome (dark icon rail + top bar + sub-tab row),
+          so nesting it in the shell would stack two sidebars and two headers.
+          Auth-only — it is presentational, with dummy data and no API calls. */}
+      <Route
+        path="/module-workspace"
+        element={
+          <RouteGuard>
+            <ModuleWorkspace />
+          </RouteGuard>
+        }
+      />
 
       {/* Protected shell */}
       <Route

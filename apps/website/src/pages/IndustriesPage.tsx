@@ -1,12 +1,13 @@
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useRef, useState } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import {
   Factory, ShoppingBag, Truck, Utensils, Building2,
-  Stethoscope, BookOpen, Wrench, ChevronRight,
+  Stethoscope, BookOpen, Wrench, ArrowRight, Check,
 } from 'lucide-react'
 import { Navbar } from '../components/layout/Navbar'
 import { Footer } from '../components/layout/Footer'
 import { CTABanner } from '../components/home/CTABanner'
+import { LandscapeScene } from '../components/visuals/LandscapeScene'
 
 const industries = [
   {
@@ -187,118 +188,235 @@ const industries = [
   },
 ]
 
+/** The ridge motif from LandscapeScene, reduced to a single stroke for card headers. */
+function RidgeMotif() {
+  return (
+    <svg
+      viewBox="0 0 400 120"
+      preserveAspectRatio="none"
+      aria-hidden
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-16 w-full"
+    >
+      <path
+        d="M0 92 C 60 62, 110 88, 168 74 C 232 58, 282 34, 340 58 C 372 71, 388 70, 400 76 L400 120 L0 120 Z"
+        fill="#FFFFFF"
+        fillOpacity="0.10"
+      />
+      <path
+        d="M0 110 C 80 84, 150 108, 224 96 C 300 84, 348 70, 400 88 L400 120 L0 120 Z"
+        fill="#FFFFFF"
+        fillOpacity="0.08"
+      />
+    </svg>
+  )
+}
+
 export function IndustriesPage() {
   const [selected, setSelected] = useState(industries[0].id)
   const active = industries.find((i) => i.id === selected)!
+  const reduce = useReducedMotion()
+  const explorerRef = useRef<HTMLDivElement>(null)
+
+  const pick = (id: string, scroll = false) => {
+    setSelected(id)
+    if (scroll) {
+      explorerRef.current?.scrollIntoView({
+        behavior: reduce ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    }
+  }
+
+  const pillTransition = reduce
+    ? { duration: 0 }
+    : { type: 'spring' as const, stiffness: 420, damping: 34 }
 
   return (
     <div className="min-h-screen bg-bg">
       <Navbar />
 
-      {/* Hero */}
-      <section className="pt-32 pb-24 hero-gradient relative overflow-hidden">
-        <div className="absolute inset-0 pattern-dots" />
-        <div className="absolute glow-orb w-[500px] h-[500px] bg-lime top-[-200px] right-[-100px]" />
+      {/* ── Hero — the valley ─────────────────────────────────────────── */}
+      <section className="relative overflow-hidden pt-40 pb-28 sm:pb-36">
+        <LandscapeScene tone="dusk" />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
+        <div className="relative z-10 mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
+          <motion.span
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 0.5 }}
+            className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-white/90 backdrop-blur-sm"
           >
-            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-body font-semibold uppercase tracking-[0.1em] text-white/70 bg-white/[0.08] border border-white/10 mb-6">
-              Industries
-            </span>
-            <h1
-              className="font-heading font-extrabold text-white mb-6"
-              style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', letterSpacing: '-0.02em', lineHeight: 1.08 }}
-            >
-              One platform.
-              <br />
-              <span className="text-lime">Every industry.</span>
-            </h1>
-            <p className="text-lg text-white/75 font-body max-w-2xl mx-auto">
-              UnifiedTree is trusted across 8 major industries. Same platform, purpose-built
-              workflows for each sector.
-            </p>
+            <span className="h-1.5 w-1.5 rounded-full bg-lime" />
+            Industries
+          </motion.span>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 26 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
+            className="font-heading font-extrabold text-white"
+            style={{ fontSize: 'clamp(2.5rem, 5.6vw, 4.75rem)', lineHeight: 1.03, letterSpacing: '-0.038em' }}
+          >
+            One platform.
+            <br />
+            <span className="text-lime">Every industry.</span>
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.75, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            className="mx-auto mt-7 max-w-2xl text-[17px] leading-relaxed text-white/85 sm:text-[19px]"
+          >
+            UnifiedTree is trusted across 8 major industries. Same platform, purpose-built
+            workflows for each sector.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.75, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[13px] font-medium text-white/70"
+          >
+            <span>8 sectors live today</span>
+            <span className="hidden h-1 w-1 rounded-full bg-white/40 sm:block" />
+            <span>Same core, different playbook</span>
+            <span className="hidden h-1 w-1 rounded-full bg-white/40 sm:block" />
+            <span>Go live in a day</span>
           </motion.div>
         </div>
       </section>
 
-      {/* Industry explorer */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-4 gap-8">
-            {/* Sidebar list */}
-            <div className="lg:col-span-1 space-y-2">
-              {industries.map((ind) => {
-                const Icon = ind.icon
-                const isActive = ind.id === selected
-                return (
-                  <motion.button
-                    key={ind.id}
-                    onClick={() => setSelected(ind.id)}
-                    whileHover={{ x: isActive ? 0 : 4 }}
-                    className={`w-full text-left flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 ${
-                      isActive
-                        ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg shadow-primary/20'
-                        : 'premium-card text-text-secondary hover:text-primary'
-                    }`}
-                  >
-                    <Icon size={18} className={isActive ? 'text-white' : 'text-primary'} />
-                    <span className="text-sm font-body font-medium">{ind.name}</span>
-                    {isActive && <ChevronRight size={14} className="ml-auto" />}
-                  </motion.button>
-                )
-              })}
-            </div>
+      {/* ── Explorer — pill rail + detail panel ───────────────────────── */}
+      <section ref={explorerRef} className="scroll-mt-28 bg-white py-20 sm:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 26 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className="mx-auto max-w-2xl text-center"
+          >
+            <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
+              Pick your sector
+            </p>
+            <h2
+              className="mt-4 font-heading font-extrabold text-text-primary"
+              style={{ fontSize: 'clamp(2rem, 4vw, 3.25rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
+            >
+              Built for how your floor actually runs
+            </h2>
+          </motion.div>
 
-            {/* Detail panel */}
-            <div className="lg:col-span-3">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={active.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  transition={{ duration: 0.3 }}
-                  className="premium-card p-9"
+          {/* Pill rail */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.6, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+            className="mx-auto mt-10 flex max-w-5xl flex-wrap justify-center gap-2.5"
+            role="tablist"
+            aria-label="Industries"
+          >
+            {industries.map((ind) => {
+              const Icon = ind.icon
+              const isActive = ind.id === selected
+              return (
+                <button
+                  key={ind.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => pick(ind.id)}
+                  className={`relative whitespace-nowrap rounded-full border px-4 py-2.5 text-[13.5px] font-semibold transition-colors duration-200 sm:px-5 ${
+                    isActive
+                      ? 'border-primary text-white'
+                      : 'border-border bg-white text-text-secondary shadow-card hover:border-primary/40 hover:text-primary'
+                  }`}
                 >
-                  <div className="flex items-start gap-4 mb-7">
-                    <div className="icon-box w-14 h-14 flex-shrink-0">
-                      <active.icon size={26} className="text-primary" />
+                  {isActive && (
+                    <motion.span
+                      layoutId="industryPill"
+                      className="absolute inset-0 rounded-full bg-primary shadow-[0_10px_22px_-10px_rgba(5,150,105,0.75)]"
+                      transition={pillTransition}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-2">
+                    <Icon size={15} />
+                    {ind.name}
+                  </span>
+                </button>
+              )
+            })}
+          </motion.div>
+
+          {/* Detail panel */}
+          <div className="mt-10">
+            <AnimatePresence mode="wait">
+              <motion.article
+                key={active.id}
+                initial={{ opacity: 0, y: reduce ? 0 : 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: reduce ? 0 : -12 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden rounded-3xl border border-border bg-white shadow-card"
+              >
+                {/* Emerald gradient header strip */}
+                <div className="relative overflow-hidden bg-gradient-to-br from-[#04503A] via-primary-dark to-primary px-6 py-9 sm:px-10 sm:py-11">
+                  <RidgeMotif />
+                  <div className="relative z-10 flex flex-col gap-5 sm:flex-row sm:items-center">
+                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 backdrop-blur-sm">
+                      <active.icon size={26} className="text-white" />
                     </div>
-                    <div>
-                      <h2 className="font-heading font-bold text-text-primary text-2xl">{active.name}</h2>
-                      <p className="font-body font-semibold text-primary">{active.tagline}</p>
+                    <div className="min-w-0">
+                      <h3
+                        className="font-heading font-extrabold text-white"
+                        style={{ fontSize: 'clamp(1.6rem, 2.6vw, 2.25rem)', letterSpacing: '-0.035em', lineHeight: 1.06 }}
+                      >
+                        {active.name}
+                      </h3>
+                      <p className="mt-2 text-[15px] font-semibold text-lime">{active.tagline}</p>
                     </div>
                   </div>
+                </div>
 
-                  <p className="text-text-secondary font-body leading-relaxed mb-8">{active.description}</p>
+                <div className="p-6 sm:p-10">
+                  <p className="max-w-3xl text-[17px] leading-relaxed text-text-secondary">
+                    {active.description}
+                  </p>
 
-                  <div className="grid md:grid-cols-2 gap-8 mb-8">
+                  <div className="mt-10 grid gap-10 lg:grid-cols-2">
                     <div>
-                      <h4 className="font-heading font-bold text-text-primary text-sm uppercase tracking-wider mb-4">
-                        Key Use Cases
+                      <h4 className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
+                        Key use cases
                       </h4>
-                      <ul className="space-y-2.5">
-                        {active.useCases.map((uc) => (
-                          <li key={uc} className="flex items-start gap-2.5 text-sm text-text-secondary font-body">
-                            <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0 bg-primary" />
+                      <ul className="mt-5 space-y-3">
+                        {active.useCases.map((uc, i) => (
+                          <motion.li
+                            key={uc}
+                            initial={{ opacity: 0, x: reduce ? 0 : -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.4, delay: 0.06 * i, ease: [0.16, 1, 0.3, 1] }}
+                            className="flex items-start gap-3 text-[15px] leading-relaxed text-text-secondary"
+                          >
+                            <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-primary-light">
+                              <Check size={12} className="text-primary" strokeWidth={3} />
+                            </span>
                             {uc}
-                          </li>
+                          </motion.li>
                         ))}
                       </ul>
                     </div>
+
                     <div>
-                      <h4 className="font-heading font-bold text-text-primary text-sm uppercase tracking-wider mb-4">
-                        Recommended Modules
+                      <h4 className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
+                        Recommended modules
                       </h4>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="mt-5 flex flex-wrap gap-2">
                         {active.modules.map((mod) => (
                           <span
                             key={mod}
-                            className="px-3.5 py-1.5 rounded-full text-xs font-body font-semibold border border-primary/20 text-primary bg-primary-light"
+                            className="rounded-full border border-primary/20 bg-primary-light px-3.5 py-1.5 text-[12.5px] font-semibold text-primary"
                           >
                             {mod}
                           </span>
@@ -306,21 +424,130 @@ export function IndustriesPage() {
                       </div>
 
                       {/* Testimonial */}
-                      <div className="mt-7 p-5 rounded-xl border border-border relative"
-                        style={{ background: 'linear-gradient(135deg, rgba(5, 150, 105,0.04), rgba(29,185,133,0.02))' }}
-                      >
-                        <span className="absolute top-3 right-4 text-3xl text-primary/10 font-heading font-bold leading-none select-none">"</span>
-                        <p className="text-sm text-text-secondary font-body leading-relaxed mb-3 relative z-10">
-                          "{active.testimonial.quote}"
-                        </p>
-                        <p className="text-xs font-heading font-semibold text-text-primary">{active.testimonial.name}</p>
-                        <p className="text-xs text-text-secondary font-body">{active.testimonial.company}</p>
-                      </div>
+                      <figure className="relative mt-8 overflow-hidden rounded-2xl border border-border bg-[#ECFDF5] p-6">
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute -top-3 right-4 select-none font-heading font-extrabold leading-none text-primary/10"
+                          style={{ fontSize: '5rem' }}
+                        >
+                          &ldquo;
+                        </span>
+                        <blockquote className="relative z-10 text-[15px] leading-relaxed text-text-secondary">
+                          &ldquo;{active.testimonial.quote}&rdquo;
+                        </blockquote>
+                        <figcaption className="relative z-10 mt-5 flex items-center gap-3">
+                          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-[12px] font-bold text-white">
+                            {active.testimonial.name
+                              .replace(/^Dr\.\s*/, '')
+                              .split(' ')
+                              .map((n) => n[0])
+                              .join('')
+                              .slice(0, 2)}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-[13.5px] font-bold text-text-primary">
+                              {active.testimonial.name}
+                            </span>
+                            <span className="block text-[12.5px] text-text-tertiary">
+                              {active.testimonial.company}
+                            </span>
+                          </span>
+                        </figcaption>
+                      </figure>
                     </div>
                   </div>
-                </motion.div>
-              </AnimatePresence>
-            </div>
+                </div>
+              </motion.article>
+            </AnimatePresence>
+          </div>
+        </div>
+      </section>
+
+      {/* ── The full set of sectors ───────────────────────────────────── */}
+      <section className="bg-[#ECFDF5] py-20 sm:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 26 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className="max-w-2xl"
+          >
+            <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
+              Every sector we serve
+            </p>
+            <h2
+              className="mt-4 font-heading font-extrabold text-text-primary"
+              style={{ fontSize: 'clamp(2rem, 4vw, 3.25rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
+            >
+              Eight industries, one core
+            </h2>
+            <p className="mt-5 text-[17px] leading-relaxed text-text-secondary">
+              The same ledger, the same people records, the same stock — configured around the
+              way your sector actually works. Pick a card to open its playbook.
+            </p>
+          </motion.div>
+
+          <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {industries.map((ind, i) => {
+              const Icon = ind.icon
+              const isActive = ind.id === selected
+              return (
+                <motion.button
+                  key={ind.id}
+                  type="button"
+                  onClick={() => pick(ind.id, true)}
+                  initial={{ opacity: 0, y: 26 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.2 }}
+                  transition={{ duration: 0.6, delay: (i % 4) * 0.08, ease: [0.16, 1, 0.3, 1] }}
+                  className={`group flex flex-col overflow-hidden rounded-3xl border bg-white text-left shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover ${
+                    isActive ? 'border-primary/40 ring-1 ring-primary/25' : 'border-border'
+                  }`}
+                >
+                  {/* Emerald gradient header strip */}
+                  <div className="relative h-24 overflow-hidden bg-gradient-to-br from-[#04503A] via-primary-dark to-primary">
+                    <RidgeMotif />
+                    <div className="absolute -bottom-6 left-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-white text-primary shadow-card transition-transform duration-300 group-hover:scale-105">
+                      <Icon size={24} />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-1 flex-col px-6 pb-6 pt-10">
+                    <h3 className="font-heading text-[17px] font-bold leading-snug text-text-primary" style={{ letterSpacing: '-0.02em' }}>
+                      {ind.name}
+                    </h3>
+                    <p className="mt-2 text-[14px] font-semibold leading-snug text-primary">
+                      {ind.tagline}
+                    </p>
+                    <p className="mt-3 flex-1 text-[13.5px] leading-relaxed text-text-secondary">
+                      {ind.useCases[0]} · {ind.useCases[1]}
+                    </p>
+
+                    <div className="mt-5 flex flex-wrap gap-1.5">
+                      {ind.modules.slice(0, 2).map((mod) => (
+                        <span
+                          key={mod}
+                          className="rounded-full bg-surface-2 px-2.5 py-1 text-[11.5px] font-semibold text-text-secondary"
+                        >
+                          {mod}
+                        </span>
+                      ))}
+                      {ind.modules.length > 2 && (
+                        <span className="rounded-full bg-primary-light px-2.5 py-1 text-[11.5px] font-semibold text-primary">
+                          +{ind.modules.length - 2}
+                        </span>
+                      )}
+                    </div>
+
+                    <span className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-bold text-primary">
+                      See the playbook
+                      <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
+                    </span>
+                  </div>
+                </motion.button>
+              )
+            })}
           </div>
         </div>
       </section>

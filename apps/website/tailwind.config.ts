@@ -44,9 +44,11 @@ const config: Config = {
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-        heading: ['Inter', '-apple-system', 'sans-serif'],
+        // Figtree carries the display voice — rounded geometric, warm at large
+        // sizes. Body stays Inter, which is a better reading face at 16-19px.
+        heading: ['Figtree', 'Inter', '-apple-system', 'sans-serif'],
+        display: ['Figtree', 'Inter', '-apple-system', 'sans-serif'],
         body: ['Inter', '-apple-system', 'sans-serif'],
-        display: ['Inter', '-apple-system', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],
       },
       fontSize: {

@@ -1,5 +1,14 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Star } from 'lucide-react'
+
+/**
+ * Customer stories — premium quote cards on a soft emerald tint band.
+ *
+ * Sits between the emerald StatsSection and the white IntegrationsSection, so
+ * it takes the light tint surface to keep the page alternating. Cards are laid
+ * out as a masonry-ish three-column rhythm on lg: each column carries a fixed
+ * vertical offset so the grid reads hand-set rather than tabular.
+ */
 
 const testimonials = [
   {
@@ -9,7 +18,7 @@ const testimonials = [
     company: 'Joshi Construction Pvt. Ltd.',
     role: 'CEO',
     initials: 'RJ',
-    color: '#0B0D0C',
+    color: '#047857',
   },
   {
     quote:
@@ -18,7 +27,7 @@ const testimonials = [
     company: 'Krishnamurthy Textiles',
     role: 'CFO',
     initials: 'AK',
-    color: '#8B5CF6',
+    color: '#059669',
   },
   {
     quote:
@@ -27,7 +36,7 @@ const testimonials = [
     company: 'VPL Industries',
     role: 'Operations Head',
     initials: 'VP',
-    color: '#F59E0B',
+    color: '#065F46',
   },
   {
     quote:
@@ -36,7 +45,7 @@ const testimonials = [
     company: 'TechServ Solutions',
     role: 'Sales Director',
     initials: 'SM',
-    color: '#EC4899',
+    color: '#10B981',
   },
   {
     quote:
@@ -45,7 +54,7 @@ const testimonials = [
     company: 'Desai Retail Group',
     role: 'Managing Director',
     initials: 'KD',
-    color: '#3A7D22',
+    color: '#04503A',
   },
   {
     quote:
@@ -54,72 +63,106 @@ const testimonials = [
     company: 'MediCure Distributors',
     role: 'Warehouse Manager',
     initials: 'PA',
-    color: '#EF4444',
+    color: '#047857',
   },
 ]
 
+/** Per-column vertical offset that gives the lg grid its masonry rhythm. */
+const COLUMN_OFFSET = ['', 'lg:mt-10', 'lg:mt-5']
+
 function StarRating() {
   return (
-    <div className="flex gap-1 mb-4">
+    <div className="flex gap-1" aria-label="Rated 5 out of 5">
       {[1, 2, 3, 4, 5].map((s) => (
-        <Star key={s} size={14} className="text-warning fill-warning" />
+        <Star key={s} size={15} className="fill-primary text-primary" aria-hidden />
       ))}
     </div>
   )
 }
 
 export function TestimonialsSection() {
+  const reduce = useReducedMotion()
+
   return (
-    <section className="py-24 bg-surface-2">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="relative overflow-hidden bg-tint py-24 lg:py-28">
+      {/* Soft emerald bloom so the tint band has depth behind the cards */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-80"
+        style={{
+          background:
+            'radial-gradient(60% 100% at 50% 0%, rgba(167,243,208,0.55) 0%, rgba(236,253,245,0) 70%)',
+        }}
+      />
+
+      <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: reduce ? 0 : 26 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-16"
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="mx-auto mb-16 max-w-3xl text-center"
         >
-          <span className="text-primary font-body font-semibold text-sm uppercase tracking-widest mb-3 block">
+          <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
             Customer stories
           </span>
-          <h2 className="font-heading font-bold text-text-primary" style={{ fontSize: 'clamp(2rem, 3.5vw, 3rem)' }}>
+          <h2
+            className="font-heading font-extrabold text-text-primary"
+            style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', lineHeight: 1.05, letterSpacing: '-0.035em' }}
+          >
             What our customers say
           </h2>
-          <p className="text-text-secondary font-body mt-3 text-lg max-w-xl mx-auto">
+          <p className="mx-auto mt-5 max-w-xl text-[17px] leading-relaxed text-text-secondary">
             Real businesses, real results. From manufacturing to retail to services.
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid items-start gap-6 md:grid-cols-2 lg:grid-cols-3">
           {testimonials.map((t, i) => (
-            <motion.div
+            <motion.figure
               key={t.name}
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: reduce ? 0 : 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.5, delay: i * 0.08, ease: 'easeOut' }}
-              whileHover={{ y: -4 }}
-              className="bg-surface rounded-2xl p-6 border border-border shadow-card hover:shadow-card-hover transition-all duration-300"
+              transition={{ duration: 0.6, delay: (i % 3) * 0.08, ease: [0.16, 1, 0.3, 1] }}
+              whileHover={reduce ? undefined : { y: -6 }}
+              className={`group relative overflow-hidden rounded-3xl border border-border bg-surface p-7 shadow-card transition-shadow duration-300 hover:shadow-card-hover ${COLUMN_OFFSET[i % 3]}`}
             >
-              <StarRating />
-              <p className="text-text-secondary font-body leading-relaxed mb-6 text-sm italic">
-                "{t.quote}"
-              </p>
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-heading font-bold text-sm flex-shrink-0"
-                  style={{ backgroundColor: t.color }}
-                >
-                  {t.initials}
-                </div>
-                <div>
-                  <p className="font-body font-semibold text-text-primary text-sm">{t.name}</p>
-                  <p className="text-text-secondary text-xs">
-                    {t.role} · {t.company}
-                  </p>
-                </div>
+              {/* Oversized decorative quote glyph */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-6 right-4 select-none font-heading font-extrabold leading-none text-primary/10 transition-colors duration-300 group-hover:text-primary/20"
+                style={{ fontSize: '132px', letterSpacing: '-0.045em' }}
+              >
+                &ldquo;
+              </span>
+
+              <div className="relative z-10">
+                <StarRating />
+
+                <blockquote className="mt-5 text-[15.5px] leading-relaxed text-text-primary">
+                  {t.quote}
+                </blockquote>
+
+                <figcaption className="mt-7 flex items-center gap-3 border-t border-border pt-6">
+                  <span
+                    aria-hidden
+                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full font-heading text-[13px] font-bold text-white"
+                    style={{ backgroundColor: t.color }}
+                  >
+                    {t.initials}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[15px] font-semibold text-text-primary">
+                      {t.name}
+                    </span>
+                    <span className="block truncate text-[13px] text-text-tertiary">
+                      {t.role} · {t.company}
+                    </span>
+                  </span>
+                </figcaption>
               </div>
-            </motion.div>
+            </motion.figure>
           ))}
         </div>
       </div>
