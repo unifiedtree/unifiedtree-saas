@@ -97,7 +97,7 @@ public class MilestonesController {
                   FROM base
                  WHERE occurs BETWEEN current_date AND current_date + make_interval(days => ?)
                  ORDER BY occurs
-                """.formatted(NEXT_OCCURRENCE_SQL), tenantId, days);
+                """.formatted(nextOccurrence("e.date_of_birth")), tenantId, days);
     }
 
     // -- work anniversaries ----------------------------------------------------
@@ -122,8 +122,7 @@ public class MilestonesController {
                  WHERE occurs BETWEEN current_date AND current_date + make_interval(days => ?)
                    AND (EXTRACT(YEAR FROM occurs) - EXTRACT(YEAR FROM src)) >= 1
                  ORDER BY occurs
-                """.formatted(NEXT_OCCURRENCE_SQL.replace("date_of_birth", "date_of_joining")),
-                tenantId, days);
+                """.formatted(nextOccurrence("e.date_of_joining")), tenantId, days);
     }
 
     // -- retirements -----------------------------------------------------------
@@ -145,29 +144,32 @@ public class MilestonesController {
     }
 
     /**
-     * This year's occurrence of a recurring date, rolling to next year once it
-     * has passed. 29 Feb falls back to 28 Feb in a non-leap year — make_date
-     * would raise "date field value out of range" and take the whole query
-     * down with it.
+     * The next time a recurring date comes round: add whole years to the
+     * original until it lands on or after today.
+     *
+     * <p>Leans on Postgres clamping date + interval rather than reconstructing
+     * the date. {@code date '2000-02-29' + interval '27 years'} yields
+     * 2027-02-28 and {@code + '28 years'} yields 2028-02-29 — so leap-day
+     * birthdays land on 28 Feb in ordinary years and correctly return to the
+     * 29th in leap years, with no leap-year arithmetic here at all.
+     *
+     * <p>A first attempt built the date with {@code make_date(year, month, day)}
+     * plus a hand-rolled leap check. Two things were wrong with it: make_date
+     * raises "date field value out of range" for (non-leap-year, 2, 29), so a
+     * single 29-February employee would have 500'd milestones for their whole
+     * workspace; and the {@code %%} modulo escapes were passed through
+     * .formatted() as an ARGUMENT rather than a format string, so they reached
+     * Postgres literally as {@code %%} — "operator does not exist: integer %%
+     * integer". Both problems disappear with interval addition.
+     *
+     * @param col qualified source column, e.g. {@code e.date_of_birth}
      */
-    private static final String NEXT_OCCURRENCE_SQL = """
-            CASE
-              WHEN EXTRACT(MONTH FROM e.date_of_birth) = 2 AND EXTRACT(DAY FROM e.date_of_birth) = 29
-                   AND NOT (
-                     (EXTRACT(YEAR FROM current_date)::int %% 4 = 0
-                      AND EXTRACT(YEAR FROM current_date)::int %% 100 <> 0)
-                     OR EXTRACT(YEAR FROM current_date)::int %% 400 = 0)
-                THEN make_date(EXTRACT(YEAR FROM current_date)::int, 2, 28)
-              ELSE make_date(EXTRACT(YEAR FROM current_date)::int,
-                             EXTRACT(MONTH FROM e.date_of_birth)::int,
-                             EXTRACT(DAY  FROM e.date_of_birth)::int)
-            END
-            + CASE WHEN make_date(EXTRACT(YEAR FROM current_date)::int,
-                                  EXTRACT(MONTH FROM e.date_of_birth)::int,
-                                  LEAST(EXTRACT(DAY FROM e.date_of_birth)::int, 28))
-                        < current_date
-                   THEN make_interval(years => 1) ELSE make_interval() END
-            """;
+    private static String nextOccurrence(String col) {
+        String yearsToAdd = "EXTRACT(YEAR FROM current_date)::int - EXTRACT(YEAR FROM " + col + ")::int";
+        String thisYear = "(" + col + " + make_interval(years => " + yearsToAdd + "))::date";
+        String nextYear = "(" + col + " + make_interval(years => " + yearsToAdd + " + 1))::date";
+        return "CASE WHEN " + thisYear + " < current_date THEN " + nextYear + " ELSE " + thisYear + " END";
+    }
 
     private List<Milestone> query(String sql, UUID tenantId, int window) {
         List<Milestone> out = new ArrayList<>();
