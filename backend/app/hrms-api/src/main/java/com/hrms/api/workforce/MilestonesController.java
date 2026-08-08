@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,9 +54,11 @@ public class MilestonesController {
     private static final int RETIREMENT_AGE_YEARS = 60;
 
     private final JdbcTemplate jdbc;
+    private final MilestoneReminderService reminders;
 
-    public MilestonesController(JdbcTemplate jdbc) {
+    public MilestonesController(JdbcTemplate jdbc, MilestoneReminderService reminders) {
         this.jdbc = jdbc;
+        this.reminders = reminders;
     }
 
     @Operation(summary = "Upcoming birthdays, work anniversaries and retirements")
@@ -79,6 +82,46 @@ public class MilestonesController {
                 anniversaries(tenantId, aDays),
                 retirements(tenantId, rMonths));
     }
+
+    /**
+     * Run today's birthday / anniversary reminder fan-out for THIS tenant now,
+     * instead of waiting for the 09:00 IST job.
+     *
+     * <p>Exists because a daily cron is otherwise untestable without changing
+     * the clock, and because an admin who onboards someone mid-morning wants
+     * their anniversary to still go out today.
+     *
+     * <p>Safe to call repeatedly: the send is gated on the unique row in
+     * notif.milestone_reminder_log, so a second call the same day is a no-op
+     * and returns 0. {@code date} is accepted only to let an admin re-drive a
+     * day the job missed (an outage), and is clamped to the last week so it can
+     * never be used to blast an arbitrary historical date.
+     */
+    @Operation(summary = "Send today's milestone reminders for this workspace now (idempotent)")
+    @PostMapping("/send-reminders")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','OWNER','COMPANY_ADMIN','HR_MANAGER')")
+    public SendRemindersResponse sendReminders(
+            @RequestParam(value = "date", required = false) String date) {
+        UUID tenantId = TenantContext.getTenantId();
+        if (tenantId == null) return new SendRemindersResponse(0, null);
+
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        LocalDate target = today;
+        if (date != null && !date.isBlank()) {
+            LocalDate parsed = LocalDate.parse(date.trim());
+            boolean withinWindow = !parsed.isAfter(today) && !parsed.isBefore(today.minusDays(7));
+            if (!withinWindow) {
+                throw new com.hrms.core.exception.BusinessRuleException(
+                        "date must be today or within the last 7 days");
+            }
+            target = parsed;
+        }
+        int sent = reminders.remindForTenant(tenantId, target);
+        return new SendRemindersResponse(sent, target);
+    }
+
+    /** {@code sent} counts milestones announced, not individual notifications. */
+    public record SendRemindersResponse(int sent, LocalDate date) {}
 
     // -- birthdays -------------------------------------------------------------
 
