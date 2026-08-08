@@ -79,6 +79,18 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
+      // Required for the httpOnly refresh cookie to work AT ALL. On a
+      // cross-origin request (app on <workspace>.unifiedtree.com, API on
+      // api.unifiedtree.com) the browser DISCARDS the response's Set-Cookie
+      // unless the request itself was credentialed — and refuses to send the
+      // cookie back for the same reason. The backend was setting the cookie
+      // correctly and curl stored it, while browsers silently dropped it, so
+      // every reload still logged the user out.
+      //
+      // Safe now that CORS no longer allows wildcard public-hosting origins:
+      // allowed origins are unifiedtree.com and its subdomains only, so no
+      // attacker-controlled page can make a credentialed call here.
+      credentials: 'include',
       signal: init.signal ?? controller.signal,
       headers: {
         'Content-Type': 'application/json',
