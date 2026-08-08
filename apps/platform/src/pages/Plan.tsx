@@ -193,8 +193,26 @@ export const Plan: React.FC = () => {
   const fetchCurrent = async () => {
     try {
       const r = await apiJson<CurrentSubscriptionsResponse>('/v1/workspace/plan/current')
-      setActiveSubs(r.subscriptions ?? [])
+      const list = r.subscriptions ?? []
+      setActiveSubs(list)
       setSubsLoadFailed(false)
+      // Seed the seat picker for plans that are unlocked with no autopay
+      // behind them. Their whole purpose on this page is "start paying for
+      // what you already have", so the sensible starting number is the seat
+      // count they are already running — the admin adjusts from there rather
+      // than typing it in again. Only seeds keys the admin has not already
+      // touched, so a re-fetch (after a recovery, say) never overwrites an
+      // edit in progress.
+      setSeatsByPlan(prev => {
+        const next = { ...prev }
+        for (const s of list) {
+          if (s.billed || !s.primaryPlanKey) continue
+          if (next[s.primaryPlanKey] == null) {
+            next[s.primaryPlanKey] = Math.max(1, s.seats)
+          }
+        }
+        return next
+      })
     } catch {
       setActiveSubs([])
       setSubsLoadFailed(true)
@@ -629,7 +647,7 @@ export const Plan: React.FC = () => {
                             {nextCharge && <> · next charge {nextCharge}</>}
                           </>
                         ) : (
-                          <> · unlocked, but nothing is being charged</>
+                          <> unlocked · choose how many to pay for</>
                         )}
                       </p>
                     </div>
@@ -650,25 +668,46 @@ export const Plan: React.FC = () => {
                         </button>
                       </div>
                     ) : (
-                      // No mandate behind this plan — the only useful action is
-                      // to start one. Pre-fills the picker with the seat count
-                      // they already have so they are not re-entering it.
-                      <button
-                        onClick={() => {
-                          if (!sub.primaryPlanKey) return
-                          setSeatsByPlan(s => ({ ...s, [sub.primaryPlanKey!]: Math.max(1, sub.seats) }))
-                          document.getElementById('plan-summary')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                        }}
-                        className="shrink-0 rounded-lg bg-[var(--accent-solid)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90">
-                        Set up autopay
-                      </button>
+                      // No mandate behind this plan, so there is nothing to
+                      // prorate against — but the admin still has to pick how
+                      // many seats to START paying for. This drives the SAME
+                      // seatsByPlan state the picker rows use, so the summary
+                      // and the Pay button pick it up automatically.
+                      //
+                      // A previous version put a "Set up autopay" button here
+                      // that only seeded the count and scrolled down. Since
+                      // this plan is (correctly) hidden from the picker to
+                      // avoid listing it twice, that left the seat count
+                      // completely uneditable: you could buy 5 seats or
+                      // nothing. The stepper has to live on the card.
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button onClick={() => sub.primaryPlanKey && dec(sub.primaryPlanKey)}
+                                disabled={(seatsByPlan[sub.primaryPlanKey ?? ''] ?? 0) <= 1}
+                                aria-label="Decrease seats"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] disabled:cursor-not-allowed disabled:opacity-40">
+                          <Minus size={14} />
+                        </button>
+                        <input
+                          type="number" min={1} max={999}
+                          value={seatsByPlan[sub.primaryPlanKey ?? ''] ?? Math.max(1, sub.seats)}
+                          onChange={e => sub.primaryPlanKey && setSeats(sub.primaryPlanKey, Number(e.target.value))}
+                          aria-label="Seats to pay for"
+                          className="h-8 w-14 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 text-center text-sm font-medium text-[var(--text-primary)] tabular-nums outline-none focus:border-[var(--border-focus)]" />
+                        <button onClick={() => sub.primaryPlanKey && inc(sub.primaryPlanKey)}
+                                disabled={(seatsByPlan[sub.primaryPlanKey ?? ''] ?? 0) >= 999}
+                                aria-label="Increase seats"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] disabled:cursor-not-allowed disabled:opacity-40">
+                          <Plus size={14} />
+                        </button>
+                      </div>
                     )}
                   </div>
                   {!sub.billed && (
                     <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
                       These modules are unlocked and your team can use them, but there is no
-                      active autopay behind them — so nothing is being charged. Set up autopay
-                      to put this plan on a proper billing cycle.
+                      active autopay behind them — so nothing is being charged. Set the number
+                      of seats above, then use <b>Pay ₹0 &amp; Set Up Autopay</b> to start the
+                      billing cycle. Your first 7 days stay free.
                     </div>
                   )}
                   {sub.billed && !seatChangeAllowed && sub.status !== 'ACTIVE' && sub.status !== 'TRIALING' && (
