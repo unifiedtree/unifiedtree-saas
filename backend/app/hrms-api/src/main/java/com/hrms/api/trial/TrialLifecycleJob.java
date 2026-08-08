@@ -35,6 +35,14 @@ public class TrialLifecycleJob {
 
     private static final Logger log = LoggerFactory.getLogger(TrialLifecycleJob.class);
 
+    /**
+     * Trials that lapsed more than this many days ago are flipped to EXPIRED
+     * silently, without an email. Protects the first-ever run of this job
+     * (see {@link #processExpired}) from mailing the entire historical
+     * backlog at once.
+     */
+    private static final int BACKFILL_GRACE_DAYS = 2;
+
     private final JdbcTemplate jdbc;
     private final BillingSettingsService billingSettings;
     private final TrialNotificationService notifier;
@@ -66,14 +74,28 @@ public class TrialLifecycleJob {
     // -- expiry pass -----------------------------------------------------------
 
     private int processExpired(String upgradeUrl) {
+        // `stale` = expired longer ago than BACKFILL_GRACE_DAYS.
+        //
+        // BACKFILL SAFETY. This job was absent from the canonical component
+        // scan and so had never run in production: no trial was ever flipped
+        // to EXPIRED and no notice was ever sent. The moment it is enabled it
+        // therefore meets the entire historical backlog at once. Flipping
+        // those rows is correct bookkeeping and we do it — but emailing them
+        // is not: telling someone "your free trial has ended" about a trial
+        // that lapsed weeks ago is confusing at best, and a burst of them
+        // going out simultaneously to real customers is worse. So stale rows
+        // are stamped silently and only genuinely-recent expiries notify.
+        // After the first sweep the backlog is gone and this predicate stops
+        // mattering.
         List<TrialRow> rows = jdbc.query("""
-                SELECT id, tenant_id, subdomain
+                SELECT id, tenant_id, subdomain,
+                       (current_period_end < now() - make_interval(days => ?)) AS stale
                   FROM platform.subscriptions
                  WHERE plan_type = 'TRIAL'
                    AND status = 'ACTIVE'
                    AND current_period_end <= now()
                    AND trial_expired_notice_sent_at IS NULL
-                """, TrialLifecycleJob::mapRow);
+                """, TrialLifecycleJob::mapRow, BACKFILL_GRACE_DAYS);
 
         int notified = 0;
         for (TrialRow r : rows) {
@@ -92,6 +114,12 @@ public class TrialLifecycleJob {
                         """, r.id());
                 if (updated == 0) continue; // raced with another worker; skip
 
+                if (r.stale()) {
+                    log.info("trial-expiry: subscription {} (tenant {}) expired more than {}d ago — "
+                             + "status flipped, notice suppressed as backlog",
+                            r.id(), r.tenantId(), BACKFILL_GRACE_DAYS);
+                    continue;
+                }
                 notifier.notifyExpired(r.tenantId(), r.subdomain(), upgradeUrl);
                 notified++;
             } catch (Exception ex) {
@@ -142,11 +170,22 @@ public class TrialLifecycleJob {
     }
 
     private static TrialRow mapRow(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        boolean stale = hasColumn(rs, "stale") && rs.getBoolean("stale");
         return new TrialRow(
                 UUID.fromString(rs.getString("id")),
                 rs.getObject("tenant_id", UUID.class),
-                rs.getString("subdomain"));
+                rs.getString("subdomain"),
+                stale);
     }
 
-    private record TrialRow(UUID id, UUID tenantId, String subdomain) {}
+    /** The warning pass reuses this mapper but selects no {@code stale} column. */
+    private static boolean hasColumn(java.sql.ResultSet rs, String name) throws java.sql.SQLException {
+        java.sql.ResultSetMetaData md = rs.getMetaData();
+        for (int i = 1; i <= md.getColumnCount(); i++) {
+            if (name.equalsIgnoreCase(md.getColumnLabel(i))) return true;
+        }
+        return false;
+    }
+
+    private record TrialRow(UUID id, UUID tenantId, String subdomain, boolean stale) {}
 }
