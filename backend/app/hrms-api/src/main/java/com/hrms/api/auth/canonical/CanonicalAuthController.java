@@ -46,9 +46,43 @@ public class CanonicalAuthController {
     private static final int RT_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
     private final AuthService auth;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
-    public CanonicalAuthController(AuthService auth) {
+    public CanonicalAuthController(AuthService auth,
+                                   org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.auth = auth;
+        this.jdbc = jdbc;
+    }
+
+    /**
+     * Which workspace is this request for?
+     *
+     * <p>Resolved explicitly rather than read from {@link TenantContext},
+     * because /refresh and /logout are permitAll and the tenant filter does
+     * not populate the context on unauthenticated paths — leaving it null,
+     * which silently made every cookie lookup miss and every reload look like
+     * a signed-out user.
+     *
+     * <p>Falls back through the same signals the SDK sends on every call:
+     * the X-Tenant-Subdomain header (set from the hostname) and X-Tenant-ID.
+     */
+    private UUID resolveTenant(HttpServletRequest req) {
+        UUID ctx = TenantContext.getTenantId();
+        if (ctx != null) return ctx;
+
+        String id = req.getHeader("X-Tenant-ID");
+        if (id != null && !id.isBlank()) {
+            try { return UUID.fromString(id.trim()); } catch (IllegalArgumentException ignored) { /* fall through */ }
+        }
+        String slug = req.getHeader("X-Tenant-Subdomain");
+        if (slug == null || slug.isBlank()) return null;
+        try {
+            return jdbc.queryForObject(
+                    "SELECT id FROM platform.tenants WHERE lower(subdomain) = lower(?)",
+                    UUID.class, slug.trim());
+        } catch (RuntimeException e) {
+            return null;   // unknown workspace — treated as "no session"
+        }
     }
 
     private static String cookieName(UUID tenantId) {
@@ -166,7 +200,7 @@ public class CanonicalAuthController {
         // The body is @RequestBody(required=false) with no @NotBlank because a
         // cookie-only call has no body at all and would otherwise be rejected
         // at binding, before this method ever runs.
-        UUID tenantId = TenantContext.getTenantId();   // from X-Tenant-Subdomain / X-Tenant-ID
+        UUID tenantId = resolveTenant(httpReq);
         String token = req != null && req.refreshToken() != null && !req.refreshToken().isBlank()
                 ? req.refreshToken()
                 : readRefreshCookie(httpReq, tenantId);
@@ -202,7 +236,7 @@ public class CanonicalAuthController {
      */
     @PostMapping("/logout")
     public java.util.Map<String, Object> logout(HttpServletRequest httpReq, HttpServletResponse res) {
-        UUID tenantId = TenantContext.getTenantId();
+        UUID tenantId = resolveTenant(httpReq);
         String token = readRefreshCookie(httpReq, tenantId);
         boolean revoked = false;
         if (token != null) {
