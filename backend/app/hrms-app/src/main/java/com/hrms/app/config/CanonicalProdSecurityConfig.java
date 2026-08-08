@@ -113,8 +113,15 @@ public class CanonicalProdSecurityConfig {
                     "/v1/public/signup-request",
                     "/v1/public/subdomains/check",
                     "/v1/public/workspace-status",
+                    // Emails us a module enquiry and records REQUESTED rows.
+                    // Never grants access, so safe to leave public.
                     "/v1/public/module-request",
-                    "/v1/public/module-toggle",
+                    // "/v1/public/module-toggle" REMOVED 2026-08-08 — it
+                    // activated/deactivated modules for any subdomain with no
+                    // auth at all. Free paid-module access for anyone, and a
+                    // one-request DoS against a paying client. See the note on
+                    // PublicSaasController. Module state is now only ever
+                    // written by the payment path.
                     // Public plan catalog + Razorpay checkout for paid signup
                     "/v1/public/module-plans",
                     "/v1/public/payment/config",

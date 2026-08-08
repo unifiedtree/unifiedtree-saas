@@ -603,13 +603,33 @@ public class SaasService {
 
     /**
      * Activate or deactivate a single module for a workspace, addressed by
-     * subdomain. Unauthenticated to match the rest of the Edit-Workspace page
-     * (the admin lands here from an emailed deep link, not a logged-in session).
+     * subdomain.
+     *
+     * <p><b>DANGEROUS — NO CALLERS, AND DO NOT ADD ONE WITHOUT AUTHORISATION.</b>
+     * This method grants or revokes paid product access from nothing but a
+     * subdomain string. It performs no authentication, no authorisation, and
+     * no check that the caller is connected to the workspace. Its only caller
+     * was {@code POST /v1/public/module-toggle}, which sat in the
+     * {@code permitAll()} list and was verified exploitable against production
+     * on 2026-08-08: an unauthenticated request switched on a paid module for
+     * a live workspace. The same call with {@code active=false} takes modules
+     * AWAY from a paying customer. Both the endpoint and the public
+     * Edit-Workspace page that called it were deleted.
+     *
+     * <p>The premise in the old comment — "the admin lands here from an emailed
+     * deep link" — was never enforced: no token was checked, so the deep link
+     * was decoration. Module state is a billing outcome and must only be
+     * written by {@code PlanChangeService.activate} after Razorpay confirms a
+     * mandate. If a genuine admin-facing toggle is ever needed, put it on an
+     * authenticated workspace endpoint behind {@code requireAdmin} with the
+     * tenant taken from the JWT, never from a request field.
+     *
+     * <p>Kept only because platform-admin tooling may legitimately need it one
+     * day; it is unreachable today.
      *
      * <p>Writes target the non-RLS {@code platform.*} tables, so no
      * TenantContext is needed. Activation upserts the row to {@code ACTIVE};
-     * deactivation hard-deletes it so re-adding is a clean insert and the admin
-     * can toggle as many times as they like. Returns the refreshed status.
+     * deactivation hard-deletes it so re-adding is a clean insert.
      */
     public WorkspaceStatusResponse setModuleActive(String subdomainRaw, String moduleRaw, boolean active) {
         String subdomain = subdomainRaw == null ? "" : subdomainRaw.trim().toLowerCase(Locale.ROOT);

@@ -69,18 +69,35 @@ public class PublicSaasController {
     }
 
     /**
-     * Self-service module switch for the public Edit-Workspace page. Activates
-     * ({@code active=true}) or removes ({@code active=false}) a single module
-     * for the workspace and returns the refreshed status so the caller can sync
-     * its UI immediately.
+     * REMOVED 2026-08-08 — {@code POST /v1/public/module-toggle}.
+     *
+     * <p>It took {@code {subdomain, module, active}} and called
+     * {@code saas.setModuleActive} with NO authentication, NO authorisation and
+     * no check that the caller had anything to do with the workspace. It sat in
+     * the {@code permitAll()} list, so anyone on the internet who knew a
+     * subdomain — and subdomains are public, they are in the URL — could:
+     * <ul>
+     *   <li>switch ON any paid module for any workspace, free, bypassing the
+     *       entire Razorpay flow; and</li>
+     *   <li>switch OFF modules belonging to a paying customer, i.e. a
+     *       one-request denial of service against a live client.</li>
+     * </ul>
+     * Verified exploitable against production on 2026-08-08: a token-less
+     * request enabled {@code crm} on a live workspace and the response echoed
+     * the module as active. It is the most likely explanation for tenants
+     * holding modules they never bought, including LAUNCHING_SOON ones that
+     * cannot be purchased at all.
+     *
+     * <p>Not re-secured, deleted. Module state is a billing outcome: it is
+     * written by {@code PlanChangeService.activate} once Razorpay confirms a
+     * mandate, and read everywhere else. A self-service switch on an
+     * unauthenticated marketing page contradicts the paid model outright, so
+     * there is nothing here worth keeping behind an auth check. The public
+     * {@code /edit-workspace} page that called it was removed in the same
+     * change. Customers change modules from {@code /plan} inside the
+     * workspace, which is admin-gated and goes through payment.
+     *
+     * <p>{@code POST /v1/public/module-request} is unaffected and stays: it
+     * only emails us and records REQUESTED rows, and never grants access.
      */
-    @PostMapping("/module-toggle")
-    public WorkspaceStatusResponse toggleModule(@Valid @RequestBody ModuleToggleRequest req) {
-        return saas.setModuleActive(req.subdomain(), req.module(), req.active());
-    }
-
-    public record ModuleToggleRequest(
-            @NotBlank String subdomain,
-            @NotBlank String module,
-            boolean active) {}
 }

@@ -21,7 +21,6 @@ import { WorkspacesPage } from './pages/WorkspacesPage'
 import { WorkspaceLayout } from './components/WorkspaceLayout'
 import { DashboardPage } from './pages/DashboardPage'
 import { MarketplacePage } from './pages/MarketplacePage'
-import { EditWorkspacePage } from './pages/EditWorkspacePage'
 import { ScrollToTop } from './components/ScrollToTop'
 
 // Simple fade-in on mount. We deliberately do NOT use AnimatePresence
@@ -64,7 +63,16 @@ function AnimatedRoutes() {
 
       {/* Account & Workspace Routes */}
       <Route path="/workspaces"        element={<PageTransition><WorkspacesPage /></PageTransition>} />
-      <Route path="/edit-workspace"    element={<PageTransition><EditWorkspacePage /></PageTransition>} />
+      {/* /edit-workspace REMOVED 2026-08-08 (security).
+          It was an unauthenticated public page that let anyone holding a
+          subdomain switch modules on or off for that workspace, via
+          POST /v1/public/module-toggle — free paid modules for anyone, and a
+          way to disable a paying customer's modules. Verified exploitable
+          against production. The endpoint is gone too; module state is now
+          only written by the payment path. Admins manage modules from /plan
+          inside the workspace, which is admin-gated and goes through Razorpay.
+          Anyone landing on the old URL gets the pricing page. */}
+      <Route path="/edit-workspace"    element={<Navigate to="/pricing" replace />} />
     </Routes>
   )
 }

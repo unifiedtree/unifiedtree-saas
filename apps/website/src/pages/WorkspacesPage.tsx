@@ -124,16 +124,19 @@ export function WorkspacesPage() {
                     <div className="px-2.5 py-1 rounded-lg bg-surface-2 text-[10px] font-extrabold text-text-secondary uppercase tracking-widest border border-border shrink-0">
                       {ws.role}
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/edit-workspace?ws=${encodeURIComponent(ws.subdomain)}&tenantId=${ws.tenantId}`);
-                      }}
+                    {/* Goes to the workspace's own admin-gated plan page.
+                        Previously opened the public /edit-workspace editor,
+                        which changed modules with no authentication at all —
+                        removed 2026-08-08, see App.tsx. Managing modules is a
+                        billing action and belongs behind a login. */}
+                    <a
+                      href={`https://${ws.subdomain}.unifiedtree.com/plan`}
+                      onClick={(e) => e.stopPropagation()}
                       className="p-1.5 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-md transition-colors"
-                      title="Manage Workspace"
+                      title="Manage plan & modules"
                     >
                       <Settings size={16} />
-                    </button>
+                    </a>
                   </div>
                 </div>
 
