@@ -328,8 +328,14 @@ export const Plan: React.FC = () => {
     setRecovering(true)
     setError('')
     try {
+      // Explicit body even though the endpoint takes none. A bodyless POST
+      // relies on the browser adding Content-Length: 0 (which the Fetch spec
+      // requires) surviving every proxy in between — and Google's front end
+      // answers 411 Length Required if it does not arrive. Sending "{}" costs
+      // nothing and removes that dependency from the one button a customer
+      // whose money is stuck will be pressing.
       const res = await apiJson<RecoverResponse>(
-        '/v1/workspace/plan/recover', { method: 'POST' })
+        '/v1/workspace/plan/recover', { method: 'POST', body: '{}' })
       if (res.activated > 0) {
         clearPending()          // must clear pendingId too, not just storage —
                                 // the amber banner keys off pendingId && !awaitingMandate,
