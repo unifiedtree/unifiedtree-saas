@@ -96,6 +96,23 @@ public class PlanChangeService {
     public CreateResult create(UUID tenantId, UUID initiatorAccountId,
                                List<PlanItem> items, BillingCycle cycle,
                                String subdomain, String email) {
+        return create(tenantId, initiatorAccountId, items, cycle, subdomain, email, null);
+    }
+
+    /**
+     * As {@link #create}, but records that this mandate SUPERSEDES an existing
+     * one.
+     *
+     * @param replacesSubscriptionId the Razorpay {@code sub_XXX} to cancel once
+     *        this new mandate is confirmed active, or null for a first-time
+     *        purchase. Used for seat changes on mandates Razorpay will not let
+     *        us modify in place — chiefly UPI, which is most customers.
+     */
+    @Transactional
+    public CreateResult create(UUID tenantId, UUID initiatorAccountId,
+                               List<PlanItem> items, BillingCycle cycle,
+                               String subdomain, String email,
+                               String replacesSubscriptionId) {
         if (items == null || items.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Select at least one module (with a seat count).");
@@ -203,12 +220,18 @@ public class PlanChangeService {
                    AND plan_items::jsonb @> ?::jsonb
                 """, Integer.class, tenantId,
                 "[{\"planKey\":\"" + planKey + "\"}]");
-        if (existingLedger != null && existingLedger > 0) {
+        // When this is a REPLACEMENT (the customer is changing seats on a
+        // mandate that cannot be modified in place), an existing billed
+        // subscription is the whole point — do not treat it as a duplicate.
+        // The old mandate is cancelled by activate() once the new one is
+        // confirmed live, so the two never bill in parallel.
+        if (replacesSubscriptionId == null && existingLedger != null && existingLedger > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This module is already on autopay for this workspace. "
                     + "Use 'Change Plan' on the /plan page to update seats, "
                     + "or cancel the existing autopay first.");
         }
+        // A second in-flight authorisation is never wanted, replacement or not.
         if (existingPending != null && existingPending > 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A payment for this module is already in progress. Finish it in the "
@@ -225,12 +248,13 @@ public class PlanChangeService {
         jdbc.update("""
                 INSERT INTO platform.plan_change_requests
                     (id, tenant_id, initiator_account_id, plan_items, billing_cycle,
-                     status, created_at, updated_at)
-                VALUES (?, ?, ?, ?::jsonb, ?, 'AWAITING_MANDATE', now(), now())
+                     status, replaces_subscription_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?::jsonb, ?, 'AWAITING_MANDATE', ?, now(), now())
                 """,
                 pendingId, tenantId, initiatorAccountId,
                 plansJson,
-                c == BillingCycle.ANNUAL ? "yearly" : "monthly");
+                c == BillingCycle.ANNUAL ? "yearly" : "monthly",
+                replacesSubscriptionId);
 
         SubscriptionService.CreateSubscriptionResult rzp;
         try {
@@ -433,10 +457,60 @@ public class PlanChangeService {
                     "plan-change was cancelled or failed concurrently; activation aborted");
         }
 
-        log.info("plan-change {} ACTIVATED on tenant {} — {} plan(s), {} seats, ₹{}/{}",
+        // MANDATE SWAP. If this request replaced an older mandate (a seat
+        // change on UPI, which Razorpay will not let us modify in place),
+        // retire the predecessor now — and only now.
+        //
+        // Ordering is the whole safety property. The new mandate is authorised
+        // and its ledger row is written above BEFORE anything is cancelled, so:
+        //   * a customer who abandons the new authorisation keeps their old
+        //     autopay untouched (this code never runs), and
+        //   * a customer who completes it never ends up with two live mandates
+        //     billing the same module.
+        // Cancelling first would have inverted both guarantees.
+        if (r.replacesSubscriptionId != null && !r.replacesSubscriptionId.isBlank()
+                && !r.replacesSubscriptionId.equals(r.razorpaySubscriptionId)) {
+            retireReplacedMandate(r.tenantId, r.replacesSubscriptionId, r.razorpaySubscriptionId);
+        }
+
+        log.info("plan-change {} ACTIVATED on tenant {} — {} plan(s), {} seats, ₹{}/{}{}",
                 planChangeRequestId, r.tenantId, items.size(), totalSeats,
-                cycleAmount, cycle == BillingCycle.ANNUAL ? "yr" : "mo");
+                cycleAmount, cycle == BillingCycle.ANNUAL ? "yr" : "mo",
+                r.replacesSubscriptionId == null ? "" : " (replaced " + r.replacesSubscriptionId + ")");
         return true;
+    }
+
+    /**
+     * Cancel the superseded Razorpay mandate and close out its ledger row.
+     *
+     * <p>Best-effort on the Razorpay side: if the cancel call fails we still
+     * mark our row CANCELLED, because the new subscription is already live and
+     * leaving the old row ACTIVE would make the workspace look doubly
+     * subscribed to every reader (the access guard, the reconciler, /plan).
+     * A stale mandate at Razorpay that we believe is dead is the lesser
+     * problem, and it is loud in the log — but it IS a real one, because an
+     * uncancelled UPI mandate can still debit. Hence ERROR, not WARN.
+     */
+    private void retireReplacedMandate(UUID tenantId, String oldSubId, String newSubId) {
+        boolean cancelledUpstream = false;
+        try {
+            subscriptions.cancelPreAuth(oldSubId);
+            cancelledUpstream = true;
+        } catch (RuntimeException e) {
+            log.error("MANDATE_SWAP tenant={} could NOT cancel superseded subscription {} after "
+                      + "activating {} — the customer may hold TWO live mandates. "
+                      + "Cancel {} in the Razorpay dashboard by hand. Cause: {}",
+                    tenantId, oldSubId, newSubId, oldSubId, e.getMessage());
+        }
+        int rows = jdbc.update("""
+                UPDATE platform.subscriptions
+                   SET status = 'CANCELLED', auto_renew = FALSE, updated_at = now()
+                 WHERE tenant_id = ?
+                   AND razorpay_subscription_id = ?
+                   AND status NOT IN ('CANCELLED','EXPIRED','COMPLETED')
+                """, tenantId, oldSubId);
+        log.info("MANDATE_SWAP tenant={} retired {} -> {} (razorpayCancelled={}, ledgerRowsClosed={})",
+                tenantId, oldSubId, newSubId, cancelledUpstream, rows);
     }
 
     // -- stranded-request recovery (lost-webhook self-heal) ------------------
@@ -572,7 +646,8 @@ public class PlanChangeService {
      * count, this is a no-op (no Razorpay call, no billing event).
      */
     @Transactional
-    public ChangeResult changeSeatCount(UUID tenantId, String rawPlanKey, int newSeats) {
+    public ChangeResult changeSeatCount(UUID tenantId, UUID initiatorAccountId,
+                                        String rawPlanKey, int newSeats) {
         if (newSeats < 1 || newSeats > 999) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Seat count must be between 1 and 999");
@@ -608,7 +683,7 @@ public class PlanChangeService {
                     "Subscription has no Razorpay mandate yet — please wait for the initial mandate to complete.");
         }
         if (sub.seats == newSeats) {
-            return new ChangeResult(sub.razorpaySubscriptionId, sub.seats, newSeats,
+            return ChangeResult.inPlace(sub.razorpaySubscriptionId, sub.seats, newSeats,
                     /*charged*/ false, "Seat count unchanged — no billing action.");
         }
 
@@ -621,6 +696,39 @@ public class PlanChangeService {
                     "Autopay is currently " + sub.status.toLowerCase(Locale.ROOT)
                     + " — please update your payment method before changing seats. "
                     + "Try /plan again once your mandate is active.");
+        }
+
+        // (3b) CAN this mandate even be changed? Ask Razorpay before touching
+        //      anything. UPI mandates are immutable once approved, and UPI is
+        //      how most Indian SMBs pay — so for the majority of customers the
+        //      answer is no, and the seat change has to become "authorise a
+        //      new mandate for the new amount, then retire the old one".
+        //
+        //      Deliberately BEFORE the DB writes below. The replacement path
+        //      must not leave tenant_modules or the ledger claiming a seat
+        //      count the customer has not yet approved and is not yet being
+        //      billed for; those are written by activate() when the new
+        //      mandate goes live, exactly as for a first-time purchase.
+        SubscriptionService.MandateInfo mandate =
+                subscriptions.inspectMandate(sub.razorpaySubscriptionId);
+        if (!mandate.updatable()) {
+            TenantMeta meta = loadTenantMeta(tenantId);
+            BillingCycle cycle = "ANNUAL".equalsIgnoreCase(sub.billingCycle)
+                    ? BillingCycle.ANNUAL : BillingCycle.MONTHLY;
+            CreateResult created = create(tenantId, initiatorAccountId,
+                    List.of(new PlanItem(planKey, newSeats)), cycle,
+                    meta.subdomain(), meta.email(),
+                    /*replaces*/ sub.razorpaySubscriptionId);
+            log.info("plan-change SEAT CHANGE via NEW MANDATE tenant={} plan={} {} -> {} "
+                     + "(old={} not updatable: {}), new={}",
+                    tenantId, planKey, sub.seats, newSeats,
+                    sub.razorpaySubscriptionId, mandate.whyNotUpdatable(), created.razorpaySubscriptionId());
+            int d = newSeats - sub.seats;
+            return ChangeResult.needsReauthorisation(sub.razorpaySubscriptionId, sub.seats, newSeats, created,
+                    (d > 0 ? "Adding " + d + " seat(s)" : "Reducing to " + newSeats + " seats")
+                    + " needs a new autopay approval — UPI mandates are fixed once approved, so we "
+                    + "can't change the amount on your existing one. Approve the new autopay and "
+                    + "we'll cancel the old one automatically. You won't be charged twice.");
         }
 
         // (4) Frozen per-seat unit price from the LEDGER (what we billed at
@@ -736,7 +844,7 @@ public class PlanChangeService {
                 ? "Razorpay will charge the prorated difference for " + diff + " more seat(s) on your existing mandate."
                 : "Seats reduced — the credit will be applied at your next renewal.";
         }
-        return new ChangeResult(sub.razorpaySubscriptionId, sub.seats, newSeats,
+        return ChangeResult.inPlace(sub.razorpaySubscriptionId, sub.seats, newSeats,
                 /*charged*/ change.proratedNow(), message);
     }
 
@@ -804,6 +912,20 @@ public class PlanChangeService {
 
     private record LockedSub(int seats, String billingCycle, BigDecimal unitPriceInr,
                              String status, String razorpaySubscriptionId) {}
+
+    /** Subdomain + contact email for the Razorpay subscription notes. */
+    private TenantMeta loadTenantMeta(UUID tenantId) {
+        try {
+            return jdbc.queryForObject("""
+                    SELECT subdomain, contact_email FROM platform.tenants WHERE id = ?
+                    """, (rs, n) -> new TenantMeta(rs.getString("subdomain"),
+                                                   rs.getString("contact_email")), tenantId);
+        } catch (EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tenant not found");
+        }
+    }
+
+    private record TenantMeta(String subdomain, String email) {}
 
     /** List active subscriptions for a tenant — used by /plan to show current state. */
     public List<ActiveSub> listActiveSubscriptions(UUID tenantId) {
@@ -954,7 +1076,7 @@ public class PlanChangeService {
             Row r = jdbc.queryForObject("""
                     SELECT id, tenant_id, initiator_account_id, plan_items::text AS plan_items,
                            billing_cycle, razorpay_subscription_id, status,
-                           failure_reason, activated_at
+                           failure_reason, activated_at, replaces_subscription_id
                       FROM platform.plan_change_requests
                      WHERE id = ?
                     """, this::mapRow, id);
@@ -971,7 +1093,7 @@ public class PlanChangeService {
             Row r = jdbc.queryForObject("""
                     SELECT id, tenant_id, initiator_account_id, plan_items::text AS plan_items,
                            billing_cycle, razorpay_subscription_id, status,
-                           failure_reason, activated_at
+                           failure_reason, activated_at, replaces_subscription_id
                       FROM platform.plan_change_requests
                      WHERE razorpay_subscription_id = ?
                      LIMIT 1
@@ -989,7 +1111,7 @@ public class PlanChangeService {
             return jdbc.queryForObject("""
                     SELECT id, tenant_id, initiator_account_id, plan_items::text AS plan_items,
                            billing_cycle, razorpay_subscription_id, status,
-                           failure_reason, activated_at
+                           failure_reason, activated_at, replaces_subscription_id
                       FROM platform.plan_change_requests
                      WHERE id = ?
                     """, this::mapRow, id);
@@ -1008,6 +1130,7 @@ public class PlanChangeService {
         r.razorpaySubscriptionId = rs.getString("razorpay_subscription_id");
         r.status = rs.getString("status");
         r.failureReason = rs.getString("failure_reason");
+        r.replacesSubscriptionId = rs.getString("replaces_subscription_id");
         return r;
     }
 
@@ -1070,12 +1193,35 @@ public class PlanChangeService {
     /** Result of a change-seat operation. {@code charged=true} means Razorpay
      *  will attempt a prorated charge on the existing mandate (fires
      *  {@code subscription.charged} webhook asynchronously). */
+    /**
+     * @param charged            Razorpay will debit a prorated difference now
+     * @param checkoutShortUrl   non-null when the change could NOT be applied
+     *                           to the existing mandate and the customer must
+     *                           authorise a replacement (the UPI path). The
+     *                           caller opens this and polls
+     *                           {@code planChangeRequestId} exactly as it does
+     *                           for a first-time purchase.
+     */
     public record ChangeResult(
             String razorpaySubscriptionId,
             int previousSeats,
             int newSeats,
             boolean charged,
-            String message) {}
+            String message,
+            String checkoutShortUrl,
+            UUID planChangeRequestId,
+            String keyId) {
+        /** In-place change on the existing mandate — no re-authorisation. */
+        public static ChangeResult inPlace(String subId, int prev, int next, boolean charged, String msg) {
+            return new ChangeResult(subId, prev, next, charged, msg, null, null, null);
+        }
+        /** Customer must approve a new mandate before the change takes effect. */
+        public static ChangeResult needsReauthorisation(String oldSubId, int prev, int next,
+                                                        CreateResult created, String msg) {
+            return new ChangeResult(oldSubId, prev, next, false, msg,
+                    created.checkoutShortUrl(), created.planChangeRequestId(), created.keyId());
+        }
+    }
 
     private static class Row {
         UUID id;
@@ -1086,5 +1232,8 @@ public class PlanChangeService {
         String razorpaySubscriptionId;
         String status;
         String failureReason;
+        /** Mandate this request supersedes; cancelled by activate() once the
+         *  replacement is live. Null for a first-time purchase. */
+        String replacesSubscriptionId;
     }
 }

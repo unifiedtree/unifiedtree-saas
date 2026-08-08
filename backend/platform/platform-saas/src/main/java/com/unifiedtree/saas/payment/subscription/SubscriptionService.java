@@ -257,49 +257,13 @@ public class SubscriptionService {
         // Sending "now" unconditionally was wrong for the trial case, which is
         // where most seat changes will happen — a customer sizing their team
         // during the free week.
-        RazorpayClient.SubscriptionView current;
-        try {
-            current = razorpay.fetchSubscription(razorpaySubscriptionId);
-        } catch (RuntimeException e) {
-            // Do not guess. Proration is a money decision; if we cannot read
-            // the state, refuse rather than risk charging against the wrong
-            // assumption.
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "Could not read your subscription from Razorpay. Please try again in a moment.");
-        }
-        String upstream = String.valueOf(current.status()).toLowerCase(java.util.Locale.ROOT);
-        String method   = current.paymentMethod() == null
-                ? "" : current.paymentMethod().toLowerCase(java.util.Locale.ROOT);
-
-        // UPI mandates CANNOT be modified. Razorpay rejects any update to a
-        // UPI-backed subscription outright:
-        //   400 "subscriptions cannot be updated when payment mode is upi"
-        // A UPI Autopay mandate is authorised once, for a fixed maximum, and
-        // is immutable thereafter — there is no API that changes it, so no
-        // amount of retrying or re-shaping the request will help. Changing the
-        // seat count on UPI means cancelling this mandate and authorising a
-        // new one, which the customer must do themselves in their UPI app.
-        //
-        // This matters far more here than it would elsewhere: UPI is the
-        // default way Indian SMBs pay, so this is the COMMON path, not an edge
-        // case. Fail with a specific, actionable message rather than letting
-        // the caller surface a bare 502.
-        if (method.contains("upi")) {
+        MandateInfo m = inspectMandate(razorpaySubscriptionId);
+        if (!m.updatable()) {
+            // Caller should have routed to the replacement flow. Defensive.
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "UPI_MANDATE_IMMUTABLE: Your autopay is set up through UPI, and UPI mandates "
-                    + "cannot be changed once approved — that is a restriction from the payment "
-                    + "network, not from us. To change your seat count, cancel your current autopay "
-                    + "and set it up again for the new number of seats. Nothing is charged twice.");
+                    "This mandate cannot be modified (" + m.whyNotUpdatable() + ").");
         }
-        // Razorpay also refuses updates outside these two states (e.g. a
-        // mandate the customer never finished authorising).
-        if (!("authenticated".equals(upstream) || "active".equals(upstream))) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Your autopay is not in a state that can be changed (currently " + upstream
-                    + "). Please complete or re-authorise your mandate first.");
-        }
-        boolean chargedYet = "active".equals(upstream);
-        String scheduleChangeAt = chargedYet ? "now" : null;
+        String scheduleChangeAt = m.chargedYet() ? "now" : null;
 
         razorpay.updateSubscription(
                 razorpaySubscriptionId,
@@ -309,9 +273,62 @@ public class SubscriptionService {
                 /*customerNotify*/ 1);
 
         log.info("Razorpay subscription {} quantity -> {} (upstream={}, proration={})",
-                razorpaySubscriptionId, newSeats, upstream, chargedYet ? "now" : "at first charge");
-        return new QuantityChange(newSeats, chargedYet, upstream);
+                razorpaySubscriptionId, newSeats, m.upstreamStatus(),
+                m.chargedYet() ? "now" : "at first charge");
+        return new QuantityChange(newSeats, m.chargedYet(), m.upstreamStatus());
     }
+
+    /**
+     * Ask Razorpay what this mandate is and whether it can be modified at all.
+     *
+     * <p><b>UPI mandates cannot.</b> Razorpay rejects any update to a
+     * UPI-backed subscription outright:
+     * <pre>400 "subscriptions cannot be updated when payment mode is upi"</pre>
+     * A UPI Autopay mandate is authorised once, for a fixed amount, and is
+     * immutable for its whole life — there is no API that changes it, so no
+     * retry or reshaping of the request helps. Since UPI is how most Indian
+     * SMBs pay, this is the COMMON path, not an edge case: changing seats
+     * there means authorising a fresh mandate and cancelling this one.
+     *
+     * <p>Razorpay additionally refuses updates outside {@code authenticated}
+     * and {@code active} (e.g. a mandate the customer never finished
+     * approving), so that is reported the same way.
+     *
+     * <p>Never guesses. If the state cannot be read, it throws rather than
+     * assume — every decision downstream of this is about money.
+     */
+    public MandateInfo inspectMandate(String razorpaySubscriptionId) {
+        RazorpayClient.SubscriptionView v;
+        try {
+            v = razorpay.fetchSubscription(razorpaySubscriptionId);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Could not read your subscription from Razorpay. Please try again in a moment.");
+        }
+        String upstream = String.valueOf(v.status()).toLowerCase(java.util.Locale.ROOT);
+        String method   = v.paymentMethod() == null
+                ? "" : v.paymentMethod().toLowerCase(java.util.Locale.ROOT);
+
+        if (method.contains("upi")) {
+            return new MandateInfo(upstream, method, false,
+                    "UPI mandates are fixed once approved", false);
+        }
+        if (!("authenticated".equals(upstream) || "active".equals(upstream))) {
+            return new MandateInfo(upstream, method, false,
+                    "the mandate is " + upstream, false);
+        }
+        return new MandateInfo(upstream, method, true, null, "active".equals(upstream));
+    }
+
+    /**
+     * @param updatable        Razorpay will accept a quantity change on this mandate
+     * @param whyNotUpdatable  human-readable reason when it will not, else null
+     * @param chargedYet       a cycle has already been billed, so an increase
+     *                         owes a prorated top-up (false during the free trial)
+     */
+    public record MandateInfo(String upstreamStatus, String paymentMethod,
+                              boolean updatable, String whyNotUpdatable,
+                              boolean chargedYet) {}
 
     /**
      * @param proratedNow true when Razorpay will charge the difference against

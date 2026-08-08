@@ -260,12 +260,13 @@ public class WorkspacePlanController {
         JwtClaims claims = extractClaims(jwt);
         requireAdmin(claims);
         PlanChangeService.ChangeResult r = plans.changeSeatCount(
-                claims.tenantId(), req.planKey(), req.newSeats());
-        log.info("workspace change-seats tenant={} account={} plan={} {} -> {} (charged={})",
+                claims.tenantId(), claims.accountId(), req.planKey(), req.newSeats());
+        log.info("workspace change-seats tenant={} account={} plan={} {} -> {} (charged={}, reauth={})",
                 claims.tenantId(), claims.accountId(), req.planKey(),
-                r.previousSeats(), r.newSeats(), r.charged());
+                r.previousSeats(), r.newSeats(), r.charged(), r.checkoutShortUrl() != null);
         return ResponseEntity.ok(new ChangeSeatsResponse(
-                r.previousSeats(), r.newSeats(), r.charged(), r.message()));
+                r.previousSeats(), r.newSeats(), r.charged(), r.message(),
+                r.checkoutShortUrl(), r.planChangeRequestId(), r.keyId()));
     }
 
     @PostMapping("/setup-autopay/cancel")
@@ -459,7 +460,17 @@ public class WorkspacePlanController {
             @Min(1) int newSeats
     ) {}
 
-    public record ChangeSeatsResponse(int previousSeats, int newSeats, boolean charged, String message) {}
+    /**
+     * @param checkoutShortUrl non-null when the existing mandate could not be
+     *        modified (UPI is immutable once approved) and the customer must
+     *        authorise a replacement. The client opens this and then polls
+     *        {@code planChangeRequestId} through the normal
+     *        {@code /setup-autopay/status} loop. The old mandate is cancelled
+     *        automatically once the new one activates.
+     */
+    public record ChangeSeatsResponse(int previousSeats, int newSeats, boolean charged,
+                                      String message, String checkoutShortUrl,
+                                      UUID planChangeRequestId, String keyId) {}
 
     /** Result of a "I paid but it's still locked" recovery attempt. */
     public record RecoverResponse(int activated, String message) {}

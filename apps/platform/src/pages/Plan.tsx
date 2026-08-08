@@ -97,6 +97,22 @@ interface ChangeSeatsResponse {
   newSeats: number
   charged: boolean
   message: string
+  /**
+   * Present when the seat change could NOT be applied to the existing mandate
+   * and the customer has to approve a replacement.
+   *
+   * Razorpay refuses to modify a UPI-backed subscription at all — "subscriptions
+   * cannot be updated when payment mode is upi" — because a UPI Autopay mandate
+   * is authorised once for a fixed amount and is immutable afterwards. UPI is
+   * how most Indian SMBs pay, so this is the normal path, not an edge case. The
+   * backend has already created the replacement mandate; we open it and then
+   * poll it exactly like a first-time purchase. The old mandate is cancelled
+   * automatically once the new one goes live, so there is never a moment with
+   * two live mandates or none.
+   */
+  checkoutShortUrl?: string | null
+  planChangeRequestId?: string | null
+  keyId?: string | null
 }
 
 /** Result of asking the backend to re-check Razorpay for a stranded payment. */
@@ -314,10 +330,29 @@ export const Plan: React.FC = () => {
         '/v1/workspace/plan/change-seats',
         { method: 'POST', body: JSON.stringify({ planKey: primaryKey, newSeats }) },
       )
-      // Success — refresh current + tenant modules from the source of truth.
-      // Razorpay's async subscription.charged webhook will refresh amount_inr
-      // + current_period_end shortly; the poll here just reads what we just
-      // wrote so the UI reflects the intent immediately.
+
+      // The mandate could not be changed in place (UPI is immutable once
+      // approved), so the backend minted a replacement for the new seat count.
+      // Hand the customer straight to Razorpay and reuse the existing
+      // wait-for-mandate machinery — the poll, the resume-after-reload key and
+      // the "I paid but it's still locked" recovery all work unchanged,
+      // because a replacement is just another plan-change request.
+      if (res.checkoutShortUrl && res.planChangeRequestId) {
+        cancelPending(key)
+        const tab = window.open(res.checkoutShortUrl, '_blank', 'noopener,noreferrer')
+        setCheckoutTab(tab)
+        localStorage.setItem(PENDING_KEY, res.planChangeRequestId)
+        localStorage.setItem(PENDING_URL_KEY, res.checkoutShortUrl)
+        setCheckoutUrl(res.checkoutShortUrl)
+        setPendingId(res.planChangeRequestId)
+        setAwaitingMandate(true)
+        setChangeMessage(res.message)
+        return
+      }
+
+      // Applied in place — refresh from the source of truth. Razorpay's async
+      // subscription.charged webhook will refresh amount_inr and
+      // current_period_end shortly; this read just reflects the intent now.
       await fetchCurrent()
       try { await useSdkStore.getState().hydrate() } catch { /* best-effort */ }
       try { await refreshTenant() } catch { /* best-effort */ }
@@ -719,12 +754,19 @@ export const Plan: React.FC = () => {
                   )}
                   {delta !== 0 && (
                     <div className="mt-4 rounded-lg bg-[var(--accent-bg)]/60 p-3">
+                      {/* Deliberately does NOT promise "no new PIN needed".
+                          A UPI mandate is fixed once approved — Razorpay
+                          refuses to change it — so most customers DO have to
+                          approve a new autopay for the new amount. Which path
+                          applies depends on the payment method, which only the
+                          server can determine, so the copy stays truthful for
+                          both and the exact outcome comes back in the response. */}
                       <p className="text-xs text-[var(--accent-fg-strong)]">
-                        {delta > 0 ? (
-                          <>Add <b>{delta}</b> seat{delta === 1 ? '' : 's'} — Razorpay will charge the prorated difference on your existing UPI mandate. No new PIN needed.</>
-                        ) : (
-                          <>Reduce by <b>{-delta}</b> seat{delta === -1 ? '' : 's'} — credit applied at your next renewal ({nextCharge ?? 'next cycle'}).</>
-                        )}
+                        {delta > 0
+                          ? <>Add <b>{delta}</b> seat{delta === 1 ? '' : 's'}, taking you to <b>{pending}</b>.</>
+                          : <>Reduce to <b>{pending}</b> seat{pending === 1 ? '' : 's'}.</>}
+                        {' '}If your autopay was set up with UPI you'll be asked to approve the new
+                        amount — we cancel the old autopay automatically, so you're never charged twice.
                       </p>
                       <div className="mt-3 flex gap-2">
                         <button onClick={() => confirmSeatChange(sub)} disabled={isChanging}
