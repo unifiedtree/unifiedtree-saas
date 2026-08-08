@@ -93,6 +93,24 @@ public class NotificationsController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * Sign-out hook: stops push to this handset for the current user.
+     *
+     * <p>Called by the mobile app immediately BEFORE it drops its tokens, while
+     * the access token is still valid. Idempotent, and a no-op for a token that
+     * was never registered — the app must never block sign-out on this.
+     */
+    @PostMapping("/unregister-device")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> unregisterDevice(@AuthenticationPrincipal Jwt jwt,
+                                                 @Valid @RequestBody UnregisterDeviceRequest req) {
+        service.unregisterDevice(extractUserId(jwt), req.expoPushToken());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Body of {@link #unregisterDevice}. */
+    public record UnregisterDeviceRequest(@jakarta.validation.constraints.NotBlank String expoPushToken) {}
+
     private UUID extractUserId(Jwt jwt) {
         String empId = jwt.getClaimAsString("employee_id");
         return empId != null ? UUID.fromString(empId) : UUID.fromString(jwt.getSubject());

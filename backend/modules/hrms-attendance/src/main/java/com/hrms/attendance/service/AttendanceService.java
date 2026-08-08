@@ -968,7 +968,12 @@ public class AttendanceService {
         correction.setCompanyId(companyId);
         correction.setDepartmentId(departmentId);
         correction.setAttendanceRecordId(request.attendanceRecordId());
-        correction.setRequestedDate(request.requestedDate());
+        // requestedDate on the wire means "the day I'm correcting", which is the
+        // table's missing_for_date. request_date is when the request was filed —
+        // it is NOT supplied by the client and must not be, or an employee could
+        // backdate their own paper trail.
+        correction.setMissingForDate(request.requestedDate());
+        correction.setRequestedDate(LocalDate.now(IST));
         correction.setRequestedCheckInAt(request.requestedCheckInAt());
         correction.setRequestedCheckOutAt(request.requestedCheckOutAt());
         correction.setReason(request.reason());
@@ -990,7 +995,7 @@ public class AttendanceService {
         try {
             eventPublisher.publishEvent(new CorrectionSubmittedEvent(
                     correction.getId(), employeeId, correction.getTenantId(),
-                    correction.getRequestedDate()));
+                    correction.getMissingForDate()));
         } catch (Exception ex) {
             log.warn("Failed to publish CorrectionSubmittedEvent for {}: {}",
                     correction.getId(), ex.getMessage());
@@ -1044,7 +1049,7 @@ public class AttendanceService {
             eventPublisher.publishEvent(new CorrectionDecidedEvent(
                     savedCorrection.getId(), savedCorrection.getEmployeeId(), savedCorrection.getTenantId(),
                     decision.status() == ApprovalStatus.APPROVED,
-                    savedCorrection.getRequestedDate(), decision.comment()));
+                    savedCorrection.getMissingForDate(), decision.comment()));
         } catch (Exception ex) {
             log.warn("Failed to publish CorrectionDecidedEvent for {}: {}",
                     savedCorrection.getId(), ex.getMessage());
@@ -1222,7 +1227,7 @@ public class AttendanceService {
                                          String note) {
         AttendanceRecord record = correction.getAttendanceRecordId() == null
                 ? attendanceRecordRepository
-                .findByEmployeeIdAndAttendanceDate(correction.getEmployeeId(), correction.getRequestedDate())
+                .findByEmployeeIdAndAttendanceDate(correction.getEmployeeId(), correction.getMissingForDate())
                 .orElseGet(AttendanceRecord::new)
                 : attendanceRecordRepository.findById(correction.getAttendanceRecordId())
                 .orElseGet(AttendanceRecord::new);
@@ -1232,7 +1237,7 @@ public class AttendanceService {
             record.setEmployeeId(correction.getEmployeeId());
             record.setCompanyId(correction.getCompanyId());
             record.setDepartmentId(correction.getDepartmentId());
-            record.setAttendanceDate(correction.getRequestedDate());
+            record.setAttendanceDate(correction.getMissingForDate());
         }
         if (correction.getRequestedCheckInAt() != null) {
             record.setCheckInAt(correction.getRequestedCheckInAt());
@@ -1263,7 +1268,11 @@ public class AttendanceService {
                 null,
                 null,
                 correction.getAttendanceRecordId(),
-                correction.getRequestedDate(),
+                // The wire field `requestedDate` has always meant "the day being
+                // corrected" to every client (that is what the app renders in the
+                // row header), so it maps to missingForDate — NOT the entity's
+                // requestedDate, which is the filing date.
+                correction.getMissingForDate(),
                 correction.getRequestedCheckInAt(),
                 correction.getRequestedCheckOutAt(),
                 correction.getReason(),

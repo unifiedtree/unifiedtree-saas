@@ -235,4 +235,33 @@ public class AppNotificationService {
         t.setLastUsedAt(Instant.now());
         return tokenRepo.save(t);
     }
+
+    /**
+     * Deactivates a device token at sign-out.
+     *
+     * <p>register-device already hands the token over when a second user logs
+     * in on the same phone, but that only closes the leak once the NEXT person
+     * signs in. Between "A signs out" and "B signs in" the row is still active,
+     * so A's leave approvals and attendance reminders keep landing on a phone
+     * A has walked away from. On a shared shop-floor device that window can be
+     * days.
+     *
+     * <p>Deactivate rather than delete: the row carries device name, platform
+     * and last-used-at, which is the only record of which handsets a workspace
+     * actually uses, and the same token reactivates in place on the next login.
+     *
+     * <p>Scoped to the caller's own userId — a token string is not a
+     * credential, so accepting one without that scope would let anybody
+     * silence anybody else's notifications.
+     */
+    @Transactional
+    public void unregisterDevice(UUID userId, String expoPushToken) {
+        tokenRepo.findByUserIdAndExpoPushToken(userId, expoPushToken)
+                .filter(DeviceToken::isActive)
+                .ifPresent(t -> {
+                    t.setActive(false);
+                    tokenRepo.save(t);
+                    log.info("Deactivated device token for user={} on sign-out", userId);
+                });
+    }
 }

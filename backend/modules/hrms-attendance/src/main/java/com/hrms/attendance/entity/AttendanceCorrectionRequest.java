@@ -40,6 +40,24 @@ public class AttendanceCorrectionRequest extends BaseEntity {
     @Column(name = "request_date", nullable = false)
     private LocalDate requestedDate;
 
+    /**
+     * The working day being corrected — the table's {@code missing_for_date}.
+     *
+     * <p>The schema has always had TWO dates: {@code request_date} (when the
+     * request was raised) and {@code missing_for_date} (the day whose punch is
+     * wrong). This entity only ever mapped the first, so every insert left the
+     * NOT NULL {@code missing_for_date} empty and Postgres rejected the batch —
+     * attendance corrections returned 500 for every user, and
+     * attendance.regularization_requests held zero rows in production.
+     *
+     * <p>Kept as its own field rather than folded into {@code requestedDate}
+     * because approvers legitimately need both: "raised today, for last
+     * Tuesday" is the normal case, and squashing them would lose the audit of
+     * how late a correction was filed.
+     */
+    @Column(name = "missing_for_date", nullable = false)
+    private LocalDate missingForDate;
+
     // canonical column is requested_check_in
     @Column(name = "requested_check_in")
     private Instant requestedCheckInAt;

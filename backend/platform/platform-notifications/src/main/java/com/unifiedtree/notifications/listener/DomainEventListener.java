@@ -14,10 +14,9 @@ import com.unifiedtree.notifications.events.WfhCancelledEvent;
 import com.unifiedtree.notifications.events.WfhDecidedEvent;
 import com.unifiedtree.notifications.events.WfhRequestSubmittedEvent;
 import com.unifiedtree.notifications.service.AppNotificationService;
+import com.unifiedtree.notifications.service.NotificationLookupService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.EmptyResultDataAccessException;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -66,11 +65,18 @@ public class DomainEventListener {
     private static final UUID SUPER_ADMIN = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     private final AppNotificationService service;
-    private final JdbcTemplate jdbc;
+    /**
+     * All cross-schema reads go through this bean, NOT a bare JdbcTemplate.
+     * At AFTER_COMMIT the thread still holds the just-committed connection,
+     * whose SET LOCAL app.tenant_id died with the COMMIT — a direct query there
+     * silently returns zero rows against every RLS table. See
+     * {@link NotificationLookupService} for the full story.
+     */
+    private final NotificationLookupService lookup;
 
-    public DomainEventListener(AppNotificationService service, JdbcTemplate jdbc) {
+    public DomainEventListener(AppNotificationService service, NotificationLookupService lookup) {
         this.service = service;
-        this.jdbc = jdbc;
+        this.lookup = lookup;
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -458,18 +464,7 @@ public class DomainEventListener {
     // ────────────────────────────────────────────────────────────────────────
 
     private String resolveEmployeeName(UUID employeeId, UUID tenantId) {
-        if (employeeId == null || tenantId == null) return null;
-        try {
-            return jdbc.queryForObject(
-                    "SELECT TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) "
-                            + "FROM hrms.employees WHERE id = ? AND tenant_id = ? LIMIT 1",
-                    String.class, employeeId, tenantId);
-        } catch (EmptyResultDataAccessException ex) {
-            return null;
-        } catch (Exception ex) {
-            log.debug("resolveEmployeeName lookup failed for {}: {}", employeeId, ex.getMessage());
-            return null;
-        }
+        return lookup.employeeName(employeeId, tenantId);
     }
 
     private static String fmt(LocalDate d) {
@@ -511,19 +506,7 @@ public class DomainEventListener {
      */
     private UUID resolveCorrectionApprover(UUID employeeId, UUID tenantId) {
         if (employeeId == null || tenantId == null) return null;
-        UUID direct = null;
-        try {
-            direct = jdbc.query("""
-                    SELECT COALESCE(e.reporting_manager_id, d.department_head_employee_id)
-                      FROM hrms.employees e
-                      LEFT JOIN hrms.departments d
-                        ON d.id = e.department_id AND d.tenant_id = e.tenant_id
-                     WHERE e.id = ? AND e.tenant_id = ?
-                     LIMIT 1
-                    """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, employeeId, tenantId);
-        } catch (Exception ex) {
-            log.debug("correction approver lookup failed for {}: {}", employeeId, ex.getMessage());
-        }
+        UUID direct = lookup.directApprover(employeeId, tenantId);
         if (direct != null && !direct.equals(employeeId)) return direct;
 
         UUID hr = firstEmployeeWithRole(tenantId, HR_MANAGER);
@@ -533,21 +516,6 @@ public class DomainEventListener {
     }
 
     private UUID firstEmployeeWithRole(UUID tenantId, UUID roleId) {
-        try {
-            return jdbc.query("""
-                    SELECT uc.employee_id
-                      FROM rbac.user_roles ur
-                      JOIN auth.user_credentials uc ON uc.id = ur.user_id
-                     WHERE ur.tenant_id = ?
-                       AND ur.role_id = ?
-                       AND uc.employee_id IS NOT NULL
-                       AND uc.is_active = TRUE
-                     ORDER BY uc.created_at
-                     LIMIT 1
-                    """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, tenantId, roleId);
-        } catch (Exception ex) {
-            log.debug("role-holder lookup failed (role={}): {}", roleId, ex.getMessage());
-            return null;
-        }
+        return lookup.firstEmployeeWithRole(tenantId, roleId);
     }
 }
