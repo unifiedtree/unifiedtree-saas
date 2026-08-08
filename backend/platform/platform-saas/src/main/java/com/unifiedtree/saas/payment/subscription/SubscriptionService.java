@@ -257,16 +257,46 @@ public class SubscriptionService {
         // Sending "now" unconditionally was wrong for the trial case, which is
         // where most seat changes will happen — a customer sizing their team
         // during the free week.
-        String upstream;
+        RazorpayClient.SubscriptionView current;
         try {
-            upstream = String.valueOf(razorpay.fetchSubscription(razorpaySubscriptionId).status())
-                    .toLowerCase(java.util.Locale.ROOT);
+            current = razorpay.fetchSubscription(razorpaySubscriptionId);
         } catch (RuntimeException e) {
             // Do not guess. Proration is a money decision; if we cannot read
             // the state, refuse rather than risk charging against the wrong
             // assumption.
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "Could not read your subscription from Razorpay. Please try again in a moment.");
+        }
+        String upstream = String.valueOf(current.status()).toLowerCase(java.util.Locale.ROOT);
+        String method   = current.paymentMethod() == null
+                ? "" : current.paymentMethod().toLowerCase(java.util.Locale.ROOT);
+
+        // UPI mandates CANNOT be modified. Razorpay rejects any update to a
+        // UPI-backed subscription outright:
+        //   400 "subscriptions cannot be updated when payment mode is upi"
+        // A UPI Autopay mandate is authorised once, for a fixed maximum, and
+        // is immutable thereafter — there is no API that changes it, so no
+        // amount of retrying or re-shaping the request will help. Changing the
+        // seat count on UPI means cancelling this mandate and authorising a
+        // new one, which the customer must do themselves in their UPI app.
+        //
+        // This matters far more here than it would elsewhere: UPI is the
+        // default way Indian SMBs pay, so this is the COMMON path, not an edge
+        // case. Fail with a specific, actionable message rather than letting
+        // the caller surface a bare 502.
+        if (method.contains("upi")) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "UPI_MANDATE_IMMUTABLE: Your autopay is set up through UPI, and UPI mandates "
+                    + "cannot be changed once approved — that is a restriction from the payment "
+                    + "network, not from us. To change your seat count, cancel your current autopay "
+                    + "and set it up again for the new number of seats. Nothing is charged twice.");
+        }
+        // Razorpay also refuses updates outside these two states (e.g. a
+        // mandate the customer never finished authorising).
+        if (!("authenticated".equals(upstream) || "active".equals(upstream))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Your autopay is not in a state that can be changed (currently " + upstream
+                    + "). Please complete or re-authorise your mandate first.");
         }
         boolean chargedYet = "active".equals(upstream);
         String scheduleChangeAt = chargedYet ? "now" : null;
