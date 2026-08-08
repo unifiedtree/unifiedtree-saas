@@ -116,6 +116,30 @@ code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
   background-size: 96px 96px;
 }
 
+/* ── Hero backdrop ──────────────────────────────────────────────────────
+   The white-on-mint squircles were effectively invisible. This reads as a
+   real surface: an emerald squircle lattice, a soft radial bloom behind the
+   headline for depth, and a fade so the grid dissolves before the mockup. */
+.hero-surface {
+  background-color: #F3FCF7;
+  background-image:
+    /* bloom behind the headline */
+    radial-gradient(60% 46% at 50% 12%, rgba(16, 185, 129, 0.16), transparent 70%),
+    /* cool counter-light, keeps the mint from going flat */
+    radial-gradient(42% 36% at 88% 6%, rgba(5, 150, 105, 0.10), transparent 72%),
+    radial-gradient(46% 40% at 6% 20%, rgba(167, 243, 208, 0.28), transparent 70%),
+    /* the lattice */
+    url("data:image/svg+xml,%3Csvg width='104' height='104' viewBox='0 0 104 104' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='0.75' y='0.75' width='102.5' height='102.5' rx='38' fill='none' stroke='%23059669' stroke-opacity='0.16' stroke-width='1.5' /%3E%3C/svg%3E"),
+    linear-gradient(180deg, #FFFFFF 0%, #F3FCF7 26%, #E9F9F1 100%);
+  background-size: auto, auto, auto, 104px 104px, auto;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat, no-repeat;
+}
+
+/* Dissolves the lattice toward the bottom so the dashboard sits on calm ground */
+.hero-surface-fade {
+  background: linear-gradient(180deg, transparent 0%, rgba(243, 252, 247, 0.55) 58%, #F1FBF6 100%);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }

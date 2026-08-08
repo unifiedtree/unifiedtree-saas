@@ -98,6 +98,50 @@ function hexToTint(hex: string, opacity = 0.12): string {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Hand-drawn arrow pointing at the toggle                            */
+/* ------------------------------------------------------------------ */
+/** Sketchy arrow that draws itself in, so the eye lands on the toggle.
+ *  Hidden below lg — on stacked layouts it would point at nothing. */
+function HandArrow() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute -top-11 right-6 hidden h-[56px] w-[132px] lg:block"
+    >
+      <svg viewBox="0 0 132 56" fill="none" className="h-full w-full overflow-visible">
+        <motion.path
+          d="M4 8 C 30 2, 74 4, 98 24 C 104 29, 108 35, 110 43"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className="text-primary/45"
+          initial={{ pathLength: 0, opacity: 0 }}
+          whileInView={{ pathLength: 1, opacity: 1 }}
+          viewport={{ once: true, amount: 0.6 }}
+          transition={{ duration: 0.9, ease: 'easeInOut', delay: 0.35 }}
+        />
+        <motion.path
+          d="M101 34 L110 44 L118 33"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+          className="text-primary/45"
+          initial={{ pathLength: 0, opacity: 0 }}
+          whileInView={{ pathLength: 1, opacity: 1 }}
+          viewport={{ once: true, amount: 0.6 }}
+          transition={{ duration: 0.35, ease: 'easeOut', delay: 1.15 }}
+        />
+      </svg>
+      <span className="absolute -left-1 top-0 -translate-y-full whitespace-nowrap font-handwriting text-lg text-primary/70">
+        try it
+      </span>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Module Tile Component                                              */
 /* ------------------------------------------------------------------ */
 function ModuleTile({
@@ -259,19 +303,47 @@ export function ModulesOverview() {
           initial={{ opacity: 0, y: 20 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
-          className="text-center mb-16"
+          className="mb-16"
         >
-          <span className="text-primary font-body font-semibold text-sm uppercase tracking-widest mb-3 block">
-            Platform modules
-          </span>
-          <h2 className="font-heading font-bold text-text-primary mb-4" style={{ fontSize: 'clamp(2rem, 3.5vw, 3rem)' }}>
-            Everything your business needs.
-            <br />
-            Nothing it doesn't.
-          </h2>
-          <p className="text-text-secondary font-body text-lg max-w-xl mx-auto">
-            Activate only the modules you need. Pay only for what you use.
-          </p>
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
+            {/* Heading — left */}
+            <div className="text-center lg:text-left">
+              <span className="text-primary font-body font-semibold text-sm uppercase tracking-widest mb-3 block">
+                Platform modules
+              </span>
+              <h2 className="font-heading font-bold text-text-primary mb-4" style={{ fontSize: 'clamp(2rem, 3.5vw, 3rem)' }}>
+                Everything your business needs.
+                <br />
+                Nothing it doesn't.
+              </h2>
+              <p className="text-text-secondary font-body text-lg max-w-xl mx-auto lg:mx-0">
+                Activate only the modules you need. Pay only for what you use.
+              </p>
+            </div>
+
+            {/* Toggle — top right, with a hand-drawn arrow pointing at it */}
+            <div className="relative flex-shrink-0 self-center lg:self-start lg:pt-2">
+              <HandArrow />
+              <button
+                onClick={handleToggle}
+                aria-pressed={scattered}
+                className="group flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 shadow-card transition-all duration-300 hover:border-primary/40 hover:shadow-card-hover"
+              >
+                <Sparkles
+                  size={16}
+                  className={`transition-colors duration-300 ${scattered ? 'text-amber-500' : 'text-primary'}`}
+                />
+                <span className={`toggle-switch ${scattered ? 'active' : ''}`} aria-hidden />
+                <span className="text-sm font-body text-text-secondary select-none whitespace-nowrap">
+                  {scattered ? (
+                    <span className="font-handwriting text-lg text-amber-700">Imagine without UnifiedTree</span>
+                  ) : (
+                    <span className="font-semibold text-primary">One platform. Unified.</span>
+                  )}
+                </span>
+              </button>
+            </div>
+          </div>
         </motion.div>
 
         {/* Module Icon Grid */}
@@ -314,26 +386,9 @@ export function ModulesOverview() {
           initial={{ opacity: 0, y: 10 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ delay: 0.5 }}
-          className="flex flex-col sm:flex-row items-center justify-between mt-16 pt-8 border-t border-border"
+          className="flex flex-col sm:flex-row items-center justify-end mt-16 pt-8 border-t border-border"
         >
-          {/* Toggle — "Imagine without UnifiedTree" */}
-          <div className="flex items-center gap-3 mb-4 sm:mb-0">
-            <Sparkles size={16} className={`transition-colors duration-300 ${scattered ? 'text-amber-500' : 'text-primary'}`} />
-            <button
-              onClick={handleToggle}
-              className={`toggle-switch ${scattered ? 'active' : ''}`}
-              aria-label="Toggle: imagine without UnifiedTree"
-            />
-            <span className="text-sm font-body text-text-secondary select-none">
-              {scattered ? (
-                <span className="font-handwriting text-lg text-amber-700">Imagine without UnifiedTree</span>
-              ) : (
-                <span className="font-semibold text-primary">One platform. Unified.</span>
-              )}
-            </span>
-          </div>
-
-          {/* View all Apps */}
+          {/* View all Apps — the toggle now lives beside the heading, above */}
           <button
             onClick={() => navigate('/modules')}
             className="inline-flex items-center gap-2 text-primary font-body font-semibold text-sm hover:gap-3 transition-all duration-300 group"
