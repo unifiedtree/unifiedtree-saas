@@ -48,7 +48,6 @@ const ProfileTab: React.FC = () => {
           <div>
             <p className="text-text-primary font-medium">{user?.firstName} {user?.lastName}</p>
             <p className="text-text-secondary text-sm">{user?.email}</p>
-            <button className="mt-1 text-xs text-[#047857] hover:text-[#047857]">Change avatar</button>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -61,8 +60,9 @@ const ProfileTab: React.FC = () => {
             <div key={label}>
               <label className="block text-xs font-medium text-text-tertiary mb-1.5">{label}</label>
               <input
-                defaultValue={value}
-                className="w-full bg-white border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-all"
+                value={value}
+                readOnly
+                className="w-full bg-[#F8FAFC] border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm cursor-default"
               />
             </div>
           ))}
@@ -80,121 +80,202 @@ const ProfileTab: React.FC = () => {
             <div key={label}>
               <label className="block text-xs font-medium text-text-tertiary mb-1.5">{label}</label>
               <input
-                defaultValue={value}
-                readOnly={label === 'Plan'}
-                className="w-full bg-white border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-all read-only:opacity-60"
+                value={value}
+                readOnly
+                className="w-full bg-[#F8FAFC] border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm cursor-default"
               />
             </div>
           ))}
         </div>
       </div>
-      <div className="flex items-center gap-3">
-        <HrButton onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2000) }}>
-          {saved ? <><Check size={14} /> Saved!</> : 'Save Changes'}
-        </HrButton>
-      </div>
+      {/* No Save button. Every field above is read-only because no endpoint
+          exists to update an account or a workspace profile — TenantController
+          can create companies but exposes no update mapping. This previously
+          rendered editable-looking inputs (defaultValue, no onChange, so edits
+          were never even read) above a button that flashed a green "Saved!"
+          tick and persisted nothing. A confirmed save that did not happen is
+          worse than no button: an admin correcting their company's legal name
+          would believe it was fixed. */}
+      <p className="text-xs text-text-tertiary">
+        These details are read-only for now. To change your name or company details,
+        contact <a href="mailto:unifiedtree@gmail.com" className="text-[#047857] underline">unifiedtree@gmail.com</a>.
+      </p>
     </div>
   )
 }
 
+/** Small "not built yet" row, matching the Integrations treatment. */
+const SoonRow: React.FC<{ title: string; desc: string }> = ({ title, desc }) => (
+  <div className="flex items-center justify-between p-4 bg-white border border-border-default rounded-xl max-w-md opacity-75">
+    <div>
+      <p className="text-sm font-medium text-text-primary">{title}</p>
+      <p className="text-xs text-text-secondary mt-0.5">{desc}</p>
+    </div>
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#ECFDF5] px-3 py-1 text-[11px] font-semibold text-[#047857]">
+      <Sparkles size={11} /> Launching soon
+    </span>
+  </div>
+)
+
+/**
+ * Security.
+ *
+ * What was here before, and why none of it survives:
+ *
+ *  - An "Active Sessions" list hardcoding two rows — "Chrome on Windows,
+ *    Hyderabad" and "Safari on iPhone, Mumbai, 2 days ago" — shown identically
+ *    to every admin regardless of who they are or what they logged in from.
+ *    That is a fabricated security signal: an admin could conclude they had
+ *    been breached, or (worse) that they had not been because the list looked
+ *    clean. The "Revoke" button beside it had no onClick, so anyone trying to
+ *    kill a hostile session was clicking a decoration. No session-listing or
+ *    revoke endpoint exists anywhere in the backend.
+ *
+ *  - A 2FA toggle wired to local useState. It went green, persisted nothing,
+ *    and reset on reload. No secret is provisioned and login never challenges.
+ *    (auth.user_credentials.is_mfa_enabled exists and AuthService checks it,
+ *    but the enrolment service it defers to was never built.) Claiming an
+ *    account is protected by TOTP when it is not is the most consequential
+ *    lie a settings page can tell.
+ *
+ *  - A change-password form whose three inputs had no value/onChange/ref, over
+ *    a button with no handler. The typed password was never read. Someone
+ *    rotating a compromised credential would discard the old one believing it
+ *    was dead.
+ *
+ * Password change now routes to the real, working /v1/auth/forgot-password
+ * flow. Sessions and 2FA are labelled honestly until the endpoints exist.
+ */
 const SecurityTab: React.FC = () => {
-  const [twoFa, setTwoFa] = useState(false)
+  const user = useAuthStore((s) => s.user)
+  const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+
+  const sendReset = async () => {
+    if (!user?.email) return
+    setSending(true); setError('')
+    try {
+      await apiJson('/v1/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email: user.email }),
+      })
+      setSent(true)
+    } catch {
+      // Deliberately soft: forgot-password is intentionally non-committal
+      // about whether an address exists, so we do not surface a hard failure
+      // that could be read as account enumeration.
+      setSent(true)
+    } finally {
+      setSending(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-text-primary font-semibold mb-4">Change Password</h3>
-        <div className="space-y-4 max-w-md">
-          {['Current Password', 'New Password', 'Confirm New Password'].map((label) => (
-            <div key={label}>
-              <label className="block text-xs font-medium text-text-tertiary mb-1.5">{label}</label>
-              <input type="password" className="w-full bg-white border border-border-default rounded-xl px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-all" />
-            </div>
-          ))}
-          <HrButton>Update Password</HrButton>
-        </div>
+        <h3 className="text-text-primary font-semibold mb-1">Password</h3>
+        <p className="text-text-secondary text-sm mb-4">
+          We'll email a secure reset link to <span className="font-medium text-text-primary">{user?.email}</span>.
+          The link expires shortly after it is sent.
+        </p>
+        {sent ? (
+          <div className="flex items-center gap-2 rounded-xl border border-[#6EE7B7] bg-[#ECFDF5] p-4 max-w-md text-sm text-[#047857]">
+            <Check size={15} className="shrink-0" />
+            Reset link sent. Check your inbox (and spam folder).
+          </div>
+        ) : (
+          <div className="max-w-md">
+            <HrButton onClick={sendReset} disabled={sending || !user?.email}>
+              {sending ? 'Sending…' : 'Email me a password reset link'}
+            </HrButton>
+            {error && <p className="mt-2 text-xs text-[#B91C1C]">{error}</p>}
+          </div>
+        )}
       </div>
+
       <div className="border-t border-border-default pt-6">
         <h3 className="text-text-primary font-semibold mb-4">Two-Factor Authentication</h3>
-        <div className="flex items-center justify-between p-4 bg-white border border-border-default rounded-xl max-w-md">
-          <div>
-            <p className="text-sm font-medium text-text-primary">Authenticator App</p>
-            <p className="text-xs text-text-secondary mt-0.5">Use Google Authenticator or similar apps</p>
-          </div>
-          <Toggle enabled={twoFa} onChange={setTwoFa} />
-        </div>
+        <SoonRow title="Authenticator App"
+                 desc="Protect your account with a one-time code from Google Authenticator or similar." />
       </div>
+
       <div className="border-t border-border-default pt-6">
         <h3 className="text-text-primary font-semibold mb-4">Active Sessions</h3>
-        {[
-          { device: 'Chrome on Windows', location: 'Hyderabad, India', time: 'Current session', current: true },
-          { device: 'Safari on iPhone', location: 'Mumbai, India', time: '2 days ago', current: false },
-        ].map((s, i) => (
-          <div key={i} className="flex items-center justify-between p-4 bg-white border border-border-default rounded-xl mb-2">
-            <div>
-              <p className="text-sm font-medium text-text-primary">{s.device}</p>
-              <p className="text-xs text-text-secondary">{s.location} — {s.time}</p>
-            </div>
-            {s.current ? (
-              <HrStatusPill tone="ok">Current</HrStatusPill>
-            ) : (
-              <button className="text-xs text-[#B91C1C] hover:text-[#DC2626] transition-colors">Revoke</button>
-            )}
-          </div>
-        ))}
+        <SoonRow title="Device & session management"
+                 desc="See where your account is signed in and sign out other devices." />
       </div>
     </div>
   )
 }
 
+/**
+ * Notification preferences.
+ *
+ * Previously nine invented defaults in a useState, with NO save control
+ * anywhere in the component — toggling and navigating away discarded
+ * everything. The defaults were not even uniformly on: "Payroll processed" and
+ * "Invoice overdue" rendered OFF, which reads as a deliberate choice someone
+ * made. An admin asking "why didn't I get emailed about that?" would come
+ * here, see the toggle off, and be actively misled about the cause.
+ *
+ * No preferences endpoint exists (NotificationsController serves the in-app
+ * inbox; settings.notification_templates is a tenant-wide HR template
+ * catalogue, not per-user prefs). So the rows are shown as the roadmap they
+ * are, with no controls that pretend to persist.
+ *
+ * What DOES currently reach an admin, unconditionally: leave/WFH/correction
+ * approvals, shift-change requests, welcome emails, and autopay-failure
+ * notices. That is stated plainly so nobody assumes silence means disabled.
+ */
 const NotificationsTab: React.FC = () => {
-  const [settings, setSettings] = useState({
-    emailNewEmployee: true, emailLeaveRequest: true, emailPayroll: false,
-    emailDeals: true, emailTickets: true, emailInvoices: false,
-    pushAll: true, pushCritical: true, pushMentions: true,
-  })
+  const emailRows = [
+    { label: 'New employee joined', desc: 'When a new user is added to the workspace' },
+    { label: 'Leave request submitted', desc: 'When an employee submits a leave request' },
+    { label: 'Payroll processed', desc: 'Monthly payroll completion notification' },
+    { label: 'Deal status changed', desc: 'CRM deal stage updates' },
+    { label: 'Critical tickets opened', desc: 'High & critical priority helpdesk tickets' },
+    { label: 'Invoice overdue', desc: 'When invoices pass their due date' },
+  ]
+  const pushRows = [
+    { label: 'All notifications', desc: 'Receive all in-app notifications' },
+    { label: 'Critical alerts only', desc: 'Security & system critical alerts' },
+    { label: 'Mentions & assignments', desc: 'When you are tagged or assigned' },
+  ]
 
-  const toggle = (key: keyof typeof settings) => setSettings((s) => ({ ...s, [key]: !s[key] }))
+  const Row: React.FC<{ label: string; desc: string }> = ({ label, desc }) => (
+    <div className="flex items-center justify-between p-3.5 bg-white border border-border-default rounded-xl opacity-75">
+      <div>
+        <p className="text-sm font-medium text-text-primary">{label}</p>
+        <p className="text-xs text-text-secondary mt-0.5">{desc}</p>
+      </div>
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#ECFDF5] px-3 py-1 text-[11px] font-semibold text-[#047857]">
+        <Sparkles size={11} /> Launching soon
+      </span>
+    </div>
+  )
 
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border border-border-default bg-[#F8FAFC] p-4">
+        <p className="text-sm text-text-primary font-medium">Per-person notification controls are on the way</p>
+        <p className="mt-1 text-xs text-text-secondary">
+          Until then, admins and approvers receive the notifications the workspace needs to
+          function — leave, WFH and attendance-correction requests, shift changes, new-member
+          welcomes, and any autopay payment failure — by email and in the app.
+        </p>
+      </div>
       <div>
         <h3 className="text-text-primary font-semibold mb-1">Email Notifications</h3>
         <p className="text-text-secondary text-sm mb-4">Choose which events trigger email alerts</p>
         <div className="space-y-3">
-          {[
-            { key: 'emailNewEmployee' as const, label: 'New employee joined', desc: 'When a new user is added to the workspace' },
-            { key: 'emailLeaveRequest' as const, label: 'Leave request submitted', desc: 'When an employee submits a leave request' },
-            { key: 'emailPayroll' as const, label: 'Payroll processed', desc: 'Monthly payroll completion notification' },
-            { key: 'emailDeals' as const, label: 'Deal status changed', desc: 'CRM deal stage updates' },
-            { key: 'emailTickets' as const, label: 'Critical tickets opened', desc: 'High & critical priority helpdesk tickets' },
-            { key: 'emailInvoices' as const, label: 'Invoice overdue', desc: 'When invoices pass their due date' },
-          ].map(({ key, label, desc }) => (
-            <div key={key} className="flex items-center justify-between p-3.5 bg-white border border-border-default rounded-xl">
-              <div>
-                <p className="text-sm font-medium text-text-primary">{label}</p>
-                <p className="text-xs text-text-secondary mt-0.5">{desc}</p>
-              </div>
-              <Toggle enabled={settings[key]} onChange={() => toggle(key)} />
-            </div>
-          ))}
+          {emailRows.map((r) => <Row key={r.label} {...r} />)}
         </div>
       </div>
       <div className="border-t border-border-default pt-6">
         <h3 className="text-text-primary font-semibold mb-4">Push Notifications</h3>
         <div className="space-y-3">
-          {[
-            { key: 'pushAll' as const, label: 'All notifications', desc: 'Receive all in-app notifications' },
-            { key: 'pushCritical' as const, label: 'Critical alerts only', desc: 'Security & system critical alerts' },
-            { key: 'pushMentions' as const, label: 'Mentions & assignments', desc: 'When you are tagged or assigned' },
-          ].map(({ key, label, desc }) => (
-            <div key={key} className="flex items-center justify-between p-3.5 bg-white border border-border-default rounded-xl">
-              <div>
-                <p className="text-sm font-medium text-text-primary">{label}</p>
-                <p className="text-xs text-text-secondary mt-0.5">{desc}</p>
-              </div>
-              <Toggle enabled={settings[key]} onChange={() => toggle(key)} />
-            </div>
-          ))}
+          {pushRows.map((r) => <Row key={r.label} {...r} />)}
         </div>
       </div>
     </div>
@@ -378,29 +459,82 @@ const IntegrationsTab: React.FC = () => {
   )
 }
 
-const DangerTab: React.FC = () => (
-  <div className="space-y-4">
-    <div className="p-4 bg-[#FEF2F2] border border-[#FECACA] rounded-xl">
-      <h3 className="text-[#B91C1C] font-semibold text-sm mb-1">Export All Data</h3>
-      <p className="text-text-secondary text-xs mb-3">Download a full export of your workspace data in JSON format. This may take a few minutes.</p>
-      <button className="px-4 py-2 border border-[#FCA5A5] text-[#B91C1C] hover:bg-[#FEE2E2] rounded-xl text-sm font-medium transition-colors">
-        Request Data Export
-      </button>
+/**
+ * Danger Zone.
+ *
+ * Previously three buttons — Request Data Export, Reset Workspace and Delete
+ * Organization — with no onClick, no confirmation, and no endpoints behind
+ * any of them. They were pure decoration under copy that promised
+ * "Permanently delete your organization and all associated data. This action
+ * is irreversible."
+ *
+ * That is not merely a dead button. An offboarding customer clicks Delete,
+ * believes their data is destroyed, closes the tab, and may tell their own
+ * customers or a regulator that it was deleted — while every row is still
+ * there. The export button carried the same problem in the other direction:
+ * an unfulfillable data-portability promise under DPDP/GDPR.
+ *
+ * Until real endpoints exist (they are genuinely destructive and deserve
+ * their own careful build — see DeleteRoleConfirm in Roles.tsx for the
+ * confirmation pattern to follow), these route to a human. Promising nothing
+ * beats promising deletion we do not perform.
+ */
+const DangerTab: React.FC = () => {
+  const tenant = useAuthStore((s) => s.tenant)
+  const subject = (what: string) =>
+    `mailto:unifiedtree@gmail.com?subject=${encodeURIComponent(
+      `${what} — ${tenant?.subdomain ?? 'workspace'}`)}` +
+    `&body=${encodeURIComponent(
+      `Workspace: ${tenant?.subdomain ?? ''}\nOrganisation: ${tenant?.name ?? ''}\n\n` +
+      `Please ${what.toLowerCase()} for this workspace.\n\n` +
+      `I understand this request will be confirmed with me before anything is actioned.`)}`
+
+  const rows = [
+    {
+      title: 'Export all data',
+      desc: 'Get a full copy of your workspace data. We will confirm your identity and send a download link.',
+      cta: 'Request data export',
+      href: subject('Data export request'),
+    },
+    {
+      title: 'Reset workspace',
+      desc: 'Clear all records but keep the workspace and your account — useful after trialling with test data.',
+      cta: 'Request workspace reset',
+      href: subject('Workspace reset request'),
+    },
+    {
+      title: 'Delete organisation',
+      desc: 'Permanently delete this workspace and everything in it. We will confirm in writing before anything is removed.',
+      cta: 'Request deletion',
+      href: subject('Workspace deletion request'),
+      strong: true,
+    },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-border-default bg-[#F8FAFC] p-4">
+        <p className="text-xs text-text-secondary">
+          These actions are handled by our team so nothing irreversible happens by accident.
+          Email us and we'll confirm with you before doing anything. Self-service controls are
+          coming to this page.
+        </p>
+      </div>
+      {rows.map((r) => (
+        <div key={r.title}
+             className={clsx('p-4 rounded-xl border',
+               r.strong ? 'bg-[#FEE2E2] border-[#FCA5A5]' : 'bg-[#FEF2F2] border-[#FECACA]')}>
+          <h3 className="text-[#B91C1C] font-semibold text-sm mb-1">{r.title}</h3>
+          <p className="text-text-secondary text-xs mb-3">{r.desc}</p>
+          <a href={r.href}
+             className="inline-block px-4 py-2 border border-[#FCA5A5] text-[#B91C1C] hover:bg-[#FEE2E2] rounded-xl text-sm font-medium transition-colors">
+            {r.cta}
+          </a>
+        </div>
+      ))}
     </div>
-    <div className="p-4 bg-[#FEF2F2] border border-[#FECACA] rounded-xl">
-      <h3 className="text-[#B91C1C] font-semibold text-sm mb-1">Reset Workspace</h3>
-      <p className="text-text-secondary text-xs mb-3">Remove all data from your workspace but keep your account and settings. This action cannot be undone.</p>
-      <button className="px-4 py-2 border border-[#FCA5A5] text-[#B91C1C] hover:bg-[#FEE2E2] rounded-xl text-sm font-medium transition-colors">
-        Reset Workspace
-      </button>
-    </div>
-    <div className="p-4 bg-[#FEE2E2] border border-[#FCA5A5] rounded-xl">
-      <h3 className="text-[#B91C1C] font-semibold text-sm mb-1">Delete Organization</h3>
-      <p className="text-text-secondary text-xs mb-3">Permanently delete your organization and all associated data. This action is <span className="text-[#B91C1C] font-semibold">irreversible</span>.</p>
-      <HrButton variant="danger">Delete Organization</HrButton>
-    </div>
-  </div>
-)
+  )
+}
 
 export const Settings: React.FC = () => {
   const { tab } = useParams<{ tab?: string }>()

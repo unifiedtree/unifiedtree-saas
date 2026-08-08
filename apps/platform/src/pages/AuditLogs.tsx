@@ -47,11 +47,15 @@ export const AuditLogs: React.FC = () => {
         crumb="Settings"
         title="System Audit Logs"
         subtitle="Track all user actions and system events"
-        actions={
-          <Can code={P.AUDIT_EXPORT}>
-            <HrButton variant="ghost"><Download size={14} /> Export</HrButton>
-          </Can>
-        }
+        // Export intentionally not rendered. The button had no onClick and
+        // there is no export endpoint — AuditController exposes only a paged
+        // GET /v1/audit/events. It was the most convincing dead control in the
+        // app precisely because it was permission-gated behind audit.export,
+        // which implies a real feature. Someone pulling the trail for a
+        // compliance review or incident would click it, get no file and no
+        // error, and assume the export was empty. The permission code stays
+        // defined for when the endpoint is built.
+        actions={undefined}
       />
 
       {error && !isLoading ? (

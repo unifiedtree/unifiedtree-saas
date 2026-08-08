@@ -22,7 +22,7 @@ const STATUS_TONE: Record<string, PillTone> = {
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
-  const { user, hasModule, hasPermission } = useAuthStore()
+  const { user, tenant, hasModule, hasPermission } = useAuthStore()
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -79,12 +79,14 @@ export const Dashboard: React.FC = () => {
               {today} — here's what's happening across your workspace today.
             </p>
           </div>
+          {/* Shows the workspace name, not a health claim. This used to read
+              "All systems operational" behind a live-pulse animation, with no
+              health check anywhere behind it — it rendered identically during
+              a total backend outage, which is exactly when someone would look
+              at it. A status indicator that cannot go red is worse than none. */}
           <span className="hidden items-center gap-2 rounded-xl border border-[#2B441D]/15 bg-[#2B441D]/5 px-4 py-2.5 text-xs font-semibold backdrop-blur-md lg:flex text-[#2B441D]">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#486B37] opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#355428]" />
-            </span>
-            All systems operational
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#355428]" />
+            {tenant?.name ?? 'Your workspace'}
           </span>
         </div>
       </motion.div>
