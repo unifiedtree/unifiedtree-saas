@@ -7,6 +7,36 @@ import type { AuthState, AuthMeResponse, AuthUser, AuthTenant, PermissionGrant, 
 
 const EMPTY_SCOPES: ScopeContext = { branches: [], departments: [], directReports: [] };
 
+/**
+ * Mint a fresh access token from the httpOnly refresh cookie set at login.
+ *
+ * <p>Called on cold load, when there is no in-memory access token but the
+ * browser may still hold a valid refresh cookie. Uses `withCredentials` so the
+ * cookie is sent cross-origin (the app is on a workspace subdomain, the API on
+ * api.unifiedtree.com), and `_skipAuth` because there is no Bearer token to
+ * attach yet.
+ *
+ * <p>A 4xx here is the ordinary "not signed in" case, not an error worth
+ * surfacing — the caller simply shows the login page.
+ *
+ * @returns true when a session was restored
+ */
+async function tryRestoreSession(): Promise<boolean> {
+  try {
+    const res = await apiClient.post<{ accessToken?: string }>(
+      '/v1/canonical-auth/refresh',
+      {},
+      { withCredentials: true, _skipAuth: true } as never,
+    );
+    const token = res.data?.accessToken;
+    if (!token) return false;
+    setAccessToken(token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function buildPermissionMap(permissions: AuthMeResponse['permissions']): Map<string, Scope> {
   const map = new Map<string, Scope>();
   for (const grant of permissions) {
@@ -123,12 +153,24 @@ export const useAuthStore = create<AuthState>()((set) => ({
   scopes: EMPTY_SCOPES,
 
   hydrate: async () => {
-    // No token yet (e.g. on the login page) → don't call /me; it would 401.
-    if (!getAccessToken()) {
-      set({ status: 'unauthenticated', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES });
-      return;
-    }
+    // Stay in 'loading' for the whole attempt. RouteGuard renders nothing
+    // while idle/loading and only redirects to /login on 'unauthenticated',
+    // so flipping to unauthenticated early — as this used to do the instant
+    // it saw no in-memory token — is what turned every page reload into a
+    // logout, before the refresh below ever had a chance to run.
     set({ status: 'loading' });
+
+    // The access token lives in memory only (deliberate: an XSS bug cannot
+    // read it), so a reload always starts without one. That is NOT the same
+    // as being signed out — the httpOnly refresh cookie set at login can mint
+    // a fresh access token. Try that before concluding anything.
+    if (!getAccessToken()) {
+      const restored = await tryRestoreSession();
+      if (!restored) {
+        set({ status: 'unauthenticated', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES });
+        return;
+      }
+    }
     try {
       const res = await apiClient.get<CanonicalMeResponse>('/v1/canonical-auth/me');
       set(meToAuthState(res.data));
@@ -195,7 +237,14 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
   logout: async () => {
     try {
-      await apiClient.post('/v1/auth/logout');
+      // Canonical path (/v1/auth/logout does not exist under the profile
+      // production runs). withCredentials so the refresh cookie is sent and
+      // can actually be revoked and cleared server-side — dropping only the
+      // in-memory access token would leave a live refresh cookie behind, and
+      // the next page load would sign the user straight back in. On a shared
+      // machine that is a real problem, not a cosmetic one.
+      await apiClient.post('/v1/canonical-auth/logout', {},
+        { withCredentials: true, _skipAuth: true } as never);
     } catch {
       // best-effort
     }

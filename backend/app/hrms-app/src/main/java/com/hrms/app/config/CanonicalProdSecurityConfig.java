@@ -105,6 +105,14 @@ public class CanonicalProdSecurityConfig {
                     "/actuator/info",
                     "/v1/canonical-auth/login",
                     "/v1/canonical-auth/refresh",
+                    // Logout must work even when the access token has already
+                    // expired — that is exactly when someone is most likely to
+                    // click it. It authorises nothing: it only deletes the
+                    // refresh token presented in the caller's own httpOnly
+                    // cookie and clears that cookie. With no cookie it is a
+                    // no-op, so an unauthenticated caller can do nothing with
+                    // it but end their own session.
+                    "/v1/canonical-auth/logout",
                     // Invitation + password reset flows — token IS the auth
                     "/v1/auth/accept-invite",
                     "/v1/auth/forgot-password",

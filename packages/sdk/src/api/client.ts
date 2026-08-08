@@ -40,8 +40,13 @@ let refreshPromise: Promise<string | null> | null = null;
 
 async function doRefresh(instance: AxiosInstance): Promise<string | null> {
   try {
+    // /v1/canonical-auth/refresh — NOT /v1/auth/refresh, which does not exist
+    // under the canonical profile production runs. Pointing at the wrong path
+    // meant every refresh 401'd, so the interceptor below silently gave up and
+    // a browser reload became a hard logout despite all this machinery being
+    // in place.
     const res = await instance.post<{ accessToken: string }>(
-      '/v1/auth/refresh',
+      '/v1/canonical-auth/refresh',
       {},
       { withCredentials: true, _skipAuth: true } as AxiosRequestConfig & { _skipAuth?: boolean },
     );

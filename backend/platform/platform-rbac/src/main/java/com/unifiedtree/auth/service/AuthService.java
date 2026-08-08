@@ -226,6 +226,32 @@ public class AuthService {
     }
 
     /**
+     * Invalidate a refresh token on sign-out.
+     *
+     * <p>Without this, "log out" would only discard the in-memory access token
+     * while leaving a valid refresh credential in the browser's cookie jar —
+     * so the very next page load would silently sign the user back in. On a
+     * shared machine that is a real problem, not a cosmetic one.
+     *
+     * <p>Takes the tenant explicitly (the caller knows it from the request
+     * context) so this is ONE indexed lookup, rather than the tenant-by-tenant
+     * scan {@link #refresh} is forced into when all it has is an opaque token.
+     *
+     * <p>Deleting rather than stamping revoked_at keeps it consistent with the
+     * rotation in refresh(), which also deletes. Idempotent: a token that is
+     * already gone is a successful logout.
+     */
+    @Transactional
+    public void revokeRefreshToken(String refreshTokenPlain, UUID tenantId) {
+        if (refreshTokenPlain == null || refreshTokenPlain.isBlank() || tenantId == null) return;
+        String hash = sha256Hex(refreshTokenPlain.trim());
+        TenantContext.setTenantId(tenantId);
+        com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+        jdbc.queryForObject("SELECT set_config('app.tenant_id', ?, true)", String.class, tenantId.toString());
+        refreshRepo.findByTokenHash(hash).ifPresent(refreshRepo::delete);
+    }
+
+    /**
      * Issue a normal tenant-scoped ERP session after a global account token has
      * already proved the caller can enter this workspace. This deliberately does
      * not check a password; account membership is validated by the SaaS account
