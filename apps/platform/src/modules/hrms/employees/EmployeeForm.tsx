@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, ChevronRight, Send } from 'lucide-react'
+import { X, ChevronRight, Send, Users } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
 import { useAuthStore } from '@unifiedtree/sdk'
@@ -67,6 +67,12 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const [sendInvitation, setSendInvitation] = useState(true)
   const createEmp = useCreateWorkforceEmployee()
   const updateEmp = useUpdateWorkforceEmployee()
+  // Set when the workspace has run out of paid seats — see the catch in submit().
+  const [seatLimitMessage, setSeatLimitMessage] = useState<string | null>(null)
+  // Only these roles can change the plan; must match WorkspacePlanController's
+  // requireAdmin, or we would send an HR manager to a page that 403s them.
+  const canManageBilling = useAuthStore(
+    s => (s.user?.roles ?? []).some(r => ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN'].includes(r)))
 
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState(employee?.companyId ?? '')
@@ -241,7 +247,18 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
       }
       onClose()
     } catch (err: unknown) {
-      toast((err as Error)?.message ?? 'Failed to save employee', 'error')
+      // The workspace is out of paid seats. Not a failure the user can fix by
+      // retrying, so don't show it as a transient toast — say what happened
+      // and, for someone who can actually act on it, give them the way through.
+      // HR managers deliberately cannot reach billing (WorkspacePlanController
+      // is admin-only), so they get told to ask their admin rather than sent
+      // to a page that would refuse them.
+      const message = (err as Error)?.message ?? 'Failed to save employee'
+      if (/SEAT_LIMIT_REACHED/i.test(message) || /used all \d+ seats/i.test(message)) {
+        setSeatLimitMessage(message.replace(/^SEAT_LIMIT_REACHED:?\s*/i, ''))
+        return
+      }
+      toast(message, 'error')
     }
   }
 
@@ -253,6 +270,46 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const visibleSteps = isEdit ? STEPS.filter((s) => s.key === 'basic' || s.key === 'work') : STEPS
   const stepIdx = Math.max(0, visibleSteps.findIndex((s) => s.key === step))
   const isLastStep = stepIdx === visibleSteps.length - 1
+
+  // Out of seats. Replaces the form rather than sitting behind it: the answer
+  // is never "try again", it is either buy a seat or ask someone who can.
+  if (seatLimitMessage) {
+    return (
+      <>
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
+        <div className="fixed left-1/2 top-1/2 z-[110] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+            <Users size={22} className="text-amber-700" />
+          </div>
+          <h3 className="text-center text-lg font-semibold text-text-primary">
+            You've run out of seats
+          </h3>
+          <p className="mt-2 text-center text-sm text-text-secondary">{seatLimitMessage}</p>
+          <p className="mt-3 text-center text-xs text-text-tertiary">
+            A seat is one active employee. Removing someone who has left frees their seat
+            straight away.
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            {canManageBilling ? (
+              <button
+                onClick={() => { window.location.href = '/plan' }}
+                className="w-full rounded-xl bg-[#059669] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#047857]">
+                Add seats
+              </button>
+            ) : (
+              <div className="rounded-xl bg-[#F8FAFC] px-4 py-3 text-center text-xs text-text-secondary">
+                Only a workspace admin can change the plan. Ask your admin to add seats.
+              </div>
+            )}
+            <button onClick={onClose}
+                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-text-secondary hover:text-text-primary">
+              Close
+            </button>
+          </div>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>

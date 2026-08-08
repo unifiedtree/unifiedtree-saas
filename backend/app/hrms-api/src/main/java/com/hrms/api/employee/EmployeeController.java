@@ -62,15 +62,18 @@ public class EmployeeController {
     private final InvitationService invitationService;
     private final JdbcTemplate jdbcTemplate;
     private final WorkspaceAccessService accessService;
+    private final SeatLimitGuard seatLimitGuard;
 
     public EmployeeController(EmployeeService employeeService,
                               @Autowired(required = false) InvitationService invitationService,
                               @Autowired(required = false) JdbcTemplate jdbcTemplate,
-                              @Autowired(required = false) WorkspaceAccessService accessService) {
+                              @Autowired(required = false) WorkspaceAccessService accessService,
+                              SeatLimitGuard seatLimitGuard) {
         this.employeeService = employeeService;
         this.invitationService = invitationService;
         this.jdbcTemplate = jdbcTemplate;
         this.accessService = accessService;
+        this.seatLimitGuard = seatLimitGuard;
     }
 
     @Operation(summary = "Create a new employee")
@@ -78,6 +81,10 @@ public class EmployeeController {
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
     public ResponseEntity<EmployeeResponse> create(@Valid @RequestBody CreateEmployeeRequest request,
                                                    @AuthenticationPrincipal Jwt jwt) {
+        // Per-seat pricing is only real if somebody checks it. Raw JWT role
+        // strings (not the Role enum) because the guard needs workspace roles
+        // like OWNER, which Role does not model and currentRoles() drops.
+        seatLimitGuard.requireSeatAvailable(jwt.getClaimAsStringList("roles"));
         EmployeeResponse employee = employeeService.createEmployee(request);
         queueInvite(employee, jwt);
         return ResponseEntity.status(HttpStatus.CREATED).body(employee);
@@ -89,6 +96,9 @@ public class EmployeeController {
     public ResponseEntity<EmployeeResponse> createStaff(
             @Valid @RequestBody StaffOnboardingRequest request,
             @AuthenticationPrincipal Jwt jwt) {
+        // Both creation endpoints must check — guarding only one leaves the
+        // other as a way around per-seat billing.
+        seatLimitGuard.requireSeatAvailable(jwt.getClaimAsStringList("roles"));
         List<Role> currentRoles = currentRoles(jwt);
         boolean adminRequest = hasAnyRole(currentRoles, ADMIN_ROLES);
 
