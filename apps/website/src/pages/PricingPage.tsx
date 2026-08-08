@@ -50,12 +50,12 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
 
 export function PricingPage() {
   return (
-    <div className="min-h-screen bg-[#F5F5F3] relative">
+    <div className="min-h-screen bg-[#ECFDF5] relative">
       <Navbar />
 
       {/* Background pattern matching Hero Section */}
       <div className="absolute inset-0 bg-squircle-grid-white pointer-events-none h-[800px]" />
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#F5F5F3]/80 to-[#F5F5F3] pointer-events-none h-[800px]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#ECFDF5]/80 to-[#ECFDF5] pointer-events-none h-[800px]" />
 
       {/* Header */}
       <section className="pt-40 pb-12 relative z-10">
@@ -65,16 +65,16 @@ export function PricingPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-body font-semibold uppercase tracking-[0.1em] text-[#0B0D0C] bg-[#0B0D0C]/5 border border-[#0B0D0C]/10 mb-6 shadow-sm">
+            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-body font-semibold uppercase tracking-[0.1em] text-[#059669] bg-[#059669]/5 border border-[#059669]/10 mb-6 shadow-sm">
               Pricing
             </span>
             <h1
-              className="font-heading font-extrabold text-[#0B0D0C] mb-5"
+              className="font-heading font-extrabold text-[#171717] mb-5"
               style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', letterSpacing: '-0.02em', lineHeight: 1.08 }}
             >
               Build your perfect plan
             </h1>
-            <p className="text-lg text-[#0B0D0C]/80 font-body max-w-xl mx-auto">
+            <p className="text-lg text-[#525252] font-body max-w-xl mx-auto">
               Select the modules you need and the number of employees. Your price updates instantly.
             </p>
           </motion.div>

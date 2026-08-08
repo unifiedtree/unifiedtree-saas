@@ -113,7 +113,7 @@ function ModuleTile({
 }) {
   const Icon = keyIconMap[plan.key] ?? iconMap[plan.icon ?? 'Users'] ?? Users
   const available = plan.status === 'AVAILABLE'
-  const color = plan.color || '#0B0D0C'
+  const color = plan.color || '#059669'
   const competitor = competitorMap[plan.key]
   const offset = scatterOffsets[index % scatterOffsets.length]
   const annotationPos = annotationPositions[index % annotationPositions.length]

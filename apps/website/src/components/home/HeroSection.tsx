@@ -30,17 +30,17 @@ const statusColors: Record<string, string> = {
 }
 
 const sidebarItems = ['Dashboard', 'HR', 'Attendance', 'Accounting', 'Inventory', 'CRM']
-const avatarColors = ['#0B0D0C', '#2A2D2B', '#1A1C1E', '#060706', '#57595A']
+const avatarColors = ['#059669', '#10B981', '#047857', '#04503A', '#525252']
 
 export function HeroSection() {
   const navigate = useNavigate()
 
   return (
-    <section className="min-h-screen bg-[#F5F5F3] flex flex-col items-center justify-center pt-32 pb-12 relative overflow-hidden">
+    <section className="min-h-screen bg-[#ECFDF5] flex flex-col items-center justify-center pt-32 pb-12 relative overflow-hidden">
       {/* Full-width bright white squircle background pattern */}
       <div className="absolute inset-0 bg-squircle-grid-white pointer-events-none" />
       {/* Fading gradient to hide the pattern at the bottom */}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#F5F5F3]/80 to-[#F5F5F3] pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#ECFDF5]/80 to-[#ECFDF5] pointer-events-none" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col items-center text-center relative z-10">
         {/* Eyebrow */}
@@ -48,9 +48,9 @@ export function HeroSection() {
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.1, duration: 0.4 }}
-          className="inline-flex items-center gap-2 text-[#0B0D0C]/60 text-sm font-mono mb-6"
+          className="inline-flex items-center gap-2 text-[#525252] text-sm font-mono mb-6"
         >
-          <span className="text-[#0B0D0C]">•</span>
+          <span className="text-[#059669]">•</span>
           Meet the leading
         </motion.div>
 
@@ -59,7 +59,7 @@ export function HeroSection() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: 'easeOut' }}
-          className="font-heading font-medium tracking-tight text-[#0B0D0C] mb-6"
+          className="font-heading font-medium tracking-tight text-[#171717] mb-6"
           style={{ fontSize: 'clamp(3.5rem, 8vw, 6.5rem)', lineHeight: 1.1 }}
         >
           One Platform <br />
@@ -71,7 +71,7 @@ export function HeroSection() {
            initial={{ opacity: 0, y: 30 }}
            animate={{ opacity: 1, y: 0 }}
            transition={{ duration: 0.7, delay: 0.1, ease: 'easeOut' }}
-           className="text-lg text-[#0B0D0C]/70 font-body leading-relaxed mb-10 max-w-2xl mx-auto px-4"
+           className="text-lg text-[#525252] font-body leading-relaxed mb-10 max-w-2xl mx-auto px-4"
         >
           UnifiedTree's platform of software and services lays the<br className="hidden sm:block" />
           groundwork so you can focus on building the future.
@@ -84,10 +84,10 @@ export function HeroSection() {
           transition={{ duration: 0.7, delay: 0.2, ease: 'easeOut' }}
           className="flex flex-wrap justify-center gap-4 mb-20"
         >
-          <Button size="lg" className="bg-[#0B0D0C] text-white hover:bg-[#26292B] border-none font-semibold rounded-xl px-8 shadow-md" onClick={() => navigate('/talk-to-us?intent=demo')}>
+          <Button size="lg" className="bg-[#059669] text-white hover:bg-[#047857] border-none font-semibold rounded-xl px-8 shadow-md" onClick={() => navigate('/talk-to-us?intent=demo')}>
             Request a demo
           </Button>
-          <Button size="lg" className="bg-white border border-[#E7E7E4] text-[#0B0D0C] hover:bg-slate-50 rounded-xl px-8 transition-colors shadow-sm" variant="ghost" onClick={() => navigate('/talk-to-us?intent=sales')}>
+          <Button size="lg" className="bg-white border border-[#E5E5E5] text-[#059669] hover:bg-slate-50 rounded-xl px-8 transition-colors shadow-sm" variant="ghost" onClick={() => navigate('/talk-to-us?intent=sales')}>
             Contact sales
           </Button>
         </motion.div>
@@ -102,7 +102,7 @@ export function HeroSection() {
           <motion.div
             animate={{ y: [0, -10, 0] }}
             transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-            className="bg-[#060706] rounded-t-2xl shadow-2xl overflow-hidden border-t border-l border-r border-[#0B0D0C]/10 w-full text-left"
+            className="bg-[#04503A] rounded-t-2xl shadow-2xl overflow-hidden border-t border-l border-r border-[#059669]/10 w-full text-left"
           >
             {/* Window chrome */}
             <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-white/5">
@@ -114,7 +114,7 @@ export function HeroSection() {
               </span>
             </div>
 
-            <div className="flex bg-[#0A0B0A]">
+            <div className="flex bg-[#065F46]">
               {/* Sidebar */}
               <div className="w-40 border-r border-white/10 p-4 flex-shrink-0 hidden md:block">
                 <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Main Menu</div>
@@ -133,7 +133,7 @@ export function HeroSection() {
               </div>
 
               {/* Main content */}
-              <div className="flex-1 p-6 min-w-0 bg-[#060706]">
+              <div className="flex-1 p-6 min-w-0 bg-[#04503A]">
                 <div className="flex items-center justify-between mb-6">
                    <h2 className="text-xl font-semibold text-white">Dashboard</h2>
                    <div className="flex items-center gap-3">
@@ -146,12 +146,12 @@ export function HeroSection() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                   {/* KPI cards - Left Side */}
                   <div className="col-span-1 lg:col-span-1 space-y-5">
-                    <div className="bg-[#1C1F1D] rounded-xl p-5 border border-white/5 shadow-sm">
+                    <div className="bg-[#047857] rounded-xl p-5 border border-white/5 shadow-sm">
                       <p className="text-sm text-slate-300 font-medium mb-2">Revenue being processed</p>
                       <p className="text-3xl font-heading font-semibold text-white mb-1">₹24,60,000</p>
                       <p className="text-xs text-lime">Last 1 month period</p>
                     </div>
-                    <div className="bg-[#0B0D0C]/50 rounded-xl p-5 border border-white/5 shadow-sm">
+                    <div className="bg-[#059669]/50 rounded-xl p-5 border border-white/5 shadow-sm">
                       <p className="text-sm text-slate-300 font-medium mb-2">Platform fees</p>
                       <p className="text-2xl font-heading font-semibold text-white mb-1">₹12,450</p>
                       <p className="text-xs text-slate-400">Last 1 month period</p>
@@ -172,7 +172,7 @@ export function HeroSection() {
                     </div>
                     <div className="flex items-center gap-8 h-40">
                        {/* Donut Chart Mockup */}
-                       <div className="relative w-32 h-32 rounded-full border-[12px] border-[#1C1F1D] border-t-[#A3E635] border-r-[#FF9F1C] border-b-[#FF9F1C] flex items-center justify-center">
+                       <div className="relative w-32 h-32 rounded-full border-[12px] border-[#047857] border-t-[#A7F3D0] border-r-[#FF9F1C] border-b-[#FF9F1C] flex items-center justify-center">
                           <div className="text-center">
                             <div className="text-lg font-bold text-slate-900">₹271,783</div>
                             <div className="text-[10px] text-slate-500">Total rewards</div>
@@ -180,7 +180,7 @@ export function HeroSection() {
                        </div>
                        <div className="flex flex-col gap-3">
                          <div className="flex items-center gap-2 text-sm text-slate-700 font-medium">
-                           <div className="w-2.5 h-2.5 rounded-sm bg-[#1C1F1D]" /> Benefits offered
+                           <div className="w-2.5 h-2.5 rounded-sm bg-[#047857]" /> Benefits offered
                          </div>
                          <div className="flex items-center gap-2 text-sm text-slate-700 font-medium">
                            <div className="w-2.5 h-2.5 rounded-sm bg-[#FF9F1C]" /> Target variable pay
@@ -190,7 +190,7 @@ export function HeroSection() {
                            <div className="w-16 h-2 bg-slate-200 rounded-full" />
                          </div>
                          <div className="flex items-center gap-2">
-                           <div className="w-2.5 h-2.5 rounded-sm bg-[#A3E635]" />
+                           <div className="w-2.5 h-2.5 rounded-sm bg-[#A7F3D0]" />
                            <div className="w-16 h-2 bg-slate-200 rounded-full" />
                          </div>
                        </div>

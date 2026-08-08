@@ -20,7 +20,7 @@ export function CTABanner() {
   const { mode } = useCtaMode()
 
   return (
-    <section className="relative py-24 overflow-hidden" style={{ background: 'linear-gradient(135deg, #F5F5F3 0%, #F8FAFC 60%, #F5F5F3 100%)' }}>
+    <section className="relative py-24 overflow-hidden" style={{ background: 'linear-gradient(135deg, #ECFDF5 0%, #F8FAFC 60%, #ECFDF5 100%)' }}>
       {/* Animated leaf particles */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {leaves.map((leaf, i) => (

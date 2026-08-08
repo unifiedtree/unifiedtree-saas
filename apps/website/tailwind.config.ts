@@ -1,8 +1,10 @@
 import type { Config } from 'tailwindcss'
 
-// Palette direction inspired by modern fintech marketing sites: a monochrome
-// "organic green" system — green-black ink, soft green-cream tints, deep
-// forest for dark surfaces, and a lime pop reserved for key CTAs/highlights.
+// Palette = the product app's palette (apps/platform). Emerald is the single
+// brand colour, exactly as in packages/design-system/src/tokens.css:
+//   primary #059669 · hover #047857 · active #065F46 · tint #ECFDF5
+// Three colours only, 70:20:10 — 70% neutral surfaces, 20% emerald, 10% deep
+// emerald for dark bands (header/footer/hero) and highlights.
 const config: Config = {
   content: [
     './index.html',
@@ -11,36 +13,34 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Structural ink (buttons, dark surfaces, icons). The palette shifted
-        // off forest-green to a near-black "ink" so the site reads as
-        // ink + neutral + a lime pop — no green in the UI chrome.
-        primary: '#0B0D0C',
-        'primary-dark': '#060706',
-        'primary-darker': '#000000',
-        'primary-light': '#F5F5F3',
-        'primary-muted': '#2A2D2B',
-        // Neutral dark for subtle gradients (was a green accent).
-        accent: '#2A2D2B',
-        // Lime pop — the single accent, used sparingly on CTAs & highlights
-        lime: '#A3E635',
-        'lime-soft': '#D9F0A3',
-        forest: '#0B0D0C',
-        ink: '#0A0B0A',
-        tint: '#F5F5F3',
-        'tint-2': '#ECECEA',
+        // Brand emerald — identical to the app (apps/platform/tailwind.config.js)
+        primary: '#059669',
+        'primary-dark': '#047857',
+        'primary-darker': '#065F46',
+        'primary-light': '#ECFDF5',
+        'primary-muted': '#10B981',
+        accent: '#047857',
+        // Light emerald used where the old palette used lime: highlight text on
+        // the dark emerald bands. Key name kept so existing markup keeps working.
+        lime: '#A7F3D0',
+        'lime-soft': '#D1FAE5',
+        forest: '#065F46',
+        ink: '#171717',
+        tint: '#ECFDF5',
+        'tint-2': '#D1FAE5',
         bg: '#FFFFFF',
         surface: '#FFFFFF',
-        'surface-2': '#F5F5F3',
-        // Neutral text ramp
-        'text-primary': '#0A0B0A',
-        'text-secondary': '#57595A',
-        'text-tertiary': '#8A8C8A',
-        success: '#3A7D22',
-        danger: '#C0362C',
-        warning: '#B4791A',
-        info: '#2563EB',
-        border: '#E7E7E4',
-        'border-light': '#F2F2F0',
+        'surface-2': '#F5F5F5',
+        // Neutral text ramp — the app's neutrals
+        'text-primary': '#171717',
+        'text-secondary': '#525252',
+        'text-tertiary': '#737373',
+        success: '#10B981',
+        danger: '#EF4444',
+        warning: '#F59E0B',
+        info: '#3B82F6',
+        border: '#E5E5E5',
+        'border-light': '#F5F5F5',
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],

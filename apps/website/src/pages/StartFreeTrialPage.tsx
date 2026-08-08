@@ -8,7 +8,7 @@ import { useAuthStore } from '../store/authStore'
 
 const perks = [
   { icon: Zap, label: 'Free access - core HRMS included', color: '#1DB985' },
-  { icon: Shield, label: 'No credit card required', color: '#0B0D0C' },
+  { icon: Shield, label: 'No credit card required', color: '#059669' },
   { icon: Clock, label: 'Workspace activates instantly', color: '#1DB985' },
 ]
 

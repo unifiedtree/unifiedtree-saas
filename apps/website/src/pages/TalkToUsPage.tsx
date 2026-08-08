@@ -37,7 +37,7 @@ export function TalkToUsPage() {
   }, [intent])
 
   return (
-    <div className="min-h-screen bg-[#F5F5F3]">
+    <div className="min-h-screen bg-[#ECFDF5]">
       <Navbar />
       <main className="pb-24 pt-28 sm:pt-32">
         <div className="mx-auto max-w-2xl px-4">
