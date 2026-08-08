@@ -120,10 +120,34 @@ public class SubscriptionWebhookController {
         JsonNode payNode = root.path("payload").path("payment").path("entity");
         String subscriptionId = subNode.isMissingNode() ? null : optText(subNode, "id");
 
-        if (eventId == null || eventType == null) {
-            log.warn("Webhook missing id/event — eventIdHeader={} eventInBody={} — accepting silently",
-                    eventIdHeader, eventType);
-            return ResponseEntity.accepted().body("ignored");
+        if (eventType == null) {
+            // No event type means we cannot dispatch — return 400 so Razorpay
+            // retries (safe: their client will also see this in the delivery
+            // log). Never 202-accept an unparseable event; Razorpay only
+            // retries on non-2xx and a 202 would lose the event forever.
+            log.warn("Webhook missing event type — eventIdHeader={} — rejecting to force retry",
+                    eventIdHeader);
+            return ResponseEntity.badRequest().body("missing event type");
+        }
+        if (eventId == null) {
+            // Header stripped by an upstream proxy / test rig. Derive a stable
+            // synthetic id from the signed rawBody so idempotency still works
+            // (a re-delivery has identical bytes and hashes the same). We
+            // MUST NOT 202-drop here — verify caught this: a lost halted
+            // event means the customer's grace clock never starts and they
+            // hit the day-7 lockout with no email warning.
+            try {
+                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+                byte[] d = md.digest(rawBody);
+                StringBuilder sb = new StringBuilder(64);
+                for (byte b : d) sb.append(String.format("%02x", b));
+                eventId = "syn_" + sb.substring(0, 40);
+                log.warn("Webhook missing X-Razorpay-Event-Id — using synthetic id {} for {} (proxy strip?)",
+                        eventId, eventType);
+            } catch (java.security.NoSuchAlgorithmException nsae) {
+                // SHA-256 is required by every JVM; unreachable.
+                throw new IllegalStateException("SHA-256 unavailable", nsae);
+            }
         }
 
         // Idempotency: PK insert wins the race; second delivery gets DataIntegrityViolationException.

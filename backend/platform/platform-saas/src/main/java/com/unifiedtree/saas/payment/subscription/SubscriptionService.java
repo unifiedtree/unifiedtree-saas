@@ -220,6 +220,39 @@ public class SubscriptionService {
         }
     }
 
+    // -- 2b. update (Hotstar-style seat change) --------------------------------
+
+    /**
+     * Change the seat count on an existing Razorpay subscription — the same
+     * mandate the customer already authorised is reused. Razorpay charges the
+     * prorated difference on the current cycle (schedule_change_at="now") and
+     * bills the new full amount from the next renewal.
+     *
+     * <p>The async prorated charge lands as a {@code subscription.charged}
+     * webhook; our reconciler's {@code onActive} updates {@code current_period_end}
+     * and {@code amount_inr} from that webhook. This method only makes the
+     * Razorpay call — the caller ({@link PlanChangeService#changeSeatCount})
+     * updates our local {@code tenant_modules.seats} + {@code platform.subscriptions}
+     * ledger to reflect the intent.
+     */
+    public RazorpayClient.SubscriptionView updateQuantity(String razorpaySubscriptionId, int newSeats) {
+        if (newSeats < 1 || newSeats > 999) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Seat count must be between 1 and 999");
+        }
+        RazorpayClient.SubscriptionView view = razorpay.updateSubscription(
+                razorpaySubscriptionId,
+                newSeats,
+                /*planId*/ null,
+                /*scheduleChangeAt*/ "now",
+                /*customerNotify*/ 1);
+        if (props.isLive()) {
+            log.info("Razorpay LIVE subscription {} quantity updated to {} (proration now)",
+                    razorpaySubscriptionId, newSeats);
+        }
+        return view;
+    }
+
     // -- 3. cancel -------------------------------------------------------------
 
     /**

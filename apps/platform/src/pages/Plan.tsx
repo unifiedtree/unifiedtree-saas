@@ -39,6 +39,14 @@ type BillingCycle = 'monthly' | 'annual'
 const ADMIN_ROLES = ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN']
 const POLL_INTERVAL_MS = 2500
 const POLL_MAX_MS = 30 * 60 * 1000  // 30 min
+// Survives reload / re-login so the mandate poll can resume. Cleared on any
+// terminal outcome (activated, failed, cancelled, expired).
+const PENDING_KEY = 'ut.plan.pendingChangeId'
+// The Razorpay checkout URL, persisted alongside the id. Without it, a modal
+// resumed after a reload has a "focus the Razorpay tab" button pointing at a
+// Window handle that no longer exists — a silent no-op next to copy claiming
+// we just opened a tab.
+const PENDING_URL_KEY = 'ut.plan.pendingCheckoutUrl'
 
 // -- API contracts ----------------------------------------------------------
 
@@ -53,6 +61,39 @@ interface StatusResponse {
   status: 'AWAITING_MANDATE' | 'ACTIVATED' | 'FAILED' | 'CANCELLED' | 'EXPIRED'
   activatedModules?: string[]
   failureReason?: string
+}
+
+/** Response shape from GET /v1/workspace/plan/current. */
+interface CurrentSubscriptionsResponse {
+  subscriptions: ActiveSubDto[]
+}
+
+interface ActiveSubDto {
+  primaryPlanKey: string | null
+  planKeys: string[]
+  seats: number
+  billingCycle: string        // 'MONTHLY' | 'ANNUAL'
+  unitPriceInr: number | null
+  amountInr: number | null
+  status: string              // 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'HALTED' | 'PAUSED' | 'GRACE'
+  currentPeriodEnd: string | null   // ISO
+  nextChargeAt: string | null        // ISO
+  haltedAt: string | null            // ISO
+  graceUntil: string | null          // ISO
+  razorpaySubscriptionId: string
+}
+
+interface ChangeSeatsResponse {
+  previousSeats: number
+  newSeats: number
+  charged: boolean
+  message: string
+}
+
+/** Result of asking the backend to re-check Razorpay for a stranded payment. */
+interface RecoverResponse {
+  activated: number
+  message: string
 }
 
 export const Plan: React.FC = () => {
@@ -85,37 +126,93 @@ export const Plan: React.FC = () => {
   const [seatsByPlan, setSeatsByPlan] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [awaitingMandate, setAwaitingMandate] = useState(false)
-  const [pendingId, setPendingId] = useState<string | null>(null)
+  // Resume an in-flight mandate across a reload. The admin authorises the
+  // mandate in a SEPARATE Razorpay tab, so it is entirely normal for them to
+  // reload, navigate away, or even re-login on this one while the payment is
+  // completing. Keeping the pending id only in React state meant the polling
+  // loop died on any of those, the admin was dropped back on the plan picker
+  // as though they had never paid, and our own "refresh this page" error
+  // message was impossible to act on. localStorage survives all three.
+  const [awaitingMandate, setAwaitingMandate] = useState(
+    () => !!localStorage.getItem(PENDING_KEY))
+  const [pendingId, setPendingId] = useState<string | null>(
+    () => localStorage.getItem(PENDING_KEY))
   const [checkoutTab, setCheckoutTab] = useState<Window | null>(null)
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(
+    () => localStorage.getItem(PENDING_URL_KEY))
+  const [recovering, setRecovering] = useState(false)
+
+  // Active subscriptions on THIS workspace, keyed by primary planKey. When
+  // present, the /plan page shows a "Your current plan" section with a
+  // Change Seats control that reuses the SAME UPI mandate (Hotstar-style,
+  // Razorpay auto-prorates the difference on the existing mandate). The
+  // seat picker further down HIDES already-subscribed plans so the admin
+  // can only ADD new modules (creating parallel subscriptions), never
+  // accidentally create a duplicate for a plan they already own.
+  const [activeSubs, setActiveSubs] = useState<ActiveSubDto[]>([])
+  const [activeSubsLoading, setActiveSubsLoading] = useState(true)
+  const [subsLoadFailed, setSubsLoadFailed] = useState(false)
+  // Per-plan "pending seat change" state — the +/- on the current-plan card
+  // is optimistic; we submit when the admin clicks Confirm.
+  const [pendingSeatChanges, setPendingSeatChanges] = useState<Record<string, number>>({})
+  const [changingPlanKey, setChangingPlanKey] = useState<string | null>(null)
+  const [changeMessage, setChangeMessage] = useState('')
+
+  // The set of planKeys that are already active on this workspace — used to
+  // filter the seat picker so admins cannot pick the same plan twice.
+  const activePlanKeys = useMemo(() => new Set(activeSubs.flatMap(s => s.planKeys)), [activeSubs])
+
+  // Distinguishes "this workspace owns nothing" from "we could not find out".
+  // Treating a failed fetch as an empty list is dangerous here: activePlanKeys
+  // collapses to empty, which silently disables BOTH duplicate-purchase guards
+  // (the summary filter and the picker filter) in exactly the situation they
+  // exist for, and hides the "Your current plan" card including its HALTED /
+  // grace-period warning — so an admin mid-grace sees what looks like a fresh
+  // workspace and is invited to buy a module they already pay for.
+  const fetchCurrent = async () => {
+    try {
+      const r = await apiJson<CurrentSubscriptionsResponse>('/v1/workspace/plan/current')
+      setActiveSubs(r.subscriptions ?? [])
+      setSubsLoadFailed(false)
+    } catch {
+      setActiveSubs([])
+      setSubsLoadFailed(true)
+    } finally {
+      setActiveSubsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchCurrent()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Pre-select the plan passed via ?add=<planKey> (from the tile grid's
-  // "Add to plan" affordance on a locked tile). Default seat count = 1
-  // so the admin only picks the size once, not per-plan on top of that.
+  // "Add to plan" affordance on a locked tile). Skips if that plan is
+  // already active (in which case the admin should see "Change seats"
+  // on their current-plan card instead of the setup form).
   useEffect(() => {
     const add = searchParams.get('add')
-    if (add && available.some(p => p.key === add) && !seatsByPlan[add]) {
+    if (add && available.some(p => p.key === add) && !activePlanKeys.has(add) && !seatsByPlan[add]) {
       setSeatsByPlan(prev => ({ ...prev, [add]: 1 }))
     }
-    // Also pre-tick every plan whose included_modules already include an
-    // active module (so re-visits show the current state; seats default to
-    // the current count when we wire it — for now default 1 since we don't
-    // yet read per-module seat count from the tenant_modules row).
-    for (const p of available) {
-      const alreadyActive = p.includedModules.some(mk => activeModules.includes(mk))
-      if (alreadyActive && !seatsByPlan[p.key]) {
-        setSeatsByPlan(prev => ({ ...prev, [p.key]: 1 }))
-      }
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [available.length, searchParams])
+  }, [available.length, searchParams, activePlanKeys.size])
 
   // -- derived pricing ------------------------------------------------------
+  // Filters OUT plans the workspace already owns. Without this, a stray
+  // seatsByPlan entry (from a stale ?add= link or a click before fetchCurrent
+  // returned) would price the owned plan into the summary, enable the
+  // "Set Up Autopay" button, and post it to /setup-autopay — creating a
+  // SECOND Razorpay subscription for a module the customer already pays for.
+  // The grid filter at the render layer hides the tile so the admin can't
+  // even decrement the stale entry back to zero. Belt-and-suspenders here.
   const selectedPlans: Array<{ plan: ModulePlan; seats: number }> = useMemo(() => {
     return available
+      .filter(p => !activePlanKeys.has(p.key))
       .map(p => ({ plan: p, seats: seatsByPlan[p.key] ?? 0 }))
       .filter(x => x.seats > 0)
-  }, [available, seatsByPlan])
+  }, [available, seatsByPlan, activePlanKeys])
 
   const monthlyTotal = useMemo(() => {
     return selectedPlans.reduce((sum, { plan, seats }) => {
@@ -135,6 +232,124 @@ export const Plan: React.FC = () => {
   const inc = (key: string) => setSeatsByPlan(s => ({ ...s, [key]: Math.min(999, (s[key] ?? 0) + 1) }))
   const dec = (key: string) => setSeatsByPlan(s => ({ ...s, [key]: Math.max(0, (s[key] ?? 0) - 1) }))
   const setSeats = (key: string, n: number) => setSeatsByPlan(s => ({ ...s, [key]: Math.max(0, Math.min(999, Math.floor(n) || 0)) }))
+
+  // -- change-seats on an EXISTING subscription (Hotstar-style) -------------
+  // Optimistic +/-  on the current-plan card; the pending value only submits
+  // to the backend when the admin clicks Confirm. Razorpay reuses the same
+  // mandate and auto-prorates the current-cycle difference — no new UPI PIN
+  // required as long as the new amount stays under the mandate's max_amount
+  // ceiling (typically 1.5–2x the initial setup amount).
+  //
+  // Bucket key = razorpay_subscription_id (unique per subscription). Previously
+  // used primaryPlanKey ?? '' which meant two subs with null primaryPlanKey
+  // collided on the same '' slot — clicking + on sub A moved sub B's stepper
+  // and Cancel wiped both.
+  const bucketKey = (sub: ActiveSubDto) => sub.razorpaySubscriptionId
+  const currentPendingSeats = (key: string, current: number) =>
+    pendingSeatChanges[key] ?? current
+  const seatsDelta = (key: string, current: number) =>
+    currentPendingSeats(key, current) - current
+  const bumpPending = (key: string, current: number, delta: number) => {
+    setPendingSeatChanges(prev => {
+      const next = Math.max(1, Math.min(999, currentPendingSeats(key, current) + delta))
+      return { ...prev, [key]: next }
+    })
+  }
+  const cancelPending = (key: string) => {
+    setPendingSeatChanges(prev => { const c = { ...prev }; delete c[key]; return c })
+  }
+  const confirmSeatChange = async (sub: ActiveSubDto) => {
+    const primaryKey = sub.primaryPlanKey
+    const key = bucketKey(sub)
+    if (!primaryKey) return
+    const newSeats = currentPendingSeats(key, sub.seats)
+    if (newSeats === sub.seats) { cancelPending(key); return }
+    setChangingPlanKey(primaryKey)
+    setError('')
+    try {
+      const res = await apiJson<ChangeSeatsResponse>(
+        '/v1/workspace/plan/change-seats',
+        { method: 'POST', body: JSON.stringify({ planKey: primaryKey, newSeats }) },
+      )
+      // Success — refresh current + tenant modules from the source of truth.
+      // Razorpay's async subscription.charged webhook will refresh amount_inr
+      // + current_period_end shortly; the poll here just reads what we just
+      // wrote so the UI reflects the intent immediately.
+      await fetchCurrent()
+      try { await useSdkStore.getState().hydrate() } catch { /* best-effort */ }
+      try { await refreshTenant() } catch { /* best-effort */ }
+      cancelPending(key)
+      // Show the server's proration message so the admin knows what happens.
+      setChangeMessage(res.message)
+      // Auto-clear after 8s so it doesn't linger.
+      setTimeout(() => setChangeMessage(''), 8000)
+    } catch (err) {
+      setError((err as Error).message || 'Could not update seats. Please try again.')
+    } finally {
+      setChangingPlanKey(null)
+    }
+  }
+
+  // Clear every trace of an in-flight purchase. Both the storage key AND the
+  // React state must go: the amber "payment not confirmed" banner renders on
+  // `pendingId && !awaitingMandate`, so clearing only one of them is what
+  // turns the banner ON at exactly the wrong moments (right after a
+  // successful recovery, or on top of a terminal FAILED/CANCELLED error).
+  const clearPending = () => {
+    localStorage.removeItem(PENDING_KEY)
+    localStorage.removeItem(PENDING_URL_KEY)
+    setPendingId(null)
+  }
+
+  // Tell the backend to release an abandoned setup, then clear locally.
+  // Without the server call the plan_change_requests row stays
+  // AWAITING_MANDATE and the duplicate-purchase guard refuses the admin's
+  // next attempt to buy the same module — a button labelled "Cancel and edit
+  // my selection" that makes re-selecting impossible.
+  const cancelPendingSetup = async (id: string | null) => {
+    if (id) {
+      try {
+        await apiJson('/v1/workspace/plan/setup-autopay/cancel',
+          { method: 'POST', body: JSON.stringify({ id }) })
+      } catch { /* best-effort — the expiry sweep closes it out within 24h */ }
+    }
+    clearPending()
+    setAwaitingMandate(false)
+  }
+
+  // -- "I paid but it's still locked" ---------------------------------------
+  // Asks the backend to check with Razorpay directly for any purchase of ours
+  // stuck awaiting a mandate confirmation. Never charges anything — it only
+  // grants access that was already paid for. The same recovery runs
+  // automatically on page load and on a server-side cron; this button exists
+  // so an admin whose money has left their bank has something to press
+  // instead of being told to wait.
+  const recoverPayment = async () => {
+    setRecovering(true)
+    setError('')
+    try {
+      const res = await apiJson<RecoverResponse>(
+        '/v1/workspace/plan/recover', { method: 'POST' })
+      if (res.activated > 0) {
+        clearPending()          // must clear pendingId too, not just storage —
+                                // the amber banner keys off pendingId && !awaitingMandate,
+                                // so leaving it set renders "payment not confirmed"
+                                // directly beneath the success message.
+        setAwaitingMandate(false)
+        await fetchCurrent()
+        try { await useSdkStore.getState().hydrate() } catch { /* best-effort */ }
+        try { await refreshTenant() } catch { /* best-effort */ }
+        setChangeMessage(res.message)
+        setTimeout(() => setChangeMessage(''), 8000)
+      } else {
+        setError(res.message)
+      }
+    } catch (err) {
+      setError((err as Error).message || 'Could not check your payment. Please try again.')
+    } finally {
+      setRecovering(false)
+    }
+  }
 
   // -- submit ---------------------------------------------------------------
   const submit = async () => {
@@ -158,6 +373,9 @@ export const Plan: React.FC = () => {
       )
       const tab = window.open(res.checkoutShortUrl, '_blank', 'noopener,noreferrer')
       setCheckoutTab(tab)
+      localStorage.setItem(PENDING_KEY, res.planChangeRequestId)
+      localStorage.setItem(PENDING_URL_KEY, res.checkoutShortUrl)
+      setCheckoutUrl(res.checkoutShortUrl)
       setPendingId(res.planChangeRequestId)
       setAwaitingMandate(true)
     } catch (err) {
@@ -174,7 +392,13 @@ export const Plan: React.FC = () => {
     const iv = setInterval(async () => {
       if (Date.now() > deadline) {
         clearInterval(iv)
-        setError("We couldn't confirm your mandate approval. If you completed it in Razorpay, refresh this page.")
+        // Deliberately NOT clearing PENDING_KEY here. The mandate may still
+        // be completing on Razorpay's side, and the backend self-heal on
+        // /current plus the 10-minute sweep will activate it whenever the
+        // truth arrives. Keeping the id means a later reload resumes this
+        // poll rather than pretending the payment never happened.
+        setError("We couldn't confirm your payment yet. If money has left your account, "
+                 + "use “I paid but it's still locked” below — we'll check with Razorpay directly.")
         setAwaitingMandate(false)
         return
       }
@@ -184,6 +408,7 @@ export const Plan: React.FC = () => {
         )
         if (s.status === 'ACTIVATED') {
           clearInterval(iv)
+          localStorage.removeItem(PENDING_KEY)
           // Hard refresh of SDK auth state so SDK.modules AND SDK.permissions
           // AND the local Tenant all update atomically from the authenticated
           // /v1/canonical-auth/me endpoint. This addresses two 2026-08-07
@@ -203,6 +428,11 @@ export const Plan: React.FC = () => {
           navigate('/modules')
         } else if (s.status === 'FAILED' || s.status === 'CANCELLED' || s.status === 'EXPIRED') {
           clearInterval(iv)
+          // Terminal — clear id AND storage. Leaving pendingId set would put
+          // the amber "nothing is lost, we'll check with Razorpay" banner
+          // directly above the failure error, reassuring the admin about a
+          // payment the backend has just told us definitively did not happen.
+          clearPending()
           setAwaitingMandate(false)
           setError(s.failureReason || `Setup ${s.status.toLowerCase()}. Please try again.`)
         }
@@ -247,16 +477,191 @@ export const Plan: React.FC = () => {
           </div>
         </div>
 
+        {/* Could not read the current plan. Say so plainly and block purchase:
+            with no view of what this workspace already owns we cannot tell a
+            new module from a duplicate, and buying a duplicate means a second
+            Razorpay mandate charging for something they already pay for. */}
+        {subsLoadFailed && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-red-900">We couldn't load your current plan</p>
+              <p className="mt-0.5 text-xs text-red-800">
+                To avoid charging you twice for a module you may already have, purchasing is
+                paused until we can confirm what your workspace is subscribed to.
+              </p>
+            </div>
+            <button onClick={() => { setActiveSubsLoading(true); fetchCurrent() }}
+                    className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700">
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Outstanding-payment recovery. Shown when we know a purchase was
+            started (the id survives reloads in localStorage) but we are not
+            actively polling — i.e. the 30-minute window elapsed, or the admin
+            reloaded / re-logged-in after paying. This is the exit from the
+            worst state a payment system can put someone in: money gone,
+            nothing unlocked, no way to act. */}
+        {pendingId && !awaitingMandate && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-900">You have a payment we haven't confirmed yet</p>
+              <p className="mt-0.5 text-xs text-amber-800">
+                If money has already left your account, nothing is lost — we'll check with
+                Razorpay and unlock your module. You will not be charged again.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={recoverPayment} disabled={recovering}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-60">
+                {recovering && <Loader2 size={12} className="animate-spin" />}
+                {recovering ? 'Checking…' : "I paid but it's still locked"}
+              </button>
+              <button onClick={() => cancelPendingSetup(pendingId)}
+                      className="rounded-lg px-2 py-2 text-xs font-medium text-amber-800 hover:text-amber-900">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Success banner for a completed change-seats operation */}
+        {changeMessage && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl bg-[var(--accent-bg)]/60 p-3 text-sm text-[var(--accent-fg-strong)]">
+            <Sparkles size={14} className="mt-0.5 shrink-0" />
+            <span>{changeMessage}</span>
+          </div>
+        )}
+
+        {/* YOUR CURRENT PLAN — one card per active subscription. Same UPI
+            mandate reused when admin bumps seats (Razorpay auto-prorates on
+            the existing mandate; no new PIN required as long as the new
+            amount stays under the mandate's max_amount ceiling). */}
+        {!activeSubsLoading && activeSubs.length > 0 && (
+          <div className="mb-8 space-y-3">
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Your current plan</h2>
+            {activeSubs.map(sub => {
+              // Bucket key = razorpay sub id (unique per sub). Was primaryPlanKey
+              // which collided when two ledger rows had null primaryPlanKey.
+              const bkey = bucketKey(sub)
+              const plan = plans.find(p => sub.planKeys.includes(p.key))
+              const Icon = (plan?.icon && iconMap[plan.icon]) || Users
+              const displayName = plan?.displayName ?? (sub.primaryPlanKey ?? 'Subscription')
+              const cycleLabel = sub.billingCycle === 'ANNUAL' ? 'yr' : 'mo'
+              const pending = currentPendingSeats(bkey, sub.seats)
+              const delta = seatsDelta(bkey, sub.seats)
+              const isChanging = changingPlanKey === sub.primaryPlanKey
+              // If the sub has HALTED / PAUSED / PAST_DUE the backend
+              // changeSeatCount will 409 — pre-disable the +/- so the admin
+              // doesn't hit an opaque error. They should re-authorise the
+              // mandate first (surface a clearer CTA below when useful).
+              const seatChangeAllowed = (sub.status === 'ACTIVE' || sub.status === 'TRIALING')
+                  && !!sub.primaryPlanKey
+              const nextCharge = sub.nextChargeAt
+                ? new Date(sub.nextChargeAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                : null
+              const statusPill =
+                sub.status === 'ACTIVE'    ? { text: 'Active',       cls: 'bg-[var(--status-success-bg)] text-[var(--status-success-fg)]' } :
+                sub.status === 'TRIALING'  ? { text: '7-day trial',  cls: 'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]' } :
+                sub.status === 'PAST_DUE'  ? { text: 'Payment retrying', cls: 'bg-amber-100 text-amber-800' } :
+                sub.status === 'HALTED'    ? { text: 'Payment failed — grace period', cls: 'bg-red-100 text-red-700' } :
+                sub.status === 'PAUSED'    ? { text: 'Paused',       cls: 'bg-slate-100 text-slate-700' } :
+                                             { text: sub.status,     cls: 'bg-slate-100 text-slate-700' }
+              return (
+                <div key={sub.razorpaySubscriptionId}
+                     className="rounded-xl border-2 border-[var(--accent-border)] bg-[var(--bg-surface)] p-5 shadow-sm">
+                  <div className="flex items-start gap-4">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-[var(--accent-fg)]">
+                      <Icon size={20} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base font-semibold text-[var(--text-primary)]">{displayName}</h3>
+                        <span className={clsx('rounded-full px-2 py-0.5 text-[10px] font-semibold', statusPill.cls)}>{statusPill.text}</span>
+                      </div>
+                      <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                        <span className="tabular-nums">{sub.seats}</span> seats · <span className="tabular-nums">₹{(sub.amountInr ?? 0).toLocaleString('en-IN')}</span>/{cycleLabel}
+                        {nextCharge && <> · next charge {nextCharge}</>}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={() => bumpPending(bkey, sub.seats, -1)}
+                              disabled={isChanging || pending <= 1 || !seatChangeAllowed}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] disabled:cursor-not-allowed disabled:opacity-40">
+                        <Minus size={14} />
+                      </button>
+                      <div className="h-8 w-14 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-center text-sm font-medium leading-8 text-[var(--text-primary)] tabular-nums">
+                        {pending}
+                      </div>
+                      <button onClick={() => bumpPending(bkey, sub.seats, +1)}
+                              disabled={isChanging || pending >= 999 || !seatChangeAllowed}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] disabled:cursor-not-allowed disabled:opacity-40">
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  {!seatChangeAllowed && sub.status !== 'ACTIVE' && sub.status !== 'TRIALING' && (
+                    <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+                      Seat changes are paused while your autopay is <b>{sub.status.toLowerCase()}</b>.
+                      Please update your payment method first — the +/- controls will re-enable
+                      once the next charge succeeds.
+                    </div>
+                  )}
+                  {delta !== 0 && (
+                    <div className="mt-4 rounded-lg bg-[var(--accent-bg)]/60 p-3">
+                      <p className="text-xs text-[var(--accent-fg-strong)]">
+                        {delta > 0 ? (
+                          <>Add <b>{delta}</b> seat{delta === 1 ? '' : 's'} — Razorpay will charge the prorated difference on your existing UPI mandate. No new PIN needed.</>
+                        ) : (
+                          <>Reduce by <b>{-delta}</b> seat{delta === -1 ? '' : 's'} — credit applied at your next renewal ({nextCharge ?? 'next cycle'}).</>
+                        )}
+                      </p>
+                      <div className="mt-3 flex gap-2">
+                        <button onClick={() => confirmSeatChange(sub)} disabled={isChanging}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent-solid)] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60">
+                          {isChanging && <Loader2 size={12} className="animate-spin" />}
+                          {isChanging ? 'Updating…' : 'Confirm change'}
+                        </button>
+                        <button onClick={() => cancelPending(bkey)} disabled={isChanging}
+                                className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-40">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {/* Grid: modules on the left, plan summary on the right */}
         <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-          {/* Modules */}
+          {/* Modules — only the ones NOT already active. Already-active plans
+              have their own card above with +/- seat controls. */}
           <div className="space-y-3">
-            {isLoading && available.length === 0 ? (
+            {activeSubs.length > 0 && plans.filter(p => !activePlanKeys.has(p.key)).length > 0 && (
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
+                Add another module
+              </p>
+            )}
+            {/* Hold the picker until BOTH the module catalog AND the current-plan
+                fetch complete. Without gating on activeSubsLoading, on a cold
+                load useModulePlans (react-query cache) resolves first while
+                fetchCurrent is still in flight, activePlanKeys is an empty Set,
+                and the picker renders EVERY plan — including ones the workspace
+                already owns. An admin who clicks + on their existing HR plan in
+                that window writes seatsByPlan.hr=1 which then flows into the
+                summary + submit body once fetchCurrent resolves (the grid then
+                hides the tile so they can't undo it). Belt-and-suspenders with
+                selectedPlans' filter, but gating avoids the confusing flash. */}
+            {(isLoading && available.length === 0) || activeSubsLoading || subsLoadFailed ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="h-24 animate-pulse rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]" />
               ))
             ) : (
-              plans.map(plan => {
+              plans.filter(p => !activePlanKeys.has(p.key)).map(plan => {
                 const isAvailable = plan.status === 'AVAILABLE'
                 const seats = seatsByPlan[plan.key] ?? 0
                 const isSelected = seats > 0
@@ -313,8 +718,8 @@ export const Plan: React.FC = () => {
                           <input type="number" min={0} max={999} value={seats}
                                  onChange={e => setSeats(plan.key, Number(e.target.value))}
                                  className="h-8 w-14 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 text-center text-sm font-medium text-[var(--text-primary)] outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--accent-solid)]/15" />
-                          <button onClick={() => inc(plan.key)}
-                                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-subtle)]"
+                          <button onClick={() => inc(plan.key)} disabled={seats >= 999}
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-subtle)] disabled:cursor-not-allowed disabled:opacity-40"
                                   aria-label={`Increase seats for ${plan.displayName}`}>
                             <Plus size={14} />
                           </button>
@@ -410,7 +815,7 @@ export const Plan: React.FC = () => {
 
                 <button
                   onClick={submit}
-                  disabled={loading || selectedPlans.length === 0}
+                  disabled={loading || selectedPlans.length === 0 || subsLoadFailed}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent-solid)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading && <Loader2 size={14} className="animate-spin" />}
@@ -435,13 +840,42 @@ export const Plan: React.FC = () => {
             </div>
             <h2 className="text-lg font-bold text-[var(--text-primary)]">Waiting for mandate approval…</h2>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              We opened Razorpay in a new tab. Complete the autopay authorisation there and your modules will unlock automatically.
+              {checkoutTab
+                ? 'We opened Razorpay in a new tab. Complete the autopay authorisation there and your modules will unlock automatically.'
+                : 'Finish the autopay authorisation on Razorpay and your modules will unlock automatically.'}
             </p>
             <div className="mt-6 flex flex-col gap-2">
-              <button onClick={() => checkoutTab?.focus()} className="rounded-xl bg-[var(--accent-solid)] px-4 py-3 text-sm font-semibold text-white hover:opacity-90">
-                I'm on the Razorpay tab → focus it
+              {/* After a reload the Window handle is gone, so focus() would be a
+                  silent no-op. Fall back to re-opening the persisted checkout
+                  URL — the whole point of resuming is that this still works. */}
+              <button
+                onClick={() => {
+                  if (checkoutTab && !checkoutTab.closed) { checkoutTab.focus(); return }
+                  if (checkoutUrl) {
+                    const t = window.open(checkoutUrl, '_blank', 'noopener,noreferrer')
+                    setCheckoutTab(t)
+                  }
+                }}
+                disabled={!checkoutTab && !checkoutUrl}
+                className="rounded-xl bg-[var(--accent-solid)] px-4 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">
+                {checkoutTab && !checkoutTab.closed
+                  ? "I'm on the Razorpay tab → focus it"
+                  : 'Reopen the Razorpay payment page'}
               </button>
-              <button onClick={() => { setAwaitingMandate(false); setPendingId(null); }} className="py-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]">
+              <button onClick={recoverPayment} disabled={recovering}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--border-default)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] disabled:opacity-60">
+                {recovering && <Loader2 size={14} className="animate-spin" />}
+                {recovering ? 'Checking with Razorpay…' : 'Already paid? Check now'}
+              </button>
+              {/* Releases the setup server-side as well as locally. Clearing
+                  only local state would leave the request AWAITING_MANDATE, and
+                  the duplicate-purchase guard would then refuse the very
+                  re-selection this button invites. Still safe for someone who
+                  actually did pay: cancel is guarded on AWAITING_MANDATE, so if
+                  the mandate went through it is already ACTIVATED and the call
+                  is a no-op. */}
+              <button onClick={() => cancelPendingSetup(pendingId)}
+                      className="py-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]">
                 Cancel and edit my selection
               </button>
             </div>

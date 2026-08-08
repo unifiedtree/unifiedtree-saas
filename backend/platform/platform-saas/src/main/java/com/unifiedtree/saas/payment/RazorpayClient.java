@@ -3,6 +3,7 @@ package com.unifiedtree.saas.payment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
@@ -10,6 +11,7 @@ import org.springframework.web.server.ResponseStatusException;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
 
@@ -33,12 +35,37 @@ public class RazorpayClient {
 
     private static final Logger log = LoggerFactory.getLogger(RazorpayClient.class);
 
+    /**
+     * Connect timeout. Razorpay's API is a well-provisioned public endpoint;
+     * if we cannot get a socket in 5s the network path is broken, not slow.
+     */
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    /**
+     * Read timeout. MUST be bounded: {@code PlanChangeService.changeSeatCount}
+     * calls {@link #updateSubscription} from inside a transaction that holds a
+     * {@code pg_advisory_xact_lock} plus a {@code SELECT ... FOR UPDATE} row
+     * lock. With the JDK's default infinite read timeout, one hung Razorpay
+     * response would pin a Postgres connection and block every other seat
+     * change for that tenant indefinitely. 20s is comfortably above Razorpay's
+     * observed p99 while capping worst-case lock hold time.
+     */
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(20);
+
     private final RazorpayProperties props;
     private final RestClient http;
 
     public RazorpayClient(RazorpayProperties props) {
         this.props = props;
-        this.http = RestClient.builder().baseUrl(props.apiBase()).build();
+        // Explicit request factory — the auto-selected default (JDK or Simple,
+        // since no httpclient5/jetty/reactor-netty is on the classpath) leaves
+        // BOTH timeouts infinite.
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) CONNECT_TIMEOUT.toMillis());
+        factory.setReadTimeout((int) READ_TIMEOUT.toMillis());
+        this.http = RestClient.builder()
+                .baseUrl(props.apiBase())
+                .requestFactory(factory)
+                .build();
     }
 
     private String basicAuthHeader() {
@@ -276,6 +303,56 @@ public class RazorpayClient {
         } catch (Exception e) {
             log.warn("Razorpay fetchSubscription failed: {}", e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not fetch subscription");
+        }
+    }
+
+    /**
+     * Modify an existing subscription (Hotstar-style seat change / plan swap).
+     * Razorpay hits the SAME mandate — no re-authorisation needed as long as
+     * the new amount stays under the mandate's max_amount ceiling.
+     *
+     * @param subscriptionId    Razorpay sub_XXX id
+     * @param quantity          new seat count (pass null to leave unchanged)
+     * @param planId            switch to a different plan (pass null to leave unchanged)
+     * @param scheduleChangeAt  "now" for immediate proration on the current cycle,
+     *                          "cycle_end" to defer at next renewal (no proration).
+     *                          Null defaults to Razorpay's own default (cycle_end).
+     * @param customerNotify    1 = Razorpay emails the buyer about the change; 0 = we own comms.
+     * @return the updated {@link SubscriptionView}. Note Razorpay does NOT return
+     *         the prorated charge amount here — that materialises asynchronously
+     *         via the {@code subscription.charged} webhook once the mandate debits.
+     */
+    @SuppressWarnings("unchecked")
+    public SubscriptionView updateSubscription(String subscriptionId,
+                                               Integer quantity,
+                                               String planId,
+                                               String scheduleChangeAt,
+                                               int customerNotify) {
+        if (!props.isConfigured()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Payment gateway not configured");
+        }
+        Map<String, Object> body = new java.util.HashMap<>();
+        if (quantity != null)         body.put("quantity", quantity);
+        if (planId != null)           body.put("plan_id", planId);
+        if (scheduleChangeAt != null) body.put("schedule_change_at", scheduleChangeAt);
+        body.put("customer_notify", customerNotify);
+        try {
+            Map<String, Object> resp = http.post()
+                    .uri("/subscriptions/{id}", subscriptionId)
+                    .header("Authorization", basicAuthHeader())
+                    .header("Content-Type", "application/json")
+                    .body(body)
+                    .retrieve()
+                    .body(Map.class);
+            if (resp == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Razorpay returned no subscription");
+            }
+            return toSubscriptionView(resp);
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Razorpay updateSubscription failed: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not update subscription");
         }
     }
 

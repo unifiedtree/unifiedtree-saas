@@ -85,6 +85,16 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.letters",
         "com.hrms.api.invitation",
         "com.hrms.api.mail",
+        // Trial lifecycle (TrialLifecycleJob's 08:30 IST sweep +
+        // TrialNotificationService). Was omitted, so under canonical-prod
+        // neither bean was ever instantiated: the @Scheduled sweep never
+        // registered, trials were never flipped ACTIVE -> EXPIRED, and no
+        // trial-ending or trial-expired notification has ever been sent in
+        // production. Safe to scan — the package holds exactly these two
+        // classes, both JdbcTemplate-based against platform.* / notif.*,
+        // with no legacy public.*-targeting entities of the kind that keep
+        // com.hrms.api.saas out of this list.
+        "com.hrms.api.trial",
         "com.hrms.api.modulereq",
         "com.hrms.api.access",
         "com.hrms.api.probation",

@@ -31,5 +31,6 @@ public enum AppNotificationType {
     WELCOME,
     TRIAL_ENDING_SOON,
     TRIAL_EXPIRED,
+    SUBSCRIPTION_HALTED,          // autopay charge failed after Razorpay's retries; grace timer started
     GENERAL
 }

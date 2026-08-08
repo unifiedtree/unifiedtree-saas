@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -163,6 +164,27 @@ public class ModulePlanService {
         Set<String> mods = new LinkedHashSet<>();
         for (ModulePlanDto p : plans) mods.addAll(p.includedModules());
         return new ArrayList<>(mods);
+    }
+
+    /**
+     * Look up one plan by key WITHOUT the AVAILABLE check.
+     *
+     * <p>Counterpart to {@link #requireAvailable} for paths acting on a
+     * subscription the customer has ALREADY paid for — activation from a
+     * completed mandate, and seat changes on a live subscription. Those must
+     * not fail because the catalog row was later flipped to LAUNCHING_SOON or
+     * retired: the money has changed hands, and refusing to expand the
+     * customer's modules (or to let them adjust seats) over a catalog edit
+     * punishes them for an internal pricing decision. Purchase paths keep
+     * using {@link #requireAvailable} — you still cannot BUY a retired plan.
+     *
+     * @return the plan, or empty if the key is unknown entirely (renamed or
+     *         deleted), which callers must treat as unrecoverable
+     */
+    public Optional<ModulePlanDto> findLenient(String planKey) {
+        if (planKey == null || planKey.isBlank()) return Optional.empty();
+        String k = planKey.trim().toLowerCase(Locale.ROOT);
+        return listPlans().stream().filter(p -> p.key().equalsIgnoreCase(k)).findFirst();
     }
 
     /**

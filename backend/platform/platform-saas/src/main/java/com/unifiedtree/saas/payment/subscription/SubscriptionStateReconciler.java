@@ -1,13 +1,18 @@
 package com.unifiedtree.saas.payment.subscription;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.unifiedtree.saas.event.SubscriptionHaltedEvent;
 import com.unifiedtree.saas.payment.RazorpayClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * Central write-path for {@code platform.subscriptions} row-state changes
@@ -35,9 +40,11 @@ public class SubscriptionStateReconciler {
             "'CANCELLED','COMPLETED','EXPIRED'";
 
     private final JdbcTemplate jdbc;
+    private final ApplicationEventPublisher events;
 
-    public SubscriptionStateReconciler(JdbcTemplate jdbc) {
+    public SubscriptionStateReconciler(JdbcTemplate jdbc, ApplicationEventPublisher events) {
         this.jdbc = jdbc;
+        this.events = events;
     }
 
     // -- state mutators --------------------------------------------------------
@@ -105,8 +112,14 @@ public class SubscriptionStateReconciler {
      * grace window. Grace is set unconditionally here (not COALESCE) — a
      * bouncing subscription that goes ACTIVE (grace cleared) then HALTED
      * again gets a fresh 7-day window each time.
+     *
+     * <p><b>Transition guard:</b> the WHERE clause also excludes rows already
+     * in HALTED so this method's return value ({@code true} when a real
+     * transition happened) can gate the SubscriptionHaltedEvent publish —
+     * otherwise the hourly reconciliation cron + inline access-guard would
+     * re-fire the notification every sweep.
      */
-    public void onHalted(String subscriptionId) {
+    public boolean onHalted(String subscriptionId) {
         int rows = jdbc.update("""
                 UPDATE platform.subscriptions SET
                     status                = 'HALTED',
@@ -117,11 +130,51 @@ public class SubscriptionStateReconciler {
                     reconcile_error       = NULL,
                     updated_at            = now()
                  WHERE razorpay_subscription_id = ?
+                   AND status <> 'HALTED'
                    AND status NOT IN (""" + TERMINAL_STATUSES_SQL_LIST + """
                                                                     )
                 """, subscriptionId);
-        if (rows > 0) log.warn("Subscription {} -> HALTED (7-day grace started)", subscriptionId);
+        if (rows > 0) {
+            log.warn("Subscription {} -> HALTED (7-day grace started)", subscriptionId);
+            // Publish SubscriptionHaltedEvent so the admin gets an email +
+            // in-app notification. Gated on rows>0 which means this call is
+            // the one that actually transitioned the row — later reconciler
+            // sweeps see status=HALTED and skip, so we don't spam.
+            publishHalted(subscriptionId);
+        }
+        return rows > 0;
     }
+
+    /** Read tenant/subdomain/grace_until for the halted row and fire the event. */
+    private void publishHalted(String subscriptionId) {
+        try {
+            HaltedInfo info = jdbc.queryForObject("""
+                    SELECT s.tenant_id, t.subdomain, s.grace_until
+                      FROM platform.subscriptions s
+                      JOIN platform.tenants t ON t.id = s.tenant_id
+                     WHERE s.razorpay_subscription_id = ?
+                     LIMIT 1
+                    """, (rs, n) -> {
+                Timestamp gu = rs.getTimestamp("grace_until");
+                return new HaltedInfo(
+                        UUID.fromString(rs.getString("tenant_id")),
+                        rs.getString("subdomain"),
+                        gu == null ? null : gu.toInstant());
+            }, subscriptionId);
+            if (info == null) return;
+            events.publishEvent(new SubscriptionHaltedEvent(
+                    info.tenantId, subscriptionId, info.subdomain, info.graceUntil));
+        } catch (EmptyResultDataAccessException e) {
+            log.warn("publishHalted({}) — row disappeared between UPDATE and SELECT; no event fired", subscriptionId);
+        } catch (RuntimeException e) {
+            // Swallow — a failed notification MUST NOT break the state
+            // transition. The row is already HALTED; the customer's grace
+            // window is running. Ops can grep the log if they miss an email.
+            log.warn("publishHalted({}) failed: {}", subscriptionId, e.getMessage());
+        }
+    }
+
+    private record HaltedInfo(UUID tenantId, String subdomain, Instant graceUntil) {}
 
     public void onCompleted(String subscriptionId) {
         int rows = jdbc.update("""

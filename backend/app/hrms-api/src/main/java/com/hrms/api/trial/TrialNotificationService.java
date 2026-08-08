@@ -6,6 +6,7 @@ import com.unifiedtree.notifications.enums.AppNotificationType;
 import com.unifiedtree.notifications.service.AppNotificationService;
 import com.unifiedtree.saas.trial.TenantAdminLookup;
 import com.unifiedtree.saas.trial.TenantAdminLookup.AdminUser;
+import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -49,35 +50,51 @@ public class TrialNotificationService {
 
     /** Warning fired N days before expiry (per billing_settings). */
     public int notifyEndingSoon(UUID tenantId, String subdomain, int daysLeft, String upgradeUrl) {
-        List<AdminUser> admins = adminLookup.findAdminUsers(tenantId);
-        if (admins.isEmpty()) {
-            log.warn("TRIAL warning: tenant {} has no admins to notify", tenantId);
-            return 0;
+        // Bind tenant context — TrialLifecycleJob is @Scheduled, runs on a
+        // fresh Spring scheduler thread with no ThreadLocal. Without binding,
+        // TenantAwareDataSource skips SET LOCAL app.tenant_id and RLS returns
+        // zero rows / rejects INSERTs on rbac.user_roles + auth.user_credentials
+        // + notif.notifications. Every trial warning silently no-op'd
+        // (verify caught this same bug on the halt path).
+        TenantContext.setTenantId(tenantId);
+        try {
+            List<AdminUser> admins = adminLookup.findAdminUsers(tenantId);
+            if (admins.isEmpty()) {
+                log.warn("TRIAL warning: tenant {} has no admins to notify", tenantId);
+                return 0;
+            }
+            String title = daysLeft <= 1
+                    ? "Your free trial ends tomorrow"
+                    : "Your free trial ends in " + daysLeft + " days";
+            String body = "Subscribe now to keep using UnifiedTree without interruption.";
+            String html = emailHtml(subdomain, title, body, upgradeUrl,
+                    "Your free trial is ending soon. Subscribe today to keep everything you've set up.");
+            return sendAll(admins, tenantId, AppNotificationType.TRIAL_ENDING_SOON, title, body,
+                    html, "Free trial ending", upgradeUrl);
+        } finally {
+            TenantContext.clear();
         }
-        String title = daysLeft <= 1
-                ? "Your free trial ends tomorrow"
-                : "Your free trial ends in " + daysLeft + " days";
-        String body = "Subscribe now to keep using UnifiedTree without interruption.";
-        String html = emailHtml(subdomain, title, body, upgradeUrl,
-                "Your free trial is ending soon. Subscribe today to keep everything you've set up.");
-        return sendAll(admins, tenantId, AppNotificationType.TRIAL_ENDING_SOON, title, body,
-                html, "Free trial ending", upgradeUrl);
     }
 
     /** Expiry fired the first time the daily job runs after period_end. */
     public int notifyExpired(UUID tenantId, String subdomain, String upgradeUrl) {
-        List<AdminUser> admins = adminLookup.findAdminUsers(tenantId);
-        if (admins.isEmpty()) {
-            log.warn("TRIAL expired: tenant {} has no admins to notify", tenantId);
-            return 0;
+        TenantContext.setTenantId(tenantId);  // see notifyEndingSoon for rationale
+        try {
+            List<AdminUser> admins = adminLookup.findAdminUsers(tenantId);
+            if (admins.isEmpty()) {
+                log.warn("TRIAL expired: tenant {} has no admins to notify", tenantId);
+                return 0;
+            }
+            String title = "Your free trial has ended";
+            String body = "Your workspace is still active. Please subscribe to continue using UnifiedTree.";
+            String html = emailHtml(subdomain, title, body, upgradeUrl,
+                    "Your free trial has ended. Your workspace is still working — please subscribe "
+                            + "when you get a moment so it stays that way.");
+            return sendAll(admins, tenantId, AppNotificationType.TRIAL_EXPIRED, title, body,
+                    html, "Free trial ended", upgradeUrl);
+        } finally {
+            TenantContext.clear();
         }
-        String title = "Your free trial has ended";
-        String body = "Your workspace is still active. Please subscribe to continue using UnifiedTree.";
-        String html = emailHtml(subdomain, title, body, upgradeUrl,
-                "Your free trial has ended. Your workspace is still working — please subscribe "
-                        + "when you get a moment so it stays that way.");
-        return sendAll(admins, tenantId, AppNotificationType.TRIAL_EXPIRED, title, body,
-                html, "Free trial ended", upgradeUrl);
     }
 
     // -------------------------------------------------------------------------

@@ -38,7 +38,19 @@ public class TenantAdminLookup {
         this.jdbc = jdbc;
     }
 
-    /** Employee IDs (the id notifications key off) + email addresses of every active admin. */
+    /**
+     * Employee IDs (the id notifications key off) + email addresses of every
+     * active admin.
+     *
+     * <p>An empty return means "the query ran and found no admins" — that
+     * happens legitimately for a bare-bones test tenant. A query error is
+     * rethrown so ops sees an ERROR-level stack in the log AND the caller can
+     * distinguish "no admins exist" from "admin lookup crashed" (previously
+     * both surfaced as an empty list and a benign WARN — the halt-notification
+     * pipeline broke silently for weeks in that state per the verify finding).
+     * Callers wrap the whole notification loop in their own try/catch so a
+     * rethrow here doesn't break unrelated tenants in a sweep.
+     */
     public List<AdminUser> findAdminUsers(UUID tenantId) {
         if (tenantId == null) return List.of();
         try {
@@ -60,9 +72,12 @@ public class TenantAdminLookup {
                             rs.getString("email"),
                             null),
                     tenantId, SUPER_ADMIN_ROLE_ID, OWNER_ROLE_ID);
-        } catch (Exception ex) {
-            log.warn("admin lookup failed for tenant={}: {}", tenantId, ex.getMessage());
-            return List.of();
+        } catch (RuntimeException ex) {
+            log.error("admin lookup FAILED for tenant={} — notifications will not be sent. "
+                      + "Common causes: RLS tenant not bound on this thread, ut_app permission "
+                      + "regression on rbac/auth, or DB connectivity.",
+                    tenantId, ex);
+            throw ex;
         }
     }
 
