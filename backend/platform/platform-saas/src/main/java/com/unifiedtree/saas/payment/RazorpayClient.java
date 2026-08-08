@@ -3,7 +3,7 @@ package com.unifiedtree.saas.payment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
@@ -56,12 +56,27 @@ public class RazorpayClient {
 
     public RazorpayClient(RazorpayProperties props) {
         this.props = props;
-        // Explicit request factory — the auto-selected default (JDK or Simple,
-        // since no httpclient5/jetty/reactor-netty is on the classpath) leaves
-        // BOTH timeouts infinite.
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout((int) CONNECT_TIMEOUT.toMillis());
-        factory.setReadTimeout((int) READ_TIMEOUT.toMillis());
+        // Explicit request factory for two reasons:
+        //
+        //  1. The auto-selected default leaves BOTH timeouts infinite (no
+        //     httpclient5/jetty/reactor-netty on the classpath), and this
+        //     client is called from inside a transaction holding row locks.
+        //  2. It MUST support PATCH. SimpleClientHttpRequestFactory is built on
+        //     HttpURLConnection, which rejects PATCH outright with
+        //     "Invalid HTTP method: PATCH" — so using it silently broke
+        //     updateSubscription (Razorpay's update API is PATCH). Adding the
+        //     timeouts via that factory and switching the verb to PATCH were
+        //     two separate fixes on the same day that cancelled each other out.
+        //
+        // JdkClientHttpRequestFactory wraps java.net.http.HttpClient, which
+        // handles arbitrary verbs and takes a connect timeout on the client
+        // plus a read timeout on the factory.
+        java.net.http.HttpClient jdkClient = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(CONNECT_TIMEOUT)
+                .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(jdkClient);
+        factory.setReadTimeout(READ_TIMEOUT);
         this.http = RestClient.builder()
                 .baseUrl(props.apiBase())
                 .requestFactory(factory)
