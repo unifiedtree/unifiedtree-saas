@@ -132,22 +132,47 @@ public class BrandingService {
 
     /**
      * Read the first 12 bytes and match a magic-byte signature. Anything that
-     * doesn't match returns null and the caller rejects.
+     * doesn't match returns null and the caller rejects. The client's
+     * Content-Type is untrusted; only the sniffed answer is used.
+     *
+     * <p>Formats deliberately NOT accepted:
      * <ul>
-     *  <li>PNG:  89 50 4E 47 0D 0A 1A 0A</li>
-     *  <li>JPEG: FF D8 FF</li>
-     *  <li>WebP: "RIFF" .... "WEBP"</li>
+     *  <li>SVG — carries {@code <script>} / {@code <foreignObject>}, live
+     *      XSS vector when rendered inline.</li>
+     *  <li>BMP / TIFF — huge, not universally browser-native.</li>
+     *  <li>HEIC — Apple format, Chrome/Edge can't render without conversion.</li>
      * </ul>
      */
     private static Sniffed sniff(byte[] b) {
         if (b == null || b.length < 12) return null;
+
+        // PNG:  89 50 4E 47 0D 0A 1A 0A
         if (b[0] == (byte) 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47)
             return new Sniffed("image/png", "png");
+
+        // JPEG: FF D8 FF
         if (b[0] == (byte) 0xFF && b[1] == (byte) 0xD8 && b[2] == (byte) 0xFF)
             return new Sniffed("image/jpeg", "jpg");
+
+        // WebP: "RIFF" .... "WEBP"
         if (b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F'
             && b[8] == 'W' && b[9] == 'E' && b[10] == 'B' && b[11] == 'P')
             return new Sniffed("image/webp", "webp");
+
+        // GIF: "GIF87a" or "GIF89a" — added 2026-08-10 after user asked for
+        // "all image types close to images". Universally rendered by every
+        // browser, no script surface, safe.
+        if (b[0] == 'G' && b[1] == 'I' && b[2] == 'F' && b[3] == '8'
+            && (b[4] == '7' || b[4] == '9') && b[5] == 'a')
+            return new Sniffed("image/gif", "gif");
+
+        // AVIF: ISOBMFF with ftyp box at offset 4, brand "avif" at offset 8.
+        // Byte pattern: XX XX XX XX 66 74 79 70 61 76 69 66
+        // First 4 bytes are the box length — we don't need to validate it.
+        if (b[4] == 0x66 && b[5] == 0x74 && b[6] == 0x79 && b[7] == 0x70
+            && b[8] == 0x61 && b[9] == 0x76 && b[10] == 0x69 && b[11] == 0x66)
+            return new Sniffed("image/avif", "avif");
+
         return null;
     }
 
