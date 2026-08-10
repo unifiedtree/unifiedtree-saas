@@ -255,24 +255,19 @@ public class WorkforceController {
     public WorkforceEmployeeResponse createEmployee(@Valid @RequestBody CreateWorkforceEmployeeRequest req,
                                                     @AuthenticationPrincipal Jwt jwt) {
         WorkforceEmployeeResponse emp = employees.create(req);
-        // Security: never create a credential with a default password — that
-        // gives every onboarded employee a publicly-known login. Instead, fire
-        // the invitation flow so the canonical credential is born with
-        // active=false / password_hash=null and a single-use token is emailed.
-        // The send is best-effort: a misconfigured SMTP must not roll back the
-        // create or surface a 5xx to the admin — they can resend from the
-        // staff profile if the email never arrives.
-        if (invitationService != null && emp.email() != null && !emp.email().isBlank() && jwt != null) {
-            try {
-                UUID actorId = UUID.fromString(jwt.getSubject());
-                String roleCode = (req.roleCode() != null && !req.roleCode().isBlank())
-                        ? req.roleCode() : "EMPLOYEE";
-                invitationService.sendInvitation(emp.id(), TenantContext.getTenantId(), actorId, roleCode);
-            } catch (RuntimeException ex) {
-                log.warn("Invitation for {} (employee {}) failed to queue: {}",
-                        emp.email(), emp.id(), ex.getMessage());
-            }
-        }
+        // Invitation is DELIBERATELY not fired here — the SPA sends its own
+        // POST /v1/employees/{id}/invite right after create so it can honour a
+        // "send invitation email" checkbox in the form. Firing from both sides
+        // used to produce two invitation_tokens 260ms apart on different Tomcat
+        // threads (real production incident 2026-08-10, employee f84c1bd5 in
+        // tenant `src`): the second call invalidated the first token via
+        // invalidatePreviousTokens, and by the time both async emails arrived
+        // one link was already dead — clicking it returned 422
+        // INVITATION_INVALID. Keep the responsibility in one place.
+        //
+        // sendInvitation() is still idempotent (see InvitationService), so an
+        // accidental double-fire wouldn't lose the user anymore, but avoiding
+        // the double-fire in the first place is cleaner and cheaper.
         return emp;
     }
 

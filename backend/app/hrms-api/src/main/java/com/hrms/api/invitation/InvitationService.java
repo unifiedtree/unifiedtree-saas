@@ -136,6 +136,30 @@ public class InvitationService {
         creds.setInvitedAt(OffsetDateTime.now());
         credRepo.save(creds);
 
+        // Dedup: if the caller races (create-employee auto-invited AND the SPA
+        // then POSTed /invite explicitly, or two "Send invite" clicks landed on
+        // different Tomcat threads), a very-recent unused invitation token is
+        // proof we already did the work. Reuse it: the raw is lost — hash is
+        // one-way — but the still-valid HASH is what protects the endpoint, so
+        // we log the dedup and return without inserting a duplicate. The user
+        // will get one email (from whichever call won the race) and one
+        // working link, instead of two emails where one is dead-on-arrival.
+        //
+        // Window is small on purpose: we do want a genuine "resend after 30
+        // seconds" click to actually rotate the token.
+        List<InvitationToken> recentUnused = tokenRepo
+                .findRecentUnused(creds.getId(), "INVITATION",
+                        OffsetDateTime.now().minusSeconds(20));
+        if (!recentUnused.isEmpty()) {
+            InvitationToken existing = recentUnused.get(0);
+            log.info("Invitation dedup: reusing token {} for employee {} " +
+                     "(a concurrent request already created one {}ms ago)",
+                    existing.getId(), employeeId,
+                    java.time.Duration.between(existing.getCreatedAt(),
+                            OffsetDateTime.now()).toMillis());
+            return new InvitationResult(true, existing.getExpiresAt());
+        }
+
         // Invalidate any existing pending invitation tokens
         tokenRepo.invalidatePreviousTokens(creds.getId(), "INVITATION", OffsetDateTime.now());
 
