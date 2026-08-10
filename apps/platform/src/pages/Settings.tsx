@@ -159,71 +159,6 @@ const SoonRow: React.FC<{ title: string; desc: string }> = ({ title, desc }) => 
  * SVG deliberately blocked (XSS vector). The <input> accept attribute is a
  * UX hint; the real gate is the server.
  */
-/**
- * Human sentences for the HTTP status codes an upload / GET can return.
- * Users should never see "HTTP 401" — that leaks implementation and helps
- * no one troubleshoot. Anything not mapped here falls back to a generic
- * "please try again" so we never surface a raw error to the customer.
- *
- * The map is a function (not a static object) so the copy can vary by
- * server-supplied body — e.g. a 415 that also carries an allowed-types
- * message from the backend gets threaded through.
- */
-function humanErrorFor(status: number, body?: string): { title: string; description: string } {
-  const serverMessage = (() => {
-    if (!body) return ''
-    try { return (JSON.parse(body) as { message?: string }).message ?? '' } catch { return '' }
-  })()
-  switch (status) {
-    case 0: // fetch network error / offline
-      return {
-        title: 'Could not reach the server',
-        description: 'Check your internet connection and try again.',
-      }
-    case 401:
-      return {
-        title: 'Your session has expired',
-        description: 'Please sign in again to change the logo.',
-      }
-    case 402:
-      return {
-        title: 'Your subscription has ended',
-        description: "You can view branding, but to change it please renew your subscription from Manage Plan.",
-      }
-    case 403:
-      return {
-        title: "You don't have permission for this",
-        description: 'Only workspace admins can change the logo. Ask your admin to update it.',
-      }
-    case 413:
-      return {
-        title: 'That image is too large',
-        description: 'Pick a file 2 MB or smaller.',
-      }
-    case 415:
-      return {
-        title: "That file type isn't supported",
-        description: serverMessage || 'Upload a PNG, JPEG, GIF, WebP or AVIF image.',
-      }
-    case 429:
-      return {
-        title: 'Too many uploads in a row',
-        description: 'Please wait a minute and try again.',
-      }
-    default:
-      if (status >= 500) {
-        return {
-          title: 'Something went wrong on our end',
-          description: "We're on it. Please try again in a minute.",
-        }
-      }
-      return {
-        title: 'Upload failed',
-        description: serverMessage || 'Please try again — if it keeps failing, contact your admin.',
-      }
-  }
-}
-
 const BrandingTab: React.FC = () => {
   const token       = useAuthStore((s) => s.token)
   const tenant      = useAuthStore((s) => s.tenant)
@@ -231,9 +166,6 @@ const BrandingTab: React.FC = () => {
 
   const [logoUrl, setLogoUrl] = useState<string | null>(tenant?.logoUrl ?? null)
   const [uploading, setUploading] = useState(false)
-  // If GET /branding responds 402 (cancelled tenant) we disable the upload
-  // button + explain — otherwise the user clicks it and hits a second error.
-  const [loadBlocked, setLoadBlocked] = useState<{ status: number } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Sync from the auth store when it refreshes (e.g. right after a hydrate).
@@ -245,13 +177,7 @@ const BrandingTab: React.FC = () => {
     let cancelled = false
     apiJson<{ logoUrl: string | null }>('/v1/workspace/branding')
       .then((res) => { if (!cancelled) setLogoUrl(res.logoUrl ?? null) })
-      .catch((err) => {
-        if (cancelled) return
-        // apiJson throws an object with a numeric `status` — surface the
-        // block reason so the button can be disabled with a helpful pointer.
-        const status = (err as { status?: number })?.status ?? 0
-        if (status === 402 || status === 403) setLoadBlocked({ status })
-      })
+      .catch(() => { /* leave whatever the store had */ })
     return () => { cancelled = true }
   }, [])
 
@@ -260,8 +186,9 @@ const BrandingTab: React.FC = () => {
   const onFile = async (file: File | undefined) => {
     if (!file) return
     if (file.size > 2 * 1024 * 1024) {
-      const msg = humanErrorFor(413)
-      toast.error(msg.title, { description: msg.description })
+      toast.error('That file is over 2 MB', {
+        description: 'Please pick a PNG, JPEG or WebP under 2 MB.',
+      })
       return
     }
     setUploading(true)
@@ -270,22 +197,16 @@ const BrandingTab: React.FC = () => {
       // travel as multipart/form-data.
       const form = new FormData()
       form.append('file', file)
-      let resp: Response
-      try {
-        resp = await fetch(`${API_BASE_URL}/v1/workspace/branding/logo`, {
-          method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: form,
-        })
-      } catch {
-        const msg = humanErrorFor(0)
-        toast.error(msg.title, { description: msg.description })
-        return
-      }
+      const resp = await fetch(`${API_BASE_URL}/v1/workspace/branding/logo`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
       if (!resp.ok) {
-        const body = await resp.text().catch(() => '')
-        const msg = humanErrorFor(resp.status, body)
-        toast.error(msg.title, { description: msg.description })
+        const body = await resp.text()
+        let msg = body || `HTTP ${resp.status}`
+        try { msg = (JSON.parse(body) as { message?: string }).message || msg } catch { /* keep body */ }
+        toast.error('Upload failed', { description: msg })
         return
       }
       const res = await resp.json() as { logoUrl: string | null }
@@ -304,7 +225,7 @@ const BrandingTab: React.FC = () => {
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+        accept="image/png,image/jpeg,image/webp"
         className="hidden"
         onChange={(e) => onFile(e.target.files?.[0])}
       />
@@ -312,20 +233,10 @@ const BrandingTab: React.FC = () => {
       <div>
         <h3 className="text-base font-semibold text-[var(--text-primary)]">Workspace logo</h3>
         <p className="mt-1 text-sm text-[var(--text-secondary)]">
-          Shown on the sign-in page and in the top-left of the app. PNG, JPEG, GIF, WebP or AVIF,
-          up to 2 MB. Wide-format logos work best — the header renders at 28 px tall.
+          Shown on the sign-in page and in the top-left of the app. PNG, JPEG or WebP, up to 2 MB.
+          Wide-format logos work best — the header renders at 28 px tall.
         </p>
       </div>
-
-      {loadBlocked && (() => {
-        const msg = humanErrorFor(loadBlocked.status)
-        return (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
-            <div className="font-semibold text-amber-900">{msg.title}</div>
-            <div className="mt-1 text-amber-800">{msg.description}</div>
-          </div>
-        )
-      })()}
 
       <div className="flex items-center gap-6 rounded-xl border border-border-default bg-white p-6">
         <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-dashed border-border-default bg-bg-subtle">
@@ -350,7 +261,7 @@ const BrandingTab: React.FC = () => {
               : 'Until you upload one, the default UnifiedTree logo is shown to your team.'}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <HrButton onClick={chooseFile} disabled={uploading || !!loadBlocked}>
+            <HrButton onClick={chooseFile} disabled={uploading}>
               <Upload size={14} className="mr-1.5" />
               {uploading ? 'Uploading…' : (logoUrl ? 'Replace logo' : 'Upload logo')}
             </HrButton>
