@@ -5,6 +5,7 @@ import {
   AlertCircle, Lock,
 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { toast } from 'sonner'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
 // useSdkStore.getState() is used inline for the hard-refresh in the polling
@@ -82,6 +83,12 @@ interface ActiveSubDto {
   haltedAt: string | null            // ISO
   graceUntil: string | null          // ISO
   razorpaySubscriptionId: string | null
+  /**
+   * false once the sub is CANCELLED / COMPLETED / EXPIRED. UI reads this
+   * to hide seat +/- and Cancel button and show a "Resume subscription"
+   * link (which reopens setup-autopay with the same plan pre-selected).
+   */
+  autoRenew: boolean
   /**
    * false = the workspace HAS these modules unlocked but nothing is billing
    * for them (mandate cancelled, or activated before the ledger write
@@ -182,6 +189,12 @@ export const Plan: React.FC = () => {
   const [pendingSeatChanges, setPendingSeatChanges] = useState<Record<string, number>>({})
   const [changingPlanKey, setChangingPlanKey] = useState<string | null>(null)
   const [changeMessage, setChangeMessage] = useState('')
+
+  // Which subscription (by razorpaySubscriptionId) is being cancelled right
+  // now. Prevents a double-click firing two /cancel calls. String not boolean
+  // because the button lives inside a per-row .map() and we only want THAT
+  // row's button to show "Cancelling…", not every row on the page.
+  const [cancellingSubId, setCancellingSubId] = useState<string | null>(null)
 
   // Two different questions, two different sets — conflating them breaks one
   // case or the other:
@@ -379,6 +392,51 @@ export const Plan: React.FC = () => {
     setPendingId(null)
   }
 
+  // Cancel a LIVE subscription (Netflix pattern — access continues until the
+  // paid period ends, then modules revoke; no refund). Two-step confirm so a
+  // stray click doesn't cancel a real customer. Once the endpoint returns,
+  // pull /current again so the button hides itself and the "access until X"
+  // banner takes over via the same statusPill logic.
+  const cancelSubscription = async (sub: ActiveSubDto) => {
+    if (!sub.razorpaySubscriptionId) return
+    const wasInTrial = sub.status === 'TRIALING'
+    const explain = wasInTrial
+      ? 'You are still in your 7-day free trial. Cancelling now keeps you working through the end of the trial, then the workspace locks. You can start again anytime, but the trial is one-time so billing will begin immediately next time.'
+      : `Your ${sub.billingCycle === 'ANNUAL' ? 'annual' : 'monthly'} autopay will stop. You keep full access until ${sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : 'the end of the paid period'}, then the modules lock. No refund for unused days.`
+    const ok = window.confirm(`Cancel this subscription?\n\n${explain}\n\nClick OK to cancel, or Cancel to keep it.`)
+    if (!ok) return
+    setCancellingSubId(sub.razorpaySubscriptionId)
+    setError('')
+    try {
+      const res = await apiJson<{ alreadyCancelled: boolean; wasInTrial: boolean; graceUntil: string | null }>(
+        '/v1/workspace/plan/cancel',
+        { method: 'POST', body: JSON.stringify({ razorpaySubscriptionId: sub.razorpaySubscriptionId }) },
+      )
+      // Refresh the plan list so the card flips to the cancelled banner.
+      await fetchCurrent()
+      const dateStr = res.graceUntil
+        ? new Date(res.graceUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+        : null
+      if (res.alreadyCancelled) {
+        toast.info('Subscription was already cancelled', {
+          description: dateStr ? `Access continues until ${dateStr}.` : undefined,
+        })
+      } else {
+        toast.success('Subscription cancelled', {
+          description: dateStr
+            ? `You'll keep full access until ${dateStr}. Nothing more will be debited.`
+            : "No further charges will be taken.",
+          duration: 8000,
+        })
+      }
+    } catch (e) {
+      const err = e as { message?: string }
+      setError(err.message || 'Could not cancel — please try again in a minute.')
+    } finally {
+      setCancellingSubId(null)
+    }
+  }
+
   // Tell the backend to release an abandoned setup, then clear locally.
   // Without the server call the plan_change_requests row stays
   // AWAITING_MANDATE and the duplicate-purchase guard refuses the admin's
@@ -508,6 +566,19 @@ export const Plan: React.FC = () => {
           // update to the local store in case hydrate fails.
           try { await useSdkStore.getState().hydrate() } catch { /* fall through to refreshTenant */ }
           try { await refreshTenant() } catch { /* best-effort */ }
+          // One-time post-payment notice: after a NEW autopay setup, UPI apps
+          // (PhonePe / GPay) can keep showing the old superseded mandate for a
+          // few days. Tell the admin once, right here, so a real customer
+          // doesn't panic seeing a dead mandate in their UPI history. Sonner
+          // is already wired at src/main.tsx (Toaster richColors, top-right).
+          // The toast is NOT shown on every /plan visit — this branch runs
+          // only when a mandate actually just activated.
+          toast.success('Payment successful', {
+            description: 'Your subscription is active. If your UPI app still shows an older '
+              + 'UnifiedTree autopay for a few days, please ignore it — that one is cancelled '
+              + 'and nothing will be debited from it.',
+            duration: 9000,
+          })
           setAwaitingMandate(false)
           navigate('/modules')
         } else if (s.status === 'FAILED' || s.status === 'CANCELLED' || s.status === 'EXPIRED') {
@@ -750,6 +821,31 @@ export const Plan: React.FC = () => {
                       Seat changes are paused while your autopay is <b>{sub.status.toLowerCase()}</b>.
                       Please update your payment method first — the +/- controls will re-enable
                       once the next charge succeeds.
+                    </div>
+                  )}
+
+                  {/* Cancel subscription — always at the end of the card, admin-only
+                      (already true; only admins can reach this page). Rendered only for
+                      LIVE billed subscriptions the user could actually cancel. Once
+                      cancelled, autoRenew flips false — the button hides itself and a
+                      "Access ends on X" banner takes its place. */}
+                  {sub.billed && sub.autoRenew && (sub.status === 'ACTIVE' || sub.status === 'TRIALING') && (
+                    <div className="mt-4 flex items-center justify-end border-t border-[var(--border-subtle)] pt-3">
+                      <button
+                        onClick={() => cancelSubscription(sub)}
+                        disabled={cancellingSubId === sub.razorpaySubscriptionId}
+                        className="text-xs font-medium text-[var(--text-tertiary)] underline-offset-2 hover:text-[var(--danger-fg)] hover:underline disabled:opacity-40"
+                      >
+                        {cancellingSubId === sub.razorpaySubscriptionId ? 'Cancelling…' : 'Cancel subscription'}
+                      </button>
+                    </div>
+                  )}
+                  {sub.billed && !sub.autoRenew && (sub.status === 'CANCELLED' || sub.status === 'EXPIRED' || sub.status === 'COMPLETED') && (
+                    <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+                      Your subscription is cancelled. Access continues until{' '}
+                      <b>{sub.graceUntil ? new Date(sub.graceUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : 'the end of your paid period'}</b>,
+                      then this workspace's paid modules will lock. You can set up autopay again
+                      any time — you've used your free trial, so billing will start immediately.
                     </div>
                   )}
                   {delta !== 0 && (
