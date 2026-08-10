@@ -35,9 +35,12 @@ public class PlanChangeSweepJob {
     private static final int EXPIRY_BATCH_LIMIT = 500;
 
     private final PlanChangeRecoveryService recovery;
+    private final SubscriptionStateReconciler reconciler;
 
-    public PlanChangeSweepJob(PlanChangeRecoveryService recovery) {
+    public PlanChangeSweepJob(PlanChangeRecoveryService recovery,
+                              SubscriptionStateReconciler reconciler) {
         this.recovery = recovery;
+        this.reconciler = reconciler;
     }
 
     /** Every 10 minutes at :05 seconds past. */
@@ -74,6 +77,23 @@ public class PlanChangeSweepJob {
             }
         } catch (RuntimeException e) {
             log.error("plan-change expiry pass failed: {}", e.getMessage(), e);
+        }
+
+        // Finally, revoke module access for CANCELLED/EXPIRED/COMPLETED
+        // subscriptions whose grace period is already over. Idempotent —
+        // only flips ACTIVE rows, only touches tenants with no live sub.
+        // Runs alongside the guard's per-request read: the guard is the fast
+        // path (< 5 ms per request) and this is the eventual-consistency
+        // cleanup so the DB reflects reality even for tenants that never
+        // call the API again.
+        try {
+            int deactivated = reconciler.revokeExpiredCancellations();
+            if (deactivated > 0) {
+                log.info("plan-change sweep — revoked {} tenant_modules row(s) with expired grace",
+                        deactivated);
+            }
+        } catch (RuntimeException e) {
+            log.error("plan-change revocation pass failed: {}", e.getMessage(), e);
         }
     }
 }

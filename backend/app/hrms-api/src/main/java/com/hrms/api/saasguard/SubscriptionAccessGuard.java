@@ -199,9 +199,23 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
                         "Your subscription payment failed and the 7-day grace period ended. "
                       + "Renew your mandate to restore access.");
             }
-            case "CANCELLED" -> AccessDecision.deny("This subscription was cancelled. Start a new one to restore access.");
-            case "EXPIRED"   -> AccessDecision.deny("This subscription has expired. Start a new one to restore access.");
-            case "COMPLETED" -> AccessDecision.deny("This subscription completed its billing cycles. Start a new one to continue.");
+            case "CANCELLED", "EXPIRED", "COMPLETED" -> {
+                // Honour whatever period the customer paid for. onCancelled
+                // stamps grace_until = current_period_end (falls back to now+3d
+                // if there was no period end, e.g. mandate deleted mid-trial),
+                // so a cancel on day 20 of a paid month keeps working through
+                // the rest of that month.
+                if (sub.graceUntil() != null && sub.graceUntil().isAfter(now)) {
+                    yield AccessDecision.allow();
+                }
+                String msg = switch (sub.status()) {
+                    case "CANCELLED" -> "This subscription was cancelled and the paid period has ended. "
+                                      + "Start a new one to restore access.";
+                    case "EXPIRED"   -> "This subscription has expired. Start a new one to restore access.";
+                    default          -> "This subscription completed its billing cycles. Start a new one to continue.";
+                };
+                yield AccessDecision.deny(msg);
+            }
             default          -> AccessDecision.allow();     // unknown status: fail-open (never worse than today)
         };
     }

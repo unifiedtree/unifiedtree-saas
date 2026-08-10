@@ -256,16 +256,46 @@ public class PlanChangeService {
                 c == BillingCycle.ANNUAL ? "yearly" : "monthly",
                 replacesSubscriptionId);
 
-        // The 7-day start_at is the sign-up trial: a customer setting up autopay
-        // for the very first time gets one free week before Razorpay debits, which
-        // matches what the website promises. On a REPLACEMENT (seat change on a
-        // UPI mandate, or any other mandate rotation) it is a repeatable free
-        // grant — a customer can nudge seats up-and-down every week and never pay.
-        // Verified against real live data 2026-08-10 (PlanChangeService.java:264
-        // was unconditional). Only pass startAt on the first-ever mandate.
-        java.time.Instant startAt = (replacesSubscriptionId == null)
-                ? java.time.Instant.now().plusSeconds(TRIAL_DAYS * 24 * 3600)
-                : null;                       // rotate immediately, no fresh trial
+        // start_at policy for the new Razorpay subscription:
+        //
+        //   - FIRST-EVER mandate for this tenant (replacesSubscriptionId=null):
+        //       start_at = now + TRIAL_DAYS. Delivers the 7-day free trial the
+        //       website promises.
+        //
+        //   - REPLACEMENT (seat change, plan change, mandate rotation):
+        //       inherit the OLD subscription's current_period_end as start_at
+        //       (Razorpay will pick up from where the old one left off — a seat
+        //       change on day 3 of a paid month still bills at day-of-next-cycle,
+        //       and a seat change during the trial still ends the trial on the
+        //       original day-7). Fall back to "start immediately" only when we
+        //       cannot find a period end (defensive — a fresh signup mid-flight
+        //       has no ledger row yet, and letting THAT slip past would grant
+        //       another free week on every seat nudge).
+        //
+        // Corrected 2026-08-10 after user feedback: the first cut passed null
+        // (start-now) on every replacement, which would have charged a customer
+        // on day 3 of their own 7-day free trial the moment they added a seat.
+        java.time.Instant startAt = null;
+        if (replacesSubscriptionId == null) {
+            startAt = java.time.Instant.now().plusSeconds(TRIAL_DAYS * 24 * 3600);
+        } else {
+            // replacesSubscriptionId is Razorpay's sub_XXX id (a String), not
+            // our platform.subscriptions.id (UUID). Look up by the razorpay id
+            // — the type-mismatched previous query blew up as "operator does
+            // not exist: uuid = character varying" the first time it ran.
+            java.sql.Timestamp inherited = jdbc.query("""
+                    SELECT current_period_end FROM platform.subscriptions
+                     WHERE razorpay_subscription_id = ? LIMIT 1
+                    """,
+                    rs -> rs.next() ? rs.getTimestamp("current_period_end") : null,
+                    replacesSubscriptionId);
+            if (inherited != null && inherited.toInstant().isAfter(java.time.Instant.now())) {
+                startAt = inherited.toInstant();
+            }
+            // If inherited is null or in the past → leave startAt null (bill
+            // this cycle). A "past current_period_end" means Razorpay is due
+            // to charge them anyway; not our job to grant more free time.
+        }
         SubscriptionService.CreateSubscriptionResult rzp;
         try {
             rzp = subscriptions.createSubscription(

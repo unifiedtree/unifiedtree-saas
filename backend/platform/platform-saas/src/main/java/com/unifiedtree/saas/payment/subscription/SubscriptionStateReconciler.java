@@ -191,20 +191,36 @@ public class SubscriptionStateReconciler {
     }
 
     public void onCancelled(String subscriptionId) {
-        // Look up the tenant BEFORE the status change so we can also revoke
-        // module access. Doing it in this order avoids the classic bug where
-        // the sub is marked CANCELLED, the tenant lookup after that returns
-        // "no active sub" and the modules never get touched.
-        java.util.UUID tenantId = jdbc.query("""
-                SELECT tenant_id FROM platform.subscriptions
-                 WHERE razorpay_subscription_id = ?
-                 LIMIT 1
-                """, rs -> rs.next() ? (java.util.UUID) rs.getObject("tenant_id") : null,
-                subscriptionId);
-
+        // Cancel != revoke-immediately. Netflix / Zoom / Razorpay-itself pattern:
+        // if the customer paid for a period, they keep the product until that
+        // period ends, then it goes dark. Anything else is theft of the days
+        // they already paid for.
+        //
+        // Corrected 2026-08-10 after user feedback: the first cut of this method
+        // revoked tenant_modules the instant CANCELLED landed, which would have
+        // locked out a customer who cancelled ON day 20 of a monthly cycle they
+        // paid for on day 1. Now:
+        //
+        //   1. Flip the row to CANCELLED and stamp grace_until = current_period_end.
+        //      Absent a period end (mandate deleted before any charge, e.g. during
+        //      trial), fall back to a short courtesy window so they can either
+        //      re-authorise or export their data — 3 days is enough for a UPI
+        //      re-setup and matches what Play/Apple give a cancelled sub.
+        //   2. Do NOT touch tenant_modules here. RevokeExpiredCancelledJob (nightly)
+        //      is the one place that flips modules to EXPIRED — it runs the
+        //      "grace_until in the past" check against every CANCELLED row and
+        //      revokes only those that have actually elapsed.
+        //   3. SubscriptionAccessGuard also honours grace_until for CANCELLED
+        //      subscriptions, so an in-flight request in the paid window is
+        //      allowed even if the nightly sweep hasn't run yet.
+        //
+        // A tenant re-authorising during grace flips the sub back to ACTIVE via
+        // subscription.activated, and grace_until is cleared by onActive.
         int rows = jdbc.update("""
                 UPDATE platform.subscriptions SET
                     status                = 'CANCELLED',
+                    grace_until           = COALESCE(current_period_end,
+                                                    now() + interval '3 days'),
                     last_reconciled_at    = now(),
                     last_razorpay_status  = 'cancelled',
                     reconcile_error       = NULL,
@@ -214,37 +230,40 @@ public class SubscriptionStateReconciler {
                 """, subscriptionId);
         if (rows == 0) return;
 
-        log.info("Subscription {} -> CANCELLED", subscriptionId);
+        log.info("Subscription {} -> CANCELLED (access retained until grace_until, sweep will revoke)",
+                subscriptionId);
+    }
 
-        // Revoke the modules this subscription paid for. Verified live 2026-08-10:
-        // tenant `src` had its mandate cancelled on 2026-08-06 and four modules
-        // stayed ACTIVE for four days, which combined with the disabled
-        // TenantModuleGuard left them fully working for free. Every cancel MUST
-        // deactivate paid entitlements.
-        //
-        // Only INACTIVATE modules for THIS tenant that have no OTHER live
-        // subscription still backing them — a workspace with two plans in
-        // flight should keep the modules that are still paid for.
-        if (tenantId != null) {
-            int deactivated = jdbc.update("""
-                    UPDATE platform.tenant_modules SET
-                        status      = 'EXPIRED',
-                        expires_at  = now()
-                     WHERE tenant_id = ?
-                       AND status    = 'ACTIVE'
-                       AND NOT EXISTS (
-                            SELECT 1 FROM platform.subscriptions s2
-                             WHERE s2.tenant_id = platform.tenant_modules.tenant_id
-                               AND s2.status IN ('TRIALING','ACTIVE','PAST_DUE','HALTED','GRACE')
-                               AND s2.razorpay_subscription_id <> ?
-                       )
-                    """, tenantId, subscriptionId);
-            if (deactivated > 0) {
-                log.info("Deactivated {} tenant_modules row(s) for tenant {} " +
-                         "after cancel of subscription {}",
-                        deactivated, tenantId, subscriptionId);
-            }
+    /**
+     * Nightly job entry point (called from PlanChangeSweepJob): revoke module
+     * access for any CANCELLED/EXPIRED subscription whose grace period elapsed.
+     * Kept idempotent — every run only flips the tenant_modules rows that are
+     * still ACTIVE and whose *only* backing subscription has expired grace.
+     *
+     * @return the number of tenant_modules rows deactivated
+     */
+    public int revokeExpiredCancellations() {
+        int deactivated = jdbc.update("""
+                UPDATE platform.tenant_modules tm SET
+                    status      = 'EXPIRED',
+                    expires_at  = now()
+                  WHERE tm.status = 'ACTIVE'
+                    AND EXISTS (
+                        SELECT 1 FROM platform.subscriptions s
+                         WHERE s.tenant_id = tm.tenant_id
+                           AND s.status IN ('CANCELLED','EXPIRED','COMPLETED')
+                           AND (s.grace_until IS NULL OR s.grace_until <= now())
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM platform.subscriptions s2
+                         WHERE s2.tenant_id = tm.tenant_id
+                           AND s2.status IN ('TRIALING','ACTIVE','PAST_DUE','HALTED','GRACE')
+                    )
+                """);
+        if (deactivated > 0) {
+            log.info("revokeExpiredCancellations: deactivated {} tenant_modules row(s)", deactivated);
         }
+        return deactivated;
     }
 
     public void onPaused(String subscriptionId) {

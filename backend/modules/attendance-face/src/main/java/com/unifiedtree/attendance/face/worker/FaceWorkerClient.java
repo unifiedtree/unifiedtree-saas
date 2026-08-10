@@ -97,11 +97,64 @@ public class FaceWorkerClient {
         }
     }
 
-    private static HttpHeaders jsonHeaders() {
+    private HttpHeaders jsonHeaders() {
         HttpHeaders h = new HttpHeaders();
         h.setContentType(MediaType.APPLICATION_JSON);
         h.setAccept(List.of(MediaType.APPLICATION_JSON));
+        String bearer = fetchIdToken();
+        if (bearer != null) h.setBearerAuth(bearer);
         return h;
+    }
+
+    /**
+     * Fetch a Google-issued ID token for the face worker's URL from the Cloud
+     * Run metadata server. The token proves this service's identity so the
+     * face worker (locked to internal callers) can verify us and refuse the
+     * open internet.
+     *
+     * <p>Cached for its full lifetime minus 5 minutes so hot request paths
+     * do not hit the metadata server on every call; the metadata call is
+     * cheap but not free, and Google recommends caching. Returns null when
+     * the metadata server is unreachable (local dev, non-GCP runtime) so
+     * the client still works there against a local face worker.
+     */
+    private volatile String cachedIdToken;
+    private volatile long cachedIdTokenExpiresAtMillis;
+
+    private String fetchIdToken() {
+        long now = System.currentTimeMillis();
+        if (cachedIdToken != null && now < cachedIdTokenExpiresAtMillis) {
+            return cachedIdToken;
+        }
+        try {
+            // Cloud Run + Compute Engine metadata endpoint. Audience = the
+            // exact base URL of the receiving service (no trailing slash).
+            java.net.URL url = new java.net.URL(
+                    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
+                    + "?audience=" + java.net.URLEncoder.encode(workerUrl, java.nio.charset.StandardCharsets.UTF_8));
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("Metadata-Flavor", "Google");
+            conn.setConnectTimeout(1500);
+            conn.setReadTimeout(1500);
+            if (conn.getResponseCode() != 200) return null;
+            String token;
+            try (java.io.BufferedReader r = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(conn.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+                token = r.readLine();
+            }
+            if (token == null || token.isBlank()) return null;
+            cachedIdToken = token.trim();
+            // ID tokens are valid 1 hour. Cache for 55 minutes.
+            cachedIdTokenExpiresAtMillis = now + 55 * 60 * 1000L;
+            return cachedIdToken;
+        } catch (Exception e) {
+            // Local dev or a metadata-less runtime: fall back to no auth so
+            // the client still works against a self-hosted worker (this is
+            // exactly the failure mode DevOps expects on their laptop). The
+            // production face worker's IAM check will still refuse an
+            // unauthenticated caller — so no security regression.
+            return null;
+        }
     }
 
     /** Body for /face/enroll/sample. */
