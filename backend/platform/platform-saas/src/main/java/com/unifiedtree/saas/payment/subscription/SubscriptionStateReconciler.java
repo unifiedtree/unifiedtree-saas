@@ -216,11 +216,25 @@ public class SubscriptionStateReconciler {
         //
         // A tenant re-authorising during grace flips the sub back to ACTIVE via
         // subscription.activated, and grace_until is cleared by onActive.
+        // grace_until logic (user request 2026-08-10):
+        //   - Cancel DURING trial (trial_ends_at > now): keep access through the
+        //     trial end but NO further — a customer who never paid should not
+        //     get a paid period on top of their trial. Take LEAST(trial, cycle)
+        //     as belt-and-braces in case current_period_end was set past trial.
+        //   - Cancel after trial (or trial-less signup): honor the paid cycle;
+        //     access until current_period_end.
+        //   - Neither present (edge case: cancel before Razorpay set current_end):
+        //     3-day courtesy so the admin can export data or re-subscribe.
         int rows = jdbc.update("""
                 UPDATE platform.subscriptions SET
                     status                = 'CANCELLED',
-                    grace_until           = COALESCE(current_period_end,
-                                                    now() + interval '3 days'),
+                    grace_until           = COALESCE(
+                        CASE WHEN trial_ends_at IS NOT NULL AND trial_ends_at > now()
+                             THEN LEAST(trial_ends_at,
+                                        COALESCE(current_period_end, trial_ends_at))
+                             ELSE current_period_end
+                        END,
+                        now() + interval '3 days'),
                     last_reconciled_at    = now(),
                     last_razorpay_status  = 'cancelled',
                     reconcile_error       = NULL,

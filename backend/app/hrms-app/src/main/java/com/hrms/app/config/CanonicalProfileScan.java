@@ -186,6 +186,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.notiftemplate.repository",
         "com.hrms.letters.repository",
         "com.unifiedtree.settings.repository",
+        // Per-workspace branding (logo upload → Cloudflare R2). Added
+        // 2026-08-10 for the "customer sees their own logo instead of the
+        // hard-coded UnifiedTree one" feature.
+        "com.unifiedtree.settings.branding",
         "com.unifiedtree.auth.repository",
         "com.unifiedtree.rbac.repository",
         "com.unifiedtree.audit.repository",

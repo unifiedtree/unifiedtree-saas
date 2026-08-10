@@ -60,17 +60,20 @@ public class WorkspacePlanController {
     private final PlanChangeService plans;
     private final SubscriptionService subscriptions;
     private final PlanChangeRecoveryService recovery;
+    private final SubscriptionStateReconciler reconciler;
     private final RazorpayProperties props;
     private final JdbcTemplate jdbc;
 
     public WorkspacePlanController(PlanChangeService plans,
                                    SubscriptionService subscriptions,
                                    PlanChangeRecoveryService recovery,
+                                   SubscriptionStateReconciler reconciler,
                                    RazorpayProperties props,
                                    JdbcTemplate jdbc) {
         this.plans = plans;
         this.subscriptions = subscriptions;
         this.recovery = recovery;
+        this.reconciler = reconciler;
         this.props = props;
         this.jdbc = jdbc;
     }
@@ -191,7 +194,13 @@ public class WorkspacePlanController {
                 s.haltedAt(),
                 s.graceUntil(),
                 s.razorpaySubscriptionId(),
-                /*billed=*/ true
+                /*billed=*/ true,
+                // Only bill-and-charge subscriptions carry auto-renewal;
+                // anything in a terminal Razorpay state stops renewing at
+                // grace_until.
+                /*autoRenew=*/ !("CANCELLED".equals(s.status())
+                                 || "COMPLETED".equals(s.status())
+                                 || "EXPIRED".equals(s.status()))
         )).toList());
 
         // Plans the workspace demonstrably owns (modules ACTIVE) but which
@@ -207,7 +216,8 @@ public class WorkspacePlanController {
                     null, null, null,
                     "NO_AUTOPAY",
                     null, null, null, null, null,
-                    /*billed=*/ false));
+                    /*billed=*/ false,
+                    /*autoRenew=*/ false));
         }
         return ResponseEntity.ok(new CurrentSubscriptionsResponse(dtos));
     }
@@ -298,6 +308,93 @@ public class WorkspacePlanController {
         plans.markCancelled(row.id());
         log.info("workspace plan-change cancelled tenant={} pending={}", claims.tenantId(), row.id());
         return ResponseEntity.ok(new CancelResponse("CANCELLED"));
+    }
+
+    /**
+     * Cancel a LIVE (already-activated) subscription. Different endpoint from
+     * {@code /setup-autopay/cancel} above, which is only for in-flight
+     * (AWAITING_MANDATE) authorisations. Semantics = Netflix-style: access
+     * continues until the paid period ends, then modules revoke. See
+     * {@link SubscriptionStateReconciler#onCancelled}.
+     *
+     * <p>Body: {@code { razorpaySubscriptionId }}. Response includes the
+     * computed {@code graceUntil} the SPA shows on the confirmation banner.
+     */
+    @PostMapping("/cancel")
+    public ResponseEntity<LiveCancelResponse> cancelLive(
+            @RequestBody LiveCancelRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        if (req == null || req.razorpaySubscriptionId() == null
+                || req.razorpaySubscriptionId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "razorpaySubscriptionId is required");
+        }
+        JwtClaims claims = extractClaims(jwt);
+        requireAdmin(claims);
+
+        // Verify the subscription belongs to the caller's workspace BEFORE any
+        // Razorpay call — an admin from tenant A must not be able to cancel
+        // tenant B's subscription just by guessing a sub_XXX id.
+        java.util.Map<String, Object> row;
+        try {
+            row = jdbc.queryForMap("""
+                    SELECT tenant_id, status, current_period_end, trial_ends_at,
+                           plan_keys, seats
+                      FROM platform.subscriptions
+                     WHERE razorpay_subscription_id = ? LIMIT 1
+                    """, req.razorpaySubscriptionId());
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "No subscription found for that id");
+        }
+        java.util.UUID subTenantId = (java.util.UUID) row.get("tenant_id");
+        if (!claims.tenantId().equals(subTenantId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Not your workspace's subscription");
+        }
+        String status = (String) row.get("status");
+        if (status != null && ("CANCELLED".equals(status) || "COMPLETED".equals(status)
+                || "EXPIRED".equals(status))) {
+            // Idempotent — the SPA can retry safely. Return the current
+            // grace_until so the banner shows the right date.
+            java.sql.Timestamp graceTs = jdbc.query(
+                    "SELECT grace_until FROM platform.subscriptions WHERE razorpay_subscription_id = ? LIMIT 1",
+                    rs -> rs.next() ? rs.getTimestamp("grace_until") : null,
+                    req.razorpaySubscriptionId());
+            return ResponseEntity.ok(new LiveCancelResponse(true, false,
+                    graceTs == null ? null : graceTs.toInstant()));
+        }
+
+        // Cancel at Razorpay first (network side) — cancelAtCycleEnd=true so
+        // any already-issued charges complete but no new debit happens. If
+        // Razorpay says "already cancelled" swallow it and proceed to the
+        // ledger update so we don't leave the two out of sync.
+        try {
+            subscriptions.cancel(req.razorpaySubscriptionId(), true);
+        } catch (RuntimeException rzp) {
+            log.warn("Razorpay cancel for {} failed ({}) — continuing to update ledger",
+                    req.razorpaySubscriptionId(), rzp.getMessage());
+        }
+
+        // Update our ledger immediately (do not wait for webhook — user tapped
+        // the button and expects visible confirmation). This also stamps
+        // grace_until = trial_ends_at OR current_period_end.
+        reconciler.onCancelled(req.razorpaySubscriptionId());
+
+        // Read back the fresh grace_until + trial flag for the response body.
+        java.util.Map<String, Object> after = jdbc.queryForMap("""
+                SELECT grace_until, trial_ends_at FROM platform.subscriptions
+                 WHERE razorpay_subscription_id = ? LIMIT 1
+                """, req.razorpaySubscriptionId());
+        java.sql.Timestamp graceTs = (java.sql.Timestamp) after.get("grace_until");
+        java.sql.Timestamp trialTs = (java.sql.Timestamp) after.get("trial_ends_at");
+        boolean wasInTrial = trialTs != null && trialTs.toInstant().isAfter(java.time.Instant.now());
+
+        log.info("workspace subscription cancelled tenant={} sub={} graceUntil={} wasInTrial={}",
+                claims.tenantId(), req.razorpaySubscriptionId(), graceTs, wasInTrial);
+
+        return ResponseEntity.ok(new LiveCancelResponse(false, wasInTrial,
+                graceTs == null ? null : graceTs.toInstant()));
     }
 
     // -- helpers --------------------------------------------------------------
@@ -455,6 +552,23 @@ public class WorkspacePlanController {
     public record CancelRequest(UUID id) {}
     public record CancelResponse(String status) {}
 
+    /** Body for {@link #cancelLive}. */
+    public record LiveCancelRequest(@NotBlank String razorpaySubscriptionId) {}
+
+    /**
+     * @param alreadyCancelled true if the subscription was already cancelled
+     *        when we got the request (SPA retry, race with webhook, etc.).
+     * @param wasInTrial       true if the cancellation happened while the trial
+     *        was still active. The SPA uses this to swap the confirmation
+     *        wording ("Your trial has ended..." vs "Your paid period runs
+     *        until...").
+     * @param graceUntil       moment access finally revokes. Access continues
+     *        until this instant.
+     */
+    public record LiveCancelResponse(boolean alreadyCancelled,
+                                     boolean wasInTrial,
+                                     java.time.Instant graceUntil) {}
+
     public record ChangeSeatsRequest(
             @NotBlank @Size(max = 64) String planKey,
             @Min(1) int newSeats
@@ -501,7 +615,11 @@ public class WorkspacePlanController {
             java.time.Instant haltedAt,
             java.time.Instant graceUntil,
             String razorpaySubscriptionId,
-            boolean billed
+            boolean billed,
+            /** false once the sub is CANCELLED/COMPLETED/EXPIRED. SPA reads
+             *  this to hide the seat +/- and Cancel button and show a
+             *  "Resume subscription" link instead. */
+            boolean autoRenew
     ) {}
 
     private record JwtClaims(UUID tenantId, UUID accountId, List<String> roles) {}

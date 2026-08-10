@@ -245,57 +245,62 @@ public class PlanChangeService {
         UUID pendingId = UUID.randomUUID();
         String plansJson = toJson(items);
 
-        jdbc.update("""
-                INSERT INTO platform.plan_change_requests
-                    (id, tenant_id, initiator_account_id, plan_items, billing_cycle,
-                     status, replaces_subscription_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?::jsonb, ?, 'AWAITING_MANDATE', ?, now(), now())
-                """,
-                pendingId, tenantId, initiatorAccountId,
-                plansJson,
-                c == BillingCycle.ANNUAL ? "yearly" : "monthly",
-                replacesSubscriptionId);
-
-        // start_at policy for the new Razorpay subscription:
-        //
-        //   - FIRST-EVER mandate for this tenant (replacesSubscriptionId=null):
-        //       start_at = now + TRIAL_DAYS. Delivers the 7-day free trial the
-        //       website promises.
-        //
-        //   - REPLACEMENT (seat change, plan change, mandate rotation):
-        //       inherit the OLD subscription's current_period_end as start_at
-        //       (Razorpay will pick up from where the old one left off — a seat
-        //       change on day 3 of a paid month still bills at day-of-next-cycle,
-        //       and a seat change during the trial still ends the trial on the
-        //       original day-7). Fall back to "start immediately" only when we
-        //       cannot find a period end (defensive — a fresh signup mid-flight
-        //       has no ledger row yet, and letting THAT slip past would grant
-        //       another free week on every seat nudge).
-        //
-        // Corrected 2026-08-10 after user feedback: the first cut passed null
-        // (start-now) on every replacement, which would have charged a customer
-        // on day 3 of their own 7-day free trial the moment they added a seat.
-        java.time.Instant startAt = null;
-        if (replacesSubscriptionId == null) {
-            startAt = java.time.Instant.now().plusSeconds(TRIAL_DAYS * 24 * 3600);
-        } else {
-            // replacesSubscriptionId is Razorpay's sub_XXX id (a String), not
-            // our platform.subscriptions.id (UUID). Look up by the razorpay id
-            // — the type-mismatched previous query blew up as "operator does
-            // not exist: uuid = character varying" the first time it ran.
-            java.sql.Timestamp inherited = jdbc.query("""
+        // Compute start_at BEFORE the INSERT so the value is on the row from the
+        // start — the reconciler needs it to cap grace_until at the trial end,
+        // and reading it back off Razorpay's authenticated event is racy.
+        Boolean trialUsed = jdbc.queryForObject(
+                "SELECT free_trial_used FROM platform.tenants WHERE id = ?",
+                Boolean.class, tenantId);
+        boolean grantTrialForRow = replacesSubscriptionId == null && !Boolean.TRUE.equals(trialUsed);
+        java.sql.Timestamp rowStartAt = null;
+        if (grantTrialForRow) {
+            rowStartAt = new java.sql.Timestamp(
+                    java.time.Instant.now().plusSeconds(TRIAL_DAYS * 24 * 3600).toEpochMilli());
+        } else if (replacesSubscriptionId != null) {
+            java.sql.Timestamp inh = jdbc.query("""
                     SELECT current_period_end FROM platform.subscriptions
                      WHERE razorpay_subscription_id = ? LIMIT 1
                     """,
                     rs -> rs.next() ? rs.getTimestamp("current_period_end") : null,
                     replacesSubscriptionId);
-            if (inherited != null && inherited.toInstant().isAfter(java.time.Instant.now())) {
-                startAt = inherited.toInstant();
-            }
-            // If inherited is null or in the past → leave startAt null (bill
-            // this cycle). A "past current_period_end" means Razorpay is due
-            // to charge them anyway; not our job to grant more free time.
+            if (inh != null && inh.toInstant().isAfter(java.time.Instant.now())) rowStartAt = inh;
         }
+
+        jdbc.update("""
+                INSERT INTO platform.plan_change_requests
+                    (id, tenant_id, initiator_account_id, plan_items, billing_cycle,
+                     status, replaces_subscription_id, start_at, created_at, updated_at)
+                VALUES (?, ?, ?, ?::jsonb, ?, 'AWAITING_MANDATE', ?, ?, now(), now())
+                """,
+                pendingId, tenantId, initiatorAccountId,
+                plansJson,
+                c == BillingCycle.ANNUAL ? "yearly" : "monthly",
+                replacesSubscriptionId, rowStartAt);
+
+        // start_at policy for the new Razorpay subscription:
+        //
+        //   - FIRST-EVER mandate for this tenant AND the trial slot is unused:
+        //       start_at = now + TRIAL_DAYS. Delivers the 7-day free trial the
+        //       website promises, ONCE per workspace.
+        //
+        //   - FIRST-EVER mandate but the trial slot IS used (customer subscribed,
+        //       cancelled, and is coming back): no trial. start_at = null → bill
+        //       immediately. Prevents the "cancel + resubscribe on day 6 to get
+        //       another 7 days free" cycle a user flagged 2026-08-10.
+        //
+        //   - REPLACEMENT (seat change, plan change, mandate rotation):
+        //       inherit the OLD subscription's current_period_end as start_at
+        //       (Razorpay picks up where the old one left off — a seat change on
+        //       day 3 of a paid month still bills at day-of-next-cycle, and a
+        //       seat change during the trial still ends the trial on the
+        //       original day-7). Fall back to start-immediately if we cannot
+        //       find a period end.
+        //
+        // Reuse the startAt already computed above and persisted on the
+        // plan_change_requests row — that value is now the single source of
+        // truth (activate() reads it back off the row via mapRow, the
+        // reconciler reads it off subscriptions.trial_ends_at).
+        java.time.Instant startAt = rowStartAt == null ? null : rowStartAt.toInstant();
         SubscriptionService.CreateSubscriptionResult rzp;
         try {
             rzp = subscriptions.createSubscription(
@@ -446,19 +451,24 @@ public class PlanChangeService {
         // real current_end from Razorpay within seconds. Without this, every
         // activation Postgres-500'd on a NOT NULL violation (verify caught).
         String periodEndInterval = cycle == BillingCycle.ANNUAL ? "1 year" : "1 month";
+        // Persist trial_ends_at on the ledger IF this row was created with a
+        // 7-day trial start_at (r.startAt not null && in the future). The
+        // reconciler reads it back on cancel to cap grace_until at trial end.
+        java.sql.Timestamp trialEnds = (r.startAt != null && r.startAt.isAfter(java.time.Instant.now()))
+                ? new java.sql.Timestamp(r.startAt.toEpochMilli()) : null;
         jdbc.update("""
                 INSERT INTO platform.subscriptions
                     (id, tenant_id, plan_keys, modules, seats, billing_cycle,
                      unit_price_inr, amount_inr, currency, status, plan_type,
                      razorpay_subscription_id, auto_renew,
-                     current_period_start, current_period_end,
+                     current_period_start, current_period_end, trial_ends_at,
                      created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?,
                         ?, ?, 'INR', 'ACTIVE', 'PAID',
                         ?, TRUE,
                         now(), now() + interval '""" + periodEndInterval + """
                                                                           ',
-                        now(), now())
+                        ?, now(), now())
                 ON CONFLICT (razorpay_subscription_id)
                     WHERE razorpay_subscription_id IS NOT NULL
                     DO UPDATE SET
@@ -469,6 +479,8 @@ public class PlanChangeService {
                         amount_inr         = EXCLUDED.amount_inr,
                         current_period_end = COALESCE(platform.subscriptions.current_period_end,
                                                       EXCLUDED.current_period_end),
+                        trial_ends_at      = COALESCE(platform.subscriptions.trial_ends_at,
+                                                      EXCLUDED.trial_ends_at),
                         status             = 'ACTIVE',
                         updated_at         = now()
                 """,
@@ -477,7 +489,20 @@ public class PlanChangeService {
                 allCatalogKeys.toArray(new String[0]),
                 totalSeats, cycleUpper,
                 unitPrice, cycleAmount,
-                r.razorpaySubscriptionId);
+                r.razorpaySubscriptionId, trialEnds);
+
+        // Burn the free_trial_used slot ONLY if this activation actually delivered
+        // a fresh trial. Idempotent (WHERE free_trial_used = FALSE), so a webhook
+        // re-delivery cannot flip it back off. NOTE: platform.tenants has no
+        // updated_at column (verified 2026-08-10 after a "column does not exist"
+        // 500 blew up activate() live) — do not add one here.
+        if (trialEnds != null) {
+            jdbc.update("""
+                    UPDATE platform.tenants
+                       SET free_trial_used = TRUE
+                     WHERE id = ? AND free_trial_used = FALSE
+                    """, r.tenantId);
+        }
 
         // Guarded final flip: reject the write if the row is no longer
         // AWAITING_MANDATE (someone cancelled/failed it between our initial
@@ -1115,7 +1140,8 @@ public class PlanChangeService {
             Row r = jdbc.queryForObject("""
                     SELECT id, tenant_id, initiator_account_id, plan_items::text AS plan_items,
                            billing_cycle, razorpay_subscription_id, status,
-                           failure_reason, activated_at, replaces_subscription_id
+                           failure_reason, activated_at, replaces_subscription_id,
+                           start_at
                       FROM platform.plan_change_requests
                      WHERE id = ?
                     """, this::mapRow, id);
@@ -1132,7 +1158,8 @@ public class PlanChangeService {
             Row r = jdbc.queryForObject("""
                     SELECT id, tenant_id, initiator_account_id, plan_items::text AS plan_items,
                            billing_cycle, razorpay_subscription_id, status,
-                           failure_reason, activated_at, replaces_subscription_id
+                           failure_reason, activated_at, replaces_subscription_id,
+                           start_at
                       FROM platform.plan_change_requests
                      WHERE razorpay_subscription_id = ?
                      LIMIT 1
@@ -1150,7 +1177,8 @@ public class PlanChangeService {
             return jdbc.queryForObject("""
                     SELECT id, tenant_id, initiator_account_id, plan_items::text AS plan_items,
                            billing_cycle, razorpay_subscription_id, status,
-                           failure_reason, activated_at, replaces_subscription_id
+                           failure_reason, activated_at, replaces_subscription_id,
+                           start_at
                       FROM platform.plan_change_requests
                      WHERE id = ?
                     """, this::mapRow, id);
@@ -1170,6 +1198,8 @@ public class PlanChangeService {
         r.status = rs.getString("status");
         r.failureReason = rs.getString("failure_reason");
         r.replacesSubscriptionId = rs.getString("replaces_subscription_id");
+        java.sql.Timestamp sa = rs.getTimestamp("start_at");
+        r.startAt = sa == null ? null : sa.toInstant();
         return r;
     }
 
@@ -1274,5 +1304,12 @@ public class PlanChangeService {
         /** Mandate this request supersedes; cancelled by activate() once the
          *  replacement is live. Null for a first-time purchase. */
         String replacesSubscriptionId;
+        /** When the first Razorpay charge will actually happen. Non-null iff
+         *  the sub carries a 7-day trial. activate() persists this as
+         *  {@code trial_ends_at} on the ledger row so the reconciler can cap
+         *  the cancel grace at trial-end (a customer who cancels on day 3 of
+         *  a trial they never paid a rupee for still gets access through day 7,
+         *  but no more — no free extension into a paid period). */
+        java.time.Instant startAt;
     }
 }

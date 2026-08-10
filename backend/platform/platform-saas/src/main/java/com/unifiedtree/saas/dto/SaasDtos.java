@@ -74,7 +74,11 @@ public final class SaasDtos {
             String subdomain,
             String status,
             List<String> requestedModules,
-            List<String> activeModules
+            List<String> activeModules,
+            /** Custom workspace logo URL if the admin uploaded one, else null.
+             *  The login page renders this above the workspace name so the
+             *  customer sees their own brand before they sign in. */
+            String logoUrl
     ) {}
 
     public record PlatformLoginRequest(

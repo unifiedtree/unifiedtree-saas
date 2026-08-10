@@ -569,13 +569,20 @@ public class SaasService {
         List<String> requestedModules = jdbc.queryForList(
                 "SELECT module_key FROM platform.tenant_modules WHERE tenant_id = ? AND status IN ('REQUESTED','APPROVED') ORDER BY module_key",
                 String.class, tenantId);
+        // LEFT JOIN — most tenants have no branding row yet, and NULL is a
+        // valid response (SPA falls back to the UnifiedTree default logo).
+        String logoUrl = jdbc.query(
+                "SELECT logo_url FROM platform.tenant_branding WHERE tenant_id = ?",
+                rs -> rs.next() ? rs.getString("logo_url") : null,
+                tenantId);
         return new WorkspaceStatusResponse(
                 tenantId,
                 (String) tenant[2],
                 (String) tenant[1],
                 (String) tenant[3],
                 requestedModules,
-                activeModules);
+                activeModules,
+                logoUrl);
     }
 
     // -- Public: self-service module toggle ------------------------------------------------------
