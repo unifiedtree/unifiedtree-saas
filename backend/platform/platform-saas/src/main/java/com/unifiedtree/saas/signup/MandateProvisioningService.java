@@ -2,6 +2,8 @@ package com.unifiedtree.saas.signup;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.unifiedtree.saas.dto.SaasDtos.SignupResponse;
+import com.unifiedtree.saas.plans.BillingCycle;
+import com.unifiedtree.saas.plans.ModulePlanService;
 import com.unifiedtree.saas.service.SaasService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,13 +40,16 @@ public class MandateProvisioningService {
     private final JdbcTemplate jdbc;
     private final PendingSignupService pending;
     private final SaasService saas;
+    private final ModulePlanService plans;
 
     public MandateProvisioningService(JdbcTemplate jdbc,
                                       PendingSignupService pending,
-                                      SaasService saas) {
+                                      SaasService saas,
+                                      ModulePlanService plans) {
         this.jdbc = jdbc;
         this.pending = pending;
         this.saas = saas;
+        this.plans = plans;
     }
 
     /**
@@ -178,7 +183,18 @@ public class MandateProvisioningService {
             planType      = "PAID";
         }
 
-        BigDecimal unitInr = BigDecimal.ZERO;   // filled in later when subscription.charged carries the amount
+        // Freeze the price the customer signed up at on the ledger row. Verified
+        // live 2026-08-10: signup writes used to hard-code amount_inr=0 and
+        // unit_price_inr=0, so every dashboard number derived from these columns
+        // reported zero revenue while Razorpay was actually debiting the right
+        // amount. Compute from the catalogue at sign-up time so a later catalog
+        // price change never rewrites what THIS customer pays.
+        BillingCycle cycle = "ANNUAL".equalsIgnoreCase(mapCycleToSubscriptions(p.billingCycle()))
+                ? BillingCycle.ANNUAL : BillingCycle.MONTHLY;
+        java.util.List<com.unifiedtree.saas.plans.ModulePlanDto> catalog =
+                plans.requireAvailable(p.planKeys());
+        BigDecimal unitInr    = plans.unitPriceInr(catalog, cycle);
+        BigDecimal amountInr  = plans.totalPriceInr(catalog, p.seats(), cycle);
         jdbc.update("""
                 INSERT INTO platform.subscriptions
                     (id, tenant_id, subdomain, contact_email, plan_keys, modules, seats,
@@ -186,7 +202,7 @@ public class MandateProvisioningService {
                      current_period_start, current_period_end, next_charge_at,
                      razorpay_subscription_id, auto_renew, payment_method,
                      pending_signup_id, plan_type, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'INR', ?,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'INR', ?,
                         now(), COALESCE(to_timestamp(?), now()), to_timestamp(?),
                         ?, TRUE, ?, ?, ?, now(), now())
                 ON CONFLICT (razorpay_subscription_id)
@@ -200,7 +216,7 @@ public class MandateProvisioningService {
                 // ('MONTHLY' | 'ANNUAL'); pending_signups.billing_cycle stores the
                 // lowercase Razorpay period ('monthly' | 'yearly'). Map here rather
                 // than at stash time so pending_signups keeps its own CHECK intact.
-                mapCycleToSubscriptions(p.billingCycle()), unitInr,
+                mapCycleToSubscriptions(p.billingCycle()), unitInr, amountInr,
                 initialStatus,
                 currentEnd, chargeAt,
                 p.razorpaySubscriptionId(), method,

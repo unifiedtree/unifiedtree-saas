@@ -256,12 +256,21 @@ public class PlanChangeService {
                 c == BillingCycle.ANNUAL ? "yearly" : "monthly",
                 replacesSubscriptionId);
 
+        // The 7-day start_at is the sign-up trial: a customer setting up autopay
+        // for the very first time gets one free week before Razorpay debits, which
+        // matches what the website promises. On a REPLACEMENT (seat change on a
+        // UPI mandate, or any other mandate rotation) it is a repeatable free
+        // grant — a customer can nudge seats up-and-down every week and never pay.
+        // Verified against real live data 2026-08-10 (PlanChangeService.java:264
+        // was unconditional). Only pass startAt on the first-ever mandate.
+        java.time.Instant startAt = (replacesSubscriptionId == null)
+                ? java.time.Instant.now().plusSeconds(TRIAL_DAYS * 24 * 3600)
+                : null;                       // rotate immediately, no fresh trial
         SubscriptionService.CreateSubscriptionResult rzp;
         try {
             rzp = subscriptions.createSubscription(
                     List.of(it.planKey()), it.seats(), c,
-                    subdomain, email,
-                    java.time.Instant.now().plusSeconds(TRIAL_DAYS * 24 * 3600),
+                    subdomain, email, startAt,
                     pendingId.toString());   // notes.pending_signup_id — webhook fallback
         } catch (RuntimeException rex) {
             // Razorpay call failed — mark the intent CANCELLED so it doesn't

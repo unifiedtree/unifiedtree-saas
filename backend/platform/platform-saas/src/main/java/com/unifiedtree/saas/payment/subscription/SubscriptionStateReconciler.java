@@ -191,6 +191,17 @@ public class SubscriptionStateReconciler {
     }
 
     public void onCancelled(String subscriptionId) {
+        // Look up the tenant BEFORE the status change so we can also revoke
+        // module access. Doing it in this order avoids the classic bug where
+        // the sub is marked CANCELLED, the tenant lookup after that returns
+        // "no active sub" and the modules never get touched.
+        java.util.UUID tenantId = jdbc.query("""
+                SELECT tenant_id FROM platform.subscriptions
+                 WHERE razorpay_subscription_id = ?
+                 LIMIT 1
+                """, rs -> rs.next() ? (java.util.UUID) rs.getObject("tenant_id") : null,
+                subscriptionId);
+
         int rows = jdbc.update("""
                 UPDATE platform.subscriptions SET
                     status                = 'CANCELLED',
@@ -201,7 +212,39 @@ public class SubscriptionStateReconciler {
                  WHERE razorpay_subscription_id = ?
                    AND status NOT IN ('COMPLETED','EXPIRED')
                 """, subscriptionId);
-        if (rows > 0) log.info("Subscription {} -> CANCELLED", subscriptionId);
+        if (rows == 0) return;
+
+        log.info("Subscription {} -> CANCELLED", subscriptionId);
+
+        // Revoke the modules this subscription paid for. Verified live 2026-08-10:
+        // tenant `src` had its mandate cancelled on 2026-08-06 and four modules
+        // stayed ACTIVE for four days, which combined with the disabled
+        // TenantModuleGuard left them fully working for free. Every cancel MUST
+        // deactivate paid entitlements.
+        //
+        // Only INACTIVATE modules for THIS tenant that have no OTHER live
+        // subscription still backing them — a workspace with two plans in
+        // flight should keep the modules that are still paid for.
+        if (tenantId != null) {
+            int deactivated = jdbc.update("""
+                    UPDATE platform.tenant_modules SET
+                        status      = 'EXPIRED',
+                        expires_at  = now()
+                     WHERE tenant_id = ?
+                       AND status    = 'ACTIVE'
+                       AND NOT EXISTS (
+                            SELECT 1 FROM platform.subscriptions s2
+                             WHERE s2.tenant_id = platform.tenant_modules.tenant_id
+                               AND s2.status IN ('TRIALING','ACTIVE','PAST_DUE','HALTED','GRACE')
+                               AND s2.razorpay_subscription_id <> ?
+                       )
+                    """, tenantId, subscriptionId);
+            if (deactivated > 0) {
+                log.info("Deactivated {} tenant_modules row(s) for tenant {} " +
+                         "after cancel of subscription {}",
+                        deactivated, tenantId, subscriptionId);
+            }
+        }
     }
 
     public void onPaused(String subscriptionId) {

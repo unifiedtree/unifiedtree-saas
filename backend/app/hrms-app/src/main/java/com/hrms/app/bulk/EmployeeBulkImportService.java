@@ -1,11 +1,14 @@
 package com.hrms.app.bulk;
 
+import com.hrms.api.employee.SeatLimitGuard;
 import com.hrms.core.tenant.TenantContext;
 import com.hrms.employee.dto.CreateEmployeeRequest;
 import com.hrms.employee.enums.EmploymentType;
 import com.hrms.employee.enums.Gender;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.employee.service.EmployeeService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
@@ -38,11 +41,20 @@ public class EmployeeBulkImportService {
 
     private final EmployeeService employeeService;
     private final EmployeeRepository employeeRepository;
+    /**
+     * Optional to keep unit tests + legacy contexts (where the guard isn't
+     * scanned) instantiable. When absent, the pre-flight seat check no-ops and
+     * the whole batch is still gated by any per-row limit in EmployeeService.
+     */
+    private final SeatLimitGuard seatLimitGuard;
 
+    @Autowired
     public EmployeeBulkImportService(EmployeeService employeeService,
-                                     EmployeeRepository employeeRepository) {
+                                     EmployeeRepository employeeRepository,
+                                     org.springframework.beans.factory.ObjectProvider<SeatLimitGuard> seatLimitGuardProvider) {
         this.employeeService = employeeService;
         this.employeeRepository = employeeRepository;
+        this.seatLimitGuard = seatLimitGuardProvider.getIfAvailable();
     }
 
     public BulkImportResult validateOnly(MultipartFile file, UUID companyId) throws IOException {
@@ -67,6 +79,21 @@ public class EmployeeBulkImportService {
 
         if (!errors.isEmpty()) {
             return BulkImportResult.validationFailed(rows.size(), errors);
+        }
+
+        // Seat guard: reject the whole file if it would push the workspace over
+        // its paid cap. Applied before ANY row is written — the alternative was
+        // half-committing an upload and half-erroring mid-batch. This closes the
+        // bypass verified live 2026-08-10 where a 500-row CSV walked past a
+        // 10-seat plan without a peep.
+        if (seatLimitGuard != null) {
+            java.util.List<String> callerRoles = java.util.List.of();
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null) {
+                callerRoles = auth.getAuthorities().stream()
+                        .map(a -> a.getAuthority()).toList();
+            }
+            seatLimitGuard.requireSeatsAvailable(callerRoles, rows.size());
         }
 
         int created = 0;

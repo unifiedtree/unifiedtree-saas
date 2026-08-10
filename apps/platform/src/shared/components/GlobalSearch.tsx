@@ -71,12 +71,15 @@ export function GlobalSearch({ onSelect }: GlobalSearchProps) {
   const debouncedQuery = useDebounce(query, 200)
 
   const results = useMemo<SearchResult[]>(() => {
-    if (!debouncedQuery.trim()) return []
-    return MOCK_DATA
-      .map((item) => ({ ...item, score: scoreResult(item, debouncedQuery) }))
-      .filter((r) => r.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 20)
+    // Global search over invented data (MOCK_DATA hard-coded "Alice Martin",
+    // "Acme Corp Lead $45,000", "INV-2025-001") was reported live in a real
+    // customer's Cmd-K panel on 2026-08-10. Suppressed until a real search
+    // backend lands. Returning [] keeps the palette usable for the OTHER
+    // wired features (recent, favourites) if those are added, without
+    // showing anyone fake people or fake invoices.
+    void debouncedQuery
+    void MOCK_DATA
+    return []
   }, [debouncedQuery])
 
   const grouped = useMemo(() => {
@@ -119,7 +122,11 @@ export function GlobalSearch({ onSelect }: GlobalSearchProps) {
         )}
         {debouncedQuery && results.length === 0 && (
           <div className="p-6 text-center text-slate-500 text-sm">
-            No results for "{debouncedQuery}"
+            Global search is coming soon.
+            <br />
+            <span className="text-xs">
+              Meanwhile, use the sidebar or the module pages to find people, leaves and payslips.
+            </span>
           </div>
         )}
         {Array.from(grouped.entries()).map(([type, items]) => (

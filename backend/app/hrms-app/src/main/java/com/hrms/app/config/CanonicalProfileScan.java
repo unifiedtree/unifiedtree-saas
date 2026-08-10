@@ -69,6 +69,21 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         // canonical REST controllers
         "com.hrms.api.workforce",
         "com.hrms.api.settings",
+        // Paywall guards, enabled 2026-08-10. SubscriptionAccessGuard (402 for
+        // HALTED-past-grace / CANCELLED / EXPIRED / COMPLETED) and
+        // TenantModuleGuard (403 for modules the workspace hasn't provisioned).
+        //
+        // Isolated in its own tiny package so the legacy com.hrms.api.saas
+        // (which drags in PasswordEncoder + JwtTokenProvider + MailService,
+        // none scanned in canonical-prod) can stay dead. Adding
+        // com.hrms.api.saas here directly failed rev 00074 / 00075 startup —
+        // saasguard is the correct target. Guards fail OPEN on unknown status
+        // and on tenants with no subscription row (grandfathered demo /
+        // signup-in-flight workspaces), so enabling does not sign anyone out
+        // who was legitimately paying. Companion fix
+        // SubscriptionStateReconciler.onCancelled deactivates tenant_modules
+        // when a mandate is cancelled — same deploy.
+        "com.hrms.api.saasguard",
         "com.hrms.api.auth.canonical",
         "com.hrms.api.rbac",
         "com.hrms.api.employee",

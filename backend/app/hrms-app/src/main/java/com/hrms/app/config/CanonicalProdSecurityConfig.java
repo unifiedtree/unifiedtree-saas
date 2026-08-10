@@ -177,6 +177,22 @@ public class CanonicalProdSecurityConfig {
         return http.build();
     }
 
+    /**
+     * BCrypt {@link org.springframework.security.crypto.password.PasswordEncoder}.
+     *
+     * <p>Canonical login uses its own {@link com.unifiedtree.auth.service.PasswordService}
+     * — the JWT never rides Spring Security's DaoAuthenticationProvider — so this
+     * bean is not on the login hot path. It exists because {@code SaasPlatformService}
+     * (com.hrms.api.saas, enabled 2026-08-10 to switch on SubscriptionAccessGuard /
+     * TenantModuleGuard) is constructor-injected with a PasswordEncoder for legacy
+     * signup/login methods that are unreachable in production but still require the
+     * bean at wiring time. Missing it kept rev 00074 from starting.
+     */
+    @Bean
+    public org.springframework.security.crypto.password.PasswordEncoder passwordEncoder() {
+        return new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+    }
+
     @Bean
     public JwtDecoder jwtDecoder() {
         SecretKey key = jwtService.signingKey();

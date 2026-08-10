@@ -66,6 +66,22 @@ public class SeatLimitGuard {
      *         workspace is already at its paid seat count
      */
     public void requireSeatAvailable(java.util.Collection<String> callerRoles) {
+        requireSeatsAvailable(callerRoles, 1);
+    }
+
+    /**
+     * Same rule as {@link #requireSeatAvailable} but for adding {@code n} new
+     * employees in one shot — used by the bulk-import commit path, which used
+     * to insert a whole CSV in a single write and bypass the per-row guard
+     * entirely. Verified live 2026-08-10: com.hrms.app.bulk had ZERO SeatLimit
+     * references, so a 500-row upload silently blew straight past a 10-seat
+     * plan.
+     *
+     * @param n number of employees the caller is about to insert; ignored if
+     *          non-positive (a validation-only pass, for example).
+     */
+    public void requireSeatsAvailable(java.util.Collection<String> callerRoles, int n) {
+        if (n <= 0) return;
         UUID tenantId = TenantContext.getTenantId();
         if (tenantId == null) return;   // no tenant bound: not our call to police
 
@@ -76,7 +92,10 @@ public class SeatLimitGuard {
                 "SELECT count(*) FROM hrms.employees WHERE tenant_id = ? AND is_active",
                 Integer.class, tenantId);
         int inUse = used == null ? 0 : used;
-        if (inUse < limit) return;
+        // Would-be headcount after this insert. Reject if it crosses the paid
+        // cap so an N-row bulk import is rejected up front rather than half-
+        // committed and half-blocked mid-transaction.
+        if (inUse + n <= limit) return;
 
         boolean canManageBilling = callerRoles != null && callerRoles.stream()
                 .map(r -> r.startsWith("ROLE_") ? r.substring(5) : r)

@@ -74,7 +74,7 @@ import { LeaveBalanceReport } from '@/modules/hrms/reports/LeaveBalanceReport'
 import { LateMarksReport } from '@/modules/hrms/reports/LateMarksReport'
 import { DiversityReport } from '@/modules/hrms/reports/DiversityReport'
 import { EmployeeImport } from '@/modules/hrms/employees/EmployeeImport'
-import { ModuleWorkspace } from '@/pages/ModuleWorkspace'
+// import { ModuleWorkspace } from '@/pages/ModuleWorkspace'  // route disabled — see /module-workspace redirect below
 
 // Priority order: highest privilege wins when resolving landing page
 const ROLE_PRIORITY = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER', 'EMPLOYEE'] as const
@@ -127,15 +127,16 @@ export default function App() {
       {/* Module-workspace showcase. Rendered OUTSIDE <PlatformShell> on purpose:
           the page brings its own chrome (dark icon rail + top bar + sub-tab row),
           so nesting it in the shell would stack two sidebars and two headers.
-          Auth-only — it is presentational, with dummy data and no API calls. */}
-      <Route
-        path="/module-workspace"
-        element={
-          <RouteGuard>
-            <ModuleWorkspace />
-          </RouteGuard>
-        }
-      />
+          Auth-only — it is presentational, with dummy data and no API calls.
+
+          REDIRECTED 2026-08-10: the page ships fabricated employees, invented
+          KPIs (Rs 4.82 Cr) and a made-up "Acme Manufacturing" company under
+          the signed-in user's own login. Landing a real customer on that
+          screen destroys their trust in every other number the platform
+          shows. The file stays on disk so the design work isn't lost — the
+          route just doesn't reach it. Delete the file (and this route)
+          entirely when a real replacement lands. */}
+      <Route path="/module-workspace" element={<Navigate to="/dashboard" replace />} />
 
       {/* Protected shell */}
       <Route

@@ -71,9 +71,40 @@ public class PendingSignupSweepJob {
 
         int ok = 0;
         int razorpayErrors = 0;
+        int rescued = 0;
         for (PendingSignupService.PendingSignup p : expired) {
             try {
                 if (p.razorpaySubscriptionId() != null && !p.razorpaySubscriptionId().isBlank()) {
+                    // ASK RAZORPAY FIRST. This used to blindly cancel any pending
+                    // signup 24h old regardless of whether the customer had
+                    // actually authorised the mandate — a single lost webhook was
+                    // enough to permanently destroy a paid mandate the customer
+                    // would then keep being debited for with no matching workspace.
+                    //
+                    // If Razorpay says the mandate is `authenticated` or `active`,
+                    // the customer paid; leave it for the reconciler to catch on
+                    // the next sweep. If Razorpay is unreachable, err on the safe
+                    // side (leave it) — a stale AWAITING_MANDATE row is cheaper
+                    // than a cancelled real customer.
+                    try {
+                        SubscriptionService.MandateInfo info =
+                                subscriptions.inspectMandate(p.razorpaySubscriptionId());
+                        String upstream = info == null ? null : info.upstreamStatus();
+                        if ("authenticated".equals(upstream) || "active".equals(upstream)) {
+                            rescued++;
+                            log.warn("sweep: SKIP cancel — pending={} razorpay_sub={} is {} (customer paid); " +
+                                     "reconciler must promote this to a workspace",
+                                    p.id(), p.razorpaySubscriptionId(), upstream);
+                            continue;
+                        }
+                    } catch (Exception verifyErr) {
+                        razorpayErrors++;
+                        log.warn("sweep: cannot verify pending={} razorpay_sub={} with Razorpay; " +
+                                 "skipping this sweep to avoid destroying a possibly-paid mandate: {}",
+                                p.id(), p.razorpaySubscriptionId(), verifyErr.getMessage());
+                        continue;
+                    }
+
                     try {
                         subscriptions.cancelPreAuth(p.razorpaySubscriptionId());
                     } catch (Exception rzpErr) {
@@ -93,7 +124,7 @@ public class PendingSignupSweepJob {
                         p.id(), p.subdomain(), e.getMessage(), e);
             }
         }
-        log.info("pending_signups sweep — expired {} (razorpay errors: {}, backlog remaining: {})",
-                ok, razorpayErrors, Math.max(0, expired.size() - ok));
+        log.info("pending_signups sweep — expired {} (rescued {}, razorpay errors {}, backlog remaining {})",
+                ok, rescued, razorpayErrors, Math.max(0, expired.size() - ok - rescued));
     }
 }
