@@ -6,7 +6,7 @@ import {
 import { Navbar } from '../components/layout/Navbar'
 import { Footer } from '../components/layout/Footer'
 import { CTABanner } from '../components/home/CTABanner'
-import { LandscapeScene } from '../components/visuals/LandscapeScene'
+import { PageHero, EngineeredField } from '../components/marketing/PageHero'
 import { ModuleDashboard } from '../components/visuals/ModuleDashboard'
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
@@ -77,61 +77,35 @@ export function FeaturesPage() {
     <div className="min-h-screen bg-bg">
       <Navbar />
 
-      {/* ── Hero — the valley at dusk ───────────────────────────────── */}
-      <section className="relative overflow-hidden pt-40 pb-28 lg:pb-32">
-        <LandscapeScene tone="dusk" />
-
-        <div className="relative z-10 mx-auto max-w-6xl px-4 text-center sm:px-6 lg:px-8">
-          <motion.span
-            initial={{ opacity: 0, y: reduce ? 0 : 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-white/90 backdrop-blur-sm"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-            Platform Features
-          </motion.span>
-
-          <motion.h1
-            initial={{ opacity: 0, y: reduce ? 0 : 26 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, ease: EASE }}
-            className="font-heading font-extrabold text-white"
-            style={{ fontSize: 'clamp(2.5rem, 5.6vw, 4.5rem)', lineHeight: 1.04, letterSpacing: '-0.035em' }}
-          >
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <PageHero
+        eyebrow="Platform Features"
+        title={
+          <>
             Built for the way
             <br />
             growing businesses actually work
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: reduce ? 0 : 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.1, ease: EASE }}
-            className="mx-auto mt-7 max-w-3xl text-[17px] leading-relaxed text-white/85 sm:text-[19px]"
-          >
+          </>
+        }
+        lede={
+          <>
             From offline attendance in remote factories to tax filings from an accountant's desk —
             UnifiedTree is engineered for real-world conditions, not demo environments.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: reduce ? 0 : 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.2, ease: EASE }}
-            className="mt-10 flex flex-wrap items-center justify-center gap-3"
-          >
-            {heroChips.map((chip) => (
-              <span
-                key={chip}
-                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-[13.5px] font-semibold text-white/90 backdrop-blur-sm"
-              >
-                <Check size={13} strokeWidth={3} className="text-lime" />
-                {chip}
-              </span>
-            ))}
-          </motion.div>
+          </>
+        }
+      >
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {heroChips.map((chip) => (
+            <span
+              key={chip}
+              className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-[13.5px] font-semibold text-white/90 backdrop-blur-sm"
+            >
+              <Check size={13} strokeWidth={3} className="text-lime" />
+              {chip}
+            </span>
+          ))}
         </div>
-      </section>
+      </PageHero>
 
       {/* ── Core pillars ────────────────────────────────────────────── */}
       <section className="bg-white py-24 lg:py-28">
@@ -148,11 +122,11 @@ export function FeaturesPage() {
             </span>
             <h2
               className="mt-4 font-heading font-extrabold text-text-primary"
-              style={{ fontSize: 'clamp(2rem, 3.6vw, 3.25rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
+              style={{ fontSize: 'clamp(1.74rem, 3.168vw, 2.828rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
             >
               Six decisions that shape the product
             </h2>
-            <p className="mx-auto mt-5 max-w-2xl text-[17px] leading-relaxed text-text-secondary">
+            <p className="mx-auto mt-5 max-w-2xl text-[15.5px] leading-relaxed text-text-secondary">
               Not a feature list — the architectural choices your team feels every single day,
               from the shop floor to the finance desk.
             </p>
@@ -199,7 +173,7 @@ export function FeaturesPage() {
         </div>
       </section>
 
-      {/* ── The product, in the valley ──────────────────────────────── */}
+      {/* ── The product, on the engineered surface ──────────────────── */}
       <section className="bg-white pb-24 lg:pb-28">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -207,9 +181,10 @@ export function FeaturesPage() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.15 }}
             transition={{ duration: 0.7, ease: EASE }}
-            className="relative overflow-hidden rounded-3xl bg-[#04503A] px-5 py-14 sm:px-10 lg:px-14 lg:py-20"
+            className="relative overflow-hidden rounded-3xl px-5 py-14 sm:px-10 lg:px-14 lg:py-20"
+            style={{ background: 'linear-gradient(158deg, #04503A 0%, #065F46 54%, #047857 100%)' }}
           >
-            <LandscapeScene tone="dusk" />
+            <EngineeredField />
 
             <div className="relative z-10">
               <div className="mx-auto max-w-3xl text-center">
@@ -218,11 +193,11 @@ export function FeaturesPage() {
                 </span>
                 <h2
                   className="mt-4 font-heading font-extrabold text-white"
-                  style={{ fontSize: 'clamp(1.875rem, 3.2vw, 2.875rem)', lineHeight: 1.08, letterSpacing: '-0.035em' }}
+                  style={{ fontSize: 'clamp(1.631rem, 2.816vw, 2.501rem)', lineHeight: 1.08, letterSpacing: '-0.035em' }}
                 >
                   Every capability, in one workspace
                 </h2>
-                <p className="mx-auto mt-5 max-w-xl text-[16px] leading-relaxed text-white/85 sm:text-[17px]">
+                <p className="mx-auto mt-5 max-w-xl text-[16px] leading-relaxed text-white/85 sm:text-[15.5px]">
                   Switch modules and watch the numbers stay connected — the same records, the same
                   ledger, no exports in between.
                 </p>
@@ -251,11 +226,11 @@ export function FeaturesPage() {
             </span>
             <h2
               className="mt-4 font-heading font-extrabold text-text-primary"
-              style={{ fontSize: 'clamp(2rem, 3.4vw, 3rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
+              style={{ fontSize: 'clamp(1.74rem, 2.992vw, 2.61rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
             >
               Enterprise-grade. Startup-friendly.
             </h2>
-            <p className="mx-auto mt-5 max-w-xl text-[17px] leading-relaxed text-text-secondary">
+            <p className="mx-auto mt-5 max-w-xl text-[15.5px] leading-relaxed text-text-secondary">
               Security and reliability built into every layer.
             </p>
           </motion.div>

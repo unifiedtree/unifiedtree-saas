@@ -156,7 +156,7 @@ export function ModulesGrid() {
                       <div className="mt-4">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <h3
-                            className="font-heading text-[15.5px] font-bold leading-tight text-text-primary"
+                            className="font-heading text-[14.5px] font-bold leading-tight text-text-primary"
                             style={{ letterSpacing: '-0.02em' }}
                           >
                             {plan.displayName}
@@ -217,7 +217,7 @@ export function ModulesGrid() {
                         <div>
                           {available ? (
                             <p
-                              className="font-heading text-[17px] font-extrabold tabular-nums text-text-primary"
+                              className="font-heading text-[15.5px] font-extrabold tabular-nums text-text-primary"
                               style={{ letterSpacing: '-0.025em' }}
                             >
                               ₹{plan.priceInr.toLocaleString('en-IN')}

@@ -3,30 +3,40 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { Button } from '../ui/Button'
 import { CtaButton } from '../common/CtaButton'
 import { useCtaMode } from '../../hooks/useCtaMode'
-import { LandscapeScene } from '../visuals/LandscapeScene'
 
 /**
- * The closing band — the page ends where it started, inside the valley.
+ * The closing band — the page ends on the same argument it opened with.
  *
- * The dusk landscape carries the wordmark rising from behind the ridge, so the
- * old greyscale leaf particles are gone: the scene does that work now. Both
- * CTAs keep their existing routing (useCtaMode drives the primary one); only
- * their skin changes to read on the dark backdrop.
+ * No scenery, no ghost wordmark and no linework. The ground is the shared
+ * deep-emerald surface with a fine grain and two soft light fields — colour
+ * only, so the type owns the band.
+ *
+ * Both CTAs keep their existing routing (useCtaMode drives the primary one);
+ * only their skin changes to read on the dark ground.
  */
+
+
 export function CTABanner() {
   const navigate = useNavigate()
   const { mode } = useCtaMode()
   const reduce = useReducedMotion()
 
   return (
-    <section className="relative overflow-hidden bg-[#022C22] py-28 lg:py-36">
-      <LandscapeScene tone="dusk" wordmark="UnifiedTree" />
-
-      {/* Scrim — guarantees the display type reads at every viewport height */}
-      <div
+    <section className="surface-deep relative overflow-hidden py-28 lg:py-36">
+      {/* Soft colour + grain only. The radiating core/branch linework that used
+          to sit here was rejected along with the rest of the vector patterns. */}
+      <span aria-hidden className="grain grain-dark" />
+      {/* Warm lift from the top so the band does not read as a flat slab */}
+      <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#022C22]/75 via-transparent to-[#011E17]/55"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(72% 58% at 50% -12%, rgba(52,211,153,0.22), transparent 68%), radial-gradient(46% 40% at 88% 100%, rgba(16,185,129,0.16), transparent 70%)',
+        }}
       />
+      {/* Hairline rule — closes the band off from the footer */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/10" />
 
       <div className="relative z-10 mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
         <motion.div
@@ -42,14 +52,14 @@ export function CTABanner() {
 
           <h2
             className="font-heading font-extrabold text-white"
-            style={{ fontSize: 'clamp(2rem, 4.4vw, 3.75rem)', lineHeight: 1.04, letterSpacing: '-0.035em' }}
+            style={{ fontSize: 'clamp(1.74rem, 3.872vw, 3.263rem)', lineHeight: 1.04, letterSpacing: '-0.035em' }}
           >
             {mode === 'trial'
               ? 'Ready to grow your business like a tree?'
               : 'Ready to add another workspace?'}
           </h2>
 
-          <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-white/80 sm:text-[19px]">
+          <p className="mx-auto mt-6 max-w-xl text-[15.5px] leading-relaxed text-white/85 sm:text-[17px]">
             {mode === 'trial'
               ? 'Join 2,400+ companies. Start free. No credit card required.'
               : 'Spin up a workspace for a new team or entity in minutes.'}

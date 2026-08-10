@@ -7,7 +7,7 @@ import {
 import { Navbar } from '../components/layout/Navbar'
 import { Footer } from '../components/layout/Footer'
 import { CTABanner } from '../components/home/CTABanner'
-import { LandscapeScene } from '../components/visuals/LandscapeScene'
+import { PageHero } from '../components/marketing/PageHero'
 
 const industries = [
   {
@@ -188,26 +188,23 @@ const industries = [
   },
 ]
 
-/** The ridge motif from LandscapeScene, reduced to a single stroke for card headers. */
-function RidgeMotif() {
+/**
+ * Card-header surface: the card-scale version of the page's deep emerald band —
+ * soft light fields and a grain, no linework.
+ */
+function HeaderField() {
   return (
-    <svg
-      viewBox="0 0 400 120"
-      preserveAspectRatio="none"
-      aria-hidden
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-16 w-full"
-    >
-      <path
-        d="M0 92 C 60 62, 110 88, 168 74 C 232 58, 282 34, 340 58 C 372 71, 388 70, 400 76 L400 120 L0 120 Z"
-        fill="#FFFFFF"
-        fillOpacity="0.10"
+    <div aria-hidden className="pointer-events-none absolute inset-0">
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(90% 120% at 82% -10%, rgba(167,243,208,0.20), transparent 62%),' +
+            'radial-gradient(80% 120% at 6% 118%, rgba(2,40,30,0.34), transparent 70%)',
+        }}
       />
-      <path
-        d="M0 110 C 80 84, 150 108, 224 96 C 300 84, 348 70, 400 88 L400 120 L0 120 Z"
-        fill="#FFFFFF"
-        fillOpacity="0.08"
-      />
-    </svg>
+      <span className="grain grain-dark" />
+    </div>
   )
 }
 
@@ -235,61 +232,39 @@ export function IndustriesPage() {
     <div className="min-h-screen bg-bg">
       <Navbar />
 
-      {/* ── Hero — the valley ─────────────────────────────────────────── */}
-      <section className="relative overflow-hidden pt-40 pb-28 sm:pb-36">
-        <LandscapeScene tone="dusk" />
-
-        <div className="relative z-10 mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-          <motion.span
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-white/90 backdrop-blur-sm"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-            Industries
-          </motion.span>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 26 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-            className="font-heading font-extrabold text-white"
-            style={{ fontSize: 'clamp(2.5rem, 5.6vw, 4.75rem)', lineHeight: 1.03, letterSpacing: '-0.038em' }}
-          >
+      {/* ── Hero ──────────────────────────────────────────────────────── */}
+      <PageHero
+        eyebrow="Industries"
+        title={
+          <>
             One platform.
             <br />
             <span className="text-lime">Every industry.</span>
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="mx-auto mt-7 max-w-2xl text-[17px] leading-relaxed text-white/85 sm:text-[19px]"
-          >
+          </>
+        }
+        lede={
+          <>
             UnifiedTree is trusted across 8 major industries. Same platform, purpose-built
             workflows for each sector.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[13px] font-medium text-white/70"
-          >
-            <span>8 sectors live today</span>
-            <span className="hidden h-1 w-1 rounded-full bg-white/40 sm:block" />
-            <span>Same core, different playbook</span>
-            <span className="hidden h-1 w-1 rounded-full bg-white/40 sm:block" />
-            <span>Go live in a day</span>
-          </motion.div>
+          </>
+        }
+      >
+        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[13px] font-medium text-white/70">
+          <span>8 sectors live today</span>
+          <span className="hidden h-1 w-1 rounded-full bg-white/40 sm:block" />
+          <span>Same core, different playbook</span>
+          <span className="hidden h-1 w-1 rounded-full bg-white/40 sm:block" />
+          <span>Go live in a day</span>
         </div>
-      </section>
+      </PageHero>
 
       {/* ── Explorer — pill rail + detail panel ───────────────────────── */}
-      <section ref={explorerRef} className="scroll-mt-28 bg-white py-20 sm:py-24">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section
+        ref={explorerRef}
+        className="surface-soft relative overflow-hidden scroll-mt-28 py-20 sm:py-24"
+      >
+        <span aria-hidden className="grain" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 26 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -302,7 +277,7 @@ export function IndustriesPage() {
             </p>
             <h2
               className="mt-4 font-heading font-extrabold text-text-primary"
-              style={{ fontSize: 'clamp(2rem, 4vw, 3.25rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
+              style={{ fontSize: 'clamp(1.74rem, 3.52vw, 2.828rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
             >
               Built for how your floor actually runs
             </h2>
@@ -363,7 +338,7 @@ export function IndustriesPage() {
               >
                 {/* Emerald gradient header strip */}
                 <div className="relative overflow-hidden bg-gradient-to-br from-[#04503A] via-primary-dark to-primary px-6 py-9 sm:px-10 sm:py-11">
-                  <RidgeMotif />
+                  <HeaderField />
                   <div className="relative z-10 flex flex-col gap-5 sm:flex-row sm:items-center">
                     <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 backdrop-blur-sm">
                       <active.icon size={26} className="text-white" />
@@ -371,7 +346,7 @@ export function IndustriesPage() {
                     <div className="min-w-0">
                       <h3
                         className="font-heading font-extrabold text-white"
-                        style={{ fontSize: 'clamp(1.6rem, 2.6vw, 2.25rem)', letterSpacing: '-0.035em', lineHeight: 1.06 }}
+                        style={{ fontSize: 'clamp(1.392rem, 2.288vw, 1.958rem)', letterSpacing: '-0.035em', lineHeight: 1.06 }}
                       >
                         {active.name}
                       </h3>
@@ -381,7 +356,7 @@ export function IndustriesPage() {
                 </div>
 
                 <div className="p-6 sm:p-10">
-                  <p className="max-w-3xl text-[17px] leading-relaxed text-text-secondary">
+                  <p className="max-w-3xl text-[15.5px] leading-relaxed text-text-secondary">
                     {active.description}
                   </p>
 
@@ -464,8 +439,9 @@ export function IndustriesPage() {
       </section>
 
       {/* ── The full set of sectors ───────────────────────────────────── */}
-      <section className="bg-[#ECFDF5] py-20 sm:py-24">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="surface-tint relative overflow-hidden py-20 sm:py-24">
+        <span aria-hidden className="grain" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 26 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -478,11 +454,11 @@ export function IndustriesPage() {
             </p>
             <h2
               className="mt-4 font-heading font-extrabold text-text-primary"
-              style={{ fontSize: 'clamp(2rem, 4vw, 3.25rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
+              style={{ fontSize: 'clamp(1.74rem, 3.52vw, 2.828rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
             >
               Eight industries, one core
             </h2>
-            <p className="mt-5 text-[17px] leading-relaxed text-text-secondary">
+            <p className="mt-5 text-[15.5px] leading-relaxed text-text-secondary">
               The same ledger, the same people records, the same stock — configured around the
               way your sector actually works. Pick a card to open its playbook.
             </p>
@@ -507,14 +483,14 @@ export function IndustriesPage() {
                 >
                   {/* Emerald gradient header strip */}
                   <div className="relative h-24 overflow-hidden bg-gradient-to-br from-[#04503A] via-primary-dark to-primary">
-                    <RidgeMotif />
+                    <HeaderField />
                     <div className="absolute -bottom-6 left-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-white text-primary shadow-card transition-transform duration-300 group-hover:scale-105">
                       <Icon size={24} />
                     </div>
                   </div>
 
                   <div className="flex flex-1 flex-col px-6 pb-6 pt-10">
-                    <h3 className="font-heading text-[17px] font-bold leading-snug text-text-primary" style={{ letterSpacing: '-0.02em' }}>
+                    <h3 className="font-heading text-[15.5px] font-bold leading-snug text-text-primary" style={{ letterSpacing: '-0.02em' }}>
                       {ind.name}
                     </h3>
                     <p className="mt-2 text-[14px] font-semibold leading-snug text-primary">

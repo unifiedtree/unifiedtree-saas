@@ -86,15 +86,16 @@ export function HelpCenterPage() {
     <div className="min-h-screen bg-bg">
       <Navbar />
 
-      <section className="pt-32 pb-16 hero-gradient relative overflow-hidden">
-        <div className="absolute inset-0 pattern-dots" />
-        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section className="pt-32 pb-16 surface-deep relative overflow-hidden">
+        <div aria-hidden className="pointer-events-none absolute inset-0 pattern-dots" />
+        <span aria-hidden className="grain grain-dark" />
+        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-body font-semibold uppercase tracking-[0.1em] text-white/70 bg-white/[0.08] border border-white/10 mb-6">
               Help Center
             </span>
             <h1 className="font-heading font-extrabold text-white mb-6"
-                style={{ fontSize: 'clamp(2.4rem, 4.5vw, 3.5rem)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+                style={{ fontSize: 'clamp(2.088rem, 3.96vw, 3.045rem)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
               We&apos;re here to help.
             </h1>
             <p className="text-lg text-white/80 font-body leading-relaxed max-w-2xl mx-auto">
@@ -105,8 +106,9 @@ export function HelpCenterPage() {
         </div>
       </section>
 
-      <section className="py-16 bg-surface">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+      <section className="py-16 surface-soft relative overflow-hidden">
+        <span aria-hidden className="grain" />
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
           {categories.map((cat) => {
             const Icon = cat.icon
             return (
@@ -126,8 +128,9 @@ export function HelpCenterPage() {
         </div>
       </section>
 
-      <section className="py-16 bg-bg">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-16 surface-tint relative overflow-hidden">
+        <span aria-hidden className="grain" />
+        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="premium-card p-10 text-center">
             <h2 className="font-heading font-bold text-text-primary text-2xl mb-3">Still need help?</h2>
             <p className="text-text-secondary font-body mb-8 max-w-xl mx-auto">

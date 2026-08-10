@@ -218,6 +218,24 @@ const ROW_BASE = 'group relative flex items-center gap-3 rounded-lg px-3 py-2 te
 const ROW_IDLE = 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
 const ROW_ACTIVE = 'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]'
 
+/** One-word labels for the Keka-style icon rail — the full names don't fit
+ *  under an icon. Falls back to the first word of the nav label. */
+const RAIL_LABELS: Record<string, string> = {
+  dashboard: 'Home', myworkspace: 'Me', myteam: 'Team',
+  company: 'Company', master: 'Master', attendance: 'Time', leave: 'Leave',
+  recruit: 'Hire', 'payroll-hr': 'Payroll', expense: 'Expense', ess: 'Me',
+  performance: 'Perform', compliance: 'Comply', reports: 'Reports', exit: 'Exit',
+  hrsettings: 'Settings',
+  's-profile': 'Profile', 's-branding': 'Brand', 's-security': 'Security',
+  's-notifications': 'Alerts', 's-billing': 'Billing', 's-integrations': 'Connect',
+  's-users': 'Users', 's-roles': 'Roles', 's-audit': 'Audit', 's-danger': 'Danger',
+}
+
+/* Rail + top-bar ground — the same emerald family so sidebar and header read
+   as ONE surface (no divider line), the way Keka's chrome does. */
+const RAIL_BG = 'linear-gradient(180deg, #04503A 0%, #043B2C 55%, #02291E 100%)'
+const TOPBAR_BG = 'linear-gradient(90deg, #04503A 0%, #047857 45%, #059669 100%)'
+
 function matchPath(pathname: string, p?: string) {
   return !!p && (pathname === p || pathname.startsWith(p + '/'))
 }
@@ -333,8 +351,53 @@ export function PlatformShell() {
   const toggleModule = (key: string) => setOpenModules(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
 
   const profileRef = useDismiss(profileOpen, () => setProfileOpen(false))
+  const headerProfileRef = useDismiss(profileOpen, () => setProfileOpen(false))
   const notifRef = useDismiss(notifOpen, () => setNotifOpen(false))
   const switcherRef = useDismiss(switcherOpen, () => setSwitcherOpen(false))
+
+  // ─── Icon-rail model: top-level sections only ───────────────────────────────
+  // Groups collapse to a single icon; their children become the in-page tab row
+  // below the top bar (subTabs) instead of nesting in the sidebar.
+  interface RailItem { key: string; label: string; fullLabel: string; icon: React.ReactNode; target: string; active: boolean; children?: NavChild[] }
+  const railItems: RailItem[] = (() => {
+    const list: RailItem[] = []
+    for (const f of scoped.flat) {
+      if (!f.path) continue
+      list.push({
+        key: f.key,
+        label: RAIL_LABELS[f.key] ?? f.label.split(' ')[0],
+        fullLabel: f.label,
+        icon: f.icon,
+        target: f.path,
+        active: matchPath(location.pathname, f.path),
+      })
+    }
+    for (const g of scoped.groups) {
+      const kids = (g.children ?? []).filter(isVisible)
+      if (!kids.length) continue
+      list.push({
+        key: g.key,
+        label: RAIL_LABELS[g.key] ?? g.label.split(' ')[0],
+        fullLabel: g.label,
+        icon: g.icon,
+        target: kids[0].path,
+        active: kids.some(c => matchPath(location.pathname, c.path)),
+        children: kids,
+      })
+    }
+    return list
+  })()
+
+  // Several nav children intentionally share a route (e.g. the compliance
+  // views all land on /hrms/compliance) — dedupe by path or every duplicate
+  // tab would render "active" at once.
+  const subTabs: NavChild[] | null = (() => {
+    const active = railItems.find(i => i.active && i.children && i.children.length > 0)
+    if (!active?.children) return null
+    const seen = new Set<string>()
+    const tabs = active.children.filter(c => { if (seen.has(c.path)) return false; seen.add(c.path); return true })
+    return tabs.length > 1 ? tabs : null
+  })()
 
   const roleLabel = primaryRole ? (ROLE_LABELS[primaryRole] ?? primaryRole) : null
   const extraRoles = userRoles.filter(r => r !== primaryRole && ROLE_LABELS[r] !== undefined).length
@@ -459,7 +522,10 @@ export function PlatformShell() {
       </div>
       <div className="p-1.5">
         <button onClick={() => navigate('/settings')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><UserCircle2 size={16} /> My Profile</button>
-        <button onClick={() => navigate('/modules')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><LayoutGrid size={16} /> All apps</button>
+        <button onClick={() => navigate('/modules')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><LayoutGrid size={16} /> My Apps</button>
+        {isAdmin && (
+          <button onClick={() => navigate('/settings')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><Settings size={16} /> Settings</button>
+        )}
       </div>
       <div className="border-t border-[var(--border-subtle)] p-1.5">
         <button onClick={logout} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--status-error-fg)] hover:bg-[var(--status-error-bg)]"><LogOut size={16} /> Sign out</button>
@@ -527,18 +593,31 @@ export function PlatformShell() {
     </AnimatePresence>
   )
 
-  // ─── Launcher mode: full-width, top bar only ────────────────────────────────
+  // ─── Launcher mode: header floats transparent over the page's gradient ─────
+  // No bar background, no border — the launcher page paints the emerald field
+  // and this header sits on it in white, so the whole screen reads as one.
   if (isLauncher) {
     return (
-      <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg-base)] font-sans text-[var(--text-primary)]">
-        <header className="sticky top-0 z-sticky flex h-16 shrink-0 items-center justify-between gap-4 border-b border-[var(--border-default)] bg-[var(--bg-surface-overlay)] px-4 backdrop-blur-xl sm:px-6">
-          <div className="flex items-center gap-2"><AppSwitcher /><Logo /></div>
+      <div className="relative flex h-screen flex-col overflow-hidden font-sans text-[var(--text-primary)]">
+        <header className="absolute inset-x-0 top-0 z-sticky flex h-16 shrink-0 items-center justify-between gap-4 px-4 sm:px-6">
+          {/* Top-left: the workspace's own logo only (their upload when present,
+              UnifiedTree otherwise), on a white chip so any logo reads on green. */}
+          <button onClick={() => navigate('/modules')} className="flex items-center gap-2.5" title="Apps">
+            <span className="flex h-10 items-center rounded-xl bg-white/95 px-3 shadow-sm">
+              <img
+                src={tenantLogoUrl || '/UnifiedTreeLogo.png'}
+                alt={tenantName || 'Unified Tree'}
+                className="h-6 w-auto object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).src = '/UnifiedTreeLogo.png' }}
+              />
+            </span>
+          </button>
           <div className="relative flex items-center gap-1.5" ref={profileRef}>
-            {roleBadgeText && <span className="mr-1 hidden items-center rounded-full bg-[var(--accent-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-fg-strong)] ring-1 ring-inset ring-[var(--accent-border)] sm:inline-flex">{roleBadgeText}</span>}
-            <button onClick={() => setProfileOpen(v => !v)} className="flex h-9 items-center gap-2 rounded-lg pl-1 pr-2 transition-colors hover:bg-[var(--bg-subtle)]">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-sm font-semibold text-[var(--accent-fg-strong)]">{initial}</span>
-              <span className="hidden text-[13px] font-semibold text-[var(--text-primary)] sm:block">{fullName}</span>
-              <ChevronDown size={15} className="text-[var(--text-tertiary)]" />
+            {roleBadgeText && <span className="mr-1 hidden items-center rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white ring-1 ring-inset ring-white/25 sm:inline-flex">{roleBadgeText}</span>}
+            <button onClick={() => setProfileOpen(v => !v)} className="flex h-9 items-center gap-2 rounded-lg pl-1 pr-2 transition-colors hover:bg-white/10">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/95 text-sm font-bold text-[#047857] shadow-sm">{initial}</span>
+              <span className="hidden text-[13px] font-semibold text-white sm:block">{fullName}</span>
+              <ChevronDown size={15} className="text-white/70" />
             </button>
             <AnimatePresence>
               {profileOpen && (
@@ -555,17 +634,45 @@ export function PlatformShell() {
     )
   }
 
-  // ─── App mode: sidebar + header + content ───────────────────────────────────
+  // ─── App mode: Keka-style icon rail + emerald top bar + in-page sub-tabs ────
+  //
+  // The sidebar carries ONLY top-level sections (icon + one-word label); a
+  // section's sub-options render as a horizontal tab row INSIDE the page, so
+  // the rail never expands. Rail and top bar share the same emerald family
+  // with no divider — one continuous chrome, the way the reference reads.
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-base)] font-sans text-[var(--text-primary)]">
-      <aside className={clsx('relative hidden shrink-0 transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] md:block', collapsed ? 'w-[76px]' : 'w-[272px]')}>
-        {sidebarContent}
-        <button onClick={() => { const next = !collapsed; setCollapsed(next); localStorage.setItem(SIDEBAR_KEY, String(next)) }} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="absolute -right-3 top-[74px] z-fixed flex h-6 w-6 items-center justify-center rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-tertiary)] shadow-sm transition-colors hover:text-[var(--text-primary)]">
-          {collapsed ? <PanelLeft size={13} /> : <PanelLeftClose size={13} />}
+      {/* Icon rail — fixed width, its own scroll */}
+      <aside className="relative z-10 hidden w-[86px] shrink-0 flex-col md:flex" style={{ background: RAIL_BG }}>
+        <button onClick={() => navigate('/modules')} title="All apps" className="flex h-14 shrink-0 items-center justify-center">
+          <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white/95 shadow-sm">
+            <img
+              src={tenantLogoUrl || '/UnifiedTreeLogo.png'}
+              alt={tenantName || 'Unified Tree'}
+              className="h-7 w-7 object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).src = '/UnifiedTreeLogo.png' }}
+            />
+          </span>
         </button>
+        <nav className="scrollbar-hide flex-1 space-y-1 overflow-y-auto px-2.5 pb-4 pt-1">
+          {railItems.map(item => (
+            <button
+              key={item.key}
+              onClick={() => navigate(item.target)}
+              title={item.fullLabel}
+              className={clsx(
+                'flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 transition-colors duration-150',
+                item.active ? 'bg-white/[0.16] text-white' : 'text-white/60 hover:bg-white/[0.08] hover:text-white',
+              )}
+            >
+              {item.icon}
+              <span className="text-[10px] font-semibold leading-none tracking-tight">{item.label}</span>
+            </button>
+          ))}
+        </nav>
       </aside>
 
+      {/* Mobile drawer keeps the fuller grouped list — small screens need labels */}
       <AnimatePresence>
         {mobileOpen && (<>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMobileOpen(false)} className="fixed inset-0 z-modal-backdrop bg-black/40 backdrop-blur-sm md:hidden" />
@@ -574,24 +681,26 @@ export function PlatformShell() {
       </AnimatePresence>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-sticky flex h-16 shrink-0 items-center justify-between gap-4 border-b border-[var(--border-default)] bg-[var(--bg-surface-overlay)] px-4 backdrop-blur-xl sm:px-6">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <button onClick={() => setMobileOpen(true)} className="-ml-1 rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] md:hidden" aria-label="Open menu"><Menu size={20} /></button>
-            <button onClick={() => navigate('/modules')} className="hidden items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] md:inline-flex" title="Back to apps"><ArrowLeft size={15} /> Apps</button>
-            <div className="hidden h-5 w-px bg-[var(--border-default)] md:block" />
-            <button onClick={() => setSearchOpen(true)} className="group hidden h-9 w-full max-w-md items-center gap-2.5 rounded-lg border border-[var(--border-default)] bg-[var(--bg-base)] px-3 text-left transition-colors hover:border-[var(--border-strong)] sm:flex">
+        {/* Top bar — continues the rail's emerald, no border between them */}
+        <header className="z-sticky flex h-14 shrink-0 items-center gap-3 px-4 sm:px-6" style={{ background: TOPBAR_BG }}>
+          <button onClick={() => setMobileOpen(true)} className="-ml-1 rounded-lg p-2 text-white/85 hover:bg-white/10 md:hidden" aria-label="Open menu"><Menu size={20} /></button>
+          <span className="min-w-0 truncate text-[15px] font-bold text-white">{tenantName || 'Workspace'}</span>
+
+          {/* Centred search pill, Keka-style */}
+          <div className="flex min-w-0 flex-1 justify-center px-2">
+            <button onClick={() => setSearchOpen(true)} className="group flex h-9 w-full max-w-md items-center gap-2.5 rounded-full bg-white/95 px-4 text-left shadow-sm transition-colors hover:bg-white">
+              <span className="flex-1 truncate text-sm text-[var(--text-tertiary)]">Search {appMeta.label}…</span>
+              <kbd className="hidden items-center gap-0.5 rounded border border-[var(--border-default)] bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)] lg:inline-flex"><Command size={10} /> K</kbd>
               <Search size={15} className="shrink-0 text-[var(--text-tertiary)]" />
-              <span className="flex-1 text-sm text-[var(--text-tertiary)]">Search {appMeta.label}…</span>
-              <kbd className="hidden items-center gap-0.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)] lg:inline-flex"><Command size={10} /> K</kbd>
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            {roleBadgeText && <span className="mr-1 hidden items-center rounded-full bg-[var(--accent-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-fg-strong)] ring-1 ring-inset ring-[var(--accent-border)] sm:inline-flex">{roleBadgeText}</span>}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {roleBadgeText && <span className="mr-1 hidden items-center rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white ring-1 ring-inset ring-white/25 lg:inline-flex">{roleBadgeText}</span>}
             <div className="relative" ref={notifRef}>
-              <button onClick={() => setNotifOpen(v => !v)} className="relative rounded-lg p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]" aria-label="Notifications">
+              <button onClick={() => setNotifOpen(v => !v)} className="relative rounded-lg p-2 text-white/85 transition-colors hover:bg-white/10 hover:text-white" aria-label="Notifications">
                 <Bell size={18} />
-                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[var(--status-error-solid)] ring-2 ring-[var(--bg-surface)]" />
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#FDBA74] ring-2 ring-[#047857]" />
               </button>
               <AnimatePresence>
                 {notifOpen && (
@@ -605,9 +714,43 @@ export function PlatformShell() {
                 )}
               </AnimatePresence>
             </div>
-            <button onClick={() => navigate('/me')} className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent-bg)] text-sm font-semibold text-[var(--accent-fg-strong)] sm:hidden" aria-label="Profile">{initial}</button>
+            {/* Avatar → profile menu (My Profile / My Apps / Settings / Sign out) */}
+            <div className="relative" ref={headerProfileRef}>
+              <button onClick={() => setProfileOpen(v => !v)} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-sm font-bold text-[#047857] shadow-sm ring-2 ring-white/30 transition-transform hover:scale-105" aria-label="Account">
+                {initial}
+              </button>
+              <AnimatePresence>
+                {profileOpen && (
+                  <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={{ duration: 0.15 }} className="absolute right-0 top-12 z-dropdown w-56 overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
+                    {profileMenu}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </header>
+
+        {/* Sub-options of the active section — in the page, not the sidebar */}
+        {subTabs && (
+          <div className="z-sticky flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border-default)] bg-[var(--bg-surface)] px-4 sm:px-6">
+            {subTabs.map(tab => (
+              <NavLink
+                key={tab.path + tab.label}
+                to={tab.path}
+                className={({ isActive }) => clsx(
+                  'relative flex h-full shrink-0 items-center gap-1.5 px-3 text-[13.5px] font-medium transition-colors',
+                  isActive ? 'text-[var(--accent-fg-strong)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+                )}
+              >
+                {({ isActive }) => (<>
+                  {tab.label}
+                  {isActive && <motion.span layoutId="shellSubTab" className="absolute inset-x-2 bottom-0 h-[2.5px] rounded-t-full bg-[var(--accent-solid)]" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+                </>)}
+              </NavLink>
+            ))}
+          </div>
+        )}
+
         <div className="flex-1 overflow-auto"><Outlet /></div>
       </main>
       {searchModal}

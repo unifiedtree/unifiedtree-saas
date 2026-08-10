@@ -293,9 +293,10 @@ export function ModulesOverview() {
   }
 
   return (
-    <section className="py-24 bg-bg relative overflow-hidden" ref={sectionRef}>
-      {/* Background dot pattern when unified */}
-      <div className={`absolute inset-0 bg-connected-dots transition-opacity duration-700 ${scattered ? 'opacity-0' : 'opacity-100'}`} />
+    <section className="surface-soft relative overflow-hidden py-24" ref={sectionRef}>
+      {/* Soft emerald wash that blooms behind the grid while it is unified */}
+      <div aria-hidden className={`absolute inset-0 bg-connected-dots transition-opacity duration-700 ${scattered ? 'opacity-0' : 'opacity-100'}`} />
+      <span aria-hidden className="grain" />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
@@ -311,7 +312,7 @@ export function ModulesOverview() {
               <span className="text-primary font-body font-semibold text-sm uppercase tracking-widest mb-3 block">
                 Platform modules
               </span>
-              <h2 className="font-heading font-bold text-text-primary mb-4" style={{ fontSize: 'clamp(2rem, 3.5vw, 3rem)' }}>
+              <h2 className="font-heading font-bold text-text-primary mb-4" style={{ fontSize: 'clamp(1.74rem, 3.08vw, 2.61rem)' }}>
                 Everything your business needs.
                 <br />
                 Nothing it doesn't.

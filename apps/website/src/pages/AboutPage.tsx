@@ -7,7 +7,7 @@ import {
 import { Navbar } from '../components/layout/Navbar'
 import { Footer } from '../components/layout/Footer'
 import { CTABanner } from '../components/home/CTABanner'
-import { LandscapeScene } from '../components/visuals/LandscapeScene'
+import { PageHero, EngineeredField, EmeraldHairline } from '../components/marketing/PageHero'
 
 const values = [
   {
@@ -157,164 +157,150 @@ export function AboutPage() {
     <div className="min-h-screen bg-bg">
       <Navbar />
 
-      {/* ── Hero — the valley ─────────────────────────────────────────── */}
-      <section className="relative overflow-hidden pt-40 pb-28 sm:pb-36">
-        <LandscapeScene tone="dusk" />
-
-        <div className="relative z-10 mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
-          <motion.span
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-white/90 backdrop-blur-sm"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-            Our story
-          </motion.span>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 26 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-            className="font-heading font-extrabold text-white"
-            style={{ fontSize: 'clamp(2.5rem, 5.8vw, 5rem)', lineHeight: 1.03, letterSpacing: '-0.038em' }}
-          >
+      {/* ── Hero ──────────────────────────────────────────────────────── */}
+      <PageHero
+        eyebrow="Our story"
+        title={
+          <>
             We built the ERP we
             <br />
             wished we had.
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="mx-auto mt-8 max-w-2xl text-[17px] leading-relaxed text-white/85 sm:text-[19px]"
-          >
+          </>
+        }
+        lede={
+          <>
             UnifiedTree was born out of frustration. We watched growing businesses worldwide suffer
             through clunky, expensive ERP systems that assumed perfect infrastructure and unlimited
             IT budgets. We decided to build something different.
-          </motion.p>
-        </div>
-      </section>
+          </>
+        }
+      />
 
-      {/* ── Mission ───────────────────────────────────────────────────── */}
-      <section className="bg-white py-24 sm:py-28">
-        <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 26 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.3 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          >
-            {/* Clean emerald divider */}
-            <span className="mx-auto mb-10 block h-1 w-16 rounded-full bg-primary" />
+      {/* ── Mission + story share one continuous soft surface ─────────── */}
+      <div className="surface-soft relative overflow-hidden">
+        <span aria-hidden className="grain" />
 
-            <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
-              Our mission
-            </p>
-            <h2
-              className="mt-5 font-heading font-extrabold text-text-primary"
-              style={{ fontSize: 'clamp(1.9rem, 3.6vw, 3rem)', lineHeight: 1.08, letterSpacing: '-0.035em' }}
+        {/* ── Mission ───────────────────────────────────────────────────── */}
+        <section className="relative py-24 sm:py-28">
+          <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
+            <motion.div
+              initial={{ opacity: 0, y: 26 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             >
-              World-class business software that fits the way you already work
-            </h2>
-            <p className="mx-auto mt-7 max-w-2xl text-[17px] leading-relaxed text-text-secondary sm:text-[19px]">
-              To give every growing enterprise — whether in London or Lima, with 10 employees or
-              10,000 — access to world-class business management software that actually fits the
-              way they work.
-            </p>
-          </motion.div>
-        </div>
-      </section>
+              {/* Clean emerald divider */}
+              <span className="mx-auto mb-10 block h-1 w-16 rounded-full bg-primary" />
 
-      {/* ── Story — alternating chapters ──────────────────────────────── */}
-      <section className="bg-white pb-24 sm:pb-28">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="space-y-24 sm:space-y-32">
-            {story.map((ch, i) => {
-              const flipped = i % 2 === 1
-              return (
-                <motion.div
-                  key={ch.chapter}
-                  initial={{ opacity: 0, y: 26 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.2 }}
-                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                  className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20"
-                >
-                  {/* Copy */}
-                  <div className={flipped ? 'lg:order-2' : ''}>
-                    <div className="flex items-center gap-4">
-                      <span className="font-heading text-[13px] font-bold tracking-[0.14em] text-primary">
-                        {ch.chapter}
-                      </span>
-                      <span className="h-px w-10 bg-primary/30" />
-                      <span className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-text-tertiary">
-                        {ch.eyebrow}
-                      </span>
+              <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
+                Our mission
+              </p>
+              <h2
+                className="mt-5 font-heading font-extrabold text-text-primary"
+                style={{ fontSize: 'clamp(1.653rem, 3.168vw, 2.61rem)', lineHeight: 1.08, letterSpacing: '-0.035em' }}
+              >
+                World-class business software that fits the way you already work
+              </h2>
+              <p className="mx-auto mt-7 max-w-2xl text-[15.5px] leading-relaxed text-text-secondary sm:text-[17px]">
+                To give every growing enterprise — whether in London or Lima, with 10 employees or
+                10,000 — access to world-class business management software that actually fits the
+                way they work.
+              </p>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* ── Story — alternating chapters ──────────────────────────────── */}
+        <section className="relative pb-24 sm:pb-28">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="space-y-24 sm:space-y-32">
+              {story.map((ch, i) => {
+                const flipped = i % 2 === 1
+                return (
+                  <motion.div
+                    key={ch.chapter}
+                    initial={{ opacity: 0, y: 26 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.2 }}
+                    transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                    className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20"
+                  >
+                    {/* Copy */}
+                    <div className={flipped ? 'lg:order-2' : ''}>
+                      <div className="flex items-center gap-4">
+                        <span className="font-heading text-[13px] font-bold tracking-[0.14em] text-primary">
+                          {ch.chapter}
+                        </span>
+                        <span className="h-px w-10 bg-primary/30" />
+                        <span className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-text-tertiary">
+                          {ch.eyebrow}
+                        </span>
+                      </div>
+
+                      <h3
+                        className="mt-6 font-heading font-extrabold text-text-primary"
+                        style={{ fontSize: 'clamp(1.522rem, 2.816vw, 2.393rem)', lineHeight: 1.08, letterSpacing: '-0.035em' }}
+                      >
+                        {ch.title}
+                      </h3>
+                      <p className="mt-6 max-w-xl text-[15.5px] leading-relaxed text-text-secondary">
+                        {ch.body}
+                      </p>
                     </div>
 
-                    <h3
-                      className="mt-6 font-heading font-extrabold text-text-primary"
-                      style={{ fontSize: 'clamp(1.75rem, 3.2vw, 2.75rem)', lineHeight: 1.08, letterSpacing: '-0.035em' }}
-                    >
-                      {ch.title}
-                    </h3>
-                    <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-text-secondary">
-                      {ch.body}
-                    </p>
-                  </div>
+                    {/* Panel */}
+                    <div className={flipped ? 'lg:order-1' : ''}>
+                      <div className="relative overflow-hidden rounded-3xl border border-border bg-[#ECFDF5] p-7 shadow-card sm:p-9">
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute -right-2 -top-6 select-none font-heading font-extrabold leading-none text-primary/10"
+                          style={{ fontSize: 'clamp(5.22rem, 10.56vw, 7.83rem)', letterSpacing: '-0.045em' }}
+                        >
+                          {ch.chapter}
+                        </span>
 
-                  {/* Panel */}
-                  <div className={flipped ? 'lg:order-1' : ''}>
-                    <div className="relative overflow-hidden rounded-3xl border border-border bg-[#ECFDF5] p-7 shadow-card sm:p-9">
-                      <span
-                        aria-hidden
-                        className="pointer-events-none absolute -right-2 -top-6 select-none font-heading font-extrabold leading-none text-primary/10"
-                        style={{ fontSize: 'clamp(6rem, 12vw, 9rem)', letterSpacing: '-0.045em' }}
-                      >
-                        {ch.chapter}
-                      </span>
-
-                      <div className="relative z-10 space-y-3">
-                        {ch.points.map((p, j) => {
-                          const Icon = p.icon
-                          return (
-                            <motion.div
-                              key={p.label}
-                              initial={{ opacity: 0, y: reduce ? 0 : 14 }}
-                              whileInView={{ opacity: 1, y: 0 }}
-                              viewport={{ once: true, amount: 0.4 }}
-                              transition={{ duration: 0.5, delay: 0.08 * j, ease: [0.16, 1, 0.3, 1] }}
-                              className="flex gap-4 rounded-2xl border border-border bg-white p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover"
-                            >
-                              <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
-                                <Icon size={20} />
-                              </span>
-                              <span className="min-w-0">
-                                <span className="block font-heading text-[15px] font-bold leading-snug text-text-primary" style={{ letterSpacing: '-0.02em' }}>
-                                  {p.label}
+                        <div className="relative z-10 space-y-3">
+                          {ch.points.map((p, j) => {
+                            const Icon = p.icon
+                            return (
+                              <motion.div
+                                key={p.label}
+                                initial={{ opacity: 0, y: reduce ? 0 : 14 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true, amount: 0.4 }}
+                                transition={{ duration: 0.5, delay: 0.08 * j, ease: [0.16, 1, 0.3, 1] }}
+                                className="flex gap-4 rounded-2xl border border-border bg-white p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover"
+                              >
+                                <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
+                                  <Icon size={20} />
                                 </span>
-                                <span className="mt-1.5 block text-[13.5px] leading-relaxed text-text-secondary">
-                                  {p.detail}
+                                <span className="min-w-0">
+                                  <span className="block font-heading text-[15px] font-bold leading-snug text-text-primary" style={{ letterSpacing: '-0.02em' }}>
+                                    {p.label}
+                                  </span>
+                                  <span className="mt-1.5 block text-[13.5px] leading-relaxed text-text-secondary">
+                                    {p.detail}
+                                  </span>
                                 </span>
-                              </span>
-                            </motion.div>
-                          )
-                        })}
+                              </motion.div>
+                            )
+                          })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </motion.div>
-              )
-            })}
+                  </motion.div>
+                )
+              })}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ── Stat band — the valley at dusk ────────────────────────────── */}
-      <section className="relative overflow-hidden py-24 sm:py-28">
-        <LandscapeScene tone="dusk" />
+      </div>
+
+      {/* ── Stat band — deep emerald surface ──────────────────────────── */}
+      <section className="surface-deep relative overflow-hidden py-24 sm:py-28">
+        <EngineeredField />
+        <EmeraldHairline />
 
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -329,7 +315,7 @@ export function AboutPage() {
             </p>
             <h2
               className="mt-4 font-heading font-extrabold text-white"
-              style={{ fontSize: 'clamp(1.9rem, 3.6vw, 3rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
+              style={{ fontSize: 'clamp(1.653rem, 3.168vw, 2.61rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
             >
               Ten years of shop-floor lessons, running in production
             </h2>
@@ -347,7 +333,7 @@ export function AboutPage() {
               >
                 <p
                   className="font-heading font-extrabold text-white"
-                  style={{ fontSize: 'clamp(2.5rem, 4.6vw, 3.75rem)', lineHeight: 1.02, letterSpacing: '-0.04em' }}
+                  style={{ fontSize: 'clamp(2.175rem, 4.048vw, 3.263rem)', lineHeight: 1.02, letterSpacing: '-0.04em' }}
                 >
                   {s.value}
                 </p>
@@ -360,8 +346,9 @@ export function AboutPage() {
       </section>
 
       {/* ── Values ────────────────────────────────────────────────────── */}
-      <section className="bg-[#ECFDF5] py-24 sm:py-28">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="surface-tint relative overflow-hidden py-24 sm:py-28">
+        <span aria-hidden className="grain" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 26 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -374,7 +361,7 @@ export function AboutPage() {
             </p>
             <h2
               className="mt-4 font-heading font-extrabold text-text-primary"
-              style={{ fontSize: 'clamp(2rem, 4vw, 3.25rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
+              style={{ fontSize: 'clamp(1.74rem, 3.52vw, 2.828rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
             >
               What we <span className="text-primary">believe</span>
             </h2>
@@ -396,7 +383,7 @@ export function AboutPage() {
                     <Icon size={22} />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="font-heading text-[19px] font-bold text-text-primary" style={{ letterSpacing: '-0.025em' }}>
+                    <h3 className="font-heading text-[17px] font-bold text-text-primary" style={{ letterSpacing: '-0.025em' }}>
                       {val.title}
                     </h3>
                     <p className="mt-3 text-[15px] leading-relaxed text-text-secondary">
@@ -411,8 +398,9 @@ export function AboutPage() {
       </section>
 
       {/* ── The team ──────────────────────────────────────────────────── */}
-      <section className="bg-white py-24 sm:py-28">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="surface-soft relative overflow-hidden py-24 sm:py-28">
+        <span aria-hidden className="grain" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 26 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -425,11 +413,11 @@ export function AboutPage() {
             </p>
             <h2
               className="mt-4 font-heading font-extrabold text-text-primary"
-              style={{ fontSize: 'clamp(2rem, 4vw, 3.25rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
+              style={{ fontSize: 'clamp(1.74rem, 3.52vw, 2.828rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
             >
               Who you actually talk to
             </h2>
-            <p className="mt-5 text-[17px] leading-relaxed text-text-secondary">
+            <p className="mt-5 text-[15.5px] leading-relaxed text-text-secondary">
               No call centre, no ticket lottery. Four groups of people, all of whom have spent
               time inside the businesses they build for.
             </p>
@@ -448,25 +436,23 @@ export function AboutPage() {
                   className="flex flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover"
                 >
                   <div className="relative h-20 overflow-hidden bg-gradient-to-br from-[#04503A] via-primary-dark to-primary">
-                    <svg
-                      viewBox="0 0 400 120"
-                      preserveAspectRatio="none"
+                    {/* Soft top-light, no linework — the card-scale version of the band surface. */}
+                    <div
                       aria-hidden
-                      className="pointer-events-none absolute inset-x-0 bottom-0 h-14 w-full"
-                    >
-                      <path
-                        d="M0 96 C 70 66, 130 92, 196 78 C 268 62, 330 44, 400 70 L400 120 L0 120 Z"
-                        fill="#FFFFFF"
-                        fillOpacity="0.10"
-                      />
-                    </svg>
+                      className="pointer-events-none absolute inset-0"
+                      style={{
+                        background:
+                          'radial-gradient(95% 130% at 80% -20%, rgba(167,243,208,0.22), transparent 62%),' +
+                          'radial-gradient(80% 120% at 8% 120%, rgba(2,40,30,0.35), transparent 70%)',
+                      }}
+                    />
                     <div className="absolute -bottom-6 left-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-white text-primary shadow-card">
                       <Icon size={22} />
                     </div>
                   </div>
 
                   <div className="flex flex-1 flex-col px-6 pb-7 pt-10">
-                    <h3 className="font-heading text-[17px] font-bold leading-snug text-text-primary" style={{ letterSpacing: '-0.02em' }}>
+                    <h3 className="font-heading text-[15.5px] font-bold leading-snug text-text-primary" style={{ letterSpacing: '-0.02em' }}>
                       {t.group}
                     </h3>
                     <p className="mt-1.5 text-[13px] font-semibold uppercase tracking-[0.1em] text-primary">

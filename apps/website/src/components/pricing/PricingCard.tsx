@@ -37,7 +37,7 @@ export function PricingCard({ plan, index }: PricingCardProps) {
       whileHover={{ y: -4 }}
       className={`relative rounded-2xl p-8 flex flex-col transition-all duration-300 ${
         plan.popular
-          ? 'bg-green-gradient text-white shadow-premium'
+          ? 'surface-deep text-white shadow-premium'
           : 'premium-card'
       }`}
     >
@@ -50,9 +50,14 @@ export function PricingCard({ plan, index }: PricingCardProps) {
         </div>
       )}
 
-      {/* Decorative background for popular card */}
+      {/* Decorative background for popular card — soft top light + film grain,
+          the same language as the site's dark bands. No lattice, no dot matrix.
+          Rounded (not overflow-hidden) so the "Most Popular" badge isn't clipped. */}
       {plan.popular && (
-        <div className="absolute inset-0 pattern-dots opacity-50 pointer-events-none rounded-2xl" />
+        <>
+          <div aria-hidden className="absolute inset-0 pattern-dots opacity-70 pointer-events-none rounded-2xl" />
+          <span aria-hidden className="grain grain-dark rounded-2xl" />
+        </>
       )}
 
       <div className="mb-6 relative z-10">

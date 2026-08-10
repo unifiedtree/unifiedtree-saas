@@ -34,7 +34,7 @@ export function AnimatedTagline() {
     return (
       <span
         className="block text-primary font-heading font-bold"
-        style={{ fontSize: 'clamp(1.25rem, 2vw, 1.75rem)', lineHeight: 1.3 }}
+        style={{ fontSize: 'clamp(1.087rem, 1.76vw, 1.522rem)', lineHeight: 1.3 }}
       >
         {taglines[0]}
       </span>
@@ -43,7 +43,7 @@ export function AnimatedTagline() {
 
   return (
     /* Fixed height container sized to ONE line of the tagline font */
-    <div className="relative overflow-hidden" style={{ height: 'clamp(1.7rem, 2.6vw, 2.3rem)' }}>
+    <div className="relative overflow-hidden" style={{ height: 'clamp(1.479rem, 2.288vw, 2.001rem)' }}>
       <AnimatePresence mode="wait">
         <motion.span
           key={index}
@@ -53,7 +53,7 @@ export function AnimatedTagline() {
           exit="exit"
           transition={{ type: 'spring', stiffness: 320, damping: 32 }}
           className="absolute inset-0 flex items-center text-primary font-heading font-bold whitespace-nowrap"
-          style={{ fontSize: 'clamp(1.25rem, 2vw, 1.75rem)', lineHeight: 1.3 }}
+          style={{ fontSize: 'clamp(1.087rem, 1.76vw, 1.522rem)', lineHeight: 1.3 }}
         >
           {taglines[index]}
         </motion.span>

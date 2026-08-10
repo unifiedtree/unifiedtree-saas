@@ -2,10 +2,10 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { Star } from 'lucide-react'
 
 /**
- * Customer stories — premium quote cards on a soft emerald tint band.
+ * Customer stories — premium quote cards on the light site surface.
  *
  * Sits between the emerald StatsSection and the white IntegrationsSection, so
- * it takes the light tint surface to keep the page alternating. Cards are laid
+ * it takes `surface-soft` to keep the page alternating light/dark. Cards are laid
  * out as a masonry-ish three-column rhythm on lg: each column carries a fixed
  * vertical offset so the grid reads hand-set rather than tabular.
  */
@@ -84,16 +84,17 @@ export function TestimonialsSection() {
   const reduce = useReducedMotion()
 
   return (
-    <section className="relative overflow-hidden bg-tint py-24 lg:py-28">
-      {/* Soft emerald bloom so the tint band has depth behind the cards */}
+    <section className="surface-soft relative overflow-hidden py-24 lg:py-28">
+      {/* Soft emerald bloom so the band has depth behind the cards */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-80"
         style={{
           background:
-            'radial-gradient(60% 100% at 50% 0%, rgba(167,243,208,0.55) 0%, rgba(236,253,245,0) 70%)',
+            'radial-gradient(60% 100% at 50% 0%, rgba(167,243,208,0.42) 0%, rgba(236,253,245,0) 70%)',
         }}
       />
+      <span aria-hidden className="grain" />
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
@@ -108,11 +109,11 @@ export function TestimonialsSection() {
           </span>
           <h2
             className="font-heading font-extrabold text-text-primary"
-            style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', lineHeight: 1.05, letterSpacing: '-0.035em' }}
+            style={{ fontSize: 'clamp(1.74rem, 3.52vw, 3.045rem)', lineHeight: 1.05, letterSpacing: '-0.035em' }}
           >
             What our customers say
           </h2>
-          <p className="mx-auto mt-5 max-w-xl text-[17px] leading-relaxed text-text-secondary">
+          <p className="mx-auto mt-5 max-w-xl text-[15.5px] leading-relaxed text-text-secondary">
             Real businesses, real results. From manufacturing to retail to services.
           </p>
         </motion.div>
@@ -140,7 +141,7 @@ export function TestimonialsSection() {
               <div className="relative z-10">
                 <StarRating />
 
-                <blockquote className="mt-5 text-[15.5px] leading-relaxed text-text-primary">
+                <blockquote className="mt-5 text-[14.5px] leading-relaxed text-text-primary">
                   {t.quote}
                 </blockquote>
 

@@ -146,14 +146,8 @@ export function LoginPage() {
         <div className="absolute top-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
         
-        {/* Subtle Dark Dot Pattern */}
-        <div 
-          className="absolute inset-0 pointer-events-none opacity-[0.04]"
-          style={{ 
-            backgroundImage: 'radial-gradient(#0f172a 1.5px, transparent 1.5px)',
-            backgroundSize: '32px 32px',
-          }} 
-        />
+        {/* Fine film grain — replaces the dot matrix that used to tile here */}
+        <span aria-hidden className="grain" />
         {/* Subtle dark gradient overlay */}
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-transparent via-transparent to-slate-900/[0.04]" />
 

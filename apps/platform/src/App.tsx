@@ -4,7 +4,9 @@ import { P, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { RouteGuard } from '@/routes/RouteGuard'
 import { PlatformShell } from '@/layouts/PlatformShell'
 import { LoginPage } from '@/core/auth/LoginPage'
-import { Dashboard } from '@/pages/Dashboard'
+// The Keka-style HRMS analytics board (client redesign 2026-08-11) replaces the
+// old pages/Dashboard welcome screen as the module home.
+import { HrmsDashboard as Dashboard } from '@/modules/hrms/HrmsDashboard'
 import { Settings } from '@/pages/Settings'
 import { AuditLogs } from '@/pages/AuditLogs'
 import { Users } from '@/pages/Users'

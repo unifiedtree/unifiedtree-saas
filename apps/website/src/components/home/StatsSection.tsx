@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, useInView, useReducedMotion } from 'framer-motion'
-import { LandscapeScene } from '../visuals/LandscapeScene'
 
 /**
- * The proof band — a deep dusk valley with the numbers standing in it.
+ * The proof band — the numbers set on a deep emerald surface.
+ *
+ * Background is the shared `surface-deep` field plus a fine film grain: soft
+ * colour, no linework. A vignette on top pulls the corners down so the figures
+ * sit forward and white type keeps its contrast.
  *
  * Counts ramp on a requestAnimationFrame easing rather than a fixed-interval
  * timer, so the ramp stays smooth on slow frames and lands exactly on target.
@@ -24,6 +27,12 @@ const stats: StatItem[] = [
 ]
 
 const EASE = [0.16, 1, 0.3, 1] as const
+
+/** Soft vignette — pulls the corners down so the figures sit forward. */
+const VIGNETTE: React.CSSProperties = {
+  background:
+    'radial-gradient(112% 84% at 50% 44%, rgba(2,44,34,0) 38%, rgba(2,44,34,0.52) 100%)',
+}
 
 function useCountUp(target: number, duration: number, triggered: boolean) {
   const reduce = useReducedMotion()
@@ -76,7 +85,7 @@ function StatCounter({
     >
       <p
         className="font-heading font-extrabold tabular-nums text-white"
-        style={{ fontSize: 'clamp(2.5rem, 4vw, 4rem)', lineHeight: 1.02, letterSpacing: '-0.035em' }}
+        style={{ fontSize: 'clamp(2.175rem, 3.52vw, 3.48rem)', lineHeight: 1.02, letterSpacing: '-0.035em' }}
       >
         {display}
         <span className="text-lime">{suffix}</span>
@@ -94,10 +103,9 @@ export function StatsSection() {
   const inView = useInView(ref, { once: true, amount: 0.4 })
 
   return (
-    <section ref={ref} className="relative overflow-hidden bg-[#04503A] py-24 lg:py-28">
-      <LandscapeScene tone="dusk" />
-      {/* Keeps the numbers off the brighter part of the horizon. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[#022C22]/45" />
+    <section ref={ref} className="surface-deep relative overflow-hidden py-24 lg:py-28">
+      <div aria-hidden className="pointer-events-none absolute inset-0" style={VIGNETTE} />
+      <span aria-hidden className="grain grain-dark" />
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
@@ -111,7 +119,7 @@ export function StatsSection() {
           </span>
           <h2
             className="mx-auto mt-4 max-w-2xl font-heading font-extrabold text-white"
-            style={{ fontSize: 'clamp(1.75rem, 3vw, 2.75rem)', lineHeight: 1.08, letterSpacing: '-0.035em' }}
+            style={{ fontSize: 'clamp(1.522rem, 2.64vw, 2.393rem)', lineHeight: 1.08, letterSpacing: '-0.035em' }}
           >
             Built for teams that outgrew spreadsheets
           </h2>

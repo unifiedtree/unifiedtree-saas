@@ -43,12 +43,15 @@ const config: Config = {
         'border-light': '#F5F5F5',
       },
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-        // Figtree carries the display voice — rounded geometric, warm at large
-        // sizes. Body stays Inter, which is a better reading face at 16-19px.
-        heading: ['Figtree', 'Inter', '-apple-system', 'sans-serif'],
-        display: ['Figtree', 'Inter', '-apple-system', 'sans-serif'],
-        body: ['Inter', '-apple-system', 'sans-serif'],
+        // Type system, deliberately NOT rounded-geometric — that category is
+        // what made the site read as a clone of the reference we were shown.
+        // Bricolage Grotesque is an optical-size variable grotesque with real
+        // character in its counters and terminals; Instrument Sans is a clean,
+        // slightly humanist UI face that stays quiet under it.
+        sans: ['"Instrument Sans"', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        heading: ['"Bricolage Grotesque"', '"Instrument Sans"', 'sans-serif'],
+        display: ['"Bricolage Grotesque"', '"Instrument Sans"', 'sans-serif'],
+        body: ['"Instrument Sans"', '-apple-system', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],
       },
       fontSize: {

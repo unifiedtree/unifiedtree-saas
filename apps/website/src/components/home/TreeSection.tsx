@@ -1,130 +1,107 @@
-import { useRef } from 'react'
-import { motion, useInView } from 'framer-motion'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { motion, useReducedMotion } from 'framer-motion'
+import { ArrowRight, Check } from 'lucide-react'
+import { TreeSystem, TREE_NODES } from '../visuals/TreeSystem'
 
-const treeCards = [
-  { emoji: '🌱', element: 'Roots',    meaning: 'Core Foundation',        erp: 'Database, Infrastructure, Core Modules',          color: '#0F1B08' },
-  { emoji: '🪵', element: 'Trunk',    meaning: 'Central System',         erp: 'The Main ERP Engine connecting everything',        color: '#18280E' },
-  { emoji: '🌿', element: 'Branches', meaning: 'Departments',            erp: 'Finance, HR, Sales, Inventory, Supply Chain',      color: '#3A7D22' },
-  { emoji: '🍃', element: 'Leaves',   meaning: 'End Users / Outputs',    erp: 'Reports, Dashboards, Insights, Transactions',      color: '#5B8C2A' },
-  { emoji: '🍎', element: 'Fruit',    meaning: 'Business Results',       erp: 'Profits, Growth, Productivity',                   color: '#F59E0B' },
-  { emoji: '🔗', element: 'Unified',  meaning: 'One Connected Organism', erp: 'All modules working as ONE living system',         color: '#6366F1' },
-]
+/**
+ * "One root. Every branch connected." — the claim on the left, the system
+ * drawn on the right.
+ *
+ * The diagram is ours: one core, roots feeding it, a trunk that forks into two
+ * limbs, then a branch per module with live data climbing the active one. It
+ * argues the single-source-of-truth point rather than decorating it, and the
+ * branches are clickable so a reader can walk the modules.
+ */
+
+const PROOF = ['Works offline', 'Tax compliance built in', 'Activate module by module']
 
 export function TreeSection() {
-  const ref = useRef<HTMLDivElement>(null)
-  const inView = useInView(ref, { once: true, amount: 0.15 })
+  const navigate = useNavigate()
+  const reduce = useReducedMotion()
+  const [active, setActive] = useState(0)
+
+  useEffect(() => {
+    if (reduce) return
+    const id = setInterval(() => setActive((i) => (i + 1) % TREE_NODES.length), 2600)
+    return () => clearInterval(id)
+  }, [reduce])
 
   return (
-    <section className="py-24 bg-surface overflow-hidden">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center" ref={ref}>
+    <section className="surface-soft relative overflow-hidden py-24 lg:py-28">
+      {/* Extra bloom on the right so the diagram sits in its own pool of light. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{ background: 'radial-gradient(70% 55% at 78% 40%, rgba(16,185,129,0.10), transparent 70%)' }}
+      />
+      <span aria-hidden className="grain" />
 
-          {/* LEFT — Video: natural aspect ratio, no forced box */}
-          <motion.div
-            initial={{ opacity: 0, x: -24 }}
-            animate={inView ? { opacity: 1, x: 0 } : {}}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
-            className="relative w-full rounded-2xl overflow-hidden shadow-card-hover"
-            style={{ aspectRatio: '4 / 3' }}
+      <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-[1.02fr_1fr] lg:gap-10 lg:px-8">
+        {/* ── Claim (left) ──────────────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: reduce ? 0 : 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.25 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-2 px-3.5 py-1.5 text-[12px] font-semibold uppercase tracking-[0.14em] text-primary">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+            One root · every branch connected
+          </span>
+
+          <h2
+            className="mt-6 font-heading font-bold text-text-primary"
+            style={{ fontSize: 'clamp(1.958rem, 3.872vw, 3.263rem)', lineHeight: 1.03, letterSpacing: '-0.035em' }}
           >
-            <video
-              src="/tree.mp4"
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            {/* Soft bottom fade so it blends with white bg */}
-            <div
-              className="absolute inset-x-0 bottom-0 h-16 pointer-events-none"
-              style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.6))' }}
-            />
-          </motion.div>
+            Run the whole business
+            <br />
+            on <span className="text-primary">one system</span>.
+          </h2>
 
-          {/* RIGHT — Meaning table */}
-          {/* RIGHT — Meaning table */}
-          <div className="flex flex-col justify-center lg:pl-6">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={inView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6 }}
-              className="mb-10"
-            >
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 mb-6">
-                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                <span className="text-primary font-body font-semibold text-xs uppercase tracking-widest">
-                  The Tree Metaphor
+          <p className="mt-6 max-w-xl text-[15.5px] leading-relaxed text-text-secondary sm:text-[16.5px]">
+            HR, attendance, payroll, accounting, inventory and CRM growing from a single
+            core — so the number on your dashboard is the number in your report. Switch on
+            only the modules you need.
+          </p>
+
+          <ul className="mt-7 flex flex-wrap gap-x-6 gap-y-2.5">
+            {PROOF.map((p) => (
+              <li key={p} className="flex items-center gap-2 text-[14px] font-medium text-text-secondary">
+                <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-primary-light">
+                  <Check size={11} strokeWidth={3} className="text-primary" />
                 </span>
-              </div>
-              <h2
-                className="font-heading font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-text-primary to-primary mb-5"
-                style={{ fontSize: 'clamp(2.25rem, 3.5vw, 3rem)', lineHeight: '1.2' }}
-              >
-                Why UnifiedTree?
-              </h2>
-              <p className="text-text-secondary font-body text-lg leading-relaxed max-w-xl">
-                Just like a tree grows from one root but branches into many directions — UnifiedTree ERP
-                connects every department through one single powerful platform.
-              </p>
-            </motion.div>
+                {p}
+              </li>
+            ))}
+          </ul>
 
-            <div className="space-y-4">
-              {treeCards.map((card, i) => (
-                <motion.div
-                  key={card.element}
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={inView ? { opacity: 1, x: 0 } : {}}
-                  transition={{ duration: 0.5, delay: 0.2 + i * 0.1, ease: 'easeOut' }}
-                  whileHover={{ scale: 1.02, x: 5 }}
-                  className="group relative bg-white rounded-2xl p-4 border border-black/5 shadow-sm transition-all duration-300 hover:shadow-md"
-                >
-                  {/* Subtle background gradient on hover */}
-                  <div 
-                    className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                    style={{ background: `linear-gradient(90deg, transparent, ${card.color}05)` }}
-                  />
-                  
-                  <div className="relative z-10 flex items-start gap-4">
-                    <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0 shadow-sm transform group-hover:rotate-6 transition-transform duration-300"
-                      style={{ backgroundColor: `${card.color}15`, color: card.color }}
-                    >
-                      {card.emoji}
-                    </div>
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="font-heading font-bold text-text-primary text-base group-hover:text-primary transition-colors">
-                          {card.element}
-                        </span>
-                        <span className="text-xs text-text-secondary/60 block sm:inline">·</span>
-                        <span className="text-sm font-body font-semibold tracking-wide" style={{ color: card.color }}>
-                          {card.meaning}
-                        </span>
-                      </div>
-                      <p className="text-sm text-text-secondary font-body leading-relaxed">{card.erp}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-
-            {/* Quote */}
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={inView ? { opacity: 1, y: 0 } : {}}
-              transition={{ delay: 1, duration: 0.6 }}
-              className="mt-10 p-6 bg-gradient-to-r from-primary/10 to-transparent rounded-2xl border-l-4 border-primary relative overflow-hidden"
+          <div className="mt-9 flex flex-wrap items-center gap-3.5">
+            <button
+              onClick={() => navigate('/signup')}
+              className="group inline-flex items-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-[15px] font-bold text-white shadow-sm transition-all hover:gap-3 hover:bg-primary-dark"
             >
-              <div className="absolute top-2 right-4 opacity-10 pointer-events-none">
-                <span className="text-7xl font-serif text-primary">"</span>
-              </div>
-              <p className="text-text-primary font-heading text-lg italic leading-relaxed relative z-10">
-                One root. Every branch connected. <span className="font-semibold text-primary">Your business, unified.</span>
-              </p>
-            </motion.div>
+              Start free trial
+              <ArrowRight size={17} className="transition-transform group-hover:translate-x-0.5" />
+            </button>
+            <button
+              onClick={() => navigate('/modules')}
+              className="rounded-xl border border-border bg-surface px-7 py-3.5 text-[15px] font-bold text-text-primary transition-all hover:border-primary/40 hover:text-primary"
+            >
+              Explore modules
+            </button>
           </div>
-        </div>
+        </motion.div>
+
+        {/* ── The system (right) ────────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, scale: reduce ? 1 : 0.96 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true, amount: 0.25 }}
+          transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <TreeSystem active={active} onSelect={setActive} />
+        </motion.div>
       </div>
     </section>
   )

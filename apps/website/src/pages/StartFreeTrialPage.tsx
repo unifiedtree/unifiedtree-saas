@@ -35,11 +35,11 @@ export function StartFreeTrialPage() {
       <Navbar />
 
       {/* Hero */}
-      <section className="pt-32 pb-24 relative overflow-hidden bg-gradient-to-br from-primary-light via-bg to-primary-light/40">
-        {/* Decorative elements */}
-        <div className="absolute top-10 -left-20 w-80 h-80 bg-lime rounded-full blur-[110px] opacity-20 pointer-events-none animate-pulse" style={{ animationDuration: '6s' }} />
-        <div className="absolute bottom-10 -right-20 w-80 h-80 bg-primary-light rounded-full blur-[110px] opacity-35 pointer-events-none" />
-        <div className="absolute inset-0 opacity-[0.03] pattern-dots pointer-events-none" />
+      <section className="pt-32 pb-24 relative overflow-hidden surface-soft">
+        {/* Soft colour fields only — depth comes from blurred emerald blooms + grain. */}
+        <div aria-hidden className="absolute top-10 -left-20 w-80 h-80 bg-lime rounded-full blur-[110px] opacity-20 pointer-events-none animate-pulse" style={{ animationDuration: '6s' }} />
+        <div aria-hidden className="absolute bottom-10 -right-20 w-80 h-80 bg-primary-light rounded-full blur-[110px] opacity-35 pointer-events-none" />
+        <span aria-hidden className="grain" />
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <motion.div
@@ -53,7 +53,7 @@ export function StartFreeTrialPage() {
             
             <h1
               className="font-heading font-extrabold text-text-primary tracking-tight mb-5"
-              style={{ fontSize: 'clamp(2.5rem, 5vw, 4.25rem)', lineHeight: 1.08 }}
+              style={{ fontSize: 'clamp(2.175rem, 4.4vw, 3.697rem)', lineHeight: 1.08 }}
             >
               Create your free company workspace
               <br />
@@ -93,8 +93,9 @@ export function StartFreeTrialPage() {
       </section>
 
       {/* How it works */}
-      <section className="py-24 bg-surface relative">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-24 surface-tint relative overflow-hidden">
+        <span aria-hidden className="grain" />
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -133,8 +134,9 @@ export function StartFreeTrialPage() {
       </section>
 
       {/* Plan selection teaser */}
-      <section className="py-24 bg-bg relative">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-24 surface-soft relative overflow-hidden">
+        <span aria-hidden className="grain" />
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -224,8 +226,8 @@ export function StartFreeTrialPage() {
       </section>
 
       {/* Trust signals */}
-      <section className="py-16 bg-surface border-t border-border relative overflow-hidden">
-        <div className="absolute inset-0 opacity-[0.02] pattern-dots pointer-events-none" />
+      <section className="py-16 surface-tint relative overflow-hidden">
+        <span aria-hidden className="grain" />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
             {[

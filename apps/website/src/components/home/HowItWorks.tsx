@@ -44,16 +44,17 @@ export function HowItWorks() {
   const reduce = useReducedMotion()
 
   return (
-    <section className="relative overflow-hidden bg-tint py-24 lg:py-32">
-      {/* Soft light off the horizon, so the band isn't a flat wash of mint. */}
+    <section className="surface-tint relative overflow-hidden py-24 lg:py-32">
+      {/* Soft light off the horizon, so the band separates from the section above. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
         style={{
           background:
-            'radial-gradient(60% 100% at 50% 0%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 70%)',
+            'radial-gradient(60% 100% at 50% 0%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 70%)',
         }}
       />
+      <span aria-hidden className="grain" />
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
@@ -68,11 +69,11 @@ export function HowItWorks() {
           </span>
           <h2
             className="font-heading font-extrabold text-text-primary"
-            style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', lineHeight: 1.05, letterSpacing: '-0.035em' }}
+            style={{ fontSize: 'clamp(1.74rem, 3.52vw, 3.045rem)', lineHeight: 1.05, letterSpacing: '-0.035em' }}
           >
             Up and running in 3 simple steps
           </h2>
-          <p className="mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-text-secondary">
+          <p className="mx-auto mt-6 max-w-2xl text-[15.5px] leading-relaxed text-text-secondary">
             No implementation project and no consultants. Create the account, switch on the
             modules that matter, and bring your people in.
           </p>
@@ -114,7 +115,7 @@ export function HowItWorks() {
                   <span
                     aria-hidden
                     className="pointer-events-none absolute right-5 top-3 select-none font-heading font-extrabold leading-none text-primary/10"
-                    style={{ fontSize: 'clamp(4rem, 6vw, 5.5rem)', letterSpacing: '-0.05em' }}
+                    style={{ fontSize: 'clamp(3.48rem, 5.28vw, 4.785rem)', letterSpacing: '-0.05em' }}
                   >
                     {step.number}
                   </span>

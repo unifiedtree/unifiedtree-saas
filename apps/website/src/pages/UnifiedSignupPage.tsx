@@ -439,7 +439,7 @@ export function UnifiedSignupPage() {
               {mode === 'trial' ? <><Sparkles size={12} /> Free workspace</> : <><Receipt size={12} /> Paid workspace</>}
             </span>
             <h1 className="font-heading font-extrabold text-white mb-3"
-                style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                style={{ fontSize: 'clamp(1.74rem, 3.52vw, 2.61rem)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
               {mode === 'trial' ? 'Create your free workspace' : 'Create your workspace'}
             </h1>
             <p className="text-base text-white/75 font-body max-w-xl mx-auto">

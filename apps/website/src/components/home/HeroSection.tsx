@@ -36,7 +36,7 @@ export function HeroSection() {
       {/* Copy */}
       <motion.div
         style={{ y: copyY, opacity: copyOpacity }}
-        className="relative z-10 mx-auto w-full max-w-6xl px-4 text-center sm:px-6 lg:px-8"
+        className="relative z-10 mx-auto w-full max-w-4xl px-4 text-center sm:px-6 lg:px-8"
       >
         <motion.span
           initial={{ opacity: 0, y: 12 }}
@@ -53,7 +53,7 @@ export function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
           className="font-heading font-extrabold text-white"
-          style={{ fontSize: 'clamp(2.75rem, 6.4vw, 5.5rem)', lineHeight: 1.02, letterSpacing: '-0.038em' }}
+          style={{ fontSize: 'clamp(2.393rem, 5.632vw, 4.785rem)', lineHeight: 1.02, letterSpacing: '-0.038em' }}
         >
           The operating system
           <br />
@@ -64,7 +64,7 @@ export function HeroSection() {
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.75, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-          className="mx-auto mt-7 max-w-3xl text-[17px] leading-relaxed text-white/85 sm:text-[19px]"
+          className="mx-auto mt-7 max-w-3xl text-[15.5px] leading-relaxed text-white/85 sm:text-[17px]"
         >
           HR, attendance, payroll, accounting, inventory and CRM on one connected core.
           Activate only what you need — it all shares the same data, the same day.
@@ -98,7 +98,7 @@ export function HeroSection() {
         initial={{ opacity: 0, y: 60 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.9, delay: 0.32, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 mt-16 w-full max-w-5xl px-4 sm:px-8"
+        className="relative z-10 mt-16 w-full max-w-4xl px-4 sm:px-8"
       >
         <ModuleDashboard className="rounded-b-none" />
       </motion.div>

@@ -60,10 +60,12 @@ export function Footer() {
         <div className="absolute -top-40 right-[-8%] h-[460px] w-[460px] rounded-full bg-[#10B981]/20 blur-3xl" />
         <div className="absolute -bottom-32 left-[-10%] h-[380px] w-[380px] rounded-full bg-[#047857]/30 blur-3xl" />
 
-        {/* the wordmark rising from behind the ridge */}
+        {/* Wordmark sitting behind the footer. Was white/[0.05] and pinned to
+            bottom-6, which put it under the ridge — effectively invisible.
+            Lifted clear of the ridge and taken up to 10% so it actually reads. */}
         <div
-          className="absolute inset-x-0 bottom-6 whitespace-nowrap text-center font-heading font-extrabold leading-none text-white/[0.05]"
-          style={{ fontSize: 'clamp(4rem, 15vw, 13rem)', letterSpacing: '-0.045em' }}
+          className="absolute inset-x-0 bottom-24 whitespace-nowrap text-center font-heading font-extrabold leading-none text-white/[0.10]"
+          style={{ fontSize: 'clamp(3.48rem, 13.2vw, 11.31rem)', letterSpacing: '-0.045em' }}
         >
           UnifiedTree
         </div>
@@ -106,7 +108,7 @@ export function Footer() {
               className="mb-6 h-9 w-auto brightness-0 invert"
             />
             <p
-              className="max-w-xs font-heading text-[19px] font-bold leading-[1.25] text-white"
+              className="max-w-xs font-heading text-[17px] font-bold leading-[1.25] text-white"
               style={{ letterSpacing: '-0.03em' }}
             >
               One root. Every branch connected.

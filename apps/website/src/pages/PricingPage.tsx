@@ -50,43 +50,44 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
 
 export function PricingPage() {
   return (
-    <div className="min-h-screen bg-[#ECFDF5] relative">
+    <div className="min-h-screen bg-white relative">
       <Navbar />
 
-      {/* Background pattern matching Hero Section */}
-      <div className="absolute inset-0 bg-squircle-grid-white pointer-events-none h-[800px]" />
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#ECFDF5]/80 to-[#ECFDF5] pointer-events-none h-[800px]" />
+      {/* Header + calculator sit on one continuous soft surface (no lattice) */}
+      <div className="surface-soft relative overflow-hidden">
+        <span aria-hidden className="grain" />
 
-      {/* Header */}
-      <section className="pt-40 pb-12 relative z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-body font-semibold uppercase tracking-[0.1em] text-[#059669] bg-[#059669]/5 border border-[#059669]/10 mb-6 shadow-sm">
-              Pricing
-            </span>
-            <h1
-              className="font-heading font-extrabold text-[#171717] mb-5"
-              style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', letterSpacing: '-0.02em', lineHeight: 1.08 }}
+        {/* Header */}
+        <section className="pt-40 pb-12 relative z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
             >
-              Build your perfect plan
-            </h1>
-            <p className="text-lg text-[#525252] font-body max-w-xl mx-auto">
-              Select the modules you need and the number of employees. Your price updates instantly.
-            </p>
-          </motion.div>
-        </div>
-      </section>
+              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-body font-semibold uppercase tracking-[0.1em] text-[#059669] bg-[#059669]/5 border border-[#059669]/10 mb-6 shadow-sm">
+                Pricing
+              </span>
+              <h1
+                className="font-heading font-extrabold text-[#171717] mb-5"
+                style={{ fontSize: 'clamp(2.175rem, 4.4vw, 3.48rem)', letterSpacing: '-0.02em', lineHeight: 1.08 }}
+              >
+                Build your perfect plan
+              </h1>
+              <p className="text-lg text-[#525252] font-body max-w-xl mx-auto">
+                Select the modules you need and the number of employees. Your price updates instantly.
+              </p>
+            </motion.div>
+          </div>
+        </section>
 
-      {/* Calculator */}
-      <section className="pb-20 relative z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <PricingCalculator />
-        </div>
-      </section>
+        {/* Calculator */}
+        <section className="pb-20 relative z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <PricingCalculator />
+          </div>
+        </section>
+      </div>
 
       {/* Preset plans — hidden until the other modules ship (see SHOW_PRESET_PLANS) */}
       {SHOW_PRESET_PLANS && (
@@ -115,8 +116,9 @@ export function PricingPage() {
       )}
 
       {/* FAQ */}
-      <section className="py-20">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="surface-tint relative overflow-hidden py-20">
+        <span aria-hidden className="grain" />
+        <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
