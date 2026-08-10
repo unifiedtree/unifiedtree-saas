@@ -425,7 +425,15 @@ public class RazorpayClient {
     /** Small view over the Razorpay subscription response. */
     public record SubscriptionView(String id, String planId, String status,
                                    String shortUrl, Long currentStart, Long currentEnd,
-                                   Long chargeAt, String paymentMethod) {}
+                                   Long chargeAt, String paymentMethod,
+                                   /** epoch-seconds when the FIRST charge is scheduled.
+                                    *  For a trial subscription this is trialStart + trialDays,
+                                    *  i.e. the trial end. Null when Razorpay omitted it. */
+                                   Long startAt,
+                                   /** how many billing cycles have actually debited. 0 during
+                                    *  the trial period. Used by the reconciler to distinguish
+                                    *  "cancelled during trial" from "cancelled mid-cycle". */
+                                   Integer paidCount) {}
 
     private static SubscriptionView toSubscriptionView(Map<String, Object> resp) {
         String id       = str(resp, "id");
@@ -435,8 +443,12 @@ public class RazorpayClient {
         Long start      = longOrNull(resp, "current_start");
         Long end        = longOrNull(resp, "current_end");
         Long chargeAt   = longOrNull(resp, "charge_at");
+        Long startAt    = longOrNull(resp, "start_at");
+        Object pc       = resp.get("paid_count");
+        Integer paidCt  = (pc instanceof Number n) ? n.intValue() : null;
         String method   = str(resp, "payment_method");
-        return new SubscriptionView(id, planId, status, shortUrl, start, end, chargeAt, method);
+        return new SubscriptionView(id, planId, status, shortUrl, start, end,
+                                    chargeAt, method, startAt, paidCt);
     }
 
     private static String str(Map<String, Object> m, String k) {

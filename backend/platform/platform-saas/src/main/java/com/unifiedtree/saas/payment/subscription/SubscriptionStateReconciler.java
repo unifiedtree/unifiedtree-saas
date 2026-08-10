@@ -41,10 +41,29 @@ public class SubscriptionStateReconciler {
 
     private final JdbcTemplate jdbc;
     private final ApplicationEventPublisher events;
+    /** Optional — used only as a fallback in {@link #onCancelled} when our
+     *  DB has no {@code current_period_end}/{@code trial_ends_at} to base
+     *  grace on. Nullable so unit tests / older wiring don't have to
+     *  provide it; if absent, the SQL falls back to a 3-day courtesy grace. */
+    private final com.unifiedtree.saas.payment.RazorpayClient razorpay;
 
+    // @Autowired is REQUIRED with multiple public ctors on a Spring bean —
+    // otherwise Spring picks the no-arg heuristic and fails with
+    // "No default constructor found" (caught live on rev 85 at boot 2026-08-10).
+    @org.springframework.beans.factory.annotation.Autowired
+    public SubscriptionStateReconciler(JdbcTemplate jdbc, ApplicationEventPublisher events,
+                                       org.springframework.beans.factory.ObjectProvider<
+                                           com.unifiedtree.saas.payment.RazorpayClient> razorpayProvider) {
+        this.jdbc = jdbc;
+        this.events = events;
+        this.razorpay = razorpayProvider == null ? null : razorpayProvider.getIfAvailable();
+    }
+
+    /** Test / legacy 2-arg constructor. No Razorpay fallback available. */
     public SubscriptionStateReconciler(JdbcTemplate jdbc, ApplicationEventPublisher events) {
         this.jdbc = jdbc;
         this.events = events;
+        this.razorpay = null;
     }
 
     // -- state mutators --------------------------------------------------------
@@ -190,6 +209,37 @@ public class SubscriptionStateReconciler {
         if (rows > 0) log.info("Subscription {} -> COMPLETED (all charges done)", subscriptionId);
     }
 
+    /**
+     * Ask Razorpay for the trial-end + cycle-end so a cancel that arrives
+     * BEFORE we ever stored a {@code current_period_end} / {@code trial_ends_at}
+     * (webhook re-ordering, or the row was created before we started stamping
+     * these columns 2026-08-10) still gets the correct grace_until.
+     *
+     * <p>Best-effort: any Razorpay error just returns null and the SQL below
+     * falls back to a 3-day courtesy window. That way the reconciler never
+     * blocks on Razorpay availability.
+     */
+    private java.sql.Timestamp resolveGraceFromRazorpay(String subscriptionId) {
+        if (razorpay == null) return null;
+        try {
+            RazorpayClient.SubscriptionView v = razorpay.fetchSubscription(subscriptionId);
+            if (v == null) return null;
+            long now = System.currentTimeMillis() / 1000;
+            // Trial-first, cycle-second — same precedence as the SQL COALESCE below.
+            if (v.paidCount() != null && v.paidCount() == 0
+                    && v.startAt() != null && v.startAt() > now) {
+                return new java.sql.Timestamp(v.startAt() * 1000L);
+            }
+            if (v.currentEnd() != null && v.currentEnd() > now) {
+                return new java.sql.Timestamp(v.currentEnd() * 1000L);
+            }
+        } catch (Exception e) {
+            log.warn("onCancelled: could not fetch Razorpay sub {} for grace fallback: {}",
+                    subscriptionId, e.getMessage());
+        }
+        return null;
+    }
+
     public void onCancelled(String subscriptionId) {
         // Cancel != revoke-immediately. Netflix / Zoom / Razorpay-itself pattern:
         // if the customer paid for a period, they keep the product until that
@@ -225,6 +275,25 @@ public class SubscriptionStateReconciler {
         //     access until current_period_end.
         //   - Neither present (edge case: cancel before Razorpay set current_end):
         //     3-day courtesy so the admin can export data or re-subscribe.
+        // For rows where our DB never learned trial_ends_at / current_period_end
+        // (created before those columns landed, or webhook re-ordering), ask
+        // Razorpay directly so a legitimate mid-trial cancel keeps access
+        // through the day-7 mark instead of falling to the 3-day courtesy.
+        // This is what the src/src123 backfill on 2026-08-10 had to do by
+        // hand — the code now does it automatically for future cancels.
+        java.sql.Timestamp fallbackGrace = jdbc.query(
+                "SELECT trial_ends_at, current_period_end FROM platform.subscriptions " +
+                "WHERE razorpay_subscription_id = ? LIMIT 1",
+                rs -> {
+                    if (!rs.next()) return null;
+                    java.sql.Timestamp t = rs.getTimestamp("trial_ends_at");
+                    java.sql.Timestamp c = rs.getTimestamp("current_period_end");
+                    long now = System.currentTimeMillis();
+                    boolean haveFuture = (t != null && t.getTime() > now)
+                                       || (c != null && c.getTime() > now);
+                    return haveFuture ? null : resolveGraceFromRazorpay(subscriptionId);
+                }, subscriptionId);
+
         int rows = jdbc.update("""
                 UPDATE platform.subscriptions SET
                     status                = 'CANCELLED',
@@ -234,6 +303,7 @@ public class SubscriptionStateReconciler {
                                         COALESCE(current_period_end, trial_ends_at))
                              ELSE current_period_end
                         END,
+                        ?,                     -- Razorpay-derived fallback
                         now() + interval '3 days'),
                     last_reconciled_at    = now(),
                     last_razorpay_status  = 'cancelled',
@@ -241,7 +311,7 @@ public class SubscriptionStateReconciler {
                     updated_at            = now()
                  WHERE razorpay_subscription_id = ?
                    AND status NOT IN ('COMPLETED','EXPIRED')
-                """, subscriptionId);
+                """, fallbackGrace, subscriptionId);
         if (rows == 0) return;
 
         log.info("Subscription {} -> CANCELLED (access retained until grace_until, sweep will revoke)",
