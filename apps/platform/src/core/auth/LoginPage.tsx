@@ -139,9 +139,17 @@ export const LoginPage: React.FC = () => {
         />
 
         <div className="relative z-10 flex h-full flex-col p-12 xl:p-16">
-          {/* wordmark */}
+          {/* wordmark — swaps to the workspace's own logo once
+              workspaceStatus resolves. Falls back to UnifiedTree default so
+              a fresh page load or a workspace with no branding still shows
+              our mark instead of a broken image. */}
           <div className="flex items-center gap-3">
-            <img src="/UnifiedTreeLogo.png" alt="Unified Tree" className="h-9 w-auto" />
+            <img
+              src={workspaceStatus?.logoUrl || '/UnifiedTreeLogo.png'}
+              alt={workspaceStatus?.tenantName || 'Unified Tree'}
+              className="h-9 w-auto"
+              onError={(e) => { (e.target as HTMLImageElement).src = '/UnifiedTreeLogo.png' }}
+            />
           </div>
 
           {/* headline */}
@@ -206,7 +214,12 @@ export const LoginPage: React.FC = () => {
         >
           {/* Mobile brand mark */}
           <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <img src="/UnifiedTreeLogo.png" alt="Unified Tree" className="h-7 w-auto" />
+            <img
+              src={workspaceStatus?.logoUrl || '/UnifiedTreeLogo.png'}
+              alt={workspaceStatus?.tenantName || 'Unified Tree'}
+              className="h-7 w-auto"
+              onError={(e) => { (e.target as HTMLImageElement).src = '/UnifiedTreeLogo.png' }}
+            />
           </div>
 
           <div className="mb-8">

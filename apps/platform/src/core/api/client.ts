@@ -37,6 +37,9 @@ export type WorkspaceStatus = {
   status: string
   activeModules: string[]
   requestedModules: string[]
+  /** Custom logo the workspace admin uploaded via /settings/branding.
+   *  Null / missing = fall back to the UnifiedTree default. */
+  logoUrl?: string | null
 }
 
 export function currentSubdomain() {

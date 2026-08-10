@@ -1,17 +1,19 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Check, Zap, Crown, Star, Sparkles } from 'lucide-react'
+import { Check, Zap, Crown, Star, Sparkles, Image as ImageIcon, Upload } from 'lucide-react'
 import { clsx } from 'clsx'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/core/auth/authStore'
-import { apiJson } from '@/core/api/client'
+import { apiJson, API_BASE_URL } from '@/core/api/client'
 import { HrPageHeader, HrButton, HrStatusPill } from '@/shared/components/hr'
 
-type TabKey = 'profile' | 'security' | 'notifications' | 'billing' | 'integrations' | 'danger'
+type TabKey = 'profile' | 'branding' | 'security' | 'notifications' | 'billing' | 'integrations' | 'danger'
 
 // The settings *navigation* now lives in the app shell (workspace-scoped);
 // this page just renders the section named in the URL (/settings/:tab).
 const TAB_META: Record<TabKey, { label: string; desc: string }> = {
   profile:       { label: 'Profile',        desc: 'Your account and organization details.' },
+  branding:      { label: 'Branding',       desc: 'Your logo and workspace identity.' },
   security:      { label: 'Security',       desc: 'Password, two-factor and active sessions.' },
   notifications: { label: 'Notifications',  desc: 'Email and in-app notification preferences.' },
   billing:       { label: 'Billing & Plan', desc: 'Your subscription, plan and invoices.' },
@@ -146,6 +148,143 @@ const SoonRow: React.FC<{ title: string; desc: string }> = ({ title, desc }) => 
  * Password change now routes to the real, working /v1/auth/forgot-password
  * flow. Sessions and 2FA are labelled honestly until the endpoints exist.
  */
+
+/**
+ * Branding — the workspace admin uploads their company logo. It replaces the
+ * default UnifiedTree logo on the login page (before sign-in via
+ * workspace-status) and in the app shell header (after sign-in via the
+ * tenant.logoUrl on the auth store).
+ *
+ * Server enforces: PNG / JPEG / WebP only, magic-byte sniffed, 2 MB max,
+ * SVG deliberately blocked (XSS vector). The <input> accept attribute is a
+ * UX hint; the real gate is the server.
+ */
+const BrandingTab: React.FC = () => {
+  const token       = useAuthStore((s) => s.token)
+  const tenant      = useAuthStore((s) => s.tenant)
+  const refreshTenant = useAuthStore((s) => s.refreshTenant)
+
+  const [logoUrl, setLogoUrl] = useState<string | null>(tenant?.logoUrl ?? null)
+  const [uploading, setUploading] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Sync from the auth store when it refreshes (e.g. right after a hydrate).
+  useEffect(() => { setLogoUrl(tenant?.logoUrl ?? null) }, [tenant?.logoUrl])
+
+  // On first load, pull the fresh URL from the server rather than trusting
+  // stale store state — the tenant object cache can be an hour old.
+  useEffect(() => {
+    let cancelled = false
+    apiJson<{ logoUrl: string | null }>('/v1/workspace/branding')
+      .then((res) => { if (!cancelled) setLogoUrl(res.logoUrl ?? null) })
+      .catch(() => { /* leave whatever the store had */ })
+    return () => { cancelled = true }
+  }, [])
+
+  const chooseFile = () => inputRef.current?.click()
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('That file is over 2 MB', {
+        description: 'Please pick a PNG, JPEG or WebP under 2 MB.',
+      })
+      return
+    }
+    setUploading(true)
+    try {
+      // Use fetch directly — apiJson stringifies bodies as JSON and this must
+      // travel as multipart/form-data.
+      const form = new FormData()
+      form.append('file', file)
+      const resp = await fetch(`${API_BASE_URL}/v1/workspace/branding/logo`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+      if (!resp.ok) {
+        const body = await resp.text()
+        let msg = body || `HTTP ${resp.status}`
+        try { msg = (JSON.parse(body) as { message?: string }).message || msg } catch { /* keep body */ }
+        toast.error('Upload failed', { description: msg })
+        return
+      }
+      const res = await resp.json() as { logoUrl: string | null }
+      setLogoUrl(res.logoUrl ?? null)
+      // Refresh the store so the shell header logo swaps immediately.
+      try { await refreshTenant() } catch { /* best-effort */ }
+      toast.success('Logo updated', { description: 'You may need to hard-refresh other browsers to see the change.' })
+    } finally {
+      setUploading(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => onFile(e.target.files?.[0])}
+      />
+
+      <div>
+        <h3 className="text-base font-semibold text-[var(--text-primary)]">Workspace logo</h3>
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
+          Shown on the sign-in page and in the top-left of the app. PNG, JPEG or WebP, up to 2 MB.
+          Wide-format logos work best — the header renders at 28 px tall.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-6 rounded-xl border border-border-default bg-white p-6">
+        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-dashed border-border-default bg-bg-subtle">
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt="Current workspace logo"
+              className="max-h-full max-w-full object-contain p-2"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          ) : (
+            <ImageIcon size={28} className="text-slate-400" />
+          )}
+        </div>
+        <div className="flex-1">
+          <div className="text-sm font-medium text-[var(--text-primary)]">
+            {logoUrl ? 'Custom logo set' : 'No custom logo yet'}
+          </div>
+          <div className="mt-0.5 text-xs text-[var(--text-secondary)]">
+            {logoUrl
+              ? 'This logo replaces the UnifiedTree default on the login page and in the header.'
+              : 'Until you upload one, the default UnifiedTree logo is shown to your team.'}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <HrButton onClick={chooseFile} disabled={uploading}>
+              <Upload size={14} className="mr-1.5" />
+              {uploading ? 'Uploading…' : (logoUrl ? 'Replace logo' : 'Upload logo')}
+            </HrButton>
+            {logoUrl && (
+              <button
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-40"
+                onClick={() => window.open(logoUrl, '_blank', 'noopener')}
+              >
+                Open image
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <p className="text-xs text-[var(--text-tertiary)]">
+        Uploaded to Cloudflare R2. Nothing sensitive here — the URL is public so browsers can
+        display it without a token.
+      </p>
+    </div>
+  )
+}
+
 const SecurityTab: React.FC = () => {
   const user = useAuthStore((s) => s.user)
   const [sent, setSent] = useState(false)
@@ -543,6 +682,7 @@ export const Settings: React.FC = () => {
 
   const tabContent: Record<TabKey, React.ReactNode> = {
     profile: <ProfileTab />,
+    branding: <BrandingTab />,
     security: <SecurityTab />,
     notifications: <NotificationsTab />,
     billing: <BillingTab />,

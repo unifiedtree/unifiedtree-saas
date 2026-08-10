@@ -9,6 +9,7 @@ import {
   UserCheck, Star, Receipt, DollarSign, Lock, MapPin,
   Database, Target, Wallet, Plug, Award, Shield, AlertTriangle,
   PanelLeftClose, PanelLeft, LayoutGrid, ArrowLeft, Command,
+  Image as ImageIcon,
 } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
@@ -198,6 +199,7 @@ const PLATFORM_ITEMS: NavItemDef[] = [
 // is super-admin only. Each maps to a route the shell drives.
 const SETTINGS_NAV: NavItemDef[] = [
   { key: 's-profile',       label: 'Profile',             icon: <UserCircle2 size={18} />,  path: '/settings' },
+  { key: 's-branding',      label: 'Branding',            icon: <ImageIcon size={18} />,     path: '/settings/branding',      visibleForRoles: ['SUPER_ADMIN'] },
   { key: 's-security',      label: 'Security',            icon: <Shield size={18} />,        path: '/settings/security' },
   { key: 's-notifications', label: 'Notifications',       icon: <Bell size={18} />,          path: '/settings/notifications' },
   { key: 's-billing',       label: 'Billing & Plan',      icon: <CreditCard size={18} />,    path: '/settings/billing' },
@@ -252,6 +254,11 @@ export function PlatformShell() {
   // re-render when a new module activates, and the app-switcher would
   // keep showing a locked pill until an unrelated re-render triggers.
   const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
+  // Workspace-uploaded logo overrides the UnifiedTree default in both the
+  // shell header AND the loading fallback logo below. Rendered via the Logo
+  // component further down.
+  const tenantLogoUrl = useLocalAuthStore(s => s.tenant?.logoUrl)
+  const tenantName    = useLocalAuthStore(s => s.tenant?.name)
   const hasModule = (k: string) => activeModules.includes(k)
   const tenant = useSdkStore(s => s.tenant)
   const permissions = useSdkStore(s => s.permissions)
@@ -383,7 +390,12 @@ export function PlatformShell() {
 
   const Logo = () => (
     <button onClick={() => navigate('/modules')} className="flex items-center gap-2.5" title="Back to apps">
-      <img src="/UnifiedTreeLogo.png" alt="Unified Tree" className="h-7 w-auto" />
+      <img
+        src={tenantLogoUrl || '/UnifiedTreeLogo.png'}
+        alt={tenantName || 'Unified Tree'}
+        className="h-7 w-auto"
+        onError={(e) => { (e.target as HTMLImageElement).src = '/UnifiedTreeLogo.png' }}
+      />
     </button>
   )
 
