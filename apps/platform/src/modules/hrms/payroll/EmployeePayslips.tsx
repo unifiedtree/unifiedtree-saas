@@ -13,6 +13,17 @@ const PAYSLIP_TONE: Record<MyPayslip['status'], PillTone> = {
   CANCELLED: 'red',
 }
 
+/**
+ * "22 / 30" or just "22" when there's no LOP. Never renders a bare 0 in the
+ * LOP slot — that reads as "zero paid" which is wrong.
+ */
+function fmtDays(paid: number | null | undefined, lop: number | null | undefined): React.ReactNode {
+  if (paid == null) return <span className="text-text-tertiary">—</span>
+  const paidStr = Number(paid).toFixed(0)
+  if (lop == null || Number(lop) === 0) return paidStr
+  return <>{paidStr}<span className="text-text-tertiary"> / {Number(lop).toFixed(0)}</span></>
+}
+
 export const EmployeePayslips: React.FC = () => {
   const { toast } = useToast()
   const { data = [], isLoading } = useMyPayslips()
@@ -36,8 +47,11 @@ export const EmployeePayslips: React.FC = () => {
             <thead>
               <tr>
                 <th>Period</th>
-                <th>Net pay</th>
-                <th className="hidden sm:table-cell">Status</th>
+                <th className="hidden md:table-cell text-right">Paid days</th>
+                <th className="text-right">Gross</th>
+                <th className="hidden sm:table-cell text-right">Deductions</th>
+                <th className="text-right">Net pay</th>
+                <th className="hidden lg:table-cell">Status</th>
                 <th></th>
               </tr>
             </thead>
@@ -45,8 +59,16 @@ export const EmployeePayslips: React.FC = () => {
               {data.map((r) => (
                 <tr key={r.runId}>
                   <td><span className="font-semibold text-text-primary">{r.period}</span></td>
-                  <td>{inr2(r.netPay)}</td>
-                  <td className="hidden sm:table-cell">
+                  <td className="hidden md:table-cell text-right tabular-nums">
+                    {/* Null when the tenant isn't tracking LOP — render a dash, not "0". */}
+                    {r.paidDays == null ? <span className="text-text-tertiary">—</span> : fmtDays(r.paidDays, r.lopDays)}
+                  </td>
+                  <td className="text-right tabular-nums">{r.gross == null ? <span className="text-text-tertiary">—</span> : inr2(r.gross)}</td>
+                  <td className="hidden sm:table-cell text-right tabular-nums">
+                    {r.totalDeductions == null ? <span className="text-text-tertiary">—</span> : inr2(r.totalDeductions)}
+                  </td>
+                  <td className="text-right tabular-nums font-semibold">{inr2(r.netPay)}</td>
+                  <td className="hidden lg:table-cell">
                     <HrStatusPill tone={PAYSLIP_TONE[r.status]}>{r.status}</HrStatusPill>
                   </td>
                   <td className="text-right">

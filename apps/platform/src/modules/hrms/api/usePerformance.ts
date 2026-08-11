@@ -181,3 +181,53 @@ export function useUpdateGoalProgress() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'performance', 'goals'] }),
   })
 }
+
+// ─── Wave 1: Performance Directory ──────────────────────────────────────────
+
+export interface EmployeePerformanceRow {
+  employeeId: string
+  employeeCode?: string | null
+  employeeName: string
+  department?: string | null
+  departmentId?: string | null
+  // Null when the employee has no submitted review — show a dash in the UI,
+  // never treat as zero (zero would imply a bad review, which is different).
+  overallRating?: number | null
+  scorePct?: number | null           // rating / rating_scale_max * 100, 1 dp
+  lastReviewCycleName?: string | null
+  lastReviewSubmittedAt?: string | null
+  lastReviewStatus?: 'PENDING' | 'SUBMITTED' | 'ACKNOWLEDGED' | null
+}
+
+export interface PerformanceDirectoryPage {
+  items: EmployeePerformanceRow[]
+  page: number
+  size: number
+  total: number
+}
+
+export interface PerformanceDirectoryFilters {
+  departmentId?: string
+  search?: string
+  page?: number
+  size?: number
+}
+
+/**
+ * Paged directory of every active employee with their latest submitted
+ * review's rating. Employees with no review still appear (null rating) so HR
+ * sees the whole workforce, not just people who've been reviewed.
+ */
+export function usePerformanceDirectory(filters: PerformanceDirectoryFilters = {}) {
+  const { departmentId, search, page = 0, size = 25 } = filters
+  const qs = new URLSearchParams()
+  if (departmentId) qs.set('departmentId', departmentId)
+  if (search)       qs.set('search', search)
+  qs.set('page', String(page))
+  qs.set('size', String(size))
+  return useQuery({
+    queryKey: ['hrms', 'performance', 'directory', departmentId ?? '', search ?? '', page, size],
+    queryFn: () => apiJson<PerformanceDirectoryPage>(`/v1/performance/employees?${qs.toString()}`),
+    staleTime: 30_000,
+  })
+}

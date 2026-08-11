@@ -187,3 +187,50 @@ export function usePtSlabs(state: string | undefined) {
     staleTime: Infinity,
   })
 }
+
+// ─── Wave 1: Payroll Dashboard aggregates ───────────────────────────────────
+
+export interface PayrollDashboardKpis {
+  totalPayrollCost: number
+  averageSalary: number
+  pendingDisbursals: number
+  tdsLiability: number
+  currentPeriodLabel: string
+  currentPeriodMonth: number
+  currentPeriodYear: number
+}
+
+export interface PayrollTrendPoint {
+  periodMonth: number
+  periodYear: number
+  label: string            // "MAR", "APR", ...
+  totalPayrollCost: number
+  runCount: number
+}
+
+/**
+ * Current-period KPI tiles for the Payroll landing page. Aggregates over
+ * payroll.payslip_lines for the LATEST period that has at least one run —
+ * falls back to zeros for a fresh tenant, so the dashboard never crashes.
+ */
+export function usePayrollDashboardKpis() {
+  return useQuery({
+    queryKey: [...KEY, 'dashboard', 'kpis'],
+    queryFn: () => apiJson<PayrollDashboardKpis>('/v1/payroll/dashboard/kpis'),
+    // Numbers are aggregates of frozen LOCKED runs, so 60s is enough — no
+    // reason to re-fetch on every render but also fine to be a minute stale.
+    staleTime: 60_000,
+  })
+}
+
+/**
+ * Trailing N-month cost trend for the chart. Always returns exactly `months`
+ * points; empty periods come back with 0 so the chart draws a continuous line.
+ */
+export function usePayrollCostTrend(months: number = 6) {
+  return useQuery({
+    queryKey: [...KEY, 'dashboard', 'trend', months],
+    queryFn: () => apiJson<PayrollTrendPoint[]>(`/v1/payroll/dashboard/trend?months=${months}`),
+    staleTime: 60_000,
+  })
+}

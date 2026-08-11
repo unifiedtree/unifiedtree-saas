@@ -74,6 +74,14 @@ export interface MyPayslip {
   period: string
   periodMonth: number
   periodYear: number
+  // Wave 1 (2026-08-11): backend now surfaces the paid-day breakdown and the
+  // gross/deductions split so the ESS list renders a 5-column table without a
+  // per-row second fetch. Nulls are legitimate — a tenant that isn't tracking
+  // LOP won't have paidDays / lopDays; render a dash in the UI.
+  paidDays?: number | null
+  lopDays?: number | null
+  gross?: number | null
+  totalDeductions?: number | null
   netPay: number
   status: RunStatus
   lockedAt?: string | null

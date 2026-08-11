@@ -1,13 +1,18 @@
 import React, { useMemo } from 'react'
 import { format } from 'date-fns'
-import { Layers, Wallet, Users, Banknote } from 'lucide-react'
+import { Wallet, Users, Banknote, FileWarning } from 'lucide-react'
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
 import {
   HrPageHeader, HrStatCard, HrStatusPill, TableCard, type PillTone,
 } from '@/shared/components/hr'
 import { useRuns, inr, MONTHS, type PayrollRun, type RunStatus } from '../api/usePayrollRuns'
+// Wave 1 (2026-08-11): the four KPI tiles + cost trend are now backed by real
+// backend aggregates — the previous client-side reductions over the loaded
+// runs list under-counted (they missed employer contributions) and disagreed
+// with the payslip PDFs. New endpoints: /v1/payroll/dashboard/kpis + /trend.
+import { usePayrollDashboardKpis, usePayrollCostTrend } from '../api/usePayroll'
 
 // Map payroll run status → client pill tone (statusTone from the hook targets a
 // different pill set, so we map explicitly to the HrStatusPill palette here).
@@ -38,26 +43,17 @@ export const PayrollDashboard: React.FC = () => {
   const { data, isLoading } = useRuns()
   const runs = useMemo(() => data ?? [], [data])
 
+  // Backend-computed KPIs + trend (Wave 1). The runs list stays for the
+  // status-breakdown + recent-runs table — that's still a purely client-side
+  // rollup over the currently visible page of runs.
+  const { data: kpis, isLoading: kpisLoading } = usePayrollDashboardKpis()
+  const { data: trend, isLoading: trendLoading } = usePayrollCostTrend(6)
+
   // Newest-first by period, used for "latest run" and the recent-runs table.
   const byPeriodDesc = useMemo(
     () => [...runs].sort((a, b) => chronoKey(b) - chronoKey(a)),
     [runs],
   )
-  const latest = byPeriodDesc[0]
-
-  const totalNet = useMemo(() => runs.reduce((s, r) => s + (r.totalNet ?? 0), 0), [runs])
-
-  // Bar chart: net pay per period, oldest → newest, capped to the last 12 periods.
-  const chartData = useMemo(() => {
-    return [...runs]
-      .sort((a, b) => chronoKey(a) - chronoKey(b))
-      .slice(-12)
-      .map((r) => ({
-        label: `${MONTHS[r.periodMonth - 1] ?? '?'} ${String(r.periodYear).slice(-2)}`,
-        totalNet: r.totalNet ?? 0,
-        status: r.status,
-      }))
-  }, [runs])
 
   // Status breakdown across all loaded runs.
   const statusCounts = useMemo(() => {
@@ -69,67 +65,75 @@ export const PayrollDashboard: React.FC = () => {
   }, [runs])
 
   const hasRuns = runs.length > 0
+  const chartData = useMemo(
+    () => (trend ?? []).map((p) => ({ label: p.label, totalCost: p.totalPayrollCost })),
+    [trend],
+  )
 
   return (
     <div className="mx-auto max-w-6xl p-6 sm:p-8">
       <HrPageHeader
         crumb="Payroll"
         title="Payroll Dashboard"
-        subtitle="Net pay, run status, and period trends across your payroll runs"
+        subtitle={
+          kpis
+            ? `Live aggregates for ${kpis.currentPeriodLabel} across all your payroll runs`
+            : 'Cost, headcount, and disbursal status across your payroll runs'
+        }
       />
 
-      {/* KPI cards */}
+      {/* KPI cards — backed by /v1/payroll/dashboard/kpis */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <HrStatCard
-          icon={<Layers size={18} />}
-          color="blue"
-          loading={isLoading}
-          value={runs.length}
-          label="Total Runs"
-          sub="Loaded payroll runs"
-        />
         <HrStatCard
           icon={<Wallet size={18} />}
           color="green"
-          loading={isLoading}
-          value={latest ? inr(latest.totalNet) : '—'}
-          label="Latest Run Net Pay"
-          sub={latest ? periodLabel(latest) : 'No runs yet'}
+          loading={kpisLoading}
+          value={kpis ? inr(kpis.totalPayrollCost) : '—'}
+          label="Total Payroll Cost"
+          sub={kpis ? kpis.currentPeriodLabel : 'No runs yet'}
         />
         <HrStatCard
           icon={<Users size={18} />}
           color="purple"
-          loading={isLoading}
-          value={latest ? latest.employeeCount : '—'}
-          label="Employees (Latest Run)"
-          sub={latest ? `${latest.companyName}` : 'No runs yet'}
+          loading={kpisLoading}
+          value={kpis ? inr(kpis.averageSalary) : '—'}
+          label="Average Salary"
+          sub={kpis ? kpis.currentPeriodLabel : 'No runs yet'}
+        />
+        <HrStatCard
+          icon={<FileWarning size={18} />}
+          color="orange"
+          loading={kpisLoading}
+          value={kpis ? kpis.pendingDisbursals : '—'}
+          label="Pending Disbursals"
+          sub="Locked / processing runs not yet paid"
         />
         <HrStatCard
           icon={<Banknote size={18} />}
-          color="orange"
-          loading={isLoading}
-          value={inr(totalNet)}
-          label="Total Net (Loaded)"
-          sub={`Across ${runs.length} run${runs.length === 1 ? '' : 's'}`}
+          color="blue"
+          loading={kpisLoading}
+          value={kpis ? inr(kpis.tdsLiability) : '—'}
+          label="TDS Liability"
+          sub={kpis ? kpis.currentPeriodLabel : 'No runs yet'}
         />
       </div>
 
       {/* Chart + status breakdown */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Net pay by period */}
+        {/* 6-month cost trend — backed by /v1/payroll/dashboard/trend */}
         <div className="lg:col-span-2 rounded-xl border border-border-default bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-text-primary">Net Pay by Period</h2>
-              <p className="text-xs text-text-tertiary">Last {chartData.length} period{chartData.length === 1 ? '' : 's'}</p>
+              <h2 className="text-sm font-semibold text-text-primary">Payroll Cost — Last 6 Months</h2>
+              <p className="text-xs text-text-tertiary">Total cost including employer contributions</p>
             </div>
           </div>
-          {isLoading ? (
+          {trendLoading ? (
             <div className="h-[260px] animate-pulse rounded-lg bg-bg-base" />
           ) : chartData.length === 0 ? (
             <div className="flex h-[260px] flex-col items-center justify-center text-center">
               <p className="text-sm font-semibold text-text-secondary">No payroll runs yet</p>
-              <p className="mt-1 text-xs text-text-tertiary">Create a run to see net pay trends.</p>
+              <p className="mt-1 text-xs text-text-tertiary">Create a run to see cost trends.</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
@@ -144,15 +148,11 @@ export const PayrollDashboard: React.FC = () => {
                   tickFormatter={(v) => inr(Number(v))}
                 />
                 <Tooltip
-                  formatter={(v: number | string) => [inr(Number(v)), 'Net Pay']}
+                  formatter={(v: number | string) => [inr(Number(v)), 'Total Cost']}
                   cursor={{ fill: 'rgba(5, 150, 105,0.06)' }}
                   contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12 }}
                 />
-                <Bar dataKey="totalNet" radius={[6, 6, 0, 0]} maxBarSize={48}>
-                  {chartData.map((d, i) => (
-                    <Cell key={i} fill={STATUS_COLOR[d.status] ?? '#059669'} />
-                  ))}
-                </Bar>
+                <Bar dataKey="totalCost" radius={[6, 6, 0, 0]} maxBarSize={48} fill="#059669" />
               </BarChart>
             </ResponsiveContainer>
           )}
