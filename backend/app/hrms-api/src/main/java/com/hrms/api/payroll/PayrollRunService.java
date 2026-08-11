@@ -95,7 +95,17 @@ public class PayrollRunService {
         List<PayslipLineDto> employerContributions,
         BigDecimal gross, BigDecimal totalDeductions, BigDecimal netPay) {}
 
+    /**
+     * ESS payslip row for the "My Payslips" list. Extended in Wave 1
+     * (2026-08-11) with paidDays / lopDays / gross / totalDeductions so the
+     * frontend renders a Period / Paid Days / Gross / Deductions / Net table
+     * without a per-row second fetch. paidDays / lopDays come from
+     * payroll.run_lop_days; when the row is absent (no LOP tracking) both are
+     * null and the frontend renders a dash.
+     */
     public record MyPayslipDto(UUID runId, String period, int periodMonth, int periodYear,
+                               BigDecimal paidDays, BigDecimal lopDays,
+                               BigDecimal gross, BigDecimal totalDeductions,
                                BigDecimal netPay, String status, String lockedAt) {}
 
     // ── Reads ─────────────────────────────────────────────────────────────────
@@ -346,19 +356,37 @@ public class PayrollRunService {
     public List<MyPayslipDto> listMyPayslips(UUID tenantId, UUID employeeId) {
         bindTenant(tenantId);
         // Only LOCKED runs — an employee never sees draft/processing numbers.
+        //
+        // Wave 1 extension (2026-08-11): also project paid_days / lop_days from
+        // payroll.run_lop_days (LEFT JOIN — the row may not exist for tenants
+        // that haven't run LOP calc), plus split net into gross vs total
+        // deductions so the ESS list can render a 5-column table without a
+        // per-row second fetch. Employer-contribution lines (PF ER, etc.) are
+        // deliberately excluded from BOTH gross and deductions — they're a cost
+        // to the employer, never appear on the employee's payslip.
         return jdbc.query("""
             SELECT r.id, r.period_month, r.period_year, r.status, r.locked_at,
-                   coalesce(sum(l.amount) FILTER (WHERE l.category IN ('EARNING','REIMBURSEMENT')),0)
-                 - coalesce(sum(l.amount) FILTER (WHERE l.category = 'DEDUCTION'),0) AS net_pay
+                   ld.paid_days,
+                   ld.lop_days,
+                   coalesce(sum(l.amount) FILTER (WHERE l.category IN ('EARNING','REIMBURSEMENT')), 0) AS gross,
+                   coalesce(sum(l.amount) FILTER (WHERE l.category = 'DEDUCTION'), 0)                 AS total_deductions,
+                   coalesce(sum(l.amount) FILTER (WHERE l.category IN ('EARNING','REIMBURSEMENT')), 0)
+                 - coalesce(sum(l.amount) FILTER (WHERE l.category = 'DEDUCTION'), 0)                 AS net_pay
               FROM payroll.runs r
               JOIN payroll.payslip_lines l ON l.run_id = r.id AND l.employee_id = ?
+              LEFT JOIN payroll.run_lop_days ld ON ld.run_id = r.id AND ld.employee_id = ?
              WHERE r.status = 'LOCKED'
-             GROUP BY r.id, r.period_month, r.period_year, r.status, r.locked_at
+             GROUP BY r.id, r.period_month, r.period_year, r.status, r.locked_at, ld.paid_days, ld.lop_days
              ORDER BY r.period_year DESC, r.period_month DESC
             """, (rs, i) -> new MyPayslipDto(
-                rs.getObject("id", UUID.class), periodLabel(rs.getInt("period_month"), rs.getInt("period_year")),
-                rs.getInt("period_month"), rs.getInt("period_year"), rs.getBigDecimal("net_pay"),
-                rs.getString("status"), ts(rs.getTimestamp("locked_at"))), employeeId);
+                rs.getObject("id", UUID.class),
+                periodLabel(rs.getInt("period_month"), rs.getInt("period_year")),
+                rs.getInt("period_month"), rs.getInt("period_year"),
+                rs.getBigDecimal("paid_days"), rs.getBigDecimal("lop_days"),
+                rs.getBigDecimal("gross"),     rs.getBigDecimal("total_deductions"),
+                rs.getBigDecimal("net_pay"),
+                rs.getString("status"), ts(rs.getTimestamp("locked_at"))),
+            employeeId, employeeId);
     }
 
     @Transactional
