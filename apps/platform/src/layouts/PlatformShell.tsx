@@ -15,6 +15,7 @@ import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
 import { GlobalSearch } from '@/shared/components/GlobalSearch'
+import { TenantLogo } from '@/shared/components/TenantLogo'
 
 const SIDEBAR_KEY = 'ut.sidebar.collapsed'
 
@@ -272,10 +273,12 @@ export function PlatformShell() {
   // re-render when a new module activates, and the app-switcher would
   // keep showing a locked pill until an unrelated re-render triggers.
   const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
-  // Workspace-uploaded logo overrides the UnifiedTree default in both the
-  // shell header AND the loading fallback logo below. Rendered via the Logo
-  // component further down.
-  const tenantLogoUrl = useLocalAuthStore(s => s.tenant?.logoUrl)
+  // Workspace-uploaded logo is fetched + rendered by <TenantLogo />, which
+  // wraps the useTenantBranding hook. The SDK's auth hydration does NOT plumb
+  // logoUrl through, so relying on the auth store alone (as this file did)
+  // left every non-login surface — including /modules — on the UnifiedTree
+  // default. tenantName is still read from the auth store (populated at
+  // login) for the workspace label in the top bar.
   const tenantName    = useLocalAuthStore(s => s.tenant?.name)
   const hasModule = (k: string) => activeModules.includes(k)
   const tenant = useSdkStore(s => s.tenant)
@@ -453,12 +456,7 @@ export function PlatformShell() {
 
   const Logo = () => (
     <button onClick={() => navigate('/modules')} className="flex items-center gap-2.5" title="Back to apps">
-      <img
-        src={tenantLogoUrl || '/UnifiedTreeLogo.png'}
-        alt={tenantName || 'Unified Tree'}
-        className="h-7 w-auto"
-        onError={(e) => { (e.target as HTMLImageElement).src = '/UnifiedTreeLogo.png' }}
-      />
+      <TenantLogo className="h-7 w-auto" />
     </button>
   )
 
@@ -604,12 +602,7 @@ export function PlatformShell() {
               UnifiedTree otherwise), on a white chip so any logo reads on green. */}
           <button onClick={() => navigate('/modules')} className="flex items-center gap-2.5" title="Apps">
             <span className="flex h-10 items-center rounded-xl bg-white/95 px-3 shadow-sm">
-              <img
-                src={tenantLogoUrl || '/UnifiedTreeLogo.png'}
-                alt={tenantName || 'Unified Tree'}
-                className="h-6 w-auto object-contain"
-                onError={(e) => { (e.target as HTMLImageElement).src = '/UnifiedTreeLogo.png' }}
-              />
+              <TenantLogo className="h-6 w-auto object-contain" />
             </span>
           </button>
           <div className="relative flex items-center gap-1.5" ref={profileRef}>
@@ -646,12 +639,7 @@ export function PlatformShell() {
       <aside className="relative z-10 hidden w-[86px] shrink-0 flex-col md:flex" style={{ background: RAIL_BG }}>
         <button onClick={() => navigate('/modules')} title="All apps" className="flex h-14 shrink-0 items-center justify-center">
           <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white/95 shadow-sm">
-            <img
-              src={tenantLogoUrl || '/UnifiedTreeLogo.png'}
-              alt={tenantName || 'Unified Tree'}
-              className="h-7 w-7 object-contain"
-              onError={(e) => { (e.target as HTMLImageElement).src = '/UnifiedTreeLogo.png' }}
-            />
+            <TenantLogo className="h-7 w-7 object-contain" />
           </span>
         </button>
         <nav className="scrollbar-hide flex-1 space-y-1 overflow-y-auto px-2.5 pb-4 pt-1">
