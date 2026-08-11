@@ -22,15 +22,20 @@ public class DefaultComponentSeeder {
 
     /** code, name, category, statutory, taxable, computation_type, percent, order */
     private static final Object[][] DEFAULTS = {
-        {"BASIC",        "Basic Salary",              "EARNING",                false, true,  "FORMULA",          null,  10},
-        {"HRA",          "House Rent Allowance",      "EARNING",                false, true,  "PERCENT_OF_BASIC", 40.0,  20},
-        {"SPECIAL",      "Special Allowance",         "EARNING",                false, true,  "FORMULA",          null,  30},
-        {"CONVEYANCE",   "Conveyance Allowance",      "EARNING",                false, false, "FIXED",            null,  40},
-        {"PF_EMPLOYEE",  "Provident Fund (Employee)", "DEDUCTION",              true,  false, "STATUTORY",        null,  50},
-        {"PF_EMPLOYER",  "Provident Fund (Employer)", "EMPLOYER_CONTRIBUTION",  true,  false, "STATUTORY",        null,  60},
-        {"ESI_EMPLOYEE", "ESI (Employee)",            "DEDUCTION",              true,  false, "STATUTORY",        null,  70},
-        {"ESI_EMPLOYER", "ESI (Employer)",            "EMPLOYER_CONTRIBUTION",  true,  false, "STATUTORY",        null,  80},
-        {"PT",           "Professional Tax",          "DEDUCTION",              true,  false, "STATUTORY",        null,  90},
+        {"BASIC",             "Basic Salary",              "EARNING",                false, true,  "FORMULA",          null,  10},
+        {"HRA",               "House Rent Allowance",      "EARNING",                false, true,  "PERCENT_OF_BASIC", 40.0,  20},
+        {"SPECIAL",           "Special Allowance",         "EARNING",                false, true,  "FORMULA",          null,  30},
+        {"CONVEYANCE",        "Conveyance Allowance",      "EARNING",                false, false, "FIXED",            null,  40},
+        {"PF_EMPLOYEE",       "Provident Fund (Employee)", "DEDUCTION",              true,  false, "STATUTORY",        null,  50},
+        {"PF_EMPLOYER",       "Provident Fund (Employer)", "EMPLOYER_CONTRIBUTION",  true,  false, "STATUTORY",        null,  60},
+        {"ESI_EMPLOYEE",      "ESI (Employee)",            "DEDUCTION",              true,  false, "STATUTORY",        null,  70},
+        {"ESI_EMPLOYER",      "ESI (Employer)",            "EMPLOYER_CONTRIBUTION",  true,  false, "STATUTORY",        null,  80},
+        {"PT",                "Professional Tax",          "DEDUCTION",              true,  false, "STATUTORY",        null,  90},
+        // Wave 2 (2026-08-11): salary advance repayments — one payslip DEDUCTION
+        // line per employee per run summing all their scheduled installments
+        // for the run's period. Auto-seeded here so every tenant has the code
+        // available the moment AdvanceRecoveryService.applyForMonth writes.
+        {"ADVANCE_RECOVERY",  "Advance Recovery",          "DEDUCTION",              false, false, "FIXED",            null, 100},
     };
 
     /** Returns the number of components after seeding (always 9 for a fresh tenant). */

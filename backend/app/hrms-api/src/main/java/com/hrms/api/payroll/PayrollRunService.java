@@ -1,6 +1,7 @@
 package com.hrms.api.payroll;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hrms.api.advance.AdvanceRecoveryService;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.letters.service.PdfRenderer;
 import com.hrms.payroll.engine.PayrollEngine;
@@ -54,13 +55,16 @@ public class PayrollRunService {
     private final PdfRenderer pdfRenderer;
     private final ObjectMapper objectMapper;
     private final DefaultComponentSeeder seeder;
+    private final AdvanceRecoveryService advanceRecovery;
 
     public PayrollRunService(JdbcTemplate jdbc, PdfRenderer pdfRenderer, ObjectMapper objectMapper,
-                             DefaultComponentSeeder seeder) {
+                             DefaultComponentSeeder seeder,
+                             AdvanceRecoveryService advanceRecovery) {
         this.jdbc = jdbc;
         this.pdfRenderer = pdfRenderer;
         this.objectMapper = objectMapper;
         this.seeder = seeder;
+        this.advanceRecovery = advanceRecovery;
     }
 
     // ── DTOs ──────────────────────────────────────────────────────────────────
@@ -262,6 +266,47 @@ public class PayrollRunService {
         List<EligibleEmployeeDto> eligible = queryEligible(run.companyId(), run.periodStart(), run.periodEnd());
         for (EligibleEmployeeDto emp : eligible) {
             processEmployee(tenantId, runId, run.companyId(), emp.employeeId(), ym, components, settings);
+        }
+
+        // ── Wave 2 (2026-08-11): advance recovery hook ────────────────────────
+        // Every disbursed advance with a PENDING installment for this period
+        // gets a DEDUCTION payslip line, its outstanding_amount decremented,
+        // and a REPAYMENT ledger entry — all inside THIS transaction so the
+        // ledger and the payslip move atomically. Before this existed,
+        // outstanding_amount was set at disburse-time and NEVER decremented,
+        // which is the "why isn't my advance ever being paid off" bug clients
+        // hit on their first payroll run after any disbursed advance.
+        //
+        // The ADVANCE_RECOVERY component is seeded above (DefaultComponentSeeder
+        // extended to 10 defaults), so the lookup below is guaranteed to
+        // resolve. Multiple advances for the same employee in the same period
+        // collapse into ONE payslip line via ON CONFLICT DO UPDATE (summing).
+        List<AdvanceRecoveryService.Deduction> deductions =
+                advanceRecovery.applyForMonth(tenantId, runId, run.periodMonth(), run.periodYear());
+        if (!deductions.isEmpty()) {
+            CompMeta advMeta = components.get("ADVANCE_RECOVERY");
+            if (advMeta == null) {
+                // Component wasn't in the map — either an existing tenant that
+                // was seeded before Wave 2, or something else. Auto-seed and
+                // re-load rather than fail the run.
+                log.info("ADVANCE_RECOVERY component missing for tenant {} — auto-seeding", tenantId);
+                seeder.seedForTenant(tenantId);
+                components = loadComponentsMeta();
+                advMeta = components.get("ADVANCE_RECOVERY");
+                if (advMeta == null) throw new BusinessRuleException(
+                        "Unable to seed ADVANCE_RECOVERY salary component", "COMPONENT_NOT_SEEDED");
+            }
+            for (AdvanceRecoveryService.Deduction d : deductions) {
+                jdbc.update("""
+                    INSERT INTO payroll.payslip_lines
+                        (tenant_id, run_id, employee_id, component_id, component_code,
+                         component_name, category, amount, display_order)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (run_id, employee_id, component_id)
+                    DO UPDATE SET amount = payroll.payslip_lines.amount + EXCLUDED.amount
+                    """, tenantId, runId, d.employeeId(), advMeta.id(), advMeta.code(),
+                    advMeta.name(), advMeta.category(), d.amount(), advMeta.displayOrder());
+            }
         }
 
         // FIX P1-3: never let a run complete with negative net pay. Deductions
