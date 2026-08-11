@@ -110,12 +110,12 @@ public class KpiService {
 
         StringBuilder where = new StringBuilder(" WHERE 1=1");
         List<Object> args = new ArrayList<>();
-        if (ownerId != null) { where.append(" AND g.owner_id = ?"); args.add(ownerId); }
+        if (ownerId != null) { where.append(" AND g.employee_id = ?"); args.add(ownerId); }
         if (managerId != null) {
             // Direct-reports-only scoping via one-hop join. Cheap + right for
             // the demo; upgrade to recursive CTE when the manager tree gets
             // deep enough that direct reports isn't sufficient scope.
-            where.append(" AND g.owner_id IN (SELECT id FROM hrms.employees WHERE reporting_manager_id = ? AND is_active)");
+            where.append(" AND g.employee_id IN (SELECT id FROM hrms.employees WHERE reporting_manager_id = ? AND is_active)");
             args.add(managerId);
         }
         if (status != null)  { where.append(" AND g.status = ?"); args.add(status); }
@@ -138,7 +138,7 @@ public class KpiService {
                        TRIM(e.first_name || ' ' || COALESCE(e.last_name,'')) AS owner_name,
                        e.employee_code                                        AS owner_code
                   FROM performance_mgmt.goals g
-                  LEFT JOIN hrms.employees e ON e.id = g.owner_id AND e.tenant_id = g.tenant_id
+                  LEFT JOIN hrms.employees e ON e.id = g.employee_id AND e.tenant_id = g.tenant_id
                 """ + where + """
                  ORDER BY g.updated_at DESC
                  LIMIT ? OFFSET ?
@@ -155,7 +155,7 @@ public class KpiService {
                        TRIM(e.first_name || ' ' || COALESCE(e.last_name,'')) AS owner_name,
                        e.employee_code                                        AS owner_code
                   FROM performance_mgmt.goals g
-                  LEFT JOIN hrms.employees e ON e.id = g.owner_id AND e.tenant_id = g.tenant_id
+                  LEFT JOIN hrms.employees e ON e.id = g.employee_id AND e.tenant_id = g.tenant_id
                  WHERE g.id = ?
                 """, rs -> {
                     if (!rs.next()) throw new BusinessRuleException("KPI not found", "KPI_NOT_FOUND");
@@ -189,9 +189,9 @@ public class KpiService {
 
         UUID id = jdbc.queryForObject("""
                 INSERT INTO performance_mgmt.goals
-                    (tenant_id, owner_id, title, description, category,
+                    (tenant_id, employee_id, title, description, category,
                      target_value, current_value, unit, direction, weight,
-                     due_date, progress_pct, status, created_by, updated_by)
+                     due_date, progress, status, created_by, updated_by)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)
                 RETURNING id
                 """, UUID.class,
@@ -236,7 +236,7 @@ public class KpiService {
         if (req.weight()      != null) { sql.append(", weight = ?");       args.add(req.weight()); }
         if (req.dueDate()     != null) { sql.append(", due_date = ?");     args.add(java.sql.Date.valueOf(req.dueDate())); }
         if (req.status()      != null) { sql.append(", status = ?");       args.add(req.status()); }
-        if (req.ownerId()     != null) { sql.append(", owner_id = ?");     args.add(req.ownerId()); }
+        if (req.ownerId()     != null) { sql.append(", employee_id = ?");  args.add(req.ownerId()); }
         if (actorId != null)           { sql.append(", updated_by = ?");   args.add(actorId.toString()); }
         sql.append(", version = version + 1 WHERE id = ?");
         args.add(id);
@@ -277,7 +277,7 @@ public class KpiService {
 
         jdbc.update("""
                 UPDATE performance_mgmt.goals
-                   SET current_value = ?, progress_pct = ?,
+                   SET current_value = ?, progress = ?,
                        updated_at = now(), updated_by = ?, version = version + 1
                  WHERE id = ?
                 """, req.newValue(), pct.intValue(),
@@ -330,7 +330,7 @@ public class KpiService {
                        version = version + 1
                  WHERE status = 'ACTIVE'
                    AND due_date IS NOT NULL AND due_date < CURRENT_DATE
-                   AND COALESCE(progress_pct, 0) < 100
+                   AND COALESCE(progress, 0) < 100
                 """);
     }
 
@@ -348,7 +348,7 @@ public class KpiService {
                 }, kpiId);
         if (snap == null) return;
         BigDecimal pct = computeProgressPct((BigDecimal) snap[0], (BigDecimal) snap[1], (String) snap[2]);
-        if (pct != null) jdbc.update("UPDATE performance_mgmt.goals SET progress_pct = ? WHERE id = ?",
+        if (pct != null) jdbc.update("UPDATE performance_mgmt.goals SET progress = ? WHERE id = ?",
                 pct.intValue(), kpiId);
     }
 
@@ -385,11 +385,11 @@ public class KpiService {
 
     private KpiRowDto toKpiDto(java.sql.ResultSet rs) throws java.sql.SQLException {
         java.sql.Date dueDate = rs.getDate("due_date");
-        Object pctObj = rs.getObject("progress_pct");
+        Object pctObj = rs.getObject("progress");
         BigDecimal pct = pctObj == null ? null : new BigDecimal(pctObj.toString());
         return new KpiRowDto(
                 rs.getObject("id", UUID.class),
-                rs.getObject("owner_id", UUID.class),
+                rs.getObject("employee_id", UUID.class),
                 rs.getString("owner_name"),
                 rs.getString("owner_code"),
                 rs.getString("title"),
