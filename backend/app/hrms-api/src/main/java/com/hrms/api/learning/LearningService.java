@@ -28,7 +28,12 @@ import java.util.UUID;
  * Bulk-enrol supports the "enrol whole department" flow — filters out
  * already-enrolled employees + respects program capacity.
  */
-@Service
+// Explicit bean name — plain "learningService" collides with the JPA-styled
+// com.hrms.learning.service.LearningService that's already in the canonical
+// scan. Both classes live and do different things (that one is per-entity
+// JPA, this one is raw-JDBC CRUD + bulk-enrol); they just can't share the
+// default bean name.
+@Service("apiLearningService")
 public class LearningService {
 
     private static final Logger log = LoggerFactory.getLogger(LearningService.class);
