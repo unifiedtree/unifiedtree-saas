@@ -90,11 +90,22 @@ public class PayrollRunController {
         return service.lockRun(TenantContext.getTenantId(), id, actorId(jwt));
     }
 
+    /**
+     * Reopen a LOCKED run to DRAFT. Wave 6 (2026-08-11): controlled reopen
+     * with a mandatory reason (audited into runs.notes). PAID runs cannot
+     * be reopened — see the service for the exact guard.
+     */
     @PostMapping("/runs/{id}/reopen")
     @PreAuthorize("hasAuthority('payroll.runs.lock')")
-    public void reopen(@PathVariable UUID id) {
-        service.reopenRun(TenantContext.getTenantId(), id);
+    public PayrollRunService.RunDto reopen(@PathVariable UUID id,
+                                          @jakarta.validation.Valid @RequestBody ReopenRequest req,
+                                          @AuthenticationPrincipal Jwt jwt) {
+        return service.reopenRun(TenantContext.getTenantId(), id, req.reason(), actorId(jwt));
     }
+
+    public record ReopenRequest(
+            @jakarta.validation.constraints.NotBlank
+            @jakarta.validation.constraints.Size(max = 500) String reason) {}
 
     // ── Payslips (HR/Finance view) ──────────────────────────────────────────────
 

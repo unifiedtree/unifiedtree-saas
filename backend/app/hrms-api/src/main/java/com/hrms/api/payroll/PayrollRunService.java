@@ -371,15 +371,52 @@ public class PayrollRunService {
         return getRun(tenantId, runId);
     }
 
+    /**
+     * Reopen a LOCKED run to a DRAFT so payroll can be re-processed. Wave 6
+     * (2026-08-11) — turns the previous hard "cannot reopen" wall into a
+     * gated flow with an audit reason.
+     *
+     * <p>NEVER reopens a PAID run — the money's out the door, that would
+     * corrupt the disbursement ledger. Callers should record a reversal
+     * instead.
+     *
+     * <p>Reason is required (non-blank) so the operator commits to a
+     * traceable justification. It's persisted onto {@code runs.notes} as
+     * a "REOPENED: …" prefix line.
+     */
     @Transactional
-    public void reopenRun(UUID tenantId, UUID runId) {
+    public RunDto reopenRun(UUID tenantId, UUID runId, String reason, UUID actorId) {
         bindTenant(tenantId);
         RunRow run = loadRun(runId);
-        if ("LOCKED".equals(run.status()) || "PAID".equals(run.status())) {
-            // Locked is final in Phase 1 — correction runs come in a later phase.
-            throw new BusinessRuleException("Locked payroll runs cannot be reopened", "CANNOT_REOPEN_LOCKED");
+        if (!"LOCKED".equals(run.status())) {
+            throw new BusinessRuleException(
+                    "Only a LOCKED run can be reopened (current: " + run.status() + ")",
+                    "RUN_NOT_LOCKED");
         }
-        throw new BusinessRuleException("Only a locked run could be reopened", "RUN_NOT_LOCKED");
+        // PAID cannot be reopened — the disbursement batch already flipped it.
+        // (We're already guarded above by the LOCKED check, but be explicit.)
+        if ("PAID".equals(run.status())) {
+            throw new BusinessRuleException(
+                    "PAID runs cannot be reopened — record a reversal instead",
+                    "RUN_ALREADY_PAID");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessRuleException("Reason is required to reopen a locked run",
+                    "REASON_REQUIRED");
+        }
+        String actorTag = actorId == null ? "system" : actorId.toString();
+        jdbc.update("""
+                UPDATE payroll.runs
+                   SET status = 'DRAFT',
+                       locked_at = NULL, locked_by = NULL,
+                       notes = COALESCE(notes, '')
+                               || CASE WHEN COALESCE(notes,'') = '' THEN '' ELSE E'\n' END
+                               || 'REOPENED at ' || now() || ' by ' || ? || ': ' || ?,
+                       updated_at = now()
+                 WHERE id = ?
+                """, actorTag, reason, runId);
+        log.info("Payroll run {} reopened by {} — reason: {}", runId, actorTag, reason);
+        return getRun(tenantId, runId);
     }
 
     // ── Payslips ────────────────────────────────────────────────────────────────
