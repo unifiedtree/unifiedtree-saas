@@ -180,25 +180,32 @@ CREATE TABLE IF NOT EXISTS platform.tenant_branding (
     updated_by    UUID
 );
 
--- ── 8. Grants — mirror the dual-role pattern; guarded on role existence.
+-- ── 8. Grants on ALL platform.* tables. Root cause of the deploy after the
+--       first V089 iterations: hrms_app never got GRANT on platform.subscriptions
+--       (only ut_app did), so SubscriptionStateReconciler blew up with
+--       "permission denied for table subscriptions" in CI's Testcontainer
+--       (which connects as hrms_app to honour RLS — see CrossTenantIsolationIT).
+--       Broad ALL TABLES + default privileges so future tables don't fall into
+--       the same hole. platform.* has no RLS (per V087 comment), so no risk
+--       from a wide grant.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ut_app') THEN
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.razorpay_plans          TO ut_app;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.razorpay_webhook_events TO ut_app;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.plan_change_requests    TO ut_app;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.pending_signups         TO ut_app;
+        GRANT USAGE ON SCHEMA platform TO ut_app;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA platform TO ut_app;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA platform
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ut_app;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hrms_app') THEN
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.razorpay_plans          TO hrms_app;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.razorpay_webhook_events TO hrms_app;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.plan_change_requests    TO hrms_app;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.pending_signups         TO hrms_app;
+        GRANT USAGE ON SCHEMA platform TO hrms_app;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA platform TO hrms_app;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA platform
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hrms_app;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.razorpay_plans          TO app_user;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.razorpay_webhook_events TO app_user;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.plan_change_requests    TO app_user;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON platform.pending_signups         TO app_user;
+        GRANT USAGE ON SCHEMA platform TO app_user;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA platform TO app_user;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA platform
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user;
     END IF;
 END $$;
