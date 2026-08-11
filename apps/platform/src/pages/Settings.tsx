@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Check, Zap, Crown, Star, Sparkles, Image as ImageIcon, Upload } from 'lucide-react'
 import { clsx } from 'clsx'
 import { toast } from 'sonner'
+import { getAccessToken } from '@unifiedtree/sdk'
 import { useAuthStore } from '@/core/auth/authStore'
 import { apiJson, API_BASE_URL } from '@/core/api/client'
 import { HrPageHeader, HrButton, HrStatusPill } from '@/shared/components/hr'
@@ -225,7 +226,11 @@ function humanErrorFor(status: number, body?: string): { title: string; descript
 }
 
 const BrandingTab: React.FC = () => {
-  const token       = useAuthStore((s) => s.token)
+  // NOTE: DO NOT read `token` off the local zustand store — that copy is set
+  // once at login and never refreshed, so any request built from it returns
+  // 401 the moment the SDK rotates the token underneath us (real report,
+  // src.unifiedtree.com 2026-08-11: "logout / login multiple times, still
+  // 401"). Pull from the SDK's getAccessToken() the same way apiJson does.
   const tenant      = useAuthStore((s) => s.tenant)
   const refreshTenant = useAuthStore((s) => s.refreshTenant)
 
@@ -272,9 +277,15 @@ const BrandingTab: React.FC = () => {
       form.append('file', file)
       let resp: Response
       try {
+        // Always resolve the token AT REQUEST TIME from the SDK — never from a
+        // long-lived local copy. And send credentials so the httpOnly refresh
+        // cookie rides along on cross-origin (api.unifiedtree.com <—>
+        // <workspace>.unifiedtree.com) — same rule apiJson enforces.
+        const bearer = getAccessToken()
         resp = await fetch(`${API_BASE_URL}/v1/workspace/branding/logo`, {
           method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: 'include',
+          headers: bearer ? { Authorization: `Bearer ${bearer}` } : {},
           body: form,
         })
       } catch {
