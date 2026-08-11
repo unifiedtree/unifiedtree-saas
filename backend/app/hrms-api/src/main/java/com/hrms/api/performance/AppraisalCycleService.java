@@ -24,7 +24,7 @@ import java.util.UUID;
  * <p>Reviewer resolution:
  * <ul>
  *   <li><b>SELF</b> — reviewer = reviewee</li>
- *   <li><b>MANAGER</b> — reviewee's {@code hrms.employees.manager_id}
+ *   <li><b>MANAGER</b> — reviewee's {@code hrms.employees.reporting_manager_id}
  *       (if set); skipped otherwise</li>
  *   <li><b>PEER</b> — up to K same-department peers, picked deterministically
  *       by employee_code so re-initiating the same cycle yields the same
@@ -359,10 +359,10 @@ public class AppraisalCycleService {
                 return List.of(revieweeId);
             case "MANAGER":
                 UUID managerId = jdbc.query(
-                        "SELECT manager_id FROM hrms.employees WHERE id = ?",
+                        "SELECT reporting_manager_id FROM hrms.employees WHERE id = ?",
                         rs -> {
                             if (!rs.next()) return null;
-                            return rs.getObject("manager_id", UUID.class);
+                            return rs.getObject("reporting_manager_id", UUID.class);
                         }, revieweeId);
                 return managerId == null ? List.of() : List.of(managerId);
             case "PEER": {
@@ -386,7 +386,7 @@ public class AppraisalCycleService {
                 // Upward review: reviewers are the reviewee's direct reports.
                 return jdbc.query("""
                         SELECT id FROM hrms.employees
-                         WHERE manager_id = ? AND is_active = TRUE
+                         WHERE reporting_manager_id = ? AND is_active = TRUE
                          ORDER BY employee_code ASC
                         """, (rs, i) -> rs.getObject("id", UUID.class), revieweeId);
             }
@@ -394,8 +394,8 @@ public class AppraisalCycleService {
                 // Reviewer is the reviewee's manager's manager.
                 UUID skipLevel = jdbc.query("""
                         SELECT m2.id FROM hrms.employees e
-                          LEFT JOIN hrms.employees m1 ON m1.id = e.manager_id
-                          LEFT JOIN hrms.employees m2 ON m2.id = m1.manager_id
+                          LEFT JOIN hrms.employees m1 ON m1.id = e.reporting_manager_id
+                          LEFT JOIN hrms.employees m2 ON m2.id = m1.reporting_manager_id
                          WHERE e.id = ?
                         """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, revieweeId);
                 return skipLevel == null ? List.of() : List.of(skipLevel);
