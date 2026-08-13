@@ -197,7 +197,7 @@ public class KpiService {
                 """, UUID.class,
                 tenantId, req.ownerId(), req.title(), req.description(), req.category(),
                 req.targetValue(), req.currentValue(), req.unit(), req.direction(),
-                req.weight(), req.dueDate() == null ? null : java.sql.Date.valueOf(req.dueDate()),
+                req.weight(), parseDate(req.dueDate()),
                 pct == null ? null : pct.intValue(),
                 actorId == null ? null : actorId.toString(),
                 actorId == null ? null : actorId.toString());
@@ -234,7 +234,7 @@ public class KpiService {
         if (req.unit()        != null) { sql.append(", unit = ?");         args.add(req.unit()); }
         if (req.direction()   != null) { sql.append(", direction = ?");    args.add(req.direction()); }
         if (req.weight()      != null) { sql.append(", weight = ?");       args.add(req.weight()); }
-        if (req.dueDate()     != null) { sql.append(", due_date = ?");     args.add(java.sql.Date.valueOf(req.dueDate())); }
+        if (req.dueDate()     != null) { sql.append(", due_date = ?");     args.add(parseDate(req.dueDate())); }
         if (req.status()      != null) { sql.append(", status = ?");       args.add(req.status()); }
         if (req.ownerId()     != null) { sql.append(", employee_id = ?");  args.add(req.ownerId()); }
         if (actorId != null)           { sql.append(", updated_by = ?");   args.add(actorId.toString()); }
@@ -409,6 +409,23 @@ public class KpiService {
 
     private static String ts(java.sql.Timestamp t) {
         return t == null ? null : t.toInstant().toString();
+    }
+
+    /**
+     * QA FIX (2026-08-11, finding wmih6ivbj/HIGH-5): previously the callers
+     * did {@code java.sql.Date.valueOf(req.dueDate())} directly — a bad
+     * input like "2026/08/11" or "yesterday" threw IllegalArgumentException
+     * and became a 500. Now returns 400 INVALID_DATE with the offending value.
+     */
+    private static java.sql.Date parseDate(String s) {
+        if (s == null || s.isBlank()) return null;
+        try {
+            return java.sql.Date.valueOf(s);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessRuleException(
+                    "Invalid date '" + s + "' — expected YYYY-MM-DD",
+                    "INVALID_DATE");
+        }
     }
 
     private void bindTenant(UUID tenantId) {

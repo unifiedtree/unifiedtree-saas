@@ -314,8 +314,49 @@ public class LearningService {
         return new BulkEnrollResult(enrolled, dup, cap);
     }
 
+    /**
+     * QA FIX (2026-08-11, finding wmih6ivbj/HIGH-4 IDOR):
+     * Previously any user with hrms.learning.enroll.self could drop ANY
+     * enrollment in the same tenant. Now the drop is scoped: an actor
+     * can only drop their own enrollment via this endpoint. HR / managers
+     * (with hrms.learning.write) must go through {@link #adminDrop} instead.
+     *
+     * @param actorEmployeeId — the actor's OWN employee_id (from JWT claim).
+     *                          Null means "no employee identity" — reject.
+     */
     @Transactional
-    public EnrollmentDto drop(UUID tenantId, UUID enrollmentId, UUID actorId) {
+    public EnrollmentDto drop(UUID tenantId, UUID enrollmentId, UUID actorEmployeeId, UUID actorId) {
+        bindTenant(tenantId);
+        UUID owner = jdbc.query(
+                "SELECT employee_id FROM learning_mgmt.training_enrollments WHERE id = ?",
+                (org.springframework.jdbc.core.ResultSetExtractor<UUID>) rs ->
+                    rs.next() ? rs.getObject("employee_id", UUID.class) : null,
+                enrollmentId);
+        if (owner == null) {
+            throw new BusinessRuleException("Enrollment not found", "ENROLLMENT_NOT_FOUND");
+        }
+        if (actorEmployeeId == null || !actorEmployeeId.equals(owner)) {
+            // The self endpoint only drops YOUR enrollment. Escalate via admin path.
+            throw new BusinessRuleException(
+                    "You can only drop your own enrollment (use the admin drop endpoint " +
+                    "with hrms.learning.write to drop someone else's)",
+                    "ENROLLMENT_NOT_OWN");
+        }
+        jdbc.update("""
+                UPDATE learning_mgmt.training_enrollments
+                   SET status = 'DROPPED', updated_at = now(),
+                       updated_by = ?, version = version + 1
+                 WHERE id = ? AND status <> 'DROPPED'
+                """, actorId == null ? null : actorId.toString(), enrollmentId);
+        return getEnrollment(enrollmentId);
+    }
+
+    /**
+     * Admin drop — bypasses ownership check. Controller gates this with
+     * {@code hrms.learning.write} (management perm, not the self one).
+     */
+    @Transactional
+    public EnrollmentDto adminDrop(UUID tenantId, UUID enrollmentId, UUID actorId) {
         bindTenant(tenantId);
         int rows = jdbc.update("""
                 UPDATE learning_mgmt.training_enrollments
@@ -324,7 +365,6 @@ public class LearningService {
                  WHERE id = ? AND status <> 'DROPPED'
                 """, actorId == null ? null : actorId.toString(), enrollmentId);
         if (rows == 0) {
-            // Distinguish "already dropped" from "not found"
             org.springframework.jdbc.core.ResultSetExtractor<Boolean> hasRow = rs -> rs.next();
             Boolean exists = jdbc.query(
                     "SELECT 1 FROM learning_mgmt.training_enrollments WHERE id = ?",
@@ -429,9 +469,21 @@ public class LearningService {
                 ts(rs.getTimestamp("updated_at")));
     }
 
+    /**
+     * QA FIX (2026-08-11, finding wmih6ivbj/HIGH-5): a malformed date used
+     * to blow up as DateTimeParseException → GlobalExceptionHandler 500. Now
+     * throws a BusinessRuleException that maps to 400 INVALID_DATE with a
+     * helpful message. Accepts YYYY-MM-DD only.
+     */
     private static LocalDate parseDate(String s) {
         if (s == null || s.isBlank()) return null;
-        return LocalDate.parse(s);
+        try {
+            return LocalDate.parse(s);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new BusinessRuleException(
+                    "Invalid date '" + s + "' — expected YYYY-MM-DD",
+                    "INVALID_DATE");
+        }
     }
 
     private static String ts(java.sql.Timestamp t) {

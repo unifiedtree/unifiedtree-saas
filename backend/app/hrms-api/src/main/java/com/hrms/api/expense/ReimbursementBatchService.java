@@ -143,7 +143,16 @@ public class ReimbursementBatchService {
             jdbc.update("DELETE FROM expense_mgmt.reimbursement_batch_items WHERE batch_id = ?", batchId);
         }
 
-        // Pull every eligible APPROVED claim not yet in a non-CANCELLED batch.
+        // QA FIX (2026-08-11, finding wmih6ivbj/HIGH-3): the plain
+        // UNIQUE(batch_id, claim_id) index doesn't prevent the same claim
+        // from landing in TWO different non-CANCELLED batches (a race between
+        // two Finance users doing simultaneous builds). Tighten by locking
+        // the eligible claim rows FOR UPDATE — a concurrent build that reads
+        // the same set will wait until this transaction commits, at which
+        // point its NOT EXISTS check will exclude the claims we just batched.
+        // (Real bulletproof fix is a partial UNIQUE via a trigger-maintained
+        // helper column — deferred; SELECT FOR UPDATE closes the window enough
+        // for realistic Finance workflows.)
         List<Object[]> eligible = jdbc.query("""
                 SELECT ec.id, ec.employee_id, ec.total_amount, ec.title
                   FROM expense_mgmt.expense_claims ec
@@ -157,6 +166,7 @@ public class ReimbursementBatchService {
                         WHERE bi.claim_id = ec.id AND b.status <> 'CANCELLED'
                    )
                  ORDER BY ec.approved_at ASC
+                 FOR UPDATE OF ec
                 """, (rs, i) -> new Object[] {
                     rs.getObject("id", UUID.class),
                     rs.getObject("employee_id", UUID.class),

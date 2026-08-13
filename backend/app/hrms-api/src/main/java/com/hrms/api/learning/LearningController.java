@@ -16,7 +16,7 @@ import java.util.UUID;
  *
  * <ul>
  *   <li>Read → {@code hrms.learning.read}</li>
- *   <li>Manage programs → {@code hrms.learning.manage}</li>
+ *   <li>Manage programs → {@code hrms.learning.write}</li>
  *   <li>Self-enrol / drop → {@code hrms.learning.enroll.self}</li>
  * </ul>
  *
@@ -55,7 +55,7 @@ public class LearningController {
 
     @PostMapping("/programs")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('hrms.learning.manage')")
+    @PreAuthorize("hasAuthority('hrms.learning.write')")
     public LearningService.ProgramDto createProgram(
             @Valid @RequestBody LearningService.CreateProgramRequest req,
             @AuthenticationPrincipal Jwt jwt) {
@@ -63,7 +63,7 @@ public class LearningController {
     }
 
     @PutMapping("/programs/{id}")
-    @PreAuthorize("hasAuthority('hrms.learning.manage')")
+    @PreAuthorize("hasAuthority('hrms.learning.write')")
     public LearningService.ProgramDto updateProgram(
             @PathVariable UUID id,
             @Valid @RequestBody LearningService.UpdateProgramRequest req,
@@ -81,7 +81,7 @@ public class LearningController {
 
     @PostMapping("/programs/{id}/enrollments")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('hrms.learning.manage')")
+    @PreAuthorize("hasAuthority('hrms.learning.write')")
     public LearningService.EnrollmentDto enroll(
             @PathVariable UUID id,
             @Valid @RequestBody LearningService.EnrollRequest req,
@@ -90,7 +90,7 @@ public class LearningController {
     }
 
     @PostMapping("/programs/{id}/enrollments/bulk")
-    @PreAuthorize("hasAuthority('hrms.learning.manage')")
+    @PreAuthorize("hasAuthority('hrms.learning.write')")
     public LearningService.BulkEnrollResult bulkEnroll(
             @PathVariable UUID id,
             @Valid @RequestBody LearningService.BulkEnrollRequest req,
@@ -98,15 +98,32 @@ public class LearningController {
         return service.bulkEnroll(TenantContext.getTenantId(), id, req, actorId(jwt));
     }
 
+    /**
+     * Self-service drop — an employee drops their OWN enrollment.
+     * QA FIX (2026-08-11): previously any user with this perm could drop
+     * anyone's enrollment (intra-tenant IDOR). Service now enforces the
+     * (actor employee_id == enrollment employee_id) check.
+     */
     @PostMapping("/enrollments/{id}/drop")
     @PreAuthorize("hasAuthority('hrms.learning.enroll.self')")
     public LearningService.EnrollmentDto drop(@PathVariable UUID id,
                                              @AuthenticationPrincipal Jwt jwt) {
-        return service.drop(TenantContext.getTenantId(), id, actorId(jwt));
+        return service.drop(TenantContext.getTenantId(), id, employeeId(jwt), actorId(jwt));
+    }
+
+    /**
+     * Admin drop — HR / manager drops someone else's enrollment. Gated by
+     * the higher permission so the self-perm can't be used for IDOR.
+     */
+    @PostMapping("/enrollments/{id}/admin-drop")
+    @PreAuthorize("hasAuthority('hrms.learning.write')")
+    public LearningService.EnrollmentDto adminDrop(@PathVariable UUID id,
+                                                  @AuthenticationPrincipal Jwt jwt) {
+        return service.adminDrop(TenantContext.getTenantId(), id, actorId(jwt));
     }
 
     @PostMapping("/enrollments/{id}/complete")
-    @PreAuthorize("hasAuthority('hrms.learning.manage')")
+    @PreAuthorize("hasAuthority('hrms.learning.write')")
     public LearningService.EnrollmentDto complete(
             @PathVariable UUID id,
             @RequestBody(required = false) LearningService.CompleteEnrollmentRequest req,

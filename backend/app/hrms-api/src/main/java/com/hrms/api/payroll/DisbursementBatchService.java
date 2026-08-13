@@ -2,6 +2,8 @@ package com.hrms.api.payroll;
 
 import com.hrms.core.exception.BusinessRuleException;
 import com.unifiedtree.security.tenant.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,8 @@ import java.util.regex.Pattern;
  */
 @Service
 public class DisbursementBatchService {
+
+    private static final Logger log = LoggerFactory.getLogger(DisbursementBatchService.class);
 
     /** Employee bank IFSC — same shape check as BankProfileService. */
     private static final Pattern IFSC = Pattern.compile("^[A-Z]{4}0[A-Z0-9]{6}$");
@@ -308,9 +312,16 @@ public class DisbursementBatchService {
     public BatchDto markPaid(UUID tenantId, UUID batchId, MarkPaidRequest req, UUID actorId) {
         bindTenant(tenantId);
         BatchDto b = getBatch(batchId);
-        if (!"POSTED".equals(b.status()) && !"DRAFT".equals(b.status())) {
-            throw new BusinessRuleException("Batch cannot be marked paid in status " + b.status(),
-                    "BATCH_BAD_STATE");
+        // QA FIX (2026-08-11, finding wmih6ivbj/CRIT-0):
+        //   Previous guard permitted DRAFT here — that bypassed post() entirely,
+        //   meaning no NEFT file was ever generated but the payroll run still
+        //   flipped to PAID. Now: only POSTED can mark-paid. If Finance wants
+        //   the shortcut, they must POST first (which downloads the file).
+        if (!"POSTED".equals(b.status())) {
+            throw new BusinessRuleException(
+                    "Batch cannot be marked paid in status " + b.status() +
+                    " — POST the batch first (this generates the NEFT file).",
+                    "BATCH_NOT_POSTED");
         }
         jdbc.update("""
                 UPDATE payroll.disbursement_batches
@@ -322,13 +333,25 @@ public class DisbursementBatchService {
                 req.paymentReference(), req.notes(),
                 actorId == null ? null : actorId.toString(), batchId);
 
-        // Flip the run to PAID (idempotent — no-op if already PAID)
-        jdbc.update("""
+        // QA FIX (2026-08-11, finding wmih6ivbj/HIGH-2):
+        //   Previous UPDATE was `WHERE id = ? AND status <> 'PAID'` — that would
+        //   force a DRAFT/PROCESSING/CANCELLED/reopened run straight to PAID
+        //   with no state guard. Constrain to statuses that can legitimately
+        //   move to PAID (LOCKED — the intended path, or POSTED if a prior
+        //   partial state).
+        int flipped = jdbc.update("""
                 UPDATE payroll.runs
                    SET status = 'PAID', paid_at = COALESCE(paid_at, now()),
                        updated_at = now()
-                 WHERE id = ? AND status <> 'PAID'
+                 WHERE id = ? AND status IN ('LOCKED','PROCESSING')
                 """, b.runId());
+        if (flipped == 0) {
+            // Non-fatal but audit it — the batch is PAID even if the run wasn't
+            // in an eligible state to flip (already PAID / not yet LOCKED /
+            // CANCELLED). Log for reconciliation; don't roll back the batch.
+            log.warn("Batch {} marked PAID but run {} was not in LOCKED/PROCESSING — no run status change",
+                    batchId, b.runId());
+        }
 
         return getBatch(batchId);
     }
