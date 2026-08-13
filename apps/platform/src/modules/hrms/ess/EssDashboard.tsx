@@ -1,6 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, ClipboardList, CheckCircle, Clock } from 'lucide-react'
+import { ArrowRight, ClipboardList, CheckCircle, Clock, Home } from 'lucide-react'
 import { format } from 'date-fns'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { HrStatCard, HrStatusPill, type PillTone } from '@/shared/components/hr'
@@ -87,6 +87,28 @@ export const EssDashboard: React.FC = () => {
             className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
           >
             Open <ArrowRight size={12} />
+          </button>
+        </div>
+      </div>
+
+      {/* Request WFH shortcut — matches the mobile "Apply WFH" self-service so
+          desk employees can raise the request from a laptop without a phone. */}
+      <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
+              <Home size={15} className="text-[#059669]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Work From Home</p>
+              <p className="text-xs text-text-secondary">Request approval to work from home</p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/me/wfh')}
+            className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
+          >
+            Request WFH <ArrowRight size={12} />
           </button>
         </div>
       </div>

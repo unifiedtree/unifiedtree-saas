@@ -76,6 +76,7 @@ import { LeaveBalanceReport } from '@/modules/hrms/reports/LeaveBalanceReport'
 import { LateMarksReport } from '@/modules/hrms/reports/LateMarksReport'
 import { DiversityReport } from '@/modules/hrms/reports/DiversityReport'
 import { EmployeeImport } from '@/modules/hrms/employees/EmployeeImport'
+import { ApplyWfh } from '@/modules/hrms/wfh/ApplyWfh'
 // import { ModuleWorkspace } from '@/pages/ModuleWorkspace'  // route disabled — see /module-workspace redirect below
 
 // Priority order: highest privilege wins when resolving landing page
@@ -187,6 +188,20 @@ export default function App() {
           element={
             <RouteGuard anyOf={[P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF]}>
               <ModuleGate moduleKey="hrms"><EssDashboard /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+
+        {/* Employee "Apply for Work From Home" — gated on the same wfh.request.self
+            authority the backend requires (POST /v1/wfh). Falls back to ESS_READ
+            so employees whose role only bundles the generic self-service perm
+            still see the page (the submit endpoint will 403 with a clear
+            "permission denied" if the tenant hasn't granted wfh.request.self). */}
+        <Route
+          path="/me/wfh"
+          element={
+            <RouteGuard anyOf={['wfh.request.self', P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF]}>
+              <ModuleGate moduleKey="hrms"><ApplyWfh /></ModuleGate>
             </RouteGuard>
           }
         />
