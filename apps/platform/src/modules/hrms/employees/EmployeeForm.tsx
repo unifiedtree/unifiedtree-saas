@@ -4,11 +4,62 @@ import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
 import { useAuthStore } from '@unifiedtree/sdk'
 import { P } from '@unifiedtree/sdk'
-import { useCreateWorkforceEmployee, useUpdateWorkforceEmployee, useEmployeeDirectory, type WorkforceEmployee } from '../api/useWorkforce'
-import { useCompanies, useDepartments, useDesignations, useBranches, useGrades, useEmploymentTypes, useShifts } from '../api/useOrg'
+import { apiJson } from '@/core/api/client'
+import {
+  useCreateWorkforceEmployee,
+  useUpdateWorkforceEmployee,
+  useEmployeeDirectory,
+  type WorkforceEmployee,
+  type PageResponse,
+} from '../api/useWorkforce'
+import {
+  useCompanies, useDepartments, useDesignations, useBranches,
+  useGrades, useEmploymentTypes, useShifts, assignEmployeeShift,
+} from '../api/useOrg'
+import { useGeofenceZones } from '../api/useGeofence'
 import { useTemplates } from '../onboarding/api/useOnboarding'
 import { sendInvite } from './api/useInvitation'
 import { useNextEmployeeCode } from '../api/useSettings'
+
+// Mobile-parity validators. Mirror the constants used in the Attendance app's
+// staff-onboarding.tsx so a user filling the same field in either client gets
+// the same accept/reject verdict — payroll compliance strings (PAN / Aadhaar /
+// UAN / ESI / IFSC / account) are Indian statutory formats and are fixed by
+// spec, not by our UI.
+const RX = {
+  email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  phone: /^\+?\d{10,15}$/,
+  pan: /^[A-Z]{5}\d{4}[A-Z]$/,
+  aadhaar: /^\d{12}$/,
+  uan: /^\d{12}$/,
+  esi: /^\d{10,17}$/,
+  bankAccount: /^\d{9,18}$/,
+  ifsc: /^[A-Z]{4}0[A-Z\d]{6}$/,
+} as const
+
+const stripWs = (s: string) => s.replace(/\s+/g, '')
+
+// Local-timezone today, YYYY-MM-DD. Not toISOString() — that's UTC and rolls
+// the date over for anyone east of GMT for the last few hours of their day.
+function todayLocalIso(): string {
+  const d = new Date()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+const WEEK_DAYS: { iso: number; short: string }[] = [
+  { iso: 1, short: 'Mon' },
+  { iso: 2, short: 'Tue' },
+  { iso: 3, short: 'Wed' },
+  { iso: 4, short: 'Thu' },
+  { iso: 5, short: 'Fri' },
+  { iso: 6, short: 'Sat' },
+  { iso: 7, short: 'Sun' },
+]
+const DEFAULT_WEEK_OFFS = [6, 7]
+const formatWeekOffs = (days: number[]) =>
+  Array.from(new Set(days)).sort((a, b) => a - b).join(',')
 
 type FormStep = 'basic' | 'system' | 'work' | 'identity' | 'bank' | 'address' | 'emergency'
 
@@ -87,6 +138,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const { data: grades = [] } = useGrades(companyId)
   const { data: employmentTypes = [] } = useEmploymentTypes(companyId)
   const { data: shifts = [] } = useShifts(companyId)
+  const { data: geofenceZones = [] } = useGeofenceZones()
   const { data: templates = [] } = useTemplates(companyId || undefined)
   const { data: managerPage } = useEmployeeDirectory({ companyId: companyId || undefined, pageSize: 200 })
   const managers = (managerPage?.content ?? []).filter((m) => m.id !== employee?.id)
@@ -104,7 +156,9 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     email: employee?.email ?? '',
     phone: employee?.phone ?? '',
     dateOfBirth: employee?.dateOfBirth ?? '',
-    gender: employee?.gender ?? '',
+    // Defaulting gender to MALE matches the mobile onboarding form so the two
+    // clients don't disagree on the initial value shown to the HR admin.
+    gender: employee?.gender ?? (isEdit ? '' : 'MALE'),
     employeeCode: employee?.employeeCode ?? '',
     // work
     designationId: employee?.designationId ?? '',
@@ -113,10 +167,17 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     employmentType: employee?.employmentType ?? 'FULL_TIME',
     gradeId: '',
     shiftId: '',
-    dateOfJoining: employee?.dateOfJoining ?? '',
+    geoFenceZoneId: '',
+    workLocation: '',
+    // Prefill DOJ with today so the field lands with a valid value the way
+    // it does in the mobile onboarding form. Edit mode keeps whatever the
+    // employee row actually has.
+    dateOfJoining: employee?.dateOfJoining ?? (isEdit ? '' : todayLocalIso()),
+    salaryFrequency: 'MONTHLY',
+    monthlySalary: '',
     ctcAnnual: employee?.ctcAnnual ? String(employee.ctcAnnual) : '',
     // identity
-    panNumber: '', aadhaarNumber: '', passportNumber: '',
+    panNumber: '', aadhaarNumber: '', uanNumber: '', passportNumber: '',
     // bank
     bankName: '', bankAccountNumber: '', bankIfsc: '',
     // address
@@ -129,6 +190,12 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     systemAccess: true,
     systemRole: 'EMPLOYEE',
   })
+  // Weekly off days kept as an ISO-day array so the chip UI can toggle
+  // membership cheaply; serialised to CSV ("6,7") on submit to match the
+  // backend column shape.
+  const [weeklyOffDays, setWeeklyOffDays] = useState<number[]>([...DEFAULT_WEEK_OFFS])
+  const toggleWeekOff = (iso: number) =>
+    setWeeklyOffDays((p) => (p.includes(iso) ? p.filter((d) => d !== iso) : [...p, iso]))
 
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const set = (key: string, value: string) => {
@@ -156,19 +223,69 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const handleSubmit = async () => {
     if (createEmp.isPending || updateEmp.isPending) return
 
+    // Companies list is loaded before submit is even enabled in the UI, but
+    // a race (network delay + admin racing through steps) could still leave
+    // it empty. Bailing here with a warning is safer than an early-return
+    // that silently swallows the click.
+    if (!isEdit && companies.length === 0) {
+      toast('Company data is still loading — try again in a moment.', 'warning')
+      return
+    }
+
     const errs: Record<string, string> = {}
+    // -- Basic step ---------------------------------------------------------
     if (!form.firstName.trim()) errs.firstName = 'First name is required'
-    if (!form.email.trim()) errs.email = 'Work email is required'
+    if (!form.email.trim()) {
+      errs.email = 'Work email is required'
+    } else if (!RX.email.test(form.email.trim())) {
+      errs.email = 'Enter a valid email address'
+    }
+    // Phone is required — mobile logs in by phone number, so a missing phone
+    // means the employee cannot use the Attendance app at all.
+    const phoneClean = stripWs(form.phone)
+    if (!phoneClean) {
+      errs.phone = 'Phone is required (used for mobile app login)'
+    } else if (!RX.phone.test(phoneClean)) {
+      errs.phone = 'Enter a valid phone number (10–15 digits, optional + prefix)'
+    }
     if (!isEdit && !companyId) errs.companyId = 'Select a company — create one in Organization → Companies first'
+    // -- Work step ----------------------------------------------------------
     if (!isEdit && !form.branchId) errs.branchId = 'Select a Punch Location so the employee can clock in'
+    if (!form.salaryFrequency) errs.salaryFrequency = 'Salary frequency is required'
+    // -- Identity step (all optional, but validate if provided) --------------
+    if (form.panNumber && !RX.pan.test(form.panNumber.toUpperCase()))
+      errs.panNumber = 'PAN must be 5 letters + 4 digits + 1 letter (e.g. ABCDE1234F)'
+    if (form.aadhaarNumber && !RX.aadhaar.test(stripWs(form.aadhaarNumber)))
+      errs.aadhaarNumber = 'Aadhaar must be 12 digits'
+    if (form.uanNumber && !RX.uan.test(stripWs(form.uanNumber)))
+      errs.uanNumber = 'UAN must be 12 digits'
+    // -- Bank step ----------------------------------------------------------
+    if (form.bankAccountNumber && !RX.bankAccount.test(stripWs(form.bankAccountNumber)))
+      errs.bankAccountNumber = 'Account number must be 9–18 digits'
+    if (form.bankIfsc && !RX.ifsc.test(form.bankIfsc.toUpperCase()))
+      errs.bankIfsc = 'IFSC must be 4 letters + 0 + 6 alphanum (e.g. HDFC0001234)'
 
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
-      if (errs.firstName || errs.email || errs.companyId) setStep('basic')
-      else if (errs.branchId) setStep('work')
+      // Jump to the first step that contains an error. Order matches the
+      // wizard's step order so the admin lands on the earliest problem.
+      if (errs.firstName || errs.email || errs.phone || errs.companyId) setStep('basic')
+      else if (errs.branchId || errs.salaryFrequency) setStep('work')
+      else if (errs.panNumber || errs.aadhaarNumber || errs.uanNumber) setStep('identity')
+      else if (errs.bankAccountNumber || errs.bankIfsc) setStep('bank')
       return
     }
     setErrors({})
+
+    // Derive ctcAnnual from monthlySalary when the admin filled the monthly
+    // figure. If they already typed a CTC directly, that wins — don't stomp
+    // on an explicit override.
+    const monthly = form.monthlySalary ? parseFloat(form.monthlySalary) : undefined
+    const ctc = form.ctcAnnual
+      ? parseFloat(form.ctcAnnual)
+      : monthly !== undefined && !Number.isNaN(monthly)
+      ? monthly * 12
+      : undefined
     try {
       if (isEdit) {
         const result = await updateEmp.mutateAsync({
@@ -192,35 +309,43 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
         toast('Employee updated', 'success')
         onSuccess?.(result)
       } else {
-        const result = await createEmp.mutateAsync({
+        // Only forward the code if the admin manually edited the field;
+        // otherwise let the backend atomically issue the next code (see the
+        // auto-fill effect above).
+        const codeToSend =
+          !form.employeeCode ||
+          (autoFilledCodeRef.current && form.employeeCode === autoFilledCodeRef.current)
+            ? undefined
+            : form.employeeCode
+        const payload = {
           companyId,
-          // Only forward if the admin manually edited the field; otherwise
-          // let the backend atomically issue the next code (see effect above).
-          employeeCode:
-            !form.employeeCode ||
-            (autoFilledCodeRef.current && form.employeeCode === autoFilledCodeRef.current)
-              ? undefined
-              : form.employeeCode,
+          employeeCode: codeToSend,
           firstName: form.firstName,
           middleName: form.middleName || undefined,
           lastName: form.lastName || undefined,
           email: form.email,
-          phone: form.phone || undefined,
+          phone: phoneClean || undefined,
           dateOfBirth: form.dateOfBirth || undefined,
           gender: form.gender as WorkforceEmployee['gender'] || undefined,
           departmentId: departmentId || undefined,
           designationId: form.designationId || undefined,
           branchId: form.branchId || undefined,
+          geoFenceZoneId: form.geoFenceZoneId || undefined,
+          weeklyOffDays: weeklyOffDays.length ? formatWeekOffs(weeklyOffDays) : undefined,
           reportingManagerId: form.reportingManagerId || undefined,
           employmentType: form.employmentType as WorkforceEmployee['employmentType'],
           dateOfJoining: form.dateOfJoining || undefined,
-          ctcAnnual: form.ctcAnnual ? parseFloat(form.ctcAnnual) : undefined,
-          panNumber: form.panNumber || undefined,
-          aadhaarNumber: form.aadhaarNumber || undefined,
+          salaryFrequency: form.salaryFrequency || undefined,
+          monthlySalary: monthly !== undefined && !Number.isNaN(monthly) ? monthly : undefined,
+          ctcAnnual: ctc,
+          workLocation: form.workLocation.trim() || undefined,
+          panNumber: form.panNumber ? form.panNumber.toUpperCase() : undefined,
+          aadhaarNumber: form.aadhaarNumber ? stripWs(form.aadhaarNumber) : undefined,
+          uanNumber: form.uanNumber ? stripWs(form.uanNumber) : undefined,
           passportNumber: form.passportNumber || undefined,
           bankName: form.bankName || undefined,
-          bankAccountNumber: form.bankAccountNumber || undefined,
-          bankIfsc: form.bankIfsc || undefined,
+          bankAccountNumber: form.bankAccountNumber ? stripWs(form.bankAccountNumber) : undefined,
+          bankIfsc: form.bankIfsc ? form.bankIfsc.toUpperCase() : undefined,
           currentAddressLine: form.currentAddressLine || undefined,
           currentAddressCity: form.currentAddressCity || undefined,
           currentAddressState: form.currentAddressState || undefined,
@@ -230,7 +355,73 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           emergencyContactPhone: form.emergencyContactPhone || undefined,
           onboardingTemplateId: form.onboardingTemplateId || undefined,
           roleCode: form.systemRole || 'EMPLOYEE',
-        })
+        }
+        let result: WorkforceEmployee
+        try {
+          result = await createEmp.mutateAsync(payload)
+        } catch (createErr: unknown) {
+          // Dedupe recovery — mirrors the mobile submitWithRecovery pattern.
+          // A transient blip mid-POST can hide a 201 from the client; the
+          // next click then hits "employee code already in use" but the row
+          // was in fact created. Look it up by (code, email) and, if the
+          // same row is there, treat the retry as silent success rather
+          // than erroring the admin out.
+          const apiError = createErr as { status?: number; message?: string }
+          const message = apiError?.message ?? ''
+          const looksLikeDuplicate =
+            apiError?.status === 409 ||
+            apiError?.status === 422 ||
+            /already in use|already exists|duplicate/i.test(message)
+          const codeUpper = (payload.employeeCode ?? '').trim().toUpperCase()
+          const emailLower = (payload.email ?? '').trim().toLowerCase()
+          let recovered: WorkforceEmployee | undefined
+          if (looksLikeDuplicate && emailLower) {
+            try {
+              const params = new URLSearchParams({
+                companyId, page: '0', pageSize: '200',
+              })
+              const page = await apiJson<PageResponse<WorkforceEmployee>>(
+                `/v1/hrms/employees?${params.toString()}`,
+              )
+              recovered = page.content.find((c) => {
+                const codeMatches = codeUpper
+                  ? (c.employeeCode ?? '').toUpperCase() === codeUpper
+                  : true
+                const emailMatches = (c.email ?? '').toLowerCase() === emailLower
+                return codeMatches && emailMatches
+              })
+            } catch {
+              // fall through and rethrow original
+            }
+          }
+          if (recovered) {
+            result = recovered
+          } else if (looksLikeDuplicate && /email/i.test(message)) {
+            // Real collision on email — surface as a field error and jump
+            // the admin back to Basic Info where they can fix it.
+            setErrors((p) => ({ ...p, email: 'That email is already in use for this company.' }))
+            setStep('basic')
+            return
+          } else if (looksLikeDuplicate) {
+            // Real collision on employee code — same treatment, on the Work
+            // step where the code field lives.
+            setErrors((p) => ({ ...p, employeeCode: 'That employee code is already in use.' }))
+            setStep('work')
+            return
+          } else {
+            throw createErr
+          }
+        }
+        // Best-effort shift assignment. Employee already exists — don't fail
+        // the whole onboarding if this hiccups, HR can set it later from the
+        // employee profile.
+        if (form.shiftId && result?.id) {
+          try {
+            await assignEmployeeShift(result.id, form.shiftId)
+          } catch {
+            // swallow — non-fatal
+          }
+        }
         if (!isEdit && sendInvitation && canInvite) {
           try {
             // The invite endpoint returns as soon as the token is created; the email
@@ -361,7 +552,9 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               </div>
               <Field label="Middle Name"><Input value={form.middleName} onChange={(e) => set('middleName', e.target.value)} placeholder="Middle name" /></Field>
               <Field label="Work Email" required error={errors.email}><Input error={!!errors.email} type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="employee@company.com" /></Field>
-              <Field label="Phone"><Input type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+91 9876543210" /></Field>
+              <Field label="Phone" required error={errors.phone}>
+                <Input error={!!errors.phone} type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+91 9876543210" />
+              </Field>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Date of Birth"><Input type="date" value={form.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} /></Field>
                 <Field label="Gender">
@@ -405,8 +598,9 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           {step === 'work' && (
             <>
               {!isEdit && (
-                <Field label="Employee ID">
+                <Field label="Employee ID" error={errors.employeeCode}>
                   <Input
+                    error={!!errors.employeeCode}
                     value={form.employeeCode}
                     onChange={(e) => set('employeeCode', e.target.value)}
                     placeholder={nextCodePreview?.preview ?? 'Auto-generated on save'}
@@ -433,6 +627,9 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   ))}
                 </Sel>
                 <p className="mt-1 text-xs text-text-secondary">Leave requests route here for approval. If unset, the department head (or HR) approves.</p>
+              </Field>
+              <Field label="Work Location">
+                <Input value={form.workLocation} onChange={(e) => set('workLocation', e.target.value)} placeholder="e.g. Hyderabad" />
               </Field>
               <Field label="Punch Location (Branch)" required={!isEdit} error={errors.branchId}>
                 <Sel error={!!errors.branchId} value={form.branchId} onChange={(e) => set('branchId', e.target.value)}>
@@ -508,6 +705,45 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   </p>
                 )}
               </Field>
+              <Field label="Weekly Off Days">
+                {/* ISO day chips (1=Mon..7=Sun). Serialized to CSV on submit to
+                    match backend column shape. Drives this employee's attendance
+                    calendar and payroll working-day count. */}
+                <div className="flex flex-wrap gap-1.5">
+                  {WEEK_DAYS.map((d) => {
+                    const on = weeklyOffDays.includes(d.iso)
+                    return (
+                      <button
+                        key={d.iso}
+                        type="button"
+                        onClick={() => toggleWeekOff(d.iso)}
+                        className={clsx(
+                          'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                          on
+                            ? 'bg-primary text-white border-primary'
+                            : 'bg-white text-text-secondary border-border/60 hover:text-text-primary'
+                        )}
+                      >
+                        {d.short}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="mt-1 text-xs text-text-secondary">Defaults to Sat + Sun. Tap to toggle.</p>
+              </Field>
+              <Field label="Geofence Zone (Punch)">
+                <Sel value={form.geoFenceZoneId} onChange={(e) => set('geoFenceZoneId', e.target.value)}>
+                  <option value="">
+                    {geofenceZones.length === 0 ? 'No zones configured — set up in Attendance' : 'No specific zone'}
+                  </option>
+                  {geofenceZones.filter((z) => z.active).map((z) => (
+                    <option key={z.id} value={z.id}>{z.name}</option>
+                  ))}
+                </Sel>
+                <p className="mt-1 text-xs text-text-secondary">
+                  Optional — when set, the employee can only punch in from inside this zone.
+                </p>
+              </Field>
               {!isEdit && (
                 <Field label="Onboarding Template">
                   <Sel value={form.onboardingTemplateId} onChange={(e) => set('onboardingTemplateId', e.target.value)}>
@@ -520,15 +756,49 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Date of Joining"><Input type="date" value={form.dateOfJoining} onChange={(e) => set('dateOfJoining', e.target.value)} /></Field>
-                <Field label="CTC (Annual)"><Input type="number" value={form.ctcAnnual} onChange={(e) => set('ctcAnnual', e.target.value)} placeholder="e.g. 600000" /></Field>
+                <Field label="Salary Frequency" required error={errors.salaryFrequency}>
+                  <Sel error={!!errors.salaryFrequency} value={form.salaryFrequency} onChange={(e) => set('salaryFrequency', e.target.value)}>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="WEEKLY">Weekly</option>
+                    <option value="DAILY">Daily</option>
+                  </Sel>
+                </Field>
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Monthly Salary">
+                  <Input
+                    type="number"
+                    value={form.monthlySalary}
+                    onChange={(e) => set('monthlySalary', e.target.value)}
+                    placeholder="e.g. 50000"
+                  />
+                </Field>
+                <Field label="CTC (Annual)">
+                  <Input
+                    type="number"
+                    value={form.ctcAnnual}
+                    onChange={(e) => set('ctcAnnual', e.target.value)}
+                    placeholder={form.monthlySalary ? `Auto: ${Number(form.monthlySalary) * 12}` : 'e.g. 600000'}
+                  />
+                </Field>
+              </div>
+              <p className="text-xs text-text-secondary -mt-2">
+                Leave CTC blank to auto-derive it as monthly × 12.
+              </p>
             </>
           )}
 
           {step === 'identity' && (
             <>
-              <Field label="PAN Number"><Input value={form.panNumber} onChange={(e) => set('panNumber', e.target.value)} placeholder="ABCDE1234F" /></Field>
-              <Field label="Aadhaar Number"><Input value={form.aadhaarNumber} onChange={(e) => set('aadhaarNumber', e.target.value)} placeholder="1234 5678 9012" /></Field>
+              <Field label="PAN Number" error={errors.panNumber}>
+                <Input error={!!errors.panNumber} value={form.panNumber} onChange={(e) => set('panNumber', e.target.value.toUpperCase())} placeholder="ABCDE1234F" />
+              </Field>
+              <Field label="Aadhaar Number" error={errors.aadhaarNumber}>
+                <Input error={!!errors.aadhaarNumber} value={form.aadhaarNumber} onChange={(e) => set('aadhaarNumber', e.target.value)} placeholder="1234 5678 9012" />
+              </Field>
+              <Field label="UAN Number" error={errors.uanNumber}>
+                <Input error={!!errors.uanNumber} value={form.uanNumber} onChange={(e) => set('uanNumber', e.target.value)} placeholder="12-digit UAN (optional)" />
+              </Field>
               <Field label="Passport Number"><Input value={form.passportNumber} onChange={(e) => set('passportNumber', e.target.value)} placeholder="A1234567" /></Field>
             </>
           )}
@@ -536,8 +806,12 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           {step === 'bank' && (
             <>
               <Field label="Bank Name"><Input value={form.bankName} onChange={(e) => set('bankName', e.target.value)} placeholder="e.g. HDFC Bank" /></Field>
-              <Field label="Account Number"><Input value={form.bankAccountNumber} onChange={(e) => set('bankAccountNumber', e.target.value)} placeholder="123456789012" /></Field>
-              <Field label="IFSC Code"><Input value={form.bankIfsc} onChange={(e) => set('bankIfsc', e.target.value)} placeholder="HDFC0001234" /></Field>
+              <Field label="Account Number" error={errors.bankAccountNumber}>
+                <Input error={!!errors.bankAccountNumber} value={form.bankAccountNumber} onChange={(e) => set('bankAccountNumber', e.target.value)} placeholder="123456789012" />
+              </Field>
+              <Field label="IFSC Code" error={errors.bankIfsc}>
+                <Input error={!!errors.bankIfsc} value={form.bankIfsc} onChange={(e) => set('bankIfsc', e.target.value.toUpperCase())} placeholder="HDFC0001234" />
+              </Field>
             </>
           )}
 

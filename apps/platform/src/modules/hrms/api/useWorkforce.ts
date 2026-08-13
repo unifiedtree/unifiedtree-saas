@@ -65,12 +65,23 @@ export interface CreateWorkforceEmployeePayload {
   departmentId?: string
   designationId?: string
   branchId?: string
+  /** Geofence zone the new hire must punch in at (optional at onboarding). */
+  geoFenceZoneId?: string
+  /** Weekly off days CSV, ISO 1=Mon..7=Sun (e.g. "6,7" = Sat+Sun). */
+  weeklyOffDays?: string
   reportingManagerId?: string
   employmentType?: EmploymentType
   dateOfJoining?: string
   ctcAnnual?: number
+  /** MONTHLY|WEEKLY|DAILY — mobile parity, defaults to MONTHLY. */
+  salaryFrequency?: string
+  monthlySalary?: number
+  /** Free-text city / site name — mirrors mobile Work Location field. */
+  workLocation?: string
   panNumber?: string
   aadhaarNumber?: string
+  /** 12-digit UPN — mirrors mobile onboarding UAN field. */
+  uanNumber?: string
   passportNumber?: string
   bankName?: string
   bankAccountNumber?: string

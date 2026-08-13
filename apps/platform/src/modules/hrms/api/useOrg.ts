@@ -407,3 +407,18 @@ export function useDeleteShift() {
       qc.invalidateQueries({ queryKey: ['hrms', 'org', 'shifts', variables.companyId], exact: true }),
   })
 }
+
+// Assign / reassign an employee to a shift. Backend endpoint is
+// POST /v1/shifts/employee/{employeeId}  body {shiftPolicyId, effectiveFrom?}
+// Used as a post-create side effect from the Add Employee wizard so the new
+// hire's attendance is scored against the right start-time from day one.
+export function assignEmployeeShift(
+  employeeId: string,
+  shiftPolicyId: string,
+  effectiveFrom?: string,
+) {
+  return apiJson<unknown>(`/v1/shifts/employee/${employeeId}`, {
+    method: 'POST',
+    body: JSON.stringify({ shiftPolicyId, effectiveFrom }),
+  })
+}
