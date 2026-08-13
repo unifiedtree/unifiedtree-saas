@@ -228,12 +228,16 @@ public class EmployeeProfileController {
 
     private IdentityResponse toIdentityResponse(EmployeeIdentity identity) {
         if (identity == null) return null;
+        // PII redaction: aadhaar plaintext is NEVER returned in the response.
+        // Only aadhaarLast4 is exposed for display. PAN and passport remain
+        // decrypted here — those two are covered by the elevated
+        // hrms.employee.identity.read permission and are needed for regulatory
+        // filings (Form 24Q, foreign-employee compliance).
         return new IdentityResponse(
                 identity.getId(),
                 identity.getEmployeeId(),
                 identity.getPanEncrypted() != null ? profileService.decryptPan(identity) : null,
                 identity.getAadhaarLast4(),
-                identity.getAadhaarEncrypted() != null ? profileService.decryptAadhaar(identity) : null,
                 identity.getUan(),
                 identity.getEsicNumber(),
                 identity.getPassportNumberEncrypted() != null ? profileService.decryptPassport(identity) : null,
@@ -242,6 +246,9 @@ public class EmployeeProfileController {
     }
 
     private BankAccountResponse toBankAccountResponse(EmployeeBankAccount account) {
+        // PII redaction: the full account number is NEVER returned in the
+        // response — only accountNumberLast4 for display. The write path
+        // (POST /bank-accounts) still accepts the full number as input.
         return new BankAccountResponse(
                 account.getId(),
                 account.getEmployeeId(),
@@ -250,7 +257,6 @@ public class EmployeeProfileController {
                 account.getBranchName(),
                 account.getIfscCode(),
                 account.getAccountNumberLast4(),
-                account.getAccountNumberEncrypted() != null ? profileService.decryptAccountNumber(account) : null,
                 account.isPrimary(),
                 account.isVerified()
         );
@@ -287,12 +293,15 @@ public class EmployeeProfileController {
         }
     }
 
+    /**
+     * Identity response. Deliberately does NOT include full aadhaar — only
+     * aadhaarLast4 for display. See PII redaction note in {@link #toIdentityResponse}.
+     */
     public record IdentityResponse(
             UUID id,
             UUID employeeId,
             String pan,
             String aadhaarLast4,
-            String aadhaar,
             String uan,
             String esicNumber,
             String passportNumber,
@@ -317,6 +326,11 @@ public class EmployeeProfileController {
         }
     }
 
+    /**
+     * Bank account response. Deliberately does NOT include the full account
+     * number — only accountNumberLast4 for display. See PII redaction note in
+     * {@link #toBankAccountResponse}.
+     */
     public record BankAccountResponse(
             UUID id,
             UUID employeeId,
@@ -325,7 +339,6 @@ public class EmployeeProfileController {
             String branchName,
             String ifscCode,
             String accountNumberLast4,
-            String accountNumber,
             boolean primary,
             boolean verified) {}
 }
