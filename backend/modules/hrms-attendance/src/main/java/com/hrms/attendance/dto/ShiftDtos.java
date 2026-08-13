@@ -2,6 +2,11 @@ package com.hrms.attendance.dto;
 
 import com.hrms.attendance.enums.ShiftType;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -26,14 +31,29 @@ public final class ShiftDtos {
             int gracePeriodMinutes,
             Double workingHoursPerDay) {}
 
-    /** Create / update a shift definition. */
+    /**
+     * Create / update a shift definition.
+     *
+     * <p>Field bounds:
+     * <ul>
+     *   <li>{@code gracePeriodMinutes} — 0..120 (two-hour ceiling; anything larger
+     *       is almost always a data-entry error and defeats the late-mark logic).</li>
+     *   <li>{@code workingHoursPerDay} — 0.5..24.0 (half-hour minimum, one full
+     *       day maximum). Negative values silently corrupted overtime calc.</li>
+     * </ul>
+     *
+     * <p>Cross-field {@code endTime > startTime} for {@link ShiftType#FIXED} is
+     * enforced in {@code EmployeeShiftService} — a {@link ShiftType#NIGHT} shift
+     * is allowed to wrap past midnight (e.g. 22:00 → 06:00), so the check can't
+     * be a bean-validation constraint on the field alone.
+     */
     public record ShiftPolicyRequest(
             String name,
             ShiftType shiftType,
             LocalTime startTime,
             LocalTime endTime,
-            Integer gracePeriodMinutes,
-            Double workingHoursPerDay) {}
+            @Min(0) @Max(120) Integer gracePeriodMinutes,
+            @DecimalMin("0.5") @DecimalMax("24.0") Double workingHoursPerDay) {}
 
     /** Assign a shift to an employee. effectiveFrom defaults to today when null. */
     public record AssignShiftRequest(
