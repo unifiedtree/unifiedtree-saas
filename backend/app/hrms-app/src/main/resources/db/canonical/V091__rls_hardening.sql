@@ -59,6 +59,8 @@ CREATE POLICY tenant_isolation_geo_fence_audits ON public.geo_fence_audits
 -- row. Only the postgres superuser (BYPASSRLS + table owner) can seed system
 -- roles going forward — which is what future migrations already do.
 DROP POLICY IF EXISTS tenant_isolation_roles ON rbac.roles;
+DROP POLICY IF EXISTS rbac_roles_select    ON rbac.roles;
+DROP POLICY IF EXISTS rbac_roles_write     ON rbac.roles;
 CREATE POLICY rbac_roles_select ON rbac.roles
     FOR SELECT
     USING (tenant_id IS NULL OR tenant_id = current_tenant_id());
@@ -69,7 +71,8 @@ CREATE POLICY rbac_roles_write ON rbac.roles
 
 -- ── HIGH: audit.events INSERT policy — enforce tenant scoping ──────────────
 -- SELECT policy tenant_isolation_audit_read is already correct; leave it.
-DROP POLICY IF EXISTS audit_insert_permissive ON audit.events;
+DROP POLICY IF EXISTS audit_insert_permissive        ON audit.events;
+DROP POLICY IF EXISTS audit_insert_tenant_scoped     ON audit.events;
 CREATE POLICY audit_insert_tenant_scoped ON audit.events
     FOR INSERT
     WITH CHECK (tenant_id = current_tenant_id());
