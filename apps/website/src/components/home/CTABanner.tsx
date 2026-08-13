@@ -1,5 +1,6 @@
+import { useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import { Button } from '../ui/Button'
 import { CtaButton } from '../common/CtaButton'
 import { useCtaMode } from '../../hooks/useCtaMode'
@@ -7,35 +8,135 @@ import { useCtaMode } from '../../hooks/useCtaMode'
 /**
  * The closing band — the page ends on the same argument it opened with.
  *
- * No scenery, no ghost wordmark and no linework. The ground is the shared
- * deep-emerald surface with a fine grain and two soft light fields — colour
- * only, so the type owns the band.
+ * BY CLIENT REQUEST this one band carries a stylised tree-line — an agreed
+ * exemption from the no-scenery rule (the client explicitly asked for trees
+ * here). Three depths of rounded-canopy silhouettes rise from the bottom edge
+ * of the shared deep-emerald ground: a pale haze at the back, deepest emerald
+ * in front, with a soft glow behind the headline and grain on top. No sun and
+ * no sky horizon — just trees standing on the surface-deep field. The depths
+ * drift apart gently on scroll (disabled under reduced motion).
  *
  * Both CTAs keep their existing routing (useCtaMode drives the primary one);
  * only their skin changes to read on the dark ground.
  */
 
+type TreeSpec = {
+  /** Base x in the 1440-wide scene */
+  x: number
+  /** Scale — height is roughly 87·s (v0) / 95·s (v1) scene units */
+  s: number
+  /** Canopy variant: 0 broad, 1 tall */
+  v?: 0 | 1
+}
+
+// Silhouette positions, back → front. The centre of the front rank stays low
+// so the tree-line never crowds the CTA row above it.
+const TREES_BACK: TreeSpec[] = [
+  { x: 36, s: 0.8 }, { x: 148, s: 1.0, v: 1 }, { x: 252, s: 0.72 },
+  { x: 390, s: 0.95 }, { x: 505, s: 0.78, v: 1 }, { x: 625, s: 1.05 },
+  { x: 748, s: 0.7 }, { x: 862, s: 0.98, v: 1 }, { x: 988, s: 0.8 },
+  { x: 1108, s: 1.02 }, { x: 1232, s: 0.75, v: 1 }, { x: 1352, s: 0.95 },
+  { x: 1436, s: 0.7 },
+]
+const TREES_MID: TreeSpec[] = [
+  { x: 92, s: 1.28, v: 1 }, { x: 305, s: 1.1 }, { x: 452, s: 0.95, v: 1 },
+  { x: 700, s: 1.05 }, { x: 935, s: 1.22, v: 1 }, { x: 1160, s: 1.08 },
+  { x: 1385, s: 1.3 },
+]
+const TREES_FRONT: TreeSpec[] = [
+  { x: 14, s: 1.85 }, { x: 218, s: 1.45, v: 1 }, { x: 560, s: 1.28 },
+  { x: 905, s: 1.4, v: 1 }, { x: 1135, s: 1.6 }, { x: 1370, s: 1.9 },
+]
+
+/** One stylised tree: a short trunk under a cluster of rounded canopy blobs.
+    Fill comes from the parent <g> so each depth is a single silhouette. */
+function TreeShape({ x, s, v = 0 }: TreeSpec) {
+  return (
+    <g transform={`translate(${x} 260) scale(${s})`}>
+      {v === 0 ? (
+        <>
+          <rect x="-2.5" y="-38" width="5" height="38" rx="2" />
+          <circle cx="0" cy="-60" r="26" />
+          <circle cx="-19" cy="-46" r="19" />
+          <circle cx="19" cy="-46" r="19" />
+          <circle cx="-9" cy="-72" r="15" />
+          <circle cx="10" cy="-70" r="14" />
+        </>
+      ) : (
+        <>
+          <rect x="-2.5" y="-36" width="5" height="36" rx="2" />
+          <circle cx="0" cy="-78" r="17" />
+          <circle cx="0" cy="-58" r="22" />
+          <circle cx="-14" cy="-44" r="16" />
+          <circle cx="14" cy="-46" r="15" />
+        </>
+      )}
+    </g>
+  )
+}
+
+/** One depth of the tree-line. The ground strip under the trees bleeds past
+    the viewBox so parallax never reveals a floating bottom edge. */
+function TreeLayer({ trees, fill, opacity }: { trees: TreeSpec[]; fill: string; opacity: number }) {
+  return (
+    <svg
+      viewBox="0 0 1440 300"
+      preserveAspectRatio="xMidYMax slice"
+      className="h-full w-full"
+      aria-hidden
+    >
+      <g fill={fill} opacity={opacity}>
+        {trees.map((t) => (
+          <TreeShape key={t.x} {...t} />
+        ))}
+        <rect x="-60" y="256" width="1560" height="64" />
+      </g>
+    </svg>
+  )
+}
 
 export function CTABanner() {
   const navigate = useNavigate()
   const { mode } = useCtaMode()
   const reduce = useReducedMotion()
 
+  // Gentle parallax between the depths — back drifts least, front most,
+  // matching the ordering the hero's LandscapeScene uses.
+  const ref = useRef<HTMLElement>(null)
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] })
+  const yBack = useTransform(scrollYProgress, [0, 1], reduce ? [0, 0] : [6, -3])
+  const yMid = useTransform(scrollYProgress, [0, 1], reduce ? [0, 0] : [14, -7])
+  const yFront = useTransform(scrollYProgress, [0, 1], reduce ? [0, 0] : [22, -11])
+
   return (
-    <section className="surface-deep relative overflow-hidden py-28 lg:py-36">
-      {/* Soft colour + grain only. The radiating core/branch linework that used
-          to sit here was rejected along with the rest of the vector patterns. */}
-      <span aria-hidden className="grain grain-dark" />
-      {/* Warm lift from the top so the band does not read as a flat slab */}
+    <section ref={ref} className="surface-deep relative overflow-hidden pt-28 pb-44 lg:pt-36 lg:pb-52">
+      {/* Soft light fields: a warm lift from the top, a glow behind the
+          headline, and a low backlight that the front silhouettes cut into. */}
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(72% 58% at 50% -12%, rgba(52,211,153,0.22), transparent 68%), radial-gradient(46% 40% at 88% 100%, rgba(16,185,129,0.16), transparent 70%)',
+            'radial-gradient(72% 58% at 50% -12%, rgba(52,211,153,0.22), transparent 68%), radial-gradient(52% 40% at 50% 26%, rgba(52,211,153,0.24), transparent 70%), radial-gradient(70% 32% at 50% 100%, rgba(52,211,153,0.20), transparent 70%)',
         }}
       />
-      {/* Hairline rule — closes the band off from the footer */}
+
+      {/* The tree-line, back → front (client-requested — see note above) */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 select-none">
+        <motion.div style={{ y: yBack }} className="absolute inset-x-0 bottom-[-20px] h-[300px]">
+          <TreeLayer trees={TREES_BACK} fill="#6EE7B7" opacity={0.2} />
+        </motion.div>
+        <motion.div style={{ y: yMid }} className="absolute inset-x-0 bottom-[-20px] h-[300px]">
+          <TreeLayer trees={TREES_MID} fill="#059669" opacity={0.42} />
+        </motion.div>
+        <motion.div style={{ y: yFront }} className="absolute inset-x-0 bottom-[-20px] h-[300px]">
+          <TreeLayer trees={TREES_FRONT} fill="#02231A" opacity={0.92} />
+        </motion.div>
+      </div>
+
+      {/* Grain sits on top of the scene */}
+      <span aria-hidden className="grain grain-dark" />
+      {/* Hairline rule — closes the band off from the section above */}
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/10" />
 
       <div className="relative z-10 mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
@@ -71,11 +172,13 @@ export function CTABanner() {
               paidLabel="Create Workspace"
               className="!h-[52px] !bg-white !px-7 !text-[15px] !font-bold !text-[#04503A] shadow-lg transition-colors hover:!bg-[#ECFDF5]"
             />
+            {/* Secondary CTA — solid deep-emerald fill with a crisp white border
+                so it reads on the dark band; the white primary stays dominant. */}
             <Button
               size="lg"
               variant="ghost"
               onClick={() => navigate('/talk-to-us?intent=demo')}
-              className="!rounded-xl !border-white/40 !bg-white/10 !font-bold !text-white backdrop-blur-sm hover:!border-white/60 hover:!bg-white/20"
+              className="!rounded-xl !border-[1.5px] !border-white !bg-[#04503A] !font-bold !text-white shadow-lg hover:!border-white hover:!bg-white/25"
             >
               Book a Demo
             </Button>

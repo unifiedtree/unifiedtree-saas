@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, useInView, AnimatePresence } from 'framer-motion'
+import { motion, useInView, useReducedMotion, AnimatePresence } from 'framer-motion'
 import {
   Users, MapPin, Banknote, BarChart2, Package, Target,
   ShoppingCart, TrendingUp, Kanban, Settings, Monitor, PieChart,
@@ -101,40 +101,44 @@ function hexToTint(hex: string, opacity = 0.12): string {
 /*  Hand-drawn arrow pointing at the toggle                            */
 /* ------------------------------------------------------------------ */
 /** Sketchy arrow that draws itself in, so the eye lands on the toggle.
+ *  Sits directly above the toggle and sweeps down onto it — the head points
+ *  straight down at the switch.
  *  Hidden below lg — on stacked layouts it would point at nothing. */
 function HandArrow() {
+  const reduceMotion = useReducedMotion()
+
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute -top-11 right-6 hidden h-[56px] w-[132px] lg:block"
+      className="pointer-events-none absolute bottom-full right-5 mb-2 hidden h-[74px] w-[118px] lg:block"
     >
-      <svg viewBox="0 0 132 56" fill="none" className="h-full w-full overflow-visible">
+      <svg viewBox="0 0 118 74" fill="none" className="h-full w-full overflow-visible">
         <motion.path
-          d="M4 8 C 30 2, 74 4, 98 24 C 104 29, 108 35, 110 43"
+          d="M6 18 C 32 4, 70 6, 90 26 C 100 36, 105 48, 106 62"
           stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
           className="text-primary/45"
-          initial={{ pathLength: 0, opacity: 0 }}
+          initial={reduceMotion ? { pathLength: 1, opacity: 1 } : { pathLength: 0, opacity: 0 }}
           whileInView={{ pathLength: 1, opacity: 1 }}
           viewport={{ once: true, amount: 0.6 }}
-          transition={{ duration: 0.9, ease: 'easeInOut', delay: 0.35 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.9, ease: 'easeInOut', delay: 0.35 }}
         />
         <motion.path
-          d="M101 34 L110 44 L118 33"
+          d="M97 53 L106 64 L115 52"
           stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
           fill="none"
           className="text-primary/45"
-          initial={{ pathLength: 0, opacity: 0 }}
+          initial={reduceMotion ? { pathLength: 1, opacity: 1 } : { pathLength: 0, opacity: 0 }}
           whileInView={{ pathLength: 1, opacity: 1 }}
           viewport={{ once: true, amount: 0.6 }}
-          transition={{ duration: 0.35, ease: 'easeOut', delay: 1.15 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.35, ease: 'easeOut', delay: 1.15 }}
         />
       </svg>
-      <span className="absolute -left-1 top-0 -translate-y-full whitespace-nowrap font-handwriting text-lg text-primary/70">
+      <span className="absolute -left-3 top-2 -translate-y-full whitespace-nowrap font-handwriting text-lg text-primary/70">
         try it
       </span>
     </div>
@@ -304,26 +308,36 @@ export function ModulesOverview() {
           initial={{ opacity: 0, y: 20 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
-          className="mb-16"
+          className="mb-10 lg:mb-14"
         >
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
-            {/* Heading — left */}
-            <div className="text-center lg:text-left">
-              <span className="text-primary font-body font-semibold text-sm uppercase tracking-widest mb-3 block">
-                Platform modules
-              </span>
-              <h2 className="font-heading font-bold text-text-primary mb-4" style={{ fontSize: 'clamp(1.74rem, 3.08vw, 2.61rem)' }}>
-                Everything your business needs.
-                <br />
-                Nothing it doesn't.
-              </h2>
-              <p className="text-text-secondary font-body text-lg max-w-xl mx-auto lg:mx-0">
-                Activate only the modules you need. Pay only for what you use.
-              </p>
-            </div>
+          {/* Heading */}
+          <div className="text-center lg:text-left">
+            <span className="text-primary font-body font-semibold text-sm uppercase tracking-widest mb-3 block">
+              Platform modules
+            </span>
+            <h2 className="font-heading font-bold text-text-primary mb-4" style={{ fontSize: 'clamp(1.74rem, 3.08vw, 2.61rem)' }}>
+              Everything your business needs.
+              <br />
+              Nothing it doesn't.
+            </h2>
+          </div>
 
-            {/* Toggle — top right, with a hand-drawn arrow pointing at it */}
-            <div className="relative flex-shrink-0 self-center lg:self-start lg:pt-2">
+          {/* Sub-heading + toggle share one row on lg+: sentence left, toggle
+              right-aligned and vertically centred against it, with the
+              hand-drawn arrow drawing itself in directly above the switch.
+              The whole row sits above the grid panel — no overlap, no pull-down.
+              Below lg it stacks: sentence, then the toggle centred. */}
+          <div className="flex flex-col items-center gap-8 lg:mt-6 lg:flex-row lg:items-center lg:justify-between lg:gap-12">
+            <p className="text-text-secondary font-body text-lg max-w-xl text-center lg:text-left">
+              Activate only the modules you need. Pay only for what you use.
+            </p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={inView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="relative z-20 shrink-0"
+            >
               <HandArrow />
               <button
                 onClick={handleToggle}
@@ -332,18 +346,18 @@ export function ModulesOverview() {
               >
                 <Sparkles
                   size={16}
-                  className={`transition-colors duration-300 ${scattered ? 'text-amber-500' : 'text-primary'}`}
+                  className={`transition-colors duration-300 ${scattered ? 'text-primary' : 'text-amber-500'}`}
                 />
                 <span className={`toggle-switch ${scattered ? 'active' : ''}`} aria-hidden />
                 <span className="text-sm font-body text-text-secondary select-none whitespace-nowrap">
                   {scattered ? (
-                    <span className="font-handwriting text-lg text-amber-700">Imagine without UnifiedTree</span>
-                  ) : (
                     <span className="font-semibold text-primary">One platform. Unified.</span>
+                  ) : (
+                    <span className="font-handwriting text-lg text-amber-700">Imagine without UnifiedTree</span>
                   )}
                 </span>
               </button>
-            </div>
+            </motion.div>
           </div>
         </motion.div>
 
@@ -354,11 +368,45 @@ export function ModulesOverview() {
           transition={{ duration: 0.7, delay: 0.15 }}
           className="relative"
         >
+          {/* Soft panel behind the tiles — a surface-tint-like wash with very
+              soft per-corner glows echoing the tile colours, plus grain.
+              Pure colour fields: no linework, no dots. */}
+          <div
+            aria-hidden
+            className="absolute inset-0 overflow-hidden rounded-[32px]"
+            style={{ boxShadow: '0 24px 60px -40px rgba(4, 80, 58, 0.28)' }}
+          >
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundColor: '#F2FAF6',
+                backgroundImage: [
+                  'radial-gradient(64% 50% at 84% 0%, rgba(16, 185, 129, 0.10), transparent 70%)',
+                  'radial-gradient(70% 55% at 10% 100%, rgba(110, 231, 183, 0.16), transparent 72%)',
+                  'linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 34%)',
+                ].join(', '),
+              }}
+            />
+            {/* Corner glows — indigo, cyan, amber, pink, kept whisper-soft */}
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage: [
+                  'radial-gradient(40% 36% at 0% 0%, rgba(99, 102, 241, 0.07), transparent 70%)',
+                  'radial-gradient(38% 34% at 100% 0%, rgba(6, 182, 212, 0.07), transparent 70%)',
+                  'radial-gradient(40% 36% at 100% 100%, rgba(245, 158, 11, 0.06), transparent 70%)',
+                  'radial-gradient(38% 34% at 0% 100%, rgba(236, 72, 153, 0.05), transparent 70%)',
+                ].join(', '),
+              }}
+            />
+            <span aria-hidden className="grain" />
+          </div>
+
           {/* Connecting lines between tiles */}
           <ConnectingLines visible={!scattered} />
 
           {/* Grid */}
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-y-14 gap-x-6 sm:gap-x-8 lg:gap-x-10 justify-items-center py-8 relative z-10">
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-y-14 gap-x-6 sm:gap-x-8 lg:gap-x-10 justify-items-center px-4 sm:px-8 lg:px-10 py-10 sm:py-12 relative z-10">
             {plans.map((plan, i) => (
               <motion.div
                 key={plan.key}
@@ -389,7 +437,7 @@ export function ModulesOverview() {
           transition={{ delay: 0.5 }}
           className="flex flex-col sm:flex-row items-center justify-end mt-16 pt-8 border-t border-border"
         >
-          {/* View all Apps — the toggle now lives beside the heading, above */}
+          {/* View all Apps — the toggle sits above the grid panel */}
           <button
             onClick={() => navigate('/modules')}
             className="inline-flex items-center gap-2 text-primary font-body font-semibold text-sm hover:gap-3 transition-all duration-300 group"

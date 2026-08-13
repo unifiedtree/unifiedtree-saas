@@ -1,9 +1,27 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useScroll, useTransform, useReducedMotion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 import { LandscapeScene } from '../visuals/LandscapeScene'
 import { ModuleDashboard } from '../visuals/ModuleDashboard'
+
+/**
+ * The closing phrase of the headline cycles so the hero demonstrates breadth —
+ * the same core, five very different businesses. Order is deliberate: the
+ * generic promise first, then progressively more specific proof.
+ */
+const HERO_PHRASES = [
+  'growing businesses',
+  'busy factories',
+  'retail chains',
+  'finance teams',
+  'field operations',
+] as const
+
+/** The widest phrase — rendered invisibly to reserve the slot so the line never reflows. */
+const WIDEST_PHRASE = HERO_PHRASES.reduce((a, b) => (b.length > a.length ? b : a))
+
+const PHRASE_MS = 2600
 
 /**
  * Hero — a full-bleed emerald valley with the product sitting in it.
@@ -17,6 +35,18 @@ export function HeroSection() {
   const reduce = useReducedMotion()
   const ref = useRef<HTMLDivElement>(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
+
+  // Rotating headline phrase. Held still entirely when motion is reduced.
+  const [phraseIndex, setPhraseIndex] = useState(0)
+  useEffect(() => {
+    if (reduce) return
+    const id = window.setInterval(
+      () => setPhraseIndex((i) => (i + 1) % HERO_PHRASES.length),
+      PHRASE_MS,
+    )
+    return () => window.clearInterval(id)
+  }, [reduce])
+  const phrase = HERO_PHRASES[reduce ? 0 : phraseIndex]
 
   // Copy drifts up and dims as the dashboard takes the stage.
   const copyY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-40%'])
@@ -52,12 +82,50 @@ export function HeroSection() {
           initial={{ opacity: 0, y: 26 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
-          className="font-heading font-extrabold text-white"
+          /* flow-root keeps the slot's negative margins inside the heading —
+             left to collapse, the bottom one steals space from the paragraph. */
+          className="flow-root font-heading font-extrabold text-white"
           style={{ fontSize: 'clamp(2.393rem, 5.632vw, 4.785rem)', lineHeight: 1.02, letterSpacing: '-0.038em' }}
         >
-          The operating system
-          <br />
-          for growing businesses
+          {/* nbsp keeps "for" tied to "system" so it never orphans on a line of
+              its own when the heading wraps on small screens. */}
+          The operating system&nbsp;for
+          {/* The rotating phrase takes the second line on its own so the reserved
+              width stays invisible — an invisible copy of the longest phrase sizes
+              the slot, the live phrase is centred inside it, and nothing on the page
+              moves as the words swap. overflow-hidden masks the travel; the em
+              padding/negative-margin pair buys descender room back without shifting
+              the line. */}
+          <span
+            aria-live="polite"
+            className="mx-auto grid w-fit max-w-full overflow-hidden text-[#A7F3D0]"
+            style={{
+              paddingTop: '0.16em',
+              paddingBottom: '0.22em',
+              marginTop: '-0.16em',
+              marginBottom: '-0.22em',
+            }}
+          >
+            <span aria-hidden className="invisible col-start-1 row-start-1">
+              {WIDEST_PHRASE}
+            </span>
+            {reduce ? (
+              <span className="col-start-1 row-start-1">{phrase}</span>
+            ) : (
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={phrase}
+                  className="col-start-1 row-start-1"
+                  initial={{ opacity: 0, y: '55%', filter: 'blur(10px)' }}
+                  animate={{ opacity: 1, y: '0%', filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, y: '-55%', filter: 'blur(10px)' }}
+                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  {phrase}
+                </motion.span>
+              </AnimatePresence>
+            )}
+          </span>
         </motion.h1>
 
         <motion.p
@@ -76,16 +144,23 @@ export function HeroSection() {
           transition={{ duration: 0.75, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
           className="mt-10 flex flex-wrap items-center justify-center gap-4"
         >
+          {/* Both CTAs carry the same 1.5px border box, padding and radius so the
+              pair sits on one optical baseline — the primary's border is white on
+              white, present only to match the secondary's height exactly. */}
           <button
             onClick={() => navigate('/signup')}
-            className="group inline-flex items-center gap-2 rounded-xl bg-white px-7 py-3.5 text-[15px] font-bold text-[#04503A] shadow-lg transition-all hover:gap-3 hover:bg-[#ECFDF5]"
+            className="group inline-flex items-center gap-2 rounded-xl border-[1.5px] border-white bg-white px-7 py-3.5 text-[15px] font-bold text-[#04503A] shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:gap-3 hover:bg-[#ECFDF5] hover:shadow-[0_16px_32px_-14px_rgba(0,0,0,0.55)] active:translate-y-0"
           >
             Start free trial
             <ArrowRight size={17} className="transition-transform group-hover:translate-x-0.5" />
           </button>
+          {/* Secondary CTA — solid deep-emerald fill with a crisp white border so
+              it reads on the vivid band, while the white primary stays dominant.
+              Hover deepens the fill and brightens the rim: it gains presence, it
+              never drifts toward white (that washed the label out). */}
           <button
             onClick={() => navigate('/talk-to-us?intent=demo')}
-            className="rounded-xl border border-white/40 bg-white/10 px-7 py-3.5 text-[15px] font-bold text-white backdrop-blur-sm transition-all hover:bg-white/20"
+            className="rounded-xl border-[1.5px] border-white/70 bg-[#04503A] px-7 py-3.5 text-[15px] font-bold text-white shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:border-white hover:bg-[#033B2A] hover:shadow-[0_0_0_4px_rgba(255,255,255,0.16),0_16px_32px_-14px_rgba(0,0,0,0.55)] active:translate-y-0"
           >
             Book a demo
           </button>

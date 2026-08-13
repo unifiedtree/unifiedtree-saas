@@ -2,12 +2,13 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { Star } from 'lucide-react'
 
 /**
- * Customer stories — premium quote cards on the light site surface.
+ * Customer stories — premium quote cards drifting in a continuous marquee.
  *
- * Sits between the emerald StatsSection and the white IntegrationsSection, so
- * it takes `surface-soft` to keep the page alternating light/dark. Cards are laid
- * out as a masonry-ish three-column rhythm on lg: each column carries a fixed
- * vertical offset so the grid reads hand-set rather than tabular.
+ * Sits on `surface-soft` to keep the page alternating light/dark. Every quote
+ * rides a single full-bleed row that drifts on a seamless -50% loop; the row
+ * pauses while hovered and fades out at the viewport edges via a CSS mask.
+ * Under reduced motion the marquee is dropped entirely in favour of the static
+ * wrapped grid.
  */
 
 const testimonials = [
@@ -67,8 +68,12 @@ const testimonials = [
   },
 ]
 
-/** Per-column vertical offset that gives the lg grid its masonry rhythm. */
+/** Per-column vertical offset for the reduced-motion (static grid) fallback. */
 const COLUMN_OFFSET = ['', 'lg:mt-10', 'lg:mt-5']
+
+/** Soft fade at both marquee edges so cards enter/exit the frame gently. */
+const EDGE_FADE =
+  'linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%)'
 
 function StarRating() {
   return (
@@ -76,6 +81,95 @@ function StarRating() {
       {[1, 2, 3, 4, 5].map((s) => (
         <Star key={s} size={15} className="fill-primary text-primary" aria-hidden />
       ))}
+    </div>
+  )
+}
+
+type Testimonial = (typeof testimonials)[number]
+
+function TestimonialCard({
+  t,
+  ariaHidden,
+  className = '',
+}: {
+  t: Testimonial
+  ariaHidden?: boolean
+  className?: string
+}) {
+  return (
+    <figure
+      aria-hidden={ariaHidden || undefined}
+      className={`group relative overflow-hidden rounded-3xl border border-border bg-surface p-7 shadow-card transition-all duration-300 hover:-translate-y-1.5 hover:shadow-card-hover ${className}`}
+    >
+      {/* Oversized decorative quote glyph */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -top-6 right-4 select-none font-heading font-extrabold leading-none text-primary/10 transition-colors duration-300 group-hover:text-primary/20"
+        style={{ fontSize: '132px', letterSpacing: '-0.045em' }}
+      >
+        &ldquo;
+      </span>
+
+      <div className="relative z-10">
+        <StarRating />
+
+        <blockquote className="mt-5 text-[14.5px] leading-relaxed text-text-primary">
+          {t.quote}
+        </blockquote>
+
+        <figcaption className="mt-7 flex items-center gap-3 border-t border-border pt-6">
+          <span
+            aria-hidden
+            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full font-heading text-[13px] font-bold text-white"
+            style={{ backgroundColor: t.color }}
+          >
+            {t.initials}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[15px] font-semibold text-text-primary">
+              {t.name}
+            </span>
+            <span className="block truncate text-[13px] text-text-tertiary">
+              {t.role} · {t.company}
+            </span>
+          </span>
+        </figcaption>
+      </div>
+    </figure>
+  )
+}
+
+/**
+ * The single continuously drifting row. The track holds two identical halves —
+ * each the full quote set — and the `marquee` keyframe translates it -50%, so
+ * the loop point is invisible. Hovering the track pauses the drift so quotes
+ * can be read.
+ */
+function MarqueeRow({ items, duration }: { items: Testimonial[]; duration: number }) {
+  return (
+    <div
+      className="overflow-hidden pb-8 pt-4"
+      style={{ WebkitMaskImage: EDGE_FADE, maskImage: EDGE_FADE }}
+    >
+      <div
+        className="flex w-max animate-marquee hover:[animation-play-state:paused]"
+        style={{ animationDuration: `${duration}s` }}
+      >
+        {[0, 1].map((copy) => (
+          <div key={copy} className="flex gap-6 pr-6">
+            {items.map((t) => (
+              <TestimonialCard
+                key={`${copy}-${t.name}`}
+                t={t}
+                // Only the first half is exposed to assistive tech; the second
+                // exists purely to make the loop seamless.
+                ariaHidden={copy === 1}
+                className="w-[300px] flex-shrink-0 sm:w-[360px] lg:w-[400px]"
+              />
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -102,7 +196,7 @@ export function TestimonialsSection() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="mx-auto mb-16 max-w-3xl text-center"
+          className="mx-auto mb-12 max-w-3xl text-center"
         >
           <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
             Customer stories
@@ -117,56 +211,30 @@ export function TestimonialsSection() {
             Real businesses, real results. From manufacturing to retail to services.
           </p>
         </motion.div>
-
-        <div className="grid items-start gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {testimonials.map((t, i) => (
-            <motion.figure
-              key={t.name}
-              initial={{ opacity: 0, y: reduce ? 0 : 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.6, delay: (i % 3) * 0.08, ease: [0.16, 1, 0.3, 1] }}
-              whileHover={reduce ? undefined : { y: -6 }}
-              className={`group relative overflow-hidden rounded-3xl border border-border bg-surface p-7 shadow-card transition-shadow duration-300 hover:shadow-card-hover ${COLUMN_OFFSET[i % 3]}`}
-            >
-              {/* Oversized decorative quote glyph */}
-              <span
-                aria-hidden
-                className="pointer-events-none absolute -top-6 right-4 select-none font-heading font-extrabold leading-none text-primary/10 transition-colors duration-300 group-hover:text-primary/20"
-                style={{ fontSize: '132px', letterSpacing: '-0.045em' }}
-              >
-                &ldquo;
-              </span>
-
-              <div className="relative z-10">
-                <StarRating />
-
-                <blockquote className="mt-5 text-[14.5px] leading-relaxed text-text-primary">
-                  {t.quote}
-                </blockquote>
-
-                <figcaption className="mt-7 flex items-center gap-3 border-t border-border pt-6">
-                  <span
-                    aria-hidden
-                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full font-heading text-[13px] font-bold text-white"
-                    style={{ backgroundColor: t.color }}
-                  >
-                    {t.initials}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-[15px] font-semibold text-text-primary">
-                      {t.name}
-                    </span>
-                    <span className="block truncate text-[13px] text-text-tertiary">
-                      {t.role} · {t.company}
-                    </span>
-                  </span>
-                </figcaption>
-              </div>
-            </motion.figure>
-          ))}
-        </div>
       </div>
+
+      {reduce ? (
+        /* Reduced motion: no drift at all — the original static wrapped grid. */
+        <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid items-start gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {testimonials.map((t, i) => (
+              <TestimonialCard key={t.name} t={t} className={COLUMN_OFFSET[i % 3]} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10"
+        >
+          {/* 48s over one half (six cards) — the exact drift speed of the
+              original top row, which is the one the row keeps. */}
+          <MarqueeRow items={testimonials} duration={48} />
+        </motion.div>
+      )}
     </section>
   )
 }

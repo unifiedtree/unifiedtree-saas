@@ -4,6 +4,7 @@ import { HeroSection } from '../components/home/HeroSection'
 import { StickyShowcase } from '../components/home/StickyShowcase'
 import { TreeSection } from '../components/home/TreeSection'
 import { ModulesOverview } from '../components/home/ModulesOverview'
+import { WhyDifferent } from '../components/home/WhyDifferent'
 import { HowItWorks } from '../components/home/HowItWorks'
 import { StatsSection } from '../components/home/StatsSection'
 import { TestimonialsSection } from '../components/home/TestimonialsSection'
@@ -23,6 +24,10 @@ export function HomePage() {
         <StickyShowcase />
         <TreeSection />
         <ModulesOverview />
+        {/* The contrast section sits right after the module grid: the reader has
+            just seen WHAT we do, so this is the moment to say why it is not the
+            ERP they have been sold before. */}
+        <WhyDifferent />
         <HowItWorks />
         <StatsSection />
         <TestimonialsSection />
