@@ -80,7 +80,7 @@ public class AppraisalCycleService {
 
     public record RemindResultDto(UUID reviewId, int newReminderCount, String sentAt) {}
 
-    public record CloseResultDto(UUID cycleId, int missedMarked) {}
+    public record CloseResultDto(UUID cycleId, int missedMarked, int reviewsMissedMarked) {}
 
     // ── Initiate — the main fan-out ──────────────────────────────────────────
 
@@ -332,10 +332,19 @@ public class AppraisalCycleService {
                 "SELECT status FROM performance_mgmt.review_cycles WHERE id = ?",
                 rs -> rs.next() ? rs.getString(1) : null, cycleId);
         if (status == null) throw new BusinessRuleException("Cycle not found", "CYCLE_NOT_FOUND");
-        if ("CLOSED".equals(status)) return new CloseResultDto(cycleId, 0);   // idempotent
+        if ("CLOSED".equals(status)) return new CloseResultDto(cycleId, 0, 0);   // idempotent
 
         int missed = jdbc.update("""
                 UPDATE performance_mgmt.appraisal_reviewer_assignments
+                   SET status = 'MISSED', updated_at = now(), version = version + 1
+                 WHERE cycle_id = ? AND status IN ('PENDING','IN_PROGRESS')
+                """, cycleId);
+        // Also flip the linked performance_reviews rows to MISSED — otherwise
+        // the review side stays PENDING forever even though the assignment is
+        // terminal. Any PENDING/IN_PROGRESS review under this cycle is missed
+        // by definition once the cycle is closed.
+        int reviewsMissed = jdbc.update("""
+                UPDATE performance_mgmt.performance_reviews
                    SET status = 'MISSED', updated_at = now(), version = version + 1
                  WHERE cycle_id = ? AND status IN ('PENDING','IN_PROGRESS')
                 """, cycleId);
@@ -345,9 +354,9 @@ public class AppraisalCycleService {
                        updated_by = ?, version = version + 1
                  WHERE id = ?
                 """, actorId == null ? null : actorId.toString(), cycleId);
-        log.info("Cycle {} closed by {}: {} assignments marked MISSED",
-                cycleId, actorId, missed);
-        return new CloseResultDto(cycleId, missed);
+        log.info("Cycle {} closed by {}: {} assignments and {} reviews marked MISSED",
+                cycleId, actorId, missed, reviewsMissed);
+        return new CloseResultDto(cycleId, missed, reviewsMissed);
     }
 
     // ── Reviewer resolution helpers ───────────────────────────────────────────

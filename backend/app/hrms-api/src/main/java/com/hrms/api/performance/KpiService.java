@@ -186,6 +186,10 @@ public class KpiService {
         bindTenant(tenantId);
         validateDirection(req.direction());
         BigDecimal pct = computeProgressPct(req.currentValue(), req.targetValue(), req.direction());
+        // weight is NOT NULL with no DB default — omitting it used to 500.
+        // Default to 1 (matches every historical row seeded before this column
+        // was exposed to the API) so POST /v1/performance/kpis works without it.
+        BigDecimal weight = req.weight() == null ? BigDecimal.ONE : req.weight();
 
         UUID id = jdbc.queryForObject("""
                 INSERT INTO performance_mgmt.goals
@@ -197,7 +201,7 @@ public class KpiService {
                 """, UUID.class,
                 tenantId, req.ownerId(), req.title(), req.description(), req.category(),
                 req.targetValue(), req.currentValue(), req.unit(), req.direction(),
-                req.weight(), parseDate(req.dueDate()),
+                weight, parseDate(req.dueDate()),
                 pct == null ? null : pct.intValue(),
                 actorId == null ? null : actorId.toString(),
                 actorId == null ? null : actorId.toString());
