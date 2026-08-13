@@ -404,6 +404,18 @@ public class PayrollRunService {
             throw new BusinessRuleException("Reason is required to reopen a locked run",
                     "REASON_REQUIRED");
         }
+        // Never reopen a run that has a POSTED/PAID disbursement batch — the batch
+        // rows would then reference a DRAFT run, silently corrupting the ledger.
+        // Operators must cancel/reverse the batch first, then reopen.
+        Integer activeBatches = jdbc.queryForObject("""
+                SELECT count(*) FROM payroll.disbursement_batches
+                 WHERE run_id = ? AND status IN ('POSTED','PAID')
+                """, Integer.class, runId);
+        if (activeBatches != null && activeBatches > 0) {
+            throw new BusinessRuleException(
+                    "Cannot reopen — run has POSTED/PAID disbursement batch. Cancel the batch first.",
+                    "RUN_HAS_ACTIVE_BATCH");
+        }
         String actorTag = actorId == null ? "system" : actorId.toString();
         jdbc.update("""
                 UPDATE payroll.runs
@@ -437,7 +449,9 @@ public class PayrollRunService {
     @Transactional
     public List<MyPayslipDto> listMyPayslips(UUID tenantId, UUID employeeId) {
         bindTenant(tenantId);
-        // Only LOCKED runs — an employee never sees draft/processing numbers.
+        // Only LOCKED / PAID runs — an employee never sees draft/processing numbers,
+        // but MUST keep access to their payslip once the run flips from LOCKED → PAID
+        // via disbursement (otherwise history disappears the moment payroll is paid).
         //
         // Wave 1 extension (2026-08-11): also project paid_days / lop_days from
         // payroll.run_lop_days (LEFT JOIN — the row may not exist for tenants
@@ -457,7 +471,7 @@ public class PayrollRunService {
               FROM payroll.runs r
               JOIN payroll.payslip_lines l ON l.run_id = r.id AND l.employee_id = ?
               LEFT JOIN payroll.run_lop_days ld ON ld.run_id = r.id AND ld.employee_id = ?
-             WHERE r.status = 'LOCKED'
+             WHERE r.status IN ('LOCKED','PAID')
              GROUP BY r.id, r.period_month, r.period_year, r.status, r.locked_at, ld.paid_days, ld.lop_days
              ORDER BY r.period_year DESC, r.period_month DESC
             """, (rs, i) -> new MyPayslipDto(
@@ -476,7 +490,8 @@ public class PayrollRunService {
         bindTenant(tenantId);
         String status = jdbc.query("SELECT status FROM payroll.runs WHERE id = ?",
             rs -> rs.next() ? rs.getString(1) : null, runId);
-        if (!"LOCKED".equals(status)) {
+        // LOCKED or PAID — employees must retain payslip access after payout.
+        if (!"LOCKED".equals(status) && !"PAID".equals(status)) {
             throw new BusinessRuleException("Payslip is available only after the run is locked", "RUN_NOT_LOCKED");
         }
         Integer mine = jdbc.queryForObject(
