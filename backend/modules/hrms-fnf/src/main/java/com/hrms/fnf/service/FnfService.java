@@ -14,16 +14,20 @@ import com.hrms.fnf.enums.FnfComponentType;
 import com.hrms.fnf.enums.FnfStatus;
 import com.hrms.fnf.repository.FnfComponentRepository;
 import com.hrms.fnf.repository.FnfSettlementRepository;
+import com.hrms.core.exception.HrmsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -31,12 +35,24 @@ public class FnfService {
 
     private static final Logger log = LoggerFactory.getLogger(FnfService.class);
 
+    /**
+     * Only separated employees can have an FnF cut. An ACTIVE (or PROBATION,
+     * ON_NOTICE with no exit yet) record has no last-working-day meaning and
+     * must go through the exit workflow first.
+     */
+    private static final Set<String> SEPARATED_STATUSES =
+            Set.of("RESIGNED", "TERMINATED", "RETIRED", "ABSCONDING", "EXITED");
+
     private final FnfSettlementRepository settlementRepository;
     private final FnfComponentRepository componentRepository;
+    private final JdbcTemplate jdbc;
 
-    public FnfService(FnfSettlementRepository settlementRepository, FnfComponentRepository componentRepository) {
+    public FnfService(FnfSettlementRepository settlementRepository,
+                      FnfComponentRepository componentRepository,
+                      JdbcTemplate jdbc) {
         this.settlementRepository = settlementRepository;
         this.componentRepository = componentRepository;
+        this.jdbc = jdbc;
     }
 
     /**
@@ -51,6 +67,26 @@ public class FnfService {
         }
         UUID tenantId = TenantContext.getTenantId();
 
+        // Guard 1: the employee must exist. A missing employee_id currently
+        // 500s downstream on FK; surface a domain 404 instead.
+        String status = jdbc.query(
+                "SELECT employment_status FROM hrms.employees WHERE id = ?",
+                rs -> rs.next() ? rs.getString(1) : null,
+                request.employeeId());
+        if (status == null) {
+            throw new HrmsException(
+                    "Employee not found with id: " + request.employeeId(),
+                    HttpStatus.NOT_FOUND, "EMPLOYEE_NOT_FOUND");
+        }
+        // Guard 2: only separated employees can be F&F'd. An ACTIVE record
+        // has no exit and no meaningful last-working-day; run the exit
+        // workflow first.
+        if (!SEPARATED_STATUSES.contains(status)) {
+            throw new BusinessRuleException(
+                    "FnF requires exit record. Employee is currently " + status + ".",
+                    "EMPLOYEE_NOT_SEPARATED");
+        }
+
         BigDecimal gross = request.components().stream()
                 .filter(c -> c.type() == FnfComponentType.EARNING)
                 .map(FnfComponentRequest::amount)
@@ -62,6 +98,16 @@ public class FnfService {
                 .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal net = gross.subtract(deductions);
+
+        // Guard 3: never persist a net-negative settlement. Deductions can't
+        // exceed earnings — that path should be a recovery ticket, not a
+        // negative payout. Mirrored by a CHECK constraint added in V091.
+        if (net.signum() < 0) {
+            throw new BusinessRuleException(
+                    "Net settlement cannot be negative (gross " + gross
+                            + " − deductions " + deductions + " = " + net + ")",
+                    "INVALID_NET_SETTLEMENT");
+        }
 
         FnfSettlement settlement = new FnfSettlement();
         settlement.setTenantId(tenantId);
@@ -118,6 +164,14 @@ public class FnfService {
                     "Only a processed settlement can be approved (current status: " + settlement.getStatus() + ")",
                     "FNF_NOT_PROCESSED");
         }
+        // Belt-and-braces net-negative guard — processSettlement rejects
+        // negatives at creation time, but a legacy row or a component edit
+        // could sneak one in.
+        if (settlement.getNetSettlement() != null && settlement.getNetSettlement().signum() < 0) {
+            throw new BusinessRuleException(
+                    "Net settlement cannot be negative",
+                    "INVALID_NET_SETTLEMENT");
+        }
         settlement.setStatus(FnfStatus.APPROVED);
         settlement.setApproverId(approverId);
         settlement.setApprovedAt(Instant.now());
@@ -134,6 +188,12 @@ public class FnfService {
             throw new BusinessRuleException(
                     "Only an approved settlement can be paid (current status: " + settlement.getStatus() + ")",
                     "FNF_NOT_APPROVED");
+        }
+        // Second net-negative guard at pay-time — same reason as approve().
+        if (settlement.getNetSettlement() != null && settlement.getNetSettlement().signum() < 0) {
+            throw new BusinessRuleException(
+                    "Net settlement cannot be negative",
+                    "INVALID_NET_SETTLEMENT");
         }
         settlement.setStatus(FnfStatus.PAID);
         settlement.setPaidAt(Instant.now());
