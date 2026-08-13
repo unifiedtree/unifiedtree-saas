@@ -174,10 +174,13 @@ public class ReimbursementBatchService {
                     rs.getString("title")
                 },
                 req.companyId(),
-                // Interpret cutoff as end-of-day so claims approved on the cutoff
-                // date make it in.
-                new java.sql.Timestamp(java.sql.Date.valueOf(cutoff.plusDays(1))
-                        .toInstant().toEpochMilli()));
+                // QA FIX (2026-08-13): java.sql.Date deliberately throws
+                // UnsupportedOperationException from toInstant() per JDK spec
+                // — every call to POST /v1/expense/reimbursement-batches was
+                // 500'ing. Convert via LocalDate → LocalDateTime → Timestamp,
+                // interpreting cutoff as end-of-day so claims approved on the
+                // cutoff date still make it in.
+                java.sql.Timestamp.valueOf(cutoff.plusDays(1).atStartOfDay()));
 
         BigDecimal total = BigDecimal.ZERO;
         for (Object[] row : eligible) {
