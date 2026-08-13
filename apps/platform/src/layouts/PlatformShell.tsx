@@ -15,7 +15,6 @@ import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
 import { GlobalSearch } from '@/shared/components/GlobalSearch'
-import { TenantLogo } from '@/shared/components/TenantLogo'
 
 const SIDEBAR_KEY = 'ut.sidebar.collapsed'
 
@@ -232,10 +231,24 @@ const RAIL_LABELS: Record<string, string> = {
   's-users': 'Users', 's-roles': 'Roles', 's-audit': 'Audit', 's-danger': 'Danger',
 }
 
-/* Rail + top-bar ground — the same emerald family so sidebar and header read
-   as ONE surface (no divider line), the way Keka's chrome does. */
-const RAIL_BG = 'linear-gradient(180deg, #04503A 0%, #043B2C 55%, #02291E 100%)'
-const TOPBAR_BG = 'linear-gradient(90deg, #04503A 0%, #047857 45%, #059669 100%)'
+/**
+ * Chrome grounds — rail and top bar in one emerald family, so they read as a
+ * single surface with no divider between them.
+ *
+ * Both start at #047857 so the corner where they meet joins seamlessly, and
+ * #047857 rather than the brand's brightest #059669 on purpose: white 10px rail
+ * labels on #059669 land at about 3.7:1, under the 4.5:1 needed for small text.
+ * #047857 gives 5.5:1 and still reads as the app's green rather than the
+ * near-black the rail used to be.
+ *
+ * There is deliberately no logo in this chrome. A workspace logo is whatever
+ * shape the customer uploaded, and nothing fits an 86px rail cell — it needed a
+ * white chip to be legible at all, which is what made it look stuck on. The
+ * workspace NAME sits in the header instead: always legible, never distorted,
+ * and a clearer answer to "whose workspace am I in" than a shrunken mark.
+ */
+const RAIL_BG = 'linear-gradient(180deg, #047857 0%, #05614A 58%, #04503A 100%)'
+const TOPBAR_BG = 'linear-gradient(90deg, #047857 0%, #058360 52%, #059669 100%)'
 
 function matchPath(pathname: string, p?: string) {
   return !!p && (pathname === p || pathname.startsWith(p + '/'))
@@ -273,12 +286,11 @@ export function PlatformShell() {
   // re-render when a new module activates, and the app-switcher would
   // keep showing a locked pill until an unrelated re-render triggers.
   const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
-  // Workspace-uploaded logo is fetched + rendered by <TenantLogo />, which
-  // wraps the useTenantBranding hook. The SDK's auth hydration does NOT plumb
-  // logoUrl through, so relying on the auth store alone (as this file did)
-  // left every non-login surface — including /modules — on the UnifiedTree
-  // default. tenantName is still read from the auth store (populated at
-  // login) for the workspace label in the top bar.
+  // The shell chrome carries no logo — the workspace NAME is the identity here,
+  // because an uploaded logo is whatever shape the customer gave us and none of
+  // them survive an 86px rail cell. tenantName comes from the auth store, which
+  // is populated at login. The uploaded logo still appears where it has room
+  // and belongs: the login page and Settings > Branding.
   const tenantName    = useLocalAuthStore(s => s.tenant?.name)
   const hasModule = (k: string) => activeModules.includes(k)
   const tenant = useSdkStore(s => s.tenant)
@@ -454,9 +466,20 @@ export function PlatformShell() {
     </div>
   )
 
-  const Logo = () => (
-    <button onClick={() => navigate('/modules')} className="flex items-center gap-2.5" title="Back to apps">
-      <TenantLogo className="h-7 w-auto" />
+  /* The drawer's identity, same rule as the desktop chrome: the workspace name,
+     not a logo. Doubles as the way back to the launcher. */
+  const WorkspaceMark = () => (
+    <button
+      onClick={() => navigate('/modules')}
+      className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-0.5 transition-colors hover:bg-[var(--bg-subtle)]"
+      title="Back to apps"
+    >
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-solid)] text-white">
+        <LayoutGrid size={15} />
+      </span>
+      <span className="min-w-0 truncate text-[14.5px] font-bold tracking-[-0.01em] text-[var(--text-primary)]">
+        {tenantName || 'Workspace'}
+      </span>
     </button>
   )
 
@@ -537,7 +560,7 @@ export function PlatformShell() {
       <div className={clsx('flex h-16 shrink-0 items-center border-b border-[var(--border-subtle)]', collapsed ? 'flex-col justify-center gap-1 px-2' : 'justify-between px-4')}>
         {collapsed ? (
           <button onClick={() => navigate('/modules')} title="Back to apps" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-solid)] text-white shadow-sm"><LayoutGrid size={18} /></button>
-        ) : (<><Logo /><AppSwitcher /></>)}
+        ) : (<><WorkspaceMark /><AppSwitcher /></>)}
       </div>
 
       {!collapsed && (
@@ -633,9 +656,16 @@ export function PlatformShell() {
     <div className="flex h-screen overflow-hidden bg-[var(--bg-base)] font-sans text-[var(--text-primary)]">
       {/* Icon rail — fixed width, its own scroll */}
       <aside className="relative z-10 hidden w-[86px] shrink-0 flex-col md:flex" style={{ background: RAIL_BG }}>
-        <button onClick={() => navigate('/modules')} title="All apps" className="flex h-14 shrink-0 items-center justify-center">
-          <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white/95 shadow-sm">
-            <TenantLogo className="h-7 w-7 object-contain" />
+        {/* No logo here by design — this is the apps launcher, and a grid icon
+            says that far more plainly than a shrunken workspace mark did. */}
+        <button
+          onClick={() => navigate('/modules')}
+          title="All apps"
+          aria-label="All apps"
+          className="flex h-14 shrink-0 items-center justify-center"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl text-white/85 transition-colors hover:bg-white/[0.14] hover:text-white">
+            <LayoutGrid size={19} />
           </span>
         </button>
         <nav className="scrollbar-hide flex-1 space-y-1 overflow-y-auto px-2.5 pb-4 pt-1">
@@ -665,10 +695,11 @@ export function PlatformShell() {
       </AnimatePresence>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar — continues the rail's emerald, no border between them */}
+        {/* Top bar — continues the rail's emerald, no border between them. The
+            workspace name IS the branding here, in place of a logo. */}
         <header className="z-sticky flex h-14 shrink-0 items-center gap-3 px-4 sm:px-6" style={{ background: TOPBAR_BG }}>
-          <button onClick={() => setMobileOpen(true)} className="-ml-1 rounded-lg p-2 text-white/85 hover:bg-white/10 md:hidden" aria-label="Open menu"><Menu size={20} /></button>
-          <span className="min-w-0 truncate text-[15px] font-bold text-white">{tenantName || 'Workspace'}</span>
+          <button onClick={() => setMobileOpen(true)} className="-ml-1 rounded-lg p-2 text-white/85 transition-colors hover:bg-white/10 md:hidden" aria-label="Open menu"><Menu size={20} /></button>
+          <span className="min-w-0 truncate text-[15.5px] font-bold tracking-[-0.01em] text-white">{tenantName || 'Workspace'}</span>
 
           {/* Centred search pill, Keka-style */}
           <div className="flex min-w-0 flex-1 justify-center px-2">
@@ -685,7 +716,7 @@ export function PlatformShell() {
             <div className="relative" ref={notifRef}>
               <button onClick={() => setNotifOpen(v => !v)} className="relative rounded-lg p-2 text-white/85 transition-colors hover:bg-white/10 hover:text-white" aria-label="Notifications">
                 <Bell size={18} />
-                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#FDBA74] ring-2 ring-[#047857]" />
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#FDBA74] ring-2 ring-[#058360]" />
               </button>
               <AnimatePresence>
                 {notifOpen && (
