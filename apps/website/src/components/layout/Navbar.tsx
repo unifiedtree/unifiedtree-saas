@@ -79,6 +79,20 @@ export function Navbar({ tone }: Props) {
     .slice()
     .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999))
 
+  /**
+   * The logo always returns you to the top of the hero.
+   *
+   * <ScrollToTop> handles this when the route actually changes, but clicking
+   * the logo while already on "/" is a no-op navigation — React Router sees the
+   * same path, nothing re-renders, and the reader stays where they scrolled to.
+   * So on the home page we cancel the navigation and scroll instead.
+   */
+  const goHome = (e: React.MouseEvent) => {
+    if (pathname !== '/') return // let the router navigate; ScrollToTop takes it from there
+    e.preventDefault()
+    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
+  }
+
   // Hide the header while scrolling DOWN, show it back the moment the reader
   // scrolls up even a little — matches the client's ask (they explicitly
   // rejected the earlier "shrink the logo" approach). Disabled while the
@@ -155,7 +169,7 @@ export function Navbar({ tone }: Props) {
         >
           <div className="flex h-16 items-center justify-between sm:h-20">
             {/* Logo — inverted to solid white while the bar floats over the hero. */}
-            <Link to="/" className="flex flex-shrink-0 items-center gap-3">
+            <Link to="/" onClick={goHome} className="flex flex-shrink-0 items-center gap-3">
               <img
                 src="/UnifiedTreeLogo.png"
                 alt="UnifiedTree"
@@ -339,7 +353,7 @@ export function Navbar({ tone }: Props) {
             className="fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-[#04503A] lg:hidden"
           >
             <div className="flex h-16 flex-shrink-0 items-center justify-between px-4 sm:h-20 sm:px-6">
-              <Link to="/" onClick={() => setMenuOpen(false)} className="flex items-center">
+              <Link to="/" onClick={(e) => { setMenuOpen(false); goHome(e) }} className="flex items-center">
                 <img
                   src="/UnifiedTreeLogo.png"
                   alt="UnifiedTree"
