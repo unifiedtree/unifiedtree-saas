@@ -45,6 +45,10 @@ public class CanonicalAuthController {
     /** Matches the refresh-token TTL in JwtService (7 days). */
     private static final int RT_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper OBJECT_MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper()
+                    .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
     private final AuthService auth;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
@@ -129,6 +133,24 @@ public class CanonicalAuthController {
                 "HttpOnly", "Secure", "SameSite=Lax"));
     }
 
+    /**
+     * Read the request body as a UTF-8 string. Returns empty string on any IO
+     * error rather than throwing — the caller decides whether the body is
+     * required.
+     */
+    private static String readRequestBody(HttpServletRequest req) {
+        if (req.getContentLengthLong() == 0L) return "";
+        try (java.io.BufferedReader r = req.getReader()) {
+            StringBuilder sb = new StringBuilder();
+            char[] buf = new char[512];
+            int n;
+            while ((n = r.read(buf)) != -1) sb.append(buf, 0, n);
+            return sb.toString();
+        } catch (java.io.IOException e) {
+            return "";
+        }
+    }
+
     private static String readRefreshCookie(HttpServletRequest req, UUID tenantId) {
         if (req.getCookies() == null || tenantId == null) return null;
         String want = cookieName(tenantId);
@@ -189,21 +211,34 @@ public class CanonicalAuthController {
      * re-prompt the login screen — terrible Play-Store experience.
      */
     @PostMapping("/refresh")
-    public LoginResponse refresh(@RequestBody(required = false) RefreshRequest req,
-                                 HttpServletRequest httpReq,
+    public LoginResponse refresh(HttpServletRequest httpReq,
                                  HttpServletResponse res) {
         // Two callers, two transports:
         //   mobile — sends the token in the JSON body (no cookie jar)
         //   web    — sends nothing; the httpOnly cookie rides along, which is
         //            the point: script cannot read or forge it.
         //
-        // The body is @RequestBody(required=false) with no @NotBlank because a
-        // cookie-only call has no body at all and would otherwise be rejected
-        // at binding, before this method ever runs.
+        // Historically this used @RequestBody(required=false), but Spring's
+        // message converter still ran on a truly empty POST (Content-Length: 0)
+        // and threw before the method body — surfacing as 500. Reading the
+        // stream ourselves keeps every path (empty body, {}, {refreshToken:…},
+        // malformed JSON, or cookie-only) inside our own try/catch and out of
+        // the framework's converter chain.
         UUID tenantId = resolveTenant(httpReq);
-        String token = req != null && req.refreshToken() != null && !req.refreshToken().isBlank()
-                ? req.refreshToken()
-                : readRefreshCookie(httpReq, tenantId);
+        String bodyToken = null;
+        try {
+            String raw = readRequestBody(httpReq);
+            if (raw != null && !raw.isBlank()) {
+                RefreshRequest parsed = OBJECT_MAPPER.readValue(raw, RefreshRequest.class);
+                if (parsed != null && parsed.refreshToken() != null && !parsed.refreshToken().isBlank()) {
+                    bodyToken = parsed.refreshToken();
+                }
+            }
+        } catch (java.io.IOException ignored) {
+            // Malformed / non-JSON body: fall through to cookie lookup rather
+            // than 400ing. Cookie-based callers already send no body at all.
+        }
+        String token = bodyToken != null ? bodyToken : readRefreshCookie(httpReq, tenantId);
 
         if (token == null || token.isBlank()) {
             throw new com.hrms.core.exception.BusinessRuleException(

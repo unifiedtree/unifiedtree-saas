@@ -2,6 +2,8 @@ package com.hrms.employee.entity;
 
 import com.hrms.core.entity.BaseEntity;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -15,9 +17,15 @@ import java.util.UUID;
 @Setter
 public class OnboardingTemplate extends BaseEntity {
 
+    // Bean-validation guards on the create/update payload. Without @NotNull on
+    // companyId, POST /v1/onboarding/templates with a body missing that field
+    // sailed through into JPA and 500'd on the NOT NULL column constraint
+    // instead of returning a clean 400 VALIDATION_FAILED.
+    @NotNull
     @Column(name = "company_id", nullable = false)
     private UUID companyId;
 
+    @NotBlank
     @Column(name = "name", nullable = false, length = 150)
     private String name;
 
