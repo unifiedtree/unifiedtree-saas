@@ -1068,9 +1068,13 @@ public class AttendanceService {
     @Transactional
     public GeoFenceZoneResponse saveGeoFenceZone(UUID zoneId, UUID tenantId, UUID defaultCompanyId,
                                                  GeoFenceZoneRequest request) {
+        // Belt-and-braces tenant scoping (V091). RLS on public.geo_fence_zones
+        // also enforces this at the DB, but scoping the lookup here means a
+        // cross-tenant zoneId returns 404 (as the API contract expects) rather
+        // than surfacing whatever RLS-hidden state the row has.
         GeoFenceZone zone = zoneId == null
                 ? new GeoFenceZone()
-                : geoFenceZoneRepository.findById(zoneId)
+                : geoFenceZoneRepository.findByIdAndTenantId(zoneId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Geo fence zone", zoneId));
         if (zoneId == null) {
             zone.setTenantId(tenantId);
@@ -1097,8 +1101,9 @@ public class AttendanceService {
     }
 
     @Transactional
-    public void deleteGeoFenceZone(UUID zoneId) {
-        GeoFenceZone zone = geoFenceZoneRepository.findById(zoneId)
+    public void deleteGeoFenceZone(UUID zoneId, UUID tenantId) {
+        // Belt-and-braces tenant scoping (V091) — see saveGeoFenceZone note.
+        GeoFenceZone zone = geoFenceZoneRepository.findByIdAndTenantId(zoneId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Geo fence zone", zoneId));
         zone.setActive(false);
         geoFenceZoneRepository.save(zone);

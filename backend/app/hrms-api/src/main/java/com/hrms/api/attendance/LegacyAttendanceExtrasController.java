@@ -197,7 +197,7 @@ public class LegacyAttendanceExtrasController {
     @DeleteMapping("/geofence/zones/{zoneId}")
     @PreAuthorize("hasAuthority('org.geofence.write')")
     public ResponseEntity<Void> deleteZone(@PathVariable UUID zoneId) {
-        attendanceService.deleteGeoFenceZone(zoneId);
+        attendanceService.deleteGeoFenceZone(zoneId, TenantContext.getTenantId());
         return ResponseEntity.noContent().build();
     }
 
