@@ -9,6 +9,7 @@ import { enableMocking } from './mocks/browser'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { QueryProvider } from './providers/QueryProvider'
 import { AuthProvider } from './providers/AuthProvider'
+import { NotificationProvider } from './core/notifications/NotificationProvider'
 import App from './App'
 
 enableMocking().then(() => {
@@ -18,8 +19,10 @@ enableMocking().then(() => {
         <QueryProvider>
           <BrowserRouter>
             <AuthProvider>
-              <App />
-              <Toaster richColors position="top-right" />
+              <NotificationProvider>
+                <App />
+                <Toaster richColors position="top-right" />
+              </NotificationProvider>
             </AuthProvider>
           </BrowserRouter>
         </QueryProvider>
