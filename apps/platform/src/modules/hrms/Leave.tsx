@@ -108,6 +108,8 @@ function ApplyTab() {
   const { data: companies = [] } = useCompanies()
   const activeCompany = companies[0]
   const { data: leaveTypes = [], isLoading: typesLoading } = useLeaveTypes(activeCompany?.id ?? '')
+  const { data: myLeaves } = useMyLeaves(0)
+  const { data: balances = [] } = useMyBalances(new Date().getFullYear())
   const applyLeave = useApplyLeave()
 
   const [form, setForm] = useState({
@@ -118,17 +120,99 @@ function ApplyTab() {
     reason: '',
   })
 
+  const isHalfDay = form.duration === 'HALF_DAY_MORNING' || form.duration === 'HALF_DAY_AFTERNOON'
+
+  // Half-day auto-force: keep endDate == startDate whenever half-day is selected.
+  const effectiveEndDate = isHalfDay ? form.startDate : form.endDate
+
+  const todayIso = new Date().toISOString().slice(0, 10)
+
+  // Compute effective days: half-day counts as 0.5, else 1 per calendar day inclusive.
+  const effectiveDays = React.useMemo(() => {
+    if (!form.startDate || !effectiveEndDate) return 0
+    if (isHalfDay) return 0.5
+    const start = new Date(form.startDate + 'T00:00:00')
+    const end = new Date(effectiveEndDate + 'T00:00:00')
+    const diffMs = end.getTime() - start.getTime()
+    if (isNaN(diffMs) || diffMs < 0) return 0
+    return Math.floor(diffMs / 86_400_000) + 1
+  }, [form.startDate, effectiveEndDate, isHalfDay])
+
+  // Overlap check against existing PENDING/PENDING_L2/APPROVED leaves.
+  const hasOverlap = React.useMemo(() => {
+    if (!form.startDate || !effectiveEndDate) return false
+    const reqStart = form.startDate
+    const reqEnd = effectiveEndDate
+    const existing = myLeaves?.content ?? []
+    return existing.some((lv) => {
+      if (lv.status !== 'PENDING' && lv.status !== 'PENDING_L2' && lv.status !== 'APPROVED') return false
+      // Date-string comparison works because ISO YYYY-MM-DD is lexicographically ordered.
+      return lv.startDate <= reqEnd && lv.endDate >= reqStart
+    })
+  }, [form.startDate, effectiveEndDate, myLeaves])
+
+  // Balance check for the selected leave type.
+  const selectedBalance = balances.find((b) => b.leaveTypeId === form.leaveTypeId)
+  const availableBalance = selectedBalance?.available ?? null
+  const exceedsBalance = availableBalance !== null && effectiveDays > 0 && effectiveDays > availableBalance
+
+  const reasonTrimmedLen = form.reason.trim().length
+  const reasonTooShort = reasonTrimmedLen > 0 && reasonTrimmedLen < 10
+  const reasonMissing = reasonTrimmedLen === 0
+  const REASON_MAX = 500
+
+  const submitDisabled =
+    applyLeave.isPending ||
+    hasOverlap ||
+    exceedsBalance ||
+    !form.leaveTypeId ||
+    !form.startDate ||
+    !effectiveEndDate ||
+    reasonMissing ||
+    reasonTooShort
+
   const handleSubmit = async () => {
-    if (!form.leaveTypeId || !form.startDate || !form.endDate) {
+    if (!form.leaveTypeId || !form.startDate || !effectiveEndDate) {
       toast('Leave type and dates are required', 'error')
       return
     }
-    if (form.endDate < form.startDate) {
+    if (form.startDate < todayIso) {
+      toast('Leave start date cannot be in the past', 'error')
+      return
+    }
+    if (effectiveEndDate < form.startDate) {
       toast('End date must be after start date', 'error')
       return
     }
+    if (reasonMissing) {
+      toast('Reason is required', 'error')
+      return
+    }
+    if (reasonTooShort) {
+      toast('Reason must be at least 10 characters', 'error')
+      return
+    }
+    if (form.reason.length > REASON_MAX) {
+      toast(`Reason must be at most ${REASON_MAX} characters`, 'error')
+      return
+    }
+    if (hasOverlap) {
+      toast('You already have a request for these dates', 'error')
+      return
+    }
+    if (exceedsBalance) {
+      toast('Requested days exceed available balance', 'error')
+      return
+    }
     try {
-      await applyLeave.mutateAsync({ ...form, companyId: activeCompany?.id })
+      await applyLeave.mutateAsync({
+        leaveTypeId: form.leaveTypeId,
+        startDate: form.startDate,
+        endDate: effectiveEndDate,
+        duration: form.duration,
+        reason: form.reason,
+        companyId: activeCompany?.id,
+      })
       toast('Leave request submitted', 'success')
       setForm({ leaveTypeId: '', startDate: '', endDate: '', duration: 'FULL_DAY', reason: '' })
     } catch (err: unknown) {
@@ -159,11 +243,24 @@ function ApplyTab() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-text-secondary mb-1.5">Start Date *</label>
-          <input type="date" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary" />
+          <input
+            type="date"
+            min={todayIso}
+            value={form.startDate}
+            onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
+            className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary"
+          />
         </div>
         <div>
           <label className="block text-xs font-medium text-text-secondary mb-1.5">End Date *</label>
-          <input type="date" value={form.endDate} onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))} className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary" />
+          <input
+            type="date"
+            min={form.startDate || todayIso}
+            value={effectiveEndDate}
+            disabled={isHalfDay}
+            onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
+            className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary disabled:bg-surface-2 disabled:cursor-not-allowed"
+          />
         </div>
       </div>
 
@@ -181,20 +278,40 @@ function ApplyTab() {
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-text-secondary mb-1.5">Reason</label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="block text-xs font-medium text-text-secondary">Reason *</label>
+          <span className={clsx('text-[10px]', form.reason.length > REASON_MAX ? 'text-danger' : 'text-text-tertiary')}>
+            {form.reason.length}/{REASON_MAX}
+          </span>
+        </div>
         <textarea
           value={form.reason}
-          onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))}
+          onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value.slice(0, REASON_MAX) }))}
           rows={3}
-          placeholder="Reason for leave (optional)"
+          maxLength={REASON_MAX}
+          placeholder="Reason for leave (min 10 characters)"
           className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary resize-none"
         />
+        {reasonTooShort && (
+          <p className="text-[11px] text-danger mt-1">Reason must be at least 10 characters</p>
+        )}
       </div>
+
+      {hasOverlap && (
+        <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#B91C1C]">
+          You already have a request for these dates
+        </div>
+      )}
+      {exceedsBalance && availableBalance !== null && (
+        <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#B91C1C]">
+          Requested {effectiveDays} day{effectiveDays !== 1 ? 's' : ''} exceeds available balance of {availableBalance.toFixed(1)}
+        </div>
+      )}
 
       <button
         onClick={handleSubmit}
-        disabled={applyLeave.isPending}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm"
+        disabled={submitDisabled}
+        className="w-full flex items-center justify-center gap-2 py-3 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-xl transition-colors shadow-sm"
       >
         <Plus size={16} />
         {applyLeave.isPending ? 'Submitting...' : 'Apply for Leave'}
