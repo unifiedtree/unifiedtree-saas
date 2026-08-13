@@ -151,6 +151,13 @@ public class CanonicalProdSecurityConfig {
                     // with ZERO active modules; the admin unlocks + pays
                     // inside the workspace via the /plan page.
                     "/v1/public/free-signup",
+                    // QA-FIX (2026-08-13 reverify R3+R4): website Talk-to-Us Demo +
+                    // Contact Sales forms POST here unauthenticated. Without this
+                    // allowlist entry the endpoint 401s and every lead is dropped
+                    // (same silent-lead-loss shape as the CRITICAL fix, just moved
+                    // one hop further). LeadRequestController is a pure INSERT +
+                    // event publish, no PII beyond what the visitor volunteered.
+                    "/v1/public/lead-request",
                     // Razorpay webhook receiver. MUST be unauthenticated:
                     // Razorpay is a third party and cannot present our JWT.
                     // It is not unprotected — SubscriptionWebhookController

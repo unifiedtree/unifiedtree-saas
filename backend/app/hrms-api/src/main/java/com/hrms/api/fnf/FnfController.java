@@ -50,8 +50,15 @@ public class FnfController {
     @PostMapping("/settlements")
     @PreAuthorize("@perm.check('hrms.fnf.process')")
     public ResponseEntity<FnfSettlementResponse> process(@Valid @RequestBody FnfSettlementRequest request) {
+        // QA-FIX (2026-08-13 reverify R1): was throwing IllegalArgumentException which
+        // fell through GlobalExceptionHandler to a 500 INTERNAL_ERROR, masking the real
+        // "employee not found" from clients. Use HrmsException(NOT_FOUND) so it maps to
+        // 404 EMPLOYEE_NOT_FOUND — matches the service-layer guard added in fix bundle B.
         Employee employee = employeeRepository.findById(request.employeeId())
-                .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + request.employeeId()));
+                .orElseThrow(() -> new com.hrms.core.exception.HrmsException(
+                        "Employee not found: " + request.employeeId(),
+                        org.springframework.http.HttpStatus.NOT_FOUND,
+                        "EMPLOYEE_NOT_FOUND"));
         UUID companyId = request.companyId() != null ? request.companyId() : employee.getCompanyId();
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(enrichOne(fnfService.processSettlement(companyId, request)));

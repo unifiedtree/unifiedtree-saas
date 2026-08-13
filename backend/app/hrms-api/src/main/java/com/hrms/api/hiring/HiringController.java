@@ -141,8 +141,11 @@ public class HiringController {
                 ? Map.of()
                 : employeeRepository.findAllById(managerIds).stream()
                         .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
+        // QA-FIX (2026-08-13 reverify R5): Map.of() throws NPE on .get(null) — any
+        // requisition with a null hiringManagerId crashed the whole list endpoint with
+        // 500. Guard the lookup so null managers just enrich as unassigned.
         List<JobRequisitionResponse> enriched = page.content().stream()
-                .map(r -> enrich(r, employeeMap.get(r.hiringManagerId())))
+                .map(r -> enrich(r, r.hiringManagerId() == null ? null : employeeMap.get(r.hiringManagerId())))
                 .toList();
         return new PageResponse<>(enriched, page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last());
