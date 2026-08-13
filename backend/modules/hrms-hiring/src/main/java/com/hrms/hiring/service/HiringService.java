@@ -63,9 +63,31 @@ public class HiringService {
 
     @Transactional(readOnly = true)
     public PageResponse<JobRequisitionResponse> getRequisitions(UUID companyId, Pageable pageable) {
-        Page<JobRequisition> page = companyId != null
-                ? requisitionRepository.findByCompanyIdOrderByCreatedAtDesc(companyId, pageable)
-                : requisitionRepository.findAllByOrderByCreatedAtDesc(pageable);
+        // Tenant isolation is enforced by RLS on hiring_mgmt.job_requisitions
+        // (V070) — the connection's app.tenant_id GUC filters rows for us.
+        // Keep the RLS binding paranoia here regardless: if a caller reached
+        // this method WITHOUT a tenant bound, we would return every tenant's
+        // requisitions (RLS falls open on missing GUC in some configurations).
+        // A missing tenant is a caller bug, not a valid list request.
+        UUID tenantId = TenantContext.getTenantId();
+        if (tenantId == null) {
+            throw new BusinessRuleException(
+                    "No tenant context — the request is not scoped to a workspace",
+                    "TENANT_MISSING");
+        }
+        Page<JobRequisition> page;
+        try {
+            page = companyId != null
+                    ? requisitionRepository.findByCompanyIdOrderByCreatedAtDesc(companyId, pageable)
+                    : requisitionRepository.findAllByOrderByCreatedAtDesc(pageable);
+        } catch (RuntimeException e) {
+            // Common cause historically: a client-supplied ?sort=<unknownProperty>
+            // makes Spring Data build ORDER BY nonexistent_column and Hibernate
+            // fails hard. Log the pageable so we can see the offending sort in
+            // the tail rather than a bare stacktrace.
+            log.error("List requisitions failed (companyId={} pageable={})", companyId, pageable, e);
+            throw e;
+        }
         return toPage(page);
     }
 
@@ -152,26 +174,94 @@ public class HiringService {
     public CandidateResponse updateStage(UUID candidateId, CandidateStageRequest request) {
         Candidate candidate = candidateRepository.findById(candidateId)
                 .orElseThrow(() -> new ResourceNotFoundException("Candidate", candidateId));
-        candidate.setStage(request.stage());
+        CandidateStage from = candidate.getStage();
+        CandidateStage to   = request.stage();
+        if (to == null) {
+            throw new BusinessRuleException("Target stage is required", "STAGE_MISSING");
+        }
+        assertTransitionAllowed(from, to);
+        candidate.setStage(to);
         candidate = candidateRepository.save(candidate);
-        log.info("Candidate {} advanced to stage {}", candidateId, request.stage());
+        log.info("Candidate {} advanced {} -> {}", candidateId, from, to);
         return toCandidate(candidate);
+    }
+
+    /**
+     * Enforce the hiring-pipeline state machine:
+     * <ul>
+     *   <li>APPLIED → SCREENING → INTERVIEW → OFFER → HIRED (forward only;
+     *       skipping a stage is rejected, and so is reverting to an earlier
+     *       one — a candidate who "goes back to screening" is a fresh
+     *       re-apply, not a stage change).</li>
+     *   <li>REJECTED and WITHDRAWN are terminal: reachable from any funnel
+     *       stage (including HIRED, e.g. offer rescinded post-hire), but no
+     *       transition leaves them.</li>
+     *   <li>Same-stage saves are a no-op success (idempotent PATCH).</li>
+     * </ul>
+     * Invalid transitions surface as HTTP 409 STAGE_TRANSITION_INVALID.
+     */
+    private static void assertTransitionAllowed(CandidateStage from, CandidateStage to) {
+        if (from == to) return;                                   // idempotent
+
+        // Terminal stages don't move — once REJECTED / WITHDRAWN, that's final.
+        if (from == CandidateStage.REJECTED || from == CandidateStage.WITHDRAWN) {
+            throw new BusinessRuleException(
+                    "Cannot change a candidate's stage after " + from,
+                    "STAGE_TRANSITION_INVALID");
+        }
+        // Any funnel stage may drop out to REJECTED / WITHDRAWN.
+        if (to == CandidateStage.REJECTED || to == CandidateStage.WITHDRAWN) return;
+
+        // Forward-only funnel progression by exactly one step.
+        boolean fromInFunnel = from.ordinal() <= CandidateStage.HIRED.ordinal();
+        boolean toInFunnel   = to.ordinal()   <= CandidateStage.HIRED.ordinal();
+        if (!fromInFunnel || !toInFunnel) {
+            throw new BusinessRuleException(
+                    "Transition " + from + " -> " + to + " is not allowed",
+                    "STAGE_TRANSITION_INVALID");
+        }
+        if (to.ordinal() != from.ordinal() + 1) {
+            throw new BusinessRuleException(
+                    "Cannot skip stages: " + from + " -> " + to
+                            + " (must advance one step at a time)",
+                    "STAGE_TRANSITION_INVALID");
+        }
     }
 
     // ── mapping ──────────────────────────────────────────────────────────────
 
     private PageResponse<JobRequisitionResponse> toPage(Page<JobRequisition> page) {
         List<JobRequisitionResponse> content = page.getContent().stream()
-                .map(r -> toResponse(r, candidateRepository.countByRequisitionId(r.getId())))
+                .map(r -> toResponse(r, safeCandidateCount(r.getId())))
                 .toList();
         return new PageResponse<>(content, page.getNumber(), page.getSize(),
                 page.getTotalElements(), page.getTotalPages(), page.isLast());
     }
 
+    /**
+     * The candidate-count aggregation is a nice-to-have in the list view;
+     * losing it must not 500 the whole list. This wrapper turns any repo
+     * failure (e.g. a transient RLS misbinding on the child table) into a 0
+     * count with a warning log.
+     */
+    private long safeCandidateCount(UUID requisitionId) {
+        try {
+            return candidateRepository.countByRequisitionId(requisitionId);
+        } catch (Exception e) {
+            log.warn("candidate count failed for requisition {} — using 0", requisitionId, e);
+            return 0L;
+        }
+    }
+
     private JobRequisitionResponse toResponse(JobRequisition r, long candidateCount) {
+        // Every field except the primary key is defensively unwrapped:
+        // legacy rows written before some columns had NOT NULL guards can hold
+        // nulls that would otherwise NPE inside the record constructor's
+        // implicit Integer unboxing (openings) or downstream JSON serializers.
+        int openings = r.getOpenings() == null ? 0 : r.getOpenings();
         return new JobRequisitionResponse(
                 r.getId(), r.getCompanyId(), r.getTitle(), r.getDepartmentId(),
-                r.getOpenings(), r.getStatus(), r.getEmploymentType(), r.getLocation(),
+                openings, r.getStatus(), r.getEmploymentType(), r.getLocation(),
                 r.getDescription(), r.getHiringManagerId(), null, candidateCount, r.getCreatedAt());
     }
 

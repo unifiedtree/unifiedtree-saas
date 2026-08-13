@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Field, inputCls } from './DemoRequestForm'
+import { API_BASE_URL } from '../../lib/api'
 
 const schema = z.object({
   name:      z.string().min(2, 'Enter your full name'),
@@ -21,20 +22,30 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 
 /**
- * Contact-sales form. Submission is MOCKED. Same TODO(backend) applies as
- * DemoRequestForm — no lead is captured server-side yet.
+ * Contact-sales form. Wired 2026-08-13 to POST /v1/public/lead-request.
  */
 export function ContactSalesForm() {
   const [submitted, setSubmitted] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
-  const onSubmit = async (_values: FormValues) => {
-    await new Promise((r) => setTimeout(r, 700))
-    setSubmitted(true)
+  const onSubmit = async (values: FormValues) => {
+    setSubmitError(null)
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/public/lead-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent: 'sales', ...values }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setSubmitted(true)
+    } catch (err) {
+      setSubmitError("Sorry — we couldn't send that. Please try again or email us at unifiedtree@gmail.com.")
+    }
   }
 
   if (submitted) return <ThanksState />
@@ -84,9 +95,13 @@ export function ContactSalesForm() {
         {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Sending...</> : 'Contact sales'}
       </Button>
 
-      <p className="text-center text-xs text-text-tertiary">
-        Our sales team responds within one working day.
-      </p>
+      {submitError ? (
+        <p className="text-center text-xs text-danger">{submitError}</p>
+      ) : (
+        <p className="text-center text-xs text-text-tertiary">
+          Our sales team responds within one working day.
+        </p>
+      )}
     </form>
   )
 }

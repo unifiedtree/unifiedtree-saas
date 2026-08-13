@@ -11,8 +11,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
 
@@ -47,11 +49,14 @@ public class CanonicalAuthController {
 
     private final AuthService auth;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+    private final LoginRateLimiter rateLimiter;
 
     public CanonicalAuthController(AuthService auth,
-                                   org.springframework.jdbc.core.JdbcTemplate jdbc) {
+                                   org.springframework.jdbc.core.JdbcTemplate jdbc,
+                                   LoginRateLimiter rateLimiter) {
         this.auth = auth;
         this.jdbc = jdbc;
+        this.rateLimiter = rateLimiter;
     }
 
     /**
@@ -152,6 +157,22 @@ public class CanonicalAuthController {
      */
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest req, HttpServletResponse res) {
+        // ── Sliding-window rate-limit (Bundle H) ────────────────────────────
+        // 5 failed attempts per email per 5 min → 429 with Retry-After. The
+        // limiter is keyed BEFORE the tenant is resolved so an attacker who
+        // guesses the tenant right can't reset the counter by omitting it
+        // (and the mobile path doesn't send tenantId at all, so per-email is
+        // the only stable key we have here).
+        LoginRateLimiter.CheckResult gate = rateLimiter.check(req.email());
+        if (!gate.allowed()) {
+            log.warn("login blocked by rate limiter for email='{}' retryAfter={}s",
+                    req.email(), gate.retryAfterSeconds());
+            res.setHeader("Retry-After", Long.toString(gate.retryAfterSeconds()));
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many failed login attempts. Try again in "
+                            + gate.retryAfterSeconds() + "s.");
+        }
+
         // tenantId is optional. When absent (email-only mobile login), resolve
         // the workspace from the email HERE — before AuthService.login's
         // @Transactional boundary — so the connection is leased with the correct
@@ -162,13 +183,28 @@ public class CanonicalAuthController {
         if (tenantId == null) {
             tenantId = auth.resolveLoginTenant(req.email());
             if (tenantId == null) {
+                // Count this as a failed attempt too — otherwise an attacker
+                // could enumerate unknown emails cheaply and never trip the
+                // limiter.
+                rateLimiter.recordFailure(req.email());
                 throw new com.hrms.core.exception.BusinessRuleException(
                         "Invalid email or password", "INVALID_CREDENTIALS");
             }
         }
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
-        LoginResponse out = auth.login(req);
+        LoginResponse out;
+        try {
+            out = auth.login(req);
+        } catch (RuntimeException e) {
+            // Any auth failure (INVALID_CREDENTIALS, ACCOUNT_LOCKED,
+            // ACCOUNT_INACTIVE) counts against the limiter — otherwise an
+            // attacker who tripped ACCOUNT_LOCKED once could keep pounding
+            // forever without touching the per-email throttle.
+            rateLimiter.recordFailure(req.email());
+            throw e;
+        }
+        rateLimiter.recordSuccess(req.email());
         // Persist the refresh token so a reload can restore this session. Web
         // clients never touch it (httpOnly); mobile keeps using the copy in
         // the response body.

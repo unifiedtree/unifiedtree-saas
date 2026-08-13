@@ -89,6 +89,13 @@ public class PolicyController {
         return ResponseEntity.ok(policyService.updatePolicy(id, request));
     }
 
+    @Operation(summary = "Publish a DRAFT policy (DRAFT → ACTIVE)")
+    @PostMapping("/policies/{id}/publish")
+    @PreAuthorize("hasAuthority('hrms.policy.write')")
+    public ResponseEntity<PolicyResponse> publishPolicy(@PathVariable UUID id) {
+        return ResponseEntity.ok(policyService.publishPolicy(id));
+    }
+
     @Operation(summary = "Archive an HR policy")
     @PostMapping("/policies/{id}/archive")
     @PreAuthorize("hasAuthority('hrms.policy.write')")
