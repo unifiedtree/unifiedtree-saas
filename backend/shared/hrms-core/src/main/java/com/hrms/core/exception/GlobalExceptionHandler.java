@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -19,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @RestControllerAdvice
@@ -79,6 +81,11 @@ public class GlobalExceptionHandler {
      * type, etc. This is a CLIENT error (400), not a server error: mapping it here
      * keeps it out of 500 error-rate alerting/dashboards (otherwise the catch-all
      * below would log it as an "Unhandled exception" and return 500).
+     *
+     * <p>The response message is sanitized — the previous version echoed the raw
+     * Jackson diagnostic to callers, which leaked implementation classes such as
+     * {@code org.springframework.util.StreamUtils$NonClosingInputStream} and the
+     * full Jackson class chain. The full detail is kept server-side in the log.
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handle(HttpMessageNotReadableException ex) {
@@ -87,7 +94,36 @@ public class GlobalExceptionHandler {
         log.warn("Malformed request body: {}", detail);
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.of(400, "INVALID_REQUEST",
-                        detail != null ? detail : "Request body is malformed or contains an invalid value"));
+                        "Request body is malformed or missing a required value"));
+    }
+
+    /**
+     * A date/time string in a request body or query param failed to parse
+     * (e.g. "2026-13-40" for a LocalDate). Same reasoning as {@link
+     * #handle(HttpMessageNotReadableException)}: CLIENT error, sanitized
+     * message. Without this, the parse exception bubbles up and is reported as
+     * a 500, poisoning error-rate dashboards and leaking Jackson class chains.
+     */
+    @ExceptionHandler(DateTimeParseException.class)
+    public ResponseEntity<ErrorResponse> handle(DateTimeParseException ex) {
+        log.warn("Invalid date/time value in request: {}", ex.getMessage());
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of(400, "INVALID_DATE_FORMAT",
+                        "A date/time value in the request is not in a recognised format"));
+    }
+
+    /**
+     * JPA optimistic-lock miss — two writers loaded the same row and both tried
+     * to write it back. The correct HTTP status is 409 Conflict, not 500: the
+     * client can (and usually should) reload and retry. Without this mapping the
+     * catch-all below logged it as an unexpected server error and returned 500.
+     */
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handle(ObjectOptimisticLockingFailureException ex) {
+        log.warn("Optimistic lock conflict on {} id={}", ex.getPersistentClassName(), ex.getIdentifier());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of(409, "CONCURRENT_UPDATE",
+                        "This record was modified by someone else. Reload and try again."));
     }
 
     /**

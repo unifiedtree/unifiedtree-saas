@@ -1,7 +1,10 @@
 package com.hrms.app.bulk;
 
 import com.hrms.api.employee.SeatLimitGuard;
+import com.hrms.core.exception.HrmsException;
 import com.hrms.core.tenant.TenantContext;
+import org.apache.poi.ooxml.POIXMLException;
+import org.springframework.http.HttpStatus;
 import com.hrms.employee.dto.CreateEmployeeRequest;
 import com.hrms.employee.enums.EmploymentType;
 import com.hrms.employee.enums.Gender;
@@ -167,6 +170,10 @@ public class EmployeeBulkImportService {
 
     private List<BulkImportRow> parseXlsx(MultipartFile file) throws IOException {
         List<BulkImportRow> rows = new ArrayList<>();
+        // Wrap POI's exception chain in a clean 400. Uploading a text/CSV/junk
+        // file with a .xlsx extension previously threw POIXMLException /
+        // NotOfficeXmlFileException from deep inside the ZIP reader and 500'd
+        // the request. That is a client error, not a server bug.
         try (Workbook wb = new XSSFWorkbook(file.getInputStream())) {
             Sheet sheet = wb.getSheetAt(0);
             Row headerRow = sheet.getRow(0);
@@ -188,6 +195,12 @@ public class EmployeeBulkImportService {
                 }
                 rows.add(mapRow(r + 1, headers, cells));
             }
+        } catch (POIXMLException | IllegalArgumentException | IllegalStateException e) {
+            log.warn("Rejecting bulk-import upload: not a valid .xlsx ({})", e.getMessage());
+            throw new HrmsException(
+                    "Uploaded file is not a valid .xlsx",
+                    HttpStatus.BAD_REQUEST,
+                    "INVALID_FILE_FORMAT");
         }
         return rows;
     }
