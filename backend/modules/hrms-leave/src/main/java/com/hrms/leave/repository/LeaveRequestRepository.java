@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -108,4 +110,24 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
         """,
         nativeQuery = true)
     Page<LeaveRequest> findDecidedForManager(@Param("managerEmpId") UUID managerEmpId, Pageable pageable);
+
+    /**
+     * Overlap detection for the apply-leave path. Returns every leave request
+     * for {@code employeeId} that is still "live" (PENDING, PENDING_L2, or
+     * APPROVED) and whose date range intersects the proposed range
+     * {@code [startDate, endDate]}. Two ranges intersect when
+     * {@code existing.startDate <= proposed.endDate} AND
+     * {@code existing.endDate   >= proposed.startDate} — the standard overlap
+     * predicate. Any non-empty result means the applicant is trying to
+     * double-book themselves and must be rejected with LEAVE_DATES_OVERLAP.
+     */
+    @Query("SELECT lr FROM LeaveRequest lr " +
+           "WHERE lr.employeeId = :employeeId " +
+           "AND lr.status IN :statuses " +
+           "AND lr.startDate <= :endDate " +
+           "AND lr.endDate >= :startDate")
+    List<LeaveRequest> findOverlapping(@Param("employeeId") UUID employeeId,
+                                       @Param("statuses") Collection<ApprovalStatus> statuses,
+                                       @Param("startDate") LocalDate startDate,
+                                       @Param("endDate") LocalDate endDate);
 }

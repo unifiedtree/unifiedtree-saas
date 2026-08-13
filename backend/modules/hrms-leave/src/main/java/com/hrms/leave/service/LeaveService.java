@@ -123,6 +123,37 @@ public class LeaveService {
             throw new BusinessRuleException("End date must not be before start date", "INVALID_LEAVE_DATES");
         }
 
+        // Guard past-dated applications BEFORE the notice check. Without this
+        // gate, an applicant picking a start date in the past hits the notice
+        // path with a NEGATIVE noticeDays and sees the misleading text
+        // "Minimum notice of 0 day(s) required" (or whatever the leave type is
+        // set to) — a confusing error for what is really "you cannot apply
+        // for leave in the past". Reject explicitly with LEAVE_START_IN_PAST
+        // so the mobile UI can render the right message.
+        if (startDate.isBefore(LocalDate.now())) {
+            throw new BusinessRuleException(
+                    "Leave start date cannot be in the past", "LEAVE_START_IN_PAST");
+        }
+
+        // Reject overlapping / duplicate leave requests for the same employee.
+        // Any existing PENDING / PENDING_L2 / APPROVED leave whose date range
+        // intersects [startDate, endDate] blocks a new application — otherwise
+        // the applicant can double-book themselves (two PENDING requests for
+        // the same day, or a fresh request layered on top of an already-approved
+        // one), which then double-deducts pending balance and creates
+        // ambiguous approver queues. Cancelled / rejected rows are ignored on
+        // purpose so a corrected re-application still goes through.
+        List<LeaveRequest> overlapping = leaveRequestRepository.findOverlapping(
+                employeeId,
+                List.of(ApprovalStatus.PENDING, ApprovalStatus.PENDING_L2, ApprovalStatus.APPROVED),
+                startDate,
+                endDate);
+        if (!overlapping.isEmpty()) {
+            throw new BusinessRuleException(
+                    "Overlapping leave request already exists",
+                    "LEAVE_DATES_OVERLAP");
+        }
+
         // Check min notice days — must be the TOTAL elapsed days, not
         // Period.getDays() (which is only the day-of-month component, so a
         // start date one month out reads as 0 days' notice and wrongly rejects).
@@ -279,6 +310,15 @@ public class LeaveService {
 
         LeaveRequest leaveRequest = leaveRequestRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("LeaveRequest", requestId));
+
+        // Self-approval guard: the actor (approverId is the caller's employeeId
+        // extracted from JWT) must not be the same person as the request's
+        // applicant. Without this a manager who is also the applicant on their
+        // own request — which happens on tenants where the approver-fallback
+        // chain resolved to the applicant themselves (e.g. a founding HR who
+        // is both applicant and terminal fallback) — could rubber-stamp their
+        // own leave.
+        assertNotSelfApproval(leaveRequest, approverId);
 
         if (leaveRequest.getStatus() != ApprovalStatus.PENDING) {
             throw new BusinessRuleException(
@@ -527,6 +567,9 @@ public class LeaveService {
         LeaveRequest req = leaveRequestRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("LeaveRequest", requestId));
 
+        // Self-approval guard — see approveLeave for the reasoning.
+        assertNotSelfApproval(req, managerId);
+
         if (req.getStatus() != ApprovalStatus.PENDING) {
             throw new BusinessRuleException(
                     "Leave request is not awaiting L1 approval (status=%s)".formatted(req.getStatus()),
@@ -567,6 +610,13 @@ public class LeaveService {
         LeaveRequest req = leaveRequestRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("LeaveRequest", requestId));
 
+        // Self-approval guard — see approveLeave for the reasoning. Also
+        // blocks the L1 approver from also signing off L2 (impersonating
+        // hrUserId as themselves) — that is already prevented by the
+        // preAuthorize on the controller, but the applicant==actor case is
+        // the one this guard specifically closes.
+        assertNotSelfApproval(req, hrUserId);
+
         if (req.getStatus() != ApprovalStatus.PENDING_L2) {
             throw new BusinessRuleException(
                     "Leave request is not awaiting L2 approval (status=%s)".formatted(req.getStatus()),
@@ -599,6 +649,21 @@ public class LeaveService {
         LeaveRequest saved = leaveRequestRepository.save(req);
         publishLeaveDecidedSafely(saved, saved.getStatus() == ApprovalStatus.APPROVED, approval.comment());
         return toResponseWithTypeName(saved);
+    }
+
+    /**
+     * Rejects a decision when the actor is the same employee as the leave's
+     * applicant. Called from every approval path (approveLeave / approveL1 /
+     * approveL2). Throws BusinessRuleException with code SELF_APPROVAL_NOT_ALLOWED
+     * — the intent is a 403-style refusal (a policy violation, not an input
+     * shape problem) surfaced with an actionable message the UI can render.
+     */
+    private void assertNotSelfApproval(LeaveRequest req, UUID actorEmployeeId) {
+        if (actorEmployeeId != null && actorEmployeeId.equals(req.getEmployeeId())) {
+            throw new BusinessRuleException(
+                    "You cannot approve your own leave request",
+                    "SELF_APPROVAL_NOT_ALLOWED");
+        }
     }
 
     /** Best-effort publish of the notification event — never propagates. */
