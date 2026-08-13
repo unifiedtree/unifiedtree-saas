@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAuthStore as useSdkStore, apiEvents, setAccessToken } from '@unifiedtree/sdk'
 import type { AuthUser, AuthTenant, ModuleInfo } from '@unifiedtree/sdk'
 import { useAuthStore as useOldStore } from '@/core/auth/authStore'
+import { WelcomeSplash, hasWelcomed, markWelcomed } from '@/core/auth/WelcomeSplash'
 import type { User, Tenant } from '@/types'
 
 function toOldUser(sdkUser: AuthUser, permCodes: string[]): User {
@@ -38,6 +39,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const oldLogin  = useOldStore(s => s.login)
   const oldLogout = useOldStore(s => s.logout)
 
+  // Whether the welcome has already played this session. Read once on mount so
+  // a re-render never replays it mid-session.
+  const [welcomed, setWelcomed] = useState(() => hasWelcomed())
+
+  // A fresh sign-in must be greeted again, so clear the flag on sign-out.
+  useEffect(() => {
+    if (sdkStatus === 'unauthenticated') {
+      try { sessionStorage.removeItem('ut.welcomed') } catch { /* private mode */ }
+      setWelcomed(false)
+    }
+  }, [sdkStatus])
+
   // Hydrate on mount
   useEffect(() => { 
     // Check if we arrived via cross-domain SSO with a token in the URL
@@ -71,24 +84,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsub
   }, [])
 
-  // Show splash while hydrating
+  // Hydrating — no identity yet, so the grove just breathes.
   if (sdkStatus === 'idle' || sdkStatus === 'loading') {
-    return (
-      <div className="flex h-screen items-center justify-center bg-bg-base">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-accent-default flex items-center justify-center shadow-lg">
-            <span className="text-[#0F172A] font-bold text-xl select-none">U</span>
-          </div>
-          <div className="h-1 w-28 rounded-full bg-border-default overflow-hidden">
-            <div
-              className="h-full rounded-full bg-accent-default"
-              style={{ animation: 'shimmer 1.6s ease-in-out infinite', backgroundSize: '200% 100%' }}
-            />
-          </div>
-        </div>
-      </div>
-    )
+    return <WelcomeSplash mode="booting" />
   }
 
-  return <>{children}</>
+  // Authenticated and not yet greeted this session: play the welcome once, over
+  // the app (which is already mounted underneath, so nothing is blocked from
+  // loading while it plays).
+  const greeting = sdkStatus === 'authenticated' && !welcomed
+  const firstName = sdkUser?.firstName || (sdkUser?.email ? sdkUser.email.split('@')[0] : undefined)
+
+  return (
+    <>
+      {children}
+      {greeting && (
+        <WelcomeSplash
+          mode="welcome"
+          name={firstName}
+          workspace={sdkTenant?.displayName}
+          onDone={() => { markWelcomed(); setWelcomed(true) }}
+        />
+      )}
+    </>
+  )
 }

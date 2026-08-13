@@ -598,15 +598,11 @@ export function PlatformShell() {
     return (
       <div className="relative flex h-screen flex-col overflow-hidden font-sans text-[var(--text-primary)]">
         <header className="absolute inset-x-0 top-0 z-sticky flex h-16 shrink-0 items-center justify-between gap-4 px-4 sm:px-6">
-          {/* Top-left: the workspace's own logo only (their upload when present,
-              UnifiedTree otherwise), on a white chip so any logo reads on green. */}
-          <button onClick={() => navigate('/modules')} className="flex items-center gap-2.5" title="Apps">
-            <span className="flex h-10 items-center rounded-xl bg-white/95 px-3 shadow-sm">
-              <TenantLogo className="h-6 w-auto object-contain" />
-            </span>
-          </button>
+          {/* Nothing top-left on the launcher — the page IS the brand moment.
+              The logo chip and the role badge were both removed at the client's
+              request; the spacer keeps the avatar pinned right. */}
+          <span aria-hidden />
           <div className="relative flex items-center gap-1.5" ref={profileRef}>
-            {roleBadgeText && <span className="mr-1 hidden items-center rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white ring-1 ring-inset ring-white/25 sm:inline-flex">{roleBadgeText}</span>}
             <button onClick={() => setProfileOpen(v => !v)} className="flex h-9 items-center gap-2 rounded-lg pl-1 pr-2 transition-colors hover:bg-white/10">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/95 text-sm font-bold text-[#047857] shadow-sm">{initial}</span>
               <span className="hidden text-[13px] font-semibold text-white sm:block">{fullName}</span>
@@ -683,8 +679,9 @@ export function PlatformShell() {
             </button>
           </div>
 
+          {/* Role badge removed at the client's request — the role still shows
+              inside the profile menu, where it belongs. */}
           <div className="flex shrink-0 items-center gap-1.5">
-            {roleBadgeText && <span className="mr-1 hidden items-center rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white ring-1 ring-inset ring-white/25 lg:inline-flex">{roleBadgeText}</span>}
             <div className="relative" ref={notifRef}>
               <button onClick={() => setNotifOpen(v => !v)} className="relative rounded-lg p-2 text-white/85 transition-colors hover:bg-white/10 hover:text-white" aria-label="Notifications">
                 <Bell size={18} />
