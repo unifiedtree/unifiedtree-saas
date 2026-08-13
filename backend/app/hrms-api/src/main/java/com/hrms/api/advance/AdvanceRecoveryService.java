@@ -248,8 +248,15 @@ public class AdvanceRecoveryService {
         BigDecimal lump = req.lumpSumAmount();
         if (lump.signum() <= 0) throw new BusinessRuleException(
                 "Lump sum must be positive", "INVALID_AMOUNT");
-        // Allow over-payment (small excess), but never negative outstanding.
-        BigDecimal newBalance = outstanding.subtract(lump).max(BigDecimal.ZERO);
+        // Reject over-payment outright — a silent clamp writes a bogus amount
+        // to the ledger (client says ₹10 000, we settle ₹500). Caller must
+        // send exactly what's owed, not more.
+        if (lump.compareTo(outstanding) > 0) {
+            throw new BusinessRuleException(
+                    "Lump sum ₹" + lump + " exceeds outstanding ₹" + outstanding,
+                    "LUMP_EXCEEDS_OUTSTANDING");
+        }
+        BigDecimal newBalance = outstanding.subtract(lump);
 
         jdbc.update("""
                 UPDATE advance_mgmt.advance_requests
