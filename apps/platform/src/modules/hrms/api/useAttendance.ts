@@ -230,7 +230,7 @@ export function useCheckOut() {
 export function useCreateCorrection() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { requestedDate: string; requestedCheckInAt?: string; requestedCheckOutAt?: string; reason: string }) =>
+    mutationFn: (data: { requestedDate: string; requestedCheckInAt?: string; requestedCheckOutAt?: string; reason: string; attachmentUrl?: string }) =>
       apiJson<CorrectionRequestResponse>('/v1/attendance/corrections', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'attendance', 'corrections'] }),
   })

@@ -188,15 +188,44 @@ function CorrectionsTab() {
   const createCorrection = useCreateCorrection()
   const decide = useDecideCorrection()
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ requestedDate: '', requestedCheckInAt: '', requestedCheckOutAt: '', reason: '' })
+  const todayLocal = () => {
+    const d = new Date()
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
+  const emptyForm = () => ({ requestedDate: todayLocal(), requestedCheckInAt: '', requestedCheckOutAt: '', reason: '', attachmentUrl: '' })
+  const [form, setForm] = useState(emptyForm)
+
+  const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+  const composeLocalIso = (date: string, time: string): string =>
+    new Date(`${date}T${time}:00`).toISOString()
 
   const handleCreate = async () => {
-    if (!form.requestedDate || !form.reason) { toast('Date and reason required', 'error'); return }
+    if (createCorrection.isPending) return
+    if (!form.requestedDate || !form.reason.trim()) { toast('Date and reason required', 'error'); return }
+    if (!form.requestedCheckInAt && !form.requestedCheckOutAt) {
+      toast('Provide either check-in or check-out time (or both)', 'error')
+      return
+    }
+    if (form.requestedCheckInAt && !TIME_RE.test(form.requestedCheckInAt)) {
+      toast('Requested check-in time must be HH:MM (24-hour)', 'error'); return
+    }
+    if (form.requestedCheckOutAt && !TIME_RE.test(form.requestedCheckOutAt)) {
+      toast('Requested check-out time must be HH:MM (24-hour)', 'error'); return
+    }
     try {
-      await createCorrection.mutateAsync({ requestedDate: form.requestedDate, requestedCheckInAt: form.requestedCheckInAt || undefined, requestedCheckOutAt: form.requestedCheckOutAt || undefined, reason: form.reason })
+      await createCorrection.mutateAsync({
+        requestedDate: form.requestedDate,
+        requestedCheckInAt: form.requestedCheckInAt ? composeLocalIso(form.requestedDate, form.requestedCheckInAt) : undefined,
+        requestedCheckOutAt: form.requestedCheckOutAt ? composeLocalIso(form.requestedDate, form.requestedCheckOutAt) : undefined,
+        reason: form.reason.trim(),
+        attachmentUrl: form.attachmentUrl.trim() || undefined,
+      })
       toast('Correction submitted successfully', 'success')
       setOpen(false)
-      setForm({ requestedDate: '', requestedCheckInAt: '', requestedCheckOutAt: '', reason: '' })
+      setForm(emptyForm())
     } catch { toast('Failed to submit correction', 'error') }
   }
 
@@ -232,8 +261,8 @@ function CorrectionsTab() {
                     <input type="date" value={form.requestedDate} onChange={(e) => setForm(p => ({ ...p, requestedDate: e.target.value }))} className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-text-tertiary mb-1.5">Reason *</label>
-                    <input value={form.reason} onChange={(e) => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="Brief reason" className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all" />
+                    <label className="block text-xs font-bold uppercase tracking-wider text-text-tertiary mb-1.5">Attachment URL</label>
+                    <input type="url" value={form.attachmentUrl} onChange={(e) => setForm(p => ({ ...p, attachmentUrl: e.target.value }))} placeholder="https://…" className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all" />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -245,6 +274,10 @@ function CorrectionsTab() {
                     <label className="block text-xs font-bold uppercase tracking-wider text-text-tertiary mb-1.5">Requested Out</label>
                     <input type="time" value={form.requestedCheckOutAt} onChange={(e) => setForm(p => ({ ...p, requestedCheckOutAt: e.target.value }))} className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all" />
                   </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-text-tertiary mb-1.5">Reason *</label>
+                  <textarea rows={3} value={form.reason} onChange={(e) => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="Brief reason" className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all resize-y" />
                 </div>
                 <div className="flex justify-end gap-3 pt-2">
                   <button onClick={() => setOpen(false)} className="px-4 py-2 text-text-secondary font-semibold text-sm hover:text-text-primary transition-colors">Cancel</button>
