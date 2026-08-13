@@ -2,7 +2,12 @@ import React, { useEffect, useState } from 'react'
 import { useAuthStore as useSdkStore, apiEvents, setAccessToken } from '@unifiedtree/sdk'
 import type { AuthUser, AuthTenant, ModuleInfo } from '@unifiedtree/sdk'
 import { useAuthStore as useOldStore } from '@/core/auth/authStore'
-import { WelcomeSplash, hasWelcomed, markWelcomed } from '@/core/auth/WelcomeSplash'
+import {
+  WelcomeSplash,
+  peekWelcomeIntent,
+  initialWelcomeIntent,
+  consumeWelcomeIntent,
+} from '@/core/auth/WelcomeSplash'
 import type { User, Tenant } from '@/types'
 
 function toOldUser(sdkUser: AuthUser, permCodes: string[]): User {
@@ -39,30 +44,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const oldLogin  = useOldStore(s => s.login)
   const oldLogout = useOldStore(s => s.logout)
 
-  // Whether the welcome has already played this session. Read once on mount so
-  // a re-render never replays it mid-session.
-  const [welcomed, setWelcomed] = useState(() => hasWelcomed())
+  /**
+   * Whether the one welcome animation is playing.
+   *
+   * Seeded during the FIRST render (not in an effect) and latched on the
+   * transition into `authenticated` during render too. Effects run after the
+   * browser paints, so deciding there meant one frame where the app was on
+   * screen and the splash was not — the flash of dashboard before the greeting.
+   */
+  const [greeting, setGreeting] = useState(initialWelcomeIntent)
+  const [seenStatus, setSeenStatus] = useState(sdkStatus)
 
-  // A fresh sign-in must be greeted again, so clear the flag on sign-out.
+  if (sdkStatus !== seenStatus) {
+    setSeenStatus(sdkStatus)
+    // Signing in happens inside an already-mounted app, so the initialiser
+    // above cannot catch it; this does. `peek` is pure, so it is safe here.
+    if (sdkStatus === 'authenticated' && !greeting && peekWelcomeIntent()) setGreeting(true)
+    // Never strand the greeting over a session that turned out to be invalid.
+    if (sdkStatus === 'unauthenticated' && greeting) setGreeting(false)
+  }
+
+  // Spend the flag once we have committed to showing the greeting, so the next
+  // reload finds nothing. Safe in an effect: `greeting` is latched state, so
+  // clearing the flag cannot retract the splash.
   useEffect(() => {
-    if (sdkStatus === 'unauthenticated') {
-      try { sessionStorage.removeItem('ut.welcomed') } catch { /* private mode */ }
-      setWelcomed(false)
-    }
-  }, [sdkStatus])
+    if (greeting) consumeWelcomeIntent()
+  }, [greeting])
 
   // Hydrate on mount
-  useEffect(() => { 
+  useEffect(() => {
     // Check if we arrived via cross-domain SSO with a token in the URL
     const params = new URLSearchParams(window.location.search)
     const token = params.get('token')
     if (token) {
       setAccessToken(token)
+      // The greeting for this path was already decided by initialWelcomeIntent()
+      // during the first render, which is what keeps the splash on screen from
+      // frame one instead of a boot screen appearing first.
       // Clean up the URL so the token doesn't linger in history
       window.history.replaceState({}, document.title, window.location.pathname)
     }
-    
-    hydrate() 
+
+    hydrate()
   }, [hydrate])
 
   // Bridge SDK state → old auth store (HRMS files depend on it)
@@ -84,15 +107,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsub
   }, [])
 
-  // Hydrating — no identity yet, so the grove just breathes.
-  if (sdkStatus === 'idle' || sdkStatus === 'loading') {
-    return <WelcomeSplash mode="booting" />
-  }
-
-  // Authenticated and not yet greeted this session: play the welcome once, over
-  // the app (which is already mounted underneath, so nothing is blocked from
-  // loading while it plays).
-  const greeting = sdkStatus === 'authenticated' && !welcomed
+  // No splash while auth resolves. A reload is just a reload — the page comes
+  // back, and nothing performs on the way. This is safe because RouteGuard
+  // already returns null for `idle`/`loading`, so protected pages never render
+  // against an unresolved session, and it only redirects once the status is
+  // definitively `unauthenticated` — there is no login flash to guard against.
   const firstName = sdkUser?.firstName || (sdkUser?.email ? sdkUser.email.split('@')[0] : undefined)
 
   return (
@@ -100,10 +119,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {children}
       {greeting && (
         <WelcomeSplash
-          mode="welcome"
+          ready={sdkStatus === 'authenticated'}
           name={firstName}
           workspace={sdkTenant?.displayName}
-          onDone={() => { markWelcomed(); setWelcomed(true) }}
+          onDone={() => setGreeting(false)}
         />
       )}
     </>

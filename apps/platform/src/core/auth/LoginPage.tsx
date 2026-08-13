@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Camera, Eye, EyeOff } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { apiJson, AuthResponse, currentSubdomain, WorkspaceStatus } from '@/core/api/client'
+import { markWelcomeIntent } from '@/core/auth/WelcomeSplash'
 
 /** Workspace slugs are lowercase alphanumeric + hyphens, like a DNS label. */
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/
@@ -125,6 +126,10 @@ export const LoginPage: React.FC = () => {
         tenantName:    status.tenantName,
         activeModules: status.activeModules,
       })
+      // Signing in is an arrival, and the only thing that earns the welcome
+      // animation. AuthProvider consumes this flag exactly once, so reloads
+      // afterwards stay silent.
+      markWelcomeIntent()
       navigate('/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to sign in')
