@@ -367,6 +367,9 @@ export interface ShiftPayload {
   graceMinutes?: number
   daysBitmask?: number
   isNightShift?: boolean
+  // Sent forward-compat alongside isNightShift so the backend can start using
+  // it once the shift_type column lands. Unknown fields are ignored server-side.
+  shiftType?: 'FIXED' | 'FLEXIBLE' | 'ROTATIONAL' | 'NIGHT'
 }
 
 export function useShifts(companyId: string) {

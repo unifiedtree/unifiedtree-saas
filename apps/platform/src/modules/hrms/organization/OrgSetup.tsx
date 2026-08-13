@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { Plus, Building2, GitBranch, Layers, Award, Trash2, X, BarChart3, Briefcase, Clock, Pencil } from 'lucide-react'
+import { Plus, Building2, GitBranch, Layers, Award, Trash2, X, BarChart3, Briefcase, Clock, Pencil, Users, Laptop, Wallet, Brain } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Can, P } from '@unifiedtree/sdk'
 import { DataTable, EmptyState } from '@unifiedtree/ui-kit'
@@ -63,6 +63,52 @@ function DayToggle({ value, onChange }: { value: number; onChange: (v: number) =
       ))}
     </div>
   )
+}
+
+// ── Department presets (mirror mobile) ───────────────────────────────────────
+// Backend may not persist these; we store per-device in localStorage so the
+// list keeps its colour dots / icons after reload. Keyed by department id.
+
+const DEPT_COLORS = ['#0F6E56', '#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#22C55E', '#EF4444', '#0EA5E9'] as const
+const DEFAULT_DEPT_COLOR: string = DEPT_COLORS[0]
+const DEPT_ICONS = [
+  { key: 'team',    label: 'Team',    Icon: Users },
+  { key: 'laptop',  label: 'Laptop',  Icon: Laptop },
+  { key: 'finance', label: 'Finance', Icon: Wallet },
+  { key: 'brain',   label: 'Brain',   Icon: Brain },
+] as const
+const DEFAULT_DEPT_ICON = 'team'
+
+function readDeptColor(id: string): string {
+  if (typeof window === 'undefined') return DEFAULT_DEPT_COLOR
+  try { return window.localStorage.getItem(`dept_color_${id}`) || DEFAULT_DEPT_COLOR } catch { return DEFAULT_DEPT_COLOR }
+}
+function writeDeptColor(id: string, hex: string) {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(`dept_color_${id}`, hex) } catch { /* quota / disabled — ignore */ }
+}
+function writeDeptIcon(id: string, key: string) {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(`dept_icon_${id}`, key) } catch { /* ignore */ }
+}
+
+// ── Shift type ───────────────────────────────────────────────────────────────
+type ShiftType = 'FIXED' | 'FLEXIBLE' | 'ROTATIONAL' | 'NIGHT'
+const SHIFT_TYPES: { value: ShiftType; label: string }[] = [
+  { value: 'FIXED',      label: 'Fixed' },
+  { value: 'FLEXIBLE',   label: 'Flexible' },
+  { value: 'ROTATIONAL', label: 'Rotational' },
+  { value: 'NIGHT',      label: 'Night' },
+]
+
+// Parse HH:MM into minutes-of-day. Returns null on malformed input so the
+// caller can skip the wrap check rather than blocking on garbage.
+function parseHHMM(v: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim())
+  if (!m) return null
+  const h = Number(m[1]), min = Number(m[2])
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null
+  return h * 60 + min
 }
 
 // ── Shared form primitives ────────────────────────────────────────────────────
@@ -459,7 +505,8 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
   const archiveDept = useArchiveDepartment()
   const setHead = useSetDepartmentHead()
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ name: '', code: '', description: '', departmentHeadEmployeeId: '' })
+  const emptyDeptForm = { name: '', code: '', description: '', departmentHeadEmployeeId: '', colorHex: DEFAULT_DEPT_COLOR, iconKey: DEFAULT_DEPT_ICON }
+  const [form, setForm] = useState(emptyDeptForm)
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
   const empLabel = (id?: string) => {
@@ -468,19 +515,57 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
   }
 
   const handleCreate = async () => {
-    if (!activeCompany || !form.name.trim()) return
+    if (!activeCompany) return
+    const trimmed = form.name.trim()
+    if (!trimmed) return
+
+    // Pre-submit duplicate-name check (case-insensitive) against the loaded list.
+    // Cheap client-side guard — server remains the source of truth for anything
+    // that landed after the last refetch.
+    const norm = trimmed.toLowerCase()
+    if (departments.some((d) => d.name.trim().toLowerCase() === norm)) {
+      toast('A department with this name already exists', 'error')
+      return
+    }
+
     try {
-      await createDept.mutateAsync({
+      const created = await createDept.mutateAsync({
         companyId: activeCompany.id,
-        name: form.name,
+        name: trimmed,
         code: form.code || undefined,
         description: form.description || undefined,
         departmentHeadEmployeeId: form.departmentHeadEmployeeId || undefined,
       })
+      // Persist device-local preset choices keyed by the new dept id.
+      if (created?.id) {
+        writeDeptColor(created.id, form.colorHex)
+        writeDeptIcon(created.id, form.iconKey)
+      }
       toast('Department created', 'success')
       setOpen(false)
-      setForm({ name: '', code: '', description: '', departmentHeadEmployeeId: '' })
-    } catch { toast('Failed to create department', 'error') }
+      setForm(emptyDeptForm)
+    } catch (err) {
+      // 201-lost recovery: on network hiccup the POST may have landed but the
+      // response was dropped. Refetch and, if a dept with this name now exists,
+      // treat as success. Otherwise surface the real failure.
+      const isNetwork = err instanceof TypeError || (err instanceof Error && /network|fetch|failed to fetch/i.test(err.message))
+      if (isNetwork) {
+        try {
+          const refreshed = await refetch()
+          const list = refreshed.data ?? []
+          const match = list.find((d) => d.name.trim().toLowerCase() === norm)
+          if (match) {
+            writeDeptColor(match.id, form.colorHex)
+            writeDeptIcon(match.id, form.iconKey)
+            toast('Department created', 'success')
+            setOpen(false)
+            setForm(emptyDeptForm)
+            return
+          }
+        } catch { /* fall through to error toast */ }
+      }
+      toast('Failed to create department', 'error')
+    }
   }
 
   const handleArchive = async (id: string) => {
@@ -499,7 +584,16 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
   const cols: Column<Dept>[] = [
     {
       key: 'name', header: 'Department',
-      cell: (d) => <span className="font-medium text-text-primary text-sm">{d.name}</span>,
+      cell: (d) => (
+        <div className="flex items-center gap-2">
+          <span
+            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+            style={{ backgroundColor: readDeptColor(d.id) }}
+            aria-hidden
+          />
+          <span className="font-medium text-text-primary text-sm">{d.name}</span>
+        </div>
+      ),
     },
     {
       key: 'code', header: 'Code', hideBelow: 'md',
@@ -571,6 +665,46 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
                 <option key={emp.id} value={emp.id}>{[emp.firstName, emp.lastName].filter(Boolean).join(' ')}</option>
               ))}
             </select>
+          </Field>
+          <Field label="Colour">
+            <div className="flex flex-wrap gap-2">
+              {DEPT_COLORS.map((hex) => (
+                <button
+                  key={hex}
+                  type="button"
+                  onClick={() => set('colorHex', hex)}
+                  aria-label={`Colour ${hex}`}
+                  aria-pressed={form.colorHex === hex}
+                  className={clsx(
+                    'w-7 h-7 rounded-full transition-transform',
+                    form.colorHex === hex ? 'ring-2 ring-offset-2 ring-[#059669] scale-110' : 'hover:scale-105'
+                  )}
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
+            </div>
+          </Field>
+          <Field label="Icon">
+            <div className="flex flex-wrap gap-2">
+              {DEPT_ICONS.map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => set('iconKey', key)}
+                  aria-label={label}
+                  aria-pressed={form.iconKey === key}
+                  className={clsx(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors',
+                    form.iconKey === key
+                      ? 'border-[#059669] bg-[#059669]/10 text-[#059669]'
+                      : 'border-border-default bg-bg-surface text-text-secondary hover:text-text-primary'
+                  )}
+                >
+                  <Icon size={14} />
+                  {label}
+                </button>
+              ))}
+            </div>
           </Field>
           <div className="flex gap-3 pt-2">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
@@ -972,7 +1106,7 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
   const deleteShift = useDeleteShift()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Shift | null>(null)
-  const emptyForm = { name: '', code: '', startTime: '09:00', endTime: '18:00', breakMinutes: '30', graceMinutes: '10', daysBitmask: 62, isNightShift: false }
+  const emptyForm = { name: '', code: '', startTime: '09:00', endTime: '18:00', breakMinutes: '30', graceMinutes: '15', daysBitmask: 62, shiftType: 'FIXED' as ShiftType }
   const [form, setForm] = useState(emptyForm)
 
   const openAdd = () => { setEditing(null); setForm(emptyForm); setOpen(true) }
@@ -982,25 +1116,45 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
       name: s.name, code: s.code ?? '',
       startTime: s.startTime ?? '09:00', endTime: s.endTime ?? '18:00',
       breakMinutes: String(s.breakMinutes), graceMinutes: String(s.graceMinutes),
-      daysBitmask: s.daysBitmask, isNightShift: s.nightShift,
+      daysBitmask: s.daysBitmask,
+      // Backend only round-trips nightShift; infer type from that until the
+      // column lands. FIXED is the safe default for non-night existing rows.
+      shiftType: s.nightShift ? 'NIGHT' : 'FIXED',
     })
     setOpen(true)
   }
   const set = (k: string, v: string | number | boolean) => setForm(p => ({ ...p, [k]: v }))
 
   const handleSave = async () => {
-    if (!activeCompany || !form.name.trim()) return
+    if (!activeCompany) return
+    const trimmedName = form.name.trim()
+    if (!trimmedName) {
+      toast('Shift name is required', 'error')
+      return
+    }
+    // End-vs-start sanity: FIXED / FLEXIBLE / ROTATIONAL cannot wrap past
+    // midnight. NIGHT is allowed to wrap (e.g. 22:00 → 06:00).
+    const startMin = parseHHMM(form.startTime)
+    const endMin   = parseHHMM(form.endTime)
+    if (form.shiftType !== 'NIGHT' && startMin !== null && endMin !== null && endMin <= startMin) {
+      toast('End time must be after start time (use Night shift to wrap past midnight)', 'error')
+      return
+    }
     try {
+      const isNight = form.shiftType === 'NIGHT'
       const payload = {
         companyId: activeCompany.id,
-        name: form.name,
+        name: trimmedName,
         code: form.code || undefined,
         startTime: form.startTime || undefined,
         endTime: form.endTime || undefined,
         breakMinutes: Number(form.breakMinutes) || 30,
-        graceMinutes: Number(form.graceMinutes) || 10,
+        graceMinutes: Number(form.graceMinutes) || 15,
         daysBitmask: form.daysBitmask,
-        isNightShift: form.isNightShift,
+        // Send both for compatibility: legacy isNightShift boolean stays wired
+        // to the enum until the backend accepts shiftType directly.
+        isNightShift: isNight,
+        shiftType: form.shiftType,
       }
       if (editing) {
         await updateShift.mutateAsync({ id: editing.id, ...payload })
@@ -1096,12 +1250,17 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
           <Field label="Working Days">
             <DayToggle value={form.daysBitmask} onChange={(v) => set('daysBitmask', v)} />
           </Field>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={form.isNightShift}
-              onChange={(e) => set('isNightShift', e.target.checked)}
-              className="accent-primary w-4 h-4" />
-            <span className="text-sm text-text-secondary">Night shift</span>
-          </label>
+          <Field label="Shift Type *">
+            <select
+              value={form.shiftType}
+              onChange={(e) => set('shiftType', e.target.value as ShiftType)}
+              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#059669] transition-colors"
+            >
+              {SHIFT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </Field>
           <div className="flex gap-3 pt-2">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <Can code={P.HRMS_SHIFT_WRITE}>
