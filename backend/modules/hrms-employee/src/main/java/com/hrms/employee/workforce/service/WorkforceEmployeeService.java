@@ -61,7 +61,10 @@ public class WorkforceEmployeeService {
                 spec,
                 PageRequest.of(f.page(), f.pageSize(),
                         Sort.by(Sort.Order.asc("employeeCode"), Sort.Order.asc("firstName"))));
-        return PageResponse.from(page, this::toResponse);
+        // PII redaction: list responses MUST NOT include salary (ctcAnnual).
+        // The full salary is only exposed on the by-id detail endpoint
+        // (WorkforceController.getEmployee), which reuses toResponse().
+        return PageResponse.from(page, this::toListResponse);
     }
 
     private Specification<WorkforceEmployee> buildSpec(WorkforceFilter f) {
@@ -324,6 +327,32 @@ public class WorkforceEmployeeService {
                 e.getDateOfJoining(), e.getProbationEndDate(),
                 e.getConfirmationDate(), e.getLastWorkingDay(),
                 e.getCtcAnnual(), e.getProfilePhotoUrl(),
+                e.isFaceEnrolled(), checkHasAccount(e.getId()), e.isActive());
+    }
+
+    /**
+     * List-safe variant of {@link #toResponse}. Salary (ctcAnnual) is blanked
+     * to null so the workforce directory can't be scraped for every
+     * employee's compensation by anyone with hrms.employee.read. Full salary
+     * is still available on the by-id detail endpoint.
+     *
+     * The DTO shape stays the same (single WorkforceEmployeeResponse record)
+     * to avoid churning the WorkforceController + frontend contract; the
+     * sensitive field is simply omitted from the payload as null.
+     */
+    private WorkforceEmployeeResponse toListResponse(WorkforceEmployee e) {
+        return new WorkforceEmployeeResponse(
+                e.getId(), e.getCompanyId(), e.getEmployeeCode(),
+                e.getFirstName(), e.getMiddleName(), e.getLastName(),
+                e.getEmail(), e.getPhone(), e.getDateOfBirth(), e.getGender(),
+                e.getDepartmentId(), e.getDesignationId(), e.getBranchId(),
+                e.getGeoFenceZoneId(),
+                e.getReportingManagerId(),
+                e.getEmploymentType(), e.getEmploymentStatus(),
+                e.getDateOfJoining(), e.getProbationEndDate(),
+                e.getConfirmationDate(), e.getLastWorkingDay(),
+                null /* ctcAnnual — redacted in list responses */,
+                e.getProfilePhotoUrl(),
                 e.isFaceEnrolled(), checkHasAccount(e.getId()), e.isActive());
     }
 
