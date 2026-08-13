@@ -10,9 +10,11 @@ import com.hrms.attendance.enums.ShiftType;
 import com.hrms.attendance.repository.EmployeeShiftAssignmentRepository;
 import com.hrms.attendance.repository.ShiftPolicyRepository;
 import com.hrms.core.exception.BusinessRuleException;
+import com.hrms.core.exception.HrmsException;
 import com.hrms.core.exception.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -80,6 +82,7 @@ public class EmployeeShiftService {
         if (req.name() == null || req.name().isBlank()) {
             throw new BusinessRuleException("Shift name is required", "SHIFT_NAME_REQUIRED");
         }
+        validateShiftWindow(req.shiftType(), req.startTime(), req.endTime());
         ShiftPolicy p = new ShiftPolicy();
         p.setCompanyId(companyId);
         apply(p, req);
@@ -91,8 +94,65 @@ public class EmployeeShiftService {
     public ShiftPolicyResponse updateShift(UUID shiftId, ShiftPolicyRequest req) {
         ShiftPolicy p = policyRepo.findById(shiftId)
                 .orElseThrow(() -> new ResourceNotFoundException("ShiftPolicy", shiftId));
+        // Cross-field validation runs against the effective (post-merge) window,
+        // so a caller who only PATCHes the endTime is still checked against the
+        // stored startTime — matching what actually lands in the DB.
+        LocalTime start = req.startTime() != null ? req.startTime() : p.getStartTime();
+        LocalTime end   = req.endTime()   != null ? req.endTime()   : p.getEndTime();
+        ShiftType type  = req.shiftType() != null ? req.shiftType() : p.getShiftType();
+        validateShiftWindow(type, start, end);
         apply(p, req);
         return toPolicyResponse(policyRepo.save(p));
+    }
+
+    /**
+     * Soft-delete a shift definition. Refuses (409 SHIFT_IN_USE) when at least
+     * one employee still has an open-ended assignment to it — reassign them
+     * first, otherwise the late-mark logic loses its shift window mid-day and
+     * every subsequent punch downgrades to "no shift assigned". Idempotent for
+     * already-inactive shifts.
+     */
+    @Transactional
+    public void deleteShift(UUID shiftId) {
+        ShiftPolicy p = policyRepo.findById(shiftId)
+                .orElseThrow(() -> new ResourceNotFoundException("ShiftPolicy", shiftId));
+        long inUse = assignmentRepo.countByShiftPolicyIdAndEffectiveToIsNull(shiftId);
+        if (inUse > 0) {
+            // 409 CONFLICT — the resource can't be deleted in its current state.
+            // BusinessRuleException maps to 422 which UI treats as validation;
+            // we want the delete button to render a "reassign first" prompt.
+            throw new HrmsException(
+                    "Shift has " + inUse + " active assignment(s); reassign employees before deleting.",
+                    HttpStatus.CONFLICT, "SHIFT_IN_USE");
+        }
+        if (p.isActive()) {
+            p.setActive(false);
+            policyRepo.save(p);
+            log.info("Soft-deleted shift policy {} ({})", p.getId(), p.getName());
+        }
+    }
+
+    /**
+     * Reject nonsensical windows. FIXED shifts must have endTime strictly after
+     * startTime; NIGHT is allowed to wrap past midnight (start > end); either
+     * type still rejects start == end since a zero-length window makes the late-
+     * mark math divide by zero. FLEXIBLE / ROTATIONAL are permissive — start/end
+     * are informational and the enforcement lives elsewhere.
+     */
+    private static void validateShiftWindow(ShiftType type, LocalTime start, LocalTime end) {
+        if (type == null || start == null || end == null) {
+            return; // partial payload — the null-guarded @Column defaults will fill in
+        }
+        if (start.equals(end)) {
+            throw new BusinessRuleException(
+                    "Shift start and end time must differ.", "SHIFT_WINDOW_ZERO_LENGTH");
+        }
+        if (type == ShiftType.FIXED && !end.isAfter(start)) {
+            throw new BusinessRuleException(
+                    "FIXED shift endTime must be after startTime (use NIGHT for wrap-past-midnight).",
+                    "SHIFT_WINDOW_INVALID");
+        }
+        // NIGHT: end < start is expected (22:00 → 06:00). No further check.
     }
 
     // ── Assignment ───────────────────────────────────────────────────────────

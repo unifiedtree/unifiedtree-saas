@@ -34,12 +34,15 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -58,6 +61,10 @@ import java.util.stream.Collectors;
 @RequestMapping("/v1/attendance")
 @Tag(name = "Attendance", description = "Check-in, check-out, and attendance records")
 @SecurityRequirement(name = "bearerAuth")
+// @Validated at the class level activates method-parameter validation so the
+// @Min/@Max on the monthly-stats/history query params actually fire (Spring MVC
+// only inspects them when the enclosing bean is a validation target).
+@Validated
 public class AttendanceController {
 
     private final AttendanceService attendanceService;
@@ -172,8 +179,8 @@ public class AttendanceController {
     @GetMapping("/monthly-stats")
     @PreAuthorize("hasAuthority('attendance.checkin.self')")
     public ResponseEntity<MonthlyStatsResponse> monthlyStats(
-            @RequestParam(required = false) Integer year,
-            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) @Min(2000) @Max(2100) Integer year,
+            @RequestParam(required = false) @Min(1) @Max(12) Integer month,
             @AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
         int y = year  != null ? year  : LocalDate.now().getYear();
@@ -185,8 +192,8 @@ public class AttendanceController {
     @GetMapping("/history")
     @PreAuthorize("hasAuthority('attendance.checkin.self')")
     public ResponseEntity<List<DayRecordResponse>> history(
-            @RequestParam(required = false) Integer year,
-            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) @Min(2000) @Max(2100) Integer year,
+            @RequestParam(required = false) @Min(1) @Max(12) Integer month,
             @AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
         int y = year  != null ? year  : LocalDate.now().getYear();

@@ -83,7 +83,7 @@ public class LegacyAttendanceExtrasController {
     @PostMapping("/geo-fence/check")
     @PreAuthorize("hasAuthority('attendance.checkin.self')")
     public ResponseEntity<GeoValidateResponse> geoFenceCheck(
-            @RequestBody GeoValidateRequest request,
+            @Valid @RequestBody GeoValidateRequest request,
             @AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
         AttendanceContextResolver.Context ctx = contextResolver.resolve(employeeId);

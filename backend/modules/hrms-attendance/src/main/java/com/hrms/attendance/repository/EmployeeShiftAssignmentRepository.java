@@ -21,4 +21,11 @@ public interface EmployeeShiftAssignmentRepository extends JpaRepository<Employe
 
     /** All open-ended assignments for an employee (should be at most one; used to close stragglers). */
     List<EmployeeShiftAssignment> findByEmployeeIdAndEffectiveToIsNull(UUID employeeId);
+
+    /**
+     * Count employees currently (open-endedly) assigned to a shift. Used by
+     * {@code DELETE /v1/shifts/{id}} to refuse deletion (409 SHIFT_IN_USE) when
+     * anyone still points at the shift being removed.
+     */
+    long countByShiftPolicyIdAndEffectiveToIsNull(UUID shiftPolicyId);
 }

@@ -10,11 +10,13 @@ import com.hrms.attendance.dto.ShiftDtos.ShiftPolicyResponse;
 import com.hrms.attendance.service.EmployeeShiftService;
 import com.hrms.attendance.service.ShiftChangeRequestService;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -64,7 +66,7 @@ public class ShiftController {
     @PostMapping
     @PreAuthorize("hasAuthority('attendance.regularization.approve')")
     public ResponseEntity<ShiftPolicyResponse> create(@RequestParam("companyId") UUID companyId,
-                                                       @RequestBody ShiftPolicyRequest req) {
+                                                       @Valid @RequestBody ShiftPolicyRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED).body(shiftService.createShift(companyId, req));
     }
 
@@ -72,8 +74,16 @@ public class ShiftController {
     @PutMapping("/{shiftId}")
     @PreAuthorize("hasAuthority('attendance.regularization.approve')")
     public ResponseEntity<ShiftPolicyResponse> update(@PathVariable UUID shiftId,
-                                                      @RequestBody ShiftPolicyRequest req) {
+                                                      @Valid @RequestBody ShiftPolicyRequest req) {
         return ResponseEntity.ok(shiftService.updateShift(shiftId, req));
+    }
+
+    @Operation(summary = "Soft-delete a shift definition (409 SHIFT_IN_USE if any employee is still assigned)")
+    @DeleteMapping("/{shiftId}")
+    @PreAuthorize("hasAuthority('attendance.regularization.approve')")
+    public ResponseEntity<Void> delete(@PathVariable UUID shiftId) {
+        shiftService.deleteShift(shiftId);
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "Get an employee's current shift")

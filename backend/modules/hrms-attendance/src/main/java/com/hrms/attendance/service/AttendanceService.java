@@ -962,6 +962,16 @@ public class AttendanceService {
                                                             UUID companyId,
                                                             UUID departmentId,
                                                             CorrectionRequestRequest request) {
+        // 90-day look-back cap. @PastOrPresent on the DTO catches future dates;
+        // this catches ancient ones (year-1900 was reaching the DB in QA). Older
+        // gaps go through the payroll adjustment flow, not this self-serve form.
+        LocalDate today = LocalDate.now(IST);
+        if (request.requestedDate() != null
+                && request.requestedDate().isBefore(today.minusDays(90))) {
+            throw new BusinessRuleException(
+                    "Correction requests are limited to the last 90 days.",
+                    "CORRECTION_DATE_TOO_OLD");
+        }
         AttendanceCorrectionRequest correction = new AttendanceCorrectionRequest();
         correction.setTenantId(TenantContext.getTenantId());
         correction.setEmployeeId(employeeId);
