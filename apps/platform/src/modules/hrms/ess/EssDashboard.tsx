@@ -1,6 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, ClipboardList, CheckCircle, Clock, Home } from 'lucide-react'
+import { ArrowRight, ClipboardList, CheckCircle, Clock, Home, Repeat } from 'lucide-react'
 import { format } from 'date-fns'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { HrStatCard, HrStatusPill, type PillTone } from '@/shared/components/hr'
@@ -91,8 +91,10 @@ export const EssDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Request WFH shortcut — matches the mobile "Apply WFH" self-service so
-          desk employees can raise the request from a laptop without a phone. */}
+      {/* Employee self-service shortcuts — mirror the mobile app's "Apply WFH"
+          and "Shift Change" so desk employees can raise these from a laptop
+          without a phone. Kept as two adjacent cards to preserve the existing
+          spacing rhythm; teammate can restyle into a single row/grid later. */}
       <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -109,6 +111,26 @@ export const EssDashboard: React.FC = () => {
             className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
           >
             Request WFH <ArrowRight size={12} />
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
+              <Repeat size={15} className="text-[#059669]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Shift Change</p>
+              <p className="text-xs text-text-secondary">Ask HR to move you to a different shift</p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/me/shift-change')}
+            className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
+          >
+            Request Shift Change <ArrowRight size={12} />
           </button>
         </div>
       </div>

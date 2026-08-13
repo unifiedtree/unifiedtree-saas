@@ -34,6 +34,7 @@ import { Payroll } from '@/modules/hrms/Payroll'
 import { OrgSetup } from '@/modules/hrms/organization/OrgSetup'
 import { EmployeeDetail } from '@/modules/hrms/employees/EmployeeDetail'
 import { EssDashboard } from '@/modules/hrms/ess/EssDashboard'
+import { ShiftChangeRequest } from '@/modules/hrms/shifts/ShiftChangeRequest'
 import { TeamDashboard } from '@/modules/hrms/team/TeamDashboard'
 import { ReportsIndex } from '@/modules/hrms/reports/ReportsIndex'
 import { ProbationSettings } from '@/modules/hrms/probation/ProbationSettings'
@@ -188,6 +189,14 @@ export default function App() {
           element={
             <RouteGuard anyOf={[P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF]}>
               <ModuleGate moduleKey="hrms"><EssDashboard /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/me/shift-change"
+          element={
+            <RouteGuard anyOf={[P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF]}>
+              <ModuleGate moduleKey="hrms"><ShiftChangeRequest /></ModuleGate>
             </RouteGuard>
           }
         />
