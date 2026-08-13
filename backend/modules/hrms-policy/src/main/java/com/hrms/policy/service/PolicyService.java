@@ -1,6 +1,7 @@
 package com.hrms.policy.service;
 
 import com.hrms.core.dto.PageResponse;
+import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.core.tenant.TenantContext;
 import com.hrms.policy.dto.AcknowledgementResponse;
@@ -41,15 +42,52 @@ public class PolicyService {
     @Transactional
     public PolicyResponse createPolicy(UUID companyId, PolicyRequest request) {
         UUID resolvedCompany = request.companyId() != null ? request.companyId() : companyId;
-        log.info("Creating HR policy title={} category={} company={}", request.title(), request.category(), resolvedCompany);
+        // Honour req.status if the author explicitly picked DRAFT / ACTIVE;
+        // default to ACTIVE only when omitted. ARCHIVED at create time is
+        // meaningless — reject it (use PATCH /archive on an existing row).
+        // Jackson already rejects unknown enum labels with a 400, so anything
+        // reaching here is one of {DRAFT, ACTIVE, ARCHIVED}.
+        PolicyStatus status = request.status();
+        if (status == null) {
+            status = PolicyStatus.ACTIVE;
+        } else if (status == PolicyStatus.ARCHIVED) {
+            throw new BusinessRuleException(
+                    "Policies cannot be created directly in ARCHIVED state",
+                    "POLICY_STATUS_INVALID");
+        }
+        log.info("Creating HR policy title={} category={} status={} company={}",
+                request.title(), request.category(), status, resolvedCompany);
 
         HrPolicy policy = new HrPolicy();
         policy.setTenantId(TenantContext.getTenantId());
         policy.setCompanyId(resolvedCompany);
         apply(policy, request);
-        policy.setStatus(PolicyStatus.ACTIVE);
+        policy.setStatus(status);
 
         policy = policyRepository.save(policy);
+        return toResponse(policy);
+    }
+
+    /**
+     * DRAFT → ACTIVE transition. Idempotent: republishing an already-ACTIVE
+     * policy is a no-op (200 OK with the current row) so the frontend can
+     * safely double-click.
+     */
+    @Transactional
+    public PolicyResponse publishPolicy(UUID policyId) {
+        HrPolicy policy = policyRepository.findById(policyId)
+                .orElseThrow(() -> new ResourceNotFoundException("HrPolicy", policyId));
+        if (policy.getStatus() == PolicyStatus.ACTIVE) {
+            return toResponse(policy);
+        }
+        if (policy.getStatus() != PolicyStatus.DRAFT) {
+            throw new BusinessRuleException(
+                    "Only DRAFT policies can be published (current: " + policy.getStatus() + ")",
+                    "POLICY_STATUS_INVALID");
+        }
+        policy.setStatus(PolicyStatus.ACTIVE);
+        policy = policyRepository.save(policy);
+        log.info("HR policy {} published (DRAFT → ACTIVE)", policyId);
         return toResponse(policy);
     }
 

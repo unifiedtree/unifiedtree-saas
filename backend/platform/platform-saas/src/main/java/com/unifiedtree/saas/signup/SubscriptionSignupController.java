@@ -118,6 +118,19 @@ public class SubscriptionSignupController {
                     "Your account already exists. Create a paid workspace instead.");
         }
 
+        // ------- 2b. subdomain-taken guard -----------------------------------
+        // A tenant with this subdomain (case-insensitive) that is still ACTIVE
+        // means the signup would create a Razorpay subscription for a slot the
+        // caller can never actually get — reject up front rather than let them
+        // pay and then hit "already reserved" at provisioning time (whose
+        // handling downgrades to "That workspace address was just taken. Please
+        // cancel and pick a different one." — a much worse UX after money has
+        // moved).
+        String requestedSubdomain = normSubdomain(req.subdomain());
+        if (requestedSubdomain != null && subdomainTaken(requestedSubdomain)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "SUBDOMAIN_TAKEN");
+        }
+
         // ------- 3. plan validation (server-authoritative) -------------------
         if (req.planKeys() == null || req.planKeys().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select at least one module");
@@ -328,6 +341,31 @@ public class SubscriptionSignupController {
                     Integer.class, email.toLowerCase(Locale.ROOT));
             return n != null;
         } catch (EmptyResultDataAccessException e) {
+            return false;
+        }
+    }
+
+    /**
+     * True if an ACTIVE tenant with this subdomain already exists. Only
+     * ACTIVE tenants are considered — a SUSPENDED / TERMINATED row that has
+     * released the slug (or is about to) shouldn't block a new signup, and a
+     * partial-index on lower(subdomain) WHERE status='ACTIVE' at the DB level
+     * mirrors this check on the write side.
+     */
+    private boolean subdomainTaken(String subdomainLower) {
+        try {
+            Integer n = jdbc.queryForObject(
+                    "SELECT 1 FROM platform.tenants "
+                            + "WHERE lower(subdomain) = ? AND status = 'ACTIVE' LIMIT 1",
+                    Integer.class, subdomainLower);
+            return n != null;
+        } catch (EmptyResultDataAccessException e) {
+            return false;
+        } catch (Exception e) {
+            // Fail OPEN — an intermittent DB blip should not stop paying customers
+            // from starting a signup. The unique index at insert time is the
+            // real backstop.
+            log.warn("subdomain-taken check failed for '{}' — allowing signup to proceed", subdomainLower, e);
             return false;
         }
     }

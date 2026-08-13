@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { API_BASE_URL } from '../../lib/api'
 
 const schema = z.object({
   name:      z.string().min(2, 'Enter your full name'),
@@ -18,25 +19,33 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 
 /**
- * Demo-request form. Submission is MOCKED — the current client decision is
- * to ship the UI without a live backend endpoint. Leads are NOT captured
- * anywhere. TODO(backend): POST to /v1/public/lead-request with { intent:'demo',
- * ...values } and remove the setTimeout below. Without that, marketing traffic
- * silently discards submissions; do NOT run paid ads pointing here until the
- * endpoint is wired.
+ * Demo-request form. Wired 2026-08-13 to POST /v1/public/lead-request so
+ * marketing leads are captured server-side and emailed to unifiedtree@gmail.com.
+ * See LeadRequestController on the backend.
  */
 export function DemoRequestForm() {
   const [submitted, setSubmitted] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
-  const onSubmit = async (_values: FormValues) => {
-    // Mocked delay so the button visibly transitions through loading state.
-    await new Promise((r) => setTimeout(r, 700))
-    setSubmitted(true)
+  const onSubmit = async (values: FormValues) => {
+    setSubmitError(null)
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/public/lead-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent: 'demo', ...values }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setSubmitted(true)
+    } catch (err) {
+      // Never lose the lead silently — surface the failure so the visitor can retry.
+      setSubmitError("Sorry — we couldn't send that. Please try again or email us at unifiedtree@gmail.com.")
+    }
   }
 
   if (submitted) return <ThanksState kind="demo" />
@@ -78,9 +87,13 @@ export function DemoRequestForm() {
         {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Sending...</> : 'Request demo'}
       </Button>
 
-      <p className="text-center text-xs text-text-tertiary">
-        We'll reach out within one working day.
-      </p>
+      {submitError ? (
+        <p className="text-center text-xs text-danger">{submitError}</p>
+      ) : (
+        <p className="text-center text-xs text-text-tertiary">
+          We'll reach out within one working day.
+        </p>
+      )}
     </form>
   )
 }
