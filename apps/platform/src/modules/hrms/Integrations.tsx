@@ -3,6 +3,7 @@ import { Plus, Trash2, Plug, PlugZap, Power, AlertTriangle, Boxes } from 'lucide
 import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, type PillTone,
 } from '@/shared/components/hr'
@@ -23,6 +24,7 @@ const fmtStatus = (s: IntegrationStatus) =>
 
 export const Integrations: React.FC = () => {
   const { toast } = useToast()
+  const confirm = useConfirmDialog()
   const canWrite = usePermission('hrms.integration.write')
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState('')
@@ -71,9 +73,16 @@ export const Integrations: React.FC = () => {
     }
   }
 
-  const onRemove = async (id: string) => {
+  const onRemove = async (c: { id: string; name: string; provider: string }) => {
+    const ok = await confirm({
+      title: `Remove ${c.name}?`,
+      body: `The ${c.provider} connection and its stored credentials will be deleted. This cannot be undone.`,
+      confirmLabel: 'Remove',
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
-      await remove.mutateAsync(id)
+      await remove.mutateAsync(c.id)
       toast('Integration removed', 'success')
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed', 'error')
@@ -160,7 +169,7 @@ export const Integrations: React.FC = () => {
                       <HrButton size="sm" variant={c.status === 'CONNECTED' ? 'ghost' : undefined} onClick={() => onToggle(c.id, c.status)} disabled={toggle.isPending}>
                         {c.status === 'CONNECTED' ? <><Power size={14} /> Disconnect</> : <><Plug size={14} /> Connect</>}
                       </HrButton>
-                      <button onClick={() => onRemove(c.id)} disabled={remove.isPending} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Remove">
+                      <button onClick={() => onRemove(c)} disabled={remove.isPending} aria-label={`Remove ${c.provider} integration ${c.name}`} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Remove">
                         <Trash2 size={14} />
                       </button>
                     </div>

@@ -3,6 +3,7 @@ import { Check, X, Wallet, Clock, BadgeCheck, HandCoins, Banknote } from 'lucide
 import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
 } from '@/shared/components/hr'
@@ -188,6 +189,7 @@ function RequestTab({ onSubmitted }: { onSubmitted: () => void }) {
 
 function ApprovalsTab({ canApprove, canDisburse }: { canApprove: boolean; canDisburse: boolean }) {
   const { toast } = useToast()
+  const confirm = useConfirmDialog()
   const { data, isLoading } = usePendingAdvanceApprovals(0)
   const decide = useAdvanceDecision()
   const disburse = useDisburseAdvance()
@@ -206,9 +208,17 @@ function ApprovalsTab({ canApprove, canDisburse }: { canApprove: boolean; canDis
     }
   }
 
-  const onDisburse = async (id: string) => {
+  const onDisburse = async (a: { id: string; amount: number; employeeName?: string }) => {
+    const who = a.employeeName || 'this employee'
+    const ok = await confirm({
+      title: `Disburse ${inr(a.amount)} to ${who}?`,
+      body: 'This records the advance as paid out and starts the salary-recovery schedule. This cannot be undone.',
+      confirmLabel: 'Disburse',
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
-      await disburse.mutateAsync(id)
+      await disburse.mutateAsync(a.id)
       toast('Advance disbursed', 'success')
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed', 'error')
@@ -247,7 +257,7 @@ function ApprovalsTab({ canApprove, canDisburse }: { canApprove: boolean; canDis
                     </>
                   )}
                   {a.status === 'APPROVED' && canDisburse && (
-                    <HrButton size="sm" onClick={() => onDisburse(a.id)} disabled={disburse.isPending}><Banknote size={14} /> Disburse</HrButton>
+                    <HrButton size="sm" onClick={() => onDisburse(a)} disabled={disburse.isPending} aria-label={`Disburse advance of ${inr(a.amount)} to ${a.employeeName || 'employee'}`}><Banknote size={14} /> Disburse</HrButton>
                   )}
                 </div>
               </td>

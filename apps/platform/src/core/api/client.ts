@@ -5,6 +5,24 @@ export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
   '/api'
 
+/**
+ * Typed error thrown by {@link apiJson} for non-2xx responses. Carries the HTTP
+ * status and the parsed JSON body so callers can branch on status code (e.g.
+ * 401 → sign out, 409 → show merge banner) or surface field-level backend
+ * errors without re-parsing the response. `.message` stays populated for
+ * compat with any `catch (e) { toast((e as Error).message) }` sites.
+ */
+export class HttpError extends Error {
+  readonly status: number
+  readonly payload?: unknown
+  constructor(message: string, status: number, payload?: unknown) {
+    super(message)
+    this.name = 'HttpError'
+    this.status = status
+    this.payload = payload
+  }
+}
+
 export type AuthResponse = {
   accessToken: string
   refreshToken?: string
@@ -117,7 +135,7 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
 
   if (!response.ok) {
     const message = data?.message || data?.error || data?.detail || `Request failed with status ${response.status}`
-    throw new Error(message)
+    throw new HttpError(message, response.status, data)
   }
 
   return data as T

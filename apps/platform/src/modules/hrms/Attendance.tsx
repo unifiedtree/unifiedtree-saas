@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Clock, CheckCircle } from 'lucide-react'
 import { clsx } from 'clsx'
-import { format } from 'date-fns'
+import { eachDayOfInterval, endOfMonth, format, startOfMonth } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/shared/hooks/useToast'
 import { usePermission, Can, P } from '@unifiedtree/sdk'
@@ -74,34 +74,7 @@ function MyAttendanceTab() {
         ) : histError ? (
           <EmptyState variant="error" title="Failed to load history" primaryAction={{ label: 'Retry', onClick: () => refetchHist() }} />
         ) : (
-          <div className="grid grid-cols-7 gap-2 sm:gap-3">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-              <div key={d} className="text-center text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2">{d}</div>
-            ))}
-            {history.map((day, idx) => {
-              // Add empty slots for the first day of the month
-              const dateObj = new Date(day.date);
-              const dayOfWeek = dateObj.getDay();
-              const isFirstDay = idx === 0;
-              
-              return (
-                <React.Fragment key={day.date}>
-                  {isFirstDay && Array.from({ length: dayOfWeek }).map((_, i) => (
-                    <div key={`empty-${i}`} className="aspect-square rounded-xl" />
-                  ))}
-                  <div
-                    title={`${day.date} — ${day.status}`}
-                    className={clsx(
-                      'aspect-square rounded-xl flex items-center justify-center text-sm font-bold cursor-default transition-all hover:scale-105 hover:shadow-md',
-                      STATUS_BG[day.status] ?? 'bg-bg-base text-text-secondary border border-border-default'
-                    )}
-                  >
-                    {dateObj.getDate()}
-                  </div>
-                </React.Fragment>
-              )
-            })}
-          </div>
+          <MyAttendanceCalendar year={year} month={month} history={history} statusBg={STATUS_BG} />
         )}
         <div className="flex flex-wrap gap-4 mt-8 pt-6 border-t border-border-default">
           {[['PRESENT', 'bg-success'], ['ABSENT', 'bg-danger'], ['LATE', 'bg-warning'], ['ON_LEAVE', 'bg-accent-default'], ['HOLIDAY', 'bg-purple-500'], ['WEEKEND', 'bg-bg-base border border-border-default']].map(([label, bg]) => (
@@ -112,6 +85,69 @@ function MyAttendanceTab() {
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── My Attendance Calendar ────────────────────────────────────────────────────
+// Iterating with date-fns eachDayOfInterval and looking up by 'yyyy-MM-dd' is
+// DST-safe and month-length-safe. The previous implementation walked the
+// history array in order, injected padding cells only in front of history[0]'s
+// weekday, and derived the day number via `new Date(day.date).getDate()` — all
+// three of which break the moment the API omits a day (DST spring-forward, a
+// missing weekend row, or a partial month) or when the browser TZ shifts the
+// parsed date into the previous day.
+
+type DayStatus = { status: string }
+
+function MyAttendanceCalendar({
+  year, month, history, statusBg,
+}: {
+  year: number
+  month: number
+  history: { date: string; status: string }[]
+  statusBg: Record<string, string>
+}) {
+  const days = useMemo(() => {
+    // month is 1-indexed from the caller (matches backend).
+    const first = startOfMonth(new Date(year, month - 1, 1))
+    const last = endOfMonth(first)
+    return eachDayOfInterval({ start: first, end: last })
+  }, [year, month])
+
+  const byDate = useMemo(() => {
+    const m = new Map<string, DayStatus>()
+    for (const row of history) m.set(row.date, { status: row.status })
+    return m
+  }, [history])
+
+  const leadingBlanks = days[0].getDay() // 0=Sun … 6=Sat, matches header order
+
+  return (
+    <div className="grid grid-cols-7 gap-2 sm:gap-3">
+      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+        <div key={d} className="text-center text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2">{d}</div>
+      ))}
+      {Array.from({ length: leadingBlanks }).map((_, i) => (
+        <div key={`blank-${i}`} className="aspect-square rounded-xl" aria-hidden />
+      ))}
+      {days.map((d) => {
+        const key = format(d, 'yyyy-MM-dd')
+        const info = byDate.get(key)
+        const status = info?.status ?? 'NOT_MARKED'
+        return (
+          <div
+            key={key}
+            title={`${key} — ${status}`}
+            className={clsx(
+              'aspect-square rounded-xl flex items-center justify-center text-sm font-bold cursor-default transition-all hover:scale-105 hover:shadow-md',
+              statusBg[status] ?? 'bg-bg-base text-text-secondary border border-border-default'
+            )}
+          >
+            {d.getDate()}
+          </div>
+        )
+      })}
     </div>
   )
 }

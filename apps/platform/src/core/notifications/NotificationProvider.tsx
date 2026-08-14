@@ -23,7 +23,12 @@ const POLL_MS = 60_000
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
   const isAuthed = useAuthStore((s) => s.status === 'authenticated')
   const fetchNotifications = useNotificationStore((s) => s.fetch)
+  const resetNotifications = useNotificationStore((s) => s.reset)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Track the previous auth state so we only reset on true authed→unauthed
+  // transitions (not on the initial "unauthed" mount before login, which
+  // would clobber nothing but still fire an extra render for no reason).
+  const wasAuthedRef = useRef(false)
 
   useEffect(() => {
     if (!isAuthed) {
@@ -31,8 +36,18 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         clearInterval(timerRef.current)
         timerRef.current = null
       }
+      // Sign-out (or session expiry): drop every cached row so the next user
+      // signing in on the same tab never sees the previous user's inbox
+      // between login and the first /v1/notifications response. Without this,
+      // zustand keeps the old array in memory and the bell renders stale
+      // cross-user data.
+      if (wasAuthedRef.current) {
+        resetNotifications()
+        wasAuthedRef.current = false
+      }
       return
     }
+    wasAuthedRef.current = true
     // Immediate load on login/mount, then poll.
     fetchNotifications()
     timerRef.current = setInterval(fetchNotifications, POLL_MS)
@@ -49,7 +64,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         timerRef.current = null
       }
     }
-  }, [isAuthed, fetchNotifications])
+  }, [isAuthed, fetchNotifications, resetNotifications])
 
   return <>{children}</>
 }

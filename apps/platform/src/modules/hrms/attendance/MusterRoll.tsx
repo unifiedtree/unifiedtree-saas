@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2,
@@ -64,12 +64,60 @@ function toISODate(d: Date): string {
   return format(d, 'yyyy-MM-dd')
 }
 
+// Debounce a value by `delayMs`. Keeps the input responsive while the (large)
+// staff list is only re-filtered after the user pauses typing. Inline here
+// because the platform doesn't ship a shared useDebounce hook yet.
+function useDebounce<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(value), delayMs)
+    return () => window.clearTimeout(id)
+  }, [value, delayMs])
+  return debounced
+}
+
+// Muster-roll row. React.memo skips re-renders while parent state (search
+// input, date picker) changes but this row's inputs don't — big win on ~500-
+// employee rosters where every keystroke otherwise re-runs every cell.
+const MusterRollRow = React.memo(function MusterRollRow({
+  staff, idx, punches,
+}: {
+  staff: StaffStatusResponse
+  idx: number
+  punches: number
+}) {
+  const meta = statusMeta(staff.status)
+  return (
+    <tr>
+      <td>
+        <HrAvatar
+          name={fullName(staff)}
+          sub={[staff.employeeCode, staff.jobTitle].filter(Boolean).join(' · ') || undefined}
+          seed={idx}
+        />
+      </td>
+      <td className="text-text-secondary">{staff.departmentName ?? '—'}</td>
+      <td><HrStatusPill tone={meta.tone}>{meta.label}</HrStatusPill></td>
+      <td className="font-medium text-text-primary">{fmtTime(staff.checkInAt)}</td>
+      <td className="font-medium text-text-primary">{fmtTime(staff.checkOutAt)}</td>
+      <td className="text-text-secondary">{staff.locationName ?? '—'}</td>
+      <td className="text-right tabular-nums text-text-secondary">
+        {punches > 0 ? punches : '—'}
+      </td>
+    </tr>
+  )
+})
+
 export const MusterRoll: React.FC = () => {
   const { toast } = useToast()
   const today = useMemo(() => toISODate(new Date()), [])
   const [date, setDate] = useState<string>(today)
   const [deptId, setDeptId] = useState<string>('')
   const [search, setSearch] = useState('')
+  // Debounce the search term by 350ms so filtering a 500-employee register
+  // waits for the user to pause. The <input> still updates instantly (it's
+  // bound to `search`), only the derived filter uses `debouncedSearch`.
+  const debouncedSearch = useDebounce(search, 350)
 
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
@@ -98,7 +146,7 @@ export const MusterRoll: React.FC = () => {
   const totalStaff = staff.length
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = debouncedSearch.trim().toLowerCase()
     const rows = q
       ? staff.filter((s) =>
           fullName(s).toLowerCase().includes(q) ||
@@ -107,7 +155,7 @@ export const MusterRoll: React.FC = () => {
       : staff
     // Stable, useful ordering: by name.
     return [...rows].sort((a, b) => fullName(a).localeCompare(fullName(b)))
-  }, [staff, search])
+  }, [staff, debouncedSearch])
 
   // Distribution data for the charts — only non-zero buckets in the pie.
   const distribution = useMemo(() => {
@@ -356,29 +404,14 @@ export const MusterRoll: React.FC = () => {
                 </td>
               </tr>
             ) : (
-              filtered.map((s, idx) => {
-                const meta = statusMeta(s.status)
-                const punches = punchByEmp.get(s.employeeId) ?? 0
-                return (
-                  <tr key={s.employeeId}>
-                    <td>
-                      <HrAvatar
-                        name={fullName(s)}
-                        sub={[s.employeeCode, s.jobTitle].filter(Boolean).join(' · ') || undefined}
-                        seed={idx}
-                      />
-                    </td>
-                    <td className="text-text-secondary">{s.departmentName ?? '—'}</td>
-                    <td><HrStatusPill tone={meta.tone}>{meta.label}</HrStatusPill></td>
-                    <td className="font-medium text-text-primary">{fmtTime(s.checkInAt)}</td>
-                    <td className="font-medium text-text-primary">{fmtTime(s.checkOutAt)}</td>
-                    <td className="text-text-secondary">{s.locationName ?? '—'}</td>
-                    <td className="text-right tabular-nums text-text-secondary">
-                      {punches > 0 ? punches : '—'}
-                    </td>
-                  </tr>
-                )
-              })
+              filtered.map((s, idx) => (
+                <MusterRollRow
+                  key={s.employeeId}
+                  staff={s}
+                  idx={idx}
+                  punches={punchByEmp.get(s.employeeId) ?? 0}
+                />
+              ))
             )}
           </tbody>
         </table>

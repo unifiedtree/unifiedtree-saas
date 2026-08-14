@@ -114,6 +114,13 @@ interface NotificationState {
   markAllAsRead: () => Promise<void>
   removeNotification: (id: string) => Promise<void>
   unreadCount: () => number
+  /**
+   * Wipe all cached rows and reset load flags. Called on sign-out so a
+   * subsequent sign-in as a different user does not briefly render the
+   * previous user's notifications while the fresh /v1/notifications
+   * request is in flight.
+   */
+  reset: () => void
 }
 
 export const useNotificationStore = create<NotificationState>()((set, get) => ({
@@ -176,4 +183,6 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
   },
 
   unreadCount: () => get().notifications.filter((n) => !n.isRead).length,
+
+  reset: () => set({ notifications: [], loading: false, loaded: false, error: null }),
 }))

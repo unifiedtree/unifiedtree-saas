@@ -10,6 +10,7 @@ import { ThemeProvider } from './providers/ThemeProvider'
 import { QueryProvider } from './providers/QueryProvider'
 import { AuthProvider } from './providers/AuthProvider'
 import { NotificationProvider } from './core/notifications/NotificationProvider'
+import { ConfirmDialogProvider } from './shared/components/ConfirmDialog'
 import App from './App'
 
 enableMocking().then(() => {
@@ -20,8 +21,10 @@ enableMocking().then(() => {
           <BrowserRouter>
             <AuthProvider>
               <NotificationProvider>
-                <App />
-                <Toaster richColors position="top-right" />
+                <ConfirmDialogProvider>
+                  <App />
+                  <Toaster richColors position="top-right" />
+                </ConfirmDialogProvider>
               </NotificationProvider>
             </AuthProvider>
           </BrowserRouter>

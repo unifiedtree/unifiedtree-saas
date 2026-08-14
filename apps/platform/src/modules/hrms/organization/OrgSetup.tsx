@@ -5,6 +5,7 @@ import { Can, P } from '@unifiedtree/sdk'
 import { DataTable, EmptyState } from '@unifiedtree/ui-kit'
 import type { Column, SortState } from '@unifiedtree/ui-kit'
 import { HrPageHeader, HrStatusPill } from '@/shared/components/hr'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { useToast } from '@/shared/hooks/useToast'
 import {
   useCompanies, useCreateCompany, useUpdateCompany, useArchiveCompany,
@@ -160,6 +161,7 @@ const BTN_DEL     = 'p-1.5 text-text-tertiary hover:text-red-600 transition-colo
 
 function CompaniesTab() {
   const { toast } = useToast()
+  const confirm = useConfirmDialog()
   const { data: companies = [], isLoading, error, refetch } = useCompanies()
   const createCompany = useCreateCompany()
   const updateCompany = useUpdateCompany()
@@ -195,6 +197,13 @@ function CompaniesTab() {
   }
 
   const handleArchive = async (co: Company) => {
+    const ok = await confirm({
+      title: `Archive ${co.name}?`,
+      body: 'Employees and history stay intact, but this company will be hidden from lists and pickers.',
+      confirmLabel: 'Archive',
+      tone: 'danger',
+    })
+    if (!ok) return
     try { await archiveCompany.mutateAsync(co.id); toast('Company archived', 'success') }
     catch { toast('Failed to archive company', 'error') }
   }
@@ -228,8 +237,8 @@ function CompaniesTab() {
       cell: (co) => (
         <Can code={P.ORG_COMPANY_WRITE}>
           <div className="flex items-center gap-0.5">
-            <button onClick={() => openEdit(co)} className={BTN_ICON}><Pencil size={13} /></button>
-            <button onClick={() => handleArchive(co)} className={BTN_DEL}><Trash2 size={13} /></button>
+            <button onClick={() => openEdit(co)} aria-label={`Edit ${co.name}`} className={BTN_ICON}><Pencil size={13} /></button>
+            <button onClick={() => handleArchive(co)} aria-label={`Archive company ${co.name}`} className={BTN_DEL}><Trash2 size={13} /></button>
           </div>
         </Can>
       ),
@@ -391,6 +400,7 @@ interface CompanyProp { activeCompany?: Company }
 
 function BranchesTab({ activeCompany }: CompanyProp) {
   const { toast } = useToast()
+  const confirm = useConfirmDialog()
   const { data: branches = [], isLoading, error, refetch } = useBranches(activeCompany?.id)
   const createBranch = useCreateBranch()
   const archiveBranch = useArchiveBranch()
@@ -408,8 +418,15 @@ function BranchesTab({ activeCompany }: CompanyProp) {
     } catch { toast('Failed to create branch', 'error') }
   }
 
-  const handleArchive = async (id: string) => {
-    try { await archiveBranch.mutateAsync(id); toast('Branch archived', 'success') }
+  const handleArchive = async (br: { id: string; name: string }) => {
+    const ok = await confirm({
+      title: `Archive branch ${br.name}?`,
+      body: 'The branch will be hidden from lists and pickers. Existing assignments are preserved.',
+      confirmLabel: 'Archive',
+      tone: 'danger',
+    })
+    if (!ok) return
+    try { await archiveBranch.mutateAsync(br.id); toast('Branch archived', 'success') }
     catch { toast('Failed to archive branch', 'error') }
   }
 
@@ -440,7 +457,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
       key: 'actions', header: '',
       cell: (br) => (
         <Can code={P.ORG_COMPANY_WRITE}>
-          <button onClick={() => handleArchive(br.id)} className={BTN_DEL}><Trash2 size={14} /></button>
+          <button onClick={() => handleArchive(br)} aria-label={`Archive branch ${br.name}`} className={BTN_DEL}><Trash2 size={14} /></button>
         </Can>
       ),
     },
@@ -498,6 +515,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
 
 function DepartmentsTab({ activeCompany }: CompanyProp) {
   const { toast } = useToast()
+  const confirm = useConfirmDialog()
   const { data: departments = [], isLoading, error, refetch } = useDepartments(activeCompany?.id ?? '')
   const { data: empPage } = useEmployeeDirectory({ companyId: activeCompany?.id, pageSize: 200 })
   const employees = empPage?.content ?? []
@@ -568,8 +586,15 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
     }
   }
 
-  const handleArchive = async (id: string) => {
-    try { await archiveDept.mutateAsync(id); toast('Department archived', 'success') }
+  const handleArchive = async (dept: { id: string; name: string }) => {
+    const ok = await confirm({
+      title: `Archive department ${dept.name}?`,
+      body: 'The department will be hidden from lists and pickers. Existing employee assignments are preserved.',
+      confirmLabel: 'Archive',
+      tone: 'danger',
+    })
+    if (!ok) return
+    try { await archiveDept.mutateAsync(dept.id); toast('Department archived', 'success') }
     catch { toast('Failed to archive department', 'error') }
   }
 
@@ -625,7 +650,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
       key: 'actions', header: '',
       cell: (d) => (
         <Can code={P.HRMS_DEPARTMENT_WRITE}>
-          <button onClick={() => handleArchive(d.id)} className={BTN_DEL}><Trash2 size={14} /></button>
+          <button onClick={() => handleArchive(d)} aria-label={`Archive department ${d.name}`} className={BTN_DEL}><Trash2 size={14} /></button>
         </Can>
       ),
     },
@@ -722,6 +747,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
 
 function DesignationsTab({ activeCompany }: CompanyProp) {
   const { toast } = useToast()
+  const confirm = useConfirmDialog()
   const { data: designations = [], isLoading, error, refetch } = useDesignations(activeCompany?.id ?? '')
   const createDesig = useCreateDesignation()
   const updateDesig = useUpdateDesignation()
@@ -753,8 +779,15 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
     } catch { toast(editing ? 'Failed to update designation' : 'Failed to create designation', 'error') }
   }
 
-  const handleArchive = async (id: string) => {
-    try { await archiveDesig.mutateAsync(id); toast('Designation archived', 'success') }
+  const handleArchive = async (d: Designation) => {
+    const ok = await confirm({
+      title: `Archive designation ${d.title}?`,
+      body: 'The designation will be hidden from lists and pickers. Existing employee assignments are preserved.',
+      confirmLabel: 'Archive',
+      tone: 'danger',
+    })
+    if (!ok) return
+    try { await archiveDesig.mutateAsync(d.id); toast('Designation archived', 'success') }
     catch { toast('Failed to archive designation', 'error') }
   }
 
@@ -783,8 +816,8 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
       cell: (d) => (
         <Can code={P.HRMS_DESIGNATION_WRITE}>
           <div className="flex items-center gap-0.5">
-            <button onClick={() => openEdit(d)} className={BTN_ICON}><Pencil size={13} /></button>
-            <button onClick={() => handleArchive(d.id)} className={BTN_DEL}><Trash2 size={13} /></button>
+            <button onClick={() => openEdit(d)} aria-label={`Edit ${d.title}`} className={BTN_ICON}><Pencil size={13} /></button>
+            <button onClick={() => handleArchive(d)} aria-label={`Archive designation ${d.title}`} className={BTN_DEL}><Trash2 size={13} /></button>
           </div>
         </Can>
       ),
@@ -834,6 +867,7 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
 
 function GradesTab({ activeCompany }: CompanyProp) {
   const { toast } = useToast()
+  const confirm = useConfirmDialog()
   const { data: grades = [], isLoading, error, refetch } = useGrades(activeCompany?.id ?? '')
   const createGrade = useCreateGrade()
   const updateGrade = useUpdateGrade()
@@ -881,6 +915,13 @@ function GradesTab({ activeCompany }: CompanyProp) {
 
   const handleDelete = async (g: Grade) => {
     if (!activeCompany) return
+    const ok = await confirm({
+      title: `Delete grade ${g.name}?`,
+      body: 'This cannot be undone. Employees on this grade will need to be reassigned.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
     try { await deleteGrade.mutateAsync({ id: g.id, companyId: activeCompany.id }); toast('Grade deleted', 'success') }
     catch { toast('Failed to delete grade', 'error') }
   }
@@ -914,8 +955,8 @@ function GradesTab({ activeCompany }: CompanyProp) {
       cell: (g) => (
         <Can code={P.HRMS_GRADE_WRITE}>
           <div className="flex items-center gap-0.5">
-            <button onClick={() => openEdit(g)} className={BTN_ICON}><Pencil size={13} /></button>
-            <button onClick={() => handleDelete(g)} className={BTN_DEL}><Trash2 size={13} /></button>
+            <button onClick={() => openEdit(g)} aria-label={`Edit grade ${g.name}`} className={BTN_ICON}><Pencil size={13} /></button>
+            <button onClick={() => handleDelete(g)} aria-label={`Delete grade ${g.name}`} className={BTN_DEL}><Trash2 size={13} /></button>
           </div>
         </Can>
       ),
@@ -971,6 +1012,7 @@ function GradesTab({ activeCompany }: CompanyProp) {
 
 function EmploymentTypesTab({ activeCompany }: CompanyProp) {
   const { toast } = useToast()
+  const confirm = useConfirmDialog()
   const { data: types = [], isLoading, error, refetch } = useEmploymentTypes(activeCompany?.id ?? '')
   const createType = useCreateEmploymentType()
   const updateType = useUpdateEmploymentType()
@@ -1010,6 +1052,13 @@ function EmploymentTypesTab({ activeCompany }: CompanyProp) {
 
   const handleDelete = async (t: EmploymentTypeRecord) => {
     if (!activeCompany) return
+    const ok = await confirm({
+      title: `Delete employment type ${t.name}?`,
+      body: 'This cannot be undone. Employees on this type will need to be reassigned.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
     try { await deleteType.mutateAsync({ id: t.id, companyId: activeCompany.id }); toast('Employment type deleted', 'success') }
     catch { toast('Failed to delete employment type', 'error') }
   }
@@ -1043,8 +1092,8 @@ function EmploymentTypesTab({ activeCompany }: CompanyProp) {
       cell: (t) => t.system ? null : (
         <Can code={P.HRMS_EMPLOYMENT_TYPE_WRITE}>
           <div className="flex items-center gap-0.5">
-            <button onClick={() => openEdit(t)} className={BTN_ICON}><Pencil size={13} /></button>
-            <button onClick={() => handleDelete(t)} className={BTN_DEL}><Trash2 size={13} /></button>
+            <button onClick={() => openEdit(t)} aria-label={`Edit employment type ${t.name}`} className={BTN_ICON}><Pencil size={13} /></button>
+            <button onClick={() => handleDelete(t)} aria-label={`Delete employment type ${t.name}`} className={BTN_DEL}><Trash2 size={13} /></button>
           </div>
         </Can>
       ),
@@ -1100,6 +1149,7 @@ function EmploymentTypesTab({ activeCompany }: CompanyProp) {
 
 function ShiftsTab({ activeCompany }: CompanyProp) {
   const { toast } = useToast()
+  const confirm = useConfirmDialog()
   const { data: shifts = [], isLoading, error, refetch } = useShifts(activeCompany?.id ?? '')
   const createShift = useCreateShift()
   const updateShift = useUpdateShift()
@@ -1169,6 +1219,13 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
 
   const handleDelete = async (s: Shift) => {
     if (!activeCompany) return
+    const ok = await confirm({
+      title: `Delete shift ${s.name}?`,
+      body: 'This cannot be undone. Employees assigned to this shift will need to be rescheduled.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
     try { await deleteShift.mutateAsync({ id: s.id, companyId: activeCompany.id }); toast('Shift deleted', 'success') }
     catch { toast('Failed to delete shift', 'error') }
   }
@@ -1206,8 +1263,8 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
       cell: (s) => (
         <Can code={P.HRMS_SHIFT_WRITE}>
           <div className="flex items-center gap-0.5">
-            <button onClick={() => openEdit(s)} className={BTN_ICON}><Pencil size={13} /></button>
-            <button onClick={() => handleDelete(s)} className={BTN_DEL}><Trash2 size={13} /></button>
+            <button onClick={() => openEdit(s)} aria-label={`Edit shift ${s.name}`} className={BTN_ICON}><Pencil size={13} /></button>
+            <button onClick={() => handleDelete(s)} aria-label={`Delete shift ${s.name}`} className={BTN_DEL}><Trash2 size={13} /></button>
           </div>
         </Can>
       ),

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { Plus, Trash2, Bell, Pencil, X } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, type PillTone,
 } from '@/shared/components/hr'
@@ -37,6 +38,7 @@ export const NotificationTemplates: React.FC = () => {
   const canRead = usePermission('hrms.notiftemplate.read')
   const canWrite = usePermission('hrms.notiftemplate.write')
   const { toast } = useToast()
+  const confirm = useConfirmDialog()
 
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState('')
@@ -99,11 +101,18 @@ export const NotificationTemplates: React.FC = () => {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (t: NotificationTemplate) => {
+    const ok = await confirm({
+      title: `Delete template "${t.name}"?`,
+      body: 'This cannot be undone. Any workflow wired to this template will fall back to defaults.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
-      await remove.mutateAsync(id)
+      await remove.mutateAsync(t.id)
       toast('Template deleted', 'success')
-      if (editingId === id) cancelEdit()
+      if (editingId === t.id) cancelEdit()
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed to delete template', 'error')
     }
@@ -220,10 +229,10 @@ export const NotificationTemplates: React.FC = () => {
                 {canWrite && (
                   <td>
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => startEdit(t)} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FFF3DD] hover:text-[#047857]" title="Edit">
+                      <button onClick={() => startEdit(t)} aria-label={`Edit template ${t.name}`} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FFF3DD] hover:text-[#047857]" title="Edit">
                         <Pencil size={14} />
                       </button>
-                      <button onClick={() => handleDelete(t.id)} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Delete">
+                      <button onClick={() => handleDelete(t)} aria-label={`Delete template ${t.name}`} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Delete">
                         <Trash2 size={14} />
                       </button>
                     </div>
