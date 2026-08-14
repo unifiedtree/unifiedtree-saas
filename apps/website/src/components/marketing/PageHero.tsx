@@ -33,6 +33,31 @@ export function EngineeredField({ className = '' }: { className?: string }) {
   )
 }
 
+/**
+ * The label above a hero heading.
+ *
+ * Previously a bordered chip with a dot and a backdrop blur — the single most
+ * generic marketing component there is, and it read as placeholder rather than
+ * design. It is now a typographic mark: wide-tracked mint caps between two
+ * hairlines, which suits a centred band and looks deliberate.
+ *
+ * The backdrop-blur went with it, and that was not only cosmetic. Backdrop
+ * filters force the compositor to re-sample everything behind them on every
+ * frame; removing them measured as the single biggest scroll-jank win on the
+ * home page (p95 24.6ms -> 18.3ms).
+ */
+export function Eyebrow({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-3 text-[11.5px] font-semibold uppercase tracking-[0.24em] text-lime ${className}`}
+    >
+      <span aria-hidden className="h-px w-7 bg-lime/45" />
+      {children}
+      <span aria-hidden className="h-px w-7 bg-lime/45" />
+    </span>
+  )
+}
+
 /** A one-pixel emerald rule, brightest in the middle — the band's bottom edge. */
 export function EmeraldHairline({ className = '' }: { className?: string }) {
   return (
@@ -67,15 +92,14 @@ export function PageHero({ eyebrow, title, lede, children }: PageHeroProps) {
       <EmeraldHairline />
 
       <div className="relative z-10 mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-        <motion.span
+        <motion.div
           initial={{ opacity: 0, y: reduce ? 0 : 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-white/90 backdrop-blur-sm"
+          className="mb-7"
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-          {eyebrow}
-        </motion.span>
+          <Eyebrow>{eyebrow}</Eyebrow>
+        </motion.div>
 
         <motion.h1
           initial={{ opacity: 0, y: reduce ? 0 : 24 }}

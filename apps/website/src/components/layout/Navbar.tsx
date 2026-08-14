@@ -235,7 +235,7 @@ export function Navbar({ tone }: Props) {
                       overDark ? 'text-white/85 hover:text-white' : 'text-text-secondary hover:text-text-primary'
                     }`}
                   >
-                    Sign in
+                    Login
                   </Link>
                   <CtaButton
                     trialLabel="Start free trial"
@@ -420,7 +420,7 @@ export function Navbar({ tone }: Props) {
                       onClick={() => setMenuOpen(false)}
                       className="block w-full rounded-xl border border-white/25 bg-white/10 px-4 py-3.5 text-center text-[15px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/20"
                     >
-                      Sign in
+                      Login
                     </Link>
                     <div className="w-full [&>div]:w-full" onClick={() => setMenuOpen(false)}>
                       <CtaButton

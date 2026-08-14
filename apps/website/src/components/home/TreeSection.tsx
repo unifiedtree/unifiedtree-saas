@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 import type { TreeFocus } from '../visuals/TreeAnatomy'
 import { TreePhoto } from '../visuals/TreePhoto'
+import { useCtaMode } from '../../hooks/useCtaMode'
 
 /**
  * "One root. Every branch connected." — the tree on the left, the argument on
@@ -59,6 +60,8 @@ const CYCLE_MS = 2400
 
 export function TreeSection() {
   const navigate = useNavigate()
+  /* Same rule as the header and hero — see useCtaMode. */
+  const { href: ctaHref } = useCtaMode()
   const reduce = useReducedMotion()
 
   /** What the reader is pointing at. Null means "nobody is pointing". */
@@ -184,7 +187,7 @@ export function TreeSection() {
 
           <div className="mt-8 flex flex-wrap items-center gap-3.5">
             <button
-              onClick={() => navigate('/signup')}
+              onClick={() => navigate(ctaHref)}
               className="group inline-flex items-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-[15px] font-bold text-white shadow-sm transition-all hover:gap-3 hover:bg-primary-dark"
             >
               Start free trial

@@ -4,6 +4,8 @@ import { AnimatePresence, motion, useScroll, useTransform, useReducedMotion } fr
 import { ArrowRight } from 'lucide-react'
 import { LandscapeScene } from '../visuals/LandscapeScene'
 import { ModuleDashboard } from '../visuals/ModuleDashboard'
+import { Eyebrow } from '../marketing/PageHero'
+import { useCtaMode } from '../../hooks/useCtaMode'
 
 /**
  * The closing phrase of the headline cycles so the hero demonstrates breadth —
@@ -32,6 +34,9 @@ const PHRASE_MS = 2600
  */
 export function HeroSection() {
   const navigate = useNavigate()
+  /* One source of truth for where "start free trial" goes — the same hook the
+     header CTA uses, so the two can never diverge again. */
+  const { href: ctaHref } = useCtaMode()
   const reduce = useReducedMotion()
   const ref = useRef<HTMLDivElement>(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
@@ -68,15 +73,14 @@ export function HeroSection() {
         style={{ y: copyY, opacity: copyOpacity }}
         className="relative z-10 mx-auto w-full max-w-4xl px-4 text-center sm:px-6 lg:px-8"
       >
-        <motion.span
+        <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-[12.5px] font-semibold uppercase tracking-[0.14em] text-white/90 backdrop-blur-sm"
+          className="mb-7"
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-[#A7F3D0]" />
-          One platform · every department
-        </motion.span>
+          <Eyebrow>One platform · every department</Eyebrow>
+        </motion.div>
 
         <motion.h1
           initial={{ opacity: 0, y: 26 }}
@@ -116,9 +120,14 @@ export function HeroSection() {
                 <motion.span
                   key={phrase}
                   className="col-start-1 row-start-1"
-                  initial={{ opacity: 0, y: '55%', filter: 'blur(10px)' }}
-                  animate={{ opacity: 1, y: '0%', filter: 'blur(0px)' }}
-                  exit={{ opacity: 0, y: '-55%', filter: 'blur(10px)' }}
+                  /* No animated blur here. It looked good but re-rasterises the
+                     display type on every frame of every swap, and this loops
+                     for as long as the hero is on screen — a permanent cost on
+                     the heaviest-painting part of the page. Opacity and travel
+                     carry the same gesture and composite on the GPU. */
+                  initial={{ opacity: 0, y: '55%' }}
+                  animate={{ opacity: 1, y: '0%' }}
+                  exit={{ opacity: 0, y: '-55%' }}
                   transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
                 >
                   {phrase}
@@ -148,7 +157,10 @@ export function HeroSection() {
               pair sits on one optical baseline — the primary's border is white on
               white, present only to match the secondary's height exactly. */}
           <button
-            onClick={() => navigate('/signup')}
+            /* Route through the same rule the header uses. Hardcoding
+               "/signup" dropped the ?mode= param, which landed the visitor on a
+               different form state than every other CTA on the site. */
+            onClick={() => navigate(ctaHref)}
             className="group inline-flex items-center gap-2 rounded-xl border-[1.5px] border-white bg-white px-7 py-3.5 text-[15px] font-bold text-[#04503A] shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:gap-3 hover:bg-[#ECFDF5] hover:shadow-[0_16px_32px_-14px_rgba(0,0,0,0.55)] active:translate-y-0"
           >
             Start free trial
