@@ -66,5 +66,16 @@
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
         </dependency>
+        <!--
+            Firebase Admin SDK — verifies phone-auth ID tokens minted by the
+            Android app so /v1/auth/firebase-verify can turn them into normal
+            UnifiedTree JWT + refresh pairs. Java 21 / Spring Boot 3.2
+            compatible.
+        -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.5.0</version>
+        </dependency>
     </dependencies>
 </project>
