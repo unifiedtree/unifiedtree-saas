@@ -53,41 +53,39 @@ export function PricingPage() {
     <div className="min-h-screen bg-white relative">
       <Navbar />
 
-      {/* Header + calculator sit on one continuous soft surface (no lattice) */}
-      <div className="surface-soft relative overflow-hidden">
+      {/* Above-the-fold configurator (client ask 2026-08): one fixed split-screen
+          composition — chooser left, live pricing card right — fully visible on
+          arrival at desktop sizes. The heading is deliberately compact so the
+          fold's height goes to the chooser and the card, not to a hero band.
+          On short-but-wide viewports the min-height fallback lets the page
+          scroll instead of clipping the pay button. */}
+      <section className="surface-soft relative flex flex-col lg:h-screen lg:min-h-[660px]">
         <span aria-hidden className="grain" />
 
-        {/* Header */}
-        <section className="pt-40 pb-12 relative z-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
+        <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 pb-10 pt-20 sm:px-6 sm:pt-24 lg:min-h-0 lg:px-8 lg:pb-5">
+          {/* Compact heading — small on purpose, the navbar stays above */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-1"
+          >
+            <h1
+              className="font-heading font-extrabold text-text-primary text-[24px] sm:text-[27px]"
+              style={{ letterSpacing: '-0.025em', lineHeight: 1.1 }}
             >
-              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-body font-semibold uppercase tracking-[0.1em] text-[#059669] bg-[#059669]/5 border border-[#059669]/10 mb-6 shadow-sm">
-                Pricing
-              </span>
-              <h1
-                className="font-heading font-extrabold text-[#171717] mb-5"
-                style={{ fontSize: 'clamp(2.175rem, 4.4vw, 3.48rem)', letterSpacing: '-0.02em', lineHeight: 1.08 }}
-              >
-                Build your perfect plan
-              </h1>
-              <p className="text-lg text-[#525252] font-body max-w-xl mx-auto">
-                Select the modules you need and the number of employees. Your price updates instantly.
-              </p>
-            </motion.div>
-          </div>
-        </section>
+              Build your plan
+            </h1>
+            <p className="font-body text-[13.5px] text-text-secondary sm:text-sm">
+              Pick modules and team size — your price updates live.
+            </p>
+          </motion.div>
 
-        {/* Calculator */}
-        <section className="pb-20 relative z-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex-1 lg:min-h-0">
             <PricingCalculator />
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
 
       {/* Preset plans — hidden until the other modules ship (see SHOW_PRESET_PLANS) */}
       {SHOW_PRESET_PLANS && (
