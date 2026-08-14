@@ -1,9 +1,11 @@
 package com.hrms.api.payroll;
 
+import com.hrms.core.crypto.FieldEncryptor;
 import com.hrms.core.exception.BusinessRuleException;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,9 +42,23 @@ public class DisbursementBatchService {
     private static final Pattern IFSC = Pattern.compile("^[A-Z]{4}0[A-Z0-9]{6}$");
 
     private final JdbcTemplate jdbc;
+    /** Nullable: some test wirings don't provide a FieldEncryptor bean.
+     *  generateNeftFile() detects null and refuses to emit a masked-account
+     *  file — safer than silently misrouting salaries. */
+    private final FieldEncryptor fieldEncryptor;
 
+    public DisbursementBatchService(JdbcTemplate jdbc,
+                                    ObjectProvider<FieldEncryptor> fieldEncryptorProvider) {
+        this.jdbc = jdbc;
+        this.fieldEncryptor = fieldEncryptorProvider == null
+                ? null
+                : fieldEncryptorProvider.getIfAvailable();
+    }
+
+    /** Legacy no-encryptor ctor for tests that construct the service directly. */
     public DisbursementBatchService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+        this.fieldEncryptor = null;
     }
 
     // ── DTOs ──────────────────────────────────────────────────────────────────
@@ -333,24 +349,40 @@ public class DisbursementBatchService {
                 req.paymentReference(), req.notes(),
                 actorId == null ? null : actorId.toString(), batchId);
 
-        // QA FIX (2026-08-11, finding wmih6ivbj/HIGH-2):
-        //   Previous UPDATE was `WHERE id = ? AND status <> 'PAID'` — that would
-        //   force a DRAFT/PROCESSING/CANCELLED/reopened run straight to PAID
-        //   with no state guard. Constrain to statuses that can legitimately
-        //   move to PAID (LOCKED — the intended path, or POSTED if a prior
-        //   partial state).
+        // B2/D9 FIX (2026-08-14):
+        //   Previous UPDATE allowed status IN ('LOCKED','PROCESSING') — that
+        //   silently flipped a run mid-payroll-computation straight to PAID,
+        //   losing the intermediate PROCESSING state and lying to the Payroll
+        //   UI (which then hides "still processing" progress from Finance).
+        //   PROCESSING means the run's still being computed / posted; PAID
+        //   should only follow LOCKED (the settled, sealed state).
+        //
+        //   Guard the run status BEFORE the update so we can refuse loudly
+        //   when the run is still PROCESSING — silently no-op'ing would leave
+        //   the batch marked PAID while the run stays PROCESSING forever, a
+        //   permanent ledger split that never reconciles.
+        String currentRunStatus = jdbc.query(
+                "SELECT status FROM payroll.runs WHERE id = ?",
+                rs -> rs.next() ? rs.getString("status") : null,
+                b.runId());
+        if ("PROCESSING".equals(currentRunStatus)) {
+            throw new BusinessRuleException(
+                    "Underlying payroll run is still PROCESSING — cannot mark the "
+                    + "disbursement batch PAID until the run finishes and LOCKS.",
+                    "RUN_STILL_PROCESSING");
+        }
         int flipped = jdbc.update("""
                 UPDATE payroll.runs
                    SET status = 'PAID', paid_at = COALESCE(paid_at, now()),
                        updated_at = now()
-                 WHERE id = ? AND status IN ('LOCKED','PROCESSING')
+                 WHERE id = ? AND status = 'LOCKED'
                 """, b.runId());
         if (flipped == 0) {
             // Non-fatal but audit it — the batch is PAID even if the run wasn't
-            // in an eligible state to flip (already PAID / not yet LOCKED /
-            // CANCELLED). Log for reconciliation; don't roll back the batch.
-            log.warn("Batch {} marked PAID but run {} was not in LOCKED/PROCESSING — no run status change",
-                    batchId, b.runId());
+            // in an eligible state to flip (already PAID / CANCELLED / not
+            // LOCKED). Log for reconciliation; don't roll back the batch.
+            log.warn("Batch {} marked PAID but run {} was not in LOCKED (was {}) — no run status change",
+                    batchId, b.runId(), currentRunStatus);
         }
 
         return getBatch(batchId);
@@ -395,17 +427,64 @@ public class DisbursementBatchService {
                     "FORMAT_NOT_IMPLEMENTED");
         }
 
+        // B2/D3 (2026-08-14) — the batch-line DTOs carry ONLY the redacted
+        // account string ("•••• (encrypted)"). Writing that into a bank-upload
+        // file would silently misroute every salary in the run to whatever
+        // Bank of Nowhere account "0000" happens to resolve to. Re-read the
+        // encrypted payload from the batch-line row and decrypt via the
+        // FieldEncryptor helper (AES-256-GCM, same key that encrypt-at-rest
+        // uses on hrms.employee_bank_accounts).
+        //
+        // If the encryptor bean isn't wired (test/legacy path), REFUSE to
+        // generate the file rather than fall back to the masked value —
+        // the failure mode of a silent masked-CSV batch is customer money
+        // going to a wrong beneficiary.
+        if (fieldEncryptor == null) {
+            throw new IllegalStateException(
+                    "FieldEncryptor bean not available — cannot generate NEFT file with "
+                    + "plaintext account numbers. Refusing to emit a masked file "
+                    + "(would misroute salaries). Wire com.hrms.core.crypto.FieldEncryptor "
+                    + "or use a bank format that supports opaque tokens.");
+        }
+
+        // Pull the encrypted payload + last4 for every READY line in one go
+        // (RLS already scoped by bindTenant on the caller path).
+        List<Map<String, Object>> raw = jdbc.query("""
+                SELECT id, account_no
+                  FROM payroll.disbursement_batch_lines
+                 WHERE batch_id = ? AND status = 'READY'
+                """, (rs, i) -> {
+                    Map<String, Object> m = new java.util.HashMap<>();
+                    m.put("id",         rs.getObject("id", UUID.class));
+                    m.put("account_no", rs.getString("account_no"));
+                    return m;
+                }, batchId);
+        java.util.Map<UUID, String> encByLineId = new java.util.HashMap<>();
+        for (Map<String, Object> r : raw) {
+            encByLineId.put((UUID) r.get("id"), (String) r.get("account_no"));
+        }
+
         StringBuilder csv = new StringBuilder();
         csv.append("beneficiary_name,account_number,ifsc,amount,reference\n");
         for (BatchLineDto line : detail.lines()) {
             if (!"READY".equals(line.status())) continue;
+            String encrypted = encByLineId.get(line.id());
+            if (encrypted == null || encrypted.isBlank()) {
+                throw new IllegalStateException(
+                        "READY batch line " + line.id() + " has no encrypted account payload — "
+                        + "refusing to emit the NEFT file rather than write an empty account.");
+            }
+            String plaintext;
+            try {
+                plaintext = fieldEncryptor.decrypt(encrypted);
+            } catch (RuntimeException e) {
+                throw new IllegalStateException(
+                        "Failed to decrypt account payload for batch line " + line.id()
+                        + " — refusing to emit the NEFT file rather than write ciphertext "
+                        + "to the bank upload. Cause: " + e.getMessage(), e);
+            }
             csv.append(csvEsc(line.beneficiaryName())).append(',');
-            // NOTE: we ship the ENCRYPTED account payload here as-is. Real
-            // integrations would decrypt at generation time via the KMS/vault
-            // helper; for the generic CSV that goes to a human-operated bank
-            // portal, plaintext leaves via a different channel. This keeps
-            // the batch line row itself safe under RLS + at rest.
-            csv.append(csvEsc(line.accountNoMasked())).append(',');
+            csv.append(csvEsc(plaintext)).append(',');
             csv.append(line.ifsc()).append(',');
             csv.append(line.amount().toPlainString()).append(',');
             csv.append(csvEsc(detail.batch().batchReference())).append('\n');

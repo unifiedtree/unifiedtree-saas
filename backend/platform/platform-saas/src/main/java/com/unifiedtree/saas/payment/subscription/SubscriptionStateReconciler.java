@@ -327,6 +327,20 @@ public class SubscriptionStateReconciler {
      * @return the number of tenant_modules rows deactivated
      */
     public int revokeExpiredCancellations() {
+        // B2/D6 FIX (2026-08-14) — SIBLING-IN-GRACE guard.
+        //
+        // Retired mandates from mandate-swap (UPI seat change) are written as
+        // CANCELLED with grace_until = the REPLACEMENT's current_period_end
+        // (see PlanChangeService.retireReplacedMandate). Until that
+        // replacement fully activates and its own row starts carrying an
+        // ACTIVE/TRIALING status, a naïve revoke sweep sees a CANCELLED row
+        // whose grace has technically elapsed (or is NULL, because the
+        // replacement's period end hadn't landed yet at retirement time) and
+        // yanks tenant_modules on a paying customer. The extra NOT EXISTS
+        // below refuses to revoke while ANY sibling row for the same tenant
+        // is CANCELLED-but-still-in-grace — that sibling either is the
+        // replacement's own paid grace, or is a co-mandate the customer paid
+        // for. Either way the customer's access must not evaporate.
         int deactivated = jdbc.update("""
                 UPDATE platform.tenant_modules tm SET
                     status      = 'EXPIRED',
@@ -342,6 +356,13 @@ public class SubscriptionStateReconciler {
                         SELECT 1 FROM platform.subscriptions s2
                          WHERE s2.tenant_id = tm.tenant_id
                            AND s2.status IN ('TRIALING','ACTIVE','PAST_DUE','HALTED','GRACE')
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM platform.subscriptions s3
+                         WHERE s3.tenant_id = tm.tenant_id
+                           AND s3.status = 'CANCELLED'
+                           AND s3.grace_until IS NOT NULL
+                           AND s3.grace_until > now()
                     )
                 """);
         if (deactivated > 0) {

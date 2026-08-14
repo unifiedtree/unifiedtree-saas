@@ -130,6 +130,16 @@ public class SubscriptionService {
         // Server-authoritative plan lookup — never accept the price from the client.
         List<ModulePlanDto> plans = planService.requireAvailable(List.of(moduleKey));
         ModulePlanDto plan = plans.get(0);
+        // B2 FIX (2026-08-14): FLAT-priced plans bill a single fixed charge per
+        // cycle regardless of seat count (unit * 1, NOT unit * seats). Sending
+        // the seat count as Razorpay's quantity for a FLAT plan multiplies the
+        // fixed price by the number of users — a 10-seat FLAT ₹999 add-on would
+        // debit ₹9990 every cycle. Matches ModulePlanService.totalPriceInr
+        // ("FLAT plans bill the unit once"). Seats are still recorded on our
+        // ledger for entitlement counting, but Razorpay sees quantity=1.
+        if ("FLAT".equalsIgnoreCase(plan.priceModel())) {
+            billedSeats = 1;
+        }
         BigDecimal unitPerCyclePerSeat = planService.effectiveMonthlyUnit(plan, c);
         if (unitPerCyclePerSeat.signum() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

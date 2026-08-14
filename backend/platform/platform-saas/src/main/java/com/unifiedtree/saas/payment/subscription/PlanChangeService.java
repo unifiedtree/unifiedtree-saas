@@ -566,15 +566,33 @@ public class PlanChangeService {
                       + "Cancel {} in the Razorpay dashboard by hand. Cause: {}",
                     tenantId, oldSubId, newSubId, oldSubId, e.getMessage());
         }
+        // B2/D6 FIX (2026-08-14): the retired row must inherit the
+        // REPLACEMENT subscription's current_period_end as grace_until, or
+        // SubscriptionStateReconciler.revokeExpiredCancellations runs at
+        // 03:00 and yanks tenant_modules while the customer is still in
+        // paid grace on the new mandate — a paying customer sees "your
+        // subscription lapsed" the morning after a seat change. Absent a
+        // period end on the replacement (webhook not landed yet, corner
+        // case), leave grace_until NULL and rely on the sibling-in-grace
+        // guard added to revokeExpiredCancellations below to keep the
+        // customer's modules active until the replacement has one.
+        java.sql.Timestamp replacementGrace = jdbc.query("""
+                SELECT current_period_end
+                  FROM platform.subscriptions
+                 WHERE tenant_id = ? AND razorpay_subscription_id = ?
+                 LIMIT 1
+                """, rs -> rs.next() ? rs.getTimestamp("current_period_end") : null,
+                tenantId, newSubId);
         int rows = jdbc.update("""
                 UPDATE platform.subscriptions
-                   SET status = 'CANCELLED', auto_renew = FALSE, updated_at = now()
+                   SET status = 'CANCELLED', auto_renew = FALSE,
+                       grace_until = ?, updated_at = now()
                  WHERE tenant_id = ?
                    AND razorpay_subscription_id = ?
                    AND status NOT IN ('CANCELLED','EXPIRED','COMPLETED')
-                """, tenantId, oldSubId);
-        log.info("MANDATE_SWAP tenant={} retired {} -> {} (razorpayCancelled={}, ledgerRowsClosed={})",
-                tenantId, oldSubId, newSubId, cancelledUpstream, rows);
+                """, replacementGrace, tenantId, oldSubId);
+        log.info("MANDATE_SWAP tenant={} retired {} -> {} (razorpayCancelled={}, ledgerRowsClosed={}, graceUntil={})",
+                tenantId, oldSubId, newSubId, cancelledUpstream, rows, replacementGrace);
     }
 
     // -- stranded-request recovery (lost-webhook self-heal) ------------------

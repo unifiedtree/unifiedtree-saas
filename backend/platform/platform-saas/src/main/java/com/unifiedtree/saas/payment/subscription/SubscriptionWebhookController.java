@@ -150,7 +150,50 @@ public class SubscriptionWebhookController {
             }
         }
 
-        // Idempotency: PK insert wins the race; second delivery gets DataIntegrityViolationException.
+        // B2 FIX (2026-08-14) — DISPATCH-BEFORE-INSERT so Razorpay can retry.
+        //
+        // Previous ordering INSERTed the event row FIRST, then dispatched. If
+        // dispatch threw (Postgres blip, RLS not set, downstream 500) the row
+        // was already committed, so a retry would hit the PK and 202-drop —
+        // the event was permanently swallowed. That's how the
+        // "webhook-dispatch-failure-permanently-lost" bug lost live
+        // subscription.charged / .halted events.
+        //
+        // New ordering:
+        //   1. Signature-verify + parse (already done above).
+        //   2. Idempotency-CHECK-BEFORE-dispatch via a SELECT — a real
+        //      re-delivery of a previously-successful event still short-
+        //      circuits so we don't double-provision.
+        //   3. Dispatch. If it throws, return 500 so Razorpay retries; do
+        //      NOT write the ledger row (the retry will re-check step 2 and
+        //      re-attempt dispatch).
+        //   4. On success, INSERT the ledger row. A rare race where two
+        //      instances win step 2 simultaneously and both dispatch is
+        //      caught by the PK unique constraint here; the loser logs and
+        //      still ACKs 200 (dispatch already happened once).
+
+        // Step 2: idempotency check (replay-safe read).
+        Integer already = jdbc.queryForObject(
+                "SELECT count(*) FROM platform.razorpay_webhook_events WHERE event_id = ?",
+                Integer.class, eventId);
+        if (already != null && already > 0) {
+            log.info("Duplicate webhook {} ({}); already processed, ignoring", eventId, eventType);
+            return ResponseEntity.ok("duplicate");
+        }
+
+        // Step 3: dispatch. If it throws, refuse the ACK so Razorpay retries.
+        try {
+            dispatch(eventType, subscriptionId, subNode, payNode);
+        } catch (Exception e) {
+            log.error("Webhook dispatch FAILED for {} {} (id={}); returning 500 so Razorpay retries: {}",
+                    eventType, subscriptionId, eventId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("dispatch failed; will retry");
+        }
+
+        // Step 4: only NOW record the event as processed. A concurrent duplicate
+        // that also passed step 2 loses the PK race here; treat that as a
+        // benign duplicate rather than 5xx.
         try {
             jdbc.update("""
                     INSERT INTO platform.razorpay_webhook_events
@@ -158,18 +201,8 @@ public class SubscriptionWebhookController {
                     VALUES (?, ?, ?, CAST(? AS JSONB), ?)
                     """, eventId, eventType, subscriptionId, new String(rawBody), Timestamp.from(Instant.now()));
         } catch (DataIntegrityViolationException e) {
-            log.info("Duplicate webhook {} ({}); ignoring", eventId, eventType);
-            return ResponseEntity.ok("duplicate");
-        }
-
-        try {
-            dispatch(eventType, subscriptionId, subNode, payNode);
-        } catch (Exception e) {
-            // Log & swallow — the event is already in the ledger. Do NOT 5xx
-            // back to Razorpay (they'd retry and hit the idempotency guard,
-            // meaning we'd never re-attempt this specific event). A separate
-            // reconciliation job (future) can walk unprocessed ledger rows.
-            log.error("Webhook dispatch failed for {} {}: {}", eventType, subscriptionId, e.getMessage(), e);
+            log.info("Webhook {} ({}): concurrent duplicate INSERT lost the PK race after successful dispatch; ok",
+                    eventId, eventType);
         }
         return ResponseEntity.ok("ok");
     }

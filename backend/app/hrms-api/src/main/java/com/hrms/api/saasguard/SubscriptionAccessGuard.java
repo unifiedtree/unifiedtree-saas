@@ -123,6 +123,16 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
         if (PLATFORM_TENANT_ID.equals(tenantId)) return true;
 
         SubStatus sub = loadStatus(tenantId);
+        // TODO(audit B2/D5): fail-open here means any tenant WITHOUT a
+        // subscription row gets full access. That's intentional today for
+        // grandfathered/pre-autopay tenants (and the reviewer demo), but it
+        // ALSO papers over any bug that silently drops a subscription row —
+        // a paying customer whose ledger row disappears sees no gate at all.
+        // The audit bundle B2 note tracks flipping this to fail-closed once
+        // V096 ships the operator-supplied grandfather list, so we can tell
+        // "legitimately unbilled" from "billing state lost". Do NOT change
+        // this line without that list — flipping it prematurely locks every
+        // grandfathered tenant out on the next deploy.
         if (sub == null) return true;   // grandfathered: no subscription row, no gating
 
         Instant now = Instant.now();
