@@ -118,6 +118,8 @@ export const AcceptInvite: React.FC = () => {
                     required
                   />
                   <button type="button" onClick={() => setShowPw(v => !v)}
+                    aria-label={showPw ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPw}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>

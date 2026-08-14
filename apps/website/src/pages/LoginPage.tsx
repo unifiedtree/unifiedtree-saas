@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Navbar } from '../components/layout/Navbar'
 import { Footer } from '../components/layout/Footer'
@@ -80,6 +80,51 @@ export function LoginPage() {
     if (forgotSending) return
     setForgotOpen(false)
   }
+
+  // A11y: Escape closes the modal + focus-trap keeps Tab inside the dialog.
+  // The overlay itself already handles backdrop clicks via onClick={closeForgot}
+  // (children stopPropagation), and the email input carries autoFocus so
+  // initial focus lands inside the modal without extra work here.
+  const forgotDialogRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!forgotOpen) return
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeForgot()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const root = forgotDialogRef.current
+      if (!root) return
+      const focusables = root.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      if (e.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else {
+        if (active === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      // Restore focus to the trigger that opened the modal.
+      previouslyFocused?.focus?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forgotOpen, forgotSending])
   const submitForgot = async () => {
     const email = forgotEmail.trim()
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -232,6 +277,8 @@ export function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPass(!showPass)}
+                    aria-label={showPass ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPass}
                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary transition-colors p-1 rounded-md hover:bg-bg"
                   >
                     {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -283,15 +330,25 @@ export function LoginPage() {
               <div className="flex-1 h-px bg-border" />
             </div>
 
-            {/* Google SSO */}
-            <button className="w-full py-3 rounded-xl border border-border bg-surface hover:bg-surface-2 hover:border-primary/20 hover:shadow-sm active:scale-[0.99] transition-all flex items-center justify-center gap-3 text-sm font-body font-semibold text-text-primary group">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="group-hover:scale-105 transition-transform">
+            {/* Google SSO — backend endpoint /v1/accounts/auth/google/start
+                doesn't exist yet (AccountController has no google/oauth route
+                as of 2026-08). Render disabled 'Coming soon' state so we
+                don't ship a dead button that silently 404s. */}
+            <button
+              type="button"
+              disabled
+              aria-label="Google sign-in coming soon"
+              title="Google sign-in coming soon"
+              className="w-full py-3 rounded-xl border border-border bg-surface flex items-center justify-center gap-3 text-sm font-body font-semibold text-text-secondary cursor-not-allowed opacity-70"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
                 <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
                 <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
                 <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
                 <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
               </svg>
               Continue with Google
+              <span className="ml-1 rounded-full bg-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text-tertiary">Soon</span>
             </button>
 
             <p className="text-center text-sm text-text-secondary font-body mt-6">
@@ -314,6 +371,7 @@ export function LoginPage() {
           aria-labelledby="forgot-title"
         >
           <div
+            ref={forgotDialogRef}
             className="w-full max-w-md bg-surface rounded-2xl shadow-xl border border-border p-6 sm:p-8"
             onClick={(e) => e.stopPropagation()}
           >

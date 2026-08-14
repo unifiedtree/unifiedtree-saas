@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -348,6 +348,62 @@ export function UnifiedSignupPage() {
     }
   }
 
+  // -- mandate-overlay a11y: Escape closes, backdrop click closes, focus
+  // stays trapped inside. Cancelling from Escape / backdrop tears down the
+  // pending signup the same way the visible "Cancel and edit my details"
+  // button does (release the subdomain reservation + kill the Razorpay
+  // subscription) so the next submit doesn't collide.
+  const mandateDialogRef = useRef<HTMLDivElement | null>(null)
+  const cancelMandateOverlay = async () => {
+    const id = pendingSignupId
+    setWaitingForMandate(false)
+    setPendingSignupId(null)
+    if (id) await cancelPending(id)
+  }
+  useEffect(() => {
+    if (!waitingForMandate) return
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        void cancelMandateOverlay()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const root = mandateDialogRef.current
+      if (!root) return
+      const focusables = root.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      if (e.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else {
+        if (active === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    // Move initial focus into the dialog so the trap has something to hold.
+    const first = mandateDialogRef.current?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )
+    first?.focus()
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      previouslyFocused?.focus?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waitingForMandate])
+
   // -- polling for provisioning -------------------------------------------
   const pollDeadline = useRef<number>(0)
   useEffect(() => {
@@ -457,12 +513,20 @@ export function UnifiedSignupPage() {
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            onClick={() => { void cancelMandateOverlay() }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mandate-title"
           >
-            <div className="premium-card p-10 max-w-md w-full text-center">
+            <div
+              ref={mandateDialogRef}
+              className="premium-card p-10 max-w-md w-full text-center"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="w-14 h-14 rounded-full bg-primary-light mx-auto mb-5 flex items-center justify-center">
                 <Loader2 size={26} className="text-primary animate-spin" />
               </div>
-              <h2 className="font-heading font-bold text-text-primary text-xl mb-2">
+              <h2 id="mandate-title" className="font-heading font-bold text-text-primary text-xl mb-2">
                 Waiting for mandate approval…
               </h2>
               <p className="text-text-secondary text-sm mb-6">
@@ -486,7 +550,7 @@ export function UnifiedSignupPage() {
                     setPendingSignupId(null)
                     if (id) await cancelPending(id)
                   }}
-                  className="text-xs text-text-tertiary hover:text-text-secondary py-2"
+                  className="text-xs font-semibold text-text-primary hover:text-primary underline underline-offset-2 py-2"
                 >
                   Cancel and edit my details
                 </button>
@@ -510,11 +574,11 @@ export function UnifiedSignupPage() {
               )}
 
               {/* Basic identity */}
-              <Field label="First and Last Name" icon={<User size={18} />} error={errors.adminName?.message}>
+              <Field label="First and Last Name" required icon={<User size={18} />} error={errors.adminName?.message}>
                 <input {...register('adminName')} placeholder="John Doe" className={inputCls(!!errors.adminName)} />
               </Field>
 
-              <Field label="Company Name" icon={<Building size={18} />} error={errors.companyName?.message}>
+              <Field label="Company Name" required icon={<Building size={18} />} error={errors.companyName?.message}>
                 <input {...register('companyName')} placeholder="Acme Corp" className={inputCls(!!errors.companyName)} />
               </Field>
 
@@ -556,7 +620,7 @@ export function UnifiedSignupPage() {
 
               {/* Email + Phone */}
               <div className="grid md:grid-cols-2 gap-5">
-                <Field label="Email Address" icon={<Mail size={18} />} error={errors.adminEmail?.message}>
+                <Field label="Email Address" required icon={<Mail size={18} />} error={errors.adminEmail?.message}>
                   <input
                     {...register('adminEmail')}
                     type="email"
@@ -579,10 +643,10 @@ export function UnifiedSignupPage() {
               {/* Password (hidden when signed in) */}
               {!accountToken && (
                 <div className="grid md:grid-cols-2 gap-5">
-                  <Field label="Password" icon={<Lock size={18} />} error={errors.password?.message}>
+                  <Field label="Password" required icon={<Lock size={18} />} error={errors.password?.message}>
                     <input {...register('password')} type="password" placeholder="Create a password" className={inputCls(!!errors.password)} />
                   </Field>
-                  <Field label="Confirm Password" icon={<Lock size={18} />} error={errors.confirmPassword?.message}>
+                  <Field label="Confirm Password" required icon={<Lock size={18} />} error={errors.confirmPassword?.message}>
                     <input {...register('confirmPassword')} type="password" placeholder="Repeat password" className={inputCls(!!errors.confirmPassword)} />
                   </Field>
                 </div>
@@ -591,11 +655,11 @@ export function UnifiedSignupPage() {
               {/* Seats (PAID only — TRIAL picks seats per-module inside the workspace) + Country */}
               <div className={mode === 'trial' ? '' : 'grid md:grid-cols-2 gap-5'}>
                 {mode !== 'trial' && (
-                  <Field label="Number of Users" icon={<Users size={18} />} error={errors.seats?.message}>
+                  <Field label="Number of Users" required icon={<Users size={18} />} error={errors.seats?.message}>
                     <input {...register('seats', { valueAsNumber: true })} type="number" min={1} className={inputCls(!!errors.seats)} />
                   </Field>
                 )}
-                <Field label="Country" icon={<Globe size={18} />} error={errors.country?.message}>
+                <Field label="Country" required icon={<Globe size={18} />} error={errors.country?.message}>
                   <select {...register('country')} className={inputCls(!!errors.country)}>
                     {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -638,7 +702,7 @@ export function UnifiedSignupPage() {
                 <button
                   type="submit"
                   disabled={loading || availability.state === 'taken'}
-                  className="w-full rounded-xl bg-primary text-lime font-body font-bold py-4 hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors flex items-center justify-center gap-2"
+                  className="w-full rounded-xl bg-primary text-white font-body font-bold py-4 hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors flex items-center justify-center gap-2"
                 >
                   {loading && <Loader2 size={16} className="animate-spin" />}
                   {mode === 'trial'
@@ -671,7 +735,7 @@ export function UnifiedSignupPage() {
                 {/* Forest header makes the summary the visual anchor */}
                 <div className="bg-primary px-6 py-4">
                   <p className="text-[11px] font-body font-semibold uppercase tracking-wider text-white/70">Your plan</p>
-                  <h3 className="font-heading font-bold text-lime text-lg leading-tight">
+                  <h3 className="font-heading font-bold text-white text-lg leading-tight">
                     {chosenPlanNames || 'No modules selected'}
                   </h3>
                 </div>
@@ -686,7 +750,7 @@ export function UnifiedSignupPage() {
                     <button type="button" onClick={() => setBillingCycle('annual')}
                             className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-semibold transition-colors ${billingCycle === 'annual' ? 'bg-primary text-white' : 'text-text-secondary'}`}>
                       Annual
-                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${billingCycle === 'annual' ? 'bg-lime text-primary' : 'bg-lime/25 text-primary-dark'}`}>Save 10%</span>
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${billingCycle === 'annual' ? 'bg-white text-primary-dark' : 'bg-lime/25 text-primary-dark'}`}>Save 10%</span>
                     </button>
                   </div>
 
@@ -718,15 +782,49 @@ export function UnifiedSignupPage() {
 }
 
 // -- small helpers -----------------------------------------------------------
-function Field({ label, icon, error, children }: { label: string; icon?: React.ReactNode; error?: string; children: React.ReactNode }) {
+// A11y: every Field generates a stable useId + wires it as htmlFor on the
+// label and id/aria-invalid/aria-describedby on the input child via
+// React.cloneElement, so screen readers announce the label + error together.
+// `required` visibly marks the field with a red asterisk AND surfaces an
+// sr-only "required" span (screen readers don't read `*` reliably).
+function Field({
+  label, icon, error, required, children,
+}: {
+  label: string
+  icon?: React.ReactNode
+  error?: string
+  required?: boolean
+  children: React.ReactNode
+}) {
+  const reactId = useId()
+  const fieldId = `f-${reactId}`
+  const errorId = `${fieldId}-err`
+  const isValidElement = (n: React.ReactNode): n is React.ReactElement<Record<string, unknown>> =>
+    !!n && typeof n === 'object' && 'props' in (n as object)
+  const enhanced = isValidElement(children)
+    ? React.cloneElement(children, {
+        id: fieldId,
+        'aria-invalid': error ? true : undefined,
+        'aria-describedby': error ? errorId : undefined,
+        required: required || (children.props.required as boolean | undefined),
+      })
+    : children
   return (
     <div>
-      <label className="text-sm font-body font-semibold text-text-primary mb-1.5 block">{label}</label>
+      <label htmlFor={fieldId} className="text-sm font-body font-semibold text-text-primary mb-1.5 block">
+        {label}
+        {required && (
+          <>
+            <span aria-hidden="true" className="text-danger ml-0.5">*</span>
+            <span className="sr-only"> required</span>
+          </>
+        )}
+      </label>
       <div className="relative">
         {icon && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary">{icon}</div>}
-        {children}
+        {enhanced}
       </div>
-      {error && <span className="text-danger text-xs mt-1 block">{error}</span>}
+      {error && <span id={errorId} className="text-danger text-xs mt-1 block">{error}</span>}
     </div>
   )
 }
