@@ -114,6 +114,51 @@ export interface UpdateWorkforceEmployeePayload {
   profilePhotoUrl?: string
 }
 
+/** Aggregated status counts for the Workforce Directory stat cards. */
+export interface EmployeeCounts {
+  total: number
+  active: number
+  notice: number
+  exited: number
+  terminated: number
+}
+
+/**
+ * B8 web-perf: single grouped-count call to replace the previous five
+ * parallel useEmployeeDirectory({ pageSize: 1 }) queries that only read
+ * totalElements. companyId is optional; when omitted the backend counts
+ * every employee in the tenant.
+ */
+export function useEmployeeCounts(companyId?: string, opts?: { enabled?: boolean }) {
+  const params = new URLSearchParams()
+  if (companyId) params.set('companyId', companyId)
+  const qs = params.toString()
+  return useQuery({
+    queryKey: ['hrms', 'employee-counts', companyId ?? null],
+    queryFn: () => apiJson<EmployeeCounts>(`/v1/hrms/employees/counts${qs ? `?${qs}` : ''}`),
+    enabled: opts?.enabled ?? true,
+  })
+}
+
+/**
+ * B8 web-perf: fetch a specific set of employees by id in one round trip.
+ * Backed by GET /v1/hrms/employees/by-ids (capped at 500 ids server-side).
+ * Preferred over fetching a large directory page just to build a name lookup.
+ */
+export function useEmployeesByIds(ids: string[] | undefined, opts?: { enabled?: boolean }) {
+  // Dedupe + sort so equivalent id sets produce the same query key (avoids
+  // refetching when the same employees appear in a different order).
+  const unique = Array.from(new Set(ids ?? [])).sort()
+  return useQuery({
+    queryKey: ['hrms', 'employees-by-ids', unique],
+    queryFn: () =>
+      apiJson<WorkforceEmployee[]>(`/v1/hrms/employees/by-ids?ids=${unique.join(',')}`),
+    // Skip the call entirely when no ids are known yet — no point sending
+    // ?ids= to the backend just to get an empty list.
+    enabled: (opts?.enabled ?? true) && unique.length > 0,
+  })
+}
+
 export function useEmployeeDirectory(filters: EmployeeDirectoryFilters, opts?: { enabled?: boolean }) {
   const params = new URLSearchParams()
   if (filters.companyId) params.set('companyId', filters.companyId)

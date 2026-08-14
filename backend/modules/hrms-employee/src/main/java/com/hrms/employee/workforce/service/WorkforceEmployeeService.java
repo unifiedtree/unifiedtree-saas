@@ -95,6 +95,64 @@ public class WorkforceEmployeeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Employee " + id + " not found")));
     }
 
+    // -- Counts -------------------------------------------------------------
+    /**
+     * Single grouped-count query for the Workforce Directory stat cards.
+     *
+     * <p>Replaces the previous SPA behaviour of firing five parallel
+     * {@code directory()} calls with {@code pageSize=1} just to read
+     * {@code totalElements} — five paginated JPA queries (each doing a
+     * COUNT and a SELECT + all mappings) collapsed into one grouped COUNT.
+     *
+     * <p>Filters on {@code is_active = true} to match {@link #buildSpec}
+     * (the directory query hides archived rows) and honours the optional
+     * companyId scope. RLS enforces tenant isolation via
+     * {@code current_tenant_id()} — no manual tenant filter needed.
+     */
+    @Transactional(readOnly = true)
+    public com.hrms.employee.workforce.dto.WorkforceDtos.EmployeeCountsResponse counts(UUID companyId) {
+        String sql = """
+                SELECT employment_status, COUNT(*)
+                  FROM hrms.employees
+                 WHERE is_active = true
+                   AND (CAST(? AS uuid) IS NULL OR company_id = CAST(? AS uuid))
+              GROUP BY employment_status
+                """;
+        String cid = companyId == null ? null : companyId.toString();
+        long total = 0, active = 0, notice = 0, exited = 0, terminated = 0;
+        List<Map<String, Object>> rows = jdbc.queryForList(sql, cid, cid);
+        for (Map<String, Object> row : rows) {
+            String status = String.valueOf(row.get("employment_status"));
+            long n = ((Number) row.get("count")).longValue();
+            total += n;
+            switch (status) {
+                case "ACTIVE"         -> active     = n;
+                case "NOTICE_PERIOD"  -> notice     = n;
+                case "EXITED"         -> exited     = n;
+                case "TERMINATED"     -> terminated = n;
+                default               -> { /* PROBATION, SUSPENDED, etc. — counted in total only */ }
+            }
+        }
+        return new com.hrms.employee.workforce.dto.WorkforceDtos.EmployeeCountsResponse(
+                total, active, notice, exited, terminated);
+    }
+
+    // -- Batch by IDs -------------------------------------------------------
+    /**
+     * Look up multiple employees in one round trip — used by pages that
+     * only need to resolve id → display name for a handful of rows and
+     * previously fetched the entire directory page just to build a lookup
+     * map. Caps the batch at 500 ids to keep the IN-list bounded.
+     */
+    @Transactional(readOnly = true)
+    public List<WorkforceEmployeeResponse> byIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return List.of();
+        List<UUID> capped = ids.size() > 500 ? ids.subList(0, 500) : ids;
+        // Dedupe to avoid needless DB work when callers pass duplicate ids.
+        List<UUID> unique = capped.stream().distinct().toList();
+        return repository.findAllById(unique).stream().map(this::toListResponse).toList();
+    }
+
     // -- Create -------------------------------------------------------------
     public WorkforceEmployeeResponse create(CreateWorkforceEmployeeRequest req) {
         String code = (req.employeeCode() == null || req.employeeCode().isBlank())

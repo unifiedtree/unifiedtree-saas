@@ -6,7 +6,7 @@ import { useToast } from '@/shared/hooks/useToast'
 import { Can, usePermission, P } from '@unifiedtree/sdk'
 import { TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import { HrStatCard, HrStatusPill, HrPageHeader, HrButton, TableCard, HrAvatar, type PillTone } from '@/shared/components/hr'
-import { useEmployeeDirectory, type EmploymentStatus } from './api/useWorkforce'
+import { useEmployeeDirectory, useEmployeeCounts, type EmploymentStatus } from './api/useWorkforce'
 import { useCompanies, useDepartments, useBranches } from './api/useOrg'
 import { EmployeeForm } from './employees/EmployeeForm'
 import { useDebounce } from '@/shared/hooks/useDebounce'
@@ -76,18 +76,17 @@ export const Employees: React.FC = () => {
   // Stat-card counts: server-side totals scoped to the company and independent of
   // the table's department/branch/status/search filters — so the cards are a
   // stable workforce breakdown, not a count of just the current page (max 25).
+  //
+  // B8 web-perf: a single GET /v1/hrms/employees/counts replaces five parallel
+  // useEmployeeDirectory({pageSize:1}) calls that only read totalElements.
   const cid = activeCompany?.id
-  const { data: allCount }    = useEmployeeDirectory({ companyId: cid, pageSize: 1 })
-  const { data: activeCount } = useEmployeeDirectory({ companyId: cid, status: 'ACTIVE', pageSize: 1 })
-  const { data: noticeCount } = useEmployeeDirectory({ companyId: cid, status: 'NOTICE_PERIOD', pageSize: 1 })
-  const { data: exitedCount } = useEmployeeDirectory({ companyId: cid, status: 'EXITED', pageSize: 1 })
-  const { data: termCount }   = useEmployeeDirectory({ companyId: cid, status: 'TERMINATED', pageSize: 1 })
+  const { data: counts } = useEmployeeCounts(cid)
 
   const statusCounts = {
-    total: allCount?.totalElements ?? 0,
-    active: activeCount?.totalElements ?? 0,
-    onLeave: noticeCount?.totalElements ?? 0,
-    inactive: (exitedCount?.totalElements ?? 0) + (termCount?.totalElements ?? 0),
+    total: counts?.total ?? 0,
+    active: counts?.active ?? 0,
+    onLeave: counts?.notice ?? 0,
+    inactive: (counts?.exited ?? 0) + (counts?.terminated ?? 0),
   }
 
   const resetPage = useCallback(() => setPage(0), [])

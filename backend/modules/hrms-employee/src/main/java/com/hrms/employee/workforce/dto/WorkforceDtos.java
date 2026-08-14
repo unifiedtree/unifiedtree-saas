@@ -258,6 +258,23 @@ public final class WorkforceDtos {
             String profilePhotoUrl
     ) { }
 
+    /**
+     * Aggregated status counts for the Workforce Directory stat cards.
+     *
+     * <p>Backs {@code GET /v1/hrms/employees/counts}. Fields are the raw
+     * status buckets so the SPA can compose derived tiles ("Inactive" =
+     * exited + terminated) without extra round trips. {@code total}
+     * counts every active employee row (including PROBATION and SUSPENDED
+     * which aren't broken out individually).
+     */
+    public record EmployeeCountsResponse(
+            long total,
+            long active,
+            long notice,
+            long exited,
+            long terminated
+    ) { }
+
     /** Filter object for the Workforce Directory page (matches client UI). */
     public record WorkforceFilter(
             UUID companyId,

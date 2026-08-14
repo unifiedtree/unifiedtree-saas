@@ -12,6 +12,7 @@ import com.hrms.employee.workforce.dto.WorkforceDtos.CreateContractorRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateDepartmentRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateDesignationRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateWorkforceEmployeeRequest;
+import com.hrms.employee.workforce.dto.WorkforceDtos.EmployeeCountsResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.DepartmentResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.DesignationResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateCompanyRequest;
@@ -247,6 +248,37 @@ public class WorkforceController {
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER') or hasAuthority('hrms.employee.read')")
     public WorkforceEmployeeResponse getEmployee(@PathVariable UUID id) {
         return employees.get(id);
+    }
+
+    /**
+     * Aggregated status counts for the Workforce Directory stat cards.
+     *
+     * <p>B8 web-perf: the SPA previously fired five parallel directory
+     * calls with {@code pageSize=1} just to read {@code totalElements}
+     * for Total/Active/Notice/Exited/Terminated tiles. That's five
+     * paginated JPA queries (with COUNT + SELECT + row mapping) per
+     * page load. This endpoint replaces them with a single grouped
+     * COUNT in the service layer.
+     */
+    @GetMapping("/employees/counts")
+    @PreAuthorize("hasAuthority('hrms.employee.read')")
+    public EmployeeCountsResponse employeeCounts(@RequestParam(required = false) UUID companyId) {
+        return employees.counts(companyId);
+    }
+
+    /**
+     * Batch employee fetch for id → display lookup. Bounded at 500 ids
+     * per call so a runaway caller can't blow the IN-list.
+     *
+     * <p>B8 web-perf: pages like Onboarding Instances used to pull
+     * {@code pageSize=200} of the directory just to translate the ids
+     * that appear on the current page into names. This endpoint fetches
+     * only the ids that are actually needed.
+     */
+    @GetMapping("/employees/by-ids")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER') or hasAuthority('hrms.employee.read')")
+    public List<WorkforceEmployeeResponse> employeesByIds(@RequestParam("ids") List<UUID> ids) {
+        return employees.byIds(ids);
     }
 
     @PostMapping("/employees")

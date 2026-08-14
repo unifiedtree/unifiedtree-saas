@@ -4,7 +4,7 @@ import { TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import { HrPageHeader, HrStatusPill, TableCard, HrAvatar } from '@/shared/components/hr'
 import { useInstances, useTemplates } from './api/useOnboarding'
 import type { OnboardingInstance } from './api/useOnboarding'
-import { useEmployeeDirectory } from '../api/useWorkforce'
+import { useEmployeesByIds } from '../api/useWorkforce'
 
 const STATUS_FILTERS = [
   { value: '', label: 'All' },
@@ -26,8 +26,16 @@ export const Instances: React.FC = () => {
 
   const { data: instances = [], isLoading, error, refetch } = useInstances(status || undefined)
   const { data: templates = [] } = useTemplates()
-  // Page size is generous so the name lookup covers the instances on this list.
-  const { data: directory } = useEmployeeDirectory({ pageSize: 200 })
+
+  // B8 web-perf: fetch ONLY the employees that appear as instance.employeeId
+  // on this page, via the by-ids batch endpoint. Previously this pulled a
+  // pageSize:200 directory slice — meaning up to 200 full rows just to build
+  // an id -> "First Last" lookup for the handful of instances shown.
+  const instanceEmployeeIds = useMemo(
+    () => instances.map((row) => row.employeeId).filter((id): id is string => !!id),
+    [instances],
+  )
+  const { data: instanceEmployees } = useEmployeesByIds(instanceEmployeeIds)
 
   const templateName = useMemo(() => {
     const map = new Map<string, string>()
@@ -37,11 +45,11 @@ export const Instances: React.FC = () => {
 
   const employeeName = useMemo(() => {
     const map = new Map<string, string>()
-    ;(directory?.content ?? []).forEach((e) =>
+    ;(instanceEmployees ?? []).forEach((e) =>
       map.set(e.id, [e.firstName, e.lastName].filter(Boolean).join(' ').trim()),
     )
     return map
-  }, [directory])
+  }, [instanceEmployees])
 
   return (
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
