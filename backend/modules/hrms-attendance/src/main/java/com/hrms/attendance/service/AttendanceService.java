@@ -833,13 +833,19 @@ public class AttendanceService {
                 "Face not recognized — please try again or use PIN fallback", result.confidenceScore());
     }
 
+    /**
+     * Internal check-out path used only by trusted server code — callers must
+     * pass an {@code employeeId} they have already authorised, since the
+     * {@link CheckOutRequest} DTO deliberately no longer carries one (any
+     * client-supplied employee id was an IDOR — see the DTO javadoc).
+     */
     @Transactional
-    public AttendanceRecordResponse processCheckOut(CheckOutRequest request) {
+    public AttendanceRecordResponse processCheckOut(UUID employeeId, CheckOutRequest request) {
         LocalDate today = LocalDate.now(IST);
         AttendanceRecord record = attendanceRecordRepository
-                .findByEmployeeIdAndAttendanceDate(request.employeeId(), today)
+                .findByEmployeeIdAndAttendanceDate(employeeId, today)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "No attendance record found for employee " + request.employeeId() + " on " + today));
+                        "No attendance record found for employee " + employeeId + " on " + today));
         Instant checkOutAt = Instant.now();
         record.setCheckOutAt(checkOutAt);
         record.setCheckOutLatitude(request.latitude());
@@ -851,7 +857,7 @@ public class AttendanceService {
         }
         AttendanceRecord saved = attendanceRecordRepository.save(record);
         logEvent(saved, AttendanceEventType.CHECK_OUT, request.latitude(), request.longitude(),
-                request.locationName(), request.zoneName(), request.employeeId(), null);
+                request.locationName(), request.zoneName(), employeeId, null);
         return attendanceMapper.toResponse(saved);
     }
 
@@ -1039,6 +1045,18 @@ public class AttendanceService {
 
         AttendanceCorrectionRequest correction = correctionRequestRepository.findById(correctionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Attendance correction", correctionId));
+
+        // Self-approval guard — mirrors LeaveService.assertNotSelfApproval.
+        // A user with attendance.regularization.approve who happens to be the
+        // employee that filed the correction must not be able to approve or
+        // reject their own request; that has to go through a peer approver.
+        // Same error code convention as leave (SELF_APPROVAL_NOT_ALLOWED)
+        // so the frontend renders the same actionable message.
+        if (approverEmployeeId != null && approverEmployeeId.equals(correction.getEmployeeId())) {
+            throw new BusinessRuleException(
+                    "You cannot approve your own correction request",
+                    "SELF_APPROVAL_NOT_ALLOWED");
+        }
 
         if (correction.getStatus() != ApprovalStatus.PENDING) {
             throw new BusinessRuleException("Correction request is not pending", "CORRECTION_NOT_PENDING");

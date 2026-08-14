@@ -145,9 +145,14 @@ public class AttendanceController {
     public ResponseEntity<AttendanceDto> checkOut(
             @RequestBody(required = false) CheckOutRequest request,
             @AuthenticationPrincipal Jwt jwt) {
-        UUID employeeId = request != null && request.employeeId() != null
-                ? request.employeeId()
-                : extractEmployeeId(jwt);
+        // Employee identity is ALWAYS the caller (JWT). Never trust a
+        // client-supplied employeeId here — that used to let any user with
+        // attendance.checkin.self force-checkout an arbitrary employee (IDOR,
+        // slug: checkout-arbitrary-employee-idor). The DTO no longer carries
+        // that field. If a legitimate manager-force-checkout need arises,
+        // add a NEW endpoint POST /v1/attendance/team/force-checkout guarded
+        // by @PreAuthorize("hasAuthority('attendance.regularization.approve')").
+        UUID employeeId = extractEmployeeId(jwt);
         return ResponseEntity.ok(attendanceService.checkOut(
                 employeeId,
                 request != null ? request.latitude() : null,
