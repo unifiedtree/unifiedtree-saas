@@ -62,12 +62,14 @@ public class SubscriptionWebhookController {
     private final MandateProvisioningService provisioning;
     private final PlanChangeService planChanges;
     private final SubscriptionStateReconciler reconciler;
+    private final WebhookMetrics metrics;
 
     public SubscriptionWebhookController(JdbcTemplate jdbc, RazorpayClient razorpay, RazorpayProperties props,
                                          PendingSignupService pending,
                                          MandateProvisioningService provisioning,
                                          PlanChangeService planChanges,
-                                         SubscriptionStateReconciler reconciler) {
+                                         SubscriptionStateReconciler reconciler,
+                                         WebhookMetrics metrics) {
         this.jdbc = jdbc;
         this.razorpay = razorpay;
         this.props = props;
@@ -75,6 +77,7 @@ public class SubscriptionWebhookController {
         this.provisioning = provisioning;
         this.planChanges = planChanges;
         this.reconciler = reconciler;
+        this.metrics = metrics;
     }
 
     /**
@@ -94,6 +97,7 @@ public class SubscriptionWebhookController {
         }
         if (!razorpay.verifyWebhookSignature(rawBody, signature)) {
             log.warn("Webhook signature verification FAILED (sig hdr present={})", signature != null);
+            metrics.signatureFailed();
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("bad signature");
         }
 
@@ -102,6 +106,7 @@ public class SubscriptionWebhookController {
             root = MAPPER.readTree(rawBody);
         } catch (IOException e) {
             log.warn("Webhook body not JSON: {}", e.getMessage());
+            metrics.webhookReceived("unknown", "missing_body");
             return ResponseEntity.badRequest().body("bad body");
         }
 
@@ -127,6 +132,7 @@ public class SubscriptionWebhookController {
             // retries on non-2xx and a 202 would lose the event forever.
             log.warn("Webhook missing event type — eventIdHeader={} — rejecting to force retry",
                     eventIdHeader);
+            metrics.webhookReceived("unknown", "missing_event");
             return ResponseEntity.badRequest().body("missing event type");
         }
         if (eventId == null) {
@@ -178,6 +184,7 @@ public class SubscriptionWebhookController {
                 Integer.class, eventId);
         if (already != null && already > 0) {
             log.info("Duplicate webhook {} ({}); already processed, ignoring", eventId, eventType);
+            metrics.webhookReceived(eventType, "duplicate");
             return ResponseEntity.ok("duplicate");
         }
 
@@ -187,6 +194,8 @@ public class SubscriptionWebhookController {
         } catch (Exception e) {
             log.error("Webhook dispatch FAILED for {} {} (id={}); returning 500 so Razorpay retries: {}",
                     eventType, subscriptionId, eventId, e.getMessage(), e);
+            metrics.dispatchError();
+            metrics.webhookReceived(eventType, "dispatch_error");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("dispatch failed; will retry");
         }
@@ -204,6 +213,7 @@ public class SubscriptionWebhookController {
             log.info("Webhook {} ({}): concurrent duplicate INSERT lost the PK race after successful dispatch; ok",
                     eventId, eventType);
         }
+        metrics.webhookReceived(eventType, "ok");
         return ResponseEntity.ok("ok");
     }
 

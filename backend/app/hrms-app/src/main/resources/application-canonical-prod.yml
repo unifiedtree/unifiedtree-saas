@@ -183,21 +183,36 @@ server:
 # with health show-details: always — i.e. /actuator/prometheus and /actuator/metrics
 # are world-readable and leak internal topology + per-endpoint latency, and the
 # health payload leaks DB/vendor details to anonymous callers. In prod, expose
-# ONLY health + info, and never reveal health internals to unauthenticated
-# callers. Cloud Run/GCP uptime checks only need HTTP 200 on /api/actuator/health.
-# (To scrape Prometheus later, expose it on a separate management port bound to
-# the private VPC, not the public ingress — documented in MONITORING.md.)
+# ONLY health + info + prometheus (B11), and never reveal health internals to
+# unauthenticated callers. Cloud Run/GCP uptime checks only need HTTP 200 on
+# /api/actuator/health.
+#
+# B11 (2026-08-14): prometheus is now included so the Razorpay-webhook /
+# pending-signup-sweep counters (WebhookMetrics) are scrape-able.
+# TODO(audit B11): open VPC firewall on management port before enabling
+# public scrape. Until the management endpoint is bound to a separate port
+# behind the VPC firewall (see MONITORING.md), the prometheus endpoint at
+# /api/actuator/prometheus is reachable on the SAME public ingress as the
+# rest of the API — treat it as sensitive: it leaks per-endpoint latency
+# histograms and the counters listed in WebhookMetrics. Configure the
+# ingress to deny /actuator/prometheus to the internet, OR move the
+# management port to a private-VPC-only listener, BEFORE relying on this
+# in production dashboards.
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: never
       probes:
         # Kubernetes/Cloud Run style liveness + readiness groups, served at
         # /api/actuator/health/liveness and /health/readiness.
+        enabled: true
+  metrics:
+    export:
+      prometheus:
         enabled: true
   info:
     env:

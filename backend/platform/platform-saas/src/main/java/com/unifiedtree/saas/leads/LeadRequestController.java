@@ -84,10 +84,16 @@ public class LeadRequestController {
         String ua = truncate(httpReq.getHeader("User-Agent"), 400);
         String ip = clientIp(httpReq);
 
-        // 1. Structured log — this is the last-resort record of the lead, so it
+        // 1. Structured log — the last-resort record that a lead came in, so it
         //    goes first and is always emitted regardless of the two side-effects.
-        log.info("lead-request intent={} email={} company={} size={} timeline={} preferred={}",
-                intent, req.workEmail(), req.company(), companySize, req.timeline(), req.preferred());
+        //    B11 (2026-08-14): do NOT log workEmail / preferred contact time / free-text
+        //    notes/message. Those are PII the marketing form collects on behalf of the
+        //    prospect — application logs ship to Cloud Logging where retention and
+        //    audience are much wider than the platform.lead_requests table. Log only
+        //    the correlation id + non-identifying descriptors; anything else lives in
+        //    the DB row and the event payload.
+        log.info("lead-request received id={} intent={} company={}",
+                leadId, intent, req.company());
 
         // 2. Best-effort persistence. Missing table (migration not yet applied
         //    in one environment) or any other DataAccessException degrades to a
