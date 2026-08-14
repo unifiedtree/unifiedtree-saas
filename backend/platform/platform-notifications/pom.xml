@@ -47,5 +47,17 @@
         </dependency>
         <!-- oauth2-resource-server (Jwt) + security (PreAuthorize) come in
              transitively via hrms-core, matching every other module in the tree. -->
+
+        <!-- Test (B10 test coverage backfill) -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

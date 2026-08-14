@@ -1,0 +1,29 @@
+{
+  "_readme": [
+    "B10 — PAYROLL ENGINE GOLDEN-MASTER FIXTURE (PLACEHOLDER SHELL).",
+    "",
+    "This file must be populated with Finance-signed-off numbers before the",
+    "corresponding PayrollEngineGoldenMasterTest is enabled. See the test",
+    "class @Disabled reason for the workflow.",
+    "",
+    "Structure: {inputs: [10 EmployeeInput], expected: [10 PayrollResult]}",
+    "",
+    "The 10 inputs must cover the boundary cases listed in the test class",
+    "Javadoc (LOP, PF ceiling, ESI ceiling, joiner, leaver, PT slabs, etc.).",
+    "The 'expected' block must match the spreadsheet Finance signs off on,",
+    "NOT whatever the current engine emits — that's how snapshots canonicalise",
+    "bugs. Add the signed spreadsheet PDF path to _signed_off_by below when",
+    "you promote this to a real fixture."
+  ],
+  "_signed_off_by": null,
+  "_signed_off_at": null,
+  "_finance_reviewer_pdf": null,
+  "_engine_git_sha_when_signed": null,
+  "period": {
+    "year": 2026,
+    "month": 4,
+    "days_in_month": 30
+  },
+  "inputs": [],
+  "expected": []
+}
