@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import {
   Factory, ShoppingBag, Truck, Utensils, Building2,
-  Stethoscope, BookOpen, Wrench, ArrowRight, Check,
+  Stethoscope, BookOpen, Wrench, Check, ChevronRight,
 } from 'lucide-react'
 import { Navbar } from '../components/layout/Navbar'
 import { Footer } from '../components/layout/Footer'
@@ -188,6 +188,14 @@ const industries = [
   },
 ]
 
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
+
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** Initials for the testimonial avatar, minus any honorific. */
+const initials = (name: string) =>
+  name.replace(/^Dr\.\s*/, '').split(' ').map((n) => n[0]).join('').slice(0, 2)
+
 /**
  * Card-header surface: the card-scale version of the page's deep emerald band —
  * soft light fields and a grain, no linework.
@@ -208,25 +216,160 @@ function HeaderField() {
   )
 }
 
+/**
+ * The sector name is set with its metrics pinned inline — `opsz` included — so
+ * the invisible sizer copies (rendered as <p>, to keep a single <h3> in the
+ * live panel) wrap at exactly the same points as the live <h3>. Without pinning
+ * opsz the two tags inherit different optical sizes and the reservation drifts.
+ */
+const NAME_STYLE = {
+  fontSize: 'clamp(1.32rem, 1.75vw, 1.66rem)',
+  lineHeight: 1.08,
+  letterSpacing: '-0.03em',
+  fontVariationSettings: "'opsz' 40",
+} as const
+const NAME_CLASS = 'font-heading font-extrabold text-white'
+
+/** Micro-label above a block inside the dossier. Leading is pinned so the <h4>
+ *  live version and the <p> sizer version reserve exactly the same height. */
+const LABEL_CLASS =
+  'text-[12px] font-semibold uppercase leading-[1.3] tracking-[0.14em] text-primary'
+
+/* ------------------------------------------------------------------ */
+/*  The dossier — one sector, in full                                  */
+/* ------------------------------------------------------------------ */
+/**
+ * Rendered nine times: once live, and once per sector as an invisible sizer in
+ * the same grid cell. The sizers reserve the height of the TALLEST sector, so
+ * switching sectors never nudges the page — and, unlike a hard-coded min-height,
+ * the reservation is exactly right at every width and font fallback.
+ */
+function Dossier({ index, sizer = false }: { index: number; sizer?: boolean }) {
+  const ind = industries[index]
+  const Icon = ind.icon
+  /* Uppercase identifiers so TSX treats these as components, not intrinsics. */
+  const Name = sizer ? 'p' : 'h3'
+  const Label = sizer ? 'p' : 'h4'
+
+  return (
+    /* `h-full` + a growing body: the reserved cell is as tall as the TALLEST
+       sector, so without this the white card's own bottom edge would still jump
+       by up to 61px as sectors change. The slack lands as extra breathing room
+       under the testimonial instead. */
+    <article className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-card">
+      {/* Emerald masthead — the sector, its promise, and its place in the index */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#04503A] via-primary-dark to-primary px-5 py-5 sm:px-8 sm:py-6">
+        <HeaderField />
+        <div className="relative z-10 flex items-center gap-4">
+          <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 sm:h-12 sm:w-12">
+            <Icon size={21} className="text-white" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <Name className={NAME_CLASS} style={NAME_STYLE}>
+              {ind.name}
+            </Name>
+            <p className="mt-1.5 text-[14px] font-semibold leading-snug text-lime">{ind.tagline}</p>
+          </div>
+          <span
+            aria-hidden
+            className="hidden flex-shrink-0 self-start font-mono text-[11.5px] tabular-nums tracking-[0.1em] text-white/55 sm:block"
+          >
+            {pad(index + 1)} / {pad(industries.length)}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col px-5 py-6 sm:px-8 sm:py-7">
+        <p className="max-w-3xl text-[15px] leading-relaxed text-text-secondary">
+          {ind.description}
+        </p>
+
+        <Label className={`${LABEL_CLASS} mt-7`}>Key use cases</Label>
+        <ul className="mt-4 grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
+          {ind.useCases.map((uc) => (
+            <li
+              key={uc}
+              className="flex items-start gap-2.5 text-[14px] leading-snug text-text-secondary"
+            >
+              <span className="mt-px flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-md bg-primary-light">
+                <Check size={11} className="text-primary" strokeWidth={3} />
+              </span>
+              {uc}
+            </li>
+          ))}
+        </ul>
+
+        <Label className={`${LABEL_CLASS} mt-7`}>Recommended modules</Label>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {ind.modules.map((mod) => (
+            <span
+              key={mod}
+              className="rounded-full border border-primary/20 bg-primary-light px-3 py-1.5 text-[12.5px] font-semibold text-primary"
+            >
+              {mod}
+            </span>
+          ))}
+        </div>
+
+        {/* Absorbs the slack between this sector's content and the reserved
+            height, so the testimonial always sits on the card's floor rather
+            than leaving a ragged gap under it. */}
+        <div aria-hidden className="min-h-[1.75rem] flex-1" />
+
+        {/* Testimonial — laid out across the panel so no side is left empty */}
+        {ind.testimonial && (
+          <figure className="flex flex-col gap-4 rounded-2xl bg-primary-light px-5 py-4 sm:flex-row sm:items-center sm:gap-6 sm:px-6">
+            <blockquote className="min-w-0 flex-1 text-[14px] leading-relaxed text-text-secondary">
+              &ldquo;{ind.testimonial.quote}&rdquo;
+            </blockquote>
+            {/* Proportional, not fixed: at lg the dossier column is at its
+                narrowest, and a fixed 13.5rem there squeezed the quote into a
+                five-line ribbon beside a half-empty attribution. */}
+            <figcaption className="flex flex-shrink-0 items-center gap-3 sm:w-[36%] sm:max-w-[13.5rem] sm:border-l sm:border-primary/20 sm:pl-5">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-[12px] font-bold text-white">
+                {initials(ind.testimonial.name)}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[13px] font-bold leading-snug text-text-primary">
+                  {ind.testimonial.name}
+                </span>
+                <span className="block text-[12px] leading-snug text-text-tertiary">
+                  {ind.testimonial.company}
+                </span>
+              </span>
+            </figcaption>
+          </figure>
+        )}
+      </div>
+    </article>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Page                                                               */
+/* ------------------------------------------------------------------ */
 export function IndustriesPage() {
-  const [selected, setSelected] = useState(industries[0].id)
-  const active = industries.find((i) => i.id === selected)!
   const reduce = useReducedMotion()
-  const explorerRef = useRef<HTMLDivElement>(null)
+  const [active, setActive] = useState(0)
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
 
-  const pick = (id: string, scroll = false) => {
-    setSelected(id)
-    if (scroll) {
-      explorerRef.current?.scrollIntoView({
-        behavior: reduce ? 'auto' : 'smooth',
-        block: 'start',
-      })
-    }
-  }
+  /* Roving focus across the index, as a tablist should behave. Both axes are
+     bound because the list is one column beside the dossier at lg and up, and
+     wraps to two columns below that. */
+  const onTabKeys = useCallback((e: React.KeyboardEvent<HTMLButtonElement>, i: number) => {
+    const last = industries.length - 1
+    let next: number | null = null
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = i === last ? 0 : i + 1
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = i === 0 ? last : i - 1
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = last
+    if (next === null) return
+    e.preventDefault()
+    setActive(next)
+    tabRefs.current[next]?.focus()
+  }, [])
 
-  const pillTransition = reduce
-    ? { duration: 0 }
-    : { type: 'spring' as const, stiffness: 420, damping: 34 }
+  const current = industries[active]
 
   return (
     <div className="min-h-screen bg-bg">
@@ -258,272 +401,153 @@ export function IndustriesPage() {
         </div>
       </PageHero>
 
-      {/* ── Explorer — pill rail + detail panel ───────────────────────── */}
+      {/* ── The index and the dossier, side by side ────────────────────
+          One section, not two: every sector is listed at once on the left and
+          the selected one is open in full on the right. Nothing is shown
+          twice. */}
       <section
-        ref={explorerRef}
-        className="surface-soft relative overflow-hidden scroll-mt-28 py-20 sm:py-24"
+        data-explorer
+        className="surface-soft relative overflow-hidden py-16 sm:py-20"
       >
         <span aria-hidden className="grain" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 26 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="mx-auto max-w-2xl text-center"
-          >
-            <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
-              Pick your sector
-            </p>
-            <h2
-              className="mt-4 font-heading font-extrabold text-text-primary"
-              style={{ fontSize: 'clamp(1.74rem, 3.52vw, 2.828rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
+        <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          {/* Both columns stretch to the same height, so the index and the
+              dossier always end on the same line: whichever is intrinsically
+              shorter absorbs the slack rather than leaving one card hanging. */}
+          <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:items-stretch xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)] xl:gap-x-14">
+            {/* ── Left: masthead over the index of all eight sectors ── */}
+            <motion.div
+              initial={{ opacity: 0, y: reduce ? 0 : 22 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.6, ease: EASE }}
+              className="min-w-0 lg:flex lg:flex-col"
             >
-              Built for how your floor actually runs
-            </h2>
-          </motion.div>
-
-          {/* Pill rail */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.6, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-            className="mx-auto mt-10 flex max-w-5xl flex-wrap justify-center gap-2.5"
-            role="tablist"
-            aria-label="Industries"
-          >
-            {industries.map((ind) => {
-              const Icon = ind.icon
-              const isActive = ind.id === selected
-              return (
-                <button
-                  key={ind.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => pick(ind.id)}
-                  className={`relative whitespace-nowrap rounded-full border px-4 py-2.5 text-[13.5px] font-semibold transition-colors duration-200 sm:px-5 ${
-                    isActive
-                      ? 'border-primary text-white'
-                      : 'border-border bg-white text-text-secondary shadow-card hover:border-primary/40 hover:text-primary'
-                  }`}
-                >
-                  {isActive && (
-                    <motion.span
-                      layoutId="industryPill"
-                      className="absolute inset-0 rounded-full bg-primary shadow-[0_10px_22px_-10px_rgba(5,150,105,0.75)]"
-                      transition={pillTransition}
-                    />
-                  )}
-                  <span className="relative z-10 flex items-center gap-2">
-                    <Icon size={15} />
-                    {ind.name}
-                  </span>
-                </button>
-              )
-            })}
-          </motion.div>
-
-          {/* Detail panel */}
-          <div className="mt-10">
-            <AnimatePresence mode="wait">
-              <motion.article
-                key={active.id}
-                initial={{ opacity: 0, y: reduce ? 0 : 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: reduce ? 0 : -12 }}
-                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                className="overflow-hidden rounded-3xl border border-border bg-white shadow-card"
+              <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-primary">
+                Every sector we serve
+              </p>
+              <h2
+                className="mt-3.5 font-heading font-extrabold text-text-primary"
+                style={{
+                  fontSize: 'clamp(1.68rem, 2.35vw, 2.2rem)',
+                  lineHeight: 1.08,
+                  letterSpacing: '-0.035em',
+                }}
               >
-                {/* Emerald gradient header strip */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-[#04503A] via-primary-dark to-primary px-6 py-9 sm:px-10 sm:py-11">
-                  <HeaderField />
-                  <div className="relative z-10 flex flex-col gap-5 sm:flex-row sm:items-center">
-                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 backdrop-blur-sm">
-                      <active.icon size={26} className="text-white" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3
-                        className="font-heading font-extrabold text-white"
-                        style={{ fontSize: 'clamp(1.392rem, 2.288vw, 1.958rem)', letterSpacing: '-0.035em', lineHeight: 1.06 }}
-                      >
-                        {active.name}
-                      </h3>
-                      <p className="mt-2 text-[15px] font-semibold text-lime">{active.tagline}</p>
-                    </div>
-                  </div>
-                </div>
+                Built for how your floor actually runs
+              </h2>
+              <p className="mt-4 max-w-xl text-[14.5px] leading-relaxed text-text-secondary">
+                The same ledger, the same people records, the same stock — configured around the
+                way your sector actually works. Pick your sector to open its playbook.
+              </p>
 
-                <div className="p-6 sm:p-10">
-                  <p className="max-w-3xl text-[15.5px] leading-relaxed text-text-secondary">
-                    {active.description}
-                  </p>
-
-                  <div className="mt-10 grid gap-10 lg:grid-cols-2">
-                    <div>
-                      <h4 className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
-                        Key use cases
-                      </h4>
-                      <ul className="mt-5 space-y-3">
-                        {active.useCases.map((uc, i) => (
-                          <motion.li
-                            key={uc}
-                            initial={{ opacity: 0, x: reduce ? 0 : -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.4, delay: 0.06 * i, ease: [0.16, 1, 0.3, 1] }}
-                            className="flex items-start gap-3 text-[15px] leading-relaxed text-text-secondary"
-                          >
-                            <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-primary-light">
-                              <Check size={12} className="text-primary" strokeWidth={3} />
-                            </span>
-                            {uc}
-                          </motion.li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <div>
-                      <h4 className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
-                        Recommended modules
-                      </h4>
-                      <div className="mt-5 flex flex-wrap gap-2">
-                        {active.modules.map((mod) => (
-                          <span
-                            key={mod}
-                            className="rounded-full border border-primary/20 bg-primary-light px-3.5 py-1.5 text-[12.5px] font-semibold text-primary"
-                          >
-                            {mod}
-                          </span>
-                        ))}
-                      </div>
-
-                      {/* Testimonial */}
-                      <figure className="relative mt-8 overflow-hidden rounded-2xl border border-border bg-[#ECFDF5] p-6">
-                        <span
+              <div
+                role="tablist"
+                aria-orientation="vertical"
+                aria-label="Industries"
+                className="mt-7 grid gap-1 rounded-3xl border border-border bg-white p-2 shadow-card sm:grid-cols-2 lg:grid-cols-1 lg:grid-rows-[repeat(8,minmax(0,1fr))] lg:flex-1"
+              >
+                {industries.map((ind, i) => {
+                  const Icon = ind.icon
+                  const on = i === active
+                  /* `isolate` keeps the label's z-10 — which lifts it over the
+                     sliding emerald fill — contained to this button. */
+                  return (
+                    <button
+                      key={ind.id}
+                      ref={(el) => {
+                        tabRefs.current[i] = el
+                      }}
+                      type="button"
+                      role="tab"
+                      id={`sector-tab-${ind.id}`}
+                      aria-selected={on}
+                      aria-controls="sector-panel"
+                      tabIndex={on ? 0 : -1}
+                      onClick={() => setActive(i)}
+                      onKeyDown={(e) => onTabKeys(e, i)}
+                      className="group relative isolate flex min-w-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors duration-200 hover:bg-primary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+                    >
+                      {on && (
+                        <motion.span
+                          layoutId="sectorRow"
                           aria-hidden
-                          className="pointer-events-none absolute -top-3 right-4 select-none font-heading font-extrabold leading-none text-primary/10"
-                          style={{ fontSize: '5rem' }}
-                        >
-                          &ldquo;
-                        </span>
-                        <blockquote className="relative z-10 text-[15px] leading-relaxed text-text-secondary">
-                          &ldquo;{active.testimonial.quote}&rdquo;
-                        </blockquote>
-                        <figcaption className="relative z-10 mt-5 flex items-center gap-3">
-                          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-[12px] font-bold text-white">
-                            {active.testimonial.name
-                              .replace(/^Dr\.\s*/, '')
-                              .split(' ')
-                              .map((n) => n[0])
-                              .join('')
-                              .slice(0, 2)}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block text-[13.5px] font-bold text-text-primary">
-                              {active.testimonial.name}
-                            </span>
-                            <span className="block text-[12.5px] text-text-tertiary">
-                              {active.testimonial.company}
-                            </span>
-                          </span>
-                        </figcaption>
-                      </figure>
-                    </div>
-                  </div>
-                </div>
-              </motion.article>
-            </AnimatePresence>
-          </div>
-        </div>
-      </section>
-
-      {/* ── The full set of sectors ───────────────────────────────────── */}
-      <section className="surface-tint relative overflow-hidden py-20 sm:py-24">
-        <span aria-hidden className="grain" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 26 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="max-w-2xl"
-          >
-            <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-primary">
-              Every sector we serve
-            </p>
-            <h2
-              className="mt-4 font-heading font-extrabold text-text-primary"
-              style={{ fontSize: 'clamp(1.74rem, 3.52vw, 2.828rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
-            >
-              Eight industries, one core
-            </h2>
-            <p className="mt-5 text-[15.5px] leading-relaxed text-text-secondary">
-              The same ledger, the same people records, the same stock — configured around the
-              way your sector actually works. Pick a card to open its playbook.
-            </p>
-          </motion.div>
-
-          <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {industries.map((ind, i) => {
-              const Icon = ind.icon
-              const isActive = ind.id === selected
-              return (
-                <motion.button
-                  key={ind.id}
-                  type="button"
-                  onClick={() => pick(ind.id, true)}
-                  initial={{ opacity: 0, y: 26 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.2 }}
-                  transition={{ duration: 0.6, delay: (i % 4) * 0.08, ease: [0.16, 1, 0.3, 1] }}
-                  className={`group flex flex-col overflow-hidden rounded-3xl border bg-white text-left shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover ${
-                    isActive ? 'border-primary/40 ring-1 ring-primary/25' : 'border-border'
-                  }`}
-                >
-                  {/* Emerald gradient header strip */}
-                  <div className="relative h-24 overflow-hidden bg-gradient-to-br from-[#04503A] via-primary-dark to-primary">
-                    <HeaderField />
-                    <div className="absolute -bottom-6 left-6 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-white text-primary shadow-card transition-transform duration-300 group-hover:scale-105">
-                      <Icon size={24} />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-1 flex-col px-6 pb-6 pt-10">
-                    <h3 className="font-heading text-[15.5px] font-bold leading-snug text-text-primary" style={{ letterSpacing: '-0.02em' }}>
-                      {ind.name}
-                    </h3>
-                    <p className="mt-2 text-[14px] font-semibold leading-snug text-primary">
-                      {ind.tagline}
-                    </p>
-                    <p className="mt-3 flex-1 text-[13.5px] leading-relaxed text-text-secondary">
-                      {ind.useCases[0]} · {ind.useCases[1]}
-                    </p>
-
-                    <div className="mt-5 flex flex-wrap gap-1.5">
-                      {ind.modules.slice(0, 2).map((mod) => (
-                        <span
-                          key={mod}
-                          className="rounded-full bg-surface-2 px-2.5 py-1 text-[11.5px] font-semibold text-text-secondary"
-                        >
-                          {mod}
-                        </span>
-                      ))}
-                      {ind.modules.length > 2 && (
-                        <span className="rounded-full bg-primary-light px-2.5 py-1 text-[11.5px] font-semibold text-primary">
-                          +{ind.modules.length - 2}
-                        </span>
+                          className="absolute inset-0 rounded-xl bg-primary shadow-[0_10px_22px_-12px_rgba(5,150,105,0.85)]"
+                          transition={
+                            reduce ? { duration: 0 } : { type: 'spring', stiffness: 440, damping: 38 }
+                          }
+                        />
                       )}
-                    </div>
+                      <span
+                        className={`relative z-10 font-mono text-[11px] tabular-nums transition-colors duration-200 ${
+                          on ? 'text-lime' : 'text-text-tertiary/70'
+                        }`}
+                      >
+                        {pad(i + 1)}
+                      </span>
+                      <Icon
+                        size={14}
+                        className={`relative z-10 flex-shrink-0 transition-colors duration-200 ${
+                          on ? 'text-white' : 'text-primary/70'
+                        }`}
+                      />
+                      <span
+                        className={`relative z-10 truncate text-[13px] font-semibold transition-colors duration-200 ${
+                          on ? 'text-white' : 'text-text-secondary'
+                        }`}
+                        style={{ letterSpacing: '-0.01em' }}
+                      >
+                        {ind.name}
+                      </span>
+                      <ChevronRight
+                        size={14}
+                        aria-hidden
+                        className={`relative z-10 ml-auto flex-shrink-0 transition-colors duration-200 ${
+                          on ? 'text-white/75' : 'text-text-tertiary/40 group-hover:text-primary'
+                        }`}
+                      />
+                    </button>
+                  )
+                })}
+              </div>
+            </motion.div>
 
-                    <span className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-bold text-primary">
-                      See the playbook
-                      <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-1" />
-                    </span>
-                  </div>
-                </motion.button>
-              )
-            })}
+            {/* ── Right: the selected sector, in full ── */}
+            <motion.div
+              initial={{ opacity: 0, y: reduce ? 0 : 22 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.12 }}
+              transition={{ duration: 0.6, delay: 0.08, ease: EASE }}
+              className="grid min-w-0 grid-cols-1 grid-rows-1"
+            >
+              {/* Invisible sizers hold the cell at the height of the tallest
+                  sector, so switching never moves the page. */}
+              {industries.map((ind, i) => (
+                <div key={ind.id} aria-hidden className="invisible col-start-1 row-start-1 min-w-0">
+                  <Dossier index={i} sizer />
+                </div>
+              ))}
+
+              <div
+                id="sector-panel"
+                role="tabpanel"
+                aria-labelledby={`sector-tab-${current.id}`}
+                className="col-start-1 row-start-1 min-w-0"
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={current.id}
+                    initial={{ opacity: 0, y: reduce ? 0 : 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: reduce ? 0 : -8 }}
+                    transition={{ duration: reduce ? 0 : 0.3, ease: EASE }}
+                    className="h-full"
+                  >
+                    <Dossier index={active} />
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </motion.div>
           </div>
         </div>
       </section>
