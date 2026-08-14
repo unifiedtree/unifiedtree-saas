@@ -3,11 +3,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import {
   Loader2, User, Building, Mail, Lock, Globe, Users,
-  Edit2, Sparkles, Check, X as XIcon, AlertCircle, ChevronDown, ChevronUp,
-  Receipt, ArrowRight,
+  Edit2, Check, X as XIcon, AlertCircle, ChevronDown, ChevronUp,
+  Receipt, ArrowRight, Sparkles,
 } from 'lucide-react'
 import { usePricingStore } from '../store/pricingStore'
 import { useAuthStore } from '../store/authStore'
@@ -15,6 +15,7 @@ import { useModulePlans, effectiveUnit, type ModulePlan } from '../lib/plans'
 import { API_BASE_URL, api } from '../lib/api'
 import { friendlyServerError } from '../lib/errors'
 import { Navbar } from '../components/layout/Navbar'
+import { Eyebrow } from '../components/marketing/PageHero'
 import { COUNTRIES } from '../data/countries'
 import { PhoneField } from '../components/forms/PhoneField'
 import { useSubdomainAvailability } from '../lib/subdomainCheck'
@@ -104,6 +105,7 @@ function workspaceLoginUrl(subdomain: string, email: string, workspaceUrlFromSer
 export function UnifiedSignupPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const reduce = useReducedMotion()
 
   const modeParam = (searchParams.get('mode') || 'paid').toLowerCase()
   const initialMode: 'trial' | 'paid' = modeParam === 'trial' ? 'trial' : 'paid'
@@ -194,10 +196,11 @@ export function UnifiedSignupPage() {
   const [pendingSignupId, setPendingSignupId] = useState<string | null>(null)
   const [waitingForMandate, setWaitingForMandate] = useState(false)
   const [checkoutTab, setCheckoutTab] = useState<Window | null>(null)
-  // B4 anti-enumeration guard: when the backend returns HTTP 200 with a null
-  // tenantId (free-signup) or a null pendingSignupId (subscription-signup TRIAL),
-  // we render the same "check your inbox" screen a fresh signup would show so
-  // an attacker cannot distinguish "email already claimed with a different
+  // B4 anti-enumeration guard (teammate's, ported through the layout
+  // redesign): when the backend returns HTTP 200 with a null tenantId
+  // (free-signup) or a null pendingSignupId (subscription-signup TRIAL), we
+  // render the same "check your inbox" screen a fresh signup would show so an
+  // attacker cannot distinguish "email already claimed with a different
   // password" from a real new signup by the client-side outcome either.
   const [checkInboxSuccess, setCheckInboxSuccess] = useState(false)
   const [submittedEmail, setSubmittedEmail] = useState('')
@@ -261,16 +264,14 @@ export function UnifiedSignupPage() {
         }
         const r = parsed as FreeSignupResponse
 
-        // B4 anti-enumeration guard (see backend/.../SaasService.resolveOrCreateAccountIdSafe):
-        // when the email already claims an account with a different password, the
-        // backend returns HTTP 200 with tenantId/subdomain/workspaceUrl all null so
-        // an attacker cannot distinguish "wrong password / claimed email" from a
-        // fresh signup by status code. We MUST mirror that indistinguishability
-        // client-side — do NOT attempt the auto-login below (it would 401 and,
-        // via the try/catch, leave the visitor on an empty /workspaces that a
-        // successful signup would never land on). Render the same
-        // "check your inbox" success surface a fresh workspace would show,
-        // then return.
+        // B4 anti-enumeration guard (see backend SaasService
+        // .resolveOrCreateAccountIdSafe): when the email already claims an
+        // account with a different password, the backend returns HTTP 200
+        // with tenantId/subdomain/workspaceUrl all null so an attacker cannot
+        // distinguish "wrong password / claimed email" from a fresh signup by
+        // status code. Mirror that indistinguishability client-side — do NOT
+        // attempt the auto-login below (it would 401 and strand the visitor
+        // on an empty /workspaces a successful signup never lands on).
         if (!r.tenantId || !r.subdomain || !r.workspaceUrl) {
           setSubmittedEmail(data.adminEmail)
           setCheckInboxSuccess(true)
@@ -293,7 +294,8 @@ export function UnifiedSignupPage() {
         } catch { /* rare — the account was just created; user can login manually */ }
 
         // Open the new workspace directly (client asked: "redirects to
-        // their company.unifiedtree.com").
+        // their company.unifiedtree.com"). The null case is handled by the
+        // anti-enumeration guard above, so no fallback branch remains here.
         const loginUrl = workspaceLoginUrl(r.subdomain, r.email || data.adminEmail, r.workspaceUrl)
         window.location.href = loginUrl
         return
@@ -378,62 +380,6 @@ export function UnifiedSignupPage() {
     }
   }
 
-  // -- mandate-overlay a11y: Escape closes, backdrop click closes, focus
-  // stays trapped inside. Cancelling from Escape / backdrop tears down the
-  // pending signup the same way the visible "Cancel and edit my details"
-  // button does (release the subdomain reservation + kill the Razorpay
-  // subscription) so the next submit doesn't collide.
-  const mandateDialogRef = useRef<HTMLDivElement | null>(null)
-  const cancelMandateOverlay = async () => {
-    const id = pendingSignupId
-    setWaitingForMandate(false)
-    setPendingSignupId(null)
-    if (id) await cancelPending(id)
-  }
-  useEffect(() => {
-    if (!waitingForMandate) return
-    const previouslyFocused = document.activeElement as HTMLElement | null
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        void cancelMandateOverlay()
-        return
-      }
-      if (e.key !== 'Tab') return
-      const root = mandateDialogRef.current
-      if (!root) return
-      const focusables = root.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      )
-      if (focusables.length === 0) return
-      const first = focusables[0]
-      const last = focusables[focusables.length - 1]
-      const active = document.activeElement as HTMLElement | null
-      if (e.shiftKey) {
-        if (active === first || !root.contains(active)) {
-          e.preventDefault()
-          last.focus()
-        }
-      } else {
-        if (active === last) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    }
-    // Move initial focus into the dialog so the trap has something to hold.
-    const first = mandateDialogRef.current?.querySelector<HTMLElement>(
-      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    )
-    first?.focus()
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown)
-      previouslyFocused?.focus?.()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waitingForMandate])
-
   // -- polling for provisioning -------------------------------------------
   const pollDeadline = useRef<number>(0)
   useEffect(() => {
@@ -505,20 +451,78 @@ export function UnifiedSignupPage() {
   }, [pendingSignupId, waitingForMandate])
 
   // -- render ---------------------------------------------------------------
+  // Field chrome is one step tighter than the marketing default: the whole
+  // card has to clear a 900px viewport with the site header on top. This is
+  // sizing only — field names, validation and the submit payload are unchanged.
   const inputCls = (err: boolean) =>
-    `w-full pl-11 pr-4 py-3 text-sm font-body text-text-primary placeholder:text-text-tertiary bg-white outline-none rounded-xl border transition-all ${
+    `w-full pl-9 pr-3 py-2.5 text-sm font-body text-text-primary placeholder:text-text-tertiary bg-white outline-none rounded-xl border transition-all ${
       err ? 'border-danger ring-2 ring-danger/10' : 'border-border focus:border-primary focus:ring-2 focus:ring-primary/10'
     }`
 
   const [showTaxDetails, setShowTaxDetails] = useState(false)
 
+  // -- mandate-overlay a11y (teammate's B12, ported): Escape closes, backdrop
+  // click closes, focus stays trapped inside. Cancelling from Escape/backdrop
+  // tears down the pending signup the same way the visible "Cancel and edit
+  // my details" button does (release the subdomain reservation + kill the
+  // Razorpay subscription) so the next submit doesn't collide.
+  const mandateDialogRef = useRef<HTMLDivElement | null>(null)
+  const cancelMandateOverlay = async () => {
+    const id = pendingSignupId
+    setWaitingForMandate(false)
+    setPendingSignupId(null)
+    if (id) await cancelPending(id)
+  }
+  useEffect(() => {
+    if (!waitingForMandate) return
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        void cancelMandateOverlay()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const root = mandateDialogRef.current
+      if (!root) return
+      const focusables = root.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      if (e.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else {
+        if (active === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    // Move initial focus into the dialog so the trap has something to hold.
+    const first = mandateDialogRef.current?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )
+    first?.focus()
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      previouslyFocused?.focus?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waitingForMandate])
+
   // B4 anti-enumeration success screen — see setCheckInboxSuccess call sites.
   // Rendered BEFORE any other page state so that a claimed-email response
   // looks identical to a real signup: no /workspaces navigation, no Razorpay
-  // popup, no login flash, just a generic "check your inbox" surface. This is
-  // the client-side half of the free-signup / subscription-signup TRIAL
-  // enumeration guard. Do not add any branch here that depends on whether
-  // the workspace was actually created — that would re-open the leak.
+  // popup, no login flash, just a generic "check your inbox" surface. Do not
+  // add any branch here that depends on whether the workspace was actually
+  // created — that would re-open the leak.
   if (checkInboxSuccess) {
     return (
       <div className="min-h-screen bg-bg">
@@ -547,37 +551,31 @@ export function UnifiedSignupPage() {
     )
   }
 
-  return (
-    <div className="min-h-screen bg-bg">
-      <Navbar />
+  // Value proposition for the dark panel — copy only.
+  const panelPoints = mode === 'trial'
+    ? [
+        'Your workspace is live in seconds — no card, no sales call.',
+        `Pick your modules and start the ${TRIAL_DAYS}-day trial from inside.`,
+        'HR, attendance, payroll, accounting, inventory and CRM on one core.',
+      ]
+    : [
+        'Autopay is authorised once and your modules activate immediately.',
+        'Add or drop modules any time — billing follows the change.',
+        'HR, attendance, payroll, accounting, inventory and CRM on one core.',
+      ]
 
-      {/* Hero band */}
-      <section className="pt-32 pb-8 hero-gradient relative overflow-hidden">
-        <div className="absolute inset-0 pattern-dots" />
-        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-body font-semibold uppercase tracking-[0.1em] text-white/70 bg-white/[0.08] border border-white/10 mb-4">
-              {mode === 'trial' ? <><Sparkles size={12} /> Free workspace</> : <><Receipt size={12} /> Paid workspace</>}
-            </span>
-            <h1 className="font-heading font-extrabold text-white mb-3"
-                style={{ fontSize: 'clamp(1.74rem, 3.52vw, 2.61rem)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-              {mode === 'trial' ? 'Create your free workspace' : 'Create your workspace'}
-            </h1>
-            <p className="text-base text-white/75 font-body max-w-xl mx-auto">
-              {mode === 'trial'
-                ? 'Instant setup, no card required. Pick modules and start your 7-day trial from inside the workspace.'
-                : 'Pick your modules, choose your team size, and pay securely to activate instantly.'}
-            </p>
-          </motion.div>
-        </div>
-      </section>
+  return (
+    <div className="surface-soft min-h-screen lg:h-screen lg:overflow-hidden">
+      {/* The right half of this page is white at scroll-top, so the header's
+          floating white-on-dark variant would be invisible. Force the solid bar. */}
+      <Navbar tone="light" />
 
       {/* Waiting-for-mandate overlay */}
       <AnimatePresence>
         {waitingForMandate && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6"
+            className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6"
             onClick={() => { void cancelMandateOverlay() }}
             role="dialog"
             aria-modal="true"
@@ -625,67 +623,144 @@ export function UnifiedSignupPage() {
         )}
       </AnimatePresence>
 
-      {/* Form */}
-      <section className="py-12">
-        <div className={mode === 'trial' ? 'max-w-2xl mx-auto px-4 sm:px-6 lg:px-8' : 'max-w-6xl mx-auto px-4 sm:px-6 lg:px-8'}>
-          <div className={mode === 'trial' ? '' : 'grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-8'}>
+      {/*
+        Centred-card signup — the same composition as /login.
 
-            <form onSubmit={handleSubmit(onSubmit)} className="premium-card p-8 space-y-5">
+        One rounded-3xl card floats on the surface-soft ground with breathing
+        room on all four sides: sapling photo pane left, form pane right, both
+        inside the card. On lg+ the card takes a definite height (viewport
+        minus header and margins, capped) so when the optional tax panel is
+        opened the FORM PANE scrolls internally — the page itself never
+        scrolls. Below lg the photo collapses to a short banner above the
+        form (exactly like login) and the page scrolls normally.
+      */}
+      <main className="flex min-h-screen flex-col px-4 pb-10 pt-24 sm:px-6 lg:h-screen lg:min-h-0 lg:pb-6 lg:pt-24">
+        <motion.div
+          initial={{ opacity: 0, y: reduce ? 0 : 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="m-auto w-full max-w-6xl"
+        >
+          <div className="grid overflow-hidden rounded-3xl border border-border bg-surface shadow-card-hover lg:h-[min(50rem,calc(100vh-7.5rem))] lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:grid-rows-[minmax(0,1fr)]">
+
+            {/* ── Photo pane — the client-supplied sapling photograph ────
+                Copy sits over the dark soil at the image's bottom, behind a
+                deep-emerald scrim; the bright bokeh top stays text-free.
+                Below lg the pane collapses to a short banner above the form. */}
+            <div className="relative h-44 sm:h-52 lg:h-auto">
+              <img
+                src="/assets/signup.jpg"
+                alt="A young sapling growing from dark soil"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+              <div
+                aria-hidden
+                className="absolute inset-0"
+                style={{
+                  background:
+                    'linear-gradient(180deg, rgba(3,43,32,0.30) 0%, rgba(3,43,32,0.04) 24%, rgba(2,26,19,0.22) 42%, rgba(2,26,19,0.82) 60%, rgba(2,26,19,0.97) 100%)',
+                }}
+              />
+              <span aria-hidden className="grain grain-dark" />
+              <div className="absolute inset-x-0 bottom-0 z-10 p-6 lg:p-8">
+                <Eyebrow>{mode === 'trial' ? 'Free workspace' : 'Paid workspace'}</Eyebrow>
+
+                {/* opsz tracks the rendered size — Bricolage is an optical-size
+                    variable font and .font-heading otherwise pins it at 96. */}
+                <h1
+                  className="mt-3 max-w-xs font-heading text-[19px] font-bold leading-[1.15] tracking-tight text-white lg:text-[22px]"
+                  style={{ fontVariationSettings: "'opsz' 32" }}
+                >
+                  {mode === 'trial'
+                    ? <>Start free.<br />Grow into the rest.</>
+                    : <>One workspace.<br />Every module you activate.</>}
+                </h1>
+
+                <ul className="mt-4 hidden space-y-2 lg:block">
+                  {panelPoints.map((point) => (
+                    <li key={point} className="flex items-start gap-2.5 text-[13px] font-body leading-snug text-white/85">
+                      <Check size={14} className="mt-0.5 flex-shrink-0 text-lime" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* PAID only, lg only — below lg the same summary renders
+                    inside the form pane, where the cycle toggle stays
+                    reachable. See the note on <PlanSummary />. */}
+                {mode === 'paid' && (
+                  <div className="mt-4 hidden lg:block">
+                    <PlanSummary
+                      tone="dark" planNames={chosenPlanNames} total={chargeTotal}
+                      unit={cycleUnit} seats={seats} cycle={billingCycle} onCycle={setBillingCycle}
+                    />
+                  </div>
+                )}
+
+                <p className="mt-4 hidden text-[12px] leading-snug text-white/55 lg:block">
+                  {mode === 'trial'
+                    ? 'No card required. You only pay when you switch on autopay inside your workspace.'
+                    : 'Payments and autopay mandates are handled by Razorpay. We never see your card.'}
+                </p>
+              </div>
+            </div>
+
+            {/* ── Form pane ─────────────────────────────────────────────── */}
+            <div className="flex min-w-0 lg:overflow-y-auto">
+              {/* `m-auto` rather than justify/items-center: a centred flex child
+                  inside an overflow container clips its own top when it grows. */}
+              <div className="m-auto w-full p-5 sm:p-8 lg:px-9 lg:py-6">
+
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+              <div>
+                <h2
+                  className="font-heading text-[21px] font-bold leading-tight tracking-tight text-text-primary sm:text-[23px]"
+                  style={{ fontVariationSettings: "'opsz' 24" }}
+                >
+                  {mode === 'trial' ? 'Create your free workspace' : 'Create your workspace'}
+                </h2>
+                {/* Hidden from lg up: the dark panel already carries this
+                    message there, and the card needs the vertical room. */}
+                <p className="mt-1 text-[12.5px] leading-snug text-text-secondary lg:hidden">
+                  {mode === 'trial'
+                    ? 'Instant setup, no card required.'
+                    : 'Choose your team size and pay securely to activate instantly.'}
+                </p>
+              </div>
+
               {error && (
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-danger/10 border border-danger/20 text-sm text-danger">
-                  <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-danger/10 border border-danger/20 text-[13px] text-danger">
+                  <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
-              {/* Basic identity */}
-              <Field label="First and Last Name" required icon={<User size={18} />} error={errors.adminName?.message}>
-                <input {...register('adminName')} placeholder="John Doe" className={inputCls(!!errors.adminName)} />
-              </Field>
-
-              <Field label="Company Name" required icon={<Building size={18} />} error={errors.companyName?.message}>
-                <input {...register('companyName')} placeholder="Acme Corp" className={inputCls(!!errors.companyName)} />
-              </Field>
-
-              {/* Subdomain */}
-              <div>
-                <label className="text-sm font-body font-semibold text-text-primary mb-1.5 block">
-                  Your workspace domain
-                </label>
-                <div className="p-4 bg-bg rounded-xl border border-border">
-                  <div className="flex items-center gap-1">
-                    {isEditingSubdomain ? (
-                      <input
-                        {...register('subdomain')}
-                        onBlur={() => { subdomainTouched.current = true; setIsEditingSubdomain(false) }}
-                        autoFocus
-                        className="flex-1 text-lg font-heading font-bold bg-white border border-primary rounded-lg px-3 py-1 outline-none"
-                      />
-                    ) : (
-                      <button type="button"
-                              onClick={() => setIsEditingSubdomain(true)}
-                              className="flex-1 text-left flex items-center gap-2">
-                        <span className="text-lg font-heading font-bold text-primary bg-primary-light/60 px-3 py-1 rounded-lg">
-                          {subdomainValue || 'yourcompany'}
-                        </span>
-                        <span className="text-text-secondary font-body font-semibold">.unifiedtree.com</span>
-                        <Edit2 size={14} className="text-text-tertiary" />
-                      </button>
-                    )}
-                  </div>
-                  {availability.state === 'taken' && (
-                    <p className="text-xs text-danger mt-2 flex items-center gap-1"><XIcon size={12} /> {availability.reason}</p>
-                  )}
-                  {availability.state === 'available' && (
-                    <p className="text-xs text-primary mt-2 flex items-center gap-1 font-semibold"><Check size={12} /> Available</p>
-                  )}
+              {/* Plan summary — PAID only, and only below lg: from lg up the
+                  same summary sits on the dark panel where there is room for
+                  it. See the note on <PlanSummary />. */}
+              {mode === 'paid' && (
+                <div className="lg:hidden">
+                  <PlanSummary
+                    tone="light" planNames={chosenPlanNames} total={chargeTotal}
+                    unit={cycleUnit} seats={seats} cycle={billingCycle} onCycle={setBillingCycle}
+                  />
                 </div>
-                {errors.subdomain && <span className="text-danger text-xs mt-1 block">{errors.subdomain.message}</span>}
+              )}
+
+              {/* Basic identity — paired on desktop, stacked below lg */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <Field label="First and Last Name" required icon={<User size={15} />} error={errors.adminName?.message}>
+                  <input {...register('adminName')} placeholder="John Doe" className={inputCls(!!errors.adminName)} />
+                </Field>
+
+                <Field label="Company Name" required icon={<Building size={15} />} error={errors.companyName?.message}>
+                  <input {...register('companyName')} placeholder="Acme Corp" className={inputCls(!!errors.companyName)} />
+                </Field>
               </div>
 
               {/* Email + Phone */}
-              <div className="grid md:grid-cols-2 gap-5">
-                <Field label="Email Address" required icon={<Mail size={18} />} error={errors.adminEmail?.message}>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <Field label="Email Address" required icon={<Mail size={15} />} error={errors.adminEmail?.message}>
                   <input
                     {...register('adminEmail')}
                     type="email"
@@ -694,37 +769,77 @@ export function UnifiedSignupPage() {
                     className={`${inputCls(!!errors.adminEmail)} ${accountToken ? 'bg-slate-50 cursor-not-allowed text-text-secondary' : ''}`}
                   />
                 </Field>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-body font-semibold text-text-primary">Phone Number</label>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[12px] font-body font-semibold leading-4 text-text-primary">Phone Number</label>
+                  {/* PhoneField is shared with other forms, so its own padding
+                      is nudged from here rather than edited at the source —
+                      this keeps it the same height as the inputs beside it. */}
                   <PhoneField
+                    className="[&_button]:!py-2.5 [&_input]:!py-2.5"
                     value={watch('adminMobile') || ''}
                     onChange={(v) => setValue('adminMobile', v, { shouldValidate: true, shouldDirty: true })}
                     error={errors.adminMobile?.message}
                   />
-                  {errors.adminMobile && <span className="text-danger text-xs">{errors.adminMobile.message}</span>}
+                  {errors.adminMobile && <span className="text-danger text-[11px]">{errors.adminMobile.message}</span>}
                 </div>
+              </div>
+
+              {/* Subdomain — full width */}
+              <div>
+                <label className="text-[12px] font-body font-semibold leading-4 text-text-primary mb-1 block">
+                  Your workspace domain
+                </label>
+                <div className="px-3 py-2 bg-bg rounded-xl border border-border">
+                  <div className="flex items-center gap-1">
+                    {isEditingSubdomain ? (
+                      <input
+                        {...register('subdomain')}
+                        onBlur={() => { subdomainTouched.current = true; setIsEditingSubdomain(false) }}
+                        autoFocus
+                        className="flex-1 min-w-0 text-[15px] font-heading font-bold bg-white border border-primary rounded-lg px-2.5 py-1 outline-none"
+                      />
+                    ) : (
+                      <button type="button"
+                              onClick={() => setIsEditingSubdomain(true)}
+                              className="flex-1 min-w-0 text-left flex items-center gap-2">
+                        <span className="truncate text-[15px] font-heading font-bold text-primary bg-primary-light/60 px-2.5 py-1 rounded-lg">
+                          {subdomainValue || 'yourcompany'}
+                        </span>
+                        <span className="text-[13px] text-text-secondary font-body font-semibold">.unifiedtree.com</span>
+                        <Edit2 size={13} className="flex-shrink-0 text-text-tertiary" />
+                      </button>
+                    )}
+                  </div>
+                  {availability.state === 'taken' && (
+                    <p className="text-[11px] text-danger mt-1 flex items-center gap-1"><XIcon size={11} /> {availability.reason}</p>
+                  )}
+                  {availability.state === 'available' && (
+                    <p className="text-[11px] text-primary mt-1 flex items-center gap-1 font-semibold"><Check size={11} /> Available</p>
+                  )}
+                </div>
+                {errors.subdomain && <span className="text-danger text-[11px] mt-1 block">{errors.subdomain.message}</span>}
               </div>
 
               {/* Password (hidden when signed in) */}
               {!accountToken && (
-                <div className="grid md:grid-cols-2 gap-5">
-                  <Field label="Password" required icon={<Lock size={18} />} error={errors.password?.message}>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <Field label="Password" required icon={<Lock size={15} />} error={errors.password?.message}>
                     <input {...register('password')} type="password" placeholder="Create a password" className={inputCls(!!errors.password)} />
                   </Field>
-                  <Field label="Confirm Password" required icon={<Lock size={18} />} error={errors.confirmPassword?.message}>
+                  <Field label="Confirm Password" required icon={<Lock size={15} />} error={errors.confirmPassword?.message}>
                     <input {...register('confirmPassword')} type="password" placeholder="Repeat password" className={inputCls(!!errors.confirmPassword)} />
                   </Field>
                 </div>
               )}
 
               {/* Seats (PAID only — TRIAL picks seats per-module inside the workspace) + Country */}
-              <div className={mode === 'trial' ? '' : 'grid md:grid-cols-2 gap-5'}>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {mode !== 'trial' && (
-                  <Field label="Number of Users" required icon={<Users size={18} />} error={errors.seats?.message}>
+                  <Field label="Number of Users" required icon={<Users size={15} />} error={errors.seats?.message}>
                     <input {...register('seats', { valueAsNumber: true })} type="number" min={1} className={inputCls(!!errors.seats)} />
                   </Field>
                 )}
-                <Field label="Country" required icon={<Globe size={18} />} error={errors.country?.message}>
+                <Field label="Country" required icon={<Globe size={15} />} error={errors.country?.message}>
                   <select {...register('country')} className={inputCls(!!errors.country)}>
                     {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -732,19 +847,19 @@ export function UnifiedSignupPage() {
               </div>
 
               {/* Optional company / tax details */}
-              <div className="border-t border-border pt-4">
+              <div>
                 <button type="button" onClick={() => setShowTaxDetails((v) => !v)}
-                        className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${showTaxDetails ? 'border-primary/30 bg-primary-light' : 'border-primary/15 bg-primary-light/60 hover:border-primary/30 hover:bg-primary-light'}`}>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-primary"><Receipt size={16} /></span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-text-primary">Add tax / billing details</span>
-                    <span className="block text-xs text-text-secondary">PAN, GSTIN &amp; billing address — optional</span>
+                        className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors ${showTaxDetails ? 'border-primary/30 bg-primary-light' : 'border-primary/15 bg-primary-light/60 hover:border-primary/30 hover:bg-primary-light'}`}>
+                  <Receipt size={14} className="flex-shrink-0 text-primary" />
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-text-primary">
+                    Add tax / billing details
+                    <span className="hidden font-normal text-text-secondary sm:inline"> — PAN, GSTIN &amp; billing address</span>
                   </span>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">Optional</span>
-                  {showTaxDetails ? <ChevronUp size={16} className="text-primary" /> : <ChevronDown size={16} className="text-primary" />}
+                  <span className="flex-shrink-0 rounded-full bg-white px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">Optional</span>
+                  {showTaxDetails ? <ChevronUp size={14} className="text-primary" /> : <ChevronDown size={14} className="text-primary" />}
                 </button>
                 {showTaxDetails && (
-                  <div className="grid md:grid-cols-2 gap-4 mt-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
                     <Field label="PAN"><input {...register('pan')} placeholder="ABCDE1234F" className={inputCls(false)} /></Field>
                     <Field label="GSTIN"><input {...register('gstin')} placeholder="29ABCDE1234F1Z5" className={inputCls(false)} /></Field>
                     <Field label="Address Line 1"><input {...register('addressLine1')} className={inputCls(false)} /></Field>
@@ -756,18 +871,13 @@ export function UnifiedSignupPage() {
                 )}
               </div>
 
-              <div className="border-t border-border pt-5">
-                <p className="text-xs text-text-tertiary text-center mb-4">
-                  By continuing you accept our <a href="/terms" className="font-semibold underline">Subscription Agreement</a> and{' '}
-                  <a href="/privacy" className="font-semibold underline">Privacy Policy</a>.
-                  {mode === 'trial'
-                    ? ' No card required. Modules unlock when you set up autopay inside your workspace.'
-                    : ' Autopay activates today with immediate first charge.'}
-                </p>
+              {/* Submit. The legal note sits BELOW the button so the button
+                  itself stays as high up the card as possible. */}
+              <div className="border-t border-border pt-3">
                 <button
                   type="submit"
                   disabled={loading || availability.state === 'taken'}
-                  className="w-full rounded-xl bg-primary text-white font-body font-bold py-4 hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors flex items-center justify-center gap-2"
+                  className="w-full rounded-xl bg-primary text-white font-body font-bold py-3 hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors flex items-center justify-center gap-2"
                 >
                   {loading && <Loader2 size={16} className="animate-spin" />}
                   {mode === 'trial'
@@ -775,12 +885,14 @@ export function UnifiedSignupPage() {
                     : (loading ? 'Opening Razorpay…' : `Pay ₹${chargeTotal.toLocaleString('en-IN')}/${billingCycle === 'annual' ? 'yr' : 'mo'} & Create Workspace`)}
                   {!loading && <ArrowRight size={16} />}
                 </button>
-                {mode === 'trial' && (
-                  <p className="text-xs text-text-secondary text-center mt-3">
-                    Instant workspace. Pick modules + start your 7-day trial from inside — no charge until then.
-                  </p>
-                )}
-                <p className="text-center text-sm text-text-secondary mt-4">
+                <p className="text-[11px] leading-snug text-text-tertiary text-center mt-2">
+                  By continuing you accept our <a href="/terms" className="font-semibold underline">Subscription Agreement</a> and{' '}
+                  <a href="/privacy" className="font-semibold underline">Privacy Policy</a>.
+                  {mode === 'trial'
+                    ? ` No card required — your ${TRIAL_DAYS}-day trial starts when you unlock modules inside the workspace.`
+                    : ' Autopay activates today with immediate first charge. Secured by Razorpay.'}
+                </p>
+                <p className="text-center text-[12.5px] text-text-secondary mt-2">
                   {accountToken
                     ? <>Adding a workspace to your account? <Link to="/workspaces" className="font-semibold text-primary">See your workspaces</Link></>
                     : <>Already have an account? <Link to="/login" className="font-semibold text-primary">Sign in</Link></>}
@@ -788,70 +900,97 @@ export function UnifiedSignupPage() {
               </div>
             </form>
 
-            {/* Right sidebar — PAID only. TRIAL creates a free workspace via
-                /v1/public/free-signup and picks modules / seats inside on
-                the workspace's /plan page, so no plan summary here.
-                Styling below is the teammate's forest-header redesign
-                (bc5bd55) with the trial branch dropped since mode is
-                narrowed to 'paid' inside this gate. */}
-            {mode === 'paid' && (
-            <aside>
-              <div className="sticky top-24 overflow-hidden rounded-2xl border-2 border-primary/20 bg-surface shadow-teal-lg">
-                {/* Forest header makes the summary the visual anchor */}
-                <div className="bg-primary px-6 py-4">
-                  <p className="text-[11px] font-body font-semibold uppercase tracking-wider text-white/70">Your plan</p>
-                  <h3 className="font-heading font-bold text-white text-lg leading-tight">
-                    {chosenPlanNames || 'No modules selected'}
-                  </h3>
-                </div>
-
-                <div className="p-6">
-                  {/* Cycle toggle — Annual carries a Save 10% badge */}
-                  <div className="inline-flex w-full rounded-lg bg-bg p-1 mb-4">
-                    <button type="button" onClick={() => setBillingCycle('monthly')}
-                            className={`flex-1 rounded px-3 py-1.5 text-xs font-semibold transition-colors ${billingCycle === 'monthly' ? 'bg-primary text-white' : 'text-text-secondary'}`}>
-                      Monthly
-                    </button>
-                    <button type="button" onClick={() => setBillingCycle('annual')}
-                            className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-semibold transition-colors ${billingCycle === 'annual' ? 'bg-primary text-white' : 'text-text-secondary'}`}>
-                      Annual
-                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${billingCycle === 'annual' ? 'bg-white text-primary-dark' : 'bg-lime/25 text-primary-dark'}`}>Save 10%</span>
-                    </button>
-                  </div>
-
-                  <div className="space-y-2 text-sm mb-4">
-                    <Row k="Per user / month" v={`₹${cycleUnit}`} />
-                    <Row k="Users" v={String(seats)} />
-                    <div className="mt-2 flex items-end justify-between border-t border-border pt-3">
-                      <span className="text-text-secondary">Total {billingCycle === 'annual' ? 'per year' : 'per month'}</span>
-                      <span className="font-heading font-bold text-primary text-2xl">
-                        ₹{chargeTotal.toLocaleString('en-IN')}<span className="text-sm font-normal text-text-secondary">/{billingCycle === 'annual' ? 'yr' : 'mo'}</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  <Link to="/pricing" className="block rounded-xl border border-border py-2.5 text-center text-sm font-body font-semibold text-text-secondary transition-colors hover:border-primary hover:text-primary">
-                    Change modules
-                  </Link>
-                  <p className="mt-3 text-center text-[11px] text-text-tertiary">Secured by Razorpay.</p>
-                </div>
               </div>
-            </aside>
-            )}
+            </div>
 
           </div>
-        </div>
-      </section>
+        </motion.div>
+      </main>
     </div>
   )
 }
 
 // -- small helpers -----------------------------------------------------------
-// A11y: every Field generates a stable useId + wires it as htmlFor on the
-// label and id/aria-invalid/aria-describedby on the input child via
-// React.cloneElement, so screen readers announce the label + error together.
-// `required` visibly marks the field with a red asterisk AND surfaces an
-// sr-only "required" span (screen readers don't read `*` reliably).
+
+/**
+ * Compact plan + billing-cycle summary (PAID only).
+ *
+ * Rendered TWICE and gated by CSS so exactly one copy is ever visible: on the
+ * dark panel from lg up, inside the card below lg. It has to exist at every
+ * breakpoint because the Monthly/Annual toggle writes `billingCycle`, which is
+ * part of the submit payload — the old desktop-only sidebar left phone users
+ * unable to switch cycle at all.
+ */
+function PlanSummary({
+  tone, planNames, total, unit, seats, cycle, onCycle,
+}: {
+  tone: 'light' | 'dark'
+  planNames: string
+  total: number
+  unit: number
+  seats: number
+  cycle: 'monthly' | 'annual'
+  onCycle: (c: 'monthly' | 'annual') => void
+}) {
+  const dark = tone === 'dark'
+  const active = dark ? 'bg-lime text-primary-darker' : 'bg-primary text-white'
+  const idle   = dark ? 'text-white/70 hover:text-white' : 'text-text-secondary'
+
+  return (
+    <div className={dark
+      ? 'rounded-2xl border border-white/12 bg-white/[0.06] px-4 py-3'
+      : 'rounded-xl border border-primary/20 bg-primary-light/70 px-3 py-2.5'}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`text-[10px] font-body font-bold uppercase tracking-wider ${dark ? 'text-lime/70' : 'text-primary-dark/70'}`}>
+            Your plan
+          </p>
+          <p className={`truncate text-[13px] font-semibold ${dark ? 'text-white' : 'text-text-primary'}`}>
+            {planNames || 'No modules selected'}
+          </p>
+        </div>
+        <p className={`flex-shrink-0 font-heading text-lg font-bold leading-none ${dark ? 'text-lime' : 'text-primary'}`}>
+          ₹{total.toLocaleString('en-IN')}
+          <span className={`text-[11px] font-normal ${dark ? 'text-white/60' : 'text-text-secondary'}`}>
+            /{cycle === 'annual' ? 'yr' : 'mo'}
+          </span>
+        </p>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <div className={`inline-flex rounded-lg p-0.5 ${dark ? 'bg-black/25' : 'bg-white'}`}>
+          <button type="button" onClick={() => onCycle('monthly')}
+                  className={`rounded px-2.5 py-1 text-[11.5px] font-semibold transition-colors ${cycle === 'monthly' ? active : idle}`}>
+            Monthly
+          </button>
+          <button type="button" onClick={() => onCycle('annual')}
+                  className={`flex items-center gap-1 rounded px-2.5 py-1 text-[11.5px] font-semibold transition-colors ${cycle === 'annual' ? active : idle}`}>
+            Annual
+            <span className={`rounded-full px-1 py-px text-[9px] font-bold ${
+              cycle === 'annual'
+                ? (dark ? 'bg-primary-darker text-lime' : 'bg-lime text-primary')
+                : (dark ? 'bg-lime/20 text-lime' : 'bg-lime/30 text-primary-dark')
+            }`}>−10%</span>
+          </button>
+        </div>
+        <span className={`text-[11.5px] ${dark ? 'text-white/55' : 'text-text-tertiary'}`}>
+          ₹{unit}/user · {seats} {seats === 1 ? 'user' : 'users'}
+        </span>
+        <Link to="/pricing"
+              className={`ml-auto flex-shrink-0 text-[11.5px] font-semibold ${dark ? 'text-lime hover:text-white' : 'text-primary hover:text-primary-dark'}`}>
+          Change
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+// A11y (teammate's B12, ported into the compact one-screen styling): every
+// Field generates a stable useId + wires it as htmlFor on the label and
+// id/aria-invalid/aria-describedby on the input child via React.cloneElement,
+// so screen readers announce the label + error together. `required` visibly
+// marks the field with a red asterisk AND an sr-only "required" span (screen
+// readers don't read `*` reliably).
 function Field({
   label, icon, error, required, children,
 }: {
@@ -876,7 +1015,7 @@ function Field({
     : children
   return (
     <div>
-      <label htmlFor={fieldId} className="text-sm font-body font-semibold text-text-primary mb-1.5 block">
+      <label htmlFor={fieldId} className="text-[12px] font-body font-semibold leading-4 text-text-primary mb-1 block">
         {label}
         {required && (
           <>
@@ -886,19 +1025,10 @@ function Field({
         )}
       </label>
       <div className="relative">
-        {icon && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary">{icon}</div>}
+        {icon && <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary">{icon}</div>}
         {enhanced}
       </div>
-      {error && <span id={errorId} className="text-danger text-xs mt-1 block">{error}</span>}
-    </div>
-  )
-}
-
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-text-secondary">{k}</span>
-      <span className="font-body font-semibold text-text-primary">{v}</span>
+      {error && <span id={errorId} className="text-danger text-[11px] mt-1 block">{error}</span>}
     </div>
   )
 }
