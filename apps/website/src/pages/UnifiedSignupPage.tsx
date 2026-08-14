@@ -194,6 +194,13 @@ export function UnifiedSignupPage() {
   const [pendingSignupId, setPendingSignupId] = useState<string | null>(null)
   const [waitingForMandate, setWaitingForMandate] = useState(false)
   const [checkoutTab, setCheckoutTab] = useState<Window | null>(null)
+  // B4 anti-enumeration guard: when the backend returns HTTP 200 with a null
+  // tenantId (free-signup) or a null pendingSignupId (subscription-signup TRIAL),
+  // we render the same "check your inbox" screen a fresh signup would show so
+  // an attacker cannot distinguish "email already claimed with a different
+  // password" from a real new signup by the client-side outcome either.
+  const [checkInboxSuccess, setCheckInboxSuccess] = useState(false)
+  const [submittedEmail, setSubmittedEmail] = useState('')
 
   // Cancel a previously-created pending signup on the backend. Used both by
   // the "Cancel and edit my details" overlay button and BEFORE every new
@@ -254,6 +261,22 @@ export function UnifiedSignupPage() {
         }
         const r = parsed as FreeSignupResponse
 
+        // B4 anti-enumeration guard (see backend/.../SaasService.resolveOrCreateAccountIdSafe):
+        // when the email already claims an account with a different password, the
+        // backend returns HTTP 200 with tenantId/subdomain/workspaceUrl all null so
+        // an attacker cannot distinguish "wrong password / claimed email" from a
+        // fresh signup by status code. We MUST mirror that indistinguishability
+        // client-side — do NOT attempt the auto-login below (it would 401 and,
+        // via the try/catch, leave the visitor on an empty /workspaces that a
+        // successful signup would never land on). Render the same
+        // "check your inbox" success surface a fresh workspace would show,
+        // then return.
+        if (!r.tenantId || !r.subdomain || !r.workspaceUrl) {
+          setSubmittedEmail(data.adminEmail)
+          setCheckInboxSuccess(true)
+          return
+        }
+
         // Auto-login on the account we just created (or the pre-existing
         // one when signed in) so the visitor lands on /workspaces with a
         // session already established. Then navigate them to their new
@@ -270,14 +293,9 @@ export function UnifiedSignupPage() {
         } catch { /* rare — the account was just created; user can login manually */ }
 
         // Open the new workspace directly (client asked: "redirects to
-        // their company.unifiedtree.com"). Fall back to /workspaces if the
-        // workspace URL isn't returned for some reason.
-        if (r.workspaceUrl) {
-          const loginUrl = workspaceLoginUrl(r.subdomain, r.email || data.adminEmail, r.workspaceUrl)
-          window.location.href = loginUrl
-        } else {
-          navigate('/workspaces')
-        }
+        // their company.unifiedtree.com").
+        const loginUrl = workspaceLoginUrl(r.subdomain, r.email || data.adminEmail, r.workspaceUrl)
+        window.location.href = loginUrl
         return
       }
 
@@ -333,6 +351,18 @@ export function UnifiedSignupPage() {
         throw new Error((parsed as { message?: string }).message || `Signup failed (${res.status})`)
       }
       const r = parsed as SignupResponse
+
+      // B4 anti-enumeration guard for TRIAL mode: the backend returns
+      // pendingSignupId=null + checkoutShortUrl=null when the anon caller
+      // attempts a trial for an email that already claims an account. We
+      // must not open `window.open(undefined)` or wire the polling machinery
+      // — that would leak the branch (no Razorpay tab pops up vs. one does).
+      // Mirror the same "check your inbox" surface the free-signup path uses.
+      if (!r.pendingSignupId || !r.checkoutShortUrl) {
+        setSubmittedEmail(data.adminEmail)
+        setCheckInboxSuccess(true)
+        return
+      }
 
       // Open Razorpay checkout in a NEW tab and keep the visitor on our
       // page so we can poll for mandate completion and redirect them into
@@ -481,6 +511,41 @@ export function UnifiedSignupPage() {
     }`
 
   const [showTaxDetails, setShowTaxDetails] = useState(false)
+
+  // B4 anti-enumeration success screen — see setCheckInboxSuccess call sites.
+  // Rendered BEFORE any other page state so that a claimed-email response
+  // looks identical to a real signup: no /workspaces navigation, no Razorpay
+  // popup, no login flash, just a generic "check your inbox" surface. This is
+  // the client-side half of the free-signup / subscription-signup TRIAL
+  // enumeration guard. Do not add any branch here that depends on whether
+  // the workspace was actually created — that would re-open the leak.
+  if (checkInboxSuccess) {
+    return (
+      <div className="min-h-screen bg-bg">
+        <Navbar />
+        <section className="pt-32 pb-24 max-w-2xl mx-auto px-4 text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-6">
+            <Sparkles size={22} className="text-primary" />
+          </div>
+          <h1 className="font-heading font-extrabold text-text-primary mb-3"
+              style={{ fontSize: 'clamp(1.5rem, 3vw, 2.2rem)', letterSpacing: '-0.02em' }}>
+            Check your inbox
+          </h1>
+          <p className="text-base text-text-secondary max-w-md mx-auto mb-8">
+            We&rsquo;ve sent a next-steps email to <strong>{submittedEmail}</strong>. Open
+            it to finish setting up your workspace. If you don&rsquo;t see it in a few
+            minutes, check your spam folder.
+          </p>
+          <button
+            onClick={() => { setCheckInboxSuccess(false); setSubmittedEmail('') }}
+            className="text-sm text-primary hover:underline"
+          >
+            Use a different email
+          </button>
+        </section>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-bg">
