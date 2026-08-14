@@ -47,6 +47,14 @@ public class DisbursementBatchService {
      *  file — safer than silently misrouting salaries. */
     private final FieldEncryptor fieldEncryptor;
 
+    /**
+     * Primary constructor. Marked @Autowired explicitly because when a class
+     * has more than one public constructor Spring does NOT auto-pick one — it
+     * falls back to a default (no-arg) constructor, which doesn't exist here.
+     * Without this annotation the container refuses to boot ("No default
+     * constructor found") — see 2026-08-14 rev 00103 crash log.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
     public DisbursementBatchService(JdbcTemplate jdbc,
                                     ObjectProvider<FieldEncryptor> fieldEncryptorProvider) {
         this.jdbc = jdbc;
@@ -55,7 +63,9 @@ public class DisbursementBatchService {
                 : fieldEncryptorProvider.getIfAvailable();
     }
 
-    /** Legacy no-encryptor ctor for tests that construct the service directly. */
+    /** Legacy no-encryptor ctor for tests that construct the service directly.
+     *  Kept for test call-sites; Spring never picks this because the primary
+     *  ctor above is @Autowired. */
     public DisbursementBatchService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
         this.fieldEncryptor = null;
