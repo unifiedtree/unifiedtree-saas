@@ -55,7 +55,6 @@ const MODULE_ITEMS: NavItemDef[] = [
     key: 'master', label: 'Master', icon: <Database size={18} />, module: 'hrms',
     children: [
       { label: 'Workforce Directory', path: '/hrms/employees',         icon: <UserCheck size={15} />,     visibleForRoles: R_ADMIN_MGR },
-      { label: 'Organization Setup',  path: '/hrms/organization',      icon: <Building2 size={15} />,     visibleForRoles: R_HR },
       { label: 'Rules & Policies',    path: '/hrms/policies', icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
       { label: 'Payroll Configuration', path: '/hrms/payroll/components', icon: <Receipt size={15} />,     visibleForRoles: R_FIN },
     ],
@@ -142,14 +141,12 @@ const MODULE_ITEMS: NavItemDef[] = [
     children: [
       { label: 'Resignation & Exit',       path: '/hrms/fnf',  icon: <LogOut size={15} />,   visibleForRoles: R_HR },
       { label: 'Full & Final Settlement',  path: '/hrms/fnf',          icon: <Wallet size={15} />,   visibleForRoles: R_FIN },
-      { label: 'Experience Letter',        path: '/hrms/letters/templates', icon: <FileText size={15} />, visibleForRoles: R_HR },
     ],
   },
   {
     key: 'hrsettings', label: 'Settings', icon: <Settings size={18} />, module: 'hrms',
     children: [
       { label: 'HR Configuration',      path: '/hrms/settings',                   icon: <Settings size={15} />, visibleForRoles: R_HR },
-      { label: 'Holiday Calendar',      path: '/hrms/leave',                      icon: <Calendar size={15} />, visibleForRoles: R_HR },
       { label: 'Notification Templates', path: '/hrms/notification-templates', icon: <Bell size={15} />,    visibleForRoles: R_HR },
       { label: 'Integrations',          path: '/hrms/integrations',          icon: <Plug size={15} />,     visibleForRoles: R_HR },
     ],
@@ -234,23 +231,24 @@ const RAIL_LABELS: Record<string, string> = {
 }
 
 /**
- * Chrome grounds — rail and top bar in one emerald family, so they read as a
- * single surface with no divider between them.
- *
- * Both start at #047857 so the corner where they meet joins seamlessly, and
- * #047857 rather than the brand's brightest #059669 on purpose: white 10px rail
- * labels on #059669 land at about 3.7:1, under the 4.5:1 needed for small text.
- * #047857 gives 5.5:1 and still reads as the app's green rather than the
- * near-black the rail used to be.
+ * Chrome grounds — BRAND chrome (client-approved): blackish-green rail
+ * (180deg #04503A → #043B2C → #02291E) + app-green header (90deg #047857 →
+ * #058360 → #059669, joining the rail's top tone at the corner). Active states
+ * are Keka-style: a lighter white-tint block on the rail, a white pill in the
+ * header tab row. The #059669 stop sits at 75% so the lightest tone only ever
+ * lives under the right-side icon cluster — white TEXT (tabs/label, left side)
+ * always sits on ≤ #058360, which keeps it ≥ 4.5:1 (white on full #059669 is
+ * only 3.77:1, fine for icons at 3:1 but not for text).
  *
  * There is deliberately no logo in this chrome. A workspace logo is whatever
- * shape the customer uploaded, and nothing fits an 86px rail cell — it needed a
+ * shape the customer uploaded, and nothing fits a ~96px rail cell — it needed a
  * white chip to be legible at all, which is what made it look stuck on. The
- * workspace NAME sits in the header instead: always legible, never distorted,
- * and a clearer answer to "whose workspace am I in" than a shrunken mark.
+ * rail's identity tile renders the workspace INITIAL on a white/95 tile with
+ * the workspace name in tiny white text under it instead: always legible, never
+ * distorted, and it doubles as the way back to the launcher (/modules).
  */
-const RAIL_BG = 'linear-gradient(180deg, #047857 0%, #05614A 58%, #04503A 100%)'
-const TOPBAR_BG = 'linear-gradient(90deg, #047857 0%, #058360 52%, #059669 100%)'
+const RAIL_BG = 'linear-gradient(180deg,#04503A 0%,#043B2C 55%,#02291E 100%)'
+const HEADER_BG = 'linear-gradient(90deg,#047857 0%,#058360 75%,#059669 100%)'
 
 function matchPath(pathname: string, p?: string) {
   return !!p && (pathname === p || pathname.startsWith(p + '/'))
@@ -648,44 +646,68 @@ export function PlatformShell() {
     )
   }
 
-  // ─── App mode: Keka-style icon rail + emerald top bar + in-page sub-tabs ────
+  // ─── App mode: dark-green icon rail + green header w/ in-header sub-tabs ────
   //
-  // The sidebar carries ONLY top-level sections (icon + one-word label); a
-  // section's sub-options render as a horizontal tab row INSIDE the page, so
-  // the rail never expands. Rail and top bar share the same emerald family
-  // with no divider — one continuous chrome, the way the reference reads.
+  // The sidebar carries ONLY top-level sections (icon over a tiny label); a
+  // section's sub-options render as pills in the header's LEFT side, so the
+  // rail never expands. Active rail item = Keka-style lighter block
+  // (rounded-xl, bg-white/[0.14], white icon+label); everything else white/60.
+  const workspaceInitial = (tenantName?.trim()?.[0] ?? 'W').toUpperCase()
+  const activeRailItem = railItems.find(i => i.active)
+  const sectionLabel = activeRailItem?.fullLabel ?? appMeta.label
+  // Settings pins to the rail's bottom the way the reference pins Help/Settings.
+  // Pure rendering split — railItems derivation above is untouched.
+  const pinnedRail = railItems.filter(i => i.key === 'hrsettings')
+  const mainRail = railItems.filter(i => i.key !== 'hrsettings')
+
+  const renderRailItem = (item: (typeof railItems)[number]) => (
+    <button
+      key={item.key}
+      onClick={() => navigate(item.target)}
+      title={item.fullLabel}
+      className={clsx(
+        'flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 transition-colors duration-150',
+        item.active
+          ? 'bg-white/[0.14] text-white'
+          : 'text-white/60 hover:bg-white/[0.06] hover:text-white',
+      )}
+    >
+      <span>{item.icon}</span>
+      <span className="text-[10px] font-semibold leading-none tracking-tight">{item.label}</span>
+    </button>
+  )
+
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-base)] font-sans text-[var(--text-primary)]">
-      {/* Icon rail — fixed width, its own scroll */}
-      <aside className="relative z-10 hidden w-[86px] shrink-0 flex-col md:flex" style={{ background: RAIL_BG }}>
-        {/* No logo here by design — this is the apps launcher, and a grid icon
-            says that far more plainly than a shrunken workspace mark did. */}
-        <button
-          onClick={() => navigate('/modules')}
-          title="All apps"
-          aria-label="All apps"
-          className="flex h-14 shrink-0 items-center justify-center"
-        >
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl text-white/85 transition-colors hover:bg-white/[0.14] hover:text-white">
-            <LayoutGrid size={19} />
-          </span>
-        </button>
-        <nav className="scrollbar-hide flex-1 space-y-1 overflow-y-auto px-2.5 pb-4 pt-1">
-          {railItems.map(item => (
-            <button
-              key={item.key}
-              onClick={() => navigate(item.target)}
-              title={item.fullLabel}
-              className={clsx(
-                'flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 transition-colors duration-150',
-                item.active ? 'bg-white/[0.16] text-white' : 'text-white/60 hover:bg-white/[0.08] hover:text-white',
-              )}
-            >
-              {item.icon}
-              <span className="text-[10px] font-semibold leading-none tracking-tight">{item.label}</span>
-            </button>
-          ))}
+      {/* Icon rail — blackish-green gradient, fixed width, its own scroll.
+          No hairline border: the dark ground separates itself from the page. */}
+      <aside className="relative z-10 hidden w-[96px] shrink-0 flex-col md:flex" style={{ background: RAIL_BG }}>
+        {/* Identity tile — workspace initial + name (no logo by design; see the
+            chrome comment above). Click = back to the launcher. Replaces both
+            the old grid-icon launcher button and the header workspace name. */}
+        <div className="shrink-0 px-2.5 pb-1 pt-3">
+          <button
+            onClick={() => navigate('/modules')}
+            title="All apps"
+            aria-label="All apps"
+            className="flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 transition-colors hover:bg-white/10"
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/95 text-[15px] font-bold text-[#047857] shadow-sm">
+              {workspaceInitial}
+            </span>
+            <span className="w-full truncate px-0.5 text-center text-[10px] font-semibold leading-tight text-white">
+              {tenantName || 'Workspace'}
+            </span>
+          </button>
+        </div>
+        <nav className="scrollbar-hide flex-1 space-y-1 overflow-y-auto px-2.5 pb-2 pt-2">
+          {mainRail.map(renderRailItem)}
         </nav>
+        {pinnedRail.length > 0 && (
+          <div className="shrink-0 space-y-1 px-2.5 pb-3 pt-1">
+            {pinnedRail.map(renderRailItem)}
+          </div>
+        )}
       </aside>
 
       {/* Mobile drawer keeps the fuller grouped list — small screens need labels */}
@@ -697,31 +719,55 @@ export function PlatformShell() {
       </AnimatePresence>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar — continues the rail's emerald, no border between them. The
-            workspace name IS the branding here, in place of a logo. */}
-        <header className="z-sticky flex h-14 shrink-0 items-center gap-3 px-4 sm:px-6" style={{ background: TOPBAR_BG }}>
-          <button onClick={() => setMobileOpen(true)} className="-ml-1 rounded-lg p-2 text-white/85 transition-colors hover:bg-white/10 md:hidden" aria-label="Open menu"><Menu size={20} /></button>
-          <span className="min-w-0 truncate text-[15.5px] font-bold tracking-[-0.01em] text-white">{tenantName || 'Workspace'}</span>
+        {/* Top bar — solid app green (gradient joins the rail's top tone at the
+            corner), no bottom hairline. The current section's sub-tabs live
+            HERE (left side); when the section has no children its name shows
+            as a static white label instead. */}
+        <header className="z-sticky flex h-[72px] shrink-0 items-center gap-3 px-4 sm:px-6" style={{ background: HEADER_BG }}>
+          <button onClick={() => setMobileOpen(true)} className="-ml-1 rounded-lg p-2 text-white/85 transition-colors hover:bg-white/10 hover:text-white md:hidden" aria-label="Open menu"><Menu size={20} /></button>
 
-          {/* Centred search pill, Keka-style */}
-          <div className="flex min-w-0 flex-1 justify-center px-2">
-            <button onClick={() => setSearchOpen(true)} className="group flex h-9 w-full max-w-md items-center gap-2.5 rounded-full bg-white/95 px-4 text-left shadow-sm transition-colors hover:bg-white">
-              <span className="flex-1 truncate text-sm text-[var(--text-tertiary)]">Search {appMeta.label}…</span>
-              <kbd className="hidden items-center gap-0.5 rounded border border-[var(--border-default)] bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)] lg:inline-flex"><Command size={10} /> K</kbd>
-              <Search size={15} className="shrink-0 text-[var(--text-tertiary)]" />
-            </button>
+          {/* Sub-sections of the current module as horizontal pills. pr-4 keeps
+              a clipped tab from butting against the search pill when the row
+              scrolls at narrow widths. */}
+          <div className="scrollbar-hide flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-4">
+            {subTabs ? (
+              subTabs.map(tab => (
+                <NavLink
+                  key={tab.path + tab.label}
+                  to={tab.path}
+                  className={({ isActive }) => clsx(
+                    'shrink-0 rounded-lg px-3 py-1.5 text-[13.5px] transition-colors',
+                    isActive
+                      ? 'bg-white/95 font-semibold text-[#047857] shadow-sm'
+                      : 'font-medium text-white/70 hover:bg-white/10 hover:text-white',
+                  )}
+                >
+                  {tab.label}
+                </NavLink>
+              ))
+            ) : (
+              <span className="truncate text-[15px] font-semibold text-white">{sectionLabel}</span>
+            )}
           </div>
 
           {/* Role badge removed at the client's request — the role still shows
               inside the profile menu, where it belongs. */}
           <div className="flex shrink-0 items-center gap-1.5">
+            {/* White rounded-full search pill w/ command chip (reference style) */}
+            <button onClick={() => setSearchOpen(true)} className="hidden h-9 w-52 items-center gap-2.5 rounded-full bg-white/95 px-3.5 text-left shadow-sm transition-colors hover:bg-white sm:flex lg:w-64">
+              <Search size={15} className="shrink-0 text-[var(--text-tertiary)]" />
+              <span className="flex-1 truncate text-[13px] text-[var(--text-tertiary)]">Search {appMeta.label}…</span>
+              <kbd className="hidden items-center gap-0.5 rounded border border-[var(--border-default)] bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)] lg:inline-flex"><Command size={10} /> K</kbd>
+            </button>
+            <button onClick={() => setSearchOpen(true)} className="rounded-lg p-2 text-white/85 transition-colors hover:bg-white/10 hover:text-white sm:hidden" aria-label="Search"><Search size={18} /></button>
             <div className="relative" ref={notifRef}>
               <ShellNotificationBell open={notifOpen} onToggle={() => setNotifOpen(v => !v)} onNavigate={(to) => { setNotifOpen(false); navigate(to) }} />
             </div>
-            {/* Avatar → profile menu (My Profile / My Apps / Settings / Sign out) */}
+            {/* Avatar + chevron → profile menu (My Profile / My Apps / Settings / Sign out) */}
             <div className="relative" ref={headerProfileRef}>
-              <button onClick={() => setProfileOpen(v => !v)} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-sm font-bold text-[#047857] shadow-sm ring-2 ring-white/30 transition-transform hover:scale-105" aria-label="Account">
-                {initial}
+              <button onClick={() => setProfileOpen(v => !v)} className="flex h-10 items-center gap-1.5 rounded-lg pl-1 pr-1.5 transition-colors hover:bg-white/10" aria-label="Account">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-sm font-bold text-[#047857] shadow-sm">{initial}</span>
+                <ChevronDown size={15} className={clsx('text-white/80 transition-transform', profileOpen && 'rotate-180')} />
               </button>
               <AnimatePresence>
                 {profileOpen && (
@@ -734,28 +780,8 @@ export function PlatformShell() {
           </div>
         </header>
 
-        {/* Sub-options of the active section — in the page, not the sidebar */}
-        {subTabs && (
-          <div className="z-sticky flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--border-default)] bg-[var(--bg-surface)] px-4 sm:px-6">
-            {subTabs.map(tab => (
-              <NavLink
-                key={tab.path + tab.label}
-                to={tab.path}
-                className={({ isActive }) => clsx(
-                  'relative flex h-full shrink-0 items-center gap-1.5 px-3 text-[13.5px] font-medium transition-colors',
-                  isActive ? 'text-[var(--accent-fg-strong)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-                )}
-              >
-                {({ isActive }) => (<>
-                  {tab.label}
-                  {isActive && <motion.span layoutId="shellSubTab" className="absolute inset-x-2 bottom-0 h-[2.5px] rounded-t-full bg-[var(--accent-solid)]" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
-                </>)}
-              </NavLink>
-            ))}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-auto"><Outlet /></div>
+        {/* Content ground — light grey so the white cards read against it */}
+        <div className="flex-1 overflow-auto bg-[var(--bg-base)]"><Outlet /></div>
       </main>
       {searchModal}
     </div>
@@ -801,9 +827,9 @@ function ShellNotificationBell({
       >
         <Bell size={18} />
         {/* Dot is now truthful — only visible when there is at least one
-            unread notification. Keeps the same visual placement as before. */}
+            unread notification. Ringed with the header's green so it pops. */}
         {unreadCount > 0 && (
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#FDBA74] ring-2 ring-[#047857]" />
+          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#F97316] ring-2 ring-[#059669]" />
         )}
       </button>
       <AnimatePresence>
