@@ -40,6 +40,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!--
+          B7 (2026-08-14): switched FaceWorkerClient off RestTemplate onto
+          WebClient (reactor-netty). Aligns the two face clients on the
+          same reactive HTTP stack that FaceRecognitionClient already uses
+          and unlocks Semaphore-guarded concurrency (see FaceWorkerClient
+          bulkhead) so a face-worker slowdown can't drain the Tomcat pool.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>

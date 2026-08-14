@@ -271,6 +271,16 @@ public class LearningService {
     /**
      * Enrol a batch of employees. Returns counts so the UI can render
      * "Enrolled 8/10, 2 already enrolled, 0 rejected for capacity".
+     *
+     * <p><b>B7 perf (2026-08-14):</b> the previous per-id SELECT-existence
+     * + INSERT loop was 2N round-trips against Postgres for an N-employee
+     * bulk enrol. Replaced with:
+     *   (a) ONE query to load the ids already enrolled (for the dup count),
+     *   (b) ONE INSERT ... SELECT ... WHERE NOT EXISTS per remaining id
+     *       — collapsed into a batched INSERT via {@code batchUpdate}.
+     * The WHERE NOT EXISTS keeps the write race-safe even before V098's
+     * unique index has been applied (Flyway is off in prod); once V098
+     * lands, a concurrent double-post is caught by the unique index too.
      */
     @Transactional
     public BulkEnrollResult bulkEnroll(UUID tenantId, UUID programId,
@@ -283,31 +293,65 @@ public class LearningService {
                     "PROGRAM_CLOSED");
         }
 
+        List<UUID> requested = req.employeeIds() == null ? List.of() : req.employeeIds();
+        if (requested.isEmpty()) return new BulkEnrollResult(0, 0, 0);
+
         // Snapshot current enrolled count so we can enforce capacity across
         // the batch atomically.
         int enrolledSoFar = program.enrolledCount();
         Integer capacity  = program.capacity();
 
-        int enrolled = 0, dup = 0, cap = 0;
-        for (UUID empId : req.employeeIds()) {
-            // Explicit ResultSetExtractor<Boolean> — a bare `rs -> rs.next()`
-            // lambda is ambiguous with the RowCallbackHandler overload.
-            org.springframework.jdbc.core.ResultSetExtractor<Boolean> hasRow = rs -> rs.next();
-            Boolean already = jdbc.query("""
-                    SELECT 1 FROM learning_mgmt.training_enrollments
-                     WHERE program_id = ? AND employee_id = ? AND status <> 'DROPPED'
-                    """, hasRow, programId, empId);
-            if (Boolean.TRUE.equals(already)) { dup++; continue; }
-            if (capacity != null && enrolledSoFar >= capacity) { cap++; continue; }
-            jdbc.update("""
+        // ── (a) preload the already-enrolled subset in ONE query ─────────
+        // Build an anyarray-style IN(?, ?, ...) with a placeholder per id.
+        StringBuilder inSql = new StringBuilder(
+                "SELECT employee_id FROM learning_mgmt.training_enrollments" +
+                " WHERE program_id = ? AND status <> 'DROPPED' AND employee_id IN (");
+        Object[] args = new Object[requested.size() + 1];
+        args[0] = programId;
+        for (int i = 0; i < requested.size(); i++) {
+            if (i > 0) inSql.append(',');
+            inSql.append('?');
+            args[i + 1] = requested.get(i);
+        }
+        inSql.append(')');
+
+        java.util.Set<UUID> already = new java.util.HashSet<>(
+                jdbc.query(inSql.toString(),
+                        (rs, i) -> rs.getObject("employee_id", UUID.class), args));
+
+        // ── (b) figure out who to insert (respecting capacity across batch)
+        int dup = 0, cap = 0;
+        List<Object[]> insertBatch = new ArrayList<>(requested.size());
+        String actorTag = actorId == null ? null : actorId.toString();
+        for (UUID empId : requested) {
+            if (already.contains(empId))                             { dup++; continue; }
+            if (capacity != null && enrolledSoFar >= capacity)       { cap++; continue; }
+            insertBatch.add(new Object[]{
+                    tenantId, programId, empId, actorTag, actorTag,
+                    // WHERE NOT EXISTS bind — dup-safe if a concurrent write
+                    // landed between (a) and (b).
+                    programId, empId
+            });
+            enrolledSoFar++;
+        }
+
+        int enrolled = 0;
+        if (!insertBatch.isEmpty()) {
+            // WHERE NOT EXISTS keeps this race-safe pre-V098 (Flyway off in
+            // prod → unique index may not be applied yet). Post-V098 the
+            // unique index would also catch the race — either mechanism is
+            // fine; NOT EXISTS is portable and doesn't need the index.
+            int[] rows = jdbc.batchUpdate("""
                     INSERT INTO learning_mgmt.training_enrollments
                         (tenant_id, program_id, employee_id, status, created_by, updated_by)
-                    VALUES (?, ?, ?, 'ENROLLED', ?, ?)
-                    """, tenantId, programId, empId,
-                    actorId == null ? null : actorId.toString(),
-                    actorId == null ? null : actorId.toString());
-            enrolled++;
-            enrolledSoFar++;
+                    SELECT ?, ?, ?, 'ENROLLED', ?, ?
+                     WHERE NOT EXISTS (
+                        SELECT 1 FROM learning_mgmt.training_enrollments
+                         WHERE program_id = ? AND employee_id = ? AND status <> 'DROPPED')
+                    """, insertBatch);
+            for (int r : rows) if (r > 0) enrolled++;
+            // Rows the NOT EXISTS filter skipped were racy duplicates.
+            dup += (insertBatch.size() - enrolled);
         }
         log.info("Program {} bulk-enrol: {} new / {} already / {} over-capacity",
                 programId, enrolled, dup, cap);

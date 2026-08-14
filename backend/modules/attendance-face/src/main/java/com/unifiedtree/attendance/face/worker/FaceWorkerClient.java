@@ -3,18 +3,22 @@ package com.unifiedtree.attendance.face.worker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import io.netty.channel.ChannelOption;
+import reactor.netty.http.client.HttpClient;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * HTTP client for the self-hosted Python face-verification worker.
@@ -29,6 +33,18 @@ import java.util.Map;
  * caller path translates that into a {@code FAIL_WORKER_UNAVAILABLE}
  * audit event and a 503 to the client. A working face system NEVER lets
  * an attendance punch-in succeed without a real worker verdict.
+ *
+ * <p><b>B7 rewrite (2026-08-14):</b>
+ * <ul>
+ *   <li>Switched from RestTemplate to WebClient (reactor-netty), matching
+ *       {@code FaceRecognitionClient}. One reactive stack instead of two.</li>
+ *   <li>Wrapped every call in a plain-JDK {@link Semaphore} bulkhead
+ *       (Resilience4j is only in the app-runner classpath, not this
+ *       module's, so we use the java.util.concurrent primitive to stay
+ *       dependency-neutral). A burst of face requests can no longer drain
+ *       the Tomcat thread pool: excess callers wait a bounded time for a
+ *       permit, then fail closed with {@code worker_bulkhead_saturated}.</li>
+ * </ul>
  */
 @Component
 public class FaceWorkerClient {
@@ -36,33 +52,52 @@ public class FaceWorkerClient {
     private static final Logger log = LoggerFactory.getLogger(FaceWorkerClient.class);
 
     private final String workerUrl;
-    private final RestTemplate http;
+    private final Duration readTimeout;
+    private final WebClient http;
+    private final Semaphore bulkhead;
+    private final long bulkheadWaitMs;
 
     public FaceWorkerClient(
             @Value("${unifiedtree.face.worker-url:http://localhost:8091}") String workerUrl,
             @Value("${unifiedtree.face.worker-timeout-ms:12000}") int timeoutMs,
-            @Value("${unifiedtree.face.worker-connect-timeout-ms:12000}") int connectTimeoutMs) {
+            @Value("${unifiedtree.face.worker-connect-timeout-ms:12000}") int connectTimeoutMs,
+            // Bulkhead sizing: the worker itself is single-CPU-bound (ONNX
+            // inference) — allowing ~16 concurrent requests keeps it busy
+            // without inviting queueing storms upstream. Overridable at
+            // deploy time if you scale the worker horizontally.
+            @Value("${unifiedtree.face.worker-max-concurrent:16}") int maxConcurrent,
+            // Wait budget before a saturated bulkhead rejects the caller.
+            // Kept small so a slow worker doesn't tie up Tomcat threads
+            // just standing in line — fail fast, let the client retry.
+            @Value("${unifiedtree.face.worker-bulkhead-wait-ms:500}") long bulkheadWaitMs) {
         this.workerUrl = workerUrl.replaceAll("/$", "");
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         // Connect timeout MUST tolerate a scale-to-zero worker: Railway holds the
         // socket open while the container boots and lazy-loads its ONNX models.
         // The old Math.min(750, readTimeout) cap made a cold worker unreachable,
         // so the first punch after idle always 503'd. Both timeouts stay well
         // under the mobile checkin timeout (60s) so Spring returns a real verdict
         // before the app gives up with a bare "Network Error".
-        factory.setConnectTimeout(connectTimeoutMs);
-        factory.setReadTimeout(timeoutMs);
-        this.http = new RestTemplate(factory);
+        this.readTimeout = Duration.ofMillis(timeoutMs);
+        HttpClient httpClient = HttpClient.create()
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
+                .responseTimeout(readTimeout);
+        this.http = WebClient.builder()
+                .baseUrl(this.workerUrl)
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
+        this.bulkhead = new Semaphore(Math.max(1, maxConcurrent), /*fair*/ true);
+        this.bulkheadWaitMs = Math.max(0, bulkheadWaitMs);
     }
 
     public boolean isHealthy() {
         try {
-            HttpHeaders h = jsonHeaders();
-            ResponseEntity<Map> resp = http.exchange(
-                    workerUrl + "/health", HttpMethod.GET,
-                    new HttpEntity<>(h), Map.class);
-            return resp.getStatusCode().is2xxSuccessful()
-                    && "ok".equals(resp.getBody() == null ? null : resp.getBody().get("status"));
+            @SuppressWarnings("rawtypes")
+            Map body = http.get().uri("/health")
+                    .headers(this::applyAuthHeaders)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block(readTimeout);
+            return body != null && "ok".equals(body.get("status"));
         } catch (Exception e) {
             log.warn("face worker /health failed: {}", e.getMessage());
             return false;
@@ -80,30 +115,59 @@ public class FaceWorkerClient {
     }
 
     private WorkerResult call(String path, Object body) {
+        // Bulkhead — bounded wait for a permit, then fail closed. This is
+        // the fix for a face-worker slowdown draining the Tomcat thread
+        // pool: without it, every Tomcat thread blocks on .block() and
+        // the whole API stops answering. With it, at most maxConcurrent
+        // requests are in-flight; the rest either get a permit within
+        // bulkheadWaitMs or return a 503-shaped result immediately.
+        boolean acquired = false;
         try {
-            HttpEntity<Object> entity = new HttpEntity<>(body, jsonHeaders());
-            ResponseEntity<Map> resp = http.postForEntity(workerUrl + path, entity, Map.class);
-            Map m = resp.getBody();
+            acquired = bulkhead.tryAcquire(bulkheadWaitMs, TimeUnit.MILLISECONDS);
+            if (!acquired) {
+                log.warn("face worker bulkhead saturated (max={} in-flight); rejecting {}",
+                        bulkhead.availablePermits(), path);
+                return WorkerResult.unavailable("worker_bulkhead_saturated");
+            }
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            return WorkerResult.unavailable("interrupted waiting for face worker bulkhead");
+        }
+        try {
+            @SuppressWarnings("rawtypes")
+            Map m = http.post().uri(path)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .headers(this::applyAuthHeaders)
+                    .bodyValue(body)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block(readTimeout);
             if (m == null) {
                 return WorkerResult.unavailable("worker returned empty body");
             }
-            return WorkerResult.ok(m);
-        } catch (ResourceAccessException ra) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> typed = (Map<String, Object>) m;
+            return WorkerResult.ok(typed);
+        } catch (WebClientRequestException ra) {
+            // Connect/read timeout or DNS failure — behaves like the old
+            // ResourceAccessException path.
             log.warn("face worker {} unavailable: {}", path, ra.getMessage());
             return WorkerResult.unavailable("worker unreachable: " + ra.getMessage());
+        } catch (WebClientResponseException re) {
+            log.warn("face worker {} returned {}: {}", path, re.getStatusCode(), re.getMessage());
+            return WorkerResult.unavailable("worker error: " + re.getStatusCode());
         } catch (Exception e) {
             log.warn("face worker {} call failed: {}", path, e.getMessage());
             return WorkerResult.unavailable("worker error: " + e.getMessage());
+        } finally {
+            bulkhead.release();
         }
     }
 
-    private HttpHeaders jsonHeaders() {
-        HttpHeaders h = new HttpHeaders();
-        h.setContentType(MediaType.APPLICATION_JSON);
-        h.setAccept(List.of(MediaType.APPLICATION_JSON));
+    private void applyAuthHeaders(HttpHeaders h) {
         String bearer = fetchIdToken();
         if (bearer != null) h.setBearerAuth(bearer);
-        return h;
     }
 
     /**
