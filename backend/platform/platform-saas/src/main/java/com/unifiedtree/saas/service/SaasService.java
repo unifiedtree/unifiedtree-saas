@@ -13,6 +13,8 @@ import com.unifiedtree.saas.dto.SaasDtos.TenantRequestSummary;
 import com.unifiedtree.saas.dto.SaasDtos.WorkspaceStatusResponse;
 import com.unifiedtree.saas.event.WorkspaceCreatedEvent;
 import com.unifiedtree.security.tenant.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -39,6 +41,8 @@ import java.util.UUID;
  */
 @Service
 public class SaasService {
+
+    private static final Logger log = LoggerFactory.getLogger(SaasService.class);
 
     /** Special tenant id used to host UnifiedTree platform admins. */
     public static final UUID PLATFORM_TENANT_ID =
@@ -499,36 +503,73 @@ public class SaasService {
      * Public overload for callers that don't have a full SignupRequest —
      * takes email + plaintext password directly and returns the account id
      * to use (existing if email+password match, freshly minted UUID otherwise).
-     * Throws 409 when an account exists but the password doesn't match.
+     *
+     * <p><b>Bundle B4 (D2)</b> — no longer throws 409 on wrong-password. That
+     * behaviour was an account-enumeration oracle: an attacker could probe
+     * {@code /v1/public/free-signup} with any email and read "409 password
+     * doesn't match" back to prove the email had an account. Now the caller
+     * gets {@link java.util.Optional#empty()} and MUST respond with the same
+     * 200-shaped "we're processing your signup" payload it would return on a
+     * new email — the two cases are indistinguishable on the wire.
+     *
+     * @return {@code Optional.of(accountId)} — new UUID for a fresh email, or
+     *         the existing account's UUID if the password matched.
+     *         {@code Optional.empty()} — the email is claimed by an existing
+     *         account and the caller's password did NOT match; the caller MUST
+     *         NOT create a workspace and MUST return a generic 200 response.
      */
-    public UUID resolveOrCreateAccountId(String email, String plaintextPassword) {
-        return resolveOrCreateAccountId(new SignupRequest(
-                "", "", "", email, "", plaintextPassword,
-                null, null, null, null, null, null, java.util.List.of(), null, null));
-    }
-
-    private UUID resolveOrCreateAccountId(SignupRequest req) {
-        String email = req.adminEmail().trim().toLowerCase(Locale.ROOT);
+    public java.util.Optional<UUID> resolveOrCreateAccountIdSafe(String email, String plaintextPassword) {
+        String normalized = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
         return jdbc.query("""
                 SELECT id, password_hash, status
                   FROM platform.accounts
                  WHERE lower(email) = lower(?)
                 """, rs -> {
             if (!rs.next()) {
-                return UUID.randomUUID();
+                return java.util.Optional.of(UUID.randomUUID());
             }
             String status = rs.getString("status");
             if (!"ACTIVE".equals(status)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is disabled");
+                // Also indistinguishable: a disabled account must not leak
+                // "you exist but you're locked" back to an anonymous caller.
+                log.warn("free-signup blocked (account not ACTIVE) for email={} status={}",
+                        normalized, status);
+                return java.util.Optional.<UUID>empty();
             }
             String existingHash = rs.getString("password_hash");
-            if (!passwords.matches(req.password(), existingHash)) {
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "An account already exists for this email. Sign in first to create another workspace.");
+            if (!passwords.matches(plaintextPassword, existingHash)) {
+                log.warn("free-signup blocked (password mismatch, enumeration guard) for email={}",
+                        normalized);
+                return java.util.Optional.<UUID>empty();
             }
-            return UUID.fromString(rs.getString("id"));
-        }, email);
+            return java.util.Optional.of(UUID.fromString(rs.getString("id")));
+        }, normalized);
+    }
+
+    /**
+     * @deprecated Use {@link #resolveOrCreateAccountIdSafe(String, String)}
+     *             instead. Kept only for the legacy internal signup path
+     *             (which is 410 GONE at the HTTP surface) so no other module
+     *             breaks; its wrong-password branch still throws 409 because
+     *             that path is not publicly reachable.
+     */
+    @Deprecated
+    public UUID resolveOrCreateAccountId(String email, String plaintextPassword) {
+        return resolveOrCreateAccountIdSafe(email, plaintextPassword)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "An account already exists for this email. Sign in first to create another workspace."));
+    }
+
+    private UUID resolveOrCreateAccountId(SignupRequest req) {
+        // Legacy internal path (/signup-request → 410 GONE at HTTP layer, but
+        // paywallActive / trial admin backfills still call in). Keep the
+        // original throw so admin scripts get a clear error, not the silent
+        // "check your inbox" affordance the public path uses.
+        return resolveOrCreateAccountIdSafe(req.adminEmail(), req.password())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "An account already exists for this email. Sign in first to create another workspace."));
     }
 
     // -- Public: workspace status ----------------------------------------------------------------

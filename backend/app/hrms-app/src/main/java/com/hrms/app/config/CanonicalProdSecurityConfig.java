@@ -121,9 +121,13 @@ public class CanonicalProdSecurityConfig {
                     "/v1/public/signup-request",
                     "/v1/public/subdomains/check",
                     "/v1/public/workspace-status",
-                    // Emails us a module enquiry and records REQUESTED rows.
-                    // Never grants access, so safe to leave public.
-                    "/v1/public/module-request",
+                    // "/v1/public/module-request" REMOVED from permitAll
+                    // 2026-08-14 (Bundle B4 D4). Anonymous access here was a
+                    // tenant-poisoning surface: any caller could POST an
+                    // arbitrary subdomain + module list, spam our ops inbox,
+                    // and stuff REQUESTED rows into any tenant's module
+                    // catalog. Endpoint is now behind authenticate() via the
+                    // catch-all + @PreAuthorize on the controller method.
                     // "/v1/public/module-toggle" REMOVED 2026-08-08 — it
                     // activated/deactivated modules for any subdomain with no
                     // auth at all. Free paid-module access for anyone, and a

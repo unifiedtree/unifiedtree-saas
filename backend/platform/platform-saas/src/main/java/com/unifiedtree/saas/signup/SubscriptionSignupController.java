@@ -1,11 +1,13 @@
 package com.unifiedtree.saas.signup;
 
+import com.unifiedtree.auth.ratelimit.PublicEndpointRateLimiter;
 import com.unifiedtree.auth.service.PasswordService;
 import com.unifiedtree.saas.payment.RazorpayProperties;
 import com.unifiedtree.saas.payment.subscription.SubscriptionService;
 import com.unifiedtree.saas.plans.BillingCycle;
 import com.unifiedtree.saas.plans.ModulePlanService;
 import com.unifiedtree.saas.service.SaasService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Min;
@@ -71,25 +73,35 @@ public class SubscriptionSignupController {
     private final ModulePlanService planService;
     private final JdbcTemplate jdbc;
     private final RazorpayProperties props;
+    private final PublicEndpointRateLimiter rateLimiter;
 
     public SubscriptionSignupController(SubscriptionService subscriptions,
                                         PendingSignupService pending,
                                         PasswordService passwords,
                                         ModulePlanService planService,
                                         JdbcTemplate jdbc,
-                                        RazorpayProperties props) {
+                                        RazorpayProperties props,
+                                        PublicEndpointRateLimiter rateLimiter) {
         this.subscriptions = subscriptions;
         this.pending = pending;
         this.passwords = passwords;
         this.planService = planService;
         this.jdbc = jdbc;
         this.props = props;
+        this.rateLimiter = rateLimiter;
     }
 
     @PostMapping
     public ResponseEntity<SubscriptionSignupResponse> signup(
             @Valid @RequestBody SubscriptionSignupRequest req,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            HttpServletRequest http) {
+
+        // ── Bundle B4: per-email + per-ip in-memory rate-limit ──────────────
+        // 5 / 15min per email, 20 / 15min per ip. Sits BEFORE the payment
+        // gateway config check so a flood cannot trigger a wave of Razorpay
+        // API calls even when the gateway is up.
+        rateLimiter.check("subscription-signup", clientIp(http), norm(req.adminEmail()));
 
         if (!props.isConfigured()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
@@ -102,14 +114,26 @@ public class SubscriptionSignupController {
         String email = norm(req.adminEmail());
 
         // ------- 2. duplicate-email guard (TRIAL only, when NOT signed in) ---
-        // Anon TRIAL signup: reject if email already has an account. Signed-in
-        // caller means the account already exists by definition — reusing the
-        // trial slot must NOT be allowed either, but that's caught below by
-        // checking their workspaces count via a separate signed-in guard.
+        // Bundle B4 D3 — TRIAL / anon path must NOT distinguish "email is
+        // free" from "email is already claimed". A 409 on the existing-email
+        // path was an enumeration oracle: attacker probes /subscription-signup
+        // mode=TRIAL with any email, reads back "409 conflict" to confirm the
+        // account exists (or "success shape" to confirm it doesn't). We now
+        // silently short-circuit with the same 200-shaped response the fresh
+        // signup path emits — no razorpay side-effects, no pending row, no
+        // hint back to the caller. The dashboard / signed-in flow keeps its
+        // real 409 because that caller is authenticated and already knows the
+        // account exists.
         if (mode == Mode.TRIAL && signedInAccountId == null) {
             if (accountExistsByEmail(email)) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "This email has already claimed the free trial. Please sign in and create a paid workspace instead.");
+                log.warn("subscription-signup TRIAL silently declined (enumeration guard) for email={}",
+                        email);
+                return ResponseEntity.ok(new SubscriptionSignupResponse(
+                        /*pendingSignupId*/       null,
+                        /*razorpaySubscriptionId*/null,
+                        /*checkoutShortUrl*/      null,
+                        /*mode*/                  mode.name(),
+                        /*keyId*/                 null));
             }
         }
         // Signed-in caller must not start ANOTHER trial. They add a paid workspace.
@@ -328,6 +352,23 @@ public class SubscriptionSignupController {
 
     private static String norm(String s) {
         return s == null ? null : s.trim();
+    }
+
+    /**
+     * Best-effort client-IP resolution. Prefers the leftmost address in
+     * {@code X-Forwarded-For} (Cloud Run injects it), else the servlet's
+     * {@code getRemoteAddr()}. Returns null on total failure so the limiter
+     * simply skips the IP key rather than erroring out the signup.
+     */
+    private static String clientIp(HttpServletRequest req) {
+        if (req == null) return null;
+        String xff = req.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            int comma = xff.indexOf(',');
+            String first = (comma > 0 ? xff.substring(0, comma) : xff).trim();
+            if (!first.isEmpty()) return first;
+        }
+        return req.getRemoteAddr();
     }
 
     private static String normSubdomain(String s) {

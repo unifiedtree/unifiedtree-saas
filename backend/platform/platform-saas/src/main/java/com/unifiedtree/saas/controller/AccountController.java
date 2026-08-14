@@ -1,5 +1,6 @@
 package com.unifiedtree.saas.controller;
 
+import com.unifiedtree.auth.ratelimit.PublicEndpointRateLimiter;
 import com.unifiedtree.saas.dto.AccountDtos.AccountLoginRequest;
 import com.unifiedtree.saas.dto.AccountDtos.AccountLoginResponse;
 import com.unifiedtree.saas.dto.AccountDtos.CreateWorkspaceRequest;
@@ -8,6 +9,7 @@ import com.unifiedtree.saas.dto.AccountDtos.WorkspaceSessionResponse;
 import com.unifiedtree.saas.dto.AccountDtos.WorkspaceSummary;
 import com.unifiedtree.saas.dto.SaasDtos.SignupResponse;
 import com.unifiedtree.saas.service.AccountService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,13 +37,25 @@ import java.util.List;
 public class AccountController {
 
     private final AccountService accounts;
+    private final PublicEndpointRateLimiter rateLimiter;
 
-    public AccountController(AccountService accounts) {
+    public AccountController(AccountService accounts, PublicEndpointRateLimiter rateLimiter) {
         this.accounts = accounts;
+        this.rateLimiter = rateLimiter;
     }
 
+    /**
+     * Bundle B4 — rate-limited BEFORE credential check so brute-force
+     * enumeration hits the 429 wall before it can walk the accounts table.
+     * The DB-side {@code failed_login_count / locked_until} logic in
+     * {@link AccountService#login} still runs on any request the limiter
+     * lets through, as defence-in-depth against a compromised low-and-slow
+     * source that stays under the per-window threshold.
+     */
     @PostMapping("/v1/accounts/auth/login")
-    public AccountLoginResponse login(@Valid @RequestBody AccountLoginRequest request) {
+    public AccountLoginResponse login(@Valid @RequestBody AccountLoginRequest request,
+                                      HttpServletRequest http) {
+        rateLimiter.check("accounts-auth-login", clientIp(http), request.email());
         return accounts.login(request.email(), request.password());
     }
 
@@ -76,5 +90,22 @@ public class AccountController {
     public WorkspaceSummary requestUpgrade(@AuthenticationPrincipal Jwt jwt,
                                            @PathVariable String moduleKey) {
         return accounts.requestModuleUpgrade(jwt, moduleKey);
+    }
+
+    /**
+     * Best-effort client-IP resolution. Prefers the leftmost address in
+     * {@code X-Forwarded-For} (Cloud Run injects it), else the servlet's
+     * {@code getRemoteAddr()}. Returns null on total failure so the limiter
+     * simply skips the IP key rather than erroring out the login.
+     */
+    private static String clientIp(HttpServletRequest req) {
+        if (req == null) return null;
+        String xff = req.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            int comma = xff.indexOf(',');
+            String first = (comma > 0 ? xff.substring(0, comma) : xff).trim();
+            if (!first.isEmpty()) return first;
+        }
+        return req.getRemoteAddr();
     }
 }

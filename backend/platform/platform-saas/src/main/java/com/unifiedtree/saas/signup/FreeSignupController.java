@@ -1,8 +1,10 @@
 package com.unifiedtree.saas.signup;
 
+import com.unifiedtree.auth.ratelimit.PublicEndpointRateLimiter;
 import com.unifiedtree.auth.service.PasswordService;
 import com.unifiedtree.saas.dto.SaasDtos.SignupResponse;
 import com.unifiedtree.saas.service.SaasService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -56,25 +59,38 @@ public class FreeSignupController {
 
     private final SaasService saas;
     private final PasswordService passwords;
+    private final PublicEndpointRateLimiter rateLimiter;
 
-    public FreeSignupController(SaasService saas, PasswordService passwords) {
+    public FreeSignupController(SaasService saas,
+                                PasswordService passwords,
+                                PublicEndpointRateLimiter rateLimiter) {
         this.saas = saas;
         this.passwords = passwords;
+        this.rateLimiter = rateLimiter;
     }
 
     @PostMapping
     public ResponseEntity<FreeSignupResponse> signup(
             @Valid @RequestBody FreeSignupRequest req,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            HttpServletRequest http) {
 
         String email = norm(req.adminEmail());
+
+        // ── Bundle B4: per-email + per-ip in-memory rate-limit ──────────────
+        // 5 / 15min per email, 20 / 15min per ip. Throws 429 HrmsException on
+        // exhaustion. Runs BEFORE any password / DB work so a flood cannot
+        // touch the account row.
+        rateLimiter.check("free-signup", clientIp(http), email);
+
         UUID signedInAccountId = jwt == null ? null : accountIdFromJwt(jwt);
 
         // Resolve account:
         //   - signed-in caller → use the JWT account, no password needed
         //   - anon caller     → email+password path in SaasService (existing
         //                       account with matching password → reuse;
-        //                       else mint a new UUID for SaasWriter to insert)
+        //                       else mint a new UUID for SaasWriter to insert;
+        //                       wrong password → Optional.empty(), see below).
         UUID accountId;
         String passwordHash;
         if (signedInAccountId != null) {
@@ -86,7 +102,23 @@ public class FreeSignupController {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Password is required (min 8 characters)");
             }
-            accountId    = saas.resolveOrCreateAccountId(email, plaintext);
+            // Bundle B4 D2 — resolveOrCreateAccountIdSafe returns empty when
+            // the email is claimed by a different password. Do NOT throw 409
+            // here (that would be an account-enumeration oracle: attacker
+            // asks "does this email exist?" and the status code answers).
+            // Instead return the SAME 200-shaped response we'd send on a
+            // brand-new signup, with tenantId/subdomain nulled out so the
+            // frontend shows a generic "check your inbox" affordance.
+            Optional<UUID> resolved = saas.resolveOrCreateAccountIdSafe(email, plaintext);
+            if (resolved.isEmpty()) {
+                log.warn("free-signup silently blocked (enumeration guard) for email={}", email);
+                return ResponseEntity.ok(new FreeSignupResponse(
+                        /*tenantId*/     null,
+                        /*subdomain*/    null,
+                        /*workspaceUrl*/ null,
+                        email));
+            }
+            accountId    = resolved.get();
             passwordHash = passwords.hash(plaintext);
         }
 
@@ -116,6 +148,23 @@ public class FreeSignupController {
 
     private static String norm(String s) {
         return s == null ? null : s.trim();
+    }
+
+    /**
+     * Best-effort client-IP resolution. Prefers the leftmost address in
+     * {@code X-Forwarded-For} (Cloud Run injects it), else the servlet's
+     * {@code getRemoteAddr()}. Returns null on total failure so the limiter
+     * simply skips the IP key rather than erroring out the signup.
+     */
+    private static String clientIp(HttpServletRequest req) {
+        if (req == null) return null;
+        String xff = req.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            int comma = xff.indexOf(',');
+            String first = (comma > 0 ? xff.substring(0, comma) : xff).trim();
+            if (!first.isEmpty()) return first;
+        }
+        return req.getRemoteAddr();
     }
 
     private static UUID accountIdFromJwt(Jwt jwt) {
@@ -154,6 +203,12 @@ public class FreeSignupController {
         }
     }
 
+    /**
+     * Bundle B4 D2 — tenantId/subdomain/workspaceUrl are nullable now. The
+     * silent-decline branch (enumeration guard) returns them as null; the
+     * SPA treats a null tenantId as "check your inbox for confirmation"
+     * instead of auto-redirecting into the workspace.
+     */
     public record FreeSignupResponse(
             UUID tenantId,
             String subdomain,
