@@ -119,10 +119,15 @@ public class RbacService {
     /**
      * Replace the entire permission set on a role. After update, all users
      * holding this role have their cache evicted.
+     *
+     * SECURITY: Only tenant-owned custom roles may be modified. System roles
+     * (tenant_id IS NULL, e.g. OWNER / SUPER_ADMIN / HR_MANAGER / EMPLOYEE) and
+     * roles belonging to another tenant are rejected — otherwise any workspace
+     * OWNER (granted rbac.role.write) could rewrite the shared system-role
+     * permission set and escalate to platform-admin across every tenant.
      */
     public void setRolePermissions(UUID roleId, List<String> permissionCodes) {
-        Role role = roleRepo.findById(roleId).orElseThrow(() ->
-            new ResourceNotFoundException("Role " + roleId + " not found"));
+        requireTenantCustomRole(roleId);
         for (String code : permissionCodes) {
             permissionRepo.findById(code).orElseThrow(() ->
                 new ResourceNotFoundException("Permission " + code + " not in catalog"));
