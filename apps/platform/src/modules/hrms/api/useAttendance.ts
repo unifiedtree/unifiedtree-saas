@@ -247,3 +247,36 @@ export function useDecideCorrection() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'attendance', 'corrections'] }),
   })
 }
+
+// Admin / HR punch-on-behalf. Backend: POST /v1/attendance/manual-entry
+// (see ManualAttendanceRequest — employeeId, attendanceDate, checkInAt, checkOutAt,
+// attendanceType, attendanceStatus, latitude, longitude, locationName, reason).
+export interface ManualEntryPayload {
+  employeeId: string
+  attendanceDate: string           // yyyy-MM-dd
+  checkInAt?: string               // ISO instant, optional
+  checkOutAt?: string              // ISO instant, optional
+  attendanceType?: string
+  attendanceStatus?: string
+  latitude?: number
+  longitude?: number
+  locationName?: string
+  reason: string
+}
+
+export function useManualEntry() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: ManualEntryPayload) =>
+      apiJson<AttendanceDto>('/v1/attendance/manual-entry', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    // Refresh muster roll + team dashboard so the new punch shows up immediately.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'attendance', 'dashboard'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'attendance', 'logs'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'attendance', 'today'] })
+    },
+  })
+}

@@ -48,6 +48,8 @@ import { AttendanceAnalytics } from '@/modules/hrms/analytics/AttendanceAnalytic
 import { PayrollDashboard } from '@/modules/hrms/payroll/PayrollDashboard'
 import { SalaryStructureAdmin } from '@/modules/hrms/payroll/SalaryStructureAdmin'
 import { MusterRoll } from '@/modules/hrms/attendance/MusterRoll'
+import { ManualEntry } from '@/modules/hrms/attendance/ManualEntry'
+import { WorkTimeSettings } from '@/modules/hrms/organization/WorkTimeSettings'
 import { BankDisbursement } from '@/modules/hrms/payroll/BankDisbursement'
 import { DocumentVault } from '@/modules/hrms/DocumentVault'
 import { Learning } from '@/modules/hrms/Learning'
@@ -361,6 +363,30 @@ export default function App() {
           element={
             <RouteGuard anyOf={['attendance.team.read', P.HRMS_EMPLOYEE_READ]}>
               <ModuleGate moduleKey="hrms"><MusterRoll /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        {/* Admin/HR manual attendance entry (punch on behalf). Backend
+            requires attendance.regularization.approve; team.read is accepted
+            here so a manager landing on the page from the muster-roll deep
+            link sees the form (submit will 403 cleanly if their role lacks
+            the write authority). */}
+        <Route
+          path="/hrms/attendance/manual-entry"
+          element={
+            <RouteGuard anyOf={['attendance.regularization.approve', 'attendance.team.read']}>
+              <ModuleGate moduleKey="hrms"><ManualEntry /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        {/* Per-company work-time settings (grace, auto-deduct, workweek). Kept
+            as its own top-level route (rather than folded into OrgSetup) so
+            the existing tabbed OrgSetup layout is untouched. */}
+        <Route
+          path="/hrms/settings/work-time"
+          element={
+            <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE]}>
+              <ModuleGate moduleKey="hrms"><WorkTimeSettings /></ModuleGate>
             </RouteGuard>
           }
         />
