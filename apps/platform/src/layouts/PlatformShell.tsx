@@ -15,6 +15,8 @@ import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
 import { GlobalSearch } from '@/shared/components/GlobalSearch'
+import { useNotificationStore } from '@/core/notifications/notificationStore'
+import { formatDistanceToNow } from 'date-fns'
 
 const SIDEBAR_KEY = 'ut.sidebar.collapsed'
 
@@ -714,21 +716,7 @@ export function PlatformShell() {
               inside the profile menu, where it belongs. */}
           <div className="flex shrink-0 items-center gap-1.5">
             <div className="relative" ref={notifRef}>
-              <button onClick={() => setNotifOpen(v => !v)} className="relative rounded-lg p-2 text-white/85 transition-colors hover:bg-white/10 hover:text-white" aria-label="Notifications">
-                <Bell size={18} />
-                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#FDBA74] ring-2 ring-[#058360]" />
-              </button>
-              <AnimatePresence>
-                {notifOpen && (
-                  <motion.div initial={{ opacity: 0, y: -8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.98 }} transition={{ duration: 0.16 }} className="absolute right-0 top-12 z-dropdown w-80 overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
-                    <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3"><p className="text-sm font-semibold text-[var(--text-primary)]">Notifications</p><span className="rounded-full bg-[var(--bg-subtle)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-tertiary)]">0 new</span></div>
-                    <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--bg-subtle)]"><Bell size={18} className="text-[var(--text-tertiary)]" /></div>
-                      <p className="text-sm font-medium text-[var(--text-secondary)]">You're all caught up</p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <ShellNotificationBell open={notifOpen} onToggle={() => setNotifOpen(v => !v)} onNavigate={(to) => { setNotifOpen(false); navigate(to) }} />
             </div>
             {/* Avatar → profile menu (My Profile / My Apps / Settings / Sign out) */}
             <div className="relative" ref={headerProfileRef}>
@@ -771,5 +759,142 @@ export function PlatformShell() {
       </main>
       {searchModal}
     </div>
+  )
+}
+
+/**
+ * Notification bell rendered in the top bar of {@link PlatformShell}.
+ *
+ * <p>Was previously a hard-coded "0 new / You're all caught up" popup with an
+ * always-on orange dot — the store-backed {@code NotificationPanel.tsx} was
+ * never mounted here, so the fix that wired the store to real
+ * {@code /v1/notifications} traffic never reached the user. This inline
+ * component reads the same {@link useNotificationStore} the header badge
+ * reads, so the dot, the count pill and the list are guaranteed to agree.
+ */
+function ShellNotificationBell({
+  open,
+  onToggle,
+  onNavigate,
+}: {
+  open: boolean
+  onToggle: () => void
+  onNavigate: (to: string) => void
+}) {
+  const notifications = useNotificationStore((s) => s.notifications)
+  const loading = useNotificationStore((s) => s.loading)
+  const loaded = useNotificationStore((s) => s.loaded)
+  const markAsRead = useNotificationStore((s) => s.markAsRead)
+  const markAllAsRead = useNotificationStore((s) => s.markAllAsRead)
+  const unreadCount = useNotificationStore((s) => s.unreadCount())
+
+  // Cap the popup at 8 to keep the surface tight — the panel's own footer
+  // links to a fuller view once we have one.
+  const items = notifications.slice(0, 8)
+
+  return (
+    <>
+      <button
+        onClick={onToggle}
+        className="relative rounded-lg p-2 text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+        aria-label="Notifications"
+      >
+        <Bell size={18} />
+        {/* Dot is now truthful — only visible when there is at least one
+            unread notification. Keeps the same visual placement as before. */}
+        {unreadCount > 0 && (
+          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#FDBA74] ring-2 ring-[#047857]" />
+        )}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={{ duration: 0.16 }}
+            className="absolute right-0 top-12 z-dropdown w-96 overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg"
+          >
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Notifications</p>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-[var(--bg-subtle)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-tertiary)]">
+                  {unreadCount} new
+                </span>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={() => markAllAsRead()}
+                    className="text-[11px] font-semibold text-[#047857] hover:text-[#053B2E]"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
+            </div>
+            {items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--bg-subtle)]">
+                  <Bell size={18} className="text-[var(--text-tertiary)]" />
+                </div>
+                <p className="text-sm font-medium text-[var(--text-secondary)]">
+                  {loading && !loaded ? 'Loading…' : "You're all caught up"}
+                </p>
+              </div>
+            ) : (
+              <div className="max-h-96 overflow-y-auto">
+                {items.map((n) => {
+                  const tone =
+                    n.type === 'error'
+                      ? 'bg-red-500/10 text-red-500'
+                      : n.type === 'warning'
+                      ? 'bg-amber-500/10 text-amber-600'
+                      : n.type === 'success'
+                      ? 'bg-emerald-500/10 text-emerald-600'
+                      : 'bg-blue-500/10 text-blue-600'
+                  return (
+                    <button
+                      key={n.id}
+                      onClick={() => {
+                        markAsRead(n.id)
+                        if (n.link) onNavigate(n.link)
+                      }}
+                      className={clsx(
+                        'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors',
+                        !n.isRead ? 'bg-[#ECFDF5] hover:bg-[#D1FAE5]' : 'hover:bg-[var(--bg-subtle)]',
+                      )}
+                    >
+                      <span
+                        className={clsx(
+                          'mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg',
+                          tone,
+                        )}
+                      >
+                        <Bell size={14} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={clsx(
+                            'block truncate text-sm font-medium',
+                            !n.isRead ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]',
+                          )}
+                        >
+                          {n.title}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-[var(--text-secondary)] line-clamp-2">
+                          {n.message}
+                        </span>
+                        <span className="mt-1 block text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
+                          {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   )
 }
