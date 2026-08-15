@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Calendar, Plus, CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
+import { Calendar, Plus, CheckCircle, XCircle, Clock, FileText, Check, X as XIcon } from 'lucide-react'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { useToast } from '@/shared/hooks/useToast'
@@ -412,9 +412,13 @@ function ApprovalsTab() {
         </div>
       ) : (
         approvals.map((leave) => (
-          <div key={leave.id} className="bg-white border border-border-default rounded-2xl px-4 py-3 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
+          <div key={leave.id} className="bg-white border border-border-default rounded-2xl px-4 py-3">
+            {/* Header row: employee identity on the left, status + inline
+                actions on the right so buttons stay compact and don't grow
+                with the card width (previous flex-1 layout stretched to
+                ~500px each on desktop and looked broken). */}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
                 <p className="text-text-primary font-medium text-sm">
                   {leave.employeeName ?? 'Employee'}{leave.employeeCode ? ` · ${leave.employeeCode}` : ''}
                 </p>
@@ -424,32 +428,64 @@ function ApprovalsTab() {
                   {' · '}{leave.totalDays} day{leave.totalDays !== 1 ? 's' : ''}
                 </p>
                 {leave.departmentName && <p className="text-text-tertiary text-xs mt-0.5">{leave.departmentName}</p>}
-                {leave.reason && <p className="text-text-secondary text-xs mt-0.5 italic">"{leave.reason}"</p>}
+                {leave.reason && <p className="text-text-secondary text-xs mt-1 italic">&ldquo;{leave.reason}&rdquo;</p>}
               </div>
-              <div className="flex-shrink-0"><HrStatusPill tone="warn">Pending</HrStatusPill></div>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <HrStatusPill tone="warn">Pending</HrStatusPill>
+                {commenting?.id !== leave.id && (
+                  <Can code={P.HRMS_LEAVE_APPROVE_L1}>
+                    <button
+                      onClick={() => setCommenting({ id: leave.id, approved: false })}
+                      className="inline-flex items-center gap-1 rounded-lg bg-[#FEE2E2] px-2.5 py-1 text-xs font-medium text-[#B91C1C] transition-colors hover:bg-[#FECACA]"
+                      aria-label="Reject"
+                    >
+                      <XIcon size={13} /> Reject
+                    </button>
+                    <button
+                      onClick={() => setCommenting({ id: leave.id, approved: true })}
+                      className="inline-flex items-center gap-1 rounded-lg bg-[#DCFCE7] px-2.5 py-1 text-xs font-medium text-[#15803D] transition-colors hover:bg-[#BBF7D0]"
+                      aria-label="Approve"
+                    >
+                      <Check size={13} /> Approve
+                    </button>
+                  </Can>
+                )}
+              </div>
             </div>
-            {commenting?.id === leave.id ? (
-              <div className="space-y-2">
+
+            {/* Comment box appears only when the reviewer chose Approve or
+                Reject and needs to add an optional note. Kept below the
+                header so the row above stays compact. */}
+            {commenting?.id === leave.id && (
+              <div className="mt-3 space-y-2 border-t border-border-default/40 pt-3">
                 <input
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="Comment (optional)"
-                  className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary"
+                  placeholder={commenting.approved ? 'Approval note (optional)' : 'Rejection reason (optional)'}
+                  className="w-full rounded-xl border border-border-default/60 bg-white px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:border-primary focus:outline-none"
                 />
-                <div className="flex gap-2">
-                  <button onClick={() => setCommenting(null)} className="flex-1 py-2 border border-border-default text-text-secondary text-xs rounded-xl hover:text-text-primary transition-colors">Cancel</button>
-                  <button onClick={handleDecide} disabled={decide.isPending} className={clsx('flex-1 py-2 text-xs rounded-xl font-medium transition-colors disabled:opacity-50 text-white', commenting.approved ? 'bg-[#15803D] hover:bg-[#166534]' : 'bg-[#EF4444] hover:bg-[#DC2626]')}>
-                    {decide.isPending ? '...' : commenting.approved ? 'Confirm Approve' : 'Confirm Reject'}
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => { setCommenting(null); setComment('') }}
+                    className="rounded-lg border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDecide}
+                    disabled={decide.isPending}
+                    className={clsx(
+                      'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50',
+                      commenting.approved
+                        ? 'bg-[#15803D] hover:bg-[#166534]'
+                        : 'bg-[#EF4444] hover:bg-[#DC2626]',
+                    )}
+                  >
+                    {commenting.approved ? <Check size={13} /> : <XIcon size={13} />}
+                    {decide.isPending ? 'Working…' : commenting.approved ? 'Confirm Approve' : 'Confirm Reject'}
                   </button>
                 </div>
               </div>
-            ) : (
-              <Can code={P.HRMS_LEAVE_APPROVE_L1}>
-                <div className="flex gap-2">
-                  <button onClick={() => setCommenting({ id: leave.id, approved: true })} className="flex-1 py-1.5 bg-[#DCFCE7] text-[#15803D] hover:bg-[#BBF7D0] text-xs rounded-lg transition-colors font-medium">Approve</button>
-                  <button onClick={() => setCommenting({ id: leave.id, approved: false })} className="flex-1 py-1.5 bg-[#FEE2E2] text-[#B91C1C] hover:bg-[#FECACA] text-xs rounded-lg transition-colors font-medium">Reject</button>
-                </div>
-              </Can>
             )}
           </div>
         ))
