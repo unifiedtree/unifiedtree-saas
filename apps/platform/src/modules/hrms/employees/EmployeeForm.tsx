@@ -239,6 +239,12 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   // ─── Per-step validation ──────────────────────────────────────────────────
   // Split so Next can validate only the current step, while Submit
   // re-validates every required field across both.
+  // Required-set MUST match Attendance_App/app/staff-onboarding.tsx exactly.
+  // Mobile treats DOB and every Financial-step statutory / bank field as
+  // OPTIONAL — format-checked only when the admin actually types something.
+  // Everyone provisioned later (payroll / EPFO) fills those in when they have
+  // the paperwork; blocking onboarding on them would prevent HR from adding a
+  // new joiner on day 1. See mobile rules at staff-onboarding.tsx lines 544-780.
   const validateBasic = (): Record<string, string> => {
     const errs: Record<string, string> = {}
     if (!isEdit && !companyId) {
@@ -266,41 +272,34 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     if (!departmentId) errs.departmentId = 'Select a department'
     if (!form.employeeCode.trim()) errs.employeeCode = 'Employee code is required'
     if (!form.dateOfJoining) errs.dateOfJoining = 'Date of joining is required'
-    if (!form.dateOfBirth) errs.dateOfBirth = 'Date of birth is required'
+    // DOB is OPTIONAL per mobile parity — format is naturally enforced by
+    // <input type="date">, so no manual check needed when a value is set.
     return errs
   }
 
   const validateFinancial = (): Record<string, string> => {
     const errs: Record<string, string> = {}
+    // salaryFrequency is the ONLY required Financial-step field in mobile.
     if (!form.salaryFrequency) errs.salaryFrequency = 'Salary frequency is required'
-    if (!form.panNumber.trim()) {
-      errs.panNumber = 'PAN is required'
-    } else if (!RX.pan.test(form.panNumber.toUpperCase())) {
+    // Every statutory + bank field below is OPTIONAL. Validate format ONLY
+    // when the admin actually entered a value — same behaviour as mobile's
+    // `validate: (v) => !v || pattern.test(v)` rules.
+    if (form.panNumber.trim() && !RX.pan.test(form.panNumber.toUpperCase())) {
       errs.panNumber = 'PAN must be 5 letters + 4 digits + 1 letter (e.g. ABCDE1234F)'
     }
-    if (!form.aadhaarNumber.trim()) {
-      errs.aadhaarNumber = 'Aadhaar is required'
-    } else if (!RX.aadhaar.test(stripWs(form.aadhaarNumber))) {
+    if (form.aadhaarNumber.trim() && !RX.aadhaar.test(stripWs(form.aadhaarNumber))) {
       errs.aadhaarNumber = 'Aadhaar must be 12 digits'
     }
-    if (!form.uanNumber.trim()) {
-      errs.uanNumber = 'UAN is required'
-    } else if (!RX.uan.test(stripWs(form.uanNumber))) {
+    if (form.uanNumber.trim() && !RX.uan.test(stripWs(form.uanNumber))) {
       errs.uanNumber = 'UAN must be 12 digits'
     }
-    if (!form.esiNumber.trim()) {
-      errs.esiNumber = 'ESI is required'
-    } else if (!RX.esi.test(stripWs(form.esiNumber))) {
+    if (form.esiNumber.trim() && !RX.esi.test(stripWs(form.esiNumber))) {
       errs.esiNumber = 'ESI must be 10–17 digits'
     }
-    if (!form.bankAccountNumber.trim()) {
-      errs.bankAccountNumber = 'Bank account number is required'
-    } else if (!RX.bankAccount.test(stripWs(form.bankAccountNumber))) {
+    if (form.bankAccountNumber.trim() && !RX.bankAccount.test(stripWs(form.bankAccountNumber))) {
       errs.bankAccountNumber = 'Account number must be 9–18 digits'
     }
-    if (!form.bankIfsc.trim()) {
-      errs.bankIfsc = 'IFSC is required'
-    } else if (!RX.ifsc.test(form.bankIfsc.toUpperCase())) {
+    if (form.bankIfsc.trim() && !RX.ifsc.test(form.bankIfsc.toUpperCase())) {
       errs.bankIfsc = 'IFSC must be 4 letters + 0 + 6 alphanum (e.g. HDFC0001234)'
     }
     return errs
@@ -713,7 +712,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 <Field label="Date of Joining" required error={errors.dateOfJoining}>
                   <Input error={!!errors.dateOfJoining} type="date" value={form.dateOfJoining} onChange={(e) => set('dateOfJoining', e.target.value)} />
                 </Field>
-                <Field label="Date of Birth" required error={errors.dateOfBirth}>
+                <Field label="Date of Birth" error={errors.dateOfBirth}>
                   <Input error={!!errors.dateOfBirth} type="date" value={form.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} />
                 </Field>
               </div>
@@ -827,23 +826,23 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 )}
               </Field>
 
-              <Field label="PAN Number" required error={errors.panNumber}>
+              <Field label="PAN Number" error={errors.panNumber}>
                 <Input error={!!errors.panNumber} value={form.panNumber} onChange={(e) => set('panNumber', e.target.value.toUpperCase())} placeholder="ABCDE1234F" />
               </Field>
-              <Field label="Aadhaar Number" required error={errors.aadhaarNumber}>
+              <Field label="Aadhaar Number" error={errors.aadhaarNumber}>
                 <Input error={!!errors.aadhaarNumber} value={form.aadhaarNumber} onChange={(e) => set('aadhaarNumber', e.target.value)} placeholder="1234 5678 9012" />
               </Field>
-              <Field label="UAN Number" required error={errors.uanNumber}>
+              <Field label="UAN Number" error={errors.uanNumber}>
                 <Input error={!!errors.uanNumber} value={form.uanNumber} onChange={(e) => set('uanNumber', e.target.value)} placeholder="12-digit UAN" />
               </Field>
-              <Field label="ESI Number" required error={errors.esiNumber}>
+              <Field label="ESI Number" error={errors.esiNumber}>
                 <Input error={!!errors.esiNumber} value={form.esiNumber} onChange={(e) => set('esiNumber', e.target.value)} placeholder="10–17 digit ESI number" />
               </Field>
 
-              <Field label="Bank Account Number" required error={errors.bankAccountNumber}>
+              <Field label="Bank Account Number" error={errors.bankAccountNumber}>
                 <Input error={!!errors.bankAccountNumber} value={form.bankAccountNumber} onChange={(e) => set('bankAccountNumber', e.target.value)} placeholder="123456789012" />
               </Field>
-              <Field label="IFSC Code" required error={errors.bankIfsc}>
+              <Field label="IFSC Code" error={errors.bankIfsc}>
                 <Input error={!!errors.bankIfsc} value={form.bankIfsc} onChange={(e) => set('bankIfsc', e.target.value.toUpperCase())} placeholder="HDFC0001234" />
               </Field>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
