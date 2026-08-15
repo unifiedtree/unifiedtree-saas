@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Clock, CheckCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { eachDayOfInterval, endOfMonth, format, startOfMonth } from 'date-fns'
@@ -392,9 +393,32 @@ function CorrectionsTab() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+const ATT_TABS: readonly Tab[] = ['my', 'team', 'corrections']
+
 export const Attendance: React.FC = () => {
   const isManager = usePermission(P.ATTENDANCE_TEAM_READ)
-  const [tab, setTab] = useState<Tab>('my')
+
+  // Deep-linking support for ?tab=corrections / ?tab=team so notifications
+  // and other pages can land the user on the right tab. Same pattern as
+  // Leave.tsx.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab') as Tab | null
+  const initialTab: Tab = requestedTab && ATT_TABS.includes(requestedTab) ? requestedTab : 'my'
+  const [tab, setTab] = useState<Tab>(initialTab)
+
+  useEffect(() => {
+    if (requestedTab && ATT_TABS.includes(requestedTab) && requestedTab !== tab) {
+      setTab(requestedTab)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTab])
+
+  const switchTab = (next: Tab) => {
+    setTab(next)
+    const p = new URLSearchParams(searchParams)
+    p.set('tab', next)
+    setSearchParams(p, { replace: true })
+  }
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'my', label: 'My Attendance' },
@@ -409,9 +433,9 @@ export const Attendance: React.FC = () => {
       {/* Modern Tabs */}
       <div className="flex items-center p-1 bg-bg-surface border border-border-default rounded-xl w-max shadow-inner">
         {tabs.map((t) => (
-          <button 
-            key={t.key} 
-            onClick={() => setTab(t.key)} 
+          <button
+            key={t.key}
+            onClick={() => switchTab(t.key)}
             className={clsx(
               'relative px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-300',
               tab === t.key ? 'text-text-primary shadow-sm bg-white' : 'text-text-secondary hover:text-text-primary hover:bg-white/50'

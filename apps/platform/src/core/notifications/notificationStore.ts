@@ -94,17 +94,21 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   if (raw && !isMobileShaped) return raw
 
   // Leave — the ops-center page handles both approvals (manager view) and
-  // my-leaves (employee view) via role-aware tabs; single route covers both.
-  if (type.startsWith('LEAVE_')) return '/hrms/leave'
+  // my-leaves (employee view). We deep-link straight into the right tab
+  // via ?tab= (see Leave.tsx which reads useSearchParams on mount).
+  if (type === 'LEAVE_SUBMITTED') return '/hrms/leave?tab=approvals'
+  if (type.startsWith('LEAVE_')) return '/hrms/leave?tab=my'
 
-  // WFH — approvals are surfaced on the leave ops-center for admins;
-  // employees have their own /me/wfh apply/history page.
+  // WFH — approvals are surfaced on the leave ops-center Approvals tab
+  // for admins; employees have their own /me/wfh apply/history page.
   if (type === 'WFH_APPROVED' || type === 'WFH_REJECTED' || type === 'WFH_CANCELLED') return '/me/wfh'
-  if (type === 'WFH_SUBMITTED') return '/hrms/leave'
+  if (type === 'WFH_SUBMITTED') return '/hrms/leave?tab=approvals'
 
-  // Attendance corrections — the /hrms/attendance page has both a
-  // 'corrections' tab (manager approvals) and a 'my' tab (employee history).
-  if (type.startsWith('CORRECTION_')) return '/hrms/attendance'
+  // Attendance corrections — /hrms/attendance has 'corrections' + 'my'
+  // tabs. Both flavours of notification land on the corrections tab, which
+  // is role-aware and shows the right list (approvals-queue for managers,
+  // history for employees).
+  if (type.startsWith('CORRECTION_')) return '/hrms/attendance?tab=corrections'
 
   // Shift change — employees submit + view on /me/shift-change; admins
   // work the queue from /hrms/shifts (the shifts admin page).

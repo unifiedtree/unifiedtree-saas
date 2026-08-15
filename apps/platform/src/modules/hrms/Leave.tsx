@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Calendar, Plus, CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
@@ -467,11 +468,38 @@ function ApprovalsTab() {
 
 // ── Main Leave Page ───────────────────────────────────────────────────────────
 
+const ALL_TABS: readonly Tab[] = ['my', 'apply', 'balances', 'approvals', 'types', 'holidays']
+
 export const Leave: React.FC = () => {
   const isManager = usePermission(P.HRMS_LEAVE_APPROVE_L1)
   const canManageTypes = usePermission(P.LEAVE_TYPE_WRITE)
   const canManageHolidays = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
-  const [tab, setTab] = useState<Tab>('my')
+
+  // Support deep-linking to a specific tab via ?tab=approvals (etc). Notifications
+  // + the dashboard's "Review leave requests" button rely on this — without it
+  // every entry point dumped the user on 'My Leaves' regardless of the intent.
+  // The URL stays in sync as the user clicks through so the back button works.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab') as Tab | null
+  const initialTab: Tab = requestedTab && ALL_TABS.includes(requestedTab) ? requestedTab : 'my'
+  const [tab, setTab] = useState<Tab>(initialTab)
+
+  // If the URL param changes while the page is mounted (e.g. the same-page
+  // notification click), reflect it in local state without dropping other params.
+  useEffect(() => {
+    if (requestedTab && ALL_TABS.includes(requestedTab) && requestedTab !== tab) {
+      setTab(requestedTab)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTab])
+
+  const switchTab = (next: Tab) => {
+    setTab(next)
+    // Keep any other query params intact; only rewrite ?tab=.
+    const p = new URLSearchParams(searchParams)
+    p.set('tab', next)
+    setSearchParams(p, { replace: true })
+  }
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'my', label: 'My Leaves' },
@@ -492,7 +520,7 @@ export const Leave: React.FC = () => {
 
       <div className="flex flex-wrap gap-1 bg-white border border-border-default p-1 rounded-xl w-fit">
         {tabs.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t.key ? 'bg-[#059669] text-white shadow' : 'text-text-secondary hover:text-text-primary')}>
+          <button key={t.key} onClick={() => switchTab(t.key)} className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t.key ? 'bg-[#059669] text-white shadow' : 'text-text-secondary hover:text-text-primary')}>
             {t.label}
           </button>
         ))}

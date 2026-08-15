@@ -516,7 +516,12 @@ export const HrmsDashboard: React.FC = () => {
                   ? `${pendingLeaves === 1 ? 'A leave request is' : 'Leave requests are'} queued for your decision.`
                   : 'No leave approvals pending right now.'}
               </p>
-              <HrButton className="mt-4 w-full" onClick={() => navigate('/hrms/leave')}>
+              <HrButton
+                className="mt-4 w-full"
+                onClick={() =>
+                  navigate(pendingLeaves > 0 ? '/hrms/leave?tab=approvals' : '/hrms/leave?tab=my')
+                }
+              >
                 {pendingLeaves > 0 ? 'Review leave requests' : 'Open leave overview'}
               </HrButton>
             </Card>
