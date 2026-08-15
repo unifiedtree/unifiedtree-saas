@@ -66,6 +66,26 @@ interface PageResponse<T> {
  * segments (e.g. {@code /leaves/[id]}) that don't exist on the web SPA. This
  * table maps by category prefix; the sender's route is preferred if it looks
  * web-shaped (starts with "/" and isn't a mobile-only segment).
+ *
+ * <p><b>Route existence guarantee:</b> every route returned by this function
+ * MUST be a real path registered in {@code apps/platform/src/App.tsx}. Earlier
+ * versions of this map returned {@code /me/leaves}, {@code /me/correction},
+ * {@code /me/profile}, {@code /settings/billing} — none of which are
+ * registered, so clicking a notification silently fell through the
+ * {@code <Route path="*">} catch-all and dumped the user on the dashboard.
+ * The set below has been cross-checked against App.tsx as of 2026-08-15.
+ *
+ * <p><b>Who receives which type:</b>
+ * <ul>
+ *   <li>{@code *_SUBMITTED} → the manager whose queue needs to act on it →
+ *       the operations-center page (works for both the manager's approvals
+ *       tab AND the requester's history tab, since these pages are
+ *       role-aware and show the right tab per viewer).</li>
+ *   <li>{@code *_APPROVED} / {@code *_REJECTED} / {@code *_CANCELLED} → the
+ *       employee who submitted → the same operations page (their history
+ *       tab) or, when there's a dedicated employee-self-service page for
+ *       that category (WFH, shift-change), that page.</li>
+ * </ul>
  */
 function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> | null): string | undefined {
   const raw = typeof data?.route === 'string' ? (data.route as string) : undefined
@@ -73,12 +93,32 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   const isMobileShaped = raw ? raw.includes('[') || raw.includes(']') : false
   if (raw && !isMobileShaped) return raw
 
-  if (type.startsWith('LEAVE_')) return '/me/leaves'
-  if (type.startsWith('WFH_')) return '/me/wfh'
-  if (type.startsWith('CORRECTION_')) return '/me/correction'
-  if (type.startsWith('SHIFT_CHANGE_')) return '/me/shift-change'
-  if (type === 'FACE_ENROLLMENT_COMPLETE' || type === 'FACE_ENROLLMENT_FAILED') return '/me/profile'
-  if (type === 'TRIAL_ENDING_SOON' || type === 'TRIAL_EXPIRED' || type === 'SUBSCRIPTION_HALTED') return '/settings/billing'
+  // Leave — the ops-center page handles both approvals (manager view) and
+  // my-leaves (employee view) via role-aware tabs; single route covers both.
+  if (type.startsWith('LEAVE_')) return '/hrms/leave'
+
+  // WFH — approvals are surfaced on the leave ops-center for admins;
+  // employees have their own /me/wfh apply/history page.
+  if (type === 'WFH_APPROVED' || type === 'WFH_REJECTED' || type === 'WFH_CANCELLED') return '/me/wfh'
+  if (type === 'WFH_SUBMITTED') return '/hrms/leave'
+
+  // Attendance corrections — the /hrms/attendance page has both a
+  // 'corrections' tab (manager approvals) and a 'my' tab (employee history).
+  if (type.startsWith('CORRECTION_')) return '/hrms/attendance'
+
+  // Shift change — employees submit + view on /me/shift-change; admins
+  // work the queue from /hrms/shifts (the shifts admin page).
+  if (type === 'SHIFT_CHANGE_APPROVED' || type === 'SHIFT_CHANGE_REJECTED') return '/me/shift-change'
+  if (type === 'SHIFT_CHANGE_SUBMITTED') return '/hrms/shifts'
+
+  // Face enrollment happens on the mobile app; on web the ESS dashboard is
+  // the closest surface to visualise the employee's profile state.
+  if (type === 'FACE_ENROLLMENT_COMPLETE' || type === 'FACE_ENROLLMENT_FAILED') return '/me'
+
+  // Billing / subscription — the workspace admin lands on the /plan page
+  // (the in-workspace plan configurator + autopay setup).
+  if (type === 'TRIAL_ENDING_SOON' || type === 'TRIAL_EXPIRED' || type === 'SUBSCRIPTION_HALTED') return '/plan'
+
   if (type === 'WELCOME') return '/'
   return undefined
 }
