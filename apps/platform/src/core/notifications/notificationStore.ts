@@ -87,11 +87,31 @@ interface PageResponse<T> {
  *       that category (WFH, shift-change), that page.</li>
  * </ul>
  */
+// Known web-route prefixes. Anything the backend puts in {@code data.route}
+// that doesn't start with one of these is presumed to be an Expo-router
+// mobile-only route (e.g. {@code /requests-tab}, {@code /leaves/[id]},
+// {@code /wfh-apply}, {@code /my-corrections}) — cannot resolve on the web SPA
+// and would fall through to the {@code *} catch-all which sends the user to
+// {@code /} → {@code /modules}, which is what we're guarding against here.
+// Order matters only if two prefixes could overlap — none do.
+const WEB_ROUTE_PREFIXES = [
+  '/hrms/', '/me/', '/me', '/settings/', '/settings', '/plan',
+  '/team', '/dashboard', '/analytics', '/audit-logs', '/users',
+  '/roles', '/modules', '/files',
+] as const
+
+function isWebShapedRoute(path: string): boolean {
+  if (path === '/') return true
+  if (path.includes('[') || path.includes(']')) return false // Expo bracket segments
+  return WEB_ROUTE_PREFIXES.some((p) => path === p || path.startsWith(p + '?') || path.startsWith(p + '/') || (p.endsWith('/') && path.startsWith(p)))
+}
+
 function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> | null): string | undefined {
   const raw = typeof data?.route === 'string' ? (data.route as string) : undefined
-  // Mobile routes use bracket segments — {@code /leaves/[id]} — never used on web.
-  const isMobileShaped = raw ? raw.includes('[') || raw.includes(']') : false
-  if (raw && !isMobileShaped) return raw
+  // Prefer the backend-supplied route ONLY if it points at a real web route.
+  // Otherwise it's a mobile-only path (Expo Router shape like /requests-tab
+  // or /leaves/[id]) and we fall through to the category-based web mapping.
+  if (raw && isWebShapedRoute(raw)) return raw
 
   // Leave — the ops-center page handles both approvals (manager view) and
   // my-leaves (employee view). We deep-link straight into the right tab
