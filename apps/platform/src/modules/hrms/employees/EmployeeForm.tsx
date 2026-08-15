@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, ChevronRight, Send, Users } from 'lucide-react'
+import { X, ChevronRight, Send, Users, Pencil } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
 import { useAuthStore } from '@unifiedtree/sdk'
@@ -61,17 +61,19 @@ const DEFAULT_WEEK_OFFS = [6, 7]
 const formatWeekOffs = (days: number[]) =>
   Array.from(new Set(days)).sort((a, b) => a - b).join(',')
 
-type FormStep = 'basic' | 'system' | 'work' | 'identity' | 'bank' | 'address' | 'emergency'
+// 3-step wizard mirrors the Attendance app's staff-onboarding flow exactly —
+// same order, same field grouping. Previous 7-step wizard included System
+// Access / Address / Emergency screens the mobile app never asked for; those
+// belong in an Employee-Detail edit-later flow, not the initial onboarding.
+type FormStep = 'basic' | 'financial' | 'review'
 
 const STEPS: { key: FormStep; label: string }[] = [
-  { key: 'basic', label: 'Basic Info' },
-  { key: 'system', label: 'System Access' },
-  { key: 'work', label: 'Work Info' },
-  { key: 'identity', label: 'Identity' },
-  { key: 'bank', label: 'Bank' },
-  { key: 'address', label: 'Address' },
-  { key: 'emergency', label: 'Emergency' },
+  { key: 'basic', label: 'Basic' },
+  { key: 'financial', label: 'Financial' },
+  { key: 'review', label: 'Review' },
 ]
+
+const EMPLOYMENT_TYPE_ENUM = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'] as const
 
 function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
   return (
@@ -134,14 +136,16 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const [departmentId, setDepartmentId] = useState(employee?.departmentId ?? '')
   const { data: departments = [] } = useDepartments(companyId)
   const { data: designations = [] } = useDesignations(companyId, departmentId || undefined)
-  const { data: branches = [] } = useBranches(companyId)
-  const { data: grades = [] } = useGrades(companyId)
+  // Branches / grades / templates are still loaded so the underlying org hooks
+  // continue to warm the react-query cache used elsewhere in the app; the 3-step
+  // wizard just doesn't surface them anymore (mobile parity).
+  const { data: _branches = [] } = useBranches(companyId)
+  const { data: _grades = [] } = useGrades(companyId)
   const { data: employmentTypes = [] } = useEmploymentTypes(companyId)
   const { data: shifts = [] } = useShifts(companyId)
   const { data: geofenceZones = [] } = useGeofenceZones()
-  const { data: templates = [] } = useTemplates(companyId || undefined)
-  const { data: managerPage } = useEmployeeDirectory({ companyId: companyId || undefined, pageSize: 200 })
-  const managers = (managerPage?.content ?? []).filter((m) => m.id !== employee?.id)
+  const { data: _templates = [] } = useTemplates(companyId || undefined)
+  const { data: _managerPage } = useEmployeeDirectory({ companyId: companyId || undefined, pageSize: 200 })
 
   // Pre-fill Employee Code with the next auto-generated value from HR config
   // whenever we're adding a NEW employee under a selected company. Field
@@ -150,45 +154,39 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
 
   const [step, setStep] = useState<FormStep>('basic')
   const [form, setForm] = useState({
+    // ── Basic ─────────────────────────────────────────────────────────────
     firstName: employee?.firstName ?? '',
-    middleName: employee?.middleName ?? '',
     lastName: employee?.lastName ?? '',
     email: employee?.email ?? '',
     phone: employee?.phone ?? '',
-    dateOfBirth: employee?.dateOfBirth ?? '',
     // Defaulting gender to MALE matches the mobile onboarding form so the two
     // clients don't disagree on the initial value shown to the HR admin.
     gender: employee?.gender ?? (isEdit ? '' : 'MALE'),
+    dateOfBirth: employee?.dateOfBirth ?? '',
     employeeCode: employee?.employeeCode ?? '',
-    // work
-    designationId: employee?.designationId ?? '',
-    branchId: employee?.branchId ?? '',
-    reportingManagerId: employee?.reportingManagerId ?? '',
-    employmentType: employee?.employmentType ?? 'FULL_TIME',
-    gradeId: '',
-    shiftId: '',
-    geoFenceZoneId: '',
-    workLocation: '',
     // Prefill DOJ with today so the field lands with a valid value the way
     // it does in the mobile onboarding form. Edit mode keeps whatever the
     // employee row actually has.
     dateOfJoining: employee?.dateOfJoining ?? (isEdit ? '' : todayLocalIso()),
+    // Designation: dropdown when the tenant has designations configured, free
+    // text otherwise. We store both — designationId wins if set, else the
+    // free-text value is sent as `designation` (mobile-parity payload key).
+    designationId: employee?.designationId ?? '',
+    designationText: '',
+    geoFenceZoneId: '',
+    shiftId: '',
+    // ── Financial ─────────────────────────────────────────────────────────
     salaryFrequency: 'MONTHLY',
     monthlySalary: '',
-    ctcAnnual: employee?.ctcAnnual ? String(employee.ctcAnnual) : '',
-    // identity
-    panNumber: '', aadhaarNumber: '', uanNumber: '', passportNumber: '',
-    // bank
-    bankName: '', bankAccountNumber: '', bankIfsc: '',
-    // address
-    currentAddressLine: '', currentAddressCity: '', currentAddressState: '', currentAddressPincode: '',
-    // emergency
-    emergencyContactName: '', emergencyContactRelation: '', emergencyContactPhone: '',
-    // onboarding
-    onboardingTemplateId: '',
-    // system access
-    systemAccess: true,
-    systemRole: 'EMPLOYEE',
+    employmentType: employee?.employmentType ?? 'FULL_TIME',
+    panNumber: '',
+    aadhaarNumber: '',
+    uanNumber: '',
+    esiNumber: '',
+    bankAccountNumber: '',
+    bankIfsc: '',
+    bankName: '',
+    bankBranchName: '',
   })
   // Weekly off days kept as an ISO-day array so the chip UI can toggle
   // membership cheaply; serialised to CSV ("6,7") on submit to match the
@@ -220,6 +218,124 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextCodePreview?.preview])
 
+  // When the selected company changes, clear the previously-suggested employee
+  // code and department so the next company's format / list is picked up.
+  const prevCompanyRef = React.useRef(companyId)
+  React.useEffect(() => {
+    if (isEdit) { prevCompanyRef.current = companyId; return }
+    if (prevCompanyRef.current && prevCompanyRef.current !== companyId) {
+      setForm((p) => ({ ...p, employeeCode: '' }))
+      setDepartmentId('')
+      autoFilledCodeRef.current = null
+    }
+    prevCompanyRef.current = companyId
+  }, [companyId, isEdit])
+
+  // Whether the designation field is in dropdown mode (list has ≥1 item) or
+  // free-text mode (tenant has no designations configured yet — mobile parity
+  // path so a fresh tenant can onboard without visiting Organization first).
+  const useDesignationFreeText = designations.length === 0
+
+  // ─── Per-step validation ──────────────────────────────────────────────────
+  // Split so Next can validate only the current step, while Submit
+  // re-validates every required field across both.
+  const validateBasic = (): Record<string, string> => {
+    const errs: Record<string, string> = {}
+    if (!isEdit && !companyId) {
+      errs.companyId = 'Select a company — create one in Organization → Companies first'
+    }
+    if (!form.firstName.trim()) errs.firstName = 'First name is required'
+    if (!form.email.trim()) {
+      errs.email = 'Work email is required'
+    } else if (!RX.email.test(form.email.trim())) {
+      errs.email = 'Enter a valid email address'
+    }
+    const phoneClean = stripWs(form.phone)
+    if (!phoneClean) {
+      errs.phone = 'Phone is required (used for mobile app login)'
+    } else if (!RX.phone.test(phoneClean)) {
+      errs.phone = 'Enter a valid phone number (10–15 digits, optional + prefix)'
+    }
+    // Designation is required — either a picked designationId or free-text
+    // value depending on which mode is active.
+    if (useDesignationFreeText) {
+      if (!form.designationText.trim()) errs.designationText = 'Designation is required'
+    } else if (!form.designationId) {
+      errs.designationId = 'Select a designation'
+    }
+    if (!departmentId) errs.departmentId = 'Select a department'
+    if (!form.employeeCode.trim()) errs.employeeCode = 'Employee code is required'
+    if (!form.dateOfJoining) errs.dateOfJoining = 'Date of joining is required'
+    if (!form.dateOfBirth) errs.dateOfBirth = 'Date of birth is required'
+    return errs
+  }
+
+  const validateFinancial = (): Record<string, string> => {
+    const errs: Record<string, string> = {}
+    if (!form.salaryFrequency) errs.salaryFrequency = 'Salary frequency is required'
+    if (!form.panNumber.trim()) {
+      errs.panNumber = 'PAN is required'
+    } else if (!RX.pan.test(form.panNumber.toUpperCase())) {
+      errs.panNumber = 'PAN must be 5 letters + 4 digits + 1 letter (e.g. ABCDE1234F)'
+    }
+    if (!form.aadhaarNumber.trim()) {
+      errs.aadhaarNumber = 'Aadhaar is required'
+    } else if (!RX.aadhaar.test(stripWs(form.aadhaarNumber))) {
+      errs.aadhaarNumber = 'Aadhaar must be 12 digits'
+    }
+    if (!form.uanNumber.trim()) {
+      errs.uanNumber = 'UAN is required'
+    } else if (!RX.uan.test(stripWs(form.uanNumber))) {
+      errs.uanNumber = 'UAN must be 12 digits'
+    }
+    if (!form.esiNumber.trim()) {
+      errs.esiNumber = 'ESI is required'
+    } else if (!RX.esi.test(stripWs(form.esiNumber))) {
+      errs.esiNumber = 'ESI must be 10–17 digits'
+    }
+    if (!form.bankAccountNumber.trim()) {
+      errs.bankAccountNumber = 'Bank account number is required'
+    } else if (!RX.bankAccount.test(stripWs(form.bankAccountNumber))) {
+      errs.bankAccountNumber = 'Account number must be 9–18 digits'
+    }
+    if (!form.bankIfsc.trim()) {
+      errs.bankIfsc = 'IFSC is required'
+    } else if (!RX.ifsc.test(form.bankIfsc.toUpperCase())) {
+      errs.bankIfsc = 'IFSC must be 4 letters + 0 + 6 alphanum (e.g. HDFC0001234)'
+    }
+    return errs
+  }
+
+  // Jump the admin to the step that contains their earliest error.
+  const stepForErrors = (errs: Record<string, string>): FormStep => {
+    const basicKeys = ['companyId', 'firstName', 'email', 'phone', 'designationId', 'designationText', 'departmentId', 'employeeCode', 'dateOfJoining', 'dateOfBirth']
+    if (basicKeys.some((k) => errs[k])) return 'basic'
+    return 'financial'
+  }
+
+  const handleNext = () => {
+    if (step === 'basic') {
+      const errs = validateBasic()
+      if (Object.keys(errs).length > 0) { setErrors(errs); return }
+      setErrors({})
+      setStep('financial')
+      return
+    }
+    if (step === 'financial') {
+      const errs = validateFinancial()
+      if (Object.keys(errs).length > 0) { setErrors(errs); return }
+      setErrors({})
+      // In edit mode there is no review step — Next on Financial submits.
+      if (isEdit) { void handleSubmit(); return }
+      setStep('review')
+    }
+  }
+
+  const handleBack = () => {
+    if (step === 'review') setStep('financial')
+    else if (step === 'financial') setStep('basic')
+  }
+
   const handleSubmit = async () => {
     if (createEmp.isPending || updateEmp.isPending) return
 
@@ -232,78 +348,37 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
       return
     }
 
-    const errs: Record<string, string> = {}
-    // -- Basic step ---------------------------------------------------------
-    if (!form.firstName.trim()) errs.firstName = 'First name is required'
-    if (!form.email.trim()) {
-      errs.email = 'Work email is required'
-    } else if (!RX.email.test(form.email.trim())) {
-      errs.email = 'Enter a valid email address'
-    }
-    // Phone is required — mobile logs in by phone number, so a missing phone
-    // means the employee cannot use the Attendance app at all.
-    const phoneClean = stripWs(form.phone)
-    if (!phoneClean) {
-      errs.phone = 'Phone is required (used for mobile app login)'
-    } else if (!RX.phone.test(phoneClean)) {
-      errs.phone = 'Enter a valid phone number (10–15 digits, optional + prefix)'
-    }
-    if (!isEdit && !companyId) errs.companyId = 'Select a company — create one in Organization → Companies first'
-    // -- Work step ----------------------------------------------------------
-    if (!isEdit && !form.branchId) errs.branchId = 'Select a Punch Location so the employee can clock in'
-    if (!form.salaryFrequency) errs.salaryFrequency = 'Salary frequency is required'
-    // -- Identity step (all optional, but validate if provided) --------------
-    if (form.panNumber && !RX.pan.test(form.panNumber.toUpperCase()))
-      errs.panNumber = 'PAN must be 5 letters + 4 digits + 1 letter (e.g. ABCDE1234F)'
-    if (form.aadhaarNumber && !RX.aadhaar.test(stripWs(form.aadhaarNumber)))
-      errs.aadhaarNumber = 'Aadhaar must be 12 digits'
-    if (form.uanNumber && !RX.uan.test(stripWs(form.uanNumber)))
-      errs.uanNumber = 'UAN must be 12 digits'
-    // -- Bank step ----------------------------------------------------------
-    if (form.bankAccountNumber && !RX.bankAccount.test(stripWs(form.bankAccountNumber)))
-      errs.bankAccountNumber = 'Account number must be 9–18 digits'
-    if (form.bankIfsc && !RX.ifsc.test(form.bankIfsc.toUpperCase()))
-      errs.bankIfsc = 'IFSC must be 4 letters + 0 + 6 alphanum (e.g. HDFC0001234)'
-
+    const basicErrs = validateBasic()
+    const financialErrs = validateFinancial()
+    const errs = { ...basicErrs, ...financialErrs }
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
-      // Jump to the first step that contains an error. Order matches the
-      // wizard's step order so the admin lands on the earliest problem.
-      if (errs.firstName || errs.email || errs.phone || errs.companyId) setStep('basic')
-      else if (errs.branchId || errs.salaryFrequency) setStep('work')
-      else if (errs.panNumber || errs.aadhaarNumber || errs.uanNumber) setStep('identity')
-      else if (errs.bankAccountNumber || errs.bankIfsc) setStep('bank')
+      setStep(stepForErrors(errs))
       return
     }
     setErrors({})
 
-    // Derive ctcAnnual from monthlySalary when the admin filled the monthly
-    // figure. If they already typed a CTC directly, that wins — don't stomp
-    // on an explicit override.
+    const phoneClean = stripWs(form.phone)
+
+    // Derive ctcAnnual from monthlySalary if the admin filled it — mobile
+    // parity, so the two clients compute the same yearly figure.
     const monthly = form.monthlySalary ? parseFloat(form.monthlySalary) : undefined
-    const ctc = form.ctcAnnual
-      ? parseFloat(form.ctcAnnual)
-      : monthly !== undefined && !Number.isNaN(monthly)
-      ? monthly * 12
-      : undefined
+    const ctc = monthly !== undefined && !Number.isNaN(monthly) ? monthly * 12 : undefined
     try {
       if (isEdit) {
         const result = await updateEmp.mutateAsync({
           id: employee.id,
           data: {
             firstName: form.firstName,
-            middleName: form.middleName || undefined,
             lastName: form.lastName || undefined,
             email: form.email,
-            phone: form.phone || undefined,
+            phone: phoneClean || undefined,
             dateOfBirth: form.dateOfBirth || undefined,
             gender: (form.gender as WorkforceEmployee['gender']) || undefined,
             departmentId: departmentId || undefined,
             designationId: form.designationId || undefined,
-            branchId: form.branchId || undefined,
-            reportingManagerId: form.reportingManagerId || undefined,
             employmentType: form.employmentType as WorkforceEmployee['employmentType'],
-            ctcAnnual: form.ctcAnnual ? parseFloat(form.ctcAnnual) : undefined,
+            ctcAnnual: ctc,
           },
         })
         toast('Employee updated', 'success')
@@ -321,40 +396,37 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           companyId,
           employeeCode: codeToSend,
           firstName: form.firstName,
-          middleName: form.middleName || undefined,
           lastName: form.lastName || undefined,
           email: form.email,
           phone: phoneClean || undefined,
           dateOfBirth: form.dateOfBirth || undefined,
           gender: form.gender as WorkforceEmployee['gender'] || undefined,
           departmentId: departmentId || undefined,
-          designationId: form.designationId || undefined,
-          branchId: form.branchId || undefined,
+          // Send whichever designation representation the admin used —
+          // designationId when a lookup exists, else the free-text string.
+          designationId: !useDesignationFreeText && form.designationId ? form.designationId : undefined,
+          designation: useDesignationFreeText && form.designationText.trim()
+            ? form.designationText.trim()
+            : undefined,
           geoFenceZoneId: form.geoFenceZoneId || undefined,
           weeklyOffDays: weeklyOffDays.length ? formatWeekOffs(weeklyOffDays) : undefined,
-          reportingManagerId: form.reportingManagerId || undefined,
           employmentType: form.employmentType as WorkforceEmployee['employmentType'],
           dateOfJoining: form.dateOfJoining || undefined,
           salaryFrequency: form.salaryFrequency || undefined,
           monthlySalary: monthly !== undefined && !Number.isNaN(monthly) ? monthly : undefined,
           ctcAnnual: ctc,
-          workLocation: form.workLocation.trim() || undefined,
           panNumber: form.panNumber ? form.panNumber.toUpperCase() : undefined,
           aadhaarNumber: form.aadhaarNumber ? stripWs(form.aadhaarNumber) : undefined,
           uanNumber: form.uanNumber ? stripWs(form.uanNumber) : undefined,
-          passportNumber: form.passportNumber || undefined,
+          esiNumber: form.esiNumber ? stripWs(form.esiNumber) : undefined,
           bankName: form.bankName || undefined,
+          bankBranchName: form.bankBranchName || undefined,
           bankAccountNumber: form.bankAccountNumber ? stripWs(form.bankAccountNumber) : undefined,
           bankIfsc: form.bankIfsc ? form.bankIfsc.toUpperCase() : undefined,
-          currentAddressLine: form.currentAddressLine || undefined,
-          currentAddressCity: form.currentAddressCity || undefined,
-          currentAddressState: form.currentAddressState || undefined,
-          currentAddressPincode: form.currentAddressPincode || undefined,
-          emergencyContactName: form.emergencyContactName || undefined,
-          emergencyContactRelation: form.emergencyContactRelation || undefined,
-          emergencyContactPhone: form.emergencyContactPhone || undefined,
-          onboardingTemplateId: form.onboardingTemplateId || undefined,
-          roleCode: form.systemRole || 'EMPLOYEE',
+          // Backend still requires roleCode on create; the mobile-parity
+          // wizard drops the picker and provisions everyone as EMPLOYEE.
+          // Admins upgrade access via Users & Access after onboarding.
+          roleCode: 'EMPLOYEE',
         }
         let result: WorkforceEmployee
         try {
@@ -398,15 +470,15 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
             result = recovered
           } else if (looksLikeDuplicate && /email/i.test(message)) {
             // Real collision on email — surface as a field error and jump
-            // the admin back to Basic Info where they can fix it.
+            // the admin back to Basic where they can fix it.
             setErrors((p) => ({ ...p, email: 'That email is already in use for this company.' }))
             setStep('basic')
             return
           } else if (looksLikeDuplicate) {
-            // Real collision on employee code — same treatment, on the Work
-            // step where the code field lives.
+            // Real collision on employee code — Basic step is where the
+            // code field now lives.
             setErrors((p) => ({ ...p, employeeCode: 'That employee code is already in use.' }))
-            setStep('work')
+            setStep('basic')
             return
           } else {
             throw createErr
@@ -454,13 +526,15 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   }
 
   const isPending = createEmp.isPending || updateEmp.isPending
-  // The update API persists ONLY Basic + Work fields. Identity/Bank/Address/Emergency
-  // are managed via the employee's profile tabs (separate endpoints), and System Access
-  // (role + invite) is create-only. Showing those steps on edit silently dropped data,
-  // so in edit mode we restrict the wizard to the steps the update actually saves.
-  const visibleSteps = isEdit ? STEPS.filter((s) => s.key === 'basic' || s.key === 'work') : STEPS
+  // Edit mode skips Review — update payload persists only a subset of fields,
+  // and asking for a "review + send invitation" pass on an existing employee
+  // is nonsense. Two-step Basic → Financial with a Save button on Financial.
+  const visibleSteps = isEdit ? STEPS.filter((s) => s.key !== 'review') : STEPS
   const stepIdx = Math.max(0, visibleSteps.findIndex((s) => s.key === step))
   const isLastStep = stepIdx === visibleSteps.length - 1
+  // Review does its own submit button — the footer keeps a plain Back on that
+  // screen. On earlier steps the footer's primary button is Next.
+  const isReviewStep = step === 'review'
 
   // Out of seats. Replaces the form rather than sitting behind it: the answer
   // is never "try again", it is either buy a seat or ask someone who can.
@@ -502,6 +576,36 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     )
   }
 
+  // ── Review lookups ────────────────────────────────────────────────────────
+  const dash = (v?: string) => (v && v.trim() ? v : '—')
+  const companyName = companies.find((c) => c.id === companyId)?.name ?? '—'
+  const departmentName = departments.find((d) => d.id === departmentId)?.name ?? '—'
+  const designationLabel = useDesignationFreeText
+    ? dash(form.designationText)
+    : (designations.find((d) => d.id === form.designationId)?.title ?? '—')
+  const zoneName = form.geoFenceZoneId
+    ? (geofenceZones.find((z) => z.id === form.geoFenceZoneId)?.name ?? '—')
+    : 'No specific zone'
+  const shiftName = form.shiftId
+    ? (shifts.find((sh) => sh.id === form.shiftId)?.name ?? '—')
+    : 'Default (9:30 AM)'
+  const weekOffLabel = weeklyOffDays.length === 0
+    ? 'None'
+    : weeklyOffDays
+        .slice().sort((a, b) => a - b)
+        .map((iso) => WEEK_DAYS.find((d) => d.iso === iso)?.short ?? '')
+        .filter(Boolean)
+        .join(', ')
+  const genderLabel = form.gender
+    ? form.gender.charAt(0) + form.gender.slice(1).toLowerCase().replace(/_/g, ' ')
+    : '—'
+  const salaryLabel = form.monthlySalary
+    ? `₹${Number(form.monthlySalary).toLocaleString('en-IN')}`
+    : '—'
+  const empTypeLabel = form.employmentType
+    ? form.employmentType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+    : '—'
+
   return (
     <>
       <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -512,7 +616,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg hover:bg-white/5"><X size={16} /></button>
         </div>
 
-        {/* Step pills */}
+        {/* Step pills — 3 dots (2 in edit) mirroring the mobile stepper */}
         <div className="flex gap-1 px-5 py-3 border-b border-border overflow-x-auto scrollbar-hide">
           {visibleSteps.map((s, i) => (
             <button
@@ -532,166 +636,116 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {step === 'basic' && (
             <>
-              {!isEdit && (
-                companies.length === 0 ? (
-                  <div className={`rounded-xl border px-4 py-3 text-sm ${errors.companyId ? 'border-red-400 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
-                    No company exists yet. Create one in <span className="font-semibold">Organization → Companies</span> before adding employees.
-                    {errors.companyId && <p className="mt-1 font-semibold text-red-600">{errors.companyId}</p>}
-                  </div>
-                ) : (
-                  <Field label="Company" required error={errors.companyId}>
-                    <Sel error={!!errors.companyId} value={companyId} onChange={(e) => { setCompanyId(e.target.value); setErrors(p => ({ ...p, companyId: '' })) }}>
-                      {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </Sel>
-                  </Field>
-                )
+              {!isEdit && companies.length > 1 && (
+                <Field label="Company" required error={errors.companyId}>
+                  <Sel error={!!errors.companyId} value={companyId} onChange={(e) => { setCompanyId(e.target.value); setErrors(p => ({ ...p, companyId: '' })) }}>
+                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </Sel>
+                </Field>
               )}
+              {!isEdit && companies.length === 0 && (
+                <div className={`rounded-xl border px-4 py-3 text-sm ${errors.companyId ? 'border-red-400 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+                  No company exists yet. Create one in <span className="font-semibold">Organization → Companies</span> before adding employees.
+                  {errors.companyId && <p className="mt-1 font-semibold text-red-600">{errors.companyId}</p>}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="First Name" required error={errors.firstName}><Input error={!!errors.firstName} value={form.firstName} onChange={(e) => set('firstName', e.target.value)} placeholder="First name" /></Field>
-                <Field label="Last Name"><Input value={form.lastName} onChange={(e) => set('lastName', e.target.value)} placeholder="Last name" /></Field>
+                <Field label="First Name" required error={errors.firstName}>
+                  <Input error={!!errors.firstName} value={form.firstName} onChange={(e) => set('firstName', e.target.value)} placeholder="First name" />
+                </Field>
+                <Field label="Last Name">
+                  <Input value={form.lastName} onChange={(e) => set('lastName', e.target.value)} placeholder="Last name" />
+                </Field>
               </div>
-              <Field label="Middle Name"><Input value={form.middleName} onChange={(e) => set('middleName', e.target.value)} placeholder="Middle name" /></Field>
-              <Field label="Work Email" required error={errors.email}><Input error={!!errors.email} type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="employee@company.com" /></Field>
+
+              <Field label="Work Email" required error={errors.email}>
+                <Input error={!!errors.email} type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="employee@company.com" />
+              </Field>
               <Field label="Phone" required error={errors.phone}>
                 <Input error={!!errors.phone} type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+91 9876543210" />
               </Field>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Date of Birth"><Input type="date" value={form.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} /></Field>
-                <Field label="Gender">
-                  <Sel value={form.gender} onChange={(e) => set('gender', e.target.value)}>
-                    <option value="">Select</option>
-                    <option value="MALE">Male</option>
-                    <option value="FEMALE">Female</option>
-                    <option value="OTHER">Other</option>
-                    <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+
+              <Field label="Designation" required error={errors.designationId || errors.designationText}>
+                {useDesignationFreeText ? (
+                  <>
+                    <Input
+                      error={!!errors.designationText}
+                      value={form.designationText}
+                      onChange={(e) => set('designationText', e.target.value)}
+                      placeholder="e.g. Software Engineer"
+                    />
+                    <p className="mt-1 text-xs text-text-secondary">
+                      No designations configured yet. You can pick from a list once you add some under Organization → Designations.
+                    </p>
+                  </>
+                ) : (
+                  <Sel error={!!errors.designationId} value={form.designationId} onChange={(e) => set('designationId', e.target.value)}>
+                    <option value="">Select designation</option>
+                    {designations.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
                   </Sel>
-                </Field>
-              </div>
-            </>
-          )}
-
-          {step === 'system' && (
-            <div className="space-y-6">
-              {/* A workspace login account is always provisioned on create (the backend
-                  sends a roleCode unconditionally), so the role is always required.
-                  The old "Enable System Access" toggle was a no-op and was removed. */}
-              <div className="p-4 bg-bg-base border border-border-default rounded-xl">
-                <h4 className="text-sm font-semibold text-text-primary">System Access</h4>
-                <p className="text-xs text-text-tertiary mt-0.5">A workspace login account is created for this employee. Choose their access level below.</p>
-              </div>
-
-              <Field label="Workspace Role" required>
-                <Sel value={form.systemRole} onChange={(e) => set('systemRole', e.target.value)}>
-                  <option value="EMPLOYEE">Employee (Self-service only)</option>
-                  <option value="DEPT_MANAGER">Dept Manager (Approve team leaves)</option>
-                  <option value="HR_MANAGER">HR Manager (Full HR access)</option>
-                  <option value="FINANCE_LEAD">Finance Lead (Payroll &amp; reports)</option>
-                  <option value="SUPER_ADMIN">Super Admin (Full access)</option>
-                </Sel>
+                )}
               </Field>
-              <p className="mt-3 text-xs bg-[#ECFDF5] text-[#047857] p-3 rounded-lg border border-[#6EE7B7]">
-                An invitation email will be sent to <strong>{form.email || 'the employee'}</strong> (when "Send invitation" is enabled) so they can set their password.
-              </p>
-            </div>
-          )}
 
-          {step === 'work' && (
-            <>
-              {!isEdit && (
-                <Field label="Employee ID" error={errors.employeeCode}>
-                  <Input
-                    error={!!errors.employeeCode}
-                    value={form.employeeCode}
-                    onChange={(e) => set('employeeCode', e.target.value)}
-                    placeholder={nextCodePreview?.preview ?? 'Auto-generated on save'}
-                  />
-                </Field>
-              )}
-              <Field label="Department">
-                <Sel value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
-                  <option value="">Select department</option>
+              <Field label="Department" required error={errors.departmentId}>
+                <Sel
+                  error={!!errors.departmentId}
+                  value={departmentId}
+                  onChange={(e) => { setDepartmentId(e.target.value); setErrors(p => ({ ...p, departmentId: '' })) }}
+                >
+                  <option value="">
+                    {departments.length === 0 ? 'No departments — create one in Organization first' : 'Select department'}
+                  </option>
                   {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </Sel>
               </Field>
-              <Field label="Designation">
-                <Sel value={form.designationId} onChange={(e) => set('designationId', e.target.value)}>
-                  <option value="">Select designation</option>
-                  {designations.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
+
+              <Field label="Employee Code" required error={errors.employeeCode}>
+                <Input
+                  error={!!errors.employeeCode}
+                  value={form.employeeCode}
+                  onChange={(e) => set('employeeCode', e.target.value)}
+                  placeholder={nextCodePreview?.preview ?? 'e.g. EMP-1024'}
+                />
+              </Field>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Date of Joining" required error={errors.dateOfJoining}>
+                  <Input error={!!errors.dateOfJoining} type="date" value={form.dateOfJoining} onChange={(e) => set('dateOfJoining', e.target.value)} />
+                </Field>
+                <Field label="Date of Birth" required error={errors.dateOfBirth}>
+                  <Input error={!!errors.dateOfBirth} type="date" value={form.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} />
+                </Field>
+              </div>
+
+              <Field label="Gender">
+                <Sel value={form.gender} onChange={(e) => set('gender', e.target.value)}>
+                  <option value="">Select</option>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                  <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
                 </Sel>
               </Field>
-              <Field label="Reporting Manager">
-                <Sel value={form.reportingManagerId} onChange={(e) => set('reportingManagerId', e.target.value)}>
-                  <option value="">{managers.length === 0 ? 'No other employees yet — leave routes to dept head / HR' : 'Select manager (optional)'}</option>
-                  {managers.map((m) => (
-                    <option key={m.id} value={m.id}>{[m.firstName, m.lastName].filter(Boolean).join(' ')}{m.employeeCode ? ` (${m.employeeCode})` : ''}</option>
-                  ))}
-                </Sel>
-                <p className="mt-1 text-xs text-text-secondary">Leave requests route here for approval. If unset, the department head (or HR) approves.</p>
-              </Field>
-              <Field label="Work Location">
-                <Input value={form.workLocation} onChange={(e) => set('workLocation', e.target.value)} placeholder="e.g. Hyderabad" />
-              </Field>
-              <Field label="Punch Location (Branch)" required={!isEdit} error={errors.branchId}>
-                <Sel error={!!errors.branchId} value={form.branchId} onChange={(e) => set('branchId', e.target.value)}>
+
+              <Field label="Geofence Zone (Punch)">
+                <Sel value={form.geoFenceZoneId} onChange={(e) => set('geoFenceZoneId', e.target.value)}>
                   <option value="">
-                    {branches.length === 0 ? 'No branches configured — set up in Organization' : 'Select branch'}
+                    {geofenceZones.length === 0 ? 'No zones configured — set up in Attendance' : 'No specific zone'}
                   </option>
-                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  {geofenceZones.filter((z) => z.active).map((z) => (
+                    <option key={z.id} value={z.id}>{z.name}</option>
+                  ))}
                 </Sel>
                 <p className="mt-1 text-xs text-text-secondary">
-                  Employees can only punch in from inside this branch&rsquo;s geofence — outside-zone punches are blocked.
-                  {branches.length === 0 && (
-                    <> Add branches under <a href="/hrms/organization" className="text-primary hover:underline">Organization &rarr; Branches</a>.</>
-                  )}
+                  Optional — when set, the employee can only punch in from inside this zone.
                 </p>
               </Field>
-              <Field label="Employment Type">
-                {/* Only org types whose code is a real backend enum value are offered —
-                    the API field is a fixed enum, so a custom/lookup code (or a UUID
-                    fallback) would 400 at deserialization. */}
-                {employmentTypes.filter((t) => t.active && t.code && ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT'].includes(t.code)).length > 0 ? (
-                  <Sel value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)}>
-                    <option value="">Select type</option>
-                    {employmentTypes
-                      .filter((t) => t.active && t.code && ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT'].includes(t.code))
-                      .map((t) => (
-                        <option key={t.id} value={t.code!}>{t.name}</option>
-                      ))}
-                  </Sel>
-                ) : (
-                  <>
-                    <Sel value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)}>
-                      <option value="FULL_TIME">Full Time</option>
-                      <option value="PART_TIME">Part Time</option>
-                      <option value="CONTRACT">Contract</option>
-                      <option value="INTERN">Intern</option>
-                      <option value="CONSULTANT">Consultant</option>
-                    </Sel>
-                    <p className="mt-1 text-xs text-text-secondary">
-                      Using defaults — add custom types under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Employment Types</a>
-                    </p>
-                  </>
-                )}
-              </Field>
-              <Field label="Grade">
-                <Sel value={form.gradeId} onChange={(e) => set('gradeId', e.target.value)}>
-                  <option value="">
-                    {grades.length === 0 ? 'No grades configured — set up in Organization' : 'Select grade'}
-                  </option>
-                  {grades.filter((g) => g.active).map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}{g.code ? ` (${g.code})` : ''}</option>
-                  ))}
-                </Sel>
-                {grades.length === 0 && (
-                  <p className="mt-1 text-xs text-text-secondary">
-                    Add grades under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Grades</a>
-                  </p>
-                )}
-              </Field>
+
               <Field label="Shift">
                 <Sel value={form.shiftId} onChange={(e) => set('shiftId', e.target.value)}>
                   <option value="">
-                    {shifts.length === 0 ? 'No shifts configured — set up in Organization' : 'Select shift'}
+                    {shifts.length === 0 ? 'No shifts configured — set up in Organization' : 'Default (9:30 AM)'}
                   </option>
                   {shifts.filter((s) => s.active).map((s) => (
                     <option key={s.id} value={s.id}>
@@ -699,12 +753,8 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     </option>
                   ))}
                 </Sel>
-                {shifts.length === 0 && (
-                  <p className="mt-1 text-xs text-text-secondary">
-                    Add shifts under <a href="/hrms/organization" className="text-primary hover:underline">Organization → Shifts</a>
-                  </p>
-                )}
               </Field>
+
               <Field label="Weekly Off Days">
                 {/* ISO day chips (1=Mon..7=Sun). Serialized to CSV on submit to
                     match backend column shape. Drives this employee's attendance
@@ -731,31 +781,12 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </div>
                 <p className="mt-1 text-xs text-text-secondary">Defaults to Sat + Sun. Tap to toggle.</p>
               </Field>
-              <Field label="Geofence Zone (Punch)">
-                <Sel value={form.geoFenceZoneId} onChange={(e) => set('geoFenceZoneId', e.target.value)}>
-                  <option value="">
-                    {geofenceZones.length === 0 ? 'No zones configured — set up in Attendance' : 'No specific zone'}
-                  </option>
-                  {geofenceZones.filter((z) => z.active).map((z) => (
-                    <option key={z.id} value={z.id}>{z.name}</option>
-                  ))}
-                </Sel>
-                <p className="mt-1 text-xs text-text-secondary">
-                  Optional — when set, the employee can only punch in from inside this zone.
-                </p>
-              </Field>
-              {!isEdit && (
-                <Field label="Onboarding Template">
-                  <Sel value={form.onboardingTemplateId} onChange={(e) => set('onboardingTemplateId', e.target.value)}>
-                    <option value="">No onboarding checklist</option>
-                    {templates.filter((t) => t.active).map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </Sel>
-                </Field>
-              )}
+            </>
+          )}
+
+          {step === 'financial' && (
+            <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Date of Joining"><Input type="date" value={form.dateOfJoining} onChange={(e) => set('dateOfJoining', e.target.value)} /></Field>
                 <Field label="Salary Frequency" required error={errors.salaryFrequency}>
                   <Sel error={!!errors.salaryFrequency} value={form.salaryFrequency} onChange={(e) => set('salaryFrequency', e.target.value)}>
                     <option value="MONTHLY">Monthly</option>
@@ -763,9 +794,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     <option value="DAILY">Daily</option>
                   </Sel>
                 </Field>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Monthly Salary">
+                <Field label="Monthly Salary (₹)">
                   <Input
                     type="number"
                     value={form.monthlySalary}
@@ -773,89 +802,115 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     placeholder="e.g. 50000"
                   />
                 </Field>
-                <Field label="CTC (Annual)">
-                  <Input
-                    type="number"
-                    value={form.ctcAnnual}
-                    onChange={(e) => set('ctcAnnual', e.target.value)}
-                    placeholder={form.monthlySalary ? `Auto: ${Number(form.monthlySalary) * 12}` : 'e.g. 600000'}
-                  />
-                </Field>
               </div>
-              <p className="text-xs text-text-secondary -mt-2">
-                Leave CTC blank to auto-derive it as monthly × 12.
-              </p>
-            </>
-          )}
 
-          {step === 'identity' && (
-            <>
-              <Field label="PAN Number" error={errors.panNumber}>
+              <Field label="Employment Type">
+                {/* Only org types whose code is a real backend enum value are offered —
+                    the API field is a fixed enum, so a custom/lookup code (or a UUID
+                    fallback) would 400 at deserialization. Mobile parity: hardcode
+                    the 4 canonical types when no org lookup exists. */}
+                {employmentTypes.filter((t) => t.active && t.code && (EMPLOYMENT_TYPE_ENUM as readonly string[]).includes(t.code)).length > 0 ? (
+                  <Sel value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)}>
+                    {employmentTypes
+                      .filter((t) => t.active && t.code && (EMPLOYMENT_TYPE_ENUM as readonly string[]).includes(t.code))
+                      .map((t) => (
+                        <option key={t.id} value={t.code!}>{t.name}</option>
+                      ))}
+                  </Sel>
+                ) : (
+                  <Sel value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)}>
+                    <option value="FULL_TIME">Full Time</option>
+                    <option value="PART_TIME">Part Time</option>
+                    <option value="CONTRACT">Contract</option>
+                    <option value="INTERN">Intern</option>
+                  </Sel>
+                )}
+              </Field>
+
+              <Field label="PAN Number" required error={errors.panNumber}>
                 <Input error={!!errors.panNumber} value={form.panNumber} onChange={(e) => set('panNumber', e.target.value.toUpperCase())} placeholder="ABCDE1234F" />
               </Field>
-              <Field label="Aadhaar Number" error={errors.aadhaarNumber}>
+              <Field label="Aadhaar Number" required error={errors.aadhaarNumber}>
                 <Input error={!!errors.aadhaarNumber} value={form.aadhaarNumber} onChange={(e) => set('aadhaarNumber', e.target.value)} placeholder="1234 5678 9012" />
               </Field>
-              <Field label="UAN Number" error={errors.uanNumber}>
-                <Input error={!!errors.uanNumber} value={form.uanNumber} onChange={(e) => set('uanNumber', e.target.value)} placeholder="12-digit UAN (optional)" />
+              <Field label="UAN Number" required error={errors.uanNumber}>
+                <Input error={!!errors.uanNumber} value={form.uanNumber} onChange={(e) => set('uanNumber', e.target.value)} placeholder="12-digit UAN" />
               </Field>
-              <Field label="Passport Number"><Input value={form.passportNumber} onChange={(e) => set('passportNumber', e.target.value)} placeholder="A1234567" /></Field>
-            </>
-          )}
+              <Field label="ESI Number" required error={errors.esiNumber}>
+                <Input error={!!errors.esiNumber} value={form.esiNumber} onChange={(e) => set('esiNumber', e.target.value)} placeholder="10–17 digit ESI number" />
+              </Field>
 
-          {step === 'bank' && (
-            <>
-              <Field label="Bank Name"><Input value={form.bankName} onChange={(e) => set('bankName', e.target.value)} placeholder="e.g. HDFC Bank" /></Field>
-              <Field label="Account Number" error={errors.bankAccountNumber}>
+              <Field label="Bank Account Number" required error={errors.bankAccountNumber}>
                 <Input error={!!errors.bankAccountNumber} value={form.bankAccountNumber} onChange={(e) => set('bankAccountNumber', e.target.value)} placeholder="123456789012" />
               </Field>
-              <Field label="IFSC Code" error={errors.bankIfsc}>
+              <Field label="IFSC Code" required error={errors.bankIfsc}>
                 <Input error={!!errors.bankIfsc} value={form.bankIfsc} onChange={(e) => set('bankIfsc', e.target.value.toUpperCase())} placeholder="HDFC0001234" />
               </Field>
-            </>
-          )}
-
-          {step === 'address' && (
-            <>
-              <Field label="Address Line"><Input value={form.currentAddressLine} onChange={(e) => set('currentAddressLine', e.target.value)} placeholder="Flat/Street" /></Field>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="City"><Input value={form.currentAddressCity} onChange={(e) => set('currentAddressCity', e.target.value)} placeholder="Mumbai" /></Field>
-                <Field label="State"><Input value={form.currentAddressState} onChange={(e) => set('currentAddressState', e.target.value)} placeholder="Maharashtra" /></Field>
+                <Field label="Bank Name">
+                  <Input value={form.bankName} onChange={(e) => set('bankName', e.target.value)} placeholder="e.g. HDFC Bank" />
+                </Field>
+                <Field label="Bank Branch">
+                  <Input value={form.bankBranchName} onChange={(e) => set('bankBranchName', e.target.value)} placeholder="e.g. MG Road" />
+                </Field>
               </div>
-              <Field label="Pincode"><Input value={form.currentAddressPincode} onChange={(e) => set('currentAddressPincode', e.target.value)} placeholder="400001" /></Field>
             </>
           )}
 
-          {step === 'emergency' && (
+          {step === 'review' && !isEdit && (
             <>
-              <Field label="Contact Name"><Input value={form.emergencyContactName} onChange={(e) => set('emergencyContactName', e.target.value)} placeholder="Full name" /></Field>
-              <Field label="Relationship"><Input value={form.emergencyContactRelation} onChange={(e) => set('emergencyContactRelation', e.target.value)} placeholder="e.g. Spouse, Parent" /></Field>
-              <Field label="Phone"><Input type="tel" value={form.emergencyContactPhone} onChange={(e) => set('emergencyContactPhone', e.target.value)} placeholder="+91 9876543210" /></Field>
-            </>
-          )}
-        </div>
+              <div className="rounded-xl border border-border bg-white p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold text-text-primary">Basic Information</h4>
+                  <button
+                    type="button"
+                    onClick={() => setStep('basic')}
+                    className="flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/15"
+                  >
+                    <Pencil size={12} /> Edit
+                  </button>
+                </div>
+                <SummaryRow label="Company" value={companyName} />
+                <SummaryRow label="Name" value={dash([form.firstName, form.lastName].filter(Boolean).join(' '))} />
+                <SummaryRow label="Email" value={dash(form.email)} />
+                <SummaryRow label="Phone" value={dash(form.phone)} />
+                <SummaryRow label="Designation" value={designationLabel} />
+                <SummaryRow label="Department" value={departmentName} />
+                <SummaryRow label="Employee Code" value={dash(form.employeeCode)} />
+                <SummaryRow label="Date of Joining" value={dash(form.dateOfJoining)} />
+                <SummaryRow label="Date of Birth" value={dash(form.dateOfBirth)} />
+                <SummaryRow label="Gender" value={genderLabel} />
+                <SummaryRow label="Geofence Zone" value={zoneName} />
+                <SummaryRow label="Shift" value={shiftName} />
+                <SummaryRow label="Weekly Offs" value={weekOffLabel} />
+              </div>
 
-        {/* Footer */}
-        <div className="flex gap-3 p-5 border-t border-border">
-          {stepIdx > 0 && (
-            <button onClick={() => setStep(visibleSteps[stepIdx - 1].key)} className="px-4 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">
-              Back
-            </button>
-          )}
-          <button onClick={onClose} className="px-4 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">
-            Cancel
-          </button>
-          {!isLastStep ? (
-            <button
-              onClick={() => setStep(visibleSteps[stepIdx + 1].key)}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-dark text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
-            >
-              Next <ChevronRight size={14} />
-            </button>
-          ) : (
-            <div className="flex-1 flex flex-col gap-2">
-              {!isEdit && canInvite && (
-                <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+              <div className="rounded-xl border border-border bg-white p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold text-text-primary">Financial, Government &amp; Bank</h4>
+                  <button
+                    type="button"
+                    onClick={() => setStep('financial')}
+                    className="flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/15"
+                  >
+                    <Pencil size={12} /> Edit
+                  </button>
+                </div>
+                <SummaryRow label="Salary Frequency" value={form.salaryFrequency || '—'} />
+                <SummaryRow label="Monthly Salary" value={salaryLabel} />
+                <SummaryRow label="Employment Type" value={empTypeLabel} />
+                <SummaryRow label="PAN" value={dash(form.panNumber)} />
+                <SummaryRow label="Aadhaar" value={dash(form.aadhaarNumber)} />
+                <SummaryRow label="UAN" value={dash(form.uanNumber)} />
+                <SummaryRow label="ESI" value={dash(form.esiNumber)} />
+                <SummaryRow label="Bank Account" value={dash(form.bankAccountNumber)} />
+                <SummaryRow label="IFSC" value={dash(form.bankIfsc)} />
+                <SummaryRow label="Bank Name" value={dash(form.bankName)} />
+                <SummaryRow label="Bank Branch" value={dash(form.bankBranchName)} />
+              </div>
+
+              {canInvite && (
+                <label className="flex items-center gap-2 px-1 text-xs text-text-secondary cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={sendInvitation}
@@ -863,20 +918,68 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     className="h-3.5 w-3.5 rounded accent-primary"
                   />
                   <Send size={11} className="text-primary" />
-                  Send invitation email
+                  Send invitation email to <strong>{form.email || 'the employee'}</strong>
                 </label>
               )}
+
               <button
                 onClick={handleSubmit}
                 disabled={isPending}
-                className="w-full py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
+                className="w-full py-3 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm"
               >
-                {isPending ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Employee'}
+                {isPending ? 'Saving…' : 'Create Employee'}
               </button>
-            </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer — Back / Cancel / (Next | Save) */}
+        <div className="flex gap-3 p-5 border-t border-border">
+          {stepIdx > 0 && (
+            <button
+              onClick={handleBack}
+              className="px-4 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors"
+            >
+              Back
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="px-4 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors"
+          >
+            Cancel
+          </button>
+          {!isReviewStep && (
+            !isLastStep ? (
+              <button
+                onClick={handleNext}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-dark text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
+              >
+                Next <ChevronRight size={14} />
+              </button>
+            ) : (
+              // Edit mode: last visible step is Financial, so its primary
+              // action is Save Changes (there is no Review pass on edit).
+              <button
+                onClick={handleSubmit}
+                disabled={isPending}
+                className="flex-1 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors shadow-sm"
+              >
+                {isPending ? 'Saving…' : 'Save Changes'}
+              </button>
+            )
           )}
         </div>
       </div>
     </>
+  )
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-1.5 border-t border-border/60 first:border-t-0">
+      <span className="text-xs text-text-secondary">{label}</span>
+      <span className="text-xs font-medium text-text-primary text-right break-words">{value}</span>
+    </div>
   )
 }

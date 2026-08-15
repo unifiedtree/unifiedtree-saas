@@ -64,6 +64,8 @@ export interface CreateWorkforceEmployeePayload {
   gender?: Gender
   departmentId?: string
   designationId?: string
+  /** Free-text designation — mirrors mobile onboarding when no lookup exists. */
+  designation?: string
   branchId?: string
   /** Geofence zone the new hire must punch in at (optional at onboarding). */
   geoFenceZoneId?: string
@@ -82,8 +84,11 @@ export interface CreateWorkforceEmployeePayload {
   aadhaarNumber?: string
   /** 12-digit UPN — mirrors mobile onboarding UAN field. */
   uanNumber?: string
+  /** 10–17-digit ESI number — mirrors mobile onboarding ESI field. */
+  esiNumber?: string
   passportNumber?: string
   bankName?: string
+  bankBranchName?: string
   bankAccountNumber?: string
   bankIfsc?: string
   currentAddressLine?: string
