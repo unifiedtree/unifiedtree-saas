@@ -57,6 +57,7 @@ public class FirebaseAuthController {
 
     /** Rate-limit key label — kept independent of the password endpoint. */
     private static final String ENDPOINT = "firebase-verify";
+    private static final String ENDPOINT_CHECK = "firebase-phone-check";
 
     /** Same prefix / TTL / attributes as CanonicalAuthController.RT_COOKIE_*. */
     private static final String RT_COOKIE_PREFIX = "ut_rt_";
@@ -72,6 +73,51 @@ public class FirebaseAuthController {
         this.auth = auth;
         this.phoneLookup = phoneLookup;
         this.rateLimiter = rateLimiter;
+    }
+
+    /**
+     * Pre-flight registration check. Called by the mobile app BEFORE
+     * asking Firebase to send an SMS OTP — if the number isn't on file
+     * we skip Firebase entirely, saving a paid SMS send and avoiding
+     * a Firebase rate-limit hit on the caller's device. Also gives the
+     * mobile UI a chance to render the "Not registered" panel with
+     * email-login / create-workspace CTAs before any SMS goes out.
+     *
+     * <p>Trade-off: this IS a mild enumeration oracle — an attacker who
+     * hits the endpoint with a phone number gets back a definitive
+     * {@code registered: true/false}. Mitigations:
+     * <ul>
+     *   <li>Rate-limited on both IP and phone via
+     *       {@link PublicEndpointRateLimiter} (5/15m per phone, 20/15m per IP)</li>
+     *   <li>Employee phones aren't publicly-known lists in a B2B HRMS
+     *       (unlike consumer platforms where phone-number = user id)</li>
+     *   <li>The endpoint is small and returns only a boolean — no name,
+     *       tenant, employee code, or any identifiable data leaks</li>
+     * </ul>
+     * If the trade-off ever becomes uncomfortable, swap the response
+     * shape to always-true + let the OTP path 404 as before.
+     */
+    @PostMapping("/phone/check")
+    public ResponseEntity<?> phoneCheck(@Valid @RequestBody PhoneCheckRequest req,
+                                        HttpServletRequest http) {
+        String phone = req.mobile() == null ? null : req.mobile().trim();
+        if (phone == null || phone.isBlank()) {
+            throw new HrmsException("Mobile number is required", HttpStatus.BAD_REQUEST,
+                    "MOBILE_REQUIRED");
+        }
+        // Two rate-limit passes (same pattern as /firebase-verify) so a
+        // burst against one number OR one source IP both trip.
+        rateLimiter.check(ENDPOINT_CHECK, clientIp(http), null);
+        rateLimiter.check(ENDPOINT_CHECK, null, phone);
+
+        // findByPhone normalises to last-10-digit lookup across all
+        // tenants — same match logic the /firebase-verify path uses on
+        // the phone_number claim, so a hit here guarantees a hit there.
+        boolean registered = phoneLookup.findByPhone(phone).isPresent();
+        log.info("phone/check: phone(last-10)={} registered={}",
+                phone.length() > 10 ? phone.substring(phone.length() - 10) : phone,
+                registered);
+        return ResponseEntity.ok(Map.of("registered", registered));
     }
 
     @PostMapping("/firebase-verify")
@@ -198,4 +244,9 @@ public class FirebaseAuthController {
     // ── DTO ─────────────────────────────────────────────────────────────────
 
     public record FirebaseVerifyRequest(@NotBlank String idToken) { }
+
+    /** Body of {@link #phoneCheck}. Accepts a plain 10-digit mobile string,
+     *  or a longer variant (E.164 with country code) — the phone lookup
+     *  matches on the last 10 digits either way. */
+    public record PhoneCheckRequest(@NotBlank String mobile) { }
 }

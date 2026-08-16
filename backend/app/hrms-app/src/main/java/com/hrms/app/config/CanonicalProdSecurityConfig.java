@@ -112,6 +112,7 @@ public class CanonicalProdSecurityConfig {
                     // the same reason /login is: the caller has no session
                     // yet.
                     "/v1/auth/firebase-verify",
+                    "/v1/auth/phone/check",
                     "/v1/canonical-auth/refresh",
                     // Logout must work even when the access token has already
                     // expired — that is exactly when someone is most likely to
