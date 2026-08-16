@@ -134,15 +134,28 @@ public class PayrollDashboardService {
         // (Wave 2 adds the batch build; today the LEFT JOIN just returns NULL
         // and every PROCESSING/LOCKED run counts as pending, which is the
         // correct current-state answer.)
-        Integer pending = jdbc.queryForObject("""
-                SELECT COUNT(*)
-                  FROM payroll.runs r
-                 WHERE r.status = ANY (?::text[])
-                   AND NOT EXISTS (
-                        SELECT 1 FROM payroll.disbursement_batches b
-                         WHERE b.run_id = r.id
-                           AND b.status IN ('POSTED','PAID'))
-                """, Integer.class, PENDING_DISBURSAL_STATUSES.toArray(String[]::new));
+        //
+        // Previously used `WHERE r.status = ANY (?::text[])` with
+        // `PENDING_DISBURSAL_STATUSES.toArray(String[]::new)` as the vararg.
+        // That crashed in prod on rev 00104 (2026-08-16) with
+        // "The column index is out of range: 2, number of columns: 1" —
+        // JdbcTemplate's varargs unpack the String[] into N separate JDBC
+        // parameters, but the SQL only had one `?` slot. Rewritten to use
+        // an explicit IN (?,?) list built from the same constant so
+        // JdbcTemplate binds one parameter per placeholder, and adding a
+        // new status here can't drift the query out of sync.
+        String inPlaceholders = PENDING_DISBURSAL_STATUSES.stream()
+                .map(s -> "?")
+                .collect(java.util.stream.Collectors.joining(","));
+        Integer pending = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM payroll.runs r "
+              + "WHERE r.status IN (" + inPlaceholders + ") "
+              + "  AND NOT EXISTS ("
+              + "        SELECT 1 FROM payroll.disbursement_batches b"
+              + "         WHERE b.run_id = r.id"
+              + "           AND b.status IN ('POSTED','PAID'))",
+                Integer.class,
+                PENDING_DISBURSAL_STATUSES.toArray());
         pending = pending == null ? 0 : pending;
 
         return new KpisDto(totalCost, avg, pending, tds,
