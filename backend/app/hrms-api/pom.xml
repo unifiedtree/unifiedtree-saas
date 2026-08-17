@@ -57,5 +57,13 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
+        <!-- B7 FIX (audit 2026-08-15): jsoup for HTML sanitization on
+             LetterDistributionProcessor.customMessage (was raw pass-through
+             into the recipient email body → XSS in the email preview). -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.15.3</version>
+        </dependency>
     </dependencies>
 </project>

@@ -39,9 +39,21 @@ const SOON: Record<string, { title: string; desc: string }> = {
   'integrations':         { title: 'Integrations', desc: 'Connect Google Workspace, Slack, biometric devices and more.' },
 }
 
+/** Slug allow-list — every key registered in {@link SOON}. Any /hrms/soon/:key
+ *  URL for a key NOT in this list bounces the user to /dashboard instead of
+ *  rendering the generic placeholder, so hand-crafted URLs can't be used to
+ *  spoof a launching-soon page for something we never planned to ship. */
+const ALLOWED_KEYS = new Set(Object.keys(SOON))
+
 export const ModuleComingSoon: React.FC = () => {
   const { key = '' } = useParams()
   const navigate = useNavigate()
+  // Redirect unknown slugs — the RouteGuard wrapping this route already
+  // handles auth + module gating; we handle the key allow-list here where
+  // the slug list actually lives.
+  React.useEffect(() => {
+    if (key && !ALLOWED_KEYS.has(key)) navigate('/dashboard', { replace: true })
+  }, [key, navigate])
   const entry = SOON[key] ?? { title: 'This module', desc: 'This screen is being built.' }
 
   return (

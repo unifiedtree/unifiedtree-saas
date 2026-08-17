@@ -87,6 +87,38 @@ public class FnfService {
                     "EMPLOYEE_NOT_SEPARATED");
         }
 
+        // B3 FIX (audit 2026-08-15): outstanding-advances check. Before FnF
+        // was aware of advances, an employee could exit while still owing
+        // installments — the schedule kept ticking against a payroll that
+        // never ran again, and the money was simply lost. Now: query the
+        // outstanding total for this employee's disbursed advances, and if
+        // it is non-zero refuse to process the settlement until the caller
+        // includes an equivalent ADVANCE_RECOVERY deduction (or explicitly
+        // waives it in a separate write-off flow).
+        BigDecimal outstandingAdvance = jdbc.query("""
+                SELECT COALESCE(SUM(outstanding_amount), 0)
+                  FROM advance_mgmt.advance_requests
+                 WHERE employee_id = ? AND status = 'DISBURSED'
+                   AND COALESCE(outstanding_amount, 0) > 0
+                """, rs -> rs.next() ? rs.getBigDecimal(1) : BigDecimal.ZERO,
+                request.employeeId());
+        if (outstandingAdvance != null && outstandingAdvance.signum() > 0) {
+            BigDecimal advanceDeductions = request.components().stream()
+                    .filter(c -> c.type() == FnfComponentType.DEDUCTION
+                            && c.label() != null
+                            && c.label().toUpperCase().contains("ADVANCE"))
+                    .map(FnfComponentRequest::amount)
+                    .filter(java.util.Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (advanceDeductions.compareTo(outstandingAdvance) < 0) {
+                throw new BusinessRuleException(
+                        "Employee has ₹" + outstandingAdvance + " in outstanding advances. "
+                        + "Include an 'Advance Recovery' deduction of at least ₹" + outstandingAdvance
+                        + " in the settlement, or write off the advance first.",
+                        "FNF_OUTSTANDING_ADVANCE");
+            }
+        }
+
         BigDecimal gross = request.components().stream()
                 .filter(c -> c.type() == FnfComponentType.EARNING)
                 .map(FnfComponentRequest::amount)
@@ -164,6 +196,12 @@ public class FnfService {
                     "Only a processed settlement can be approved (current status: " + settlement.getStatus() + ")",
                     "FNF_NOT_PROCESSED");
         }
+        // B3 FIX (audit 2026-08-15): self-approval guard.
+        if (approverId != null && approverId.equals(settlement.getEmployeeId())) {
+            throw new BusinessRuleException(
+                    "You cannot approve your own FnF settlement.",
+                    "FNF_SELF_APPROVAL");
+        }
         // Belt-and-braces net-negative guard — processSettlement rejects
         // negatives at creation time, but a legacy row or a component edit
         // could sneak one in.
@@ -177,6 +215,49 @@ public class FnfService {
         settlement.setApprovedAt(Instant.now());
         settlement = settlementRepository.save(settlement);
         log.info("FnF settlement {} approved by approver={}", settlementId, approverId);
+
+        // B3 FIX (audit 2026-08-15): on APPROVED FnF, FORECLOSE remaining
+        // advance_recovery_schedule PENDING rows for this employee — the
+        // amount was already recovered lump-sum in the settlement's
+        // ADVANCE_RECOVERY deduction (validated at processSettlement time).
+        try {
+            int foreclosed = jdbc.update("""
+                    UPDATE advance_mgmt.advance_recovery_schedule
+                       SET status = 'CANCELLED', updated_at = now(),
+                           version = version + 1
+                     WHERE advance_request_id IN (
+                            SELECT id FROM advance_mgmt.advance_requests
+                             WHERE employee_id = ? AND status = 'DISBURSED')
+                       AND status = 'PENDING'
+                    """, settlement.getEmployeeId());
+            if (foreclosed > 0) {
+                jdbc.update("""
+                        INSERT INTO advance_mgmt.advance_ledger_entries
+                            (tenant_id, advance_request_id, entry_type,
+                             amount, balance_after, reference, notes)
+                        SELECT ar.tenant_id, ar.id, 'FORECLOSE',
+                               -COALESCE(ar.outstanding_amount, 0), 0,
+                               'fnf-settlement:' || ?,
+                               'Foreclosed on FnF approval'
+                          FROM advance_mgmt.advance_requests ar
+                         WHERE ar.employee_id = ? AND ar.status = 'DISBURSED'
+                           AND COALESCE(ar.outstanding_amount, 0) > 0
+                        """, settlementId.toString(), settlement.getEmployeeId());
+                jdbc.update("""
+                        UPDATE advance_mgmt.advance_requests
+                           SET outstanding_amount = 0, updated_at = now(),
+                               version = version + 1
+                         WHERE employee_id = ? AND status = 'DISBURSED'
+                           AND COALESCE(outstanding_amount, 0) > 0
+                        """, settlement.getEmployeeId());
+                log.info("FnF {} approval: foreclosed {} pending advance installments for employee {}",
+                        settlementId, foreclosed, settlement.getEmployeeId());
+            }
+        } catch (RuntimeException e) {
+            // Do not fail the approval — the settlement itself is fine.
+            log.error("FnF {} approval: foreclose failed for employee {} — MANUAL FORECLOSE REQUIRED: {}",
+                    settlementId, settlement.getEmployeeId(), e.getMessage());
+        }
         return toResponse(settlement, componentRepository.findBySettlementIdOrderByTypeAscLabelAsc(settlementId));
     }
 
@@ -194,6 +275,19 @@ public class FnfService {
             throw new BusinessRuleException(
                     "Net settlement cannot be negative",
                     "INVALID_NET_SETTLEMENT");
+        }
+        // B3 FIX (audit 2026-08-15): service-level defense-in-depth — the
+        // controller already refuses when payer==requester, but the service
+        // must not trust its caller.
+        // (Payer identity is not passed into this method; the controller does
+        // that check with the JWT. This guard rejects a pay call when the
+        // settlement's approverId equals its employeeId — indicating a
+        // corrupt row where the payee also self-approved.)
+        if (settlement.getApproverId() != null
+                && settlement.getApproverId().equals(settlement.getEmployeeId())) {
+            throw new BusinessRuleException(
+                    "This FnF was approved by the payee — refuse to pay a self-approved settlement.",
+                    "FNF_SELF_APPROVED_ROW");
         }
         settlement.setStatus(FnfStatus.PAID);
         settlement.setPaidAt(Instant.now());

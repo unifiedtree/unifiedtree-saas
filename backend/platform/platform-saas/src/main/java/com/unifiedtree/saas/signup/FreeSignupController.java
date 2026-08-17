@@ -137,10 +137,24 @@ public class FreeSignupController {
         log.info("free-signup {} → tenant={} subdomain={} signedIn={}",
                 email, resp.tenantId(), resp.subdomain(), signedInAccountId != null);
 
+        // B7 FIX (audit 2026-08-15): return identical response shape for
+        // existing-email (enumeration guard branch above) vs fresh-email
+        // anonymous callers. Both paths now omit tenantId/subdomain/URL and
+        // rely on the welcome email (fired by the workspace-created event
+        // pipeline) to hand the customer the actual workspace link. Signed-in
+        // callers still get the direct redirect payload — for them there is
+        // no enumeration risk (they already know their own account exists).
+        if (signedInAccountId != null) {
+            return ResponseEntity.ok(new FreeSignupResponse(
+                    resp.tenantId(),
+                    resp.subdomain(),
+                    resp.workspaceUrl(),
+                    email));
+        }
         return ResponseEntity.ok(new FreeSignupResponse(
-                resp.tenantId(),
-                resp.subdomain(),
-                resp.workspaceUrl(),
+                /*tenantId*/     null,
+                /*subdomain*/    null,
+                /*workspaceUrl*/ null,
                 email));
     }
 

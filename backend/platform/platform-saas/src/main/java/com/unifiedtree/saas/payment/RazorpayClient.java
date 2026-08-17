@@ -433,7 +433,13 @@ public class RazorpayClient {
                                    /** how many billing cycles have actually debited. 0 during
                                     *  the trial period. Used by the reconciler to distinguish
                                     *  "cancelled during trial" from "cancelled mid-cycle". */
-                                   Integer paidCount) {}
+                                   Integer paidCount,
+                                   /** B1 FIX (audit 2026-08-15): seat count Razorpay is currently
+                                    *  billing this mandate for. Used by the reconciler to detect
+                                    *  drift between our ledger seats and Razorpay's — a mismatch
+                                    *  means a seat-change request either half-succeeded (SEAT_DRIFT)
+                                    *  or the customer changed it in the Razorpay dashboard. */
+                                   Integer quantity) {}
 
     private static SubscriptionView toSubscriptionView(Map<String, Object> resp) {
         String id       = str(resp, "id");
@@ -446,9 +452,11 @@ public class RazorpayClient {
         Long startAt    = longOrNull(resp, "start_at");
         Object pc       = resp.get("paid_count");
         Integer paidCt  = (pc instanceof Number n) ? n.intValue() : null;
+        Object qty      = resp.get("quantity");
+        Integer quantity = (qty instanceof Number nq) ? nq.intValue() : null;
         String method   = str(resp, "payment_method");
         return new SubscriptionView(id, planId, status, shortUrl, start, end,
-                                    chargeAt, method, startAt, paidCt);
+                                    chargeAt, method, startAt, paidCt, quantity);
     }
 
     private static String str(Map<String, Object> m, String k) {

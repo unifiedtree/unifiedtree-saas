@@ -230,11 +230,14 @@ export function StartFreeTrialPage() {
         <span aria-hidden className="grain" />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            {/* 2026-08-17 (CRIT #5): dropped the "2,400+ Businesses
+                Activated" tile — that number wasn't real. Rebalanced the
+                remaining tiles to say what is true today. */}
             {[
-              { val: '2,400+', label: 'Businesses Activated' },
               { val: 'Free', label: 'Workspace Access' },
-              { val: '99.9%', label: 'Uptime Guarantee' },
+              { val: '99.5%', label: 'Uptime SLA' },
               { val: 'Instant', label: 'Workspace Provision' },
+              { val: 'India-first', label: 'GST · PF · ESI · TDS in core' },
             ].map((s) => (
               <div key={s.label} className="group">
                 <p className="font-heading font-black text-primary text-3xl sm:text-4xl tracking-tight transition-transform duration-300 group-hover:scale-105">{s.val}</p>

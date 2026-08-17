@@ -69,6 +69,30 @@ public class InvitationController {
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * Public — quick "is this reset token still valid?" check the SPA fires
+     * before rendering the new-password form. Returns 200 {valid:true} when
+     * the token exists, is unused, and hasn't expired; returns 200
+     * {valid:false, reason:...} on any of the failure modes so the SPA can
+     * show a friendly "this link has expired, request a new one" page
+     * instead of a stack-trace-y 4xx.
+     */
+    @org.springframework.web.bind.annotation.GetMapping("/v1/auth/reset-password/verify")
+    @PreAuthorize("permitAll()")
+    public ResponseEntity<java.util.Map<String, Object>> verifyResetToken(
+            @org.springframework.web.bind.annotation.RequestParam("token") String token) {
+        try {
+            invitationService.verifyResetToken(token);
+            return ResponseEntity.ok(java.util.Map.of("valid", true));
+        } catch (com.hrms.core.exception.BusinessRuleException ex) {
+            return ResponseEntity.ok(java.util.Map.of(
+                    "valid",  false,
+                    "reason", ex.getErrorCode() == null ? "INVALID" : ex.getErrorCode(),
+                    "message", ex.getMessage() == null ? "Reset link is not valid." : ex.getMessage()
+            ));
+        }
+    }
+
     // ── Request DTOs ────────────────────────────────────────────────────────
 
     public record AcceptInviteRequest(String token, String password) {}

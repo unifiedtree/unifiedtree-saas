@@ -3,6 +3,7 @@ package com.hrms.employee.workforce.service;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;
+import com.hrms.employee.quota.SeatQuotaEnforcer;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateWorkforceEmployeeRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateWorkforceEmployeeRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.WorkforceEmployeeResponse;
@@ -23,6 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.Map;
 
@@ -44,13 +46,16 @@ public class WorkforceEmployeeService {
     private final WorkforceEmployeeRepository repository;
     private final WorkforceDepartmentRepository departmentRepository;
     private final JdbcTemplate jdbc;
+    private final SeatQuotaEnforcer seatQuotaEnforcer;
 
     public WorkforceEmployeeService(WorkforceEmployeeRepository repository,
                                     WorkforceDepartmentRepository departmentRepository,
-                                    JdbcTemplate jdbc) {
+                                    JdbcTemplate jdbc,
+                                    SeatQuotaEnforcer seatQuotaEnforcer) {
         this.repository = repository;
         this.departmentRepository = departmentRepository;
         this.jdbc = jdbc;
+        this.seatQuotaEnforcer = seatQuotaEnforcer;
     }
 
     // -- Directory query ----------------------------------------------------
@@ -155,6 +160,14 @@ public class WorkforceEmployeeService {
 
     // -- Create -------------------------------------------------------------
     public WorkforceEmployeeResponse create(CreateWorkforceEmployeeRequest req) {
+        // Enforce the workspace's paid seat cap BEFORE we touch the DB.
+        // This is the SPA-invoked path (POST /v1/hrms/employees). The
+        // previous round guarded this via a Spring AOP aspect that
+        // fail-opened on any RuntimeException and never covered the
+        // legacy /v1/employees path — replaced with a direct enforcer
+        // call inside every create() so both paths share one rule.
+        seatQuotaEnforcer.assertCapacity();
+
         String code = (req.employeeCode() == null || req.employeeCode().isBlank())
                 ? generateEmployeeCode(req.companyId())
                 : req.employeeCode();
@@ -197,6 +210,12 @@ public class WorkforceEmployeeService {
         e.setPanNumber(req.panNumber());
         e.setAadhaarNumber(req.aadhaarNumber());
         e.setPassportNumber(req.passportNumber());
+        // B2 FIX (audit 2026-08-15): persist statutory + salary fields that
+        // previously fell through unread.
+        e.setPfUan(req.uan());
+        e.setEsiNumber(req.esi());
+        e.setMonthlySalary(req.monthlySalary());
+        e.setSalaryFrequency(req.salaryFrequency());
 
         e.setBankName(req.bankName());
         e.setBankAccountNumber(req.bankAccountNumber());
@@ -242,6 +261,16 @@ public class WorkforceEmployeeService {
         if (req.exitReason()       != null) e.setExitReason(req.exitReason());
         if (req.ctcAnnual()        != null) e.setCtcAnnual(req.ctcAnnual());
         if (req.profilePhotoUrl()  != null) e.setProfilePhotoUrl(req.profilePhotoUrl());
+        // B2 FIX (audit 2026-08-15): apply the seven fields the update form
+        // has always shipped but the service silently dropped — bank + tax +
+        // salary + weekly-off. Every "Saved" toast for these has been a lie.
+        if (req.uan()              != null) e.setPfUan(req.uan());
+        if (req.esi()              != null) e.setEsiNumber(req.esi());
+        if (req.bankAccountNumber()!= null) e.setBankAccountNumber(req.bankAccountNumber());
+        if (req.bankIfsc()         != null) e.setBankIfsc(req.bankIfsc());
+        if (req.monthlySalary()    != null) e.setMonthlySalary(req.monthlySalary());
+        if (req.salaryFrequency()  != null) e.setSalaryFrequency(req.salaryFrequency());
+        if (req.weeklyOffDays()    != null) e.setWeeklyOffDays(req.weeklyOffDays().trim());
 
         return toResponse(repository.save(e));
     }
@@ -374,6 +403,17 @@ public class WorkforceEmployeeService {
 
     // -- Mapping ------------------------------------------------------------
     private WorkforceEmployeeResponse toResponse(WorkforceEmployee e) {
+        // B2 FIX (audit 2026-08-15): expose bank/tax/salary fields in the
+        // detail response, but MASK the bank account to last-4 unless the
+        // caller holds hrms.employees.pii.read. Salary + PAN/Aadhaar remain
+        // fully redacted from this generic response — HR/finance code paths
+        // should call the elevated /identity or /bank endpoints (follow-up).
+        boolean piiRead = hasAuthority("hrms.employees.pii.read");
+        String bankAcct = piiRead
+                ? e.getBankAccountNumber()
+                : maskLast4(e.getBankAccountNumber());
+        BigDecimal monthlySalary = piiRead ? e.getMonthlySalary() : null;
+        BigDecimal ctc          = piiRead ? e.getCtcAnnual()     : null;
         return new WorkforceEmployeeResponse(
                 e.getId(), e.getCompanyId(), e.getEmployeeCode(),
                 e.getFirstName(), e.getMiddleName(), e.getLastName(),
@@ -384,8 +424,58 @@ public class WorkforceEmployeeService {
                 e.getEmploymentType(), e.getEmploymentStatus(),
                 e.getDateOfJoining(), e.getProbationEndDate(),
                 e.getConfirmationDate(), e.getLastWorkingDay(),
-                e.getCtcAnnual(), e.getProfilePhotoUrl(),
+                ctc,
+                e.getPfUan(), e.getEsiNumber(),
+                bankAcct, e.getBankIfsc(),
+                monthlySalary, e.getSalaryFrequency(),
+                parseWeeklyOffDays(e.getWeeklyOffDays()),
+                e.getProfilePhotoUrl(),
                 e.isFaceEnrolled(), checkHasAccount(e.getId()), e.isActive());
+    }
+
+    /**
+     * Parse the CSV weekly-off column ("6,7") into a List of ISO day numbers
+     * (1=Mon..7=Sun). Frontend edit mode hydrates checkboxes from this list;
+     * returning null/empty makes the form default to Sat+Sun.
+     *
+     * <p>Tolerant of whitespace and out-of-range values (silently dropped) so
+     * a legacy row can't 500 the response. Duplicates are preserved — the
+     * frontend already de-dups when building the checkbox state.
+     */
+    private static java.util.List<Integer> parseWeeklyOffDays(String csv) {
+        if (csv == null || csv.isBlank()) return java.util.List.of();
+        String[] parts = csv.split(",");
+        java.util.List<Integer> out = new java.util.ArrayList<>(parts.length);
+        for (String p : parts) {
+            String t = p.trim();
+            if (t.isEmpty()) continue;
+            try {
+                int d = Integer.parseInt(t);
+                if (d >= 1 && d <= 7) out.add(d);
+            } catch (NumberFormatException ignore) { /* skip malformed */ }
+        }
+        return out;
+    }
+
+    /** Mask a bank account number to "****1234" — first N-4 chars replaced. */
+    private static String maskLast4(String acct) {
+        if (acct == null || acct.isBlank()) return null;
+        String t = acct.trim();
+        if (t.length() <= 4) return "****";
+        return "****" + t.substring(t.length() - 4);
+    }
+
+    /** True if the current Spring Security Authentication has the given authority. */
+    private static boolean hasAuthority(String authority) {
+        try {
+            var auth = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (auth == null) return false;
+            return auth.getAuthorities().stream()
+                    .anyMatch(a -> authority.equals(a.getAuthority()));
+        } catch (Exception ignore) {
+            return false;
+        }
     }
 
     /**
@@ -399,6 +489,9 @@ public class WorkforceEmployeeService {
      * sensitive field is simply omitted from the payload as null.
      */
     private WorkforceEmployeeResponse toListResponse(WorkforceEmployee e) {
+        // B2 FIX (audit 2026-08-15): list responses redact ALL PII (bank,
+        // salary, tax) — only the elevated by-id endpoint returns them
+        // (masked bank unless caller has hrms.employees.pii.read).
         return new WorkforceEmployeeResponse(
                 e.getId(), e.getCompanyId(), e.getEmployeeCode(),
                 e.getFirstName(), e.getMiddleName(), e.getLastName(),
@@ -410,6 +503,10 @@ public class WorkforceEmployeeService {
                 e.getDateOfJoining(), e.getProbationEndDate(),
                 e.getConfirmationDate(), e.getLastWorkingDay(),
                 null /* ctcAnnual — redacted in list responses */,
+                null /* uan */, null /* esi */,
+                null /* bankAcct */, null /* bankIfsc */,
+                null /* monthlySalary */, null /* salaryFrequency */,
+                parseWeeklyOffDays(e.getWeeklyOffDays()),
                 e.getProfilePhotoUrl(),
                 e.isFaceEnrolled(), checkHasAccount(e.getId()), e.isActive());
     }

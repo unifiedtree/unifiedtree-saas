@@ -100,6 +100,15 @@ public class WorkforceEmployee extends BaseEntity {
     @Column(name = "ctc_annual", precision = 14, scale = 2)
     private BigDecimal ctcAnnual;
 
+    // B2 FIX (audit 2026-08-15): monthly_salary + salary_frequency columns exist
+    // in the DB since V024 but were never wired to the JPA entity — every HR
+    // "Save" for these fields returned success but persisted nothing. Wire them
+    // to the entity so the workforce service can actually write them.
+    @Column(name = "monthly_salary", precision = 14, scale = 2)
+    private BigDecimal monthlySalary;
+    @Column(name = "salary_frequency", length = 30)
+    private String salaryFrequency;
+
     @Column(name = "job_responsibilities", columnDefinition = "TEXT")
     private String jobResponsibilities;
 

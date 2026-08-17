@@ -94,8 +94,26 @@ public class FnfController {
 
     @Operation(summary = "Mark an approved settlement as paid")
     @PostMapping("/settlements/{id}/pay")
-    @PreAuthorize("@perm.check('hrms.fnf.approve')")
-    public ResponseEntity<FnfSettlementResponse> pay(@PathVariable UUID id) {
+    // B3 FIX (audit 2026-08-15): pay requires the dedicated hrms.fnf.pay
+    // permission (segregation of duties from hrms.fnf.approve). Migration
+    // V101__fnf_perm_split.sql grants both to existing approve holders on
+    // apply, and the frontend re-uses the same admin flow to grant pay to
+    // the finance role explicitly.
+    @PreAuthorize("@perm.check('hrms.fnf.pay')")
+    public ResponseEntity<FnfSettlementResponse> pay(@PathVariable UUID id,
+                                                     @AuthenticationPrincipal Jwt jwt) {
+        // Disburser != requester (segregation of duties).
+        FnfSettlementResponse existing = fnfService.getSettlement(id);
+        UUID caller = jwt == null ? null : extractEmployeeId(jwt);
+        if (caller != null && caller.equals(existing.employeeId())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "You cannot mark your own FnF settlement as paid.");
+        }
+        // Approver != payer (segregation of duties).
+        if (caller != null && existing.approverId() != null && caller.equals(existing.approverId())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "The approver cannot also mark the settlement paid — a different user must record payout.");
+        }
         return ResponseEntity.ok(enrichOne(fnfService.pay(id)));
     }
 

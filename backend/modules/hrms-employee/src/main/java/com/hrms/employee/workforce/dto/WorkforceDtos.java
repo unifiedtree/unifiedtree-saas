@@ -187,6 +187,23 @@ public final class WorkforceDtos {
             // still populate it and it serialises normally.
             @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
             BigDecimal ctcAnnual,
+            // B2 FIX (audit 2026-08-15): expose bank/statutory/salary fields.
+            // Bank account is masked to last-4 unless caller has the elevated
+            // hrms.employees.pii.read permission — see WorkforceEmployeeService.toResponse.
+            String uan,
+            String esi,
+            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+            String bankAccountNumber,
+            String bankIfsc,
+            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+            BigDecimal monthlySalary,
+            String salaryFrequency,
+            // B2 FIX (audit 2026-08-17): projected as List<Integer> of ISO day
+            // numbers (1=Mon..7=Sun). Stored as CSV in the DB column; parsed
+            // in WorkforceEmployeeService.parseWeeklyOffDays. Frontend edit
+            // mode reads this to hydrate the weekly-off checkboxes; a String
+            // projection made the checkbox pre-fill default to Sat+Sun.
+            List<Integer> weeklyOffDays,
             String profilePhotoUrl,
             boolean faceEnrolled,
             boolean hasAccount,
@@ -216,6 +233,11 @@ public final class WorkforceDtos {
             String panNumber,
             String aadhaarNumber,
             String passportNumber,
+            // B2 FIX: statutory + salary fields (were silently dropped by create/update)
+            String uan,
+            String esi,
+            BigDecimal monthlySalary,
+            String salaryFrequency,
             // bank
             String bankName,
             String bankAccountNumber,
@@ -255,7 +277,17 @@ public final class WorkforceDtos {
             LocalDate lastWorkingDay,
             String exitReason,
             BigDecimal ctcAnnual,
-            String profilePhotoUrl
+            String profilePhotoUrl,
+            // B2 FIX (audit 2026-08-15): HR could edit these fields on the
+            // employee form and get a "Saved" toast, but the service silently
+            // dropped them. Wire them through the update path.
+            String uan,
+            String esi,
+            String bankAccountNumber,
+            String bankIfsc,
+            BigDecimal monthlySalary,
+            String salaryFrequency,
+            String weeklyOffDays
     ) { }
 
     /**

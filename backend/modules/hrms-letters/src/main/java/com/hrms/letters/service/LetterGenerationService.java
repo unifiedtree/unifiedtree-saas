@@ -121,6 +121,12 @@ public class LetterGenerationService {
 
         if (req.sendImmediately()) {
             String toEmail = req.sendToEmail() != null ? req.sendToEmail() : employee.getEmail();
+            // B7 FIX (audit 2026-08-15): restrict sendToEmail to the target
+            // employee's own email or personalEmail unless the caller holds
+            // hrms.letters.send.override. Without this, an HR admin could
+            // exfiltrate confidential letters (offer, appraisal, termination)
+            // to any address they typed into the "send to" field.
+            assertSendToAllowed(toEmail, employee);
             sendLetterInternal(letter, toEmail, null, pdfBytes);
         }
 
@@ -133,13 +139,41 @@ public class LetterGenerationService {
         if ("VOID".equals(letter.getStatus())) {
             throw new HrmsException("Cannot send a voided letter", HttpStatus.BAD_REQUEST, "LETTER_VOIDED");
         }
+        Employee employee = employeeRepo.findById(letter.getEmployeeId())
+                .orElseThrow(() -> new HrmsException("Employee not found", HttpStatus.NOT_FOUND, "EMPLOYEE_NOT_FOUND"));
         byte[] pdfBytes = storageService.load(letter.getPdfPath());
-        String toEmail  = req.toEmail() != null ? req.toEmail()
-                : employeeRepo.findById(letter.getEmployeeId())
-                        .map(Employee::getEmail)
-                        .orElseThrow(() -> new HrmsException("Employee not found", HttpStatus.NOT_FOUND, "EMPLOYEE_NOT_FOUND"));
+        String toEmail  = req.toEmail() != null ? req.toEmail() : employee.getEmail();
+        // B7 FIX (audit 2026-08-15): same restriction as sendImmediately.
+        assertSendToAllowed(toEmail, employee);
         sendLetterInternal(letter, toEmail, req.ccEmail(), pdfBytes);
         return GeneratedLetterDto.from(generatedRepo.save(letter));
+    }
+
+    /**
+     * Enforce that {@code toEmail} equals the employee's work email OR
+     * their personal_email, unless the caller holds
+     * {@code hrms.letters.send.override}. Case-insensitive comparison.
+     */
+    private static void assertSendToAllowed(String toEmail, Employee employee) {
+        if (toEmail == null || employee == null) return;
+        String want = toEmail.trim().toLowerCase(java.util.Locale.ROOT);
+        String work = employee.getEmail() == null ? null
+                : employee.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
+        String personal = employee.getPersonalEmail() == null ? null
+                : employee.getPersonalEmail().trim().toLowerCase(java.util.Locale.ROOT);
+        if (want.equalsIgnoreCase(work) || want.equalsIgnoreCase(personal)) return;
+        boolean override = false;
+        try {
+            var auth = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            override = auth != null && auth.getAuthorities().stream()
+                    .anyMatch(g -> "hrms.letters.send.override".equals(g.getAuthority()));
+        } catch (Exception ignore) { /* default deny */ }
+        if (!override) {
+            throw new HrmsException(
+                    "Letter can only be sent to the employee's own work or personal email address.",
+                    HttpStatus.FORBIDDEN, "LETTER_SEND_TO_FORBIDDEN");
+        }
     }
 
     @Transactional

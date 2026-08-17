@@ -162,7 +162,7 @@ export function CTABanner() {
 
           <p className="mx-auto mt-6 max-w-xl text-[15.5px] leading-relaxed text-white/85 sm:text-[17px]">
             {mode === 'trial'
-              ? 'Join 2,400+ companies. Start free. No credit card required.'
+              ? 'HR & Payroll live today. Start on a 7-day trial. Autopay is set up at signup via Razorpay; cancel any time before your trial ends.'
               : 'Spin up a workspace for a new team or entity in minutes.'}
           </p>
 
@@ -186,7 +186,7 @@ export function CTABanner() {
 
           {mode === 'trial' && (
             <p className="mt-7 text-sm text-white/70">
-              7-day free trial · Autopay activates on day 8 · Cancel anytime
+              7-day free trial · Autopay set up at signup via Razorpay · Cancel anytime
             </p>
           )}
         </motion.div>

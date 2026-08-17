@@ -433,6 +433,23 @@ public class SubscriptionStateReconciler {
         try {
             RazorpayClient.SubscriptionView v = razorpay.fetchSubscription(subscriptionId);
             applyRazorpayStatus(subscriptionId, v);
+            // B1 FIX (audit 2026-08-15): loud SEAT_DRIFT log if Razorpay's
+            // quantity disagrees with our ledger seats. This is the only
+            // background detector for quantity drift (PlanChangeService's
+            // registerDriftAlarm only fires on transaction-commit failure).
+            if (v.quantity() != null) {
+                try {
+                    Integer ledgerSeats = jdbc.query(
+                            "SELECT seats FROM platform.subscriptions WHERE razorpay_subscription_id = ? LIMIT 1",
+                            rs -> rs.next() ? rs.getInt("seats") : null, subscriptionId);
+                    if (ledgerSeats != null && !v.quantity().equals(ledgerSeats)) {
+                        log.error("SEAT_DRIFT_RECONCILE sub={} razorpayQty={} ledgerSeats={} — MANUAL RECONCILE REQUIRED",
+                                subscriptionId, v.quantity(), ledgerSeats);
+                    }
+                } catch (RuntimeException probeErr) {
+                    log.warn("SEAT_DRIFT probe failed for sub {}: {}", subscriptionId, probeErr.getMessage());
+                }
+            }
             return v.status();
         } catch (RuntimeException e) {
             // Even on failure, gate against terminal-status rows so a

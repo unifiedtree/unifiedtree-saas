@@ -28,11 +28,18 @@ public interface WfhRequestRepository extends JpaRepository<WfhRequest, UUID> {
      * or when they are the applicant's department head. Tenant isolation is
      * enforced by RLS on all three tables.
      */
+    // B4 FIX (audit 2026-08-15): exclude the manager's OWN requests from
+    // their approval queue. Without the extra `wr.employee_id <> :managerEmpId`
+    // clause, a manager who applies for their own WFH sees the row in the
+    // "pending approvals" page and can single-click Approve — an unlogged
+    // path around the WfhService self-approval guard for the specific
+    // manager-of-themselves case.
     @Query(value = """
         SELECT wr.* FROM leave_mgmt.wfh_requests wr
         LEFT JOIN hrms.employees   e ON e.id = wr.employee_id
         LEFT JOIN hrms.departments d ON d.id = e.department_id
         WHERE wr.status = 'PENDING'
+          AND wr.employee_id <> :managerEmpId
           AND ( wr.approver_id = :managerEmpId
              OR e.reporting_manager_id = :managerEmpId
              OR d.department_head_employee_id = :managerEmpId )
@@ -42,6 +49,7 @@ public interface WfhRequestRepository extends JpaRepository<WfhRequest, UUID> {
         LEFT JOIN hrms.employees   e ON e.id = wr.employee_id
         LEFT JOIN hrms.departments d ON d.id = e.department_id
         WHERE wr.status = 'PENDING'
+          AND wr.employee_id <> :managerEmpId
           AND ( wr.approver_id = :managerEmpId
              OR e.reporting_manager_id = :managerEmpId
              OR d.department_head_employee_id = :managerEmpId )

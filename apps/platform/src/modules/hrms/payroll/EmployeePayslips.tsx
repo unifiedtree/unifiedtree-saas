@@ -72,7 +72,13 @@ export const EmployeePayslips: React.FC = () => {
                     <HrStatusPill tone={PAYSLIP_TONE[r.status]}>{r.status}</HrStatusPill>
                   </td>
                   <td className="text-right">
-                    {r.status === 'LOCKED' ? (
+                    {/* LOCKED means the payroll run is finalised and the
+                        payslip is generated; PAID additionally means the
+                        salary was disbursed. Both states are valid to
+                        download — filtering to LOCKED only hid payslips
+                        from employees the moment finance marked their
+                        salary paid, which was the reverse of the intent. */}
+                    {(r.status === 'LOCKED' || r.status === 'PAID') ? (
                       <HrButton
                         variant="ghost"
                         size="sm"

@@ -221,7 +221,10 @@ function CorrectionsTab() {
   const { toast } = useToast()
   const isManager = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
   const { data: myCorr } = useMyCorrections()
-  const { data: pending } = useCorrectionApprovals('PENDING')
+  // Approvals endpoint 403s for non-managers — gate the fetch so an employee
+  // on the Corrections tab doesn't trigger a "Permission denied" toast on
+  // every render just because the tab is visible for their own history.
+  const { data: pending } = useCorrectionApprovals('PENDING', { enabled: isManager })
   const createCorrection = useCreateCorrection()
   const decide = useDecideCorrection()
   const [open, setOpen] = useState(false)

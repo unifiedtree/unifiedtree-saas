@@ -4,6 +4,7 @@ import { Calendar, Plus, CheckCircle, XCircle, Clock, FileText, Check, X as XIco
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { useToast } from '@/shared/hooks/useToast'
+import { useVisibleTabs } from '@/shared/hooks/useVisibleTabs'
 import { usePermission, Can, P } from '@unifiedtree/sdk'
 import { CardSkeleton, Skeleton, EmptyState } from '@unifiedtree/ui-kit'
 import {
@@ -12,11 +13,10 @@ import {
   type LeaveApprovalStatus, type LeaveDuration,
 } from './api/useLeave'
 import { useCompanies } from './api/useOrg'
+import { useHrConfig } from './api/useSettings'
 import { LeaveTypes } from './leave/LeaveTypes'
 import { HolidayCalendar } from './leave/HolidayCalendar'
 import { HrPageHeader, HrStatusPill, type PillTone } from '@/shared/components/hr'
-
-type Tab = 'my' | 'apply' | 'balances' | 'approvals' | 'types' | 'holidays'
 
 const STATUS_STYLE: Record<LeaveApprovalStatus, { label: string; color: string; bg: string; icon: React.ElementType; tone: PillTone }> = {
   PENDING:    { label: 'Pending',     color: 'text-[#B45309]', bg: 'bg-[#FEF3C7]', icon: Clock,       tone: 'warn' },
@@ -111,7 +111,20 @@ function ApplyTab() {
   const { data: leaveTypes = [], isLoading: typesLoading } = useLeaveTypes(activeCompany?.id ?? '')
   const { data: myLeaves } = useMyLeaves(0)
   const { data: balances = [] } = useMyBalances(new Date().getFullYear())
+  const { data: hrConfig } = useHrConfig(activeCompany?.id)
   const applyLeave = useApplyLeave()
+
+  // Weekend/off-days come from the tenant's HR configuration
+  // (V1 /v1/settings/hr-configuration → weekendDays: number[] with
+  // Sun=0..Sat=6). This has to match whatever payroll uses on the server
+  // — a hard-coded Sat+Sun preview lied to tenants on a 6-day workweek
+  // (Sunday-only) or any Middle-East schedule (Fri+Sat). Falls back to
+  // the Indian statutory default of Sat+Sun ONLY when no config exists.
+  const weekendDays = React.useMemo<Set<number>>(() => {
+    const cfg = hrConfig?.weekendDays
+    if (cfg && cfg.length > 0) return new Set(cfg)
+    return new Set([0, 6])
+  }, [hrConfig])
 
   const [form, setForm] = useState({
     leaveTypeId: '',
@@ -128,7 +141,13 @@ function ApplyTab() {
 
   const todayIso = new Date().toISOString().slice(0, 10)
 
-  // Compute effective days: half-day counts as 0.5, else 1 per calendar day inclusive.
+  // Compute effective days: half-day counts as 0.5, else count business days
+  // (non-weekend) inclusive. Weekend day-numbers are pulled from the tenant's
+  // HR configuration (weekendDays) instead of hard-coded Sat+Sun so a 6-day
+  // workweek or a Fri+Sat schedule computes correctly. This is the frontend
+  // preview only — the backend runs the authoritative calculation including
+  // per-tenant holidays; a preview endpoint would be strictly better and is
+  // flagged for B4 backend.
   const effectiveDays = React.useMemo(() => {
     if (!form.startDate || !effectiveEndDate) return 0
     if (isHalfDay) return 0.5
@@ -136,8 +155,19 @@ function ApplyTab() {
     const end = new Date(effectiveEndDate + 'T00:00:00')
     const diffMs = end.getTime() - start.getTime()
     if (isNaN(diffMs) || diffMs < 0) return 0
-    return Math.floor(diffMs / 86_400_000) + 1
-  }, [form.startDate, effectiveEndDate, isHalfDay])
+    // Walk each calendar day inclusive; skip tenant-configured weekend days.
+    // Cap the loop at 366 iterations so a wildly out-of-order pair can never
+    // spin.
+    let count = 0
+    const cursor = new Date(start)
+    for (let i = 0; i <= 366; i++) {
+      if (cursor.getTime() > end.getTime()) break
+      const dow = cursor.getDay()
+      if (!weekendDays.has(dow)) count += 1
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    return count
+  }, [form.startDate, effectiveEndDate, isHalfDay, weekendDays])
 
   // Overlap check against existing PENDING/PENDING_L2/APPROVED leaves.
   const hasOverlap = React.useMemo(() => {
@@ -504,47 +534,77 @@ function ApprovalsTab() {
 
 // ── Main Leave Page ───────────────────────────────────────────────────────────
 
-const ALL_TABS: readonly Tab[] = ['my', 'apply', 'balances', 'approvals', 'types', 'holidays']
+// Single source of truth for every leave tab — labels, keys, and the
+// permission code that gates each. `useVisibleTabs` filters this list per
+// user against the SDK auth store. Order here is the tab order shown in
+// the UI, so if the URL asks for a tab the user cannot see, we silently
+// fall back to visibleTabs[0] (the leftmost tab they can see).
+//
+// Holidays is intentionally NOT gated at the tab level — every role
+// (EMPLOYEE + MANAGER included) needs to view the calendar. Write
+// actions (Add / Delete) are gated inside HolidayCalendar via canEdit
+// so read-only viewers see the list without buttons.
+const ALL_TABS = [
+  { key: 'my',        label: 'My Leaves' },
+  { key: 'apply',     label: 'Apply' },
+  { key: 'balances',  label: 'Balances' },
+  { key: 'approvals', label: 'Approvals',   requires: P.HRMS_LEAVE_APPROVE_L1 },
+  { key: 'types',     label: 'Leave Types', requires: P.LEAVE_TYPE_WRITE },
+  { key: 'holidays',  label: 'Holidays' },
+] as const
+
+type TabKey = typeof ALL_TABS[number]['key']
 
 export const Leave: React.FC = () => {
-  const isManager = usePermission(P.HRMS_LEAVE_APPROVE_L1)
-  const canManageTypes = usePermission(P.LEAVE_TYPE_WRITE)
-  const canManageHolidays = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
+  const visibleTabs = useVisibleTabs([...ALL_TABS])
+  const canEditHolidays = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
 
   // Support deep-linking to a specific tab via ?tab=approvals (etc). Notifications
   // + the dashboard's "Review leave requests" button rely on this — without it
   // every entry point dumped the user on 'My Leaves' regardless of the intent.
   // The URL stays in sync as the user clicks through so the back button works.
   const [searchParams, setSearchParams] = useSearchParams()
-  const requestedTab = searchParams.get('tab') as Tab | null
-  const initialTab: Tab = requestedTab && ALL_TABS.includes(requestedTab) ? requestedTab : 'my'
-  const [tab, setTab] = useState<Tab>(initialTab)
+  const requestedTab = searchParams.get('tab') as TabKey | null
+  const isVisible = (k: string | null | undefined): k is TabKey =>
+    !!k && visibleTabs.some((t) => t.key === k)
+  // Fallback to the first tab the user can actually see. visibleTabs is
+  // never empty in practice — My/Apply/Balances/Holidays have no gate
+  // — but we belt-and-brace to 'my' so a config bug can't crash the page.
+  const fallbackTab: TabKey = (visibleTabs[0]?.key ?? 'my') as TabKey
+  const initialTab: TabKey = isVisible(requestedTab) ? requestedTab : fallbackTab
+  const [tab, setTab] = useState<TabKey>(initialTab)
 
   // If the URL param changes while the page is mounted (e.g. the same-page
   // notification click), reflect it in local state without dropping other params.
   useEffect(() => {
-    if (requestedTab && ALL_TABS.includes(requestedTab) && requestedTab !== tab) {
+    if (isVisible(requestedTab) && requestedTab !== tab) {
       setTab(requestedTab)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedTab])
 
-  const switchTab = (next: Tab) => {
+  // Route-level guard: if a deep link asks for a tab this user is not
+  // allowed to see (e.g. an approvals link forwarded to an employee),
+  // rewrite the URL to the first visible tab instead of crashing or
+  // showing a blank body. `replace: true` keeps the browser back button
+  // pointing at wherever they came from.
+  useEffect(() => {
+    if (requestedTab && !isVisible(requestedTab)) {
+      const p = new URLSearchParams(searchParams)
+      p.set('tab', fallbackTab)
+      setSearchParams(p, { replace: true })
+      setTab(fallbackTab)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTab, visibleTabs.length])
+
+  const switchTab = (next: TabKey) => {
     setTab(next)
     // Keep any other query params intact; only rewrite ?tab=.
     const p = new URLSearchParams(searchParams)
     p.set('tab', next)
     setSearchParams(p, { replace: true })
   }
-
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'my', label: 'My Leaves' },
-    { key: 'apply', label: 'Apply' },
-    { key: 'balances', label: 'Balances' },
-    ...(isManager ? [{ key: 'approvals' as Tab, label: 'Approvals' }] : []),
-    ...(canManageTypes ? [{ key: 'types' as Tab, label: 'Leave Types' }] : []),
-    ...(canManageHolidays ? [{ key: 'holidays' as Tab, label: 'Holidays' }] : []),
-  ]
 
   return (
     <div className="mx-auto max-w-7xl p-6 sm:p-8 space-y-6">
@@ -555,8 +615,8 @@ export const Leave: React.FC = () => {
       />
 
       <div className="flex flex-wrap gap-1 bg-white border border-border-default p-1 rounded-xl w-fit">
-        {tabs.map((t) => (
-          <button key={t.key} onClick={() => switchTab(t.key)} className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t.key ? 'bg-[#059669] text-white shadow' : 'text-text-secondary hover:text-text-primary')}>
+        {visibleTabs.map((t) => (
+          <button key={t.key} onClick={() => switchTab(t.key as TabKey)} className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t.key ? 'bg-[#059669] text-white shadow' : 'text-text-secondary hover:text-text-primary')}>
             {t.label}
           </button>
         ))}
@@ -567,7 +627,7 @@ export const Leave: React.FC = () => {
       {tab === 'balances' && <BalancesTab />}
       {tab === 'approvals' && <ApprovalsTab />}
       {tab === 'types' && <LeaveTypes />}
-      {tab === 'holidays' && <HolidayCalendar />}
+      {tab === 'holidays' && <HolidayCalendar canEdit={canEditHolidays} />}
     </div>
   )
 }

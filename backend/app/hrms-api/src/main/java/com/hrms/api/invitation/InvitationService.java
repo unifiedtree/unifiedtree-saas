@@ -328,7 +328,12 @@ public class InvitationService {
             tokenRepo.invalidatePreviousTokens(creds.getId(), "PASSWORD_RESET", OffsetDateTime.now());
 
             String rawToken  = randomToken();
-            OffsetDateTime expiresAt = OffsetDateTime.now().plusHours(1);
+            // 24h expiry (was 1h): a user forwarding the email to a personal
+            // inbox, opening it on a phone that's been offline all day, or
+            // simply not noticing the reset email until the next morning is
+            // the normal case — a 1-hour window means half of those clicks
+            // land on RESET_EXPIRED and the user has to start over.
+            OffsetDateTime expiresAt = OffsetDateTime.now().plusHours(24);
 
             InvitationToken token = new InvitationToken();
             token.setTenantId(resolvedTenant);
@@ -345,6 +350,26 @@ public class InvitationService {
                 "Reset your UnifiedTree password", resetHtml(resetUrl));
             log.info("Password reset email queued for {}", email);
         });
+    }
+
+    /**
+     * Validate a reset token WITHOUT consuming it. Used by the SPA's landing
+     * page for the /reset-password?token=... link to decide whether to show
+     * the "set a new password" form or a "this link has expired" screen.
+     *
+     * <p>Throws the same BusinessRuleException codes as {@link #resetPassword}
+     * (RESET_INVALID / RESET_EXPIRED), so the controller's advice can render
+     * one consistent message.
+     */
+    @Transactional(readOnly = true)
+    public void verifyResetToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new BusinessRuleException(
+                    "Reset link is invalid or has already been used.", "RESET_INVALID");
+        }
+        resolveToken(sha256Hex(rawToken), "PASSWORD_RESET",
+            "Reset link is invalid or has already been used.", "RESET_INVALID",
+            "This reset link has expired. Request a new one.", "RESET_EXPIRED");
     }
 
     @Transactional
@@ -537,7 +562,7 @@ public class InvitationService {
                 Reset password →
               </a>
             </p>
-            <p style="color:#64748b;font-size:13px">This link expires in 1 hour.<br>
+            <p style="color:#64748b;font-size:13px">This link expires in 24 hours.<br>
             If you didn't request this, you can safely ignore this email.</p>
             </body></html>
             """.formatted(resetUrl);

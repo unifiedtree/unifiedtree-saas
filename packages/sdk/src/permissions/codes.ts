@@ -90,6 +90,18 @@ export const P = {
   HRMS_PAYROLL_READ:               'hrms.payroll.read',
   HRMS_PAYROLL_WRITE:              'hrms.payroll.write',
   HRMS_PAYROLL_PROCESS:            'hrms.payroll.process',
+  /**
+   * Initiate a bank-disbursement batch (NEFT/RTGS). Backend today gates the
+   * disbursement flow with `hrms.disbursement.build` / `hrms.disbursement.post`
+   * — this planned code names the "click Pay" step the HRMS dashboard needs to
+   * gate ("only admin will pay salaries") and will be seeded when the module
+   * consolidates its authorities.
+   */
+  PAYROLL_DISBURSEMENT_INITIATE:   'payroll.disbursement.initiate',
+
+  // ── HRMS: Hiring ──────────────────────────────────────────────────────────
+  HRMS_HIRING_READ:                'hrms.hiring.read',
+  HRMS_HIRING_WRITE:               'hrms.hiring.write',
 
   // ── HRMS: ESS ─────────────────────────────────────────────────────────────
   HRMS_ESS_READ:                   'hrms.ess.read',
@@ -111,6 +123,13 @@ export const P = {
   ATTENDANCE_FACE_VERIFY_SELF:     'attendance.face.verify.self',
   ATTENDANCE_FACE_ADMIN_READ:      'attendance.face.admin.read',
   ATTENDANCE_FACE_ADMIN_RESET:     'attendance.face.admin.reset',
+  /**
+   * Manager/Admin manual attendance entry. Backend AttendanceController's
+   * /manual-entry endpoint currently piggy-backs on
+   * `attendance.regularization.approve`; this planned code names the write
+   * intent directly for a future authorities split.
+   */
+  ATTENDANCE_MANUAL_ENTRY_WRITE:   'attendance.manual-entry.write',
 
   // ── Leave ─────────────────────────────────────────────────────────────────
   LEAVE_BALANCE_READ:              'leave.balance.read',

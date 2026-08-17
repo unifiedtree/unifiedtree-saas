@@ -263,6 +263,45 @@ public class PayrollRunService {
         jdbc.update("DELETE FROM payroll.payslip_lines WHERE run_id = ?", runId);
         jdbc.update("DELETE FROM payroll.run_lop_days WHERE run_id = ?", runId);
 
+        // B3 FIX (audit 2026-08-15): REWIND advance recovery BEFORE re-applying.
+        // Without this, re-processing a payroll run re-inserts REPAYMENT ledger
+        // entries and re-decrements outstanding_amount from the already-recovered
+        // balance — the employee gets double-deducted for the same installment
+        // (and the ledger tells three lies about what they still owe). Flip
+        // this run's RECOVERED rows back to PENDING, restore outstanding =
+        // outstanding + this run's recovered_amount, and delete this run's
+        // REPAYMENT ledger entries. applyForMonth below is then free to
+        // idempotently re-select the PENDING rows.
+        List<Map<String, Object>> priorRecoveries = jdbc.queryForList("""
+                SELECT s.id AS schedule_id, s.advance_request_id, s.recovered_amount
+                  FROM advance_mgmt.advance_recovery_schedule s
+                 WHERE s.payroll_run_id = ? AND s.status = 'RECOVERED'
+                """, runId);
+        for (Map<String, Object> row : priorRecoveries) {
+            java.math.BigDecimal recovered = (java.math.BigDecimal) row.get("recovered_amount");
+            UUID advId = (UUID) row.get("advance_request_id");
+            UUID schedId = (UUID) row.get("schedule_id");
+            if (recovered != null && recovered.signum() > 0) {
+                jdbc.update("""
+                        UPDATE advance_mgmt.advance_requests
+                           SET outstanding_amount = COALESCE(outstanding_amount, 0) + ?,
+                               updated_at = now(), version = version + 1
+                         WHERE id = ?
+                        """, recovered, advId);
+            }
+            jdbc.update("""
+                    UPDATE advance_mgmt.advance_recovery_schedule
+                       SET status = 'PENDING', payroll_run_id = NULL,
+                           recovered_amount = NULL, recovered_at = NULL,
+                           updated_at = now(), version = version + 1
+                     WHERE id = ?
+                    """, schedId);
+        }
+        jdbc.update("""
+                DELETE FROM advance_mgmt.advance_ledger_entries
+                 WHERE payroll_run_id = ? AND entry_type = 'REPAYMENT'
+                """, runId);
+
         List<EligibleEmployeeDto> eligible = queryEligible(run.companyId(), run.periodStart(), run.periodEnd());
 
         // ── B7 perf (2026-08-14): preload every per-employee input ONCE ──
@@ -581,8 +620,11 @@ public class PayrollRunService {
         List<DayStatus> days = buildDayStatuses(employeeId, ym, pre);
         boolean sandwich = Boolean.TRUE.equals(settings.get("sandwich_rule_enabled"));
         Integer lateThreshold = (Integer) settings.get("late_mark_lop_threshold");
+        // B3 FIX (audit 2026-08-15): actual late-mark count from the preload
+        // (was hardcoded 0 → policy never applied).
+        int lateCount = pre.lateMarkCountByEmp().getOrDefault(employeeId, 0);
         LopResult lop = LopCalculator.calculate(new LopInput(
-            days, sandwich, lateThreshold == null ? 0 : lateThreshold, 0,
+            days, sandwich, lateThreshold == null ? 0 : lateThreshold, lateCount,
             empMeta.dateOfJoining(), empMeta.lastWorkingDay(), ym));
 
         // Statutory config.
@@ -686,7 +728,12 @@ public class PayrollRunService {
             Map<UUID, Map<LocalDate, DayStatus>> attendanceByEmp,
             Map<UUID, Map<LocalDate, DayStatus>> leaveByEmp,
             Set<LocalDate> holidays,
-            Map<String, List<PtSlab>> ptSlabsByState) {}
+            Map<String, List<PtSlab>> ptSlabsByState,
+            /* B3 FIX (audit 2026-08-15): per-employee count of late marks
+             * for the payroll period. Previously PayrollRunService hard-coded
+             * lateMarkCount=0 into LopInput, so nobody ever lost pay for late
+             * marks regardless of policy. */
+            Map<UUID, Integer> lateMarkCountByEmp) {}
 
     private record EmployeeMeta(LocalDate dateOfJoining, LocalDate lastWorkingDay) {}
     private record StructureMeta(UUID id, BigDecimal ctcMonthly, boolean pfApplicable,
@@ -699,7 +746,7 @@ public class PayrollRunService {
                                             LocalDate periodStart, LocalDate periodEnd) {
         if (empIds.isEmpty()) {
             return new PreloadedRunData(Map.of(), Map.of(), Map.of(),
-                    Map.of(), Map.of(), Set.of(), Map.of());
+                    Map.of(), Map.of(), Set.of(), Map.of(), Map.of());
         }
 
         // Postgres arrays keep us portable across empIds sizes without hand-
@@ -838,8 +885,44 @@ public class PayrollRunService {
                             rs.getBigDecimal("monthly_tax")));
         });
 
+        // B3 FIX (audit 2026-08-15, corrected 2026-08-17): late-mark counts
+        // per employee. The canonical marker for a late arrival is the
+        // attendance.records.attendance_status column being 'LATE' — there is
+        // no is_late boolean column on the table (the earlier version referred
+        // to one and every payroll run silently caught the "column does not
+        // exist" and returned zeros). late_by_minutes exists too but is not a
+        // reliable predicate on its own, so we key strictly on status.
+        Map<UUID, Integer> lateMarkCountByEmp = new HashMap<>();
+        try {
+            jdbc.query("""
+                    SELECT employee_id, COUNT(*) AS n
+                      FROM attendance.records
+                     WHERE employee_id = ANY (?)
+                       AND attendance_date BETWEEN ? AND ?
+                       AND attendance_status = 'LATE'
+                     GROUP BY employee_id
+                    """, ps -> {
+                ps.setArray(1, idsArray);
+                ps.setObject(2, periodStart);
+                ps.setObject(3, periodEnd);
+            }, rs -> {
+                lateMarkCountByEmp.put(rs.getObject("employee_id", UUID.class),
+                        rs.getInt("n"));
+            });
+        } catch (RuntimeException e) {
+            // Surface, don't swallow. If the schema drifts again a payroll run
+            // must FAIL loudly in staging rather than silently zeroing every
+            // late-mark deduction across every employee (the exact failure mode
+            // this fix corrects). ERROR tag is distinctive so log alerts can
+            // catch it before it reaches customer runs.
+            log.error("LATE_MARK_LOAD_FAIL preloadRunData: late-mark count query failed for period {}..{}: {}",
+                    periodStart, periodEnd, e.getMessage(), e);
+            throw e;
+        }
+
         return new PreloadedRunData(employees, structures, structureLines,
-                attendanceByEmp, leaveByEmp, holidays, ptSlabsByState);
+                attendanceByEmp, leaveByEmp, holidays, ptSlabsByState,
+                lateMarkCountByEmp);
     }
 
     /**

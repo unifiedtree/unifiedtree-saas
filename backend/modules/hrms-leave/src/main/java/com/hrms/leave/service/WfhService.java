@@ -137,6 +137,15 @@ public class WfhService {
                     "WFH request is not in PENDING status (current: %s)".formatted(entity.getStatus()),
                     "WFH_NOT_PENDING");
         }
+        // B4 CRIT FIX (audit 2026-08-15): assertNotSelfApproval — mirror the
+        // LeaveService guard. Without this, a WFH request whose approver was
+        // set to the employee (stale reporting_manager_id, or a corrupt row)
+        // could be self-approved, giving unlimited work-from-anywhere.
+        if (approverId != null && approverId.equals(entity.getEmployeeId())) {
+            throw new BusinessRuleException(
+                    "You cannot approve or reject your own WFH request.",
+                    "WFH_SELF_APPROVAL");
+        }
         entity.setStatus(decision);
         entity.setApproverId(approverId);
         entity.setDecidedAt(Instant.now());

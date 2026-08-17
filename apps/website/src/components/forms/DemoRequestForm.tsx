@@ -53,11 +53,11 @@ export function DemoRequestForm() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <Field label="Full name" error={errors.name?.message}>
-        <input {...register('name')} className={inputCls} placeholder="Jane Doe" />
+        <input {...register('name')} className={inputCls} placeholder="Your full name" />
       </Field>
 
       <Field label="Work email" error={errors.workEmail?.message}>
-        <input {...register('workEmail')} type="email" className={inputCls} placeholder="jane@company.com" />
+        <input {...register('workEmail')} type="email" className={inputCls} placeholder="you@company.com" />
       </Field>
 
       <Field label="Company" error={errors.company?.message}>

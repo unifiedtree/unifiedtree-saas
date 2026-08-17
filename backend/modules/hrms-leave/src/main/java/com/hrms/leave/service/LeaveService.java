@@ -122,6 +122,35 @@ public class LeaveService {
         if (endDate.isBefore(startDate)) {
             throw new BusinessRuleException("End date must not be before start date", "INVALID_LEAVE_DATES");
         }
+        // B4 FIX (audit 2026-08-15): a half-day leave MUST be single-day.
+        // Previously a HALF_DAY_MORNING with startDate 2026-08-15 and endDate
+        // 2026-08-20 was accepted — the working-days calc silently applied
+        // the half-day multiplier across the whole range, meaning the
+        // employee lost 0.5 * N days from balance for what they THOUGHT was
+        // a half-day. Reject explicitly at the door.
+        boolean isHalfDay = request.duration() == com.hrms.leave.enums.LeaveDuration.HALF_DAY_MORNING
+                || request.duration() == com.hrms.leave.enums.LeaveDuration.HALF_DAY_AFTERNOON;
+        if (isHalfDay && !startDate.equals(endDate)) {
+            throw new BusinessRuleException(
+                    "HALF_DAY leave must be a single day (startDate must equal endDate).",
+                    "HALF_DAY_MULTI_DAY");
+        }
+
+        // B4 FIX (audit 2026-08-15): cross-year leave request handling.
+        // The service historically fetched ONE balance row (start-year) and
+        // deducted the whole totalDays there, silently over-drafting the
+        // start year while leaving the end year's balance untouched. Until
+        // proper per-year splitting is wired end-to-end (approveL2, cancel,
+        // accrual credit all need updates), reject cross-year applications
+        // cleanly so the operator splits into two separate requests. This
+        // fixes the wrong-deduction bug without introducing new inconsistency
+        // in the approval/cancel paths.
+        if (startDate.getYear() != endDate.getYear()) {
+            throw new BusinessRuleException(
+                    "Cross-year leave is not supported yet — split this into two requests "
+                    + "(one ending Dec 31, one starting Jan 1) so each year's balance is charged correctly.",
+                    "LEAVE_CROSS_YEAR");
+        }
 
         // Guard past-dated applications BEFORE the notice check. Without this
         // gate, an applicant picking a start date in the past hits the notice
@@ -440,11 +469,27 @@ public class LeaveService {
         }
 
         ApprovalStatus currentStatus = leaveRequest.getStatus();
-        if (currentStatus != ApprovalStatus.PENDING && currentStatus != ApprovalStatus.APPROVED) {
+        // B4 FIX (audit 2026-08-15):
+        //  - allow cancel from PENDING_L2 (with pending-only rollback, no
+        //    balance credit — same semantics as PENDING);
+        //  - block cancel for APPROVED past-dated leaves for regular
+        //    employees (only holders of hrms.leave.cancel.past can cancel
+        //    past-dated approvals, and NO balance credit is given in that
+        //    case — the leave has already been consumed as calendar time).
+        if (currentStatus != ApprovalStatus.PENDING
+                && currentStatus != ApprovalStatus.PENDING_L2
+                && currentStatus != ApprovalStatus.APPROVED) {
             throw new BusinessRuleException(
-                    "Only PENDING or APPROVED leave requests can be cancelled, current status: %s"
+                    "Only PENDING, PENDING_L2 or APPROVED leave requests can be cancelled, current status: %s"
                             .formatted(currentStatus),
                     "LEAVE_CANNOT_CANCEL");
+        }
+        boolean isPast = leaveRequest.getEndDate().isBefore(LocalDate.now());
+        boolean callerHasOverride = hasAuthority("hrms.leave.cancel.past");
+        if (currentStatus == ApprovalStatus.APPROVED && isPast && !callerHasOverride) {
+            throw new BusinessRuleException(
+                    "Approved past-dated leaves cannot be cancelled — HR only.",
+                    "LEAVE_PAST_CANCEL_FORBIDDEN");
         }
 
         LeaveBalance balance = leaveBalanceRepository
@@ -458,13 +503,20 @@ public class LeaveService {
         double totalDays = leaveRequest.getTotalDays();
 
         if (currentStatus == ApprovalStatus.APPROVED) {
-            // Revert used balance
-            balance.setUsed(balance.getUsed() - totalDays);
-            log.info("Cancelled APPROVED leave: used balance reverted for employee={}", employeeId);
+            if (isPast) {
+                // HR-override cancel of past-dated leave — do NOT credit
+                // balance (the days were already consumed).
+                log.info("HR cancelled past-dated APPROVED leave: balance NOT credited (employee={}, days={})",
+                        employeeId, totalDays);
+            } else {
+                // Future-dated approved leave: legitimate credit of used balance.
+                balance.setUsed(balance.getUsed() - totalDays);
+                log.info("Cancelled APPROVED leave: used balance reverted for employee={}", employeeId);
+            }
         } else {
-            // Revert pending balance
+            // PENDING or PENDING_L2 — pending-only rollback, no used credit.
             balance.setPending(balance.getPending() - totalDays);
-            log.info("Cancelled PENDING leave: pending balance reverted for employee={}", employeeId);
+            log.info("Cancelled {} leave: pending balance reverted for employee={}", currentStatus, employeeId);
         }
 
         leaveRequest.setStatus(ApprovalStatus.CANCELLED);
@@ -570,6 +622,19 @@ public class LeaveService {
         // Self-approval guard — see approveLeave for the reasoning.
         assertNotSelfApproval(req, managerId);
 
+        // B4 FIX (audit 2026-08-15): caller MUST match the request's
+        // approver_id_l1 unless they hold hrms.leave.override. Without this,
+        // any user with the L1 permission (a peer manager, a different
+        // department head) can approve someone else's request routed to a
+        // specific manager — bypassing the routing rules the applicant saw.
+        if (!hasAuthority("hrms.leave.override")
+                && req.getApproverId() != null
+                && !req.getApproverId().equals(managerId)) {
+            throw new BusinessRuleException(
+                    "Only the assigned L1 approver may act on this leave request.",
+                    "LEAVE_NOT_YOUR_APPROVAL");
+        }
+
         if (req.getStatus() != ApprovalStatus.PENDING) {
             throw new BusinessRuleException(
                     "Leave request is not awaiting L1 approval (status=%s)".formatted(req.getStatus()),
@@ -616,6 +681,15 @@ public class LeaveService {
         // preAuthorize on the controller, but the applicant==actor case is
         // the one this guard specifically closes.
         assertNotSelfApproval(req, hrUserId);
+
+        // B4 FIX (audit 2026-08-15): L2 approver MUST differ from the L1
+        // approver — HR sign-off is meant to be a second pair of eyes, not
+        // a single-user rubber stamp.
+        if (req.getApproverId() != null && req.getApproverId().equals(hrUserId)) {
+            throw new BusinessRuleException(
+                    "The L1 approver cannot also sign off L2 for the same request.",
+                    "LEAVE_L2_SAME_AS_L1");
+        }
 
         if (req.getStatus() != ApprovalStatus.PENDING_L2) {
             throw new BusinessRuleException(
@@ -785,7 +859,17 @@ public class LeaveService {
                 .filter(date -> !holidays.contains(date))
                 .count();
 
+        // B4 FIX (audit 2026-08-15): distinguish "start date is itself a
+        // weekend/holiday" from "range collapsed to nothing". The former
+        // is a config mistake worth flagging so the applicant fixes their
+        // date rather than seeing the generic NO_WORKING_DAYS message.
         if (workingDays == 0) {
+            boolean startIsNonWorking = isWeekend(startDate) || holidays.contains(startDate);
+            if (startIsNonWorking) {
+                throw new BusinessRuleException(
+                        "Leave cannot start on a weekend or holiday (" + startDate + ").",
+                        "LEAVE_START_ON_NON_WORKING_DAY");
+            }
             return 0;
         }
 
@@ -801,6 +885,22 @@ public class LeaveService {
     private boolean isWeekend(LocalDate date) {
         DayOfWeek day = date.getDayOfWeek();
         return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
+    }
+
+    /**
+     * True if the caller's Spring Security Authentication holds {@code authority}.
+     * Used by B4 fixes to gate override branches (cross-year past cancel,
+     * L1-approver override, etc.).
+     */
+    private static boolean hasAuthority(String authority) {
+        try {
+            var a = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            return a != null && a.getAuthorities().stream()
+                    .anyMatch(g -> authority.equals(g.getAuthority()));
+        } catch (Exception ignore) {
+            return false;
+        }
     }
 
     private LeaveRequestResponse toResponseWithTypeName(LeaveRequest request) {

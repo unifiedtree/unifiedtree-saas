@@ -170,7 +170,15 @@ public class SubscriptionSignupController {
                 ? null
                 : passwords.hash(requirePassword(req.password()));
 
-        // ------- 5. create the Razorpay subscription -------------------------
+        // ------- 5. create the Razorpay subscription + stash pending together ------
+        // B1 FIX (audit 2026-08-15): the Razorpay call and the pending_signups
+        // INSERT must live inside the SAME atomic scope so we never have a
+        // Razorpay subscription with no row in our DB (previously: create sub,
+        // then insert row — if the insert failed the Razorpay side had to be
+        // manually cancelled, and any orphan slot lived until PendingSignupSweep
+        // GC'd it). The controller wraps the whole thing in a try/rollback: if
+        // stash throws (409 subdomain collision, DB blip), we cancel the
+        // Razorpay subscription right here.
         Instant startAt = mode == Mode.TRIAL
                 ? Instant.now().plusSeconds(TRIAL_DAYS * 24 * 3600)
                 : null;
@@ -217,12 +225,19 @@ public class SubscriptionSignupController {
                     rzp.subscriptionId(),
                     /*customerId*/ null,
                     rzp.shortUrl()));
-        } catch (ResponseStatusException e) {
+        } catch (RuntimeException e) {
             // Rollback the Razorpay subscription so a failed stash doesn't leave
             // an orphaned "created" subscription that Razorpay could try to charge
             // on the trial-end day (which would generate a webhook for a signup
-            // we never persisted).
-            subscriptions.cancelPreAuth(rzp.subscriptionId());
+            // we never persisted). Widened from ResponseStatusException to
+            // RuntimeException per B1 audit — a DB blip that surfaces as
+            // DataAccessException would previously slip past and leave the
+            // Razorpay subscription live.
+            try { subscriptions.cancelPreAuth(rzp.subscriptionId()); }
+            catch (Exception rollbackErr) {
+                log.warn("subscription-signup rollback of {} failed: {}",
+                        rzp.subscriptionId(), rollbackErr.getMessage());
+            }
             throw e;
         }
 

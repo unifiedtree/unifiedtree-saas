@@ -135,8 +135,16 @@ public class PolicyService {
     public void acknowledge(UUID policyId, UUID employeeId) {
         HrPolicy policy = policyRepository.findById(policyId)
                 .orElseThrow(() -> new ResourceNotFoundException("HrPolicy", policyId));
-        if (ackRepository.existsByPolicyIdAndEmployeeId(policy.getId(), employeeId)) {
-            log.debug("Policy {} already acknowledged by employee {} — skipping", policyId, employeeId);
+        // B7 FIX (audit 2026-08-15): acks are now per-version, not
+        // per-policy — bumping the policy version forces re-ack. Look up
+        // whether an ack already exists for THIS version.
+        String currentVersion = policy.getPolicyVersion();
+        boolean alreadyAcked = ackRepository.findByEmployeeId(employeeId).stream()
+                .filter(a -> a.getPolicyId().equals(policy.getId()))
+                .anyMatch(a -> java.util.Objects.equals(a.getPolicyVersion(), currentVersion));
+        if (alreadyAcked) {
+            log.debug("Policy {} version {} already acknowledged by employee {} — skipping",
+                    policyId, currentVersion, employeeId);
             return;
         }
         PolicyAcknowledgement ack = new PolicyAcknowledgement();
@@ -144,8 +152,25 @@ public class PolicyService {
         ack.setPolicyId(policy.getId());
         ack.setEmployeeId(employeeId);
         ack.setAcknowledgedAt(Instant.now());
+        ack.setPolicyVersion(currentVersion);
         ackRepository.save(ack);
-        log.info("Policy {} acknowledged by employee {}", policyId, employeeId);
+        log.info("Policy {} version {} acknowledged by employee {}", policyId, currentVersion, employeeId);
+    }
+
+    /**
+     * B7 FIX (audit 2026-08-15): true if {@code employeeId} has NOT yet
+     * acknowledged the CURRENT version of {@code policyId}. Existing-ack
+     * check is version-aware: a prior ack for an older version does NOT
+     * satisfy a newly bumped policy.
+     */
+    @Transactional(readOnly = true)
+    public boolean needsAcknowledgment(UUID policyId, UUID employeeId) {
+        HrPolicy policy = policyRepository.findById(policyId)
+                .orElseThrow(() -> new ResourceNotFoundException("HrPolicy", policyId));
+        String currentVersion = policy.getPolicyVersion();
+        return ackRepository.findByEmployeeId(employeeId).stream()
+                .filter(a -> a.getPolicyId().equals(policy.getId()))
+                .noneMatch(a -> java.util.Objects.equals(a.getPolicyVersion(), currentVersion));
     }
 
     @Transactional(readOnly = true)

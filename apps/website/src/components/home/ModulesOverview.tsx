@@ -34,21 +34,33 @@ const keyIconMap: Record<string, React.ElementType> = {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Per-module competitor annotations                                  */
+/*  Per-module "what you'd otherwise cobble together" annotations      */
 /* ------------------------------------------------------------------ */
+/**
+ * Category labels, not named competitors.
+ *
+ * 2026-08-17 (CRIT #5 audit): the previous map named specific competitor
+ * brands next to each tile, styled as strike-through comparisons. Naming
+ * a competitor without a substantiated, apples-to-apples claim risks a
+ * disparagement complaint under the Indian Advertising Code and the
+ * competitor's own IP; the ASCI code (chapter III) also treats
+ * unsubstantiated "our product replaces X" claims as misleading. Category
+ * labels make the same "one platform vs. five tools" point without
+ * naming anyone.
+ */
 const competitorMap: Record<string, string> = {
-  hrms:          'BambooHR',
-  attendance:    'Keka',
-  payroll:       'greytHR',
-  accounting:    'QuickBooks',
-  inventory:     'Zoho',
-  crm:           'Salesforce',
-  purchase:      'SAP',
-  sales:         'Freshsales',
-  projects:      'Asana',
-  manufacturing: 'Katana',
-  pos:           'Lightspeed',
-  reports:       'Tableau',
+  hrms:          'yet another HR tool',
+  attendance:    'a separate attendance app',
+  payroll:       'a payroll spreadsheet',
+  accounting:    'a standalone ledger',
+  inventory:     'an inventory silo',
+  crm:           'a CRM you keep exporting',
+  purchase:      'a procurement app',
+  sales:         'a sales-only pipeline',
+  projects:      'a project tracker',
+  manufacturing: 'a production spreadsheet',
+  pos:           'a standalone POS',
+  reports:       'a BI seat per department',
 }
 
 /* ------------------------------------------------------------------ */
@@ -200,10 +212,10 @@ function ModuleTile({
           animationDelay: `${index * 0.04}s`,
         }}
       >
-        {/* "Soon" badge */}
+        {/* "Launching soon" badge (was "Soon", per audit 2026-08-17) */}
         {!available && (
-          <span className="absolute -top-1 -right-1 z-20 text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
-            <Lock size={8} /> Soon
+          <span className="absolute -top-1 -right-1 z-20 text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm whitespace-nowrap">
+            <Lock size={8} /> Launching soon
           </span>
         )}
 

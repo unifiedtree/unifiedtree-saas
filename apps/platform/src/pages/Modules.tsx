@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { APPS } from '@/layouts/appConfig'
 import { useModulePlans, iconMap, type ModulePlan } from '@/core/api/modulePlans'
+import { useDisplayName } from '@/shared/hooks/useDisplayName'
 
 type Status = 'active' | 'coming-soon' | 'locked'
 
@@ -145,7 +146,12 @@ export const Modules: React.FC = () => {
     const h = new Date().getHours()
     return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
   })()
-  const firstName = user?.firstName || (user?.email ? user.email.split('@')[0] : 'there')
+  // Centralised fallback chain: displayName > firstName + lastName > firstName
+  // > email.split('@')[0]. Was inlined here as `user?.firstName || email
+  // local-part`, which meant customers whose `firstName` hydrated a beat late
+  // (fresh login on a cold tab) got "shurya.kumar063" flashed before
+  // "Suryakumar" settled. See useDisplayName for the full rationale.
+  const { greetingName: firstName } = useDisplayName()
 
   const enter = (tile: Tile) => {
     if (tile.status === 'locked') { if (isAdmin) openPlan(tile.planKey); return }

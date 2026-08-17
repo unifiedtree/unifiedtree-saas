@@ -492,11 +492,17 @@ public class PlanChangeService {
                 r.razorpaySubscriptionId, trialEnds);
 
         // Burn the free_trial_used slot ONLY if this activation actually delivered
-        // a fresh trial. Idempotent (WHERE free_trial_used = FALSE), so a webhook
-        // re-delivery cannot flip it back off. NOTE: platform.tenants has no
-        // updated_at column (verified 2026-08-10 after a "column does not exist"
-        // 500 blew up activate() live) — do not add one here.
-        if (trialEnds != null) {
+        // a fresh trial (i.e. this row was created via the grantTrialForRow=true
+        // branch — replacesSubscriptionId==null AND trial slot was still unused).
+        // B1 FIX (audit 2026-08-15): trialEnds != null was also true for
+        // REPLACEMENT mandates that inherited the OLD subscription's period
+        // end as start_at (mid-trial seat change). Burning the trial slot on
+        // a replacement wastes the customer's free-trial affordance on a
+        // seat-swap event that never delivered a fresh trial. Distinguish the
+        // two cases explicitly: only burn when a REAL trial was granted.
+        boolean burnTrialSlot = trialEnds != null
+                && (r.replacesSubscriptionId == null || r.replacesSubscriptionId.isBlank());
+        if (burnTrialSlot) {
             jdbc.update("""
                     UPDATE platform.tenants
                        SET free_trial_used = TRUE

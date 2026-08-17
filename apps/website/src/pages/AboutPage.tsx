@@ -89,19 +89,19 @@ const story = [
   {
     chapter: '03',
     eyebrow: 'Where we are',
-    title: 'A platform businesses switch on in an afternoon',
+    title: 'Launched, honest about what ships today',
     body:
-      'Today UnifiedTree runs manufacturing lines, retail chains, clinics, campuses and construction sites. The promise has not changed since the first install: pick the modules you need, keep the ones that earn their place, and be running the same day.',
+      "We're in launch mode. HR, Payroll and mobile Attendance (with offline face verification) ship today, on the same connected core. Sector-specific modules — POS, Manufacturing, CRM and the rest — are launching in the order early customers ask for them.",
     points: [
       {
         icon: Rocket,
         label: 'Live on day one',
-        detail: 'Guided setup, sample data you can throw away, and your first invoice before lunch.',
+        detail: 'Guided setup, sample data you can throw away, and your first payroll run the same week.',
       },
       {
         icon: Globe2,
-        label: 'Local rules, global platform',
-        detail: 'Multi-currency, multi-entity and region-specific tax handled by the same core.',
+        label: 'India-first, region packs to follow',
+        detail: 'GST, PF, ESI, TDS are in the core today. Other regions ship as pluggable statutory packs.',
       },
       {
         icon: Handshake,
@@ -112,41 +112,61 @@ const story = [
   },
 ]
 
+/**
+ * Where-we-are markers.
+ *
+ * 2026-08-17 (CRIT #5): the previous "By the numbers" block claimed
+ * "2,400+ businesses / 14 countries / 99.9% uptime / 1 day to first
+ * invoice." None of those figures were true — we are at launch. Replaced
+ * with honest launch-mode markers that stay accurate: the SLA number we
+ * actually commit to on the Terms page and Features page, the hosting
+ * region, the region-pack we ship today, and the module set that is live
+ * today.
+ */
 const stats = [
-  { value: '2,400+', label: 'Businesses run on UnifiedTree', sub: 'from 4-person shops to 10,000-strong groups' },
-  { value: '14', label: 'Countries with live workspaces', sub: 'multi-entity, multi-currency, one core' },
-  { value: '99.9%', label: 'Platform uptime, trailing 12 months', sub: 'offline mode covers the rest' },
-  { value: '1 day', label: 'Median time to first invoice', sub: 'not one quarter, not one month' },
+  { value: '99.5%', label: 'Monthly uptime SLA', sub: 'the number we commit to on the Terms page' },
+  { value: 'asia-south1', label: 'Google Cloud, Mumbai', sub: 'data at rest stays in India' },
+  { value: 'India', label: 'First region pack live today', sub: 'GST, PF, ESI, TDS in the core' },
+  { value: 'HR + Payroll', label: 'Live modules today', sub: 'plus mobile attendance & face verification' },
 ]
 
+/**
+ * The team.
+ *
+ * 2026-08-17 (CRIT #5): the previous cards named specific headcounts
+ * (34 + 18 + 22 + 9 people) for four departments, and none of those
+ * numbers were real. Replaced with a single honest card that says what
+ * is true — a small India-based team building UnifiedTree in the open —
+ * and one contact link so a customer who wants a face still gets one.
+ */
 const team = [
   {
-    icon: Code2,
-    group: 'Product & Engineering',
-    count: '34 people',
+    icon: Handshake,
+    group: 'A small India-based team',
+    count: 'Founders on every early call',
     description:
-      'Ships every second Tuesday. Half the team has implemented ERP on a factory floor, which is why the release notes read like operations notes.',
+      "We're at launch. That means when you book a demo or email support you land on the people who built the product. No call centre, no ticket lottery, no five layers between you and the person who can change the software.",
   },
   {
-    icon: Handshake,
-    group: 'Implementation',
-    count: '18 people',
+    icon: Code2,
+    group: 'Built in the open',
+    count: 'Roadmap driven by customer conversations',
     description:
-      'On site the week you sign. They migrate your ledger, train your supervisors, and hand the system over configured — not blank.',
+      'HR, Payroll and mobile Attendance ship today. Sector modules (Manufacturing, Retail POS, CRM and the rest) are launching in the order early customers ask for them.',
   },
   {
     icon: Headset,
-    group: 'Customer Support',
-    count: '22 people',
+    group: 'Direct support',
+    count: 'Same-day response in India hours',
     description:
-      'Same-day response in your working hours, escalation paths that end at an engineer, and no ticket closed until the workflow runs.',
+      'Email support@unifiedtree.com and you talk to a human, not a bot. Escalations end at an engineer, and no ticket is closed until the workflow actually runs on your data.',
   },
   {
     icon: PenTool,
-    group: 'Design & Research',
-    count: '9 people',
+    group: 'Design decisions we hold',
+    count: 'Offline-first, one connected core',
     description:
-      'They spend more time in warehouses than in Figma. Every screen is tested with the person who will actually use it at 6am.',
+      "Every screen is designed for the shop-floor supervisor or the finance clerk who actually opens it. We don't ship features we haven't sat next to someone using.",
   },
 ]
 
@@ -311,13 +331,13 @@ export function AboutPage() {
             className="max-w-2xl"
           >
             <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-white/70">
-              By the numbers
+              Where we are today
             </p>
             <h2
               className="mt-4 font-heading font-extrabold text-white"
               style={{ fontSize: 'clamp(1.653rem, 3.168vw, 2.61rem)', lineHeight: 1.06, letterSpacing: '-0.035em' }}
             >
-              Ten years of shop-floor lessons, running in production
+              Launch mode. Honest about what ships, honest about what's next.
             </h2>
           </motion.div>
 

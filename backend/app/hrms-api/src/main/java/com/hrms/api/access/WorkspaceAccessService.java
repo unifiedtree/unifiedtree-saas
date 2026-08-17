@@ -210,14 +210,18 @@ public class WorkspaceAccessService {
             }
             String first = (req.firstName() == null || req.firstName().isBlank())
                 ? req.email().split("@")[0] : req.firstName();
-            // Positional ctor (31 components). Everything past name/email is
-            // unset for a workspace-invite-created employee — including
-            // geoFenceZoneId and weeklyOffDays (defaults applied server-side).
+            // Positional ctor. Everything past name/email is unset for a
+            // workspace-invite-created employee — including geoFenceZoneId and
+            // weeklyOffDays (defaults applied server-side). B2 FIX 2026-08-15:
+            // uan/esi/monthlySalary/salaryFrequency added between passport and
+            // bank fields, so this call now has 4 extra trailing nulls.
             CreateWorkforceEmployeeRequest cr = new CreateWorkforceEmployeeRequest(
                 req.companyId(), null, first, null, req.lastName(), req.email(),
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null,
+                null, null, null, null,   // uan, esi, monthlySalary, salaryFrequency
+                null, null, null, null, null, null, null, null, null, null);
             WorkforceEmployeeResponse emp = workforceService.create(cr);
 
             InvitationService.InvitationResult result =

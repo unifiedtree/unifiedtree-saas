@@ -57,14 +57,14 @@ const pillars = [
 ]
 
 const technicalFeatures = [
-  { icon: Lock, label: 'AES-256 Encryption at rest' },
-  { icon: RefreshCw, label: 'Auto backups every 6 hours' },
+  { icon: Lock, label: 'AES-256 encryption at rest' },
+  { icon: RefreshCw, label: 'Automated daily backups' },
   { icon: Bell, label: 'Real-time push notifications' },
   { icon: FileText, label: 'Audit trail on every action' },
   { icon: Users, label: 'Role-based access control' },
   { icon: Settings, label: 'REST API + Webhooks' },
   { icon: Globe, label: 'Multi-currency support' },
-  { icon: ShieldCheck, label: '99.9% uptime SLA' },
+  { icon: ShieldCheck, label: '99.5% uptime SLA' },
 ]
 
 const heroChips = ['Works offline', 'Compliance built in', 'One connected core']

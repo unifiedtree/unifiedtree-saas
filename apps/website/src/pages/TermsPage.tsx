@@ -22,7 +22,7 @@ export function TermsPage() {
       </ul>
 
       <h2>3. Subscription &amp; billing</h2>
-      <p>Paid plans are billed monthly or annually, in advance, in Indian Rupees via Razorpay. Trial workspaces are free for 14 days. Prices and modules are shown on <a href="/pricing">the pricing page</a> and may change with 30 days&apos; notice.</p>
+      <p>Paid plans are billed monthly or annually, in advance, in Indian Rupees via Razorpay. A 7-day free trial is available on the paid autopay plan; autopay is set up at signup and the first charge is processed at the end of the trial period unless the workspace is cancelled beforehand. Prices and modules are shown on <a href="/pricing">the pricing page</a> and may change with 30 days&apos; notice.</p>
       <p>Your subscription auto-renews at the end of each cycle unless you cancel. Cancel any time from your workspace settings.</p>
 
       <h2>4. Refunds</h2>

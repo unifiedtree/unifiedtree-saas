@@ -117,6 +117,14 @@ public class ExpenseService {
                     "Only a submitted claim can be approved or rejected (current status: " + claim.getStatus() + ")",
                     "EXPENSE_NOT_SUBMITTED");
         }
+        // B3 FIX (audit 2026-08-15): self-approval guard. Approver must not
+        // be the claim's requester — a stale/forged reporting_manager_id
+        // could otherwise let an employee approve their own expense.
+        if (approverId != null && approverId.equals(claim.getEmployeeId())) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "You cannot approve your own expense claim.",
+                    "EXPENSE_SELF_APPROVAL");
+        }
         claim.setStatus(decision.approved() ? ExpenseStatus.APPROVED : ExpenseStatus.REJECTED);
         claim.setApproverId(approverId);
         claim.setApprovedAt(Instant.now());

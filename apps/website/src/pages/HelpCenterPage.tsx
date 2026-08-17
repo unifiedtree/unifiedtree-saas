@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ChevronDown, Mail, MessageCircle, BookOpen, LifeBuoy } from 'lucide-react'
+import { ChevronDown, Mail, MessageCircle, BookOpen, LifeBuoy, ShieldCheck } from 'lucide-react'
 import { Navbar } from '../components/layout/Navbar'
 import { Footer } from '../components/layout/Footer'
 
@@ -12,7 +12,7 @@ const categories = [
     items: [
       {
         q: 'How do I create my first workspace?',
-        a: 'Head to the Pricing page, pick your modules and team size, and hit "Create Workspace with This Plan". You can also start on a 14-day free trial with no card required.',
+        a: 'Head to the Pricing page, pick your modules and team size, and hit "Create Workspace with This Plan". A 7-day free trial is available on the paid autopay plan — autopay is set up at signup via Razorpay, and the first charge runs at the end of the trial unless you cancel before then.',
       },
       {
         q: 'How many people can I invite to a workspace?',
@@ -57,6 +57,24 @@ const categories = [
       {
         q: 'How do I cancel?',
         a: 'Workspace Settings → Subscription → Cancel. You keep access until the end of the paid cycle. See our Terms for the refund policy.',
+      },
+    ],
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Security & data',
+    items: [
+      {
+        q: 'Where is my data hosted?',
+        a: 'UnifiedTree runs on Google Cloud in the asia-south1 region (Mumbai). Data is encrypted at rest (AES-256) and in transit (TLS 1.3).',
+      },
+      {
+        q: 'How often is my data backed up?',
+        a: 'Automated daily backups (24-hour recovery point). You can also export your workspace data at any time from Workspace Settings.',
+      },
+      {
+        q: 'What is your uptime commitment?',
+        a: 'We target 99.5% monthly uptime. The offline modes on the mobile app (attendance, face capture) keep your team working when connectivity drops.',
       },
     ],
   },

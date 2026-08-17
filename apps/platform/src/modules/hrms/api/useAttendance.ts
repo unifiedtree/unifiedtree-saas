@@ -190,7 +190,7 @@ export function useAttendanceLogs(date?: string, departmentId?: string, search?:
   })
 }
 
-export function useCorrectionApprovals(status = 'PENDING') {
+export function useCorrectionApprovals(status = 'PENDING', opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['hrms', 'attendance', 'corrections', 'approvals', status],
     queryFn: () =>
@@ -198,6 +198,11 @@ export function useCorrectionApprovals(status = 'PENDING') {
         `/v1/attendance/corrections/approvals?status=${status}`
       ),
     staleTime: 30_000,
+    // Gated by the caller — the approvals endpoint 403s for non-managers,
+    // so an unconditional fetch by an employee threw a red toast every time
+    // they opened the Corrections tab. Default remains true for callers
+    // that already gate the render.
+    enabled: opts?.enabled ?? true,
   })
 }
 

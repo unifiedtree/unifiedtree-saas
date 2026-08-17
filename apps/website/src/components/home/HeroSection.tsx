@@ -35,8 +35,12 @@ const PHRASE_MS = 2600
 export function HeroSection() {
   const navigate = useNavigate()
   /* One source of truth for where "start free trial" goes — the same hook the
-     header CTA uses, so the two can never diverge again. */
-  const { href: ctaHref } = useCtaMode()
+     header CTA uses, so the two can never diverge again.
+     Also gives us `mode` + `ready` so the button label doesn't flash "Start
+     free trial" for a beat when a signed-in user with workspaces reloads the
+     home page. */
+  const { mode: ctaMode, href: ctaHref, ready: ctaReady } = useCtaMode()
+  const ctaLabel = ctaMode === 'trial' ? 'Start free trial' : 'Open your workspace'
   const reduce = useReducedMotion()
   const ref = useRef<HTMLDivElement>(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
@@ -156,16 +160,28 @@ export function HeroSection() {
           {/* Both CTAs carry the same 1.5px border box, padding and radius so the
               pair sits on one optical baseline — the primary's border is white on
               white, present only to match the secondary's height exactly. */}
-          <button
-            /* Route through the same rule the header uses. Hardcoding
-               "/signup" dropped the ?mode= param, which landed the visitor on a
-               different form state than every other CTA on the site. */
-            onClick={() => navigate(ctaHref)}
-            className="group inline-flex items-center gap-2 rounded-xl border-[1.5px] border-white bg-white px-7 py-3.5 text-[15px] font-bold text-[#04503A] shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:gap-3 hover:bg-[#ECFDF5] hover:shadow-[0_16px_32px_-14px_rgba(0,0,0,0.55)] active:translate-y-0"
-          >
-            Start free trial
-            <ArrowRight size={17} className="transition-transform group-hover:translate-x-0.5" />
-          </button>
+          {ctaReady ? (
+            <button
+              /* Route through the same rule the header uses. Hardcoding
+                 "/signup" dropped the ?mode= param, which landed the visitor on a
+                 different form state than every other CTA on the site.
+                 `ctaReady` gates the render so a signed-in user with
+                 workspaces never sees "Start free trial" flash for a
+                 beat before flipping to "Open your workspace". */
+              onClick={() => navigate(ctaHref)}
+              className="group inline-flex items-center gap-2 rounded-xl border-[1.5px] border-white bg-white px-7 py-3.5 text-[15px] font-bold text-[#04503A] shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:gap-3 hover:bg-[#ECFDF5] hover:shadow-[0_16px_32px_-14px_rgba(0,0,0,0.55)] active:translate-y-0"
+            >
+              {ctaLabel}
+              <ArrowRight size={17} className="transition-transform group-hover:translate-x-0.5" />
+            </button>
+          ) : (
+            // Skeleton keeps the layout stable while useCtaMode resolves
+            // the signed-in user's workspace list on hard-refresh.
+            <div
+              aria-hidden
+              className="inline-block h-[52px] w-56 rounded-xl bg-white/40 animate-pulse"
+            />
+          )}
           {/* Secondary CTA — solid deep-emerald fill with a crisp white border so
               it reads on the vivid band, while the white primary stays dominant.
               Hover deepens the fill and brightens the rim: it gains presence, it

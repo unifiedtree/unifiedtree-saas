@@ -11,9 +11,40 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Token accessors are injected from authStore.ts on module load (see
+ * `wireAuthAccessors`). We can't import the zustand store here without
+ * creating an authStore ↔ api circular import (the store already imports
+ * `api` for its network calls), so the store hands the accessors down at
+ * boot instead. Until they're wired, requests go out unauthenticated —
+ * which is the safe default for public marketing endpoints.
+ *
+ * As of 2026-08-17 tokens are held in-memory only (audit B7) — no more
+ * `localStorage.getItem('account_token')` here.
+ */
+type Getter = () => string | null;
+type Clearer = () => void;
+
+let getAccountToken: Getter = () => null;
+let getTenantToken: Getter = () => null;
+let clearAccountToken: Clearer = () => {};
+let clearTenantToken: Clearer = () => {};
+
+export function wireAuthAccessors(hooks: {
+  getAccountToken: Getter;
+  getTenantToken: Getter;
+  clearAccountToken: Clearer;
+  clearTenantToken: Clearer;
+}) {
+  getAccountToken = hooks.getAccountToken;
+  getTenantToken = hooks.getTenantToken;
+  clearAccountToken = hooks.clearAccountToken;
+  clearTenantToken = hooks.clearTenantToken;
+}
+
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers || {});
-  
+
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
@@ -23,26 +54,24 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   // everything else -> use tenant token
   const isAccountApi = endpoint.startsWith('/v1/accounts');
   const isAccountLogin = endpoint === '/v1/accounts/auth/login';
-  const token = isAccountApi 
-    ? localStorage.getItem('account_token') 
-    : localStorage.getItem('tenant_token');
+  const token = isAccountApi ? getAccountToken() : getTenantToken();
 
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
-  
+
   try {
-    const response = await fetch(url, { ...options, headers });
-    
+    const response = await fetch(url, { ...options, headers, credentials: 'include' });
+
     // Global 401 handler
     if (response.status === 401 && !isAccountLogin) {
       if (isAccountApi) {
-        localStorage.removeItem('account_token');
+        clearAccountToken();
         window.location.href = '/login';
       } else {
-        localStorage.removeItem('tenant_token');
+        clearTenantToken();
         window.location.href = '/workspaces';
       }
       throw new ApiError(401, 'Unauthorized');
@@ -79,12 +108,12 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 
 export const api = {
   get: (endpoint: string, options?: RequestInit) => fetchWithAuth(endpoint, { ...options, method: 'GET' }),
-  post: (endpoint: string, data?: any, options?: RequestInit) => 
+  post: (endpoint: string, data?: any, options?: RequestInit) =>
     fetchWithAuth(endpoint, { ...options, method: 'POST', body: JSON.stringify(data) }),
-  put: (endpoint: string, data?: any, options?: RequestInit) => 
+  put: (endpoint: string, data?: any, options?: RequestInit) =>
     fetchWithAuth(endpoint, { ...options, method: 'PUT', body: JSON.stringify(data) }),
-  patch: (endpoint: string, data?: any, options?: RequestInit) => 
+  patch: (endpoint: string, data?: any, options?: RequestInit) =>
     fetchWithAuth(endpoint, { ...options, method: 'PATCH', body: JSON.stringify(data) }),
-  delete: (endpoint: string, options?: RequestInit) => 
+  delete: (endpoint: string, options?: RequestInit) =>
     fetchWithAuth(endpoint, { ...options, method: 'DELETE' }),
 };

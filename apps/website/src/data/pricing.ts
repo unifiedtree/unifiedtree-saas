@@ -67,7 +67,7 @@ export const presetPlans = [
     storage: 'Dedicated storage',
     support: 'Dedicated account manager',
     extras: [
-      'SLA guarantee (99.9%)',
+      'SLA guarantee (99.5%)',
       'White-label option',
       'Custom integrations',
       'On-premise deployment option',
@@ -97,7 +97,7 @@ export const faqItems = [
   },
   {
     q: 'Is my data secure?',
-    a: 'Yes. All data is encrypted at rest (AES-256) and in transit (TLS 1.3). We\'re hosted on AWS with automatic backups every 6 hours.',
+    a: 'Yes. All data is encrypted at rest (AES-256) and in transit (TLS 1.3). The platform runs on Google Cloud (asia-south1) with automated daily backups (24-hour recovery point).',
   },
   {
     q: 'Can I use UnifiedTree offline?',

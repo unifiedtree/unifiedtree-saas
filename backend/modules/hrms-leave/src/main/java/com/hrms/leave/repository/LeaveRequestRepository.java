@@ -48,11 +48,14 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
      * The LEFT JOINs make the query resilient to orphan rows (a leave whose
      * applicant was deleted, or an applicant with no department).
      */
+    // B4 FIX (audit 2026-08-15): exclude the manager's own leaves from their
+    // approval queue for the same reason as WfhRequestRepository.
     @Query(value = """
         SELECT lr.* FROM leave_mgmt.leave_requests lr
         LEFT JOIN hrms.employees e   ON e.id = lr.employee_id
         LEFT JOIN hrms.departments d ON d.id = e.department_id
         WHERE lr.status = 'PENDING'
+          AND lr.employee_id <> :managerEmpId
           AND ( lr.approver_id = :managerEmpId
              OR e.reporting_manager_id = :managerEmpId
              OR d.department_head_employee_id = :managerEmpId )
@@ -62,6 +65,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
         LEFT JOIN hrms.employees e   ON e.id = lr.employee_id
         LEFT JOIN hrms.departments d ON d.id = e.department_id
         WHERE lr.status = 'PENDING'
+          AND lr.employee_id <> :managerEmpId
           AND ( lr.approver_id = :managerEmpId
              OR e.reporting_manager_id = :managerEmpId
              OR d.department_head_employee_id = :managerEmpId )

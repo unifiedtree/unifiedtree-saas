@@ -73,6 +73,16 @@ unifiedtree:
     # Header fallback DISABLED. JWT-only.
     allow-tenant-header: false
 
+  # B1 FIX (audit 2026-08-15): SubscriptionAccessGuard is now fail-closed for
+  # tenants with no platform.subscriptions row. Tenants that legitimately
+  # have no ledger row (pre-autopay grandfathered accounts, Play-Store
+  # reviewer, demo tenant) must be listed here as comma-separated UUIDs to
+  # keep access. Empty (default) = fully fail-closed. Populate via
+  # UNIFIEDTREE_SUBSCRIPTION_GRANDFATHER_TENANT_IDS on the deploy so we do
+  # not commit customer UUIDs into the source tree.
+  subscription:
+    grandfather-tenant-ids: ${UNIFIEDTREE_SUBSCRIPTION_GRANDFATHER_TENANT_IDS:}
+
   cors:
     # PRODUCTION must set this. Empty/missing -> the canonical-prod CORS
     # config rejects every cross-origin request (fail-safe). Comma-separated
@@ -199,16 +209,25 @@ server:
 # management port to a private-VPC-only listener, BEFORE relying on this
 # in production dashboards.
 management:
+  # B7 FIX (audit 2026-08-15): move actuator off the public ingress by
+  # binding it to its own management port + base-path. Cloud Run only
+  # exposes port 8080 to the internet; nothing external will reach 8081.
+  # Keep the base-path at /mgmt so any accidental request to the old
+  # /actuator prefix on 8080 404s cleanly rather than hitting a real
+  # actuator endpoint. Probes still expose liveness/readiness at
+  # /mgmt/health/{liveness,readiness} on the management port.
+  server:
+    port: 8081
+    base-path: /mgmt
   endpoints:
     web:
+      base-path: /mgmt
       exposure:
         include: health,info,prometheus
   endpoint:
     health:
       show-details: never
       probes:
-        # Kubernetes/Cloud Run style liveness + readiness groups, served at
-        # /api/actuator/health/liveness and /health/readiness.
         enabled: true
   metrics:
     export:

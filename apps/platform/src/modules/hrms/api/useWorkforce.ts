@@ -194,7 +194,11 @@ export function useCreateWorkforceEmployee() {
   return useMutation({
     mutationFn: (data: CreateWorkforceEmployeePayload) =>
       apiJson<WorkforceEmployee>('/v1/hrms/employees', { method: 'POST', body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'employees'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'employees'] })
+      // A new hire moves the workforce totals — refresh the stat cards.
+      qc.invalidateQueries({ queryKey: ['hrms', 'employee-counts'] })
+    },
   })
 }
 
@@ -206,6 +210,10 @@ export function useUpdateWorkforceEmployee() {
     onSuccess: (_result, { id }) => {
       qc.invalidateQueries({ queryKey: ['hrms', 'employees'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'employee', id] })
+      // Header status-cards read employee-counts — invalidate so lifecycle
+      // transitions (confirm / notice / exit / cancel-notice) reflect in
+      // the stat tiles instead of showing yesterday's counts.
+      qc.invalidateQueries({ queryKey: ['hrms', 'employee-counts'] })
     },
   })
 }
@@ -218,6 +226,10 @@ export function useConfirmEmployee() {
     onSuccess: (_result, { id }) => {
       qc.invalidateQueries({ queryKey: ['hrms', 'employees'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'employee', id] })
+      // Header status-cards read employee-counts — invalidate so lifecycle
+      // transitions (confirm / notice / exit / cancel-notice) reflect in
+      // the stat tiles instead of showing yesterday's counts.
+      qc.invalidateQueries({ queryKey: ['hrms', 'employee-counts'] })
     },
   })
 }
@@ -233,6 +245,10 @@ export function useStartNotice() {
     onSuccess: (_result, { id }) => {
       qc.invalidateQueries({ queryKey: ['hrms', 'employees'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'employee', id] })
+      // Header status-cards read employee-counts — invalidate so lifecycle
+      // transitions (confirm / notice / exit / cancel-notice) reflect in
+      // the stat tiles instead of showing yesterday's counts.
+      qc.invalidateQueries({ queryKey: ['hrms', 'employee-counts'] })
     },
   })
 }
@@ -248,6 +264,10 @@ export function useExitEmployee() {
     onSuccess: (_result, { id }) => {
       qc.invalidateQueries({ queryKey: ['hrms', 'employees'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'employee', id] })
+      // Header status-cards read employee-counts — invalidate so lifecycle
+      // transitions (confirm / notice / exit / cancel-notice) reflect in
+      // the stat tiles instead of showing yesterday's counts.
+      qc.invalidateQueries({ queryKey: ['hrms', 'employee-counts'] })
     },
   })
 }
@@ -261,6 +281,10 @@ export function useCancelNotice() {
     onSuccess: (_result, id) => {
       qc.invalidateQueries({ queryKey: ['hrms', 'employees'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'employee', id] })
+      // Header status-cards read employee-counts — invalidate so lifecycle
+      // transitions (confirm / notice / exit / cancel-notice) reflect in
+      // the stat tiles instead of showing yesterday's counts.
+      qc.invalidateQueries({ queryKey: ['hrms', 'employee-counts'] })
     },
   })
 }

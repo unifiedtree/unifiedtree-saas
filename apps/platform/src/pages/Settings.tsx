@@ -76,7 +76,10 @@ const ProfileTab: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
             { label: 'Company Name', value: tenant?.name ?? '' },
-            { label: 'Industry', value: tenant?.industry ?? '' },
+            // Industry is not persisted anywhere on the backend — the
+            // field previously accepted input, showed a "Saved" tick and
+            // discarded whatever the admin typed. Dropped from the panel
+            // rather than kept as a lie about what we store.
             { label: 'Subdomain', value: tenant?.subdomain ?? '' },
             { label: 'Plan', value: tenant?.planType ?? '' },
           ].map(({ label, value }) => (

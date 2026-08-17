@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Plus, CalendarDays, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useToast } from '@/shared/hooks/useToast'
-import { Can, P } from '@unifiedtree/sdk'
+import { usePermission, P } from '@unifiedtree/sdk'
 import { TableSkeleton } from '@unifiedtree/ui-kit'
 import { HrPageHeader, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
 import { useHolidays, useCreateHoliday, useDeleteHoliday, type HolidayType } from '../api/useSettings'
@@ -132,7 +132,18 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function HolidayCalendar() {
+interface HolidayCalendarProps {
+  /**
+   * Whether the current viewer can Add / Delete holidays.
+   * EMPLOYEE + MANAGER see the calendar read-only (no action buttons);
+   * HR + ADMIN with SETTINGS_HOLIDAYS_WRITE get the full management UI.
+   * When omitted (older call sites), we fall back to the permission
+   * check so nothing regresses if a caller forgets the prop.
+   */
+  canEdit?: boolean
+}
+
+export function HolidayCalendar({ canEdit }: HolidayCalendarProps = {}) {
   const { toast } = useToast()
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
@@ -141,6 +152,8 @@ export function HolidayCalendar() {
   const companyId = companies[0]?.id ?? ''
   const { data: holidays = [], isLoading } = useHolidays(companyId, year)
   const deleteHoliday = useDeleteHoliday()
+  const canEditFromPerm = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
+  const editable = canEdit ?? canEditFromPerm
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 1 + i)
   const sorted = [...holidays].sort((a, b) => a.holidayDate.localeCompare(b.holidayDate))
@@ -173,12 +186,12 @@ export function HolidayCalendar() {
                 {years.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
-            <Can code={P.SETTINGS_HOLIDAYS_WRITE}>
+            {editable && (
               <HrButton size="sm" onClick={() => setShowAdd(true)}>
                 <Plus size={14} />
                 Add Holiday
               </HrButton>
-            </Can>
+            )}
           </>
         }
       />
@@ -210,7 +223,7 @@ export function HolidayCalendar() {
               <HrStatusPill tone={HOLIDAY_TYPE_TONE[h.holidayType] ?? 'gray'}>
                 {HOLIDAY_TYPE_LABELS[h.holidayType] ?? h.holidayType}
               </HrStatusPill>
-              <Can code={P.SETTINGS_HOLIDAYS_WRITE}>
+              {editable && (
                 <button
                   onClick={() => handleDelete(h.id, h.holidayName)}
                   disabled={deleteHoliday.isPending}
@@ -218,13 +231,13 @@ export function HolidayCalendar() {
                 >
                   <Trash2 size={13} />
                 </button>
-              </Can>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {showAdd && companyId && (
+      {showAdd && companyId && editable && (
         <AddHolidayDrawer companyId={companyId} year={year} onClose={() => setShowAdd(false)} />
       )}
     </div>

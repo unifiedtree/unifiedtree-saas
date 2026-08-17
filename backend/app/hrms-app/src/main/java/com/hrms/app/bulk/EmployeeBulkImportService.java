@@ -1,6 +1,5 @@
 package com.hrms.app.bulk;
 
-import com.hrms.api.employee.SeatLimitGuard;
 import com.hrms.core.exception.HrmsException;
 import com.hrms.core.tenant.TenantContext;
 import org.apache.poi.ooxml.POIXMLException;
@@ -8,10 +7,10 @@ import org.springframework.http.HttpStatus;
 import com.hrms.employee.dto.CreateEmployeeRequest;
 import com.hrms.employee.enums.EmploymentType;
 import com.hrms.employee.enums.Gender;
+import com.hrms.employee.quota.SeatQuotaEnforcer;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.employee.service.EmployeeService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
@@ -24,6 +23,7 @@ import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -45,19 +45,20 @@ public class EmployeeBulkImportService {
     private final EmployeeService employeeService;
     private final EmployeeRepository employeeRepository;
     /**
-     * Optional to keep unit tests + legacy contexts (where the guard isn't
-     * scanned) instantiable. When absent, the pre-flight seat check no-ops and
-     * the whole batch is still gated by any per-row limit in EmployeeService.
+     * Canonical seat-quota enforcer, shared with EmployeeService and the
+     * workforce-directory create path. Kept optional so unit tests / legacy
+     * contexts (where the enforcer bean isn't scanned) can still instantiate
+     * this service — production always has it wired.
      */
-    private final SeatLimitGuard seatLimitGuard;
+    private final SeatQuotaEnforcer seatQuotaEnforcer;
 
     @Autowired
     public EmployeeBulkImportService(EmployeeService employeeService,
                                      EmployeeRepository employeeRepository,
-                                     org.springframework.beans.factory.ObjectProvider<SeatLimitGuard> seatLimitGuardProvider) {
+                                     org.springframework.beans.factory.ObjectProvider<SeatQuotaEnforcer> seatQuotaEnforcerProvider) {
         this.employeeService = employeeService;
         this.employeeRepository = employeeRepository;
-        this.seatLimitGuard = seatLimitGuardProvider.getIfAvailable();
+        this.seatQuotaEnforcer = seatQuotaEnforcerProvider.getIfAvailable();
     }
 
     public BulkImportResult validateOnly(MultipartFile file, UUID companyId) throws IOException {
@@ -88,15 +89,11 @@ public class EmployeeBulkImportService {
         // its paid cap. Applied before ANY row is written — the alternative was
         // half-committing an upload and half-erroring mid-batch. This closes the
         // bypass verified live 2026-08-10 where a 500-row CSV walked past a
-        // 10-seat plan without a peep.
-        if (seatLimitGuard != null) {
-            java.util.List<String> callerRoles = java.util.List.of();
-            var auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null) {
-                callerRoles = auth.getAuthorities().stream()
-                        .map(a -> a.getAuthority()).toList();
-            }
-            seatLimitGuard.requireSeatsAvailable(callerRoles, rows.size());
+        // 10-seat plan without a peep. Per-row assertCapacity(1) inside
+        // employeeService.createEmployee is a belt-and-braces second check,
+        // but the aggregate pre-flight is what stops a bulk-mode blowout.
+        if (seatQuotaEnforcer != null) {
+            seatQuotaEnforcer.assertCapacity(rows.size());
         }
 
         int created = 0;
@@ -150,22 +147,102 @@ public class EmployeeBulkImportService {
         return parseXlsx(file);
     }
 
+    /**
+     * B2 FIX (audit 2026-08-15): RFC 4180-compliant CSV parser.
+     *
+     * <p>The previous implementation used {@code String.split(",")} on every
+     * line, which corrupts any field that contains a comma inside quotes
+     * (e.g. "Doe, John") and does not understand escaped quotes or embedded
+     * newlines. It also implicitly used the platform default charset and
+     * silently swallowed a leading UTF-8 BOM as part of the first header
+     * name, which broke header matching on files exported from Excel.
+     *
+     * <p>Now:
+     *   - UTF-8 InputStreamReader (never platform default);
+     *   - explicit BOM strip on the first character;
+     *   - fields may be quoted with {@code "}, quotes inside quoted fields
+     *     doubled as {@code ""}, and newlines allowed inside quoted fields.
+     *   - trailing empty fields preserved so short rows don't shift columns.
+     */
     private List<BulkImportRow> parseCsv(MultipartFile file) throws IOException {
         List<BulkImportRow> rows = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
-            String headerLine = reader.readLine();
-            if (headerLine == null) return rows;
-
-            String[] headers = headerLine.split(",");
-            String line;
-            int rowNum = 2;
-            while ((line = reader.readLine()) != null) {
-                if (line.isBlank()) continue;
-                String[] cells = line.split(",", -1);
-                rows.add(mapRow(rowNum++, headers, cells));
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            List<List<String>> records = readCsvRecords(reader);
+            if (records.isEmpty()) return rows;
+            List<String> headerRecord = records.get(0);
+            // Strip UTF-8 BOM if present on first header.
+            if (!headerRecord.isEmpty()) {
+                String h0 = headerRecord.get(0);
+                if (h0 != null && !h0.isEmpty() && h0.charAt(0) == '﻿') {
+                    headerRecord.set(0, h0.substring(1));
+                }
+            }
+            String[] headers = headerRecord.toArray(new String[0]);
+            for (int i = 1; i < records.size(); i++) {
+                List<String> rec = records.get(i);
+                if (rec.isEmpty() || (rec.size() == 1 && (rec.get(0) == null || rec.get(0).isBlank()))) {
+                    continue;
+                }
+                String[] cells = new String[headers.length];
+                for (int c = 0; c < headers.length; c++) {
+                    cells[c] = c < rec.size() ? (rec.get(c) == null ? "" : rec.get(c)) : "";
+                }
+                rows.add(mapRow(i + 1, headers, cells));
             }
         }
         return rows;
+    }
+
+    /** Minimal RFC-4180 CSV reader — handles quoted fields, doubled quotes,
+     *  embedded commas, and embedded newlines. Returns one record per row. */
+    private static List<List<String>> readCsvRecords(BufferedReader reader) throws IOException {
+        List<List<String>> out = new ArrayList<>();
+        List<String> cur = new ArrayList<>();
+        StringBuilder field = new StringBuilder();
+        boolean inQuotes = false;
+        int ch;
+        while ((ch = reader.read()) != -1) {
+            char c = (char) ch;
+            if (inQuotes) {
+                if (c == '"') {
+                    int next = reader.read();
+                    if (next == '"') { field.append('"'); }
+                    else {
+                        inQuotes = false;
+                        if (next == -1) break;
+                        // reprocess the peeked char in outer state
+                        if (next == ',') { cur.add(field.toString()); field.setLength(0); }
+                        else if (next == '\r') { /* handled by \n */ }
+                        else if (next == '\n') { cur.add(field.toString()); field.setLength(0); out.add(cur); cur = new ArrayList<>(); }
+                        else { field.append((char) next); }
+                    }
+                } else {
+                    field.append(c);
+                }
+            } else {
+                if (c == '"') {
+                    inQuotes = true;
+                } else if (c == ',') {
+                    cur.add(field.toString());
+                    field.setLength(0);
+                } else if (c == '\r') {
+                    // ignore, wait for \n
+                } else if (c == '\n') {
+                    cur.add(field.toString());
+                    field.setLength(0);
+                    out.add(cur);
+                    cur = new ArrayList<>();
+                } else {
+                    field.append(c);
+                }
+            }
+        }
+        if (field.length() > 0 || !cur.isEmpty()) {
+            cur.add(field.toString());
+            out.add(cur);
+        }
+        return out;
     }
 
     private List<BulkImportRow> parseXlsx(MultipartFile file) throws IOException {

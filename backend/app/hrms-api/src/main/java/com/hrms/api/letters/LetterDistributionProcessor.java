@@ -160,10 +160,19 @@ public class LetterDistributionProcessor {
     }
 
     private String buildEmailHtml(DistributionJob job, WorkforceEmployee emp) {
-        // customMessage is authored by a trusted HR admin and inserted as HTML so
-        // rich-text formatting survives. Full HTML sanitization (jsoup) is a
-        // follow-up if authoring is ever opened to less-trusted roles.
-        String message = job.getCustomMessage() != null ? job.getCustomMessage() : "";
+        // B7 FIX (audit 2026-08-15): sanitize customMessage with jsoup
+        // Safelist.basic() + img and links. Previously the value was
+        // pass-through HTML, so an HR admin (or anyone who compromised an
+        // HR credential) could inject <script> / event-handler payloads
+        // that fired in the recipient's email preview.
+        String raw = job.getCustomMessage() != null ? job.getCustomMessage() : "";
+        org.jsoup.safety.Safelist safe = org.jsoup.safety.Safelist.basic()
+                .addTags("img")
+                .addAttributes("img", "src", "alt", "title", "width", "height")
+                .addAttributes("a",   "href", "target", "rel")
+                .addProtocols("img", "src",  "http", "https", "cid", "data")
+                .addProtocols("a",   "href", "http", "https", "mailto");
+        String message = org.jsoup.Jsoup.clean(raw, safe);
         return ("""
                 <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0f172a;line-height:1.5">
                   <p>Hi %s,</p>

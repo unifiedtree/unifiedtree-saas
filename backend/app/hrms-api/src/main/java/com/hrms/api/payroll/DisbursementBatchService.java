@@ -82,7 +82,7 @@ public class DisbursementBatchService {
 
     public record BatchLineDto(
             UUID id, UUID employeeId, String beneficiaryName,
-            String accountNoMasked, String ifsc, BigDecimal amount,
+            String accountNoMasked, String accountNoLast4, String ifsc, BigDecimal amount,
             String status, String failureReason) {}
 
     public record BatchDetailDto(BatchDto batch, List<BatchLineDto> lines) {}
@@ -115,15 +115,26 @@ public class DisbursementBatchService {
     public BatchDetailDto get(UUID tenantId, UUID batchId) {
         bindTenant(tenantId);
         BatchDto batch = getBatch(batchId);
+        // B3 FIX (audit 2026-08-15): project account_number_last4 from
+        // hrms.employee_bank_accounts so Finance can eyeball the payee's
+        // account without decrypting the payload. Left-join because a
+        // SKIPPED_MISSING_DETAILS line has no bank row, and we still want
+        // to render the row (with a null last4).
         List<BatchLineDto> lines = jdbc.query("""
-                SELECT * FROM payroll.disbursement_batch_lines
-                 WHERE batch_id = ?
-                 ORDER BY beneficiary_name ASC
+                SELECT l.*, ba.account_number_last4 AS account_no_last4
+                  FROM payroll.disbursement_batch_lines l
+                  LEFT JOIN hrms.employee_bank_accounts ba
+                    ON ba.employee_id = l.employee_id
+                   AND ba.tenant_id   = l.tenant_id
+                   AND ba.is_primary  = TRUE
+                 WHERE l.batch_id = ?
+                 ORDER BY l.beneficiary_name ASC
                 """, (rs, i) -> new BatchLineDto(
                     rs.getObject("id", UUID.class),
                     rs.getObject("employee_id", UUID.class),
                     rs.getString("beneficiary_name"),
                     maskAccount(rs.getString("account_no")),
+                    rs.getString("account_no_last4"),
                     rs.getString("ifsc"),
                     rs.getBigDecimal("amount"),
                     rs.getString("status"),
@@ -349,28 +360,12 @@ public class DisbursementBatchService {
                     " — POST the batch first (this generates the NEFT file).",
                     "BATCH_NOT_POSTED");
         }
-        jdbc.update("""
-                UPDATE payroll.disbursement_batches
-                   SET status = 'PAID', paid_at = now(),
-                       payment_reference = ?, notes = COALESCE(?, notes),
-                       updated_at = now(), updated_by = ?, version = version + 1
-                 WHERE id = ?
-                """,
-                req.paymentReference(), req.notes(),
-                actorId == null ? null : actorId.toString(), batchId);
-
-        // B2/D9 FIX (2026-08-14):
-        //   Previous UPDATE allowed status IN ('LOCKED','PROCESSING') — that
-        //   silently flipped a run mid-payroll-computation straight to PAID,
-        //   losing the intermediate PROCESSING state and lying to the Payroll
-        //   UI (which then hides "still processing" progress from Finance).
-        //   PROCESSING means the run's still being computed / posted; PAID
-        //   should only follow LOCKED (the settled, sealed state).
-        //
-        //   Guard the run status BEFORE the update so we can refuse loudly
-        //   when the run is still PROCESSING — silently no-op'ing would leave
-        //   the batch marked PAID while the run stays PROCESSING forever, a
-        //   permanent ledger split that never reconciles.
+        // B3 FIX (audit 2026-08-15): PRE-CHECK the underlying run status BEFORE
+        // any batch UPDATE. Previously the batch was flipped PAID first and
+        // only the LOCKED->PAID run flip was guarded — a batch attached to an
+        // ARCHIVED / CANCELLED run would still be marked PAID (batch update
+        // succeeds, run flip no-ops, permanent ledger split). Now: only a
+        // LOCKED run can mark its batch PAID; anything else refuses loudly.
         String currentRunStatus = jdbc.query(
                 "SELECT status FROM payroll.runs WHERE id = ?",
                 rs -> rs.next() ? rs.getString("status") : null,
@@ -381,6 +376,21 @@ public class DisbursementBatchService {
                     + "disbursement batch PAID until the run finishes and LOCKS.",
                     "RUN_STILL_PROCESSING");
         }
+        if (!"LOCKED".equals(currentRunStatus) && !"PAID".equals(currentRunStatus)) {
+            throw new BusinessRuleException(
+                    "Underlying payroll run is " + currentRunStatus + " — only LOCKED runs can be marked paid.",
+                    "RUN_NOT_LOCKED");
+        }
+        jdbc.update("""
+                UPDATE payroll.disbursement_batches
+                   SET status = 'PAID', paid_at = now(),
+                       payment_reference = ?, notes = COALESCE(?, notes),
+                       updated_at = now(), updated_by = ?, version = version + 1
+                 WHERE id = ?
+                """,
+                req.paymentReference(), req.notes(),
+                actorId == null ? null : actorId.toString(), batchId);
+
         int flipped = jdbc.update("""
                 UPDATE payroll.runs
                    SET status = 'PAID', paid_at = COALESCE(paid_at, now()),

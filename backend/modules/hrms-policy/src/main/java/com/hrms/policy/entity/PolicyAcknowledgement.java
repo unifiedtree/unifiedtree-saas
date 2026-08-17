@@ -28,4 +28,10 @@ public class PolicyAcknowledgement extends BaseEntity {
     // Stamped server-side when the employee acknowledges.
     @Column(name = "acknowledged_at")
     private Instant acknowledgedAt;
+
+    // B7 FIX (audit 2026-08-15): capture the policy version acknowledged so a
+    // version bump forces re-acknowledgment. Nullable while the V102
+    // migration back-fills historical rows.
+    @Column(name = "policy_version", length = 20)
+    private String policyVersion;
 }

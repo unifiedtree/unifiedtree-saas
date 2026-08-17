@@ -198,6 +198,31 @@ public class PayrollService {
     @Transactional
     public void updateComponent(UUID tenantId, UUID id, CreateComponentRequest req) {
         bindTenant(tenantId);
+        // B3 FIX (audit 2026-08-15): reject a category flip on a live /
+        // referenced / system component. Changing an EARNING to a DEDUCTION
+        // after payslip lines already reference it silently inverts every
+        // historical amount (revenue on the P&L flips sign), and system
+        // components (BASIC, HRA, ADVANCE_RECOVERY, ...) must never change
+        // category. Allow it only when the row is not system AND has zero
+        // payslip lines AND zero structure lines pointing at it.
+        Map<String, Object> existing = jdbc.queryForMap(
+                "SELECT is_system, category FROM payroll.salary_components WHERE id = ?", id);
+        if (req.category() != null && !req.category().equals(existing.get("category"))) {
+            if (Boolean.TRUE.equals(existing.get("is_system"))) {
+                throw new BusinessRuleException(
+                        "Cannot change category on system component", "SYSTEM_COMPONENT_CATEGORY_LOCKED");
+            }
+            Integer refs = jdbc.queryForObject("""
+                    SELECT (SELECT count(*) FROM payroll.payslip_lines WHERE component_id = ?)
+                         + (SELECT count(*) FROM payroll.employee_structure_components WHERE component_id = ?)
+                    """, Integer.class, id, id);
+            if (refs != null && refs > 0) {
+                throw new BusinessRuleException(
+                        "Cannot change category on a component that already has payroll / structure references ("
+                        + refs + " row(s)). Retire this component and create a new one.",
+                        "COMPONENT_CATEGORY_LOCKED");
+            }
+        }
         jdbc.update("""
             UPDATE payroll.salary_components SET
                 name = COALESCE(?, name),
@@ -222,6 +247,28 @@ public class PayrollService {
             rs -> rs.next() ? rs.getBoolean(1) : null, id);
         if (isSystem == null) throw new BusinessRuleException("Component not found", "COMPONENT_NOT_FOUND");
         if (isSystem) throw new BusinessRuleException("System components cannot be deleted", "SYSTEM_COMPONENT");
+        // B3 FIX (audit 2026-08-15): reference pre-check. Deleting a component
+        // that any payslip line still references orphans that line (component_id
+        // FK becomes invalid on the next payroll re-process, and the run 500s
+        // with a friendly-message-free error). Refuse cleanly instead.
+        Integer payslipRefs = jdbc.queryForObject(
+                "SELECT count(*) FROM payroll.payslip_lines WHERE component_id = ?",
+                Integer.class, id);
+        if (payslipRefs != null && payslipRefs > 0) {
+            throw new BusinessRuleException(
+                    "Cannot delete a salary component that is used by " + payslipRefs
+                    + " payslip line(s). Archive it instead so historical payroll data is preserved.",
+                    "COMPONENT_IN_USE");
+        }
+        Integer structRefs = jdbc.queryForObject(
+                "SELECT count(*) FROM payroll.employee_structure_components WHERE component_id = ?",
+                Integer.class, id);
+        if (structRefs != null && structRefs > 0) {
+            throw new BusinessRuleException(
+                    "Cannot delete a salary component that is used by " + structRefs
+                    + " employee salary structure(s). Retire it from structures first.",
+                    "COMPONENT_IN_USE");
+        }
         jdbc.update("DELETE FROM payroll.salary_components WHERE id = ?", id);
     }
 

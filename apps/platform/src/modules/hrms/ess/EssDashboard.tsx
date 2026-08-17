@@ -4,6 +4,7 @@ import { ArrowRight, ClipboardList, CheckCircle, Clock, Home, Repeat } from 'luc
 import { format } from 'date-fns'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { HrStatCard, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import { useMonthlyStats } from '../api/useAttendance'
 import { useMyBalances, useMyLeaves } from '../api/useLeave'
 
@@ -17,8 +18,18 @@ export const EssDashboard: React.FC = () => {
 
   // Punching is mobile-only — the web ESS dashboard no longer shows a check-in/out
   // widget. useCheckIn/useCheckOut remain in ../api/useAttendance for mobile clients.
-  const { data: monthStats } = useMonthlyStats()
-  const { data: balances = [] } = useMyBalances()
+  const {
+    data: monthStats,
+    isLoading: monthStatsLoading,
+    error: monthStatsError,
+    refetch: refetchMonthStats,
+  } = useMonthlyStats()
+  const {
+    data: balances = [],
+    isLoading: balancesLoading,
+    error: balancesError,
+    refetch: refetchBalances,
+  } = useMyBalances()
   const { data: myLeaves } = useMyLeaves(0)
 
   const recentLeaves = (myLeaves?.content ?? []).slice(0, 3)
@@ -35,10 +46,21 @@ export const EssDashboard: React.FC = () => {
         <p className="mt-1 text-sm text-text-secondary">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
 
-      {/* Monthly stats */}
-      {monthStats && (
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-text-primary">This Month</h2>
+      {/* Monthly stats — explicit loading + error states so a network hiccup
+          doesn't leave the employee looking at a blank card wondering whether
+          the day counted or the page broke. */}
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-text-primary">This Month</h2>
+        {monthStatsLoading ? (
+          <CardSkeleton />
+        ) : monthStatsError ? (
+          <EmptyState
+            variant="error"
+            title="Couldn't load attendance stats"
+            description="Check your connection and retry."
+            primaryAction={{ label: 'Retry', onClick: () => refetchMonthStats() }}
+          />
+        ) : monthStats ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             <HrStatCard icon={<CheckCircle size={16} />} color="green"  value={monthStats.presentDays}            label="Present" />
             <HrStatCard icon={<Clock size={16} />}       color="red"    value={monthStats.absentDays}             label="Absent" />
@@ -46,18 +68,30 @@ export const EssDashboard: React.FC = () => {
             <HrStatCard icon={<CheckCircle size={16} />} color="blue"   value={monthStats.onTimeDays}             label="On Time" />
             <HrStatCard icon={<CheckCircle size={16} />} color="teal"   value={`${monthStats.attendanceScore}%`}  label="Score" />
           </div>
-        </div>
-      )}
+        ) : null}
+      </div>
 
-      {/* Leave balances */}
-      {balances.length > 0 && (
-        <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-text-primary">Leave Balances</h2>
-            <button onClick={() => navigate('/hrms/leave')} className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]">
-              Apply leave <ArrowRight size={12} />
-            </button>
-          </div>
+      {/* Leave balances — same loading/error treatment as the stats block. */}
+      <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-text-primary">Leave Balances</h2>
+          <button onClick={() => navigate('/hrms/leave')} className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]">
+            Apply leave <ArrowRight size={12} />
+          </button>
+        </div>
+        {balancesLoading ? (
+          <CardSkeleton />
+        ) : balancesError ? (
+          <EmptyState
+            variant="error"
+            title="Couldn't load leave balances"
+            primaryAction={{ label: 'Retry', onClick: () => refetchBalances() }}
+          />
+        ) : balances.length === 0 ? (
+          <p className="text-xs text-text-tertiary">
+            No leave types have been assigned to you yet. Contact HR to set up your balances.
+          </p>
+        ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {balances.slice(0, 6).map((b) => (
               <div key={b.id} className="rounded-xl bg-bg-base p-3">
@@ -67,8 +101,8 @@ export const EssDashboard: React.FC = () => {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Onboarding tasks shortcut */}
       <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">

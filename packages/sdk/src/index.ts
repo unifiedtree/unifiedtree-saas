@@ -16,7 +16,8 @@ export { setAccessToken, getAccessToken, isAccessTokenExpired, clearAccessToken 
 export { apiClient, apiEvents, ApiError, createApiClient } from './api/client';
 
 // Auth Store
-export { useAuthStore } from './auth/authStore';
+export { useAuthStore, useAuthDisplay } from './auth/authStore';
+export type { AuthDisplay } from './auth/authStore';
 
 // Permissions
 export { usePermission, useAnyPermission, useAllPermissions, Can, CanAny, CanAll } from './permissions/usePermission';

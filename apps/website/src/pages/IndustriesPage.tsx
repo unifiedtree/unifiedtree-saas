@@ -2,21 +2,50 @@ import { useCallback, useRef, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import {
   Factory, ShoppingBag, Truck, Utensils, Building2,
-  Stethoscope, BookOpen, Wrench, Check, ChevronRight,
+  Stethoscope, BookOpen, Wrench, Check, ChevronRight, Info,
 } from 'lucide-react'
 import { Navbar } from '../components/layout/Navbar'
 import { Footer } from '../components/layout/Footer'
 import { CTABanner } from '../components/home/CTABanner'
 import { PageHero } from '../components/marketing/PageHero'
 
-const industries = [
+/**
+ * Sector playbooks.
+ *
+ * 2026-08-17 (CRIT #5 audit): the eight per-sector testimonials were
+ * removed. Each carried a named person, a named company, a specific ROI
+ * number and a five-star rating, and none of those endorsements existed —
+ * they were fabricated marketing copy, which India CPA §2(28) treats as a
+ * misleading advertisement. Sector cards now show only the sector's real
+ * playbook (use cases + recommended modules) and a launch-state tag that
+ * matches what is actually shipping today.
+ *
+ * `launchState`:
+ *   'live'    — the HR / Payroll / Attendance modules that this sector
+ *               depends on are shipping today.
+ *   'soon'    — the sector-specific modules (POS, Manufacturing, CRM etc.)
+ *               are on the roadmap and marked "Launching soon" in
+ *               module_plans. See ModulesOverview.
+ */
+type LaunchState = 'live' | 'soon'
+
+const industries: Array<{
+  id: string
+  icon: typeof Factory
+  name: string
+  tagline: string
+  description: string
+  useCases: string[]
+  modules: string[]
+  launchState: LaunchState
+}> = [
   {
     id: 'manufacturing',
     icon: Factory,
     name: 'Manufacturing',
-    tagline: 'From BOM to dispatch — fully automated.',
+    tagline: 'From BOM to dispatch — one connected core.',
     description:
-      'UnifiedTree manages your entire manufacturing lifecycle: raw material procurement, Bill of Materials, work orders, quality checks, and finished goods inventory — all in one system.',
+      'UnifiedTree is being built to manage the manufacturing lifecycle: procurement, Bill of Materials, work orders, quality checks, and finished-goods inventory. HR & Payroll for shop-floor staff is live today; the manufacturing-specific modules are launching soon.',
     useCases: [
       'Multi-level Bill of Materials with variants',
       'Work order creation and shop floor tracking',
@@ -26,19 +55,15 @@ const industries = [
       'Machine and workcenter scheduling',
     ],
     modules: ['Manufacturing', 'Inventory', 'Purchase', 'Accounting', 'HR & Employees'],
-    testimonial: {
-      quote: "Our production efficiency improved 28% in 3 months. BOM management alone saved us 40 hours per month of manual work.",
-      name: 'Rajesh Agarwal',
-      company: 'Agarwal Auto Parts, Pune',
-    },
+    launchState: 'soon',
   },
   {
     id: 'retail',
     icon: ShoppingBag,
     name: 'Retail & Distribution',
-    tagline: 'Never miss a sale — even offline.',
+    tagline: 'Point of Sale is launching soon.',
     description:
-      'Run a single store or a chain of 50. UnifiedTree POS works offline, syncs inventory centrally, and gives you real-time sales visibility across all locations.',
+      'Run a single store or a chain. Offline POS, multi-store inventory and central sales visibility are on the roadmap. HR & Payroll for store staff is live today.',
     useCases: [
       'Offline POS — billing without internet',
       'Multi-store inventory management',
@@ -48,11 +73,7 @@ const industries = [
       'GST-compliant receipts and invoices',
     ],
     modules: ['Point of Sale', 'Inventory', 'Accounting', 'CRM', 'Reports & BI'],
-    testimonial: {
-      quote: "We have 8 stores across Maharashtra. UnifiedTree POS handles peak season billing flawlessly — even when the internet goes down.",
-      name: 'Kiran Desai',
-      company: 'Desai Retail Group',
-    },
+    launchState: 'soon',
   },
   {
     id: 'trading',
@@ -60,7 +81,7 @@ const industries = [
     name: 'Trading & Distribution',
     tagline: 'Buy right. Sell faster. Track everything.',
     description:
-      'From vendor POs to customer delivery, UnifiedTree manages your entire trading operation. 3-way matching, batch tracking, and multi-location inventory built in.',
+      'Vendor POs, 3-way matching, batch tracking and multi-location inventory are on the roadmap for trading and distribution operators. HR & Payroll for back-office and warehouse teams is live today.',
     useCases: [
       'Purchase order and vendor management',
       'Goods receipt and 3-way matching',
@@ -70,11 +91,7 @@ const industries = [
       'GST e-way bill generation',
     ],
     modules: ['Purchase', 'Inventory', 'Sales', 'Accounting', 'CRM'],
-    testimonial: {
-      quote: "Stock reconciliation used to take 3 days every month. With UnifiedTree, it's live — always accurate, always updated.",
-      name: 'Priya Shah',
-      company: 'Shah Trading Co., Surat',
-    },
+    launchState: 'soon',
   },
   {
     id: 'hospitality',
@@ -82,29 +99,25 @@ const industries = [
     name: 'Hospitality & Food',
     tagline: 'Fast billing. Happy tables. Zero chaos.',
     description:
-      'Restaurant chains, cloud kitchens, and hotels use UnifiedTree POS for KOT management, table billing, and daily operations. Works seamlessly even during rush hours.',
+      'KOT management, table billing and offline receipts for restaurants, cloud kitchens and hotels are on the roadmap. HR & Payroll for kitchen and service staff is live today.',
     useCases: [
       'KOT (Kitchen Order Ticket) management',
       'Table and seat management',
       'Offline billing during connectivity issues',
       'Recipe and ingredient costing',
       'Daily cash register management',
-      'Zomato and Swiggy order integration',
+      'Third-party aggregator order integration',
     ],
     modules: ['Point of Sale', 'Inventory', 'Accounting', 'HR & Employees', 'Payroll'],
-    testimonial: {
-      quote: "Our cloud kitchen runs on UnifiedTree. From ordering ingredients to billing — everything in one place. Game changer.",
-      name: 'Ananya Mehta',
-      company: 'Spice Route Kitchens, Bengaluru',
-    },
+    launchState: 'soon',
   },
   {
     id: 'services',
     icon: Building2,
     name: 'Professional Services',
-    tagline: 'Project-based billing. Streamlined.',
+    tagline: 'People management today, projects & billing next.',
     description:
-      'IT firms, consultancies, architects, and agencies use UnifiedTree to manage projects, track time, invoice clients, and run payroll — all connected.',
+      'IT firms, consultancies, architects and agencies can run HR, Attendance and Payroll on UnifiedTree today. Project-based time tracking, milestone billing and utilisation dashboards are launching soon.',
     useCases: [
       'Project milestones and task tracking',
       'Timesheet and billable hours',
@@ -114,19 +127,15 @@ const industries = [
       'GST invoicing with TDS deduction',
     ],
     modules: ['Projects', 'Accounting', 'HR & Employees', 'Payroll', 'CRM'],
-    testimonial: {
-      quote: "Tracking billable hours across 12 projects was a nightmare. UnifiedTree Projects solved it in the first week.",
-      name: 'Rohan Verma',
-      company: 'Verma IT Solutions, Hyderabad',
-    },
+    launchState: 'live',
   },
   {
     id: 'healthcare',
     icon: Stethoscope,
     name: 'Healthcare & Pharma',
-    tagline: 'Compliance-ready. Patient-safe.',
+    tagline: 'Staff management today, batch/expiry tracking next.',
     description:
-      'Hospitals, clinics, and pharma distributors rely on UnifiedTree for batch tracking, expiry management, compliance reporting, and staff management.',
+      'Hospitals, clinics and pharma distributors can manage staff attendance and payroll on UnifiedTree today. Batch and expiry tracking, controlled-substance management and FIFO stock valuation are on the roadmap.',
     useCases: [
       'Batch and expiry date tracking',
       'Controlled substance tracking',
@@ -136,11 +145,7 @@ const industries = [
       'Purchase of scheduled drugs tracking',
     ],
     modules: ['Inventory', 'Purchase', 'HR & Employees', 'Attendance', 'Accounting'],
-    testimonial: {
-      quote: "Expiry management for 3,000+ SKUs was a compliance risk. UnifiedTree's inventory solved it completely.",
-      name: 'Dr. Pradeep Kumar',
-      company: 'MediCure Distributors, Delhi',
-    },
+    launchState: 'live',
   },
   {
     id: 'education',
@@ -148,7 +153,7 @@ const industries = [
     name: 'Education',
     tagline: 'Run your institution. Not your spreadsheets.',
     description:
-      'Schools, colleges, and coaching institutes use UnifiedTree for staff payroll, attendance, fee management, and expense tracking.',
+      'Schools, colleges and coaching institutes can run staff attendance, statutory payroll (PF, ESI, TDS) and shift management on UnifiedTree today. Fee management and asset tracking are on the roadmap.',
     useCases: [
       'Staff attendance and payroll',
       'PF, ESI for teaching and non-teaching staff',
@@ -158,19 +163,15 @@ const industries = [
       'Multi-branch consolidated reports',
     ],
     modules: ['HR & Employees', 'Attendance', 'Payroll', 'Accounting', 'Reports & BI'],
-    testimonial: {
-      quote: "We manage payroll for 280 staff across 6 campuses. UnifiedTree made it a one-click process.",
-      name: 'Sunita Pillai',
-      company: 'Pillai Group of Schools, Mumbai',
-    },
+    launchState: 'live',
   },
   {
     id: 'construction',
     icon: Wrench,
     name: 'Construction & Real Estate',
-    tagline: 'Projects on time. Costs in control.',
+    tagline: 'GPS attendance today, project costing next.',
     description:
-      'Construction firms use UnifiedTree to manage labour attendance, material procurement, project budgets, and sub-contractor billing.',
+      'GPS-based labour attendance and payroll for on-site staff work today via the mobile app. Project-wise material tracking, sub-contractor billing and progress billing are on the roadmap.',
     useCases: [
       'GPS-based labour attendance on site',
       'Material procurement and site stock',
@@ -180,21 +181,13 @@ const industries = [
       'Progress billing and retention management',
     ],
     modules: ['Attendance', 'Purchase', 'Inventory', 'Projects', 'Accounting'],
-    testimonial: {
-      quote: "GPS attendance at remote construction sites changed everything for us. No more proxy marking. Attendance is now 100% accurate.",
-      name: 'Ramesh Joshi',
-      company: 'Joshi Construction Pvt. Ltd.',
-    },
+    launchState: 'live',
   },
 ]
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
 
 const pad = (n: number) => String(n).padStart(2, '0')
-
-/** Initials for the testimonial avatar, minus any honorific. */
-const initials = (name: string) =>
-  name.replace(/^Dr\.\s*/, '').split(' ').map((n) => n[0]).join('').slice(0, 2)
 
 /**
  * Card-header surface: the card-scale version of the page's deep emerald band —
@@ -312,34 +305,21 @@ function Dossier({ index, sizer = false }: { index: number; sizer?: boolean }) {
         </div>
 
         {/* Absorbs the slack between this sector's content and the reserved
-            height, so the testimonial always sits on the card's floor rather
-            than leaving a ragged gap under it. */}
+            height, so the launch-state footer always sits on the card's
+            floor rather than leaving a ragged gap under it. */}
         <div aria-hidden className="min-h-[1.75rem] flex-1" />
 
-        {/* Testimonial — laid out across the panel so no side is left empty */}
-        {ind.testimonial && (
-          <figure className="flex flex-col gap-4 rounded-2xl bg-primary-light px-5 py-4 sm:flex-row sm:items-center sm:gap-6 sm:px-6">
-            <blockquote className="min-w-0 flex-1 text-[14px] leading-relaxed text-text-secondary">
-              &ldquo;{ind.testimonial.quote}&rdquo;
-            </blockquote>
-            {/* Proportional, not fixed: at lg the dossier column is at its
-                narrowest, and a fixed 13.5rem there squeezed the quote into a
-                five-line ribbon beside a half-empty attribution. */}
-            <figcaption className="flex flex-shrink-0 items-center gap-3 sm:w-[36%] sm:max-w-[13.5rem] sm:border-l sm:border-primary/20 sm:pl-5">
-              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-[12px] font-bold text-white">
-                {initials(ind.testimonial.name)}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[13px] font-bold leading-snug text-text-primary">
-                  {ind.testimonial.name}
-                </span>
-                <span className="block text-[12px] leading-snug text-text-tertiary">
-                  {ind.testimonial.company}
-                </span>
-              </span>
-            </figcaption>
-          </figure>
-        )}
+        {/* Launch-state footer — replaces the removed fabricated testimonial */}
+        <div className="flex items-start gap-3 rounded-2xl bg-primary-light px-5 py-4 sm:px-6">
+          <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-white">
+            <Info size={13} />
+          </span>
+          <p className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-text-secondary">
+            {ind.launchState === 'live'
+              ? 'HR, Attendance and Payroll for this sector are live today. Sector-specific modules on this list will unlock as they ship.'
+              : 'HR, Attendance and Payroll for this sector are live today. The sector-specific modules on this list are launching soon — join early access to be first on the list.'}
+          </p>
+        </div>
       </div>
     </article>
   )
@@ -382,24 +362,41 @@ export function IndustriesPage() {
           <>
             One platform.
             <br />
-            <span className="text-lime">Every industry.</span>
+            <span className="text-lime">Built for how you actually run.</span>
           </>
         }
         lede={
           <>
-            UnifiedTree is trusted across 8 major industries. Same platform, purpose-built
-            workflows for each sector.
+            UnifiedTree ships HR, Payroll and mobile Attendance today, with sector-specific
+            modules launching by industry. Below is how each sector uses the parts that are
+            live now — and what's coming next.
           </>
         }
       >
         <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[13px] font-medium text-white/70">
-          <span>8 sectors live today</span>
+          <span>HR &amp; Payroll live today</span>
           <span className="hidden h-1 w-1 rounded-full bg-white/40 sm:block" />
-          <span>Same core, different playbook</span>
+          <span>Attendance &amp; Face Verification on the mobile app</span>
           <span className="hidden h-1 w-1 rounded-full bg-white/40 sm:block" />
-          <span>Go live in a day</span>
+          <span>Sector modules launching soon</span>
         </div>
       </PageHero>
+
+      {/* Launch-mode banner — sits under the hero so a visitor from any
+          entry point sees, before scrolling into a sector, exactly which
+          parts of the product they can use today. */}
+      <div className="border-b border-primary/15 bg-primary-light/60">
+        <div className="mx-auto flex max-w-7xl items-start gap-3 px-4 py-3.5 text-[13.5px] leading-snug text-text-secondary sm:items-center sm:px-6 lg:px-8">
+          <Info size={16} className="mt-0.5 flex-shrink-0 text-primary sm:mt-0" aria-hidden />
+          <p>
+            <span className="font-semibold text-text-primary">
+              HR &amp; Payroll are live today.
+            </span>{' '}
+            Attendance and Face Verification are available on the mobile app.
+            Sector-specific modules (POS, Manufacturing, CRM, etc.) are launching soon.
+          </p>
+        </div>
+      </div>
 
       {/* ── The index and the dossier, side by side ────────────────────
           One section, not two: every sector is listed at once on the left and

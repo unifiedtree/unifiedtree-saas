@@ -62,18 +62,15 @@ public class EmployeeController {
     private final InvitationService invitationService;
     private final JdbcTemplate jdbcTemplate;
     private final WorkspaceAccessService accessService;
-    private final SeatLimitGuard seatLimitGuard;
 
     public EmployeeController(EmployeeService employeeService,
                               @Autowired(required = false) InvitationService invitationService,
                               @Autowired(required = false) JdbcTemplate jdbcTemplate,
-                              @Autowired(required = false) WorkspaceAccessService accessService,
-                              SeatLimitGuard seatLimitGuard) {
+                              @Autowired(required = false) WorkspaceAccessService accessService) {
         this.employeeService = employeeService;
         this.invitationService = invitationService;
         this.jdbcTemplate = jdbcTemplate;
         this.accessService = accessService;
-        this.seatLimitGuard = seatLimitGuard;
     }
 
     @Operation(summary = "Create a new employee")
@@ -81,10 +78,11 @@ public class EmployeeController {
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
     public ResponseEntity<EmployeeResponse> create(@Valid @RequestBody CreateEmployeeRequest request,
                                                    @AuthenticationPrincipal Jwt jwt) {
-        // Per-seat pricing is only real if somebody checks it. Raw JWT role
-        // strings (not the Role enum) because the guard needs workspace roles
-        // like OWNER, which Role does not model and currentRoles() drops.
-        seatLimitGuard.requireSeatAvailable(jwt.getClaimAsStringList("roles"));
+        // Per-seat pricing is only real if somebody checks it. The seat-quota
+        // enforcement now lives inside EmployeeService.createEmployee itself
+        // so every code path that creates an employee — this controller, the
+        // /staff variant below, and the CSV bulk importer — shares a single
+        // rule and cannot be bypassed by picking a different endpoint.
         EmployeeResponse employee = employeeService.createEmployee(request);
         queueInvite(employee, jwt);
         return ResponseEntity.status(HttpStatus.CREATED).body(employee);
@@ -96,9 +94,8 @@ public class EmployeeController {
     public ResponseEntity<EmployeeResponse> createStaff(
             @Valid @RequestBody StaffOnboardingRequest request,
             @AuthenticationPrincipal Jwt jwt) {
-        // Both creation endpoints must check — guarding only one leaves the
-        // other as a way around per-seat billing.
-        seatLimitGuard.requireSeatAvailable(jwt.getClaimAsStringList("roles"));
+        // Seat-quota enforcement is inside EmployeeService.createEmployee, so
+        // both /employees and /employees/staff share one gate.
         List<Role> currentRoles = currentRoles(jwt);
         boolean adminRequest = hasAnyRole(currentRoles, ADMIN_ROLES);
 
@@ -154,8 +151,66 @@ public class EmployeeController {
     @GetMapping("/{employeeId}")
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER') or " +
                   "(hasRole('EMPLOYEE') and #employeeId == @securityHelper.currentEmployeeId())")
-    public ResponseEntity<EmployeeResponse> get(@PathVariable UUID employeeId) {
+    public ResponseEntity<EmployeeResponse> get(@PathVariable UUID employeeId,
+                                                @AuthenticationPrincipal Jwt jwt) {
+        // B2 FIX (audit 2026-08-15): object-scope IDOR guard. Role check alone
+        // allowed any DEPT_MANAGER in the tenant to read any employee row —
+        // narrow to (a) self, (b) direct-manager of target, or (c) HR/Admin.
+        assertCanAccessEmployee(jwt, employeeId);
         return ResponseEntity.ok(employeeService.getEmployee(employeeId));
+    }
+
+    // ---- B2 IDOR helper ------------------------------------------------------
+
+    /**
+     * Object-scope IDOR guard. Caller passes access iff any of:
+     *  <ul>
+     *   <li>SELF — jwt.employee_id equals {@code targetEmployeeId}</li>
+     *   <li>DIRECT MANAGER — target employee's reporting_manager_id equals
+     *       jwt.employee_id</li>
+     *   <li>HR / Admin — caller has {@code hrms.employees.read.all}
+     *       authority or a role of HR_MANAGER/COMPANY_ADMIN/SUPER_ADMIN</li>
+     *  </ul>
+     * Otherwise throws AccessDeniedException — 403 back to caller.
+     */
+    private void assertCanAccessEmployee(Jwt jwt, UUID targetEmployeeId) {
+        if (jwt == null || targetEmployeeId == null) {
+            throw new org.springframework.security.access.AccessDeniedException("forbidden");
+        }
+        UUID caller = extractEmployeeId(jwt);
+        if (targetEmployeeId.equals(caller)) return;
+
+        // HR / Admin permission or role
+        var auth = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication();
+        if (auth != null) {
+            for (var ga : auth.getAuthorities()) {
+                String a = ga.getAuthority();
+                if ("hrms.employees.read.all".equals(a)
+                        || "ROLE_HR_MANAGER".equals(a)
+                        || "ROLE_COMPANY_ADMIN".equals(a)
+                        || "ROLE_SUPER_ADMIN".equals(a)) {
+                    return;
+                }
+            }
+        }
+
+        // Direct-manager: target.reporting_manager_id == caller
+        if (jdbcTemplate != null) {
+            try {
+                UUID mgr = jdbcTemplate.queryForObject(
+                        "SELECT reporting_manager_id FROM hrms.employees WHERE id = ?",
+                        UUID.class, targetEmployeeId);
+                if (mgr != null && mgr.equals(caller)) return;
+            } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
+                // no such row → deny
+            } catch (Exception e) {
+                log.warn("IDOR guard: manager lookup failed for {} — denying: {}",
+                        targetEmployeeId, e.getMessage());
+            }
+        }
+        throw new org.springframework.security.access.AccessDeniedException(
+                "You are not authorised to access this employee's data");
     }
 
     @Operation(summary = "List employees by company (paginated)")
@@ -190,8 +245,10 @@ public class EmployeeController {
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
     public ResponseEntity<EmployeeResponse> assignPunchZone(
             @PathVariable UUID employeeId,
-            @RequestParam(required = false) UUID zoneId) {
+            @RequestParam(required = false) UUID zoneId,
+            @AuthenticationPrincipal Jwt jwt) {
         // zoneId present -> assign that zone; omitted -> clear (company-wide / branch fallback).
+        assertCanAccessEmployee(jwt, employeeId);
         return ResponseEntity.ok(employeeService.assignPunchZone(employeeId, zoneId));
     }
 
@@ -200,15 +257,19 @@ public class EmployeeController {
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
     public ResponseEntity<EmployeeResponse> setWeeklyOffs(
             @PathVariable UUID employeeId,
-            @RequestParam(required = false) String days) {
+            @RequestParam(required = false) String days,
+            @AuthenticationPrincipal Jwt jwt) {
         // e.g. days=6,7 for Sat+Sun. Blank/omitted falls back to the Sat+Sun default.
+        assertCanAccessEmployee(jwt, employeeId);
         return ResponseEntity.ok(employeeService.setWeeklyOffDays(employeeId, days));
     }
 
     @Operation(summary = "Read the employee's elevated role (EMPLOYEE, DEPT_MANAGER, HR_MANAGER, COMPANY_ADMIN)")
     @GetMapping("/{employeeId}/access")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Map<String, Object>> getAccess(@PathVariable UUID employeeId) {
+    public ResponseEntity<Map<String, Object>> getAccess(@PathVariable UUID employeeId,
+                                                        @AuthenticationPrincipal Jwt jwt) {
+        assertCanAccessEmployee(jwt, employeeId);
         // Reads the highest-tier role on the employee's credential. Used by the
         // mobile Staff Profile to show "Role: Department Manager" alongside the
         // existing Account-Activated panel.
@@ -311,7 +372,9 @@ public class EmployeeController {
     @Operation(summary = "Whether the employee has activated their account by setting a password")
     @GetMapping("/{employeeId}/invitation-status")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Map<String, Object>> invitationStatus(@PathVariable UUID employeeId) {
+    public ResponseEntity<Map<String, Object>> invitationStatus(@PathVariable UUID employeeId,
+                                                                @AuthenticationPrincipal Jwt jwt) {
+        assertCanAccessEmployee(jwt, employeeId);
         // Source of truth: auth.user_credentials.password_hash + last_login_at.
         // employmentStatus is NOT a reliable signal (a freshly invited employee
         // is PROBATION/ACTIVE — neither "INVITED" nor "DRAFT" exists in the
@@ -360,7 +423,9 @@ public class EmployeeController {
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','EMPLOYEE')")
     public ResponseEntity<EmergencyContactResponse> addEmergencyContact(
             @PathVariable UUID employeeId,
-            @Valid @RequestBody EmergencyContactRequest request) {
+            @Valid @RequestBody EmergencyContactRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        assertCanAccessEmployee(jwt, employeeId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(employeeService.addEmergencyContact(employeeId, request));
     }
@@ -370,7 +435,9 @@ public class EmployeeController {
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN') or " +
                   "(hasRole('EMPLOYEE') and #employeeId == @securityHelper.currentEmployeeId())")
     public ResponseEntity<List<EmergencyContactResponse>> getEmergencyContacts(
-            @PathVariable UUID employeeId) {
+            @PathVariable UUID employeeId,
+            @AuthenticationPrincipal Jwt jwt) {
+        assertCanAccessEmployee(jwt, employeeId);
         return ResponseEntity.ok(employeeService.getEmergencyContacts(employeeId));
     }
 

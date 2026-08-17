@@ -66,7 +66,7 @@ public class PendingSignupService {
                         ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?,
-                        'AWAITING_MANDATE', now() + interval '24 hours', now(), now()
+                        'AWAITING_MANDATE', now() + interval '60 minutes', now(), now()
                     )
                     """,
                     id, a.mode(), a.accountId(), lower(a.email()), a.passwordHash(), a.phone(),
@@ -151,7 +151,9 @@ public class PendingSignupService {
         log.info("pending_signup {} -> CANCELLED", id);
     }
 
-    /** Rows whose 24-hour expires_at has passed while still AWAITING_MANDATE. */
+    /** Rows whose 60-minute expires_at has passed while still AWAITING_MANDATE.
+     *  Shortened from 24h to 60min (audit 2026-08-15 B1) so a lost/abandoned
+     *  mandate does not silently squat the subdomain slot for a full day. */
     public List<PendingSignup> findExpiredAwaiting(Instant now, int limit) {
         return jdbc.query(
                 "SELECT " + COLUMNS + " FROM platform.pending_signups " +

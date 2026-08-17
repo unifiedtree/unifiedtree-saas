@@ -56,9 +56,16 @@ const addressSchema = z.object({
   pincode: z.string().optional(),
 })
 
+// Empty string in a form input must not become a Zod validation failure — an
+// admin who cleared a field expects "no value", not "invalid pattern". The
+// unions accept "" as an explicit escape hatch before the format check runs.
+const PAN_RX     = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/
+const AADHAAR_RX = /^[0-9]{12}$/
+
 const identitySchema = z.object({
-  pan: z.string().max(10).optional(),
-  aadhaar: z.string().max(12).optional(),
+  pan: z.union([z.literal(''), z.string().regex(PAN_RX, 'PAN must be 5 letters + 4 digits + 1 letter (e.g. ABCDE1234F)')]).optional(),
+  // 12-digit Aadhaar format check only — Verhoeff checksum deferred to backend.
+  aadhaar: z.union([z.literal(''), z.string().regex(AADHAAR_RX, 'Aadhaar must be exactly 12 digits')]).optional(),
   uan: z.string().optional(),
   esicNumber: z.string().optional(),
   passportNumber: z.string().optional(),
@@ -117,7 +124,14 @@ const workSchema = z.object({
   branchId:           z.string().optional(),
   reportingManagerId: z.string().optional(),
   employmentType:     z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT']).optional(),
-  ctcAnnual:          z.coerce.number().positive().optional(),
+  // ctcAnnual accepts three shapes cleanly: undefined (field never touched),
+  // "" (admin cleared it — treat as undefined), and a positive number. The
+  // previous z.coerce.number().positive().optional() rejected "" because
+  // Number("") === 0 which fails .positive(), blocking the whole form save.
+  ctcAnnual: z.preprocess(
+    (v) => (v === '' || v == null ? undefined : v),
+    z.coerce.number().positive().optional(),
+  ),
 })
 
 type AddressForm   = z.infer<typeof addressSchema>
@@ -1087,15 +1101,23 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
 
-  // Lazy-import hook to avoid circular deps; useMyLetters filtered by employee is not available,
-  // so we use the generated letters list endpoint filtered client-side by employeeId.
+  // Employee-scoped list: pass `employeeId` as a server-side filter instead of
+  // pulling the tenant-wide page and filtering client-side. The old approach
+  // silently dropped this employee's letters whenever they weren't in the
+  // most-recent 10 generated across the whole workspace, and it fetched other
+  // employees' letters into browser memory just to discard them — a soft
+  // privacy leak on any admin who could open devtools.
   const { data, isLoading } = useQuery({
     queryKey: ['hrms', 'letters', 'generated', 'employee', employeeId, page],
     queryFn: () => apiJson<{ content: GeneratedLetterDto[]; totalElements: number; totalPages: number }>(
-      `/v1/letters/generated?page=${page}&size=10`
+      `/v1/letters/generated?employeeId=${encodeURIComponent(employeeId)}&page=${page}&size=10`
     ),
+    // Defensive client-side filter: if the backend hasn't wired the employeeId
+    // param yet, at least we keep behaviour identical to before rather than
+    // rendering letters from other employees under this profile.
     select: r => ({ ...r, content: r.content.filter(l => l.employeeId === employeeId) }),
     staleTime: 30_000,
+    enabled: !!employeeId,
   })
 
   const letters = data?.content ?? []

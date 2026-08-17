@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useAuthStore as useSdkStore, apiEvents, setAccessToken } from '@unifiedtree/sdk'
 import type { AuthUser, AuthTenant, ModuleInfo } from '@unifiedtree/sdk'
 import { useAuthStore as useOldStore } from '@/core/auth/authStore'
+import { queryClient } from '@/providers/QueryProvider'
+import { useNotificationStore } from '@/core/notifications/notificationStore'
 import {
   WelcomeSplash,
   peekWelcomeIntent,
@@ -88,15 +90,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hydrate()
   }, [hydrate])
 
-  // Bridge SDK state → old auth store (HRMS files depend on it)
+  // Bridge SDK state → old auth store (HRMS files depend on it).
+  //
+  // On the AUTH → UNAUTH transition we also wipe every react-query cache and
+  // the in-memory notification store. On a shared laptop (kiosk, front desk,
+  // trainer's machine) user B was briefly seeing user A's payslips / leaves
+  // between "sign out" and the fresh queries firing, because tanstack-query
+  // hydrates from cache before the first refetch resolves. Wiping on the
+  // downward edge means every subsequent sign-in starts against an empty
+  // cache and never renders the previous account's data by mistake.
+  const prevStatusRef = useRef<typeof sdkStatus>(sdkStatus)
   useEffect(() => {
     if (sdkStatus === 'authenticated' && sdkUser && sdkTenant) {
       const permCodes = Array.from(sdkPermissions.keys())
       // token param is empty — token is held in-memory by SDK's tokenStorage
       oldLogin('', toOldUser(sdkUser, permCodes), toOldTenant(sdkTenant, sdkModules))
     } else if (sdkStatus === 'unauthenticated') {
+      // Only clear on the actual DOWNWARD edge — the initial 'idle' →
+      // 'unauthenticated' hydration on a public page must not wipe caches
+      // that were never populated.
+      if (prevStatusRef.current === 'authenticated') {
+        try { queryClient.clear() } catch { /* best-effort */ }
+        try { useNotificationStore.getState().reset() } catch { /* best-effort */ }
+      }
       oldLogout()
     }
+    prevStatusRef.current = sdkStatus
   }, [sdkStatus, sdkUser, sdkTenant, sdkPermissions, sdkModules, oldLogin, oldLogout])
 
   // Wire 403 forbidden events to a window event so Toaster can pick it up

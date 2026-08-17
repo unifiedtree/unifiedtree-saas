@@ -42,12 +42,55 @@ const POLL_INTERVAL_MS = 2500
 const POLL_MAX_MS = 30 * 60 * 1000  // 30 min
 // Survives reload / re-login so the mandate poll can resume. Cleared on any
 // terminal outcome (activated, failed, cancelled, expired).
-const PENDING_KEY = 'ut.plan.pendingChangeId'
-// The Razorpay checkout URL, persisted alongside the id. Without it, a modal
-// resumed after a reload has a "focus the Razorpay tab" button pointing at a
-// Window handle that no longer exists — a silent no-op next to copy claiming
-// we just opened a tab.
-const PENDING_URL_KEY = 'ut.plan.pendingCheckoutUrl'
+// Keys are per-workspace so an admin who signs out of workspace A and into
+// workspace B doesn't inherit the other workspace's in-flight mandate poll —
+// each mandate belongs to exactly one tenant. `pendingKeys` computes the
+// suffixed keys from the current tenant slug; the un-suffixed prefixes
+// remain read-only for a one-time migration of any legacy value present
+// when this change ships. `null` slug (pre-login) reads/writes nothing.
+const PENDING_KEY_PREFIX = 'ut.plan.pendingChangeId'
+const PENDING_URL_KEY_PREFIX = 'ut.plan.pendingCheckoutUrl'
+function pendingKeys(slug: string | null): { id: string | null; url: string | null } {
+  if (!slug) return { id: null, url: null }
+  return { id: `${PENDING_KEY_PREFIX}:${slug}`, url: `${PENDING_URL_KEY_PREFIX}:${slug}` }
+}
+/** Read the pending id, migrating from a legacy unscoped value once. */
+function readPendingId(slug: string | null): string | null {
+  const { id } = pendingKeys(slug)
+  if (!id) return null
+  const scoped = localStorage.getItem(id)
+  if (scoped) return scoped
+  const legacy = localStorage.getItem(PENDING_KEY_PREFIX)
+  if (legacy) {
+    localStorage.setItem(id, legacy)
+    localStorage.removeItem(PENDING_KEY_PREFIX)
+    return legacy
+  }
+  return null
+}
+function readPendingUrl(slug: string | null): string | null {
+  const { url } = pendingKeys(slug)
+  if (!url) return null
+  const scoped = localStorage.getItem(url)
+  if (scoped) return scoped
+  const legacy = localStorage.getItem(PENDING_URL_KEY_PREFIX)
+  if (legacy) {
+    localStorage.setItem(url, legacy)
+    localStorage.removeItem(PENDING_URL_KEY_PREFIX)
+    return legacy
+  }
+  return null
+}
+function writePendingId(slug: string | null, value: string): void {
+  const { id } = pendingKeys(slug)
+  if (id) localStorage.setItem(id, value)
+}
+function clearPendingId(slug: string | null): void {
+  const { id } = pendingKeys(slug)
+  if (id) localStorage.removeItem(id)
+  // Also clear the legacy key in case migration hadn't run for this browser.
+  localStorage.removeItem(PENDING_KEY_PREFIX)
+}
 
 // -- API contracts ----------------------------------------------------------
 
@@ -165,13 +208,16 @@ export const Plan: React.FC = () => {
   // loop died on any of those, the admin was dropped back on the plan picker
   // as though they had never paid, and our own "refresh this page" error
   // message was impossible to act on. localStorage survives all three.
+  // Compute the pending-mandate lookup keys from the tenant slug once so
+  // every read/write below stays scoped to THIS workspace.
+  const tenantSlugForKeys = useSdkStore.getState().tenant?.slug ?? null
   const [awaitingMandate, setAwaitingMandate] = useState(
-    () => !!localStorage.getItem(PENDING_KEY))
+    () => !!readPendingId(tenantSlugForKeys))
   const [pendingId, setPendingId] = useState<string | null>(
-    () => localStorage.getItem(PENDING_KEY))
+    () => readPendingId(tenantSlugForKeys))
   const [checkoutTab, setCheckoutTab] = useState<Window | null>(null)
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(
-    () => localStorage.getItem(PENDING_URL_KEY))
+    () => readPendingUrl(tenantSlugForKeys))
   const [recovering, setRecovering] = useState(false)
 
   // Active subscriptions on THIS workspace, keyed by primary planKey. When
@@ -354,8 +400,9 @@ export const Plan: React.FC = () => {
         cancelPending(key)
         const tab = window.open(res.checkoutShortUrl, '_blank', 'noopener,noreferrer')
         setCheckoutTab(tab)
-        localStorage.setItem(PENDING_KEY, res.planChangeRequestId)
-        localStorage.setItem(PENDING_URL_KEY, res.checkoutShortUrl)
+        writePendingId(tenantSlugForKeys, res.planChangeRequestId)
+        const { url: urlKey } = pendingKeys(tenantSlugForKeys)
+        if (urlKey) localStorage.setItem(urlKey, res.checkoutShortUrl)
         setCheckoutUrl(res.checkoutShortUrl)
         setPendingId(res.planChangeRequestId)
         setAwaitingMandate(true)
@@ -387,8 +434,12 @@ export const Plan: React.FC = () => {
   // turns the banner ON at exactly the wrong moments (right after a
   // successful recovery, or on top of a terminal FAILED/CANCELLED error).
   const clearPending = () => {
-    localStorage.removeItem(PENDING_KEY)
-    localStorage.removeItem(PENDING_URL_KEY)
+    clearPendingId(tenantSlugForKeys)
+    const { url: urlKey } = pendingKeys(tenantSlugForKeys)
+    if (urlKey) localStorage.removeItem(urlKey)
+    // Also clear the legacy unscoped URL key so a stale value from a
+    // pre-scoping install doesn't survive.
+    localStorage.removeItem(PENDING_URL_KEY_PREFIX)
     setPendingId(null)
   }
 
@@ -515,8 +566,9 @@ export const Plan: React.FC = () => {
       )
       const tab = window.open(res.checkoutShortUrl, '_blank', 'noopener,noreferrer')
       setCheckoutTab(tab)
-      localStorage.setItem(PENDING_KEY, res.planChangeRequestId)
-      localStorage.setItem(PENDING_URL_KEY, res.checkoutShortUrl)
+      writePendingId(tenantSlugForKeys, res.planChangeRequestId)
+      const { url: urlKey } = pendingKeys(tenantSlugForKeys)
+      if (urlKey) localStorage.setItem(urlKey, res.checkoutShortUrl)
       setCheckoutUrl(res.checkoutShortUrl)
       setPendingId(res.planChangeRequestId)
       setAwaitingMandate(true)
@@ -550,7 +602,10 @@ export const Plan: React.FC = () => {
         )
         if (s.status === 'ACTIVATED') {
           clearInterval(iv)
-          localStorage.removeItem(PENDING_KEY)
+          clearPendingId(tenantSlugForKeys)
+          const { url: urlKey2 } = pendingKeys(tenantSlugForKeys)
+          if (urlKey2) localStorage.removeItem(urlKey2)
+          localStorage.removeItem(PENDING_URL_KEY_PREFIX)
           // Hard refresh of SDK auth state so SDK.modules AND SDK.permissions
           // AND the local Tenant all update atomically from the authenticated
           // /v1/canonical-auth/me endpoint. This addresses two 2026-08-07

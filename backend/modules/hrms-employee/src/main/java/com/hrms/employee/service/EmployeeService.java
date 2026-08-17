@@ -18,6 +18,7 @@ import com.hrms.employee.entity.EmergencyContact;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.mapper.EmergencyContactMapper;
 import com.hrms.employee.mapper.EmployeeMapper;
+import com.hrms.employee.quota.SeatQuotaEnforcer;
 import com.hrms.employee.repository.EmergencyContactRepository;
 import com.hrms.employee.repository.EmployeeDocumentRepository;
 import com.hrms.employee.repository.EmployeeRepository;
@@ -52,6 +53,7 @@ public class EmployeeService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final OnboardingService onboardingService;
     private final JdbcTemplate jdbc;
+    private final SeatQuotaEnforcer seatQuotaEnforcer;
     private final boolean kafkaEnabled;
 
     public EmployeeService(
@@ -64,6 +66,7 @@ public class EmployeeService {
             KafkaTemplate<String, Object> kafkaTemplate,
             OnboardingService onboardingService,
             JdbcTemplate jdbc,
+            SeatQuotaEnforcer seatQuotaEnforcer,
             @Value("${hrms.kafka.enabled:false}") boolean kafkaEnabled) {
         this.employeeRepository = employeeRepository;
         this.emergencyContactRepository = emergencyContactRepository;
@@ -74,6 +77,7 @@ public class EmployeeService {
         this.kafkaTemplate = kafkaTemplate;
         this.onboardingService = onboardingService;
         this.jdbc = jdbc;
+        this.seatQuotaEnforcer = seatQuotaEnforcer;
         this.kafkaEnabled = kafkaEnabled;
     }
 
@@ -83,6 +87,12 @@ public class EmployeeService {
         if (tenantId == null) {
             throw new BusinessRuleException("Tenant context is missing for employee creation.", "TENANT_CONTEXT_MISSING");
         }
+
+        // Enforce the workspace's paid seat cap BEFORE we touch the DB.
+        // Takes a per-tenant advisory lock inside our tx so concurrent
+        // creates serialise on the same key. Fails CLOSED — a broken quota
+        // lookup rejects the create rather than letting it through.
+        seatQuotaEnforcer.assertCapacity();
 
         boolean emailExists = employeeRepository.findByEmail(request.email()).isPresent();
         if (emailExists) {
@@ -117,16 +127,43 @@ public class EmployeeService {
         Employee employee = findEmployeeById(employeeId);
         EmployeeResponse base = employeeMapper.toResponse(employee);
         boolean hasAccount = checkHasAccount(employee.getId());
+        // B2 FIX (audit 2026-08-15): redact PAN / Aadhaar / bank / salary from
+        // the generic employee-detail response. Callers that legitimately need
+        // these fields (payroll, finance) must switch to the elevated
+        // /identity or /bank endpoints — the generic getEmployee no longer
+        // leaks them. NOTE: this may break the existing employee-detail page
+        // until a follow-up bundle wires those callers.
+        boolean piiRead = hasAuthority("hrms.employees.pii.read");
+        String bankAcct = piiRead ? base.bankAccountNumber() : maskLast4(base.bankAccountNumber());
         return new EmployeeResponse(
                 base.id(), base.tenantId(), base.employeeCode(), base.firstName(), base.lastName(),
                 base.email(), base.phone(), base.dateOfBirth(), base.gender(),
                 base.companyId(), base.departmentId(), base.branchId(), base.geoFenceZoneId(),
                 base.weeklyOffDays(), base.managerId(), base.jobTitle(), base.employmentType(),
                 base.employmentStatus(), base.dateOfJoining(), base.workLocation(),
-                base.salaryFrequency(), base.monthlySalary(), base.panNumber(), base.aadhaarNumber(),
-                base.uanNumber(), base.esiNumber(), base.bankAccountNumber(), base.bankIfscCode(),
+                base.salaryFrequency(),
+                piiRead ? base.monthlySalary() : null,
+                piiRead ? base.panNumber() : null,
+                piiRead ? base.aadhaarNumber() : null,
+                base.uanNumber(), base.esiNumber(),
+                bankAcct, base.bankIfscCode(),
                 base.bankName(), base.bankBranchName(), base.isFaceEnrolled(), base.profilePhotoUrl(),
                 hasAccount, base.createdAt());
+    }
+
+    private static String maskLast4(String s) {
+        if (s == null || s.isBlank()) return null;
+        String t = s.trim();
+        return t.length() <= 4 ? "****" : "****" + t.substring(t.length() - 4);
+    }
+
+    private static boolean hasAuthority(String authority) {
+        try {
+            var a = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            return a != null && a.getAuthorities().stream()
+                    .anyMatch(g -> authority.equals(g.getAuthority()));
+        } catch (Exception ignore) { return false; }
     }
 
     private boolean checkHasAccount(UUID employeeId) {

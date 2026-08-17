@@ -94,6 +94,13 @@ public class AdvanceService {
                     "Only a requested advance can be approved or rejected (current status: " + advance.getStatus() + ")",
                     "ADVANCE_NOT_REQUESTED");
         }
+        // B3 FIX (audit 2026-08-15): defense-in-depth self-approval guard.
+        // The controller also checks, but the service must NOT trust callers.
+        if (approverId != null && approverId.equals(advance.getEmployeeId())) {
+            throw new BusinessRuleException(
+                    "You cannot approve your own advance request.",
+                    "ADVANCE_SELF_APPROVAL");
+        }
         advance.setStatus(decision.approved() ? AdvanceStatus.APPROVED : AdvanceStatus.REJECTED);
         advance.setApproverId(approverId);
         advance.setApprovedAt(Instant.now());

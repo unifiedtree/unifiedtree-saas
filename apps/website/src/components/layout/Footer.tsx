@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Linkedin, Twitter, Github, Youtube, Mail, MessageCircle, ArrowRight } from 'lucide-react'
+import { Mail, ArrowRight } from 'lucide-react'
 
 const columns = [
   {
@@ -33,12 +33,9 @@ const legalLinks = [
   { label: 'Cookie Policy', to: '/cookies' },
 ]
 
-const socials = [
-  { icon: Linkedin, href: '#', label: 'LinkedIn' },
-  { icon: Twitter, href: '#', label: 'Twitter' },
-  { icon: Github, href: '#', label: 'GitHub' },
-  { icon: Youtube, href: '#', label: 'YouTube' },
-]
+// Social icons were removed on 2026-08-17: they all pointed at `href='#'`
+// (placeholders) so every click landed on the current page silently.
+// Icons will come back when we have real profile URLs to link out to.
 
 const linkCls =
   'text-[14.5px] text-white/90 transition-colors duration-200 hover:text-[#D1FAE5]'
@@ -160,12 +157,9 @@ export function Footer() {
                   support@unifiedtree.com
                 </a>
               </li>
-              <li>
-                <a href="#" className={`flex items-center gap-2 ${linkCls}`}>
-                  <MessageCircle size={14} className="flex-shrink-0 text-white/75" />
-                  WhatsApp Support
-                </a>
-              </li>
+              {/* WhatsApp entry removed 2026-08-17: previous href was '#'
+                  (placeholder). It'll come back once we have a real
+                  Business Cloud number wired up. */}
               <li>
                 <Link
                   to="/talk-to-us?intent=demo"
@@ -199,18 +193,9 @@ export function Footer() {
             ))}
           </div>
 
-          <div className="order-1 flex items-center gap-2.5 lg:order-3">
-            {socials.map(({ icon: Icon, href, label }) => (
-              <a
-                key={label}
-                href={href}
-                aria-label={label}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-white/70 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#A7F3D0]/50 hover:bg-white/10 hover:text-[#A7F3D0]"
-              >
-                <Icon size={16} />
-              </a>
-            ))}
-          </div>
+          {/* Social icons block removed 2026-08-17 (see `socials` note
+              above). Placeholder anchors are a UX and accessibility bug,
+              not a design detail. */}
         </div>
       </div>
     </footer>

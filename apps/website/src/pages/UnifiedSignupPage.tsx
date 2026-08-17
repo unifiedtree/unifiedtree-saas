@@ -699,7 +699,7 @@ export function UnifiedSignupPage() {
 
                 <p className="mt-4 hidden text-[12px] leading-snug text-white/55 lg:block">
                   {mode === 'trial'
-                    ? 'No card required. You only pay when you switch on autopay inside your workspace.'
+                    ? 'Free workspace, no card required. Add paid modules and set up autopay inside your workspace when you\'re ready.'
                     : 'Payments and autopay mandates are handled by Razorpay. We never see your card.'}
                 </p>
               </div>
@@ -750,11 +750,11 @@ export function UnifiedSignupPage() {
               {/* Basic identity — paired on desktop, stacked below lg */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 <Field label="First and Last Name" required icon={<User size={15} />} error={errors.adminName?.message}>
-                  <input {...register('adminName')} placeholder="John Doe" className={inputCls(!!errors.adminName)} />
+                  <input {...register('adminName')} placeholder="Your full name" className={inputCls(!!errors.adminName)} />
                 </Field>
 
                 <Field label="Company Name" required icon={<Building size={15} />} error={errors.companyName?.message}>
-                  <input {...register('companyName')} placeholder="Acme Corp" className={inputCls(!!errors.companyName)} />
+                  <input {...register('companyName')} placeholder="Your company name" className={inputCls(!!errors.companyName)} />
                 </Field>
               </div>
 

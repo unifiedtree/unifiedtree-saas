@@ -20,6 +20,22 @@ import { useGeofenceZones } from '../api/useGeofence'
 import { useTemplates } from '../onboarding/api/useOnboarding'
 import { sendInvite } from './api/useInvitation'
 import { useNextEmployeeCode } from '../api/useSettings'
+// Edit-mode prefill for the Financial step. The workforce response DTO strips
+// PII fields for list-safety, so the fetched employee object alone can't tell
+// us pan/uan/esi/bank. We call the same profile endpoints EmployeeDetail's
+// Identity + Bank tabs use, but ONLY when we're editing an existing row.
+import { useEmployeeIdentity, useBankAccounts } from '../api/useEmployeeProfile'
+// Inline entity-creation — a click on any "+ Add new" pill next to a Basic-step
+// dropdown opens a portal-mounted modal, so filling in a missing department /
+// designation / zone / company mid-onboarding no longer costs the admin the
+// data they've already typed on the form.
+import {
+  InlineCreateDepartmentModal,
+  InlineCreateDesignationModal,
+  InlineCreateZoneModal,
+  InlineCreateCompanyModal,
+  AddNewButton,
+} from './InlineCreateModals'
 
 // Mobile-parity validators. Mirror the constants used in the Attendance app's
 // staff-onboarding.tsx so a user filling the same field in either client gets
@@ -29,8 +45,15 @@ import { useNextEmployeeCode } from '../api/useSettings'
 const RX = {
   email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   phone: /^\+?\d{10,15}$/,
-  pan: /^[A-Z]{5}\d{4}[A-Z]$/,
-  aadhaar: /^\d{12}$/,
+  // PAN is 5 letters + 4 digits + 1 letter — statutory format enforced by
+  // Income Tax India. Explicit character class avoids the ambiguity of \d
+  // (which older Node/JS engines have historically expanded to include
+  // non-ASCII digits) and matches the mobile app's regex exactly.
+  pan: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+  // 12-digit Aadhaar. Verhoeff checksum validation is deliberately skipped
+  // for now — the audit accepts a 12-digit format check as parity with
+  // mobile onboarding until the check-digit lib is added.
+  aadhaar: /^[0-9]{12}$/,
   uan: /^\d{12}$/,
   esi: /^\d{10,17}$/,
   bankAccount: /^\d{9,18}$/,
@@ -152,6 +175,19 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   // stays editable so admin can override for special cases.
   const { data: nextCodePreview } = useNextEmployeeCode(isEdit ? undefined : companyId || undefined)
 
+  // Edit-mode prefill sources — the workforce DTO doesn't ship PII, so these
+  // hooks pull identity + bank from the same endpoints EmployeeDetail uses.
+  // No-op in create mode (empty employeeId disables the underlying query).
+  const editEmployeeId = isEdit ? (employee?.id ?? '') : ''
+  const { data: existingIdentity } = useEmployeeIdentity(editEmployeeId)
+  const { data: existingBanks = [] } = useBankAccounts(editEmployeeId)
+  const primaryBank = existingBanks.find((b) => b.primary) ?? existingBanks[0]
+  // Monthly salary reconstructed from ctcAnnual when the employee row has it —
+  // matches how the create form derives ctc from monthly at submit.
+  const employeeMonthlyFromCtc = employee?.ctcAnnual && employee.ctcAnnual > 0
+    ? Math.round(Number(employee.ctcAnnual) / 12)
+    : undefined
+
   const [step, setStep] = useState<FormStep>('basic')
   const [form, setForm] = useState({
     // ── Basic ─────────────────────────────────────────────────────────────
@@ -173,11 +209,14 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     // free-text value is sent as `designation` (mobile-parity payload key).
     designationId: employee?.designationId ?? '',
     designationText: '',
-    geoFenceZoneId: '',
+    // `geoFenceZoneId` isn't on the workforce response DTO typing yet — the
+    // field is set at create time and read-only per employee — so fall back
+    // to '' in edit mode until the DTO grows the field.
+    geoFenceZoneId: (employee as unknown as { geoFenceZoneId?: string })?.geoFenceZoneId ?? '',
     shiftId: '',
     // ── Financial ─────────────────────────────────────────────────────────
     salaryFrequency: 'MONTHLY',
-    monthlySalary: '',
+    monthlySalary: employeeMonthlyFromCtc != null ? String(employeeMonthlyFromCtc) : '',
     employmentType: employee?.employmentType ?? 'FULL_TIME',
     panNumber: '',
     aadhaarNumber: '',
@@ -188,12 +227,62 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     bankName: '',
     bankBranchName: '',
   })
+
+  // Once identity + bank hooks resolve (edit mode only), fill in the Financial
+  // step fields that were empty on first render. We deliberately do NOT
+  // overwrite anything the admin has already typed — the effect only sets a
+  // field when it is still the empty-string default. Full account number is
+  // not returned for security (only last4); the admin re-types it if they
+  // want to change the bank details, otherwise the untouched-field skip on
+  // submit keeps the existing value.
+  React.useEffect(() => {
+    if (!isEdit) return
+    if (!existingIdentity && !primaryBank) return
+    setForm((p) => ({
+      ...p,
+      panNumber: p.panNumber || (existingIdentity?.pan ?? ''),
+      // Full aadhaar only if the identity endpoint returned it (PII-gated
+      // server-side). Otherwise leave blank so re-typing is optional.
+      aadhaarNumber: p.aadhaarNumber || (existingIdentity?.aadhaar ?? ''),
+      uanNumber: p.uanNumber || (existingIdentity?.uan ?? ''),
+      esiNumber: p.esiNumber || (existingIdentity?.esicNumber ?? ''),
+      bankName: p.bankName || (primaryBank?.bankName ?? ''),
+      bankBranchName: p.bankBranchName || (primaryBank?.branchName ?? ''),
+      bankIfsc: p.bankIfsc || (primaryBank?.ifscCode ?? ''),
+      // Only the last4 is available to the client — show it as a
+      // placeholder-ish value the admin can overwrite. If the admin doesn't
+      // touch the field, the untouched-fields skip on submit avoids sending
+      // a bogus 4-digit account number back.
+      bankAccountNumber: p.bankAccountNumber
+        || (primaryBank?.accountNumber ?? ''),
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingIdentity, primaryBank])
   // Weekly off days kept as an ISO-day array so the chip UI can toggle
   // membership cheaply; serialised to CSV ("6,7") on submit to match the
-  // backend column shape.
-  const [weeklyOffDays, setWeeklyOffDays] = useState<number[]>([...DEFAULT_WEEK_OFFS])
+  // backend column shape. Edit mode seeds from the CSV the server stored
+  // on this employee (may be missing from the response DTO — safe fallback
+  // to the tenant default of Sat+Sun).
+  const parseWeekOffCsv = (csv?: string): number[] => {
+    if (!csv) return [...DEFAULT_WEEK_OFFS]
+    const parts = csv.split(',').map((s) => parseInt(s.trim(), 10)).filter(
+      (n) => Number.isFinite(n) && n >= 1 && n <= 7)
+    return parts.length > 0 ? parts : [...DEFAULT_WEEK_OFFS]
+  }
+  const [weeklyOffDays, setWeeklyOffDays] = useState<number[]>(
+    isEdit ? parseWeekOffCsv((employee as unknown as { weeklyOffDays?: string })?.weeklyOffDays)
+           : [...DEFAULT_WEEK_OFFS],
+  )
   const toggleWeekOff = (iso: number) =>
     setWeeklyOffDays((p) => (p.includes(iso) ? p.filter((d) => d !== iso) : [...p, iso]))
+
+  // Inline-create modal visibility. Kept as separate booleans (not a discriminated
+  // union) so opening one never briefly closes another during a state batch, and
+  // so each affordance's onClose can be a stable inline callback.
+  const [showAddDept, setShowAddDept] = useState(false)
+  const [showAddDesignation, setShowAddDesignation] = useState(false)
+  const [showAddZone, setShowAddZone] = useState(false)
+  const [showAddCompany, setShowAddCompany] = useState(false)
 
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const set = (key: string, value: string) => {
@@ -637,15 +726,21 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
             <>
               {!isEdit && companies.length > 1 && (
                 <Field label="Company" required error={errors.companyId}>
-                  <Sel error={!!errors.companyId} value={companyId} onChange={(e) => { setCompanyId(e.target.value); setErrors(p => ({ ...p, companyId: '' })) }}>
-                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </Sel>
+                  <div className="flex items-center gap-2">
+                    <Sel error={!!errors.companyId} value={companyId} onChange={(e) => { setCompanyId(e.target.value); setErrors(p => ({ ...p, companyId: '' })) }}>
+                      {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </Sel>
+                    <AddNewButton onClick={() => setShowAddCompany(true)} label="+ Add" />
+                  </div>
                 </Field>
               )}
               {!isEdit && companies.length === 0 && (
                 <div className={`rounded-xl border px-4 py-3 text-sm ${errors.companyId ? 'border-red-400 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
-                  No company exists yet. Create one in <span className="font-semibold">Organization → Companies</span> before adding employees.
+                  No company exists yet. Create one now to keep the details you've entered so far.
                   {errors.companyId && <p className="mt-1 font-semibold text-red-600">{errors.companyId}</p>}
+                  <div className="mt-2">
+                    <AddNewButton onClick={() => setShowAddCompany(true)} label="+ Add Company" />
+                  </div>
                 </div>
               )}
 
@@ -668,35 +763,44 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               <Field label="Designation" required error={errors.designationId || errors.designationText}>
                 {useDesignationFreeText ? (
                   <>
-                    <Input
-                      error={!!errors.designationText}
-                      value={form.designationText}
-                      onChange={(e) => set('designationText', e.target.value)}
-                      placeholder="e.g. Software Engineer"
-                    />
+                    <div className="flex items-center gap-2">
+                      <Input
+                        error={!!errors.designationText}
+                        value={form.designationText}
+                        onChange={(e) => set('designationText', e.target.value)}
+                        placeholder="e.g. Software Engineer"
+                      />
+                      <AddNewButton onClick={() => setShowAddDesignation(true)} label="+ Save to list" />
+                    </div>
                     <p className="mt-1 text-xs text-text-secondary">
-                      No designations configured yet. You can pick from a list once you add some under Organization → Designations.
+                      Typed in-line, or press "Save to list" to add a reusable designation for future hires.
                     </p>
                   </>
                 ) : (
-                  <Sel error={!!errors.designationId} value={form.designationId} onChange={(e) => set('designationId', e.target.value)}>
-                    <option value="">Select designation</option>
-                    {designations.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
-                  </Sel>
+                  <div className="flex items-center gap-2">
+                    <Sel error={!!errors.designationId} value={form.designationId} onChange={(e) => set('designationId', e.target.value)}>
+                      <option value="">Select designation</option>
+                      {designations.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
+                    </Sel>
+                    <AddNewButton onClick={() => setShowAddDesignation(true)} label="+ Add" />
+                  </div>
                 )}
               </Field>
 
               <Field label="Department" required error={errors.departmentId}>
-                <Sel
-                  error={!!errors.departmentId}
-                  value={departmentId}
-                  onChange={(e) => { setDepartmentId(e.target.value); setErrors(p => ({ ...p, departmentId: '' })) }}
-                >
-                  <option value="">
-                    {departments.length === 0 ? 'No departments — create one in Organization first' : 'Select department'}
-                  </option>
-                  {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </Sel>
+                <div className="flex items-center gap-2">
+                  <Sel
+                    error={!!errors.departmentId}
+                    value={departmentId}
+                    onChange={(e) => { setDepartmentId(e.target.value); setErrors(p => ({ ...p, departmentId: '' })) }}
+                  >
+                    <option value="">
+                      {departments.length === 0 ? 'No departments yet — click Add to create one' : 'Select department'}
+                    </option>
+                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </Sel>
+                  <AddNewButton onClick={() => setShowAddDept(true)} label="+ Add" />
+                </div>
               </Field>
 
               <Field label="Employee Code" required error={errors.employeeCode}>
@@ -728,14 +832,17 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               </Field>
 
               <Field label="Geofence Zone (Punch)">
-                <Sel value={form.geoFenceZoneId} onChange={(e) => set('geoFenceZoneId', e.target.value)}>
-                  <option value="">
-                    {geofenceZones.length === 0 ? 'No zones configured — set up in Attendance' : 'No specific zone'}
-                  </option>
-                  {geofenceZones.filter((z) => z.active).map((z) => (
-                    <option key={z.id} value={z.id}>{z.name}</option>
-                  ))}
-                </Sel>
+                <div className="flex items-center gap-2">
+                  <Sel value={form.geoFenceZoneId} onChange={(e) => set('geoFenceZoneId', e.target.value)}>
+                    <option value="">
+                      {geofenceZones.length === 0 ? 'No zones yet — click Add to create one' : 'No specific zone'}
+                    </option>
+                    {geofenceZones.filter((z) => z.active).map((z) => (
+                      <option key={z.id} value={z.id}>{z.name}</option>
+                    ))}
+                  </Sel>
+                  <AddNewButton onClick={() => setShowAddZone(true)} label="+ Add" />
+                </div>
                 <p className="mt-1 text-xs text-text-secondary">
                   Optional — when set, the employee can only punch in from inside this zone.
                 </p>
@@ -970,6 +1077,49 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           )}
         </div>
       </div>
+
+      {/* Inline entity-creation modals. Rendered here (siblings of the drawer,
+          under the same top-level fragment) and internally portalled to the
+          body, so opening one does NOT unmount the drawer and every field the
+          admin already typed survives across create-and-continue. */}
+      <InlineCreateCompanyModal
+        open={showAddCompany}
+        onClose={() => setShowAddCompany(false)}
+        onCreated={(c) => {
+          setCompanyId(c.id)
+          setErrors((p) => ({ ...p, companyId: '' }))
+        }}
+      />
+      <InlineCreateDepartmentModal
+        open={showAddDept}
+        onClose={() => setShowAddDept(false)}
+        companyId={companyId}
+        onCreated={(d) => {
+          setDepartmentId(d.id)
+          setErrors((p) => ({ ...p, departmentId: '' }))
+        }}
+      />
+      <InlineCreateDesignationModal
+        open={showAddDesignation}
+        onClose={() => setShowAddDesignation(false)}
+        companyId={companyId}
+        departmentId={departmentId || undefined}
+        initialTitle={useDesignationFreeText ? form.designationText : ''}
+        onCreated={(d) => {
+          // Switch the field back into dropdown mode by clearing free-text
+          // and setting the picked id — the free-text branch only shows when
+          // the designations list is empty, and it's about to be non-empty.
+          setForm((p) => ({ ...p, designationId: d.id, designationText: '' }))
+          setErrors((p) => ({ ...p, designationId: '', designationText: '' }))
+        }}
+      />
+      <InlineCreateZoneModal
+        open={showAddZone}
+        onClose={() => setShowAddZone(false)}
+        onCreated={(z) => {
+          setForm((p) => ({ ...p, geoFenceZoneId: z.id }))
+        }}
+      />
     </>
   )
 }

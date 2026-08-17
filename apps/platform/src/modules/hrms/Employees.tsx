@@ -41,11 +41,21 @@ export const Employees: React.FC = () => {
   const canWrite = usePermission(P.HRMS_EMPLOYEE_WRITE)
 
   const { data: companies = [], isLoading: companiesLoading } = useCompanies()
-  const activeCompany = companies[0]
   const canCreateCompany = usePermission(P.ORG_COMPANY_WRITE)
   // P0-2: a fresh tenant has no companies. Adding an employee needs one, so guide
   // the user to create a company first instead of letting the form fail cryptically.
   const noCompany = !companiesLoading && companies.length === 0
+
+  // Explicit company selector — the directory previously silently defaulted to
+  // companies[0], so a tenant with more than one company only ever saw the
+  // first one's headcount and couldn't switch. `companyId` state is chosen by
+  // the toolbar select below; falls back to companies[0] before selection
+  // resolves so the initial paint isn't blank.
+  const [companyId, setCompanyId] = useState<string>('')
+  React.useEffect(() => {
+    if (!companyId && companies.length > 0) setCompanyId(companies[0].id)
+  }, [companies, companyId])
+  const activeCompany = companies.find((c) => c.id === companyId) ?? companies[0]
 
   const { data: departments = [] } = useDepartments(activeCompany?.id ?? '')
   const { data: branches = [] } = useBranches(activeCompany?.id)
@@ -153,6 +163,25 @@ export const Employees: React.FC = () => {
         search={{ value: search, onChange: (v) => { setSearch(v); resetPage() }, placeholder: 'Search name, code, email…' }}
         actions={
           <>
+            {companies.length > 1 && (
+              <select
+                value={companyId}
+                onChange={(e) => {
+                  setCompanyId(e.target.value)
+                  // Clear scope-bound filters when switching companies so we
+                  // don't send a stale departmentId/branchId of the previous
+                  // company (backend would silently return 0 rows).
+                  setDepartmentId('')
+                  setBranchId('')
+                  resetPage()
+                }}
+                className="h-9 cursor-pointer rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] shadow-xs outline-none transition-[border-color,box-shadow] hover:border-[var(--border-strong)] focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12"
+              >
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
             <select
               value={departmentId}
               onChange={(e) => { setDepartmentId(e.target.value); resetPage() }}

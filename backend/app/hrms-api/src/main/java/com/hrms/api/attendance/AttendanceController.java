@@ -423,7 +423,12 @@ public class AttendanceController {
     @PreAuthorize("hasAuthority('attendance.team.read')")
     public ResponseEntity<PageResponse<AttendanceRecordResponse>> employeeRecords(
             @PathVariable UUID employeeId,
-            @PageableDefault(size = 31) Pageable pageable) {
+            @PageableDefault(size = 31) Pageable pageable,
+            @AuthenticationPrincipal Jwt jwt) {
+        // B7 FIX (audit 2026-08-15): object-scope IDOR guard — attendance.team.read
+        // alone allowed any manager in the tenant to enumerate any employee's
+        // attendance. Restrict to self / direct manager / HR-Admin.
+        assertCanReadEmployeeAttendance(jwt, employeeId);
         return ResponseEntity.ok(attendanceService.getEmployeeAttendance(employeeId, pageable));
     }
 
@@ -432,8 +437,41 @@ public class AttendanceController {
     @PreAuthorize("hasAuthority('attendance.team.read')")
     public ResponseEntity<WeeklySummaryResponse> employeeWeeklySummary(
             @PathVariable UUID employeeId,
-            @RequestParam(required = false) LocalDate weekStart) {
+            @RequestParam(required = false) LocalDate weekStart,
+            @AuthenticationPrincipal Jwt jwt) {
+        // B7 FIX (audit 2026-08-15): same IDOR guard as records above.
+        assertCanReadEmployeeAttendance(jwt, employeeId);
         return ResponseEntity.ok(attendanceService.getWeeklySummary(employeeId, weekStart));
+    }
+
+    /**
+     * Object-scope IDOR guard used by {@code /employee/{id}/records} +
+     * {@code /employee/{id}/weekly-summary}. Same rule as
+     * {@code EmployeeController.assertCanAccessEmployee}: SELF /
+     * direct-manager / HR-Admin.
+     */
+    private void assertCanReadEmployeeAttendance(Jwt jwt, UUID targetEmployeeId) {
+        if (jwt == null || targetEmployeeId == null) {
+            throw new org.springframework.security.access.AccessDeniedException("forbidden");
+        }
+        UUID caller = extractEmployeeId(jwt);
+        if (targetEmployeeId.equals(caller)) return;
+        var auth = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication();
+        if (auth != null) {
+            for (var ga : auth.getAuthorities()) {
+                String a = ga.getAuthority();
+                if ("hrms.employees.read.all".equals(a)
+                        || "attendance.admin.read".equals(a)
+                        || "ROLE_HR_MANAGER".equals(a)
+                        || "ROLE_COMPANY_ADMIN".equals(a)
+                        || "ROLE_SUPER_ADMIN".equals(a)) return;
+            }
+        }
+        Employee target = employeeRepository.findById(targetEmployeeId).orElse(null);
+        if (target != null && caller.equals(target.getManagerId())) return;
+        throw new org.springframework.security.access.AccessDeniedException(
+                "You are not authorised to view this employee's attendance.");
     }
 
     private List<Employee> scopedEmployees(Jwt jwt, UUID departmentId) {

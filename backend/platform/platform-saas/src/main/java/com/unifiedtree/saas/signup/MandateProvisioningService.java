@@ -125,9 +125,28 @@ public class MandateProvisioningService {
                      "skipping writer and completing downstream inserts",
                     pendingSignupId, tenantId, p.subdomain());
         } else {
+            // B1 FIX (audit 2026-08-15): returning-customer FK-violation guard.
+            // p.accountId() is NULL on anonymous signups. SaasService.provisionFromPending
+            // then mints a random UUID and hands it to SaasWriter.signup, which upserts
+            // platform.accounts with ON CONFLICT DO NOTHING on lower(email). If the
+            // email is ALREADY claimed by an existing account, the upsert no-ops (existing
+            // row wins) but our downstream inserts (auth.user_credentials, hrms.employees,
+            // ...) reference the RANDOM UUID we minted — the real account has a different
+            // id → FK violation, tenant half-created, no workspace, no refund, and the
+            // customer has already been debited by Razorpay. Fix: resolve the account by
+            // email BEFORE calling into SaasWriter, so the id we pass matches what already
+            // exists (or truly is fresh).
+            UUID resolvedAccountId = p.accountId();
+            if (resolvedAccountId == null) {
+                resolvedAccountId = findAccountIdByEmail(p.email());
+                if (resolvedAccountId != null) {
+                    log.info("provisionFromPending({}) — reusing existing account {} for email {} (returning customer)",
+                            pendingSignupId, resolvedAccountId, p.email());
+                }
+            }
             try {
                 SignupResponse resp = saas.provisionFromPending(
-                        p.accountId(),
+                        resolvedAccountId,
                         p.passwordHash(),
                         p.companyName(),
                         p.subdomain(),
@@ -183,6 +202,14 @@ public class MandateProvisioningService {
             planType      = "PAID";
         }
 
+        // B1 FIX (audit 2026-08-15): persist trial_ends_at on the initial
+        // subscription row for TRIAL signups. Razorpay's subscription payload
+        // exposes start_at (epoch-secs) = first-charge time, which for a
+        // TRIAL sub is exactly the trial end. Without stamping it, the
+        // cancel reconciler cannot cap grace_until at the trial boundary and
+        // a mid-trial cancel would leak beyond the day-7 mark.
+        Long startAt = "TRIAL".equalsIgnoreCase(p.mode()) ? optLong(subscriptionEntity, "start_at") : null;
+
         // Freeze the price the customer signed up at on the ledger row. Verified
         // live 2026-08-10: signup writes used to hard-code amount_inr=0 and
         // unit_price_inr=0, so every dashboard number derived from these columns
@@ -200,10 +227,12 @@ public class MandateProvisioningService {
                     (id, tenant_id, subdomain, contact_email, plan_keys, modules, seats,
                      billing_cycle, unit_price_inr, amount_inr, currency, status,
                      current_period_start, current_period_end, next_charge_at,
+                     trial_ends_at,
                      razorpay_subscription_id, auto_renew, payment_method,
                      pending_signup_id, plan_type, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'INR', ?,
                         now(), COALESCE(to_timestamp(?), now()), to_timestamp(?),
+                        to_timestamp(?),
                         ?, TRUE, ?, ?, ?, now(), now())
                 ON CONFLICT (razorpay_subscription_id)
                     WHERE razorpay_subscription_id IS NOT NULL DO NOTHING
@@ -219,6 +248,7 @@ public class MandateProvisioningService {
                 mapCycleToSubscriptions(p.billingCycle()), unitInr, amountInr,
                 initialStatus,
                 currentEnd, chargeAt,
+                startAt,
                 p.razorpaySubscriptionId(), method,
                 pendingSignupId, planType);
 
@@ -236,7 +266,7 @@ public class MandateProvisioningService {
         // handler; ops can resend from the audit trail.
         try {
             saas.publishWorkspaceCreated(saas.buildWorkspaceCreatedEvent(
-                    tenantId, p.accountId(), p.subdomain(),
+                    tenantId, findAccountIdByEmail(p.email()), p.subdomain(),
                     p.adminName(), p.email(), p.companyName(),
                     p.planKeys()));
         } catch (Exception mailErr) {
@@ -262,6 +292,22 @@ public class MandateProvisioningService {
             return jdbc.queryForObject(
                     "SELECT id FROM platform.tenants WHERE lower(subdomain) = lower(?)",
                     UUID.class, subdomain);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        }
+    }
+
+    /**
+     * B1 FIX: resolve an existing account_id by email so the webhook path
+     * uses the SAME id already claimed on platform.accounts rather than
+     * minting a fresh UUID that will FK-violate every downstream insert.
+     */
+    private UUID findAccountIdByEmail(String email) {
+        if (email == null || email.isBlank()) return null;
+        try {
+            return jdbc.queryForObject(
+                    "SELECT id FROM platform.accounts WHERE lower(email) = lower(?) LIMIT 1",
+                    UUID.class, email.trim());
         } catch (EmptyResultDataAccessException e) {
             return null;
         }
@@ -316,6 +362,12 @@ public class MandateProvisioningService {
     private static Long optLong(JsonNode n, String field) {
         if (n == null) return null;
         JsonNode v = n.get(field);
-        return v == null || v.isNull() ? null : v.asLong();
+        if (v == null || v.isNull()) return null;
+        long l = v.asLong();
+        // B1 FIX (audit 2026-08-15): mirror SubscriptionStateReconciler.optLong —
+        // treat 0 as null so a Razorpay payload missing / zero-defaulted
+        // timestamp does not overwrite a real column value via to_timestamp(0)
+        // (which is 1970-01-01, silently marking the subscription as expired).
+        return l == 0 ? null : l;
     }
 }

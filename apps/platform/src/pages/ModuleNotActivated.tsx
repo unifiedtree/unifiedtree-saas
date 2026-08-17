@@ -32,7 +32,7 @@ export const ModuleNotActivated: React.FC<Props> = ({ moduleKey }) => {
       <p className="text-[#047857] font-semibold mb-8">Starting at ${price}/month</p>
       <div className="flex items-center gap-3">
         <button
-          onClick={() => navigate('/settings?tab=billing')}
+          onClick={() => navigate('/plan')}
           className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#047857] to-[#059669] hover:from-[#053B2E] hover:to-[#047857] text-white font-semibold rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-[#059669]/30"
         >
           <Sparkles size={16} />

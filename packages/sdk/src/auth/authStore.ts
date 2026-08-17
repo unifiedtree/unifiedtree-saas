@@ -108,12 +108,16 @@ function meToAuthState(data: CanonicalMeResponse) {
 
   const roles = data.user?.roles ?? data.roles ?? [];
   const email = data.user?.email ?? data.email ?? '';
-  const localPart = email.split('@')[0] || 'User';
+  // Do NOT synthesize a firstName from the email local-part here — persisting a
+  // fake name (e.g. "Shurya.kumar063") into the store poisons every downstream
+  // read of user.firstName because the fallback chain in useDisplayName /
+  // useAuthDisplay only fires when firstName is empty. Leave it empty when the
+  // server didn't provide one; readers compute a display fallback on the fly.
   const user: AuthUser = data.user ?? {
     id: data.userId ?? '',
     email,
-    firstName: data.firstName || (localPart.charAt(0).toUpperCase() + localPart.slice(1)),
-    lastName: data.lastName || '',
+    firstName: data.firstName ?? '',
+    lastName: data.lastName ?? '',
     roles,
   };
 
@@ -182,12 +186,14 @@ export const useAuthStore = create<AuthState>()((set) => ({
   loginWithCredentials: ({ token, userId, email, firstName, lastName, roles, permissions, tenantId, tenantSlug, tenantName, activeModules }: LoginWithCredentialsParams) => {
     setAccessToken(token);
 
-    const localPart = email.split('@')[0] || 'User';
+    // Never synthesize a firstName from the email local-part — a fake name
+    // persisted here overrides every downstream display fallback. Keep the
+    // raw fields honest; useAuthDisplay computes a display string on read.
     const user: AuthUser = {
       id: userId,
       email,
-      firstName: firstName || (localPart.charAt(0).toUpperCase() + localPart.slice(1)),
-      lastName: lastName || '',
+      firstName: firstName ?? '',
+      lastName: lastName ?? '',
       roles,
     };
 
@@ -257,3 +263,66 @@ export const useAuthStore = create<AuthState>()((set) => ({
     set({ status: 'idle', user: null, tenant: null, permissions: new Map(), modules: [], scopes: EMPTY_SCOPES });
   },
 }));
+
+// ─── Display selector ──────────────────────────────────────────────────────
+// Computed-on-read view of the current user's identity fields. The store
+// itself keeps firstName/lastName exactly as the server delivered them (empty
+// string when absent) so nothing downstream ever mistakes a synthesized
+// email-local-part for a real name. All display fallback lives here, at the
+// READ site — never persisted.
+//
+//   displayName  →  server display_name  >  firstName + lastName  >  firstName
+//                                        >  email.split('@')[0]   >  'Account'
+//   initials     →  first[0]+last[0]  >  displayName parts  >  first char of
+//                                       displayName
+export interface AuthDisplay {
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  initials: string;
+  email: string;
+}
+
+const EMPTY_DISPLAY: AuthDisplay = {
+  firstName: '',
+  lastName: '',
+  displayName: '',
+  initials: '',
+  email: '',
+};
+
+export function useAuthDisplay(): AuthDisplay {
+  const user = useAuthStore((s) => s.user);
+  if (!user) return EMPTY_DISPLAY;
+
+  const first = (user.firstName ?? '').trim();
+  const last = (user.lastName ?? '').trim();
+  const email = (user.email ?? '').trim();
+  // `displayName` is not on AuthUser yet but the API is starting to return
+  // one — read defensively so it works the moment the backend ships it.
+  const serverDisplay = ((user as { displayName?: string }).displayName ?? '').trim();
+  const emailLocal = email.includes('@') ? email.split('@')[0] : email;
+
+  const displayName = (() => {
+    if (serverDisplay) return serverDisplay;
+    const joined = [first, last].filter(Boolean).join(' ');
+    if (joined) return joined;
+    if (first) return first;
+    if (emailLocal) return emailLocal;
+    return 'Account';
+  })();
+
+  const initials = (() => {
+    if (first && last) return (first[0] + last[0]).toUpperCase();
+    if (first) return first[0].toUpperCase();
+    if (serverDisplay) {
+      const parts = serverDisplay.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return parts[0]?.[0]?.toUpperCase() ?? '?';
+    }
+    if (emailLocal) return emailLocal[0].toUpperCase();
+    return '?';
+  })();
+
+  return { firstName: first, lastName: last, displayName, initials, email };
+}

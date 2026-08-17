@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,9 +21,13 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * Blocks workspace API access when the tenant's subscription is HALTED past
@@ -92,6 +97,16 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
     private final RazorpayClient razorpay;
     private final SubscriptionStateReconciler reconciler;
 
+    /** B1 FIX (audit 2026-08-15): fail-closed grandfather list. Any tenant whose
+     *  UUID is on this list AND has no subscription row is granted access — that
+     *  is the "legitimately-unbilled" bucket (Play reviewer, demo, pre-autopay
+     *  customers). Everyone else with no subscription row is denied, because a
+     *  missing ledger is now evidence of a bug (dropped row, failed provisioning
+     *  clean-up) rather than a policy choice. Populated from
+     *  {@code unifiedtree.subscription.grandfather-tenant-ids} in application.yml
+     *  (comma-separated UUIDs); defaults to empty = fully fail-closed. */
+    private final Set<UUID> grandfatheredTenantIds;
+
     /** Per-tenant recent-deny cache: tenantId -> epoch-seconds-of-last-check.
      *  ConcurrentHashMap is fine; the guard runs on the request thread, no
      *  cross-request sharing beyond the map itself. */
@@ -100,10 +115,32 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
     @Autowired
     public SubscriptionAccessGuard(JdbcTemplate jdbc,
                                    RazorpayClient razorpay,
-                                   SubscriptionStateReconciler reconciler) {
+                                   SubscriptionStateReconciler reconciler,
+                                   @Value("${unifiedtree.subscription.grandfather-tenant-ids:}") String grandfatherCsv) {
         this.jdbc = jdbc;
         this.razorpay = razorpay;
         this.reconciler = reconciler;
+        this.grandfatheredTenantIds = parseGrandfatherList(grandfatherCsv);
+        if (!this.grandfatheredTenantIds.isEmpty()) {
+            log.info("SubscriptionAccessGuard grandfather list loaded ({} tenant(s)): {}",
+                    this.grandfatheredTenantIds.size(), this.grandfatheredTenantIds);
+        }
+    }
+
+    private static Set<UUID> parseGrandfatherList(String csv) {
+        if (csv == null || csv.isBlank()) return Set.of();
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> {
+                    try { return UUID.fromString(s); }
+                    catch (IllegalArgumentException e) {
+                        log.warn("SubscriptionAccessGuard grandfather list has invalid uuid '{}' — skipping", s);
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
     }
 
     @Override
@@ -123,17 +160,27 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
         if (PLATFORM_TENANT_ID.equals(tenantId)) return true;
 
         SubStatus sub = loadStatus(tenantId);
-        // TODO(audit B2/D5): fail-open here means any tenant WITHOUT a
-        // subscription row gets full access. That's intentional today for
-        // grandfathered/pre-autopay tenants (and the reviewer demo), but it
-        // ALSO papers over any bug that silently drops a subscription row —
-        // a paying customer whose ledger row disappears sees no gate at all.
-        // The audit bundle B2 note tracks flipping this to fail-closed once
-        // V096 ships the operator-supplied grandfather list, so we can tell
-        // "legitimately unbilled" from "billing state lost". Do NOT change
-        // this line without that list — flipping it prematurely locks every
-        // grandfathered tenant out on the next deploy.
-        if (sub == null) return true;   // grandfathered: no subscription row, no gating
+        // B1 FIX (audit 2026-08-15): FAIL-CLOSED for missing subscription rows.
+        // Previously we fell open here to accommodate grandfathered/pre-autopay
+        // tenants and the reviewer demo, which also silently papered over any
+        // bug that dropped a paying customer's ledger row. Now: allow only
+        // tenants on the operator-maintained grandfather list; everyone else
+        // with no subscription row is denied with the standard 402 body. The
+        // list ships in application-canonical-prod.yml as
+        // 'unifiedtree.subscription.grandfather-tenant-ids' (comma-separated).
+        if (sub == null) {
+            if (grandfatheredTenantIds.contains(tenantId)) return true;
+            log.info("subscription-guard BLOCK (no ledger row, not grandfathered)  tenant={} path={}",
+                    tenantId, path);
+            response.setStatus(HttpStatus.PAYMENT_REQUIRED.value());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.getWriter().write(
+                    "{\"error\":\"subscription_lapsed\",\"status\":\"NO_SUBSCRIPTION\","
+                            + "\"graceExpiredAt\":null,"
+                            + "\"message\":\"No active subscription found for this workspace. "
+                            + "Please contact support if you believe this is an error.\"}");
+            return false;
+        }
 
         Instant now = Instant.now();
         AccessDecision d = evaluate(sub, now);

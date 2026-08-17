@@ -34,6 +34,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.employee.service",
         "com.hrms.employee.repository",
         "com.hrms.employee.mapper",
+        // Seat-quota enforcement aspect + service + exception advice
+        // (SEAT_LIMIT_EXCEEDED → HTTP 402). Fixes the audit report where an
+        // admin exceeded the workspace's paid seat count.
+        "com.hrms.employee.quota",
 
         // onboarding + profile
         "com.hrms.employee.entity",
@@ -132,6 +136,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.pli",
         "com.hrms.api.integration",
         "com.hrms.api.notiftemplate",
+        // /v1/workspace/seats/usage — seat quota widget.
+        "com.hrms.api.quota",
+        // /v1/users/me + /v1/users/me/avatar — profile lookup + avatar upload.
+        "com.hrms.api.users",
 
         // app-layer: reports, bulk import, jobs
         "com.hrms.app.reports",

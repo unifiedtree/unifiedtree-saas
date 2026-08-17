@@ -131,8 +131,12 @@ export function PricingCalculator() {
                     <div className="min-w-0 flex-1">
                       <p className={`font-body text-[12.5px] font-semibold leading-tight ${isSelected ? 'text-primary' : 'text-text-primary'}`}>{plan.displayName}</p>
                       {plan.tagline && <p className="mt-0.5 truncate text-[10.5px] leading-tight text-text-secondary">{plan.tagline}</p>}
+                      {/* Removed 2026-08-17 (CRIT #6): the previous
+                          strike-through printed `plan.priceInr * 1.4` as a
+                          fake MSRP so the live price could read as "40%
+                          off". There is no real prior price — this is a
+                          launch tariff. Show only the actual price. */}
                       <p className="mt-1 flex items-baseline gap-1 text-[11px]">
-                        <span className="font-semibold text-text-tertiary line-through">₹{Math.round(plan.priceInr * 1.4)}</span>
                         <span className="font-heading text-[13px] font-bold text-primary">₹{plan.priceInr}</span>
                         <span className="text-text-secondary">/user/mo</span>
                       </p>

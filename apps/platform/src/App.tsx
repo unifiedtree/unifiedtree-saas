@@ -2,12 +2,14 @@ import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { P, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { RouteGuard } from '@/routes/RouteGuard'
+import { RequirePermission } from '@/core/permissions/RequirePermission'
 import { PlatformShell } from '@/layouts/PlatformShell'
 import { LoginPage } from '@/core/auth/LoginPage'
 // The Keka-style HRMS analytics board (client redesign 2026-08-11) replaces the
 // old pages/Dashboard welcome screen as the module home.
 import { HrmsDashboard as Dashboard } from '@/modules/hrms/HrmsDashboard'
 import { Settings } from '@/pages/Settings'
+import { Profile } from '@/pages/Profile'
 import { AuditLogs } from '@/pages/AuditLogs'
 import { Users } from '@/pages/Users'
 import { Roles } from '@/pages/Roles'
@@ -164,7 +166,17 @@ export default function App() {
         {/* Gated on any settings capability so non-admins (e.g. plain EMPLOYEE) get a clean
             "Access Restricted" instead of an empty page; matches the sidebar's Settings gate. */}
         <Route path="/settings"      element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ]}><Settings /></RouteGuard>} />
+        {/* Two tabs of the settings page carry destructive/financial authority
+            and get their own gated routes so a plain SETTINGS_READ user can't
+            deep-link into them. React Router v6 matches the static paths in
+            preference to the /:tab wildcard below, so ordering is safe. */}
+        <Route path="/settings/billing" element={<RequirePermission code={P.WORKSPACE_BILLING_MANAGE}><Settings /></RequirePermission>} />
+        <Route path="/settings/danger"  element={<RequirePermission code={P.TENANT_SETTINGS_WRITE}><Settings /></RequirePermission>} />
         <Route path="/settings/:tab" element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ]}><Settings /></RouteGuard>} />
+        {/* Personal profile page. Auth-only (no permission gate) — every
+            signed-in user is allowed to view and edit their own profile;
+            the backend's /v1/users/me enforces "you can only touch yourself". */}
+        <Route path="/profile"       element={<Profile />} />
         {/* Platform-admin pages. These were previously reachable by direct URL for any
             authenticated user (the sidebar hid them by role, and the backend 403'd the
             data fetch — so a non-admin saw a broken "failed to load" page rather than a
@@ -231,9 +243,11 @@ export default function App() {
         <Route
           path="/hrms/employees"
           element={
-            <RouteGuard anyOf={[P.HRMS_EMPLOYEE_READ]}>
-              <ModuleGate moduleKey="hrms"><Employees /></ModuleGate>
-            </RouteGuard>
+            <RequirePermission code={P.HRMS_EMPLOYEE_READ}>
+              <RouteGuard anyOf={[P.HRMS_EMPLOYEE_READ]}>
+                <ModuleGate moduleKey="hrms"><Employees /></ModuleGate>
+              </RouteGuard>
+            </RequirePermission>
           }
         />
         <Route
@@ -345,9 +359,11 @@ export default function App() {
         <Route
           path="/hrms/payroll-dashboard"
           element={
-            <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-              <ModuleGate moduleKey="hrms"><PayrollDashboard /></ModuleGate>
-            </RouteGuard>
+            <RequirePermission code={P.PAYROLL_RUNS_READ}>
+              <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
+                <ModuleGate moduleKey="hrms"><PayrollDashboard /></ModuleGate>
+              </RouteGuard>
+            </RequirePermission>
           }
         />
         <Route
@@ -393,9 +409,11 @@ export default function App() {
         <Route
           path="/hrms/bank-disbursement"
           element={
-            <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-              <ModuleGate moduleKey="hrms"><BankDisbursement /></ModuleGate>
-            </RouteGuard>
+            <RequirePermission code={P.PAYROLL_RUNS_READ}>
+              <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
+                <ModuleGate moduleKey="hrms"><BankDisbursement /></ModuleGate>
+              </RouteGuard>
+            </RequirePermission>
           }
         />
         <Route
@@ -519,11 +537,16 @@ export default function App() {
           }
         />
         {/* Placeholder for client HR screens still being built — keeps the full
-            client nav navigable (no 404s). Auth + HRMS module gated. */}
+            client nav navigable (no 404s). Auth + HRMS module gated. The key
+            allow-list is enforced inside ModuleComingSoon so unknown slugs
+            bounce to /dashboard rather than rendering a generic teaser for
+            something we never planned to ship. */}
         <Route
           path="/hrms/soon/:key"
           element={
-            <ModuleGate moduleKey="hrms"><ModuleComingSoon /></ModuleGate>
+            <RouteGuard anyOf={[P.HRMS_ESS_READ, P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_CHECKIN_SELF]}>
+              <ModuleGate moduleKey="hrms"><ModuleComingSoon /></ModuleGate>
+            </RouteGuard>
           }
         />
         <Route
@@ -553,9 +576,11 @@ export default function App() {
         <Route
           path="/hrms/payroll/runs"
           element={
-            <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-              <ModuleGate moduleKey="hrms"><PayrollRuns /></ModuleGate>
-            </RouteGuard>
+            <RequirePermission code={P.PAYROLL_RUNS_READ}>
+              <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
+                <ModuleGate moduleKey="hrms"><PayrollRuns /></ModuleGate>
+              </RouteGuard>
+            </RequirePermission>
           }
         />
         <Route

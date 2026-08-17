@@ -213,15 +213,20 @@ export function WorkspacesPage() {
               />
               <span aria-hidden className="grain grain-dark" />
 
+              {/* Fabricated "Vikram Patel / VPL Industries" testimonial
+                  removed 2026-08-17 (CRIT #5). Replaced with a neutral
+                  product statement that says what the platform actually
+                  does — no invented attribution. */}
               <figure className="relative mt-auto p-8 xl:p-10">
                 <blockquote className="font-body text-[15px] leading-relaxed text-white/85">
-                  &ldquo;We switched from three different software tools to UnifiedTree. Now our HR,
-                  payroll, and inventory all talk to each other. Statutory calculations are
-                  automatic. Zero errors.&rdquo;
+                  One connected core: HR, Payroll and Attendance share the same
+                  records the moment you unlock them. Statutory calculations
+                  (PF, ESI, TDS) run against the same ledger — no exports, no
+                  re-keying.
                 </blockquote>
                 <figcaption className="mt-4">
-                  <p className="font-body text-sm font-semibold text-white">Vikram Patel</p>
-                  <p className="font-body text-xs text-white/60">Operations Head · VPL Industries</p>
+                  <p className="font-body text-sm font-semibold text-white">Platform promise</p>
+                  <p className="font-body text-xs text-white/60">The same records everywhere, from day one</p>
                 </figcaption>
               </figure>
             </div>

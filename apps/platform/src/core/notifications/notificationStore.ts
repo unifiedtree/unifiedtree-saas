@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Notification } from '@/types'
 import { apiJson } from '@/core/api/client'
+import { useAuthStore as useSdkAuthStore } from '@unifiedtree/sdk'
 
 /**
  * Web notification store — mirrors the mobile app's notification screen
@@ -106,6 +107,49 @@ function isWebShapedRoute(path: string): boolean {
   return WEB_ROUTE_PREFIXES.some((p) => path === p || path.startsWith(p + '?') || path.startsWith(p + '/') || (p.endsWith('/') && path.startsWith(p)))
 }
 
+/**
+ * The *_CANCELLED events fan out to BOTH the requester (their own request was
+ * withdrawn or rolled back) and the approver (their pending queue-item just
+ * disappeared). Sending both parties to /hrms/leave?tab=approvals lands the
+ * requester on a page they cannot see (or shows an empty ops-center for a
+ * plain employee). Backend may hint the recipient's role via
+ * {@code data.audience} (preferred) or {@code data.recipient_role}; if
+ * neither is present we infer from the current signed-in user's role.
+ *
+ * Kept a permissive set of role synonyms because the backend has not
+ * standardised the hint value yet — "employee"/"owner"/"requester" all
+ * indicate the same intent, as do "approver"/"manager"/"admin".
+ */
+type RecipientRole = 'requester' | 'approver'
+function inferRecipientRoleFromHint(data?: Record<string, unknown> | null): RecipientRole | null {
+  const hintRaw =
+    (typeof data?.audience === 'string' ? (data.audience as string) : undefined) ??
+    (typeof data?.recipient_role === 'string' ? (data.recipient_role as string) : undefined) ??
+    (typeof data?.recipientRole === 'string' ? (data.recipientRole as string) : undefined)
+  if (!hintRaw) return null
+  const hint = hintRaw.toLowerCase()
+  if (hint === 'requester' || hint === 'employee' || hint === 'owner' || hint === 'self') return 'requester'
+  if (hint === 'approver' || hint === 'manager' || hint === 'admin' || hint === 'hr' || hint === 'hr_manager') return 'approver'
+  return null
+}
+
+/** Fall-back: infer whether the current signed-in user is on the approver
+ *  side of the flow by looking at their roles in the SDK auth store. Plain
+ *  EMPLOYEE with no elevated role = requester side. */
+function currentUserIsApprover(): boolean {
+  try {
+    const state = useSdkAuthStore.getState()
+    const roles = state.user?.roles ?? []
+    const APPROVER_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'DEPT_MANAGER', 'FINANCE_LEAD']
+    return roles.some((r) => APPROVER_ROLES.includes(r))
+  } catch {
+    // getState may throw if the SDK bundle failed to hydrate — degrade to
+    // requester so we err on the side of the employee's own view rather
+    // than sending them to an empty approvals queue.
+    return false
+  }
+}
+
 function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> | null): string | undefined {
   const raw = typeof data?.route === 'string' ? (data.route as string) : undefined
   // Prefer the backend-supplied route ONLY if it points at a real web route.
@@ -117,12 +161,26 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   // my-leaves (employee view). We deep-link straight into the right tab
   // via ?tab= (see Leave.tsx which reads useSearchParams on mount).
   if (type === 'LEAVE_SUBMITTED') return '/hrms/leave?tab=approvals'
+  // LEAVE_CANCELLED fans out to BOTH parties. Route per-recipient so the
+  // requester lands on their own list instead of an approvals queue they
+  // cannot see. Server hint (data.audience / data.recipient_role) wins;
+  // otherwise infer from the current user's role.
+  if (type === 'LEAVE_CANCELLED') {
+    const role = inferRecipientRoleFromHint(data) ?? (currentUserIsApprover() ? 'approver' : 'requester')
+    return role === 'approver' ? '/hrms/leave?tab=approvals' : '/hrms/leave?tab=my'
+  }
   if (type.startsWith('LEAVE_')) return '/hrms/leave?tab=my'
 
   // WFH — approvals are surfaced on the leave ops-center Approvals tab
   // for admins; employees have their own /me/wfh apply/history page.
-  if (type === 'WFH_APPROVED' || type === 'WFH_REJECTED' || type === 'WFH_CANCELLED') return '/me/wfh'
+  if (type === 'WFH_APPROVED' || type === 'WFH_REJECTED') return '/me/wfh'
   if (type === 'WFH_SUBMITTED') return '/hrms/leave?tab=approvals'
+  // WFH_CANCELLED fans out to both parties too: employee → /me/wfh (their
+  // history), approver → /hrms/leave?tab=approvals (their queue).
+  if (type === 'WFH_CANCELLED') {
+    const role = inferRecipientRoleFromHint(data) ?? (currentUserIsApprover() ? 'approver' : 'requester')
+    return role === 'approver' ? '/hrms/leave?tab=approvals' : '/me/wfh'
+  }
 
   // Attendance corrections — /hrms/attendance has 'corrections' + 'my'
   // tabs. Both flavours of notification land on the corrections tab, which
@@ -144,7 +202,10 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   if (type === 'TRIAL_ENDING_SOON' || type === 'TRIAL_EXPIRED' || type === 'SUBSCRIPTION_HALTED') return '/plan'
 
   if (type === 'WELCOME') return '/'
-  return undefined
+  // Unknown / not-yet-mapped types: land the user on their own workspace
+  // dashboard instead of returning undefined (which used to render an
+  // un-clickable notification card and lose the deep-link intent).
+  return '/dashboard'
 }
 
 /** Severity used by NotificationPanel for icon + tone. */
@@ -173,7 +234,17 @@ interface NotificationState {
   loading: boolean
   loaded: boolean
   error: string | null
+  /**
+   * Authoritative unread count from the server. The visible list is capped
+   * at 50 for the bell popover, so deriving unread from `notifications` gets
+   * capped along with it — a workspace with 120 unread items shows "50 new".
+   * `serverUnreadCount` is populated by {@link fetchUnreadCount} and refreshed
+   * whenever we mutate read-state, so the bell badge stays truthful even
+   * when the list is paginated.
+   */
+  serverUnreadCount: number | null
   fetch: () => Promise<void>
+  fetchUnreadCount: () => Promise<void>
   markAsRead: (id: string) => Promise<void>
   markAllAsRead: () => Promise<void>
   removeNotification: (id: string) => Promise<void>
@@ -192,6 +263,7 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
   loading: false,
   loaded: false,
   error: null,
+  serverUnreadCount: null,
 
   fetch: async () => {
     set({ loading: true, error: null })
@@ -204,11 +276,27 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
         loaded: true,
         error: null,
       })
+      // Refresh the truthful unread count alongside the list — fire-and-forget
+      // so a slow count endpoint never blocks the bell rendering.
+      void get().fetchUnreadCount()
     } catch (e) {
       // Silent-fail the bell — a notifications endpoint hiccup must never
       // block the rest of the SPA, and the panel already renders an empty
       // state. Keep the message for debug/test surfaces.
       set({ loading: false, loaded: true, error: (e as Error).message })
+    }
+  },
+
+  fetchUnreadCount: async () => {
+    try {
+      // Server endpoint returns the untruncated count so the bell dot is
+      // right even in workspaces with hundreds of unread items.
+      const res = await apiJson<{ count: number }>('/v1/notifications/unread-count')
+      const n = Number(res?.count ?? 0)
+      set({ serverUnreadCount: Number.isFinite(n) && n >= 0 ? n : 0 })
+    } catch {
+      // Endpoint not yet wired on some deployments — leave serverUnreadCount
+      // as null so the unreadCount() getter falls back to the derived value.
     }
   },
 
@@ -218,35 +306,52 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
     set({
       notifications: before.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
     })
+    // Optimistically decrement the server count too (clamped at 0) so the
+    // badge doesn't lag one refresh behind the visible list.
+    const prevCount = get().serverUnreadCount
+    if (prevCount != null && prevCount > 0 && before.find((n) => n.id === id && !n.isRead)) {
+      set({ serverUnreadCount: prevCount - 1 })
+    }
     try {
       await apiJson<void>(`/v1/notifications/${id}/read`, { method: 'PUT' })
     } catch {
       // Revert on failure so unread badge stays honest.
-      set({ notifications: before })
+      set({ notifications: before, serverUnreadCount: prevCount })
     }
   },
 
   markAllAsRead: async () => {
     const before = get().notifications
-    set({ notifications: before.map((n) => ({ ...n, isRead: true })) })
+    const prevCount = get().serverUnreadCount
+    set({ notifications: before.map((n) => ({ ...n, isRead: true })), serverUnreadCount: 0 })
     try {
       await apiJson<void>('/v1/notifications/mark-all-read', { method: 'POST' })
     } catch {
-      set({ notifications: before })
+      set({ notifications: before, serverUnreadCount: prevCount })
     }
   },
 
   removeNotification: async (id) => {
     const before = get().notifications
+    const prevCount = get().serverUnreadCount
     set({ notifications: before.filter((n) => n.id !== id) })
+    if (prevCount != null && prevCount > 0 && before.find((n) => n.id === id && !n.isRead)) {
+      set({ serverUnreadCount: prevCount - 1 })
+    }
     try {
       await apiJson<void>(`/v1/notifications/${id}`, { method: 'DELETE' })
     } catch {
-      set({ notifications: before })
+      set({ notifications: before, serverUnreadCount: prevCount })
     }
   },
 
-  unreadCount: () => get().notifications.filter((n) => !n.isRead).length,
+  // Prefer the server total when we have it — the derived count is capped
+  // at the visible page size (50) which understates on active workspaces.
+  unreadCount: () => {
+    const server = get().serverUnreadCount
+    if (server != null) return server
+    return get().notifications.filter((n) => !n.isRead).length
+  },
 
-  reset: () => set({ notifications: [], loading: false, loaded: false, error: null }),
+  reset: () => set({ notifications: [], loading: false, loaded: false, error: null, serverUnreadCount: null }),
 }))

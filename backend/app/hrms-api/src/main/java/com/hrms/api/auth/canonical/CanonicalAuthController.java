@@ -84,11 +84,42 @@ public class CanonicalAuthController {
             try { return UUID.fromString(id.trim()); } catch (IllegalArgumentException ignored) { /* fall through */ }
         }
         String slug = req.getHeader("X-Tenant-Subdomain");
+        if (slug == null || slug.isBlank()) {
+            // Fall back to the Host header — the SDK sets X-Tenant-Subdomain on
+            // most calls, but /refresh may fire from a boot path where the SDK
+            // has not yet resolved the workspace slug. The registrable domain
+            // is unifiedtree.com, so <workspace>.unifiedtree.com yields the
+            // subdomain directly. Also accept host:port forms.
+            slug = extractSubdomainFromHost(req.getHeader("Host"));
+        }
         if (slug == null || slug.isBlank()) return null;
+        return resolveTenantIdBySubdomain(slug.trim());
+    }
+
+    /**
+     * Peel the workspace slug off a Host header like {@code acme.unifiedtree.com}
+     * or {@code acme.unifiedtree.com:443}. Returns null for API/apex hosts
+     * ({@code api.unifiedtree.com}, {@code www.unifiedtree.com}, bare
+     * {@code unifiedtree.com}) — those don't belong to a specific workspace.
+     */
+    private static String extractSubdomainFromHost(String host) {
+        if (host == null || host.isBlank()) return null;
+        String h = host.trim().toLowerCase();
+        int colon = h.indexOf(':');
+        if (colon >= 0) h = h.substring(0, colon);
+        int dot = h.indexOf('.');
+        if (dot <= 0) return null;                       // no subdomain segment
+        String first = h.substring(0, dot);
+        if (first.equals("api") || first.equals("www")) return null;
+        return first;
+    }
+
+    private UUID resolveTenantIdBySubdomain(String subdomain) {
+        if (subdomain == null || subdomain.isBlank()) return null;
         try {
             return jdbc.queryForObject(
                     "SELECT id FROM platform.tenants WHERE lower(subdomain) = lower(?)",
-                    UUID.class, slug.trim());
+                    UUID.class, subdomain);
         } catch (RuntimeException e) {
             return null;   // unknown workspace — treated as "no session"
         }
@@ -159,6 +190,54 @@ public class CanonicalAuthController {
     private static String readRefreshCookie(HttpServletRequest req, UUID tenantId) {
         if (req.getCookies() == null || tenantId == null) return null;
         String want = cookieName(tenantId);
+        for (Cookie c : req.getCookies()) {
+            if (want.equals(c.getName()) && c.getValue() != null && !c.getValue().isBlank()) {
+                return c.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * B7 FIX (audit 2026-08-15): scan ALL {@code ut_rt_<tenant>} cookies on
+     * the request and return the first {@code (tenantId, token)} pair with a
+     * non-blank value. Used by refresh() so the tenant is resolved from the
+     * cookie itself, not from the X-Tenant-ID header — which can be forged
+     * cheaply and used to cross-workspace-hop a refresh from workspace A's
+     * cookie against workspace B's tenant context.
+     *
+     * <p>Fallback-only. Callers with a known target tenant should call
+     * {@link #findRefreshCookieForTenant} first — a multi-workspace browser
+     * carries several {@code ut_rt_*} cookies and servlet iteration order is
+     * not deterministic across containers, so blindly taking "first found"
+     * could rotate the wrong workspace's refresh token.
+     */
+    private static java.util.Map.Entry<UUID, String> findAnyRefreshCookie(HttpServletRequest req) {
+        if (req.getCookies() == null) return null;
+        for (Cookie c : req.getCookies()) {
+            String name = c.getName();
+            if (name == null || !name.startsWith(RT_COOKIE_PREFIX)) continue;
+            String value = c.getValue();
+            if (value == null || value.isBlank()) continue;
+            try {
+                UUID tid = UUID.fromString(name.substring(RT_COOKIE_PREFIX.length()));
+                return java.util.Map.entry(tid, value);
+            } catch (IllegalArgumentException ignored) {
+                // cookie name doesn't decode to a UUID; skip.
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Preferred lookup when the caller already knows which workspace the
+     * request is for (from the Host header or X-Tenant-Subdomain). Returns
+     * the {@code ut_rt_<targetTenantId>} cookie value if present and
+     * non-blank, otherwise null.
+     */
+    private static String findRefreshCookieForTenant(HttpServletRequest req, UUID targetTenantId) {
+        if (req.getCookies() == null || targetTenantId == null) return null;
+        String want = cookieName(targetTenantId);
         for (Cookie c : req.getCookies()) {
             if (want.equals(c.getName()) && c.getValue() != null && !c.getValue().isBlank()) {
                 return c.getValue();
@@ -260,6 +339,19 @@ public class CanonicalAuthController {
         // stream ourselves keeps every path (empty body, {}, {refreshToken:…},
         // malformed JSON, or cookie-only) inside our own try/catch and out of
         // the framework's converter chain.
+        // Resolve which workspace the browser is currently on BEFORE picking
+        // a cookie. The order matters:
+        //   1. Host / X-Tenant-Subdomain → tenantId  (this is what the user's
+        //      tab is actually pointed at)
+        //   2. Look for ut_rt_<thatTenantId> specifically. A multi-workspace
+        //      user carries several ut_rt_* cookies; iterating and taking the
+        //      first would rotate the WRONG tenant's refresh token when the
+        //      browser hands them to us in a different order.
+        //   3. Only if no target-tenant cookie is present do we fall back to
+        //      "first found" — that preserves the mobile / single-workspace
+        //      path where no header is set.
+        // The body-token path (mobile) is unchanged — mobile clients supply
+        // their own tenant in the header.
         UUID tenantId = resolveTenant(httpReq);
         String bodyToken = null;
         try {
@@ -274,7 +366,38 @@ public class CanonicalAuthController {
             // Malformed / non-JSON body: fall through to cookie lookup rather
             // than 400ing. Cookie-based callers already send no body at all.
         }
-        String token = bodyToken != null ? bodyToken : readRefreshCookie(httpReq, tenantId);
+        String token;
+        if (bodyToken != null) {
+            token = bodyToken;
+        } else {
+            // Cookie path — prefer the exact target-tenant cookie.
+            String targetCookie = findRefreshCookieForTenant(httpReq, tenantId);
+            if (targetCookie != null) {
+                token = targetCookie;
+                TenantContext.setTenantId(tenantId);
+                com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+            } else {
+                // No cookie for the resolved workspace. Two cases:
+                //   a) header not set at all (mobile / boot path) → legitimate
+                //      first-found fallback
+                //   b) header IS set but that workspace has no cookie in this
+                //      browser → also fall back, but log the mismatch so we
+                //      notice cross-workspace cookie confusion in the wild.
+                java.util.Map.Entry<UUID, String> cookiePair = findAnyRefreshCookie(httpReq);
+                if (cookiePair != null) {
+                    if (tenantId != null && !tenantId.equals(cookiePair.getKey())) {
+                        log.warn("REFRESH_COOKIE_TENANT_MISMATCH resolved tenant={} but only cookie present is for tenant={}; falling back to cookie tenant",
+                                tenantId, cookiePair.getKey());
+                    }
+                    tenantId = cookiePair.getKey();
+                    token = cookiePair.getValue();
+                    TenantContext.setTenantId(tenantId);
+                    com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+                } else {
+                    token = null;
+                }
+            }
+        }
 
         if (token == null || token.isBlank()) {
             throw new com.hrms.core.exception.BusinessRuleException(
