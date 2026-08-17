@@ -182,6 +182,40 @@ unifiedtree:
       enabled: ${EXPO_PUSH_ENABLED:true}
 
 # =============================================================================
+# MSG91 phone-auth OTP (DLT-registered transactional SMS, India-only)
+# =============================================================================
+# MSG91 replaces Firebase Phone Auth for the mobile-app login flow. See
+# OtpController + Msg91Client. All secrets live in Secret Manager and are
+# surfaced via env at deploy time; NEVER commit the auth-key.
+#
+# DLT prerequisites (block on these BEFORE flipping otp.provider=msg91):
+#  - Principal Entity registered on Jio/Airtel/Vi/BSNL DLT portals
+#  - Sender ID (6 char, ALL CAPS) registered under the PE
+#  - Template registered with the ##OTP## placeholder + a template_id
+#    (route 4 = transactional)
+#
+# Kill-switch: set OTP_FEATURE_FLAG_OVERRIDE=firebase to force every caller
+# back to the Firebase path without a redeploy — Cloud Run env change
+# triggers a restart which picks up the value.
+msg91:
+  auth-key:    ${MSG91_AUTH_KEY:}
+  template-id: ${MSG91_TEMPLATE_ID:}
+  sender-id:   ${MSG91_SENDER_ID:}
+  route:       ${MSG91_ROUTE:4}
+  base-url:    ${MSG91_BASE_URL:https://control.msg91.com}
+
+otp:
+  # Default provider. Ships as 'firebase' so the deploy is behavior-neutral
+  # until we flip it globally in phase 3 of the migration plan.
+  provider:                 ${OTP_FEATURE_FLAG:firebase}
+  # Ops kill-switch — wins over `provider`. Leave empty in normal ops.
+  provider-override:        ${OTP_FEATURE_FLAG_OVERRIDE:}
+  length:                   ${OTP_LENGTH:6}
+  ttl-minutes:              ${OTP_TTL_MINUTES:10}
+  max-attempts:             ${OTP_MAX_ATTEMPTS:5}
+  resend-cooldown-seconds:  ${OTP_RESEND_COOLDOWN_SECONDS:60}
+
+# =============================================================================
 # Production hardening — overrides base application.yml / application-canonical.yml
 # =============================================================================
 server:

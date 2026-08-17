@@ -70,6 +70,13 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.integration",
         "com.hrms.notiftemplate",
 
+        // MSG91 SMS OTP client (Msg91Client) — kept in the hrms-notification
+        // module for cohesion with the other outbound delivery services.
+        // NOTE: com.hrms.notification (the legacy in-app notification code)
+        // is deliberately NOT scanned in canonical; only the msg91 subpackage
+        // is imported so we do not resurrect the retired NotificationService.
+        "com.hrms.notification.msg91",
+
         // canonical REST controllers
         "com.hrms.api.workforce",
         "com.hrms.api.settings",
@@ -136,6 +143,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.pli",
         "com.hrms.api.integration",
         "com.hrms.api.notiftemplate",
+        // MSG91 phone-auth OTP endpoints (OtpController, OtpProviderController).
+        // Response shape is identical to /v1/auth/firebase-verify so the mobile
+        // JWT-consumer + auth store need zero changes.
+        "com.hrms.api.otp",
         // /v1/workspace/seats/usage — seat quota widget.
         "com.hrms.api.quota",
         // /v1/users/me + /v1/users/me/avatar — profile lookup + avatar upload.

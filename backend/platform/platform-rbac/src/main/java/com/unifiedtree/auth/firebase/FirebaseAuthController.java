@@ -5,6 +5,7 @@ import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
 import com.hrms.core.exception.HrmsException;
 import com.unifiedtree.auth.dto.AuthDtos.LoginResponse;
+import com.unifiedtree.auth.phone.PhoneLookupService;
 import com.unifiedtree.auth.ratelimit.PublicEndpointRateLimiter;
 import com.unifiedtree.auth.service.AuthService;
 import com.unifiedtree.security.tenant.TenantContext;
@@ -64,11 +65,11 @@ public class FirebaseAuthController {
     private static final int RT_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
     private final AuthService auth;
-    private final FirebasePhoneLookupService phoneLookup;
+    private final PhoneLookupService phoneLookup;
     private final PublicEndpointRateLimiter rateLimiter;
 
     public FirebaseAuthController(AuthService auth,
-                                  FirebasePhoneLookupService phoneLookup,
+                                  PhoneLookupService phoneLookup,
                                   PublicEndpointRateLimiter rateLimiter) {
         this.auth = auth;
         this.phoneLookup = phoneLookup;
@@ -167,7 +168,7 @@ public class FirebaseAuthController {
 
         // ── Look up the employee across tenants (RLS-safe scan, see
         // FirebasePhoneLookupService).
-        Optional<FirebasePhoneLookupService.Match> maybe = phoneLookup.findByPhone(phone);
+        Optional<PhoneLookupService.Match> maybe = phoneLookup.findByPhone(phone);
         if (maybe.isEmpty()) {
             log.info("firebase-verify: no employee found for phone (last 10 digits) — uid={}",
                     decoded.getUid());
@@ -175,7 +176,7 @@ public class FirebaseAuthController {
                     "error", "PHONE_NOT_REGISTERED",
                     "message", "This phone number is not registered. Contact your HR administrator."));
         }
-        FirebasePhoneLookupService.Match match = maybe.get();
+        PhoneLookupService.Match match = maybe.get();
 
         // ── Bind the tenant BEFORE calling AuthService — issueWorkspaceSession
         // is @Transactional, and TenantAwareDataSource reads TenantContext at

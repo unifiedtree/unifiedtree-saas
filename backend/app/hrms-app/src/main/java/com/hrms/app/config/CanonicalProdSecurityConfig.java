@@ -113,6 +113,14 @@ public class CanonicalProdSecurityConfig {
                     // yet.
                     "/v1/auth/firebase-verify",
                     "/v1/auth/phone/check",
+                    // MSG91 phone-auth login (Android app + web). Provider
+                    // choice is feature-flagged via /v1/public/otp-provider;
+                    // both /request+/verify+/resend and the flag endpoint are
+                    // pre-login by definition.
+                    "/v1/auth/otp/request",
+                    "/v1/auth/otp/verify",
+                    "/v1/auth/otp/resend",
+                    "/v1/public/otp-provider",
                     "/v1/canonical-auth/refresh",
                     // Logout must work even when the access token has already
                     // expired — that is exactly when someone is most likely to
