@@ -18,6 +18,7 @@ import { useMonthlyStats } from './api/useAttendance'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
 import { useRoles } from '@/shared/hooks/useRoles'
 import { UpcomingProbations } from './probation/UpcomingProbations'
+import { SeatsUsageTile } from './SeatsUsageTile'
 
 /**
  * HRMS home — rebuilt in the reference card language (client-approved
@@ -222,6 +223,13 @@ export const HrmsDashboard: React.FC = () => {
   const canReadHiring    = usePermission(P.HRMS_HIRING_READ)
   const canReadPayroll   = usePermission(P.HRMS_PAYROLL_READ)
   const canSeeProbation  = usePermission(P.HRMS_PROBATION_REMINDERS_READ)
+  // Billing management → determines whether the SeatsUsageTile is shown.
+  // Client rule (2026-08-17): "only admin will see this who has access for
+  // manage your plan for workspace". Backend gates /settings/billing on
+  // P.WORKSPACE_BILLING_MANAGE (see App.tsx RequirePermission wrapper); we
+  // gate the tile on the same permission so a non-billing admin (rare, but
+  // possible with custom RBAC) doesn't see a tile whose CTA they can't open.
+  const canManageBilling = usePermission(P.WORKSPACE_BILLING_MANAGE)
   // Quick-action affordances follow the write authority the target action needs,
   // not role membership — HR_MANAGER holds both and sees both, exactly like the
   // backend allows.
@@ -270,6 +278,13 @@ export const HrmsDashboard: React.FC = () => {
   // Positions Hired + Hiring KPI — same audience (ADMIN + HR only per the
   // client matrix; employees and managers do not see hiring stats).
   const canSeeHiringTiles = canReadHiring && (isAdmin || isHR)
+
+  // Seats-Usage tile — admin-only, and only when the caller can manage
+  // billing. Kept separate from canSeeWorkforceTiles because the intent is
+  // different (this is a plan-status card, not a workforce metric) and the
+  // permission bar is stricter (WORKSPACE_BILLING_MANAGE, not
+  // HRMS_EMPLOYEE_READ). See SeatsUsageTile.tsx for the render.
+  const canSeeSeatsTile = isAdmin && canManageBilling
 
   /* ── Data hooks. Employee-directory + skills radar + recent-employees fire
    *    only when the user is allowed to read employees; without that the
@@ -519,6 +534,19 @@ export const HrmsDashboard: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {kpiTiles}
+          </div>
+        )}
+
+        {/* ── Plan status: Seats-Usage tile. Admin + billing-manager only per
+              client rule "only admin will see this who has access for manage
+              your plan for workspace". Rendered as its own row so the
+              "N of M seats used" is unambiguous — nesting it in the KPI grid
+              would compress the progress bar + CTA. Grid caps at 2 columns so
+              the tile stays readable on wide screens (paired with room for a
+              second billing tile like Subscription Status when that ships). */}
+        {canSeeSeatsTile && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <SeatsUsageTile />
           </div>
         )}
 
