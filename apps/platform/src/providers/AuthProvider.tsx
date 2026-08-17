@@ -11,6 +11,7 @@ import {
   consumeWelcomeIntent,
 } from '@/core/auth/WelcomeSplash'
 import type { User, Tenant } from '@/types'
+import { useDisplayName } from '@/shared/hooks/useDisplayName'
 
 function toOldUser(sdkUser: AuthUser, permCodes: string[]): User {
   return {
@@ -131,7 +132,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // already returns null for `idle`/`loading`, so protected pages never render
   // against an unresolved session, and it only redirects once the status is
   // definitively `unauthenticated` — there is no login flash to guard against.
-  const firstName = sdkUser?.firstName || (sdkUser?.email ? sdkUser.email.split('@')[0] : undefined)
+  //
+  // Use the shared useDisplayName() hook so the splash matches the sidebar chip
+  // and the greeting on the dashboard exactly. Passing raw firstName here was
+  // the last place that could render "shurya.kumar063" (email local-part) on a
+  // cold hydrate — the client asked for the FULL name near the splash animation
+  // so we hand it fullName ("Chakri Chikkala"), not just the first word.
+  const { fullName } = useDisplayName()
 
   return (
     <>
@@ -139,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {greeting && (
         <WelcomeSplash
           ready={sdkStatus === 'authenticated'}
-          name={firstName}
+          name={fullName}
           workspace={sdkTenant?.displayName}
           onDone={() => setGreeting(false)}
         />

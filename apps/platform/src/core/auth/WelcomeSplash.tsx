@@ -185,10 +185,12 @@ export const WelcomeSplash: React.FC<Props> = ({ ready = true, name, workspace, 
     return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
   }, [])
 
-  /* Names come out of the employee record exactly as they were typed, which is
-     often all lower case. Greeting someone by name is the whole point of this
-     screen, so it is worth presenting properly — but only the first letter, so
-     "McKenzie" and "de Souza" are left alone. */
+  /* The caller passes the already-resolved display identity via useDisplayName()
+     — `name` here is the FULL name ("Chakri Chikkala"), not just the first word.
+     Callers that pass a first-name-only value get it verbatim. We still soft-
+     capitalise the first letter so "shurya" reads as "Shurya" when the record
+     came in lower case; multi-word names ("McKenzie", "de Souza") are otherwise
+     left alone. */
   const shown = useMemo(() => {
     if (!name) return undefined
     const t = name.trim()
