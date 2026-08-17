@@ -544,12 +544,19 @@ function ApprovalsTab() {
 // (EMPLOYEE + MANAGER included) needs to view the calendar. Write
 // actions (Add / Delete) are gated inside HolidayCalendar via canEdit
 // so read-only viewers see the list without buttons.
+//
+// Leave Types is likewise NOT gated at the tab level per client rule:
+// "employees can DISPLAY Leave Types and Holidays but not edit them; only
+// HR/ADMIN can edit." LeaveTypes.tsx wraps every add/edit/delete/seed
+// affordance in <Can code={P.LEAVE_TYPE_WRITE}> so read-only viewers see
+// the list without the mutation buttons. Gating the tab itself hid the
+// screen from the very audience the client asked to see it.
 const ALL_TABS = [
   { key: 'my',        label: 'My Leaves' },
   { key: 'apply',     label: 'Apply' },
   { key: 'balances',  label: 'Balances' },
   { key: 'approvals', label: 'Approvals',   requires: P.HRMS_LEAVE_APPROVE_L1 },
-  { key: 'types',     label: 'Leave Types', requires: P.LEAVE_TYPE_WRITE },
+  { key: 'types',     label: 'Leave Types' },
   { key: 'holidays',  label: 'Holidays' },
 ] as const
 

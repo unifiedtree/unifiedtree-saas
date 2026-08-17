@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/shared/hooks/useToast'
 import {
   useCreateCompany, useCreateBranch, useCreateDepartment, useCreateDesignation,
@@ -19,10 +18,17 @@ import {
  * through a React portal so opening/closing them does NOT unmount the parent
  * EmployeeForm — its React state (every field the admin already typed) is
  * preserved verbatim. On success we:
- *   1. optimistically prepend the new row into the react-query cache so the
- *      dropdown option list re-renders with it before the network settles,
- *   2. invoke onCreated(newRow) so the parent auto-selects the new value,
- *   3. invalidate the query so the background refetch confirms server state.
+ *   1. let the useCreate* hook's onSuccess invalidate the relevant query key,
+ *      which triggers a refetch and repopulates the dropdown option list from
+ *      the server — the mutation awaits that refetch, so by the time
+ *      `await mutateAsync` resolves the cache is already fresh,
+ *   2. invoke onCreated(newRow) so the parent auto-selects the new value.
+ *
+ * NOTE — do NOT add an optimistic `qc.setQueryData([..., companyId], prev =>
+ * [...prev, created])` here. The mutation hook's invalidation runs and awaits
+ * the refetch BEFORE `mutateAsync` resolves; an optimistic append after the
+ * await therefore duplicates the row (cache = server list [..., created],
+ * then we append `created` again → shown twice in the dropdown).
  *
  * Each modal calls the same POST endpoints the Organization pages already use;
  * we deliberately reuse the useCreate* hooks in useOrg.ts / useGeofence.ts so
@@ -162,7 +168,6 @@ export function InlineCreateDepartmentModal({
   onCreated: (dept: Department) => void
 }) {
   const { toast } = useToast()
-  const qc = useQueryClient()
   const create = useCreateDepartment()
   const [name, setName] = useState(initialName)
   const [code, setCode] = useState('')
@@ -182,10 +187,8 @@ export function InlineCreateDepartmentModal({
       const created = await create.mutateAsync({
         companyId, name: name.trim(), code: code.trim() || undefined,
       })
-      // Optimistic cache write so the parent dropdown re-renders with the
-      // new option before the invalidation-triggered refetch completes.
-      qc.setQueryData<Department[]>(['hrms', 'departments', companyId], (prev) =>
-        prev ? [...prev, created] : [created])
+      // No optimistic setQueryData here — see file-header note. The hook's
+      // onSuccess invalidateQueries has already awaited the refetch by now.
       onCreated(created)
       toast('Department added', 'success')
       onClose()
@@ -247,7 +250,6 @@ export function InlineCreateDesignationModal({
   onCreated: (des: Designation) => void
 }) {
   const { toast } = useToast()
-  const qc = useQueryClient()
   const create = useCreateDesignation()
   const [title, setTitle] = useState(initialTitle)
   const [grade, setGrade] = useState('')
@@ -270,19 +272,10 @@ export function InlineCreateDesignationModal({
         grade: grade.trim() || undefined,
         departmentId: departmentId || undefined,
       })
-      // Two dropdown query keys exist: with the departmentId filter and the
-      // "all" list; write into both so whichever the parent is currently
-      // reading picks up the new option optimistically.
-      qc.setQueryData<Designation[]>(
-        ['hrms', 'designations', companyId, departmentId ?? 'all'],
-        (prev) => (prev ? [...prev, created] : [created]),
-      )
-      if (departmentId) {
-        qc.setQueryData<Designation[]>(
-          ['hrms', 'designations', companyId, 'all'],
-          (prev) => (prev ? [...prev, created] : [created]),
-        )
-      }
+      // No optimistic setQueryData — the hook invalidates the whole
+      // ['hrms', 'designations'] tree, which covers both the department-scoped
+      // and 'all' variants, and awaits their refetch before mutateAsync
+      // resolves. See file-header note for why optimistic add duplicated rows.
       onCreated(created)
       toast('Designation added', 'success')
       onClose()
@@ -342,7 +335,6 @@ export function InlineCreateZoneModal({
   onCreated: (zone: GeoFenceZone) => void
 }) {
   const { toast } = useToast()
-  const qc = useQueryClient()
   const create = useCreateGeofenceZone()
   const [name, setName] = useState(initialName)
   const [latitude, setLatitude] = useState('')
@@ -391,8 +383,8 @@ export function InlineCreateZoneModal({
       const created = await create.mutateAsync({
         name: name.trim(), latitude: lat, longitude: lng, radiusMeters: rad, active: true,
       })
-      qc.setQueryData<GeoFenceZone[]>(['hrms', 'attendance', 'geofence-zones'], (prev) =>
-        prev ? [...prev, created] : [created])
+      // No optimistic setQueryData — see file-header note. useCreateGeofenceZone
+      // already invalidates ZONES_KEY and awaits the refetch.
       onCreated(created)
       toast('Zone added', 'success')
       onClose()
@@ -481,7 +473,6 @@ export function InlineCreateCompanyModal({
   onCreated: (company: Company) => void
 }) {
   const { toast } = useToast()
-  const qc = useQueryClient()
   const create = useCreateCompany()
   const [name, setName] = useState(initialName)
   const [legalName, setLegalName] = useState('')
@@ -503,8 +494,8 @@ export function InlineCreateCompanyModal({
         legalName: legalName.trim() || undefined,
         industry: industry.trim() || undefined,
       })
-      qc.setQueryData<Company[]>(['hrms', 'companies'], (prev) =>
-        prev ? [...prev, created] : [created])
+      // No optimistic setQueryData — see file-header note. useCreateCompany
+      // already invalidates ['hrms', 'companies'] and awaits the refetch.
       onCreated(created)
       toast('Company added', 'success')
       onClose()
@@ -557,7 +548,6 @@ export function InlineCreateBranchModal({
   onCreated: (branch: Branch) => void
 }) {
   const { toast } = useToast()
-  const qc = useQueryClient()
   const create = useCreateBranch()
   const [name, setName] = useState(initialName)
   const [code, setCode] = useState('')
@@ -581,11 +571,9 @@ export function InlineCreateBranchModal({
         code: code.trim() || undefined,
         city: city.trim() || undefined,
       })
-      // Branches are cached under two keys (per-company + 'all'); write both.
-      qc.setQueryData<Branch[]>(['hrms', 'branches', companyId], (prev) =>
-        prev ? [...prev, created] : [created])
-      qc.setQueryData<Branch[]>(['hrms', 'branches', 'all'], (prev) =>
-        prev ? [...prev, created] : prev)
+      // No optimistic setQueryData — the hook invalidates the whole
+      // ['hrms', 'branches'] tree (covers both per-company and 'all' variants)
+      // and awaits the refetch. See file-header note.
       onCreated(created)
       toast('Branch added', 'success')
       onClose()

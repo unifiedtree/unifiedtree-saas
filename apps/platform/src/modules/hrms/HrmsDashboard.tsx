@@ -16,6 +16,7 @@ import { useCompanies } from './api/useOrg'
 import { useLeaveOverview } from './api/useLeave'
 import { useMonthlyStats } from './api/useAttendance'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
+import { useRoles } from '@/shared/hooks/useRoles'
 import { UpcomingProbations } from './probation/UpcomingProbations'
 
 /**
@@ -227,33 +228,48 @@ export const HrmsDashboard: React.FC = () => {
   const canWriteEmployee = usePermission(P.HRMS_EMPLOYEE_WRITE)
   const canManageOrg     = usePermission(P.ORG_COMPANY_WRITE)
 
-  /* ── Role bucket. Roles are informational — we use them ONLY where the
-   *    client rule is role-string based (payroll-cost visibility) or the
-   *    label needs to swap (attendance card wording). Every other gate is
-   *    the permission check above. */
-  // Read the roles array reference directly so the selector's equality check
-  // matches the store's own object — allocating `[]` inside the selector on
-  // every render for null-user would re-fire subscribers every tick.
-  const roles = useAuthStore((s) => s.user?.roles) ?? []
-  const isPlatformAdmin =
-    roles.includes('OWNER') || roles.includes('SUPER_ADMIN')
-  // "Bare EMPLOYEE" means the principal has no elevated role — used only to
-  // pick the attendance-card label ("Your Attendance"). Any of the elevated
-  // buckets wins the wider label.
-  const hasElevatedRole =
-    isPlatformAdmin ||
-    roles.includes('HR_MANAGER') || roles.includes('HR') ||
-    roles.includes('MANAGER')    || roles.includes('ADMIN')
-  const attendanceCardTitle = !hasElevatedRole
-    ? 'Your Attendance'
-    : (roles.includes('MANAGER') && !roles.includes('HR_MANAGER') &&
-       !roles.includes('HR') && !roles.includes('ADMIN') && !isPlatformAdmin)
-      ? 'Team Attendance'
-      : 'Company Attendance'
+  /* ── Role bucket. Roles are informational — we use them for two things:
+   *  (1) role-string gates the client demanded even for principals who hold
+   *      the underlying permission (payroll-cost card is admin-only; the
+   *      Attendance Summary tile + Company Attendance card are HIDDEN for
+   *      admin/HR because "admins don't need their own attendance stats
+   *      on the dashboard"), and
+   *  (2) label swap on the attendance card ("My" / "Your" / "Team" /
+   *      "Company" — pure presentation).
+   *  Every other gate is the permission check above. See useRoles.ts for
+   *  the role-to-bucket map. */
+  const { isAdmin, isHR, isManager, isEmployee } = useRoles()
+
+  // Attendance widgets. Client rule verbatim: "for admin no need attendance
+  // history or his attendance summary in the dashboard." The dashboard's
+  // /monthly-stats endpoint returns the *caller's* own record, so for an
+  // ADMIN the tile would show their own zero (or a misleading aggregate);
+  // hide it for admin and HR. Managers and employees still see it.
+  const canSeeOwnAttendance = !isAdmin && !isHR
+
+  // Attendance card label bucket → wording. Manager shows their direct
+  // reports ("Team"), admin/HR would show "Company" but the card is hidden
+  // for them anyway, employees and mixed roles fall back to "My".
+  const attendanceCardTitle = isManager && !isAdmin && !isHR
+    ? 'Team Attendance'
+    : isEmployee
+      ? 'My Attendance'
+      : 'Your Attendance'
+
   // Client rule: "only admin will pay salaries". HR_MANAGER may hold
   // hrms.payroll.read for reporting screens but MUST NOT see the payroll-cost
-  // card on the dashboard — that stays OWNER/SUPER_ADMIN only.
-  const canSeePayrollCost = canReadPayroll && isPlatformAdmin
+  // card on the dashboard — that stays OWNER/SUPER_ADMIN/COMPANY_ADMIN only.
+  const canSeePayrollCost = canReadPayroll && isAdmin
+
+  // Workforce-shaped tiles (Total Employees, Recent Employees, Headcount,
+  // Skills radar) — client matrix restricts these to ADMIN + HR. Manager
+  // may hold HRMS_EMPLOYEE_READ for their team but the client rule hides
+  // the workforce-wide surfaces from them ("HIDE: Total Employees … Skills,
+  // Recent Employees"), and employees never see them either.
+  const canSeeWorkforceTiles = canReadEmployees && (isAdmin || isHR)
+  // Positions Hired + Hiring KPI — same audience (ADMIN + HR only per the
+  // client matrix; employees and managers do not see hiring stats).
+  const canSeeHiringTiles = canReadHiring && (isAdmin || isHR)
 
   /* ── Data hooks. Employee-directory + skills radar + recent-employees fire
    *    only when the user is allowed to read employees; without that the
@@ -317,7 +333,7 @@ export const HrmsDashboard: React.FC = () => {
   /* ── Build the KPI list conditionally so a hidden tile does not leave a
    *    gap in the 4-col grid; the grid renders whatever survives the filter. */
   const kpiTiles: React.ReactNode[] = []
-  if (canReadEmployees) {
+  if (canSeeWorkforceTiles) {
     kpiTiles.push(
       <KpiTile
         key="employees"
@@ -328,18 +344,22 @@ export const HrmsDashboard: React.FC = () => {
       />,
     )
   }
-  // Attendance summary is always visible — own stats for bare EMPLOYEE, the
-  // workspace aggregate the endpoint returns for anyone else.
-  kpiTiles.push(
-    <KpiTile
-      key="attendance"
-      icon={<UserCheck size={19} />} iconBg="var(--accent-bg)" iconFg="var(--accent-fg)"
-      label="Attendance Summary"
-      value={attendanceStats ? `${attendanceStats.attendanceScore}%` : '—'}
-      sub={attendanceStats ? `${attendanceStats.presentDays} present days this month` : undefined}
-      onClick={() => navigate('/hrms/attendance')}
-    />,
-  )
+  // Attendance summary tile — MANAGER/EMPLOYEE only. Admin and HR have this
+  // hidden entirely (client rule: "for admin no need attendance history or
+  // his attendance summary in the dashboard").
+  if (canSeeOwnAttendance) {
+    const attendanceKpiLabel = isEmployee ? 'My Attendance' : 'Your Attendance'
+    kpiTiles.push(
+      <KpiTile
+        key="attendance"
+        icon={<UserCheck size={19} />} iconBg="var(--accent-bg)" iconFg="var(--accent-fg)"
+        label={attendanceKpiLabel}
+        value={attendanceStats ? `${attendanceStats.attendanceScore}%` : '—'}
+        sub={attendanceStats ? `${attendanceStats.presentDays} present days this month` : undefined}
+        onClick={() => navigate('/hrms/attendance')}
+      />,
+    )
+  }
   // Pending leaves — two variants. Approvers see the queue length + go to
   // /leave?tab=approvals; everyone else sees their own pending count + go to
   // /leave?tab=my. The backend distinguishes the two paths already.
@@ -364,7 +384,7 @@ export const HrmsDashboard: React.FC = () => {
       />,
     )
   }
-  if (canReadHiring) {
+  if (canSeeHiringTiles) {
     kpiTiles.push(
       <KpiTile
         key="hiring"
@@ -385,8 +405,10 @@ export const HrmsDashboard: React.FC = () => {
    *    to see. If none survive, we hide the whole row so the grid doesn't
    *    render an empty band. */
   const chartTiles: React.ReactNode[] = []
-  // Attendance stats card — always visible; role picks the wording.
-  chartTiles.push(
+  // Attendance stats card — hidden for admin/HR (same client rule as the KPI
+  // tile above); shown for manager and employee with role-appropriate wording.
+  if (canSeeOwnAttendance) {
+    chartTiles.push(
     <Card
       key="attendance-stats"
       title={attendanceCardTitle}
@@ -416,8 +438,9 @@ export const HrmsDashboard: React.FC = () => {
         <DonutGauge value={score} />
       </div>
     </Card>,
-  )
-  if (canReadEmployees) {
+    )
+  }
+  if (canSeeWorkforceTiles) {
     chartTiles.push(
       <Card key="headcount" title="Headcount Growth" chip={<HrStatusPill tone="warn">Sample data</HrStatusPill>}>
         {/* Dummy series until the analytics endpoint ships. The chip warns
@@ -443,7 +466,7 @@ export const HrmsDashboard: React.FC = () => {
       </Card>,
     )
   }
-  if (canReadHiring) {
+  if (canSeeHiringTiles) {
     chartTiles.push(
       <Card key="positions" title="Positions Hired" chip={<HrStatusPill tone="warn">Sample data</HrStatusPill>}>
         <div className="h-48">
@@ -509,12 +532,12 @@ export const HrmsDashboard: React.FC = () => {
         {/* ── Row: payroll stacked bars + skills radar. Either card is
               independently gated; when both are hidden the row collapses
               entirely. */}
-        {(canSeePayrollCost || canReadEmployees) && (
+        {(canSeePayrollCost || canSeeWorkforceTiles) && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {canSeePayrollCost && (
               <Card
                 title="Payroll Cost Overview"
-                className={canReadEmployees ? 'lg:col-span-2' : 'lg:col-span-3'}
+                className={canSeeWorkforceTiles ? 'lg:col-span-2' : 'lg:col-span-3'}
                 chip={
                   <div className="flex flex-wrap items-center gap-3">
                     <LegendDot color={VIZ.e800} label="Gross pay" />
@@ -542,7 +565,7 @@ export const HrmsDashboard: React.FC = () => {
               </Card>
             )}
 
-            {canReadEmployees && (
+            {canSeeWorkforceTiles && (
               <Card
                 title="Skills"
                 className={canSeePayrollCost ? '' : 'lg:col-span-3'}
@@ -568,8 +591,8 @@ export const HrmsDashboard: React.FC = () => {
               always shown so bare-EMPLOYEE principals still get the
               approvals / quick-action affordance. When the table is hidden,
               the rail spans the full width. */}
-        <div className={`grid grid-cols-1 gap-6 ${canReadEmployees ? 'lg:grid-cols-3' : ''}`}>
-          {canReadEmployees && (
+        <div className={`grid grid-cols-1 gap-6 ${canSeeWorkforceTiles ? 'lg:grid-cols-3' : ''}`}>
+          {canSeeWorkforceTiles && (
             <section className="overflow-hidden rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-sm lg:col-span-2">
               <div className="flex flex-wrap items-center justify-between gap-2 px-5 pb-3 pt-4">
                 <h2 className="text-[15px] font-semibold tracking-tight text-[var(--text-primary)]">Recent Employees</h2>
