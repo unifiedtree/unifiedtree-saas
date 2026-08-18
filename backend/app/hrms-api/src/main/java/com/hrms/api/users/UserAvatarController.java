@@ -54,10 +54,36 @@ public class UserAvatarController {
 
     private static final Logger log = LoggerFactory.getLogger(UserAvatarController.class);
 
-    private static final long   MAX_BYTES = 5L * 1024 * 1024;
-    private static final int    MIN_DIM   = 100;
-    private static final String CT_JPEG   = "image/jpeg";
-    private static final String CT_PNG    = "image/png";
+    private static final long MAX_BYTES = 5L * 1024 * 1024;
+    private static final int  MIN_DIM   = 100;
+
+    /**
+     * Every raster format a phone or browser realistically hands us.
+     *
+     * <p>JPEG/PNG alone was too narrow and broke real users: iOS returns
+     * {@code image/heic} for camera-roll photos by default, and Android
+     * browsers commonly produce {@code image/webp}. Both were rejected as
+     * "Avatar must be a JPEG or PNG image" even though the file was a
+     * perfectly ordinary photo.
+     *
+     * <p>Keyed by the sniffed format, not by the client's Content-Type — see
+     * {@link #sniff}. The value is the extension used for the stored object.
+     */
+    private enum ImageFormat {
+        JPEG("image/jpeg", "jpg"),
+        PNG ("image/png",  "png"),
+        GIF ("image/gif",  "gif"),
+        WEBP("image/webp", "webp"),
+        HEIC("image/heic", "heic"),
+        BMP ("image/bmp",  "bmp");
+
+        final String contentType;
+        final String ext;
+        ImageFormat(String contentType, String ext) {
+            this.contentType = contentType;
+            this.ext = ext;
+        }
+    }
 
     private static final String KEY_PREFIX = "user-avatars/";
 
@@ -106,31 +132,51 @@ public class UserAvatarController {
                     "Avatar must be 5 MB or smaller.", "AVATAR_TOO_LARGE");
         }
 
-        String contentType = file.getContentType();
-        if (!CT_JPEG.equalsIgnoreCase(contentType) && !CT_PNG.equalsIgnoreCase(contentType)) {
-            throw new BusinessRuleException(
-                    "Avatar must be a JPEG or PNG image.", "AVATAR_BAD_TYPE");
-        }
-
         byte[] bytes = file.getBytes();
 
-        // Dimension check — don't trust the client Content-Type alone.
-        BufferedImage img;
+        // Identify the format from the file's own magic bytes rather than the
+        // declared Content-Type. Clients lie or omit it — expo-image-picker
+        // forwards whatever the OS reports and can send nothing at all — and
+        // trusting the header would also let someone upload a script labelled
+        // image/png. The sniffed value drives both validation and the stored
+        // extension.
+        ImageFormat format = sniff(bytes);
+        if (format == null) {
+            throw new BusinessRuleException(
+                    "That file doesn't look like an image. Please choose a JPG, PNG, "
+                    + "WebP, HEIC or GIF photo.",
+                    "AVATAR_BAD_TYPE");
+        }
+
+        // Dimension check where the JVM can actually decode the format. ImageIO
+        // ships readers for JPEG/PNG/GIF/BMP but NOT WebP or HEIC, so for those
+        // ImageIO.read returns null on a perfectly valid file. Rejecting on that
+        // would ban every default iPhone photo, so we accept the file and skip
+        // the size floor rather than fail it — the magic-byte check above has
+        // already established it is a real image of a known format.
+        BufferedImage img = null;
         try {
             img = ImageIO.read(new ByteArrayInputStream(bytes));
         } catch (Exception e) {
-            throw new BusinessRuleException(
-                    "Avatar file is not a readable image.", "AVATAR_UNREADABLE");
+            img = null;
         }
-        if (img == null) {
+        if (img != null) {
+            if (img.getWidth() < MIN_DIM || img.getHeight() < MIN_DIM) {
+                throw new BusinessRuleException(
+                        "Avatar must be at least " + MIN_DIM + "x" + MIN_DIM + " pixels.",
+                        "AVATAR_TOO_SMALL");
+            }
+        } else if (format == ImageFormat.WEBP || format == ImageFormat.HEIC) {
+            log.debug("avatar {}: no ImageIO reader, dimension check skipped", format);
+        } else {
+            // A format ImageIO *should* handle but couldn't means the bytes are
+            // truncated or corrupt, even though the header looked right.
             throw new BusinessRuleException(
-                    "Avatar file is not a readable image.", "AVATAR_UNREADABLE");
+                    "That image file appears to be damaged. Please try another photo.",
+                    "AVATAR_UNREADABLE");
         }
-        if (img.getWidth() < MIN_DIM || img.getHeight() < MIN_DIM) {
-            throw new BusinessRuleException(
-                    "Avatar must be at least " + MIN_DIM + "x" + MIN_DIM + " pixels.",
-                    "AVATAR_TOO_SMALL");
-        }
+
+        String contentType = format.contentType;
 
         // Read the previous key first — we'll GC it AFTER the new one lands
         // so a mid-flight failure never leaves the user without an avatar.
@@ -188,6 +234,63 @@ public class UserAvatarController {
     }
 
     // ── helpers ────────────────────────────────────────────────────────────
+    /**
+     * Identify an image by its magic bytes.
+     *
+     * <p>Deliberately does not consult the client's Content-Type: mobile
+     * pickers frequently report the wrong type or none at all, and a declared
+     * type is trivially forged. Returns {@code null} when the bytes match no
+     * known image container, which is the only rejection path for file type.
+     */
+    private static ImageFormat sniff(byte[] b) {
+        if (b == null || b.length < 12) return null;
+
+        // JPEG: FF D8 FF
+        if ((b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xD8 && (b[2] & 0xFF) == 0xFF) {
+            return ImageFormat.JPEG;
+        }
+        // PNG: 89 50 4E 47 0D 0A 1A 0A
+        if ((b[0] & 0xFF) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G'
+                && (b[4] & 0xFF) == 0x0D && (b[5] & 0xFF) == 0x0A
+                && (b[6] & 0xFF) == 0x1A && (b[7] & 0xFF) == 0x0A) {
+            return ImageFormat.PNG;
+        }
+        // GIF87a / GIF89a
+        if (b[0] == 'G' && b[1] == 'I' && b[2] == 'F' && b[3] == '8') {
+            return ImageFormat.GIF;
+        }
+        // BMP: "BM"
+        if (b[0] == 'B' && b[1] == 'M') {
+            return ImageFormat.BMP;
+        }
+        // WebP: "RIFF" .... "WEBP"
+        if (b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F'
+                && b[8] == 'W' && b[9] == 'E' && b[10] == 'B' && b[11] == 'P') {
+            return ImageFormat.WEBP;
+        }
+        // HEIC / HEIF — ISO-BMFF: 4-byte size, "ftyp", then a brand.
+        // Covers the brands iOS and Android actually emit for camera photos.
+        if (b[4] == 'f' && b[5] == 't' && b[6] == 'y' && b[7] == 'p') {
+            String brand = new String(b, 8, 4, java.nio.charset.StandardCharsets.US_ASCII);
+            switch (brand) {
+                case "heic": case "heix": case "hevc": case "hevx":
+                case "heim": case "heis": case "hevm": case "hevs":
+                case "mif1": case "msf1":
+                    return ImageFormat.HEIC;
+                default:
+                    return null;   // some other MP4-family container, not an image
+            }
+        }
+        return null;
+    }
+
+    /** Stored-object extension for a sniffed content type. */
+    private static String extensionFor(String contentType) {
+        for (ImageFormat f : ImageFormat.values()) {
+            if (f.contentType.equalsIgnoreCase(contentType)) return f.ext;
+        }
+        return "jpg";
+    }
 
     /**
      * Random-UUID suffix — the key is unguessable even to someone who knows
@@ -195,7 +298,7 @@ public class UserAvatarController {
      * be walked back to a user.
      */
     private static String keyFor(UUID tenantId, UUID userId, String contentType) {
-        String ext = CT_PNG.equalsIgnoreCase(contentType) ? "png" : "jpg";
+        String ext = extensionFor(contentType);
         return KEY_PREFIX + tenantId + "/" + userId + "-" + UUID.randomUUID() + "." + ext;
     }
 

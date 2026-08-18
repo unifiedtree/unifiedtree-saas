@@ -34,7 +34,15 @@ import {
  *              collision fix) updates in the same paint.
  */
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024 // 5 MB
-const ACCEPTED_TYPES = 'image/jpeg,image/png'
+// Must stay in step with UserAvatarController.ImageFormat on the backend.
+// JPEG/PNG alone rejected real photos: iOS hands back image/heic from the
+// camera roll and Android browsers commonly produce image/webp.
+//
+// Note the empty-string allowance in the check below — some browsers report
+// an empty File.type for HEIC because they have no decoder for it. The backend
+// sniffs magic bytes and is the real authority, so a blank type is passed
+// through rather than blocked client-side.
+const ACCEPTED_TYPES = 'image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,image/gif,image/bmp'
 
 function humanUploadError(status: number, fallback = 'Please try again.'): string {
   if (status === 413) return 'That image is over 5 MB. Please pick a smaller file.'
@@ -78,8 +86,11 @@ export const Profile: React.FC = () => {
 
   const onFilePicked = (file: File | undefined) => {
     if (!file) return
-    if (!ACCEPTED_TYPES.split(',').includes(file.type)) {
-      toast.error('Unsupported file type', { description: 'Only JPG or PNG images are supported.' })
+    const declaredType = (file.type || '').toLowerCase()
+    if (declaredType && !ACCEPTED_TYPES.split(',').includes(declaredType)) {
+      toast.error('Unsupported file type', {
+        description: 'Please choose a JPG, PNG, WebP, HEIC or GIF photo.',
+      })
       return
     }
     if (file.size > MAX_AVATAR_BYTES) {
