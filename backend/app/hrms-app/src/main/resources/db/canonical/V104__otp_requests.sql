@@ -22,7 +22,15 @@
 
 CREATE TABLE IF NOT EXISTS auth.otp_requests (
     id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    phone_last10      CHAR(10)     NOT NULL,
+    -- VARCHAR(10), NOT CHAR(10). Postgres maps CHAR(n) to `bpchar`, while the
+    -- JPA entity maps this field as String -> Hibernate expects `varchar`.
+    -- With hibernate.hbm2ddl.auto=validate that mismatch aborts EntityManager
+    -- construction and the whole application fails to boot. The original
+    -- CHAR(10) here bricked every backend deploy from 2026-08-17 13:23 until
+    -- it was caught on 2026-08-18 (Cloud Run kept serving the last healthy
+    -- revision, so there was no customer-visible outage, but no backend change
+    -- could ship). Do not "tidy" this back to CHAR.
+    phone_last10      VARCHAR(10)  NOT NULL,
     phone_e164        VARCHAR(16)  NOT NULL,
     otp_hash          TEXT         NOT NULL,
     purpose           VARCHAR(32)  NOT NULL DEFAULT 'LOGIN',
