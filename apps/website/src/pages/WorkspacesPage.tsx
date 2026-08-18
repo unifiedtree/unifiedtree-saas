@@ -35,13 +35,30 @@ export function WorkspacesPage() {
 
       // In local dev, *.localhost subdomains don't resolve in browsers.
       // Redirect to plain localhost:3001 — the JWT already carries tenant context.
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        window.open(`http://${workspace.subdomain}.localhost:3001/?token=${response.auth.accessToken}`, '_blank', 'noopener,noreferrer');
-      } else {
-        window.open((workspace.workspaceUrl || `https://${workspace.subdomain}.unifiedtree.com`) + `/?token=${response.auth.accessToken}`, '_blank', 'noopener,noreferrer');
+      const target =
+        window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+          ? `http://${workspace.subdomain}.localhost:3001/?token=${response.auth.accessToken}`
+          : (workspace.workspaceUrl || `https://${workspace.subdomain}.unifiedtree.com`)
+            + `/?token=${response.auth.accessToken}`;
+
+      const opened = window.open(target, '_blank', 'noopener,noreferrer');
+
+      // A popup blocker returns null (or a window that closes itself
+      // immediately). Without this branch the workspace never opens AND the
+      // button sits on "Entering…" forever, so the user has no idea the
+      // browser silently blocked it. Fall back to navigating this tab, which
+      // no blocker can intercept because it is a direct user-gesture nav.
+      if (!opened || opened.closed) {
+        window.location.assign(target);
       }
     } catch (err) {
       alert(err instanceof ApiError ? err.message : 'Failed to enter workspace');
+    } finally {
+      // MUST run on the success path too. Previously this lived only in the
+      // catch block, so once the workspace opened in a new tab the original
+      // tab was pinned on "Entering…" indefinitely — the customer saw the
+      // workspace launch correctly yet the button never recovered, and a
+      // second workspace could not be opened without a full page reload.
       setEnteringId(null);
     }
   };

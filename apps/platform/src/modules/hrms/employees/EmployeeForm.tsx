@@ -644,19 +644,45 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           </p>
           <div className="mt-6 flex flex-col gap-2">
             {canManageBilling ? (
-              <button
-                onClick={() => { window.location.href = '/plan' }}
-                className="w-full rounded-xl bg-[#059669] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#047857]">
-                Add seats
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    // NEW TAB, deliberately. This used to be
+                    // `window.location.href = '/plan'`, which is a full page
+                    // navigation — it tore down this component and threw away
+                    // every field the admin had already typed. They then had to
+                    // re-enter the whole employee after upgrading, which is the
+                    // single most annoying possible moment to lose a form.
+                    // Opening billing in a second tab keeps THIS tab (and all
+                    // its form state) alive, so they can add seats, come back,
+                    // and press "I've added seats" below.
+                    window.open('/plan', '_blank', 'noopener,noreferrer')
+                  }}
+                  className="w-full rounded-xl bg-[#059669] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#047857]">
+                  Add seats
+                  <span className="ml-1.5 text-xs font-normal opacity-80">(opens new tab)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    // Just clear the blocking state and resubmit. The backend
+                    // is the sole authority on seat capacity, so if seats are
+                    // still short this 402s and lands us right back on this
+                    // panel — no client-side cache to second-guess.
+                    setSeatLimitMessage(null)
+                    void handleSubmit()
+                  }}
+                  className="w-full rounded-xl border border-[#059669] px-4 py-2.5 text-sm font-semibold text-[#059669] hover:bg-[#ECFDF5]">
+                  I've added seats — save this employee
+                </button>
+              </>
             ) : (
               <div className="rounded-xl bg-[#F8FAFC] px-4 py-3 text-center text-xs text-text-secondary">
                 Only a workspace admin can change the plan. Ask your admin to add seats.
               </div>
             )}
-            <button onClick={onClose}
+            <button onClick={() => setSeatLimitMessage(null)}
                     className="w-full rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-text-secondary hover:text-text-primary">
-              Close
+              Back to form
             </button>
           </div>
         </div>

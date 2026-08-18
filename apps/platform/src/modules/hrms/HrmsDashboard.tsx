@@ -15,6 +15,7 @@ import { useEmployeeDirectory } from './api/useWorkforce'
 import { useCompanies } from './api/useOrg'
 import { useLeaveOverview } from './api/useLeave'
 import { useMonthlyStats } from './api/useAttendance'
+import { useHeadcountReport } from './api/useReports'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
 import { useRoles } from '@/shared/hooks/useRoles'
 import { UpcomingProbations } from './probation/UpcomingProbations'
@@ -27,18 +28,18 @@ import { SeatsUsageTile } from './SeatsUsageTile'
  * a radial attendance gauge, emerald-family chart series (legend dots +
  * period chips), an approvals alert card and a quick-action card.
  *
- * DATA: KPI cards, attendance gauge, pending approvals, recent employees and
- * probations are REAL (same hooks as before). The chart SERIES are dummy
- * until the analytics endpoints exist — approved by the client ("dummy data,
- * real screens"). Routes and hooks unchanged.
+ * DATA: every tile on this page renders REAL tenant data. The four fabricated
+ * chart series that used to live here (headcount trend, hires by department,
+ * payroll cost, skills radar) were removed on 2026-08-18 — see the block below
+ * for why. Headcount is now backed by GET /v1/reports/headcount; the rest were
+ * deleted rather than faked because no endpoint exists to feed them.
  *
  * ROLE VISIBILITY (this file's second responsibility): every section is gated
  * by the *permission* the underlying endpoint requires, never by role-string
- * equality — the two role-string exceptions are (a) the payroll-cost card,
- * which the client restricted to OWNER/SUPER_ADMIN even for principals that
- * hold `hrms.payroll.read` ("only admin will pay salaries"), and (b) the
+ * equality — the remaining role-string exception is the
  * "Your / Team / Company Attendance" label swap on the attendance card, which
- * is presentational and needs the role wording. The visibility matrix lives
+ * is presentational and needs the role wording. (The payroll-cost card that
+ * carried the other exception was removed with the fabricated series.) The visibility matrix lives
  * next to the render — see the comment on each section.
  */
 
@@ -55,27 +56,31 @@ const VIZ = {
   tick: '#A3A3A3',
 }
 
-/* ── Dummy series (replace with analytics endpoints when they ship) ───── */
-const headcountTrend = [
-  { m: 'Mar', count: 182 }, { m: 'Apr', count: 189 }, { m: 'May', count: 197 },
-  { m: 'Jun', count: 210 }, { m: 'Jul', count: 224 }, { m: 'Aug', count: 236 },
-]
-const hiresByDept = [
-  { dept: 'Sales', hires: 34 }, { dept: 'Engineering', hires: 12 },
-  { dept: 'Design', hires: 8 }, { dept: 'Support', hires: 21 },
-]
-const payrollOverview = [
-  { period: 'May 3–16',   gross: 6.8,  reimb: 1.1, benefits: 1.9, taxes: 1.4, employees: 216 },
-  { period: 'May 17–30',  gross: 9.6,  reimb: 1.4, benefits: 2.2, taxes: 1.8, employees: 442 },
-  { period: 'May 31–13',  gross: 10.9, reimb: 1.7, benefits: 2.4, taxes: 2.0, employees: 305 },
-  { period: 'Jun 14–27',  gross: 7.4,  reimb: 1.2, benefits: 2.0, taxes: 1.5, employees: 188 },
-  { period: 'Jun 28–11',  gross: 9.1,  reimb: 1.5, benefits: 2.3, taxes: 1.8, employees: 391 },
-]
-const skillsRadar = [
-  { skill: 'Research',    score: 68 }, { skill: 'Deals',    score: 54 },
-  { skill: 'Product',     score: 82 }, { skill: 'Negotiation', score: 61 },
-  { skill: 'Outreach',    score: 75 }, { skill: 'Pipeline', score: 58 },
-]
+/* ── NO HARDCODED SERIES LIVE HERE ANY MORE ─────────────────────────────────
+ *
+ * This file used to define four fabricated datasets — headcountTrend (182→236
+ * employees), hiresByDept (34 Sales hires), payrollOverview (₹6.8L–10.9L gross,
+ * 216–442 employees paid) and skillsRadar — and render them as charts on every
+ * tenant's dashboard. A brand-new workspace with three staff was shown a
+ * quarter-million-rupee payroll and a 236-person headcount.
+ *
+ * They carried a "Sample data" chip, but a customer reads the chart, not the
+ * chip, and inventing a rupee figure inside an HR/payroll product is not
+ * defensible — it is the same fabricated-numbers problem we removed from the
+ * marketing site, just hidden one login deeper.
+ *
+ * Removed 2026-08-18. "Headcount Growth" is replaced by Headcount by
+ * Department, backed by the real GET /v1/reports/headcount. The other three had
+ * no backend source at all, so they are gone rather than faked:
+ *
+ *   Positions Hired  — the Hiring KPI tile already reads "coming soon"; a
+ *                      populated chart beside it contradicted that.
+ *   Payroll Cost     — highest-risk fabrication; admins have real payroll pages.
+ *   Skills radar     — no data source exists or is planned.
+ *
+ * Rule: a tile either renders real tenant data or it does not ship. If a trend
+ * chart is wanted, it needs a headcount-history source built properly.
+ * ─────────────────────────────────────────────────────────────────────────── */
 
 const tooltipStyle: React.CSSProperties = {
   fontSize: 12, borderRadius: 10, border: '1px solid #E5E7EB',
@@ -297,6 +302,20 @@ export const HrmsDashboard: React.FC = () => {
   const now = new Date()
   const attendanceStatsQuery = useMonthlyStats(now.getFullYear(), now.getMonth() + 1)
 
+  // Real headcount-by-department, replacing the removed hardcoded trend chart.
+  // Passing null disables the query (the hook gates on `enabled: !!companyId`),
+  // which is how we keep an employee session from firing a report request the
+  // backend would 403 on.
+  const headcountQuery = useHeadcountReport(
+    canSeeWorkforceTiles ? (activeCompany?.id ?? null) : null,
+  )
+  const headcountRows = (headcountQuery.data ?? [])
+    .map((r) => ({
+      department: r.department ?? 'Unassigned',
+      active: Number(r.active ?? 0),
+    }))
+    .filter((r) => r.active > 0)
+
   const directory        = directoryQuery.data
   const leaveOverview    = leaveOverviewQuery.data
   const attendanceStats  = attendanceStatsQuery.data
@@ -455,49 +474,33 @@ export const HrmsDashboard: React.FC = () => {
     </Card>,
     )
   }
-  if (canSeeWorkforceTiles) {
+  // Headcount BY DEPARTMENT — real data from GET /v1/reports/headcount.
+  // Replaces the old "Headcount Growth" chart, whose month-over-month series
+  // was invented in this file. A genuine trend needs a headcount-history
+  // source; until that exists we show what the backend can answer truthfully.
+  if (canSeeWorkforceTiles && headcountRows.length > 0) {
     chartTiles.push(
-      <Card key="headcount" title="Headcount Growth" chip={<HrStatusPill tone="warn">Sample data</HrStatusPill>}>
-        {/* Dummy series until the analytics endpoint ships. The chip warns
-            viewers the numbers below are placeholders so a real customer
-            never mistakes them for their own workforce trend. */}
+      <Card key="headcount" title="Headcount by Department">
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={headcountTrend} margin={{ top: 6, right: 6, bottom: 0, left: -18 }}>
-              <defs>
-                <linearGradient id="hcFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={VIZ.e600} stopOpacity={0.28} />
-                  <stop offset="100%" stopColor={VIZ.e600} stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
+            <BarChart data={headcountRows} margin={{ top: 6, right: 6, bottom: 0, left: -18 }}>
               <CartesianGrid stroke={VIZ.grid} vertical={false} />
-              <XAxis dataKey="m" tick={{ fontSize: 11, fill: VIZ.tick }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: VIZ.tick }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Area type="monotone" dataKey="count" name="Employees" stroke={VIZ.e600} strokeWidth={2} fill="url(#hcFill)" activeDot={{ r: 4 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>,
-    )
-  }
-  if (canSeeHiringTiles) {
-    chartTiles.push(
-      <Card key="positions" title="Positions Hired" chip={<HrStatusPill tone="warn">Sample data</HrStatusPill>}>
-        <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={hiresByDept} margin={{ top: 6, right: 6, bottom: 0, left: -18 }}>
-              <CartesianGrid stroke={VIZ.grid} vertical={false} />
-              <XAxis dataKey="dept" interval={0} tick={{ fontSize: 10, fill: VIZ.tick }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: VIZ.tick }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="department" interval={0} tick={{ fontSize: 10, fill: VIZ.tick }}
+                     axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: VIZ.tick }}
+                     axisLine={false} tickLine={false} />
               <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(5,150,105,0.06)' }} />
-              <Bar dataKey="hires" name="Hires" fill={VIZ.e600} radius={[4, 4, 0, 0]} maxBarSize={32} />
+              <Bar dataKey="active" name="Active" fill={VIZ.e600} radius={[4, 4, 0, 0]} maxBarSize={32} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </Card>,
     )
   }
+  // "Positions Hired" removed 2026-08-18 — it charted a hardcoded
+  // Sales-34/Engineering-12/Design-8/Support-21 series while the Hiring KPI
+  // tile beside it correctly said "coming soon". Restore it when the hiring
+  // module ships a real endpoint.
 
   return (
     <div className="min-h-full bg-[var(--bg-base)]">
@@ -557,62 +560,17 @@ export const HrmsDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* ── Row: payroll stacked bars + skills radar. Either card is
-              independently gated; when both are hidden the row collapses
-              entirely. */}
-        {(canSeePayrollCost || canSeeWorkforceTiles) && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {canSeePayrollCost && (
-              <Card
-                title="Payroll Cost Overview"
-                className={canSeeWorkforceTiles ? 'lg:col-span-2' : 'lg:col-span-3'}
-                chip={
-                  <div className="flex flex-wrap items-center gap-3">
-                    <LegendDot color={VIZ.e800} label="Gross pay" />
-                    <LegendDot color={VIZ.e600} label="Reimbursements" />
-                    <LegendDot color={VIZ.e400} label="Benefits" />
-                    <LegendDot color={VIZ.e200} label="Taxes" />
-                    <HrStatusPill tone="warn">Sample data</HrStatusPill>
-                  </div>
-                }
-              >
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={payrollOverview} margin={{ top: 6, right: 6, bottom: 0, left: -10 }}>
-                      <CartesianGrid stroke={VIZ.grid} vertical={false} />
-                      <XAxis dataKey="period" tick={{ fontSize: 11, fill: VIZ.tick }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: VIZ.tick }} axisLine={false} tickLine={false} unit="L" />
-                      <Tooltip content={<PayrollTip />} cursor={{ fill: 'rgba(5,150,105,0.05)' }} />
-                      <Bar stackId="pay" dataKey="gross"    name="Gross pay"      fill={VIZ.e800} stroke="#fff" strokeWidth={1} maxBarSize={40} />
-                      <Bar stackId="pay" dataKey="reimb"    name="Reimbursements" fill={VIZ.e600} stroke="#fff" strokeWidth={1} maxBarSize={40} />
-                      <Bar stackId="pay" dataKey="benefits" name="Benefits"       fill={VIZ.e400} stroke="#fff" strokeWidth={1} maxBarSize={40} />
-                      <Bar stackId="pay" dataKey="taxes"    name="Taxes"          fill={VIZ.e200} stroke="#fff" strokeWidth={1} maxBarSize={40} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </Card>
-            )}
-
-            {canSeeWorkforceTiles && (
-              <Card
-                title="Skills"
-                className={canSeePayrollCost ? '' : 'lg:col-span-3'}
-                chip={<HrStatusPill tone="warn">Sample data</HrStatusPill>}
-              >
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart data={skillsRadar} outerRadius="62%">
-                      <PolarGrid stroke={VIZ.grid} />
-                      <PolarAngleAxis dataKey="skill" tick={{ fontSize: 10, fill: VIZ.tick }} />
-                      <Radar dataKey="score" name="Team avg" stroke={VIZ.e600} fill={VIZ.e600} fillOpacity={0.22} />
-                      <Tooltip contentStyle={tooltipStyle} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
-              </Card>
-            )}
-          </div>
-        )}
+        {/* ── "Payroll Cost Overview" and "Skills" removed 2026-08-18.
+              Both rendered hardcoded arrays defined in this file:
+                Payroll — ₹6.8L–10.9L gross across five invented pay periods,
+                          with 216–442 "employees paid". Shown to every tenant,
+                          including a three-person workspace. Inventing rupee
+                          figures inside a payroll product is indefensible, and
+                          admins already have the real payroll run pages.
+                Skills  — a six-axis radar with no data source in the product
+                          at all, present or planned.
+              Neither has a backend endpoint, so they are gone rather than
+              faked. Reinstate only when a real source exists. ─────────────── */}
 
         {/* ── Row: recent employees table card + alert / quick actions rail.
               The table is gated on HRMS_EMPLOYEE_READ; the right rail is
