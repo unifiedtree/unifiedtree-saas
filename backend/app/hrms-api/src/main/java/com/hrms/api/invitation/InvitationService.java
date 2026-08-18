@@ -308,13 +308,41 @@ public class InvitationService {
 
     @Transactional
     public void requestPasswordReset(String email, UUID tenantId) {
-        // tenantId may be null on a public localhost request (no subdomain, no JWT).
-        // Set whatever we have so the email lookup can scope; if null, the Hibernate
-        // filter is inactive and we resolve the tenant from the matched user row below.
-        if (tenantId != null) {
-            TenantContext.setTenantId(tenantId);
-            com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+        // auth.user_credentials runs FORCE ROW LEVEL SECURITY with the policy
+        // `tenant_id = current_tenant_id()`. This endpoint is unauthenticated, so
+        // unless a tenant is bound on the DB session BEFORE the lookup, the query
+        // returns ZERO rows, ifPresent() never fires, and the controller still
+        // answers 200 by anti-enumeration design — a completely silent black hole.
+        //
+        // That is exactly what happened in production on 2026-08-18: two
+        // /v1/auth/forgot-password calls returned 200 and no email was ever
+        // queued (verified as ut_app: 0 rows without app.tenant_id, 1 row with
+        // it). The previous code only set the Hibernate/thread context and only
+        // called setDbTenantContext INSIDE the ifPresent block — i.e. after the
+        // very query that needed it.
+        //
+        // When the caller did not supply a tenant (the mobile login screen does
+        // not know one yet), resolve it the same way email-only login does:
+        // AuthService.resolveLoginTenant iterates tenants binding RLS per
+        // iteration with set_config('app.tenant_id', ..., true).
+        if (tenantId == null) {
+            tenantId = canonicalAuthService.resolveLoginTenant(email);
         }
+        if (tenantId == null) {
+            // No workspace claims this address. Stay silent to the caller (no
+            // enumeration), but leave a breadcrumb so "the email never arrived"
+            // is diagnosable from logs instead of indistinguishable from success.
+            log.info("Password reset requested for an address matching no workspace");
+            return;
+        }
+
+        // Bind BOTH the application contexts and the DB session BEFORE the
+        // lookup. resolveLoginTenant() leaves app.tenant_id set to whichever
+        // tenant it happened to test last, so this re-bind is required for
+        // correctness, not just belt-and-braces.
+        TenantContext.setTenantId(tenantId);
+        com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+        setDbTenantContext(tenantId);
 
         // Always return success — never reveal which emails exist
         credRepo.findByEmailIgnoreCase(email).ifPresent(creds -> {
