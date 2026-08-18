@@ -49,6 +49,7 @@ public class AuthService {
     private final PasswordService passwords;
     private final JwtService jwt;
     private final JdbcTemplate jdbc;
+    private final com.unifiedtree.rbac.security.EmployeeBaselinePermissions employeeBaseline;
 
     public AuthService(UserCredentialsRepository credentialsRepo,
                        RbacRefreshTokenRepository refreshRepo,
@@ -57,7 +58,8 @@ public class AuthService {
                        RolePermissionRepository rolePermissionRepo,
                        PasswordService passwords,
                        JwtService jwt,
-                       JdbcTemplate jdbc) {
+                       JdbcTemplate jdbc,
+                       com.unifiedtree.rbac.security.EmployeeBaselinePermissions employeeBaseline) {
         this.credentialsRepo = credentialsRepo;
         this.refreshRepo = refreshRepo;
         this.userRoleRepo = userRoleRepo;
@@ -66,6 +68,7 @@ public class AuthService {
         this.passwords = passwords;
         this.jwt = jwt;
         this.jdbc = jdbc;
+        this.employeeBaseline = employeeBaseline;
     }
 
     /**
@@ -289,12 +292,16 @@ public class AuthService {
                 .sorted()
                 .collect(Collectors.toList());
 
-        List<String> permissions = roleIds.isEmpty()
+        // Effective permissions = assigned-role grants UNION the employee
+        // baseline. Being an employee is a fact (the credential carries an
+        // employee_id), not a role that a promotion can take away — see
+        // EmployeeBaselinePermissions for why. Without this union, promoting
+        // someone to DEPT_MANAGER silently revoked their ability to enrol their
+        // own face, punch in, or read their own payslip.
+        List<String> rolePerms = roleIds.isEmpty()
             ? List.of()
-            : rolePermissionRepo.findPermissionCodesByRoleIds(roleIds).stream()
-                .distinct()
-                .sorted()
-                .collect(Collectors.toList());
+            : rolePermissionRepo.findPermissionCodesByRoleIds(roleIds);
+        List<String> permissions = employeeBaseline.effectiveFor(rolePerms, creds.getEmployeeId());
 
         // Mint access token (employee_id claim lets AttendanceController resolve the employee).
         JwtService.IssuedToken access = jwt.issueAccessToken(
@@ -354,10 +361,13 @@ public class AuthService {
             : roleRepo.findAllById(roleIds).stream()
                 .map(com.unifiedtree.rbac.entity.Role::getCode)
                 .sorted().toList();
-        List<String> permissions = roleIds.isEmpty()
+        // Same union as issueSession — /me must report exactly the permission
+        // set the JWT was minted with, or the SPA hides affordances the backend
+        // would in fact allow.
+        List<String> rolePerms = roleIds.isEmpty()
             ? List.of()
-            : rolePermissionRepo.findPermissionCodesByRoleIds(roleIds).stream()
-                .distinct().sorted().toList();
+            : rolePermissionRepo.findPermissionCodesByRoleIds(roleIds);
+        List<String> permissions = employeeBaseline.effectiveFor(rolePerms, creds.getEmployeeId());
         // ACTIVE modules come straight from platform.tenant_modules — the source
         // of truth for what the workspace selected/activated — NOT derived from
         // permissions. Same query pattern as WorkspaceAccessService.activeModuleKeys

@@ -39,6 +39,8 @@ public class PermissionChecker {
 
     private final UserRoleRepository userRoleRepo;
     private final RolePermissionRepository rolePermissionRepo;
+    private final EmployeeBaselinePermissions employeeBaseline;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     // keyed by "tenantId:userId" → set of permission codes
     private final Cache<String, Set<String>> cache = Caffeine.newBuilder()
@@ -47,9 +49,13 @@ public class PermissionChecker {
             .build();
 
     public PermissionChecker(UserRoleRepository userRoleRepo,
-                             RolePermissionRepository rolePermissionRepo) {
+                             RolePermissionRepository rolePermissionRepo,
+                             EmployeeBaselinePermissions employeeBaseline,
+                             org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.userRoleRepo = userRoleRepo;
         this.rolePermissionRepo = rolePermissionRepo;
+        this.employeeBaseline = employeeBaseline;
+        this.jdbc = jdbc;
     }
 
     /**
@@ -121,9 +127,36 @@ public class PermissionChecker {
     private Set<String> loadPermissions(UUID userId) {
         List<UUID> roleIds = userRoleRepo.findAllByUserId(userId)
                 .stream().map(UserRole::getRoleId).toList();
-        if (roleIds.isEmpty()) return Set.of();
-        return rolePermissionRepo.findPermissionCodesByRoleIds(roleIds)
-                .stream().collect(Collectors.toUnmodifiableSet());
+
+        List<String> rolePerms = roleIds.isEmpty()
+                ? List.of()
+                : rolePermissionRepo.findPermissionCodesByRoleIds(roleIds);
+
+        // Mirror AuthService.issueSession: a principal that owns an employee
+        // record always holds the employee self-service baseline on top of
+        // whatever their assigned roles grant. If these two paths disagreed,
+        // a JWT-authority check (hasAuthority) and a bean check (@perm.check)
+        // would reach different verdicts for the same user on the same request.
+        UUID employeeId = lookupEmployeeId(userId);
+        return Set.copyOf(employeeBaseline.effectiveFor(rolePerms, employeeId));
+    }
+
+    /**
+     * Read the credential's employee_id. Returns null when the user has no
+     * employee record (platform-only principals) or when the lookup fails —
+     * failing closed to "not an employee" only withholds the self-service
+     * baseline, it never grants anything extra.
+     */
+    private UUID lookupEmployeeId(UUID userId) {
+        try {
+            List<UUID> rows = jdbc.queryForList(
+                    "SELECT employee_id FROM auth.user_credentials WHERE id = ?",
+                    UUID.class, userId);
+            return rows.isEmpty() ? null : rows.get(0);
+        } catch (RuntimeException e) {
+            log.warn("EMPLOYEE_ID_LOOKUP_FAIL user={} — employee baseline withheld", userId, e);
+            return null;
+        }
     }
 
     private static String cacheKey(UUID tenantId, UUID userId) {
