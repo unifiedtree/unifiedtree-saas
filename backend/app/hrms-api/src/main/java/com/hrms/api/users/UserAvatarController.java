@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
@@ -70,6 +71,18 @@ public class UserAvatarController {
 
     // ── upload ─────────────────────────────────────────────────────────────
 
+    /**
+     * MUST be @Transactional. TenantAwareDataSource forces autoCommit=false on
+     * the leased connection so its `SET LOCAL app.tenant_id` survives for the
+     * upcoming transaction boundary. Without one, a JdbcTemplate write here
+     * reports rows-updated but is NEVER committed — the connection goes back to
+     * the pool and Hikari resets session state, silently discarding it.
+     *
+     * That is not hypothetical: this endpoint returned 200 with a real R2 URL
+     * while auth.user_credentials.avatar_url stayed NULL, so a user's uploaded
+     * photo never appeared anywhere (verified in prod 2026-08-18).
+     */
+    @Transactional
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, String>> upload(
@@ -150,6 +163,8 @@ public class UserAvatarController {
 
     // ── delete ─────────────────────────────────────────────────────────────
 
+    /** @Transactional for the same reason as upload() above. */
+    @Transactional
     @DeleteMapping
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> delete() {
