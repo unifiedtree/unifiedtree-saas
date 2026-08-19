@@ -41,14 +41,26 @@ export function WorkspacesPage() {
           : (workspace.workspaceUrl || `https://${workspace.subdomain}.unifiedtree.com`)
             + `/?token=${response.auth.accessToken}`;
 
-      const opened = window.open(target, '_blank', 'noopener,noreferrer');
+      // Deliberately NOT passing 'noopener' in the feature string.
+      //
+      // Per the HTML spec, `window.open(..., 'noopener')` returns null even on
+      // SUCCESS — severing the opener is exactly what the flag asks for. An
+      // earlier version treated that null as "the popup was blocked" and fell
+      // back to navigating this tab, so a successful click opened the workspace
+      // in a new tab AND redirected the page behind it. Both happened at once.
+      //
+      // Opening without the flag and clearing `opener` ourselves keeps the same
+      // reverse-tabnabbing protection while leaving a usable handle, so a null
+      // return once again means what we need it to mean: genuinely blocked.
+      const opened = window.open(target, '_blank');
 
-      // A popup blocker returns null (or a window that closes itself
-      // immediately). Without this branch the workspace never opens AND the
-      // button sits on "Entering…" forever, so the user has no idea the
-      // browser silently blocked it. Fall back to navigating this tab, which
-      // no blocker can intercept because it is a direct user-gesture nav.
-      if (!opened || opened.closed) {
+      if (opened) {
+        // Cut the back-reference so the workspace tab cannot touch window.opener.
+        try { opened.opener = null; } catch { /* cross-origin: already isolated */ }
+      } else {
+        // Genuinely blocked by the browser. Navigating this tab is a direct
+        // user-gesture navigation, which no popup blocker intercepts — better
+        // than leaving the user staring at a button that did nothing.
         window.location.assign(target);
       }
     } catch (err) {
