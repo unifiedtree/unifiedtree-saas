@@ -604,9 +604,32 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
       // HR managers deliberately cannot reach billing (WorkspacePlanController
       // is admin-only), so they get told to ask their admin rather than sent
       // to a page that would refuse them.
-      const message = (err as Error)?.message ?? 'Failed to save employee'
-      if (/SEAT_LIMIT_REACHED/i.test(message) || /used all \d+ seats/i.test(message)) {
-        setSeatLimitMessage(message.replace(/^SEAT_LIMIT_REACHED:?\s*/i, ''))
+      const e = err as { message?: string; status?: number; payload?: { errorCode?: string } }
+      const message = e?.message ?? 'Failed to save employee'
+
+      // Detect on the HTTP STATUS, not on words in the message.
+      //
+      // This previously matched only the literal "SEAT_LIMIT_REACHED" while the
+      // backend enforcer actually returns "SEAT_LIMIT_EXCEEDED", and matched
+      // "used all N seats" while the real copy reads "You've used N of M paid
+      // seats". Neither ever matched, so the out-of-seats panel never rendered:
+      // a real customer at their cap saw no explanation, assumed the click had
+      // not registered, and pressed Save eight more times — eight more 402s in
+      // the console and still no idea what was wrong.
+      //
+      // 402 Payment Required is emitted by exactly one thing in this API
+      // (SeatLimitExceptionHandler), so the status alone is a precise and
+      // rename-proof signal. The string checks stay only as a fallback for a
+      // proxy that swallows the status.
+      const errorCode = e?.payload?.errorCode ?? ''
+      const isSeatLimit =
+        e?.status === 402 ||
+        /SEAT_LIMIT/i.test(errorCode) ||
+        /SEAT_LIMIT/i.test(message) ||
+        /\bseats?\b/i.test(message) && /\bupgrade\b/i.test(message)
+
+      if (isSeatLimit) {
+        setSeatLimitMessage(message.replace(/^SEAT_LIMIT[A-Z_]*:?\s*/i, ''))
         return
       }
       toast(message, 'error')
