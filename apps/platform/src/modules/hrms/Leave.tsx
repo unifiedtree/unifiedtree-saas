@@ -621,7 +621,7 @@ export const Leave: React.FC = () => {
         subtitle="Apply for leave, track balances, and manage approvals"
       />
 
-      <div className="flex flex-wrap gap-1 bg-white border border-border-default p-1 rounded-xl w-fit">
+      <div className="flex gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] bg-white border border-border-default p-1 rounded-xl w-fit max-w-full">
         {visibleTabs.map((t) => (
           <button key={t.key} onClick={() => switchTab(t.key as TabKey)} className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t.key ? 'bg-[#059669] text-white shadow' : 'text-text-secondary hover:text-text-primary')}>
             {t.label}

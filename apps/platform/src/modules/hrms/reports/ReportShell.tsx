@@ -1,8 +1,8 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Download } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { Skeleton, EmptyState } from '@unifiedtree/ui-kit'
-import { HrPageHeader, HrButton } from '@/shared/components/hr'
+import { HrPageHeader } from '@/shared/components/hr'
 import { useCompanies } from '@/modules/hrms/api/useOrg'
 
 interface ReportShellProps {
@@ -42,13 +42,7 @@ export function ReportShell({
             crumb="Reports & Analytics"
             title={title}
             subtitle={description}
-            actions={
-              /* TODO[backend]: CSV export endpoints not implemented */
-              <HrButton variant="ghost" disabled title="Export not yet available">
-                <Download size={14} />
-                Export CSV
-              </HrButton>
-            }
+            /* TODO restore Export CSV once GET /v1/reports/{name}/export lands */
           />
         </div>
       </div>

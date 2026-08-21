@@ -196,7 +196,7 @@ export function WorkspacesPage() {
                                 </span>
                               )}
                             </div>
-                            <p className="mt-0.5 whitespace-nowrap font-body text-xs font-medium text-text-secondary">
+                            <p className="mt-0.5 truncate font-body text-xs font-medium text-text-secondary">
                               {ws.subdomain}.unifiedtree.com
                             </p>
                             <p className="font-body text-xs text-text-tertiary">{moduleSummary(ws.activeModules)}</p>

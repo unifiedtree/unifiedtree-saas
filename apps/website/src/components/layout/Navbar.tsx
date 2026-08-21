@@ -187,7 +187,7 @@ export function Navbar({ tone }: Props) {
             </Link>
 
             {/* Desktop nav links */}
-            <div className="hidden items-center gap-0.5 lg:flex">
+            <div className="hidden items-center gap-0.5 md:flex">
               {links.map((item) => (
                 <Link
                   key={item.label}
@@ -221,7 +221,7 @@ export function Navbar({ tone }: Props) {
 
             {/* Desktop CTA */}
             <div
-              className="hidden flex-shrink-0 items-center gap-2 lg:flex"
+              className="hidden flex-shrink-0 items-center gap-2 md:flex"
               onMouseEnter={() => setModulesOpen(false)}
             >
               {accountToken ? (
@@ -260,7 +260,7 @@ export function Navbar({ tone }: Props) {
 
             {/* Mobile hamburger */}
             <button
-              className={`rounded-lg p-2 transition-colors duration-200 lg:hidden ${
+              className={`rounded-lg p-2 transition-colors duration-200 md:hidden ${
                 overDark
                   ? 'text-white hover:bg-white/10'
                   : 'text-text-secondary hover:bg-surface-2 hover:text-text-primary'
@@ -283,7 +283,7 @@ export function Navbar({ tone }: Props) {
                 animate={{ opacity: 1, x: '-50%', y: 0 }}
                 exit={{ opacity: 0, x: '-50%', y: reduce ? 0 : -8 }}
                 transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute left-1/2 top-full hidden pt-3 lg:block"
+                className="absolute left-1/2 top-full hidden pt-3 md:block"
               >
                 <div className="w-[min(820px,calc(100vw_-_3rem))] overflow-hidden rounded-2xl border border-border bg-white shadow-xl">
                   <div className="flex items-baseline justify-between px-6 pt-5">
@@ -359,7 +359,7 @@ export function Navbar({ tone }: Props) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: reduce ? 0 : -16 }}
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-[#04503A] lg:hidden"
+            className="fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-[#04503A] md:hidden"
           >
             <div className="flex h-16 flex-shrink-0 items-center justify-between px-4 sm:h-20 sm:px-6">
               <Link to="/" onClick={(e) => { setMenuOpen(false); goHome(e) }} className="flex items-center">

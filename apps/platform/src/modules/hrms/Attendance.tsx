@@ -62,7 +62,7 @@ function MyAttendanceTab() {
         </div>
       </div>
 
-      <div className="lg:col-span-2 bg-white border border-border-default shadow-sm rounded-2xl p-6">
+      <div className="lg:col-span-2 bg-white border border-border-default shadow-sm rounded-2xl p-3 sm:p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-base font-bold text-text-primary font-heading">Daily Log</h3>
           <div className="text-sm font-medium text-text-secondary bg-bg-surface px-3 py-1.5 rounded-lg border border-border-default">
@@ -281,9 +281,11 @@ function CorrectionsTab() {
       <div className="bg-white border border-border-default shadow-sm rounded-2xl p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-base font-bold text-text-primary font-heading">My Corrections</h3>
-          <button onClick={() => setOpen(!open)} className="text-xs font-bold px-4 py-2 bg-bg-surface hover:bg-interactive-hover border border-border-default text-text-primary rounded-xl transition-colors shadow-sm">
-            {open ? 'Close' : '+ New Request'}
-          </button>
+          <Can code={P.ATTENDANCE_CHECKIN_SELF}>
+            <button onClick={() => setOpen(!open)} className="text-xs font-bold px-4 py-2 bg-bg-surface hover:bg-interactive-hover border border-border-default text-text-primary rounded-xl transition-colors shadow-sm">
+              {open ? 'Close' : '+ New Request'}
+            </button>
+          </Can>
         </div>
 
         <AnimatePresence>

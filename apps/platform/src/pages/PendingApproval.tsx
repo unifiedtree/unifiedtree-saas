@@ -38,7 +38,7 @@ export const PendingApproval: React.FC = () => {
         <p className="text-sm font-black uppercase tracking-[0.2em] text-[#047857]">
           Workspace pending approval
         </p>
-        <h1 className="mt-3 text-4xl font-black tracking-tight text-text-primary">
+        <h1 className="mt-3 text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-text-primary">
           UnifiedTree administrator approval is required.
         </h1>
         <p className="mt-4 text-lg leading-8 text-text-secondary">

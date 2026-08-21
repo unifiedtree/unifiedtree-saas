@@ -687,7 +687,7 @@ export const HrmsDashboard: React.FC = () => {
             </Card>
 
             <Card title="Quick Actions">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {quickActions.map((a) => (
                   <button
                     key={a.label}

@@ -965,7 +965,7 @@ function ShellNotificationBell({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.98 }}
             transition={{ duration: 0.16 }}
-            className="absolute right-0 top-12 z-dropdown w-96 overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg"
+            className="absolute right-0 top-12 z-dropdown w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg"
           >
             <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
               <p className="text-sm font-semibold text-[var(--text-primary)]">Notifications</p>

@@ -165,7 +165,7 @@ export function LoginPage() {
       {/* Centred composition: one rounded card floating on the soft ground,
           photo pane left, form pane right. Below lg the photo collapses to a
           short banner above the form and the page scrolls normally. */}
-      <main className="flex min-h-screen flex-col px-4 pb-10 pt-24 sm:px-6 lg:h-screen lg:min-h-0 lg:pb-6 lg:pt-24">
+      <main className="flex min-h-screen flex-col px-4 pb-10 pt-20 sm:px-6 lg:h-screen lg:min-h-0 lg:pb-6 lg:pt-24">
         <motion.div
           initial={{ opacity: 0, y: reduce ? 0 : 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -177,7 +177,7 @@ export function LoginPage() {
             {/* ── Photo pane — the client-supplied sapling photograph ────
                 Copy sits over the dark soil at the image's bottom, behind a
                 deep-emerald scrim; the bright bokeh top stays text-free. */}
-            <div className="relative h-44 sm:h-52 lg:h-auto">
+            <div className="relative h-32 sm:h-44 lg:h-auto">
               <img
                 src="/assets/signup.jpg"
                 alt="A young sapling growing from dark soil"
