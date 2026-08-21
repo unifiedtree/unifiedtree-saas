@@ -273,7 +273,7 @@ function CreateTab({ onCreated }: { onCreated: () => void }) {
       </div>
 
       <div className="rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-5 py-4">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Gross Payable</p>
             <p className="text-lg font-bold text-text-primary">{inr(totals.gross)}</p>

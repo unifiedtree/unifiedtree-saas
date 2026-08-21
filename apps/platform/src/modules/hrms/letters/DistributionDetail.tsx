@@ -77,7 +77,7 @@ export function DistributionDetail() {
         </p>
       )}
 
-      <div className="grid max-w-2xl grid-cols-3 gap-3">
+      <div className="grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
         <HrStatCard icon={<CheckCircle2 size={18} />} color="green" value={job.sentCount} label="Sent" />
         <HrStatCard icon={<XCircle size={18} />} color="red" value={job.failedCount} label="Failed" />
         <HrStatCard icon={<Clock size={18} />} color="orange" value={pending} label="Pending" />

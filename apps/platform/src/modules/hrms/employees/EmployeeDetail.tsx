@@ -336,6 +336,11 @@ function OverviewTab({ emp, departments, designations, branches, companies }: {
   branches: ReturnType<typeof useBranches>['data']
   companies: ReturnType<typeof useCompanies>['data']
 }) {
+  // PII/CTC read-gate: peers with the plain employee.read permission must not
+  // see co-workers' contact details or CTC on the Overview card. Salary reuses
+  // the same code the Salary tab is already gated on.
+  const canReadPii    = usePermission(P.HRMS_EMPLOYEE_PROFILE_READ)
+  const canReadSalary = usePermission(P.PAYROLL_STRUCTURE_READ)
   if (!emp) return null
   const department  = (departments  ?? []).find((d) => d.id === emp.departmentId)
   const designation = (designations ?? []).find((d) => d.id === emp.designationId)
@@ -345,12 +350,14 @@ function OverviewTab({ emp, departments, designations, branches, companies }: {
   return (
     <div className="grid md:grid-cols-2 gap-4">
       <AccountCard emp={emp} />
-      <SectionCard title="Contact">
-        <InfoRow icon={Mail}     label="Work Email"  value={emp.email} />
-        <InfoRow icon={Phone}    label="Phone"       value={emp.phone} />
-        {emp.dateOfBirth && <InfoRow icon={Calendar} label="Date of Birth" value={format(new Date(emp.dateOfBirth), 'd MMM yyyy')} />}
-        {emp.gender && <InfoRow icon={Edit3} label="Gender" value={emp.gender.replace('_', ' ')} />}
-      </SectionCard>
+      {canReadPii && (
+        <SectionCard title="Contact">
+          <InfoRow icon={Mail}     label="Work Email"  value={emp.email} />
+          <InfoRow icon={Phone}    label="Phone"       value={emp.phone} />
+          {emp.dateOfBirth && <InfoRow icon={Calendar} label="Date of Birth" value={format(new Date(emp.dateOfBirth), 'd MMM yyyy')} />}
+          {emp.gender && <InfoRow icon={Edit3} label="Gender" value={emp.gender.replace('_', ' ')} />}
+        </SectionCard>
+      )}
       <SectionCard title="Employment">
         {company     && <InfoRow icon={Building2} label="Company"      value={company.name} />}
         {department  && <InfoRow icon={Briefcase} label="Department"   value={department.name} />}
@@ -360,7 +367,7 @@ function OverviewTab({ emp, departments, designations, branches, companies }: {
         <InfoRow icon={Calendar} label="Joining Date"   value={emp.dateOfJoining  ? format(new Date(emp.dateOfJoining),  'd MMM yyyy') : undefined} />
         <InfoRow icon={Calendar} label="Probation End"  value={emp.probationEndDate ? format(new Date(emp.probationEndDate), 'd MMM yyyy') : undefined} />
         <InfoRow icon={Calendar} label="Last Working Day" value={emp.lastWorkingDay ? format(new Date(emp.lastWorkingDay), 'd MMM yyyy') : undefined} />
-        {emp.ctcAnnual && (
+        {canReadSalary && emp.ctcAnnual && (
           <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
             <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
               <span className="text-xs text-text-secondary">₹</span>
@@ -970,6 +977,9 @@ function EmergencyTab({ employeeId }: { employeeId: string }) {
 // ── Tab: Work ────────────────────────────────────────────────────────────────
 
 function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmployee>['data']> }) {
+  // Mirror OverviewTab: CTC is salary data, only reveal it to holders of the
+  // salary-read permission (same code the Salary tab is gated on).
+  const canReadSalary = usePermission(P.PAYROLL_STRUCTURE_READ)
   const [open, setOpen] = useState(false)
   const updateMut = useUpdateWorkforceEmployee()
 
@@ -1022,7 +1032,7 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
           <InfoRow icon={Briefcase} label="Designation"   value={designation?.title} />
           <InfoRow icon={MapPin}    label="Branch"        value={branch?.name} />
           <InfoRow icon={Briefcase} label="Employment Type" value={emp.employmentType?.replace('_', ' ')} />
-          {emp.ctcAnnual && (
+          {canReadSalary && emp.ctcAnnual && (
             <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0 col-span-2">
               <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
                 <span className="text-xs text-text-secondary">₹</span>
@@ -1333,6 +1343,11 @@ export const EmployeeDetail: React.FC = () => {
   const canReadIdentity = usePermission(P.HRMS_EMPLOYEE_IDENTITY_READ)
   const canReadBank     = usePermission(P.HRMS_EMPLOYEE_BANK_READ)
   const canReadSalary   = usePermission(P.PAYROLL_STRUCTURE_READ)
+  // Contact / Education / Experience / Dependents / Emergency all show a
+  // co-worker's private profile — gate the tab surface itself so a peer with
+  // only hrms.employee.read (DEPT_MANAGER, viewer HR) sees an Overview-only
+  // shell instead of full PII.
+  const canReadPii      = usePermission(P.HRMS_EMPLOYEE_PROFILE_READ)
 
   const extendMutation = useExtendProbation()
   const [showEdit,     setShowEdit]     = useState(false)
@@ -1545,15 +1560,15 @@ export const EmployeeDetail: React.FC = () => {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="contact">Contact</TabsTrigger>
+          {canReadPii     && <TabsTrigger value="contact">Contact</TabsTrigger>}
           <TabsTrigger value="work">Work</TabsTrigger>
           {canReadIdentity && <TabsTrigger value="identity">Identity</TabsTrigger>}
           {canReadBank     && <TabsTrigger value="bank">Bank</TabsTrigger>}
           {canReadSalary   && <TabsTrigger value="salary">Salary</TabsTrigger>}
-          <TabsTrigger value="education">Education</TabsTrigger>
-          <TabsTrigger value="experience">Experience</TabsTrigger>
-          <TabsTrigger value="dependents">Dependents</TabsTrigger>
-          <TabsTrigger value="emergency">Emergency</TabsTrigger>
+          {canReadPii     && <TabsTrigger value="education">Education</TabsTrigger>}
+          {canReadPii     && <TabsTrigger value="experience">Experience</TabsTrigger>}
+          {canReadPii     && <TabsTrigger value="dependents">Dependents</TabsTrigger>}
+          {canReadPii     && <TabsTrigger value="emergency">Emergency</TabsTrigger>}
           <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
 
@@ -1562,9 +1577,11 @@ export const EmployeeDetail: React.FC = () => {
             <OverviewTab emp={emp} departments={departments} designations={designations} branches={branches} companies={companies} />
           </TabsContent>
 
-          <TabsContent value="contact">
-            <ContactTab employeeId={emp.id} emp={emp} />
-          </TabsContent>
+          {canReadPii && (
+            <TabsContent value="contact">
+              <ContactTab employeeId={emp.id} emp={emp} />
+            </TabsContent>
+          )}
 
           <TabsContent value="work">
             <WorkTab emp={emp} />
@@ -1588,21 +1605,29 @@ export const EmployeeDetail: React.FC = () => {
             </TabsContent>
           )}
 
-          <TabsContent value="education">
-            <EducationTab employeeId={emp.id} />
-          </TabsContent>
+          {canReadPii && (
+            <TabsContent value="education">
+              <EducationTab employeeId={emp.id} />
+            </TabsContent>
+          )}
 
-          <TabsContent value="experience">
-            <ExperienceTab employeeId={emp.id} />
-          </TabsContent>
+          {canReadPii && (
+            <TabsContent value="experience">
+              <ExperienceTab employeeId={emp.id} />
+            </TabsContent>
+          )}
 
-          <TabsContent value="dependents">
-            <DependentsTab employeeId={emp.id} />
-          </TabsContent>
+          {canReadPii && (
+            <TabsContent value="dependents">
+              <DependentsTab employeeId={emp.id} />
+            </TabsContent>
+          )}
 
-          <TabsContent value="emergency">
-            <EmergencyTab employeeId={emp.id} />
-          </TabsContent>
+          {canReadPii && (
+            <TabsContent value="emergency">
+              <EmergencyTab employeeId={emp.id} />
+            </TabsContent>
+          )}
 
           <TabsContent value="documents">
             <DocumentsTab employeeId={id ?? ''} />

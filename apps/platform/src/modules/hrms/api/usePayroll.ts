@@ -213,13 +213,16 @@ export interface PayrollTrendPoint {
  * payroll.payslip_lines for the LATEST period that has at least one run —
  * falls back to zeros for a fresh tenant, so the dashboard never crashes.
  */
-export function usePayrollDashboardKpis() {
+export function usePayrollDashboardKpis(opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...KEY, 'dashboard', 'kpis'],
     queryFn: () => apiJson<PayrollDashboardKpis>('/v1/payroll/dashboard/kpis'),
     // Numbers are aggregates of frozen LOCKED runs, so 60s is enough — no
     // reason to re-fetch on every render but also fine to be a minute stale.
     staleTime: 60_000,
+    // Callers can disable the fetch for principals that would 403 anyway
+    // (non-admin viewers of the PayrollDashboard get the redacted view).
+    enabled: opts?.enabled ?? true,
   })
 }
 
@@ -227,10 +230,11 @@ export function usePayrollDashboardKpis() {
  * Trailing N-month cost trend for the chart. Always returns exactly `months`
  * points; empty periods come back with 0 so the chart draws a continuous line.
  */
-export function usePayrollCostTrend(months: number = 6) {
+export function usePayrollCostTrend(months: number = 6, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...KEY, 'dashboard', 'trend', months],
     queryFn: () => apiJson<PayrollTrendPoint[]>(`/v1/payroll/dashboard/trend?months=${months}`),
     staleTime: 60_000,
+    enabled: opts?.enabled ?? true,
   })
 }

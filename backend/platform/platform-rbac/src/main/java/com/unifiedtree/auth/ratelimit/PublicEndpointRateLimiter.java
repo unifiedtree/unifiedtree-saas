@@ -124,6 +124,45 @@ public class PublicEndpointRateLimiter {
         if (ipKey    != null) record(ipKey, now);
     }
 
+    /**
+     * IP-only variant with an explicit per-minute cap. Used by refresh-style
+     * endpoints where the caller-supplied identity (email) is not known at
+     * request time — the credential is an opaque cookie/body token, so the
+     * (endpoint + email) key is meaningless and we fall back to (endpoint + ip).
+     *
+     * <p>Window is hard-wired to 1 minute so {@code limit} maps directly to
+     * "N per minute per IP" — 60 for account refresh is a healthy budget for
+     * "browser fires refresh from N tabs on wake" while still stopping a
+     * runaway loop.
+     */
+    public void checkPerIp(String endpoint, String ip, int limit) {
+        long now = System.currentTimeMillis();
+        String ipKey = compositeIpKey(endpoint, ip);
+        if (ipKey == null) return;  // unknown IP → skip the gate rather than 429ing every caller
+        long cutoff = now - Duration.ofMinutes(1).toMillis();
+
+        Deque<Long> stamps = hits.computeIfAbsent(ipKey, k -> new ArrayDeque<>());
+        synchronized (stamps) {
+            // Purge only entries older than the 1-minute per-IP window.
+            // (purgeExpired uses the shared 15-minute WINDOW and would leave
+            // stale hits in place, incorrectly tripping the limiter.)
+            Iterator<Long> it = stamps.iterator();
+            while (it.hasNext()) {
+                if (it.next() < cutoff) it.remove();
+                else break;
+            }
+            if (stamps.size() >= limit) {
+                log.warn("public-rate-limit tripped by ip (per-minute) endpoint={} ip={} limit={}",
+                        endpoint, ip, limit);
+                throw new HrmsException(
+                        "Too many requests. Please try again in a moment.",
+                        HttpStatus.TOO_MANY_REQUESTS,
+                        "RATE_LIMITED");
+            }
+            stamps.addLast(now);
+        }
+    }
+
     // ── internals ─────────────────────────────────────────────────────────────
 
     private boolean exceeds(String key, int limit, long now) {

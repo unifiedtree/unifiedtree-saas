@@ -67,7 +67,16 @@ export function Navbar({ tone }: Props) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const reduce = useReducedMotion()
-  const { accountToken, logoutAccount } = useAuthStore()
+  const { accountToken, signOut } = useAuthStore()
+
+  // Full sign-out: clears the server-side httpOnly refresh cookie AND
+  // drops in-memory tokens. Awaited so the cookie clear has a chance to
+  // land before we navigate — but signOut() never throws, so the nav
+  // still happens even if the network is down.
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/login')
+  }
 
   // Modules mega-menu content — same source as /pricing and /modules pages:
   // platform.module_plans via the useModulePlans query. Filters RETIRED and
@@ -219,7 +228,7 @@ export function Navbar({ tone }: Props) {
                 <>
                   <Link to="/workspaces" className={linkCls}>Workspaces</Link>
                   <button
-                    onClick={() => { logoutAccount(); navigate('/login') }}
+                    onClick={handleSignOut}
                     className={`rounded-lg px-3.5 py-2.5 text-[15px] font-medium transition-colors duration-200 ${
                       overDark ? 'text-white/70 hover:text-white' : 'text-text-tertiary hover:text-danger'
                     }`}
@@ -408,7 +417,7 @@ export function Navbar({ tone }: Props) {
                     </Link>
                     <button
                       className="block w-full rounded-xl border border-white/15 px-4 py-3.5 text-center text-[15px] font-semibold text-white/70 transition-colors hover:border-white/30 hover:text-white"
-                      onClick={() => { setMenuOpen(false); logoutAccount(); navigate('/login') }}
+                      onClick={() => { setMenuOpen(false); handleSignOut() }}
                     >
                       Sign Out
                     </button>

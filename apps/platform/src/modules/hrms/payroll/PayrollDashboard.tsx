@@ -8,6 +8,12 @@ import {
   HrPageHeader, HrStatCard, HrStatusPill, TableCard, type PillTone,
 } from '@/shared/components/hr'
 import { useRuns, inr, MONTHS, type PayrollRun, type RunStatus } from '../api/usePayrollRuns'
+// Client rule: rupee KPIs + cost-trend chart are admin/finance-only. HR (and
+// anyone lower) sees the redacted "—" placeholder instead of the actual money.
+// The recent-runs table stays visible because the sidebar/route already gates
+// entry to this page on R_FIN_RUPEE — non-admins here are edge cases who
+// arrived via a stale bookmark or an HR-only permission upgrade.
+import { useRoles } from '@/shared/hooks/useRoles'
 // Wave 1 (2026-08-11): the four KPI tiles + cost trend are now backed by real
 // backend aggregates — the previous client-side reductions over the loaded
 // runs list under-counted (they missed employer contributions) and disagreed
@@ -42,12 +48,17 @@ const chronoKey = (r: PayrollRun) => r.periodYear * 12 + r.periodMonth
 export const PayrollDashboard: React.FC = () => {
   const { data, isLoading } = useRuns()
   const runs = useMemo(() => data ?? [], [data])
+  const { isAdmin } = useRoles()
 
   // Backend-computed KPIs + trend (Wave 1). The runs list stays for the
   // status-breakdown + recent-runs table — that's still a purely client-side
   // rollup over the currently visible page of runs.
-  const { data: kpis, isLoading: kpisLoading } = usePayrollDashboardKpis()
-  const { data: trend, isLoading: trendLoading } = usePayrollCostTrend(6)
+  //
+  // Skip the rupee fetches entirely for non-admins so we don't hit the KPI
+  // endpoint that would 403 anyway (usePayroll hooks share a queryClient with
+  // other rupee-adjacent pages — silencing the fetch keeps devtools quiet).
+  const { data: kpis, isLoading: kpisLoading } = usePayrollDashboardKpis({ enabled: isAdmin })
+  const { data: trend, isLoading: trendLoading } = usePayrollCostTrend(6, { enabled: isAdmin })
 
   // Newest-first by period, used for "latest run" and the recent-runs table.
   const byPeriodDesc = useMemo(
@@ -70,51 +81,60 @@ export const PayrollDashboard: React.FC = () => {
     [trend],
   )
 
+  // Non-admin viewers get every rupee KPI + the 6-month trend chart redacted
+  // to "—" / "Restricted". "Pending Disbursals" is a raw run count (not
+  // rupees), so it stays visible even for HR — the number carries no
+  // salary-value signal on its own.
+  const redactRupees = !isAdmin
+
   return (
     <div className="mx-auto max-w-6xl p-6 sm:p-8">
       <HrPageHeader
         crumb="Payroll"
         title="Payroll Dashboard"
         subtitle={
-          kpis
-            ? `Live aggregates for ${kpis.currentPeriodLabel} across all your payroll runs`
-            : 'Cost, headcount, and disbursal status across your payroll runs'
+          redactRupees
+            ? 'Payroll cost figures are restricted to admin / finance roles'
+            : kpis
+              ? `Live aggregates for ${kpis.currentPeriodLabel} across all your payroll runs`
+              : 'Cost, headcount, and disbursal status across your payroll runs'
         }
       />
 
-      {/* KPI cards — backed by /v1/payroll/dashboard/kpis */}
+      {/* KPI cards — backed by /v1/payroll/dashboard/kpis. Rupee KPIs render
+          as "—" for non-admins; only the run-count tile shows a real value. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <HrStatCard
           icon={<Wallet size={18} />}
           color="green"
-          loading={kpisLoading}
-          value={kpis ? inr(kpis.totalPayrollCost) : '—'}
+          loading={kpisLoading && !redactRupees}
+          value={redactRupees ? '—' : (kpis ? inr(kpis.totalPayrollCost) : '—')}
           label="Total Payroll Cost"
-          sub={kpis ? kpis.currentPeriodLabel : 'No runs yet'}
+          sub={redactRupees ? 'Restricted' : (kpis ? kpis.currentPeriodLabel : 'No runs yet')}
         />
         <HrStatCard
           icon={<Users size={18} />}
           color="purple"
-          loading={kpisLoading}
-          value={kpis ? inr(kpis.averageSalary) : '—'}
+          loading={kpisLoading && !redactRupees}
+          value={redactRupees ? '—' : (kpis ? inr(kpis.averageSalary) : '—')}
           label="Average Salary"
-          sub={kpis ? kpis.currentPeriodLabel : 'No runs yet'}
+          sub={redactRupees ? 'Restricted' : (kpis ? kpis.currentPeriodLabel : 'No runs yet')}
         />
         <HrStatCard
           icon={<FileWarning size={18} />}
           color="orange"
-          loading={kpisLoading}
-          value={kpis ? kpis.pendingDisbursals : '—'}
+          loading={kpisLoading && !redactRupees}
+          value={redactRupees ? '—' : (kpis ? kpis.pendingDisbursals : '—')}
           label="Pending Disbursals"
           sub="Locked / processing runs not yet paid"
         />
         <HrStatCard
           icon={<Banknote size={18} />}
           color="blue"
-          loading={kpisLoading}
-          value={kpis ? inr(kpis.tdsLiability) : '—'}
+          loading={kpisLoading && !redactRupees}
+          value={redactRupees ? '—' : (kpis ? inr(kpis.tdsLiability) : '—')}
           label="TDS Liability"
-          sub={kpis ? kpis.currentPeriodLabel : 'No runs yet'}
+          sub={redactRupees ? 'Restricted' : (kpis ? kpis.currentPeriodLabel : 'No runs yet')}
         />
       </div>
 
@@ -128,7 +148,13 @@ export const PayrollDashboard: React.FC = () => {
               <p className="text-xs text-text-tertiary">Total cost including employer contributions</p>
             </div>
           </div>
-          {trendLoading ? (
+          {redactRupees ? (
+            // Same footprint as the chart so the surrounding grid doesn't reflow.
+            <div className="flex h-[260px] flex-col items-center justify-center text-center">
+              <p className="text-sm font-semibold text-text-secondary">—</p>
+              <p className="mt-1 text-xs text-text-tertiary">Payroll cost trend is restricted to admin / finance roles.</p>
+            </div>
+          ) : trendLoading ? (
             <div className="h-[260px] animate-pulse rounded-lg bg-bg-base" />
           ) : chartData.length === 0 ? (
             <div className="flex h-[260px] flex-col items-center justify-center text-center">
@@ -229,7 +255,8 @@ export const PayrollDashboard: React.FC = () => {
                   <td className="hidden sm:table-cell text-text-secondary">{r.companyName}</td>
                   <td><HrStatusPill tone={RUN_TONE[r.status]}>{r.status}</HrStatusPill></td>
                   <td className="text-right text-text-secondary">{r.employeeCount}</td>
-                  <td className="text-right font-semibold text-text-primary">{inr(r.totalNet)}</td>
+                  {/* Net Pay is a rupee column — redact for non-admins. */}
+                  <td className="text-right font-semibold text-text-primary">{redactRupees ? '—' : inr(r.totalNet)}</td>
                   <td className="hidden md:table-cell text-right text-text-secondary">
                     {r.processedAt ? format(new Date(r.processedAt), 'd MMM yyyy') : '—'}
                   </td>

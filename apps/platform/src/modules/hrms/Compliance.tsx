@@ -129,7 +129,7 @@ function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boo
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <HrStatCard icon={<CalendarClock size={18} />} color="orange" value={stats.pending} label="Pending" loading={isLoading} />
         <HrStatCard icon={<AlertTriangle size={18} />} color="red" value={stats.overdue} label="Overdue" loading={isLoading} />
         <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.done} label="Completed" loading={isLoading} />

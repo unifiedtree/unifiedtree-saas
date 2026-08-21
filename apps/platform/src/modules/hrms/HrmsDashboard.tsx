@@ -5,9 +5,8 @@ import {
   Banknote, Rocket, UserPlus, FileText, BellRing, PartyPopper,
 } from 'lucide-react'
 import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
+  ResponsiveContainer, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid,
-  RadarChart, PolarGrid, PolarAngleAxis, Radar,
 } from 'recharts'
 import { HrStatusPill, HrButton, HrAvatar } from '@/shared/components/hr'
 import { SkeletonCardGrid } from '@/shared/components/SkeletonCard'
@@ -48,10 +47,7 @@ import { SeatsUsageTile } from './SeatsUsageTile'
  *    stacked segments get 2px white spacers + legend dots as secondary
  *    encoding. ─────────────────────────────────────────────────────────── */
 const VIZ = {
-  e800: '#065F46',
   e600: '#059669',
-  e400: '#34D399',
-  e200: '#A7F3D0',
   grid: '#F0F0F0',
   tick: '#A3A3A3',
 }
@@ -109,16 +105,6 @@ function Card({ title, chip, className = '', children }: {
   )
 }
 
-/** Legend dot (reference: coloured-dot legends beside the chip). */
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-secondary)]">
-      <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-      {label}
-    </span>
-  )
-}
-
 /** KPI tile — icon tile + label + big number, emerald chrome. */
 function KpiTile({ icon, iconBg, iconFg, label, value, sub, onClick }: {
   icon: React.ReactNode
@@ -173,33 +159,6 @@ function DonutGauge({ value }: { value: number | null }) {
   )
 }
 
-/** Payroll tooltip — also surfaces the employee count (no second axis). */
-function PayrollTip({ active, payload, label }: {
-  active?: boolean
-  payload?: Array<{ dataKey?: string | number; name?: string; value?: number | string; color?: string; payload?: { employees: number } }>
-  label?: string
-}) {
-  if (!active || !payload || payload.length === 0) return null
-  return (
-    <div style={tooltipStyle} className="bg-white px-3 py-2.5">
-      <p className="mb-1.5 font-semibold text-[var(--text-primary)]">{label}</p>
-      {payload.map((p) => (
-        <p key={String(p.dataKey)} className="flex items-center justify-between gap-6 py-0.5 text-[var(--text-secondary)]">
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
-            {p.name}
-          </span>
-          <span className="tabular-nums font-medium text-[var(--text-primary)]">₹{p.value}L</span>
-        </p>
-      ))}
-      <p className="mt-1.5 flex items-center justify-between gap-6 border-t border-[var(--border-subtle)] pt-1.5 text-[var(--text-secondary)]">
-        <span>Employees paid</span>
-        <span className="tabular-nums font-medium text-[var(--text-primary)]">{payload[0]?.payload?.employees ?? '—'}</span>
-      </p>
-    </div>
-  )
-}
-
 /** Live clock — updates only when the displayed minute actually changes. */
 function useLiveClock() {
   const fmt = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -226,8 +185,19 @@ export const HrmsDashboard: React.FC = () => {
   const canApproveLeaves = usePermission(P.HRMS_LEAVE_APPROVE_L1)
   const canReadEmployees = usePermission(P.HRMS_EMPLOYEE_READ)
   const canReadHiring    = usePermission(P.HRMS_HIRING_READ)
-  const canReadPayroll   = usePermission(P.HRMS_PAYROLL_READ)
   const canSeeProbation  = usePermission(P.HRMS_PROBATION_REMINDERS_READ)
+  // Quick-action "Run Payroll" — hide the affordance when the caller cannot
+  // read the payroll runs page, otherwise the button 403s on click.
+  const canRunPayroll    = usePermission(P.PAYROLL_RUNS_READ)
+  // Quick-action "View Reports" — any of the HRMS report perms is enough to
+  // land on /hrms/reports without a 403 (the page picks whichever tab the
+  // caller can open).
+  const canViewReports   =
+    usePermission(P.HRMS_REPORT_HEADCOUNT) ||
+    usePermission(P.HRMS_REPORT_ATTRITION) ||
+    usePermission(P.HRMS_REPORT_ATTENDANCE) ||
+    usePermission(P.HRMS_REPORT_LEAVE) ||
+    usePermission(P.HRMS_REPORT_DIVERSITY)
   // Billing management → determines whether the SeatsUsageTile is shown.
   // Client rule (2026-08-17): "only admin will see this who has access for
   // manage your plan for workspace". Backend gates /settings/billing on
@@ -257,8 +227,9 @@ export const HrmsDashboard: React.FC = () => {
   // history or his attendance summary in the dashboard." The dashboard's
   // /monthly-stats endpoint returns the *caller's* own record, so for an
   // ADMIN the tile would show their own zero (or a misleading aggregate);
-  // hide it for admin and HR. Managers and employees still see it.
-  const canSeeOwnAttendance = !isAdmin && !isHR
+  // hide it for admin only. HR_MANAGER is a working principal too and needs
+  // their own attendance card — there is no other path for HR to see it.
+  const canSeeOwnAttendance = !isAdmin
 
   // Attendance card label bucket → wording. Manager shows their direct
   // reports ("Team"), admin/HR would show "Company" but the card is hidden
@@ -268,11 +239,6 @@ export const HrmsDashboard: React.FC = () => {
     : isEmployee
       ? 'My Attendance'
       : 'Your Attendance'
-
-  // Client rule: "only admin will pay salaries". HR_MANAGER may hold
-  // hrms.payroll.read for reporting screens but MUST NOT see the payroll-cost
-  // card on the dashboard — that stays OWNER/SUPER_ADMIN/COMPANY_ADMIN only.
-  const canSeePayrollCost = canReadPayroll && isAdmin
 
   // Workforce-shaped tiles (Total Employees, Recent Employees, Headcount,
   // Skills radar) — client matrix restricts these to ADMIN + HR. Manager
@@ -300,7 +266,11 @@ export const HrmsDashboard: React.FC = () => {
   )
   const leaveOverviewQuery = useLeaveOverview()
   const now = new Date()
-  const attendanceStatsQuery = useMonthlyStats(now.getFullYear(), now.getMonth() + 1)
+  const attendanceStatsQuery = useMonthlyStats(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    { enabled: canSeeOwnAttendance },
+  )
 
   // Real headcount-by-department, replacing the removed hardcoded trend chart.
   // Passing null disables the query (the hook gates on `enabled: !!companyId`),
@@ -333,11 +303,11 @@ export const HrmsDashboard: React.FC = () => {
 
   const quickActions = [
     ...(canWriteEmployee ? [{ label: 'Add Employee', icon: UserPlus, path: '/hrms/employees' }] : []),
-    { label: 'Run Payroll', icon: Banknote, path: '/hrms/payroll-dashboard' },
+    ...(canRunPayroll ? [{ label: 'Run Payroll', icon: Banknote, path: '/hrms/payroll-dashboard' }] : []),
     { label: 'Attendance', icon: Clock, path: '/hrms/attendance' },
     { label: 'Add Time-Off', icon: CalendarDays, path: '/hrms/leave' },
     ...(canManageOrg ? [{ label: 'Org Setup', icon: Building2, path: '/hrms/organization' }] : []),
-    { label: 'View Reports', icon: FileText, path: '/hrms/reports' },
+    ...(canViewReports ? [{ label: 'View Reports', icon: FileText, path: '/hrms/reports' }] : []),
   ]
 
   const greeting = (() => {
@@ -359,7 +329,9 @@ export const HrmsDashboard: React.FC = () => {
    *    have their own local loading affordances. */
   const kpiPending =
     leaveOverviewQuery.isPending ||
-    attendanceStatsQuery.isPending ||
+    // The attendance-stats query is disabled for admins (the tile is hidden
+    // for them), so wait on it only when the tile is actually going to render.
+    (canSeeOwnAttendance && attendanceStatsQuery.isPending) ||
     // The directory query is disabled entirely for bare-EMPLOYEE users, so we
     // only wait for it when it's actually running.
     (canReadEmployees && directoryQuery.isPending)
@@ -418,18 +390,19 @@ export const HrmsDashboard: React.FC = () => {
       />,
     )
   }
-  if (canSeeHiringTiles) {
+  // Hiring Summary — hidden entirely until a real analytics endpoint lands
+  // and feeds `hiringSummary` a value. The previous "value='—' sub='coming
+  // soon'" placeholder shipped a permanently-empty tile on every login; a
+  // truthful dashboard is one that omits tiles it cannot populate.
+  const hiringSummary = null as { openPositions: number; inFinalRound: number } | null
+  if (canSeeHiringTiles && hiringSummary != null) {
     kpiTiles.push(
       <KpiTile
         key="hiring"
         icon={<Rocket size={19} />} iconBg="var(--accent-bg)" iconFg="var(--accent-fg)"
-        // Real hiring analytics haven't shipped yet — the tile used to advertise
-        // "9 open positions · 3 in final round" for every tenant, which is a
-        // fabricated stat. Show a truthful placeholder until the hooks land;
-        // the tile still navigates to /hrms/hiring so the click affordance
-        // isn't lost.
-        label="Hiring Summary" value="—"
-        sub="coming soon"
+        label="Hiring Summary"
+        value={hiringSummary.openPositions}
+        sub={`${hiringSummary.inFinalRound} in final round`}
         onClick={() => navigate('/hrms/hiring')}
       />,
     )
@@ -535,7 +508,7 @@ export const HrmsDashboard: React.FC = () => {
         {kpiPending ? (
           <SkeletonCardGrid count={Math.max(kpiTiles.length, 1)} />
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
             {kpiTiles}
           </div>
         )}

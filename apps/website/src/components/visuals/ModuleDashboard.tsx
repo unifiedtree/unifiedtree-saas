@@ -20,10 +20,10 @@ const revenueData = [
 ]
 
 const attendanceRows = [
-  { name: 'Priya Sharma', status: 'Present', time: '09:02 AM' },
-  { name: 'Arjun Mehta', status: 'Present', time: '08:58 AM' },
-  { name: 'Kavya Nair', status: 'On Leave', time: '—' },
-  { name: 'Rohit Gupta', status: 'Absent', time: '—' },
+  { name: 'Design Lead — P.', status: 'Present', time: '09:02 AM' },
+  { name: 'Sr. Accountant — A.', status: 'Present', time: '08:58 AM' },
+  { name: 'Plant Supervisor — K.', status: 'On Leave', time: '—' },
+  { name: 'Sales Executive — R.', status: 'Absent', time: '—' },
 ]
 
 const statusColors: Record<string, string> = {
@@ -35,10 +35,10 @@ const statusColors: Record<string, string> = {
 const avatarColors = ['#059669', '#10B981', '#047857', '#04503A', '#525252']
 
 const roster = [
-  { name: 'Priya Sharma', role: 'Design Lead', dept: 'Product' },
-  { name: 'Arjun Mehta', role: 'Sr. Accountant', dept: 'Finance' },
-  { name: 'Kavya Nair', role: 'Plant Supervisor', dept: 'Operations' },
-  { name: 'Rohit Gupta', role: 'Sales Executive', dept: 'Revenue' },
+  { initial: 'P.', role: 'Design Lead', dept: 'Product' },
+  { initial: 'A.', role: 'Sr. Accountant', dept: 'Finance' },
+  { initial: 'K.', role: 'Plant Supervisor', dept: 'Operations' },
+  { initial: 'R.', role: 'Sales Executive', dept: 'Revenue' },
 ]
 
 const stock = [
@@ -74,8 +74,8 @@ export const MODULE_VIEWS: ModuleView[] = [
     key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, title: 'Dashboard',
     blurb: 'Every module reporting into one place — no tab-hopping, no exports.',
     kpis: [
-      { label: 'Revenue being processed', value: '₹24,60,000', sub: 'Last 1 month period' },
-      { label: 'Platform fees', value: '₹12,450', sub: 'Last 1 month period' },
+      { label: 'Revenue being processed', value: 'Live', sub: 'Rolling 30-day activity' },
+      { label: 'Platform fees', value: 'Rolling', sub: 'Current period accrual' },
     ],
     panel: 'donut', panelTitle: 'Earnings mix',
   },
@@ -101,8 +101,8 @@ export const MODULE_VIEWS: ModuleView[] = [
     key: 'accounting', label: 'Accounting', icon: Calculator, title: 'Accounting',
     blurb: 'Tax-compliant invoicing and filings, generated from the same ledger.',
     kpis: [
-      { label: 'Revenue this FY', value: '₹1.62 Cr', sub: '+18% year on year' },
-      { label: 'Outstanding', value: '₹4,20,000', sub: '14 invoices overdue' },
+      { label: 'Revenue this FY', value: 'Tracking up', sub: 'vs same period last year' },
+      { label: 'Outstanding', value: '14 overdue', sub: 'Invoices past due date' },
     ],
     panel: 'area', panelTitle: 'Revenue trend',
   },
@@ -119,8 +119,8 @@ export const MODULE_VIEWS: ModuleView[] = [
     key: 'crm', label: 'CRM', icon: Contact, title: 'CRM',
     blurb: 'Leads to invoice in one thread — sales hands nothing over manually.',
     kpis: [
-      { label: 'Pipeline value', value: '₹92,40,000', sub: '48 open deals' },
-      { label: 'Won this month', value: '₹14,80,000', sub: '11 deals closed' },
+      { label: 'Pipeline value', value: 'Active pipeline', sub: '48 open deals' },
+      { label: 'Won this month', value: '11 deals', sub: 'Closed this month' },
     ],
     panel: 'pipeline', panelTitle: 'Deal stages',
   },
@@ -179,9 +179,10 @@ function Panel({ kind }: { kind: PanelKind }) {
     return (
       <div className="flex h-full items-center gap-6">
         <div className="relative flex h-32 w-32 flex-shrink-0 items-center justify-center rounded-full border-[12px] border-[#047857] border-t-[#A7F3D0] border-r-[#FBBF24] border-b-[#FBBF24]">
-          <div className="text-center">
-            <div className="text-lg font-bold text-slate-900">₹2,71,783</div>
-            <div className="text-[10px] text-slate-500">Total earnings</div>
+          <div className="text-center px-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Earnings mix
+            </div>
           </div>
         </div>
         <div className="flex min-w-0 flex-col gap-3">
@@ -204,16 +205,16 @@ function Panel({ kind }: { kind: PanelKind }) {
     return (
       <div className="flex h-full flex-col justify-center gap-2.5">
         {roster.map((p, i) => (
-          <div key={p.name} className="flex items-center gap-3">
+          <div key={p.role} className="flex items-center gap-3">
             <span
               className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
               style={{ backgroundColor: avatarColors[i % avatarColors.length] }}
             >
-              {p.name.split(' ').map((n) => n[0]).join('')}
+              {p.initial}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold text-slate-800 truncate">{p.name}</p>
-              <p className="text-[11px] text-slate-500 truncate">{p.role}</p>
+              <p className="text-[13px] font-semibold text-slate-800 truncate">{p.role} — {p.initial}</p>
+              <p className="text-[11px] text-slate-500 truncate">{p.dept}</p>
             </div>
             <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full flex-shrink-0">
               {p.dept}
@@ -367,6 +368,12 @@ export function ModulePanelCard({ active, className = '' }: { active: number; cl
           alt="UnifiedTree"
           className="ml-2.5 h-3.5 w-auto brightness-0 invert opacity-70"
         />
+        <span
+          className="ml-auto whitespace-nowrap rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-white/70"
+          aria-label="Sample UI, not customer data"
+        >
+          Sample UI · not customer data
+        </span>
       </div>
 
       <div className="p-4 sm:p-5">
@@ -497,6 +504,12 @@ export function ModuleDashboard({ active, onActiveChange, autoCycle = true, clas
         <span className="w-3 h-3 rounded-full bg-[#27C93F]" />
         <span className="ml-3 flex items-center gap-2">
           <img src="/UnifiedTreeLogo.png" alt="UnifiedTree" className="h-4 w-auto brightness-0 invert opacity-70" />
+        </span>
+        <span
+          className="ml-auto whitespace-nowrap rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-white/70"
+          aria-label="Sample UI, not customer data"
+        >
+          Sample UI · not customer data
         </span>
       </div>
 

@@ -28,6 +28,8 @@ import { ModuleGate } from '@/shared/components/ModuleGate'
 import { ModulePreview } from '@/shared/components/ModulePreview'
 import { ComingSoon } from '@/shared/components/ComingSoon'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
+// Canonical admin-roles SSOT — do NOT redeclare locally. See useRoles.ts.
+import { ADMIN_ROLES } from '@/shared/hooks/useRoles'
 import { Employees } from '@/modules/hrms/Employees'
 import { Attendance } from '@/modules/hrms/Attendance'
 import { GeofenceZones } from '@/modules/hrms/attendance/GeofenceZones'
@@ -98,11 +100,12 @@ function RoleAwareLanding() {
   return <Navigate to="/no-access" replace />
 }
 
-// Roles allowed to see the "Not Activated" upsell (they can act on billing).
-const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN'] as const
-
 /**
  * Route wrapper for the 10 sellable-but-unbuilt modules.
+ *
+ * ADMIN_ROLES is the canonical SSOT imported from useRoles — the earlier
+ * local `['SUPER_ADMIN', 'COMPANY_ADMIN']` list omitted OWNER + ADMIN,
+ * so an OWNER-only principal hitting /accounts fell through to /dashboard.
  *  - Module ACTIVE for the workspace  → <ComingSoon /> (ModuleGate passes through).
  *  - Module NOT active + admin        → ModuleGate falls back to ModuleNotActivated (upsell).
  *  - Module NOT active + non-admin    → redirect to dashboard (never land on a locked route).
@@ -229,11 +232,15 @@ export default function App() {
           }
         />
 
-        {/* Dept manager team dashboard */}
+        {/* Dept manager team dashboard.
+            HRMS_EMPLOYEE_READ was removed from the anyOf list because HR/admin
+            hold it broadly and were landing on a manager-only screen from every
+            employee-directory deep link. Guard on team-attendance + first-line
+            leave approval, both of which are dept-manager authorities. */}
         <Route
           path="/team"
           element={
-            <RouteGuard anyOf={[P.ATTENDANCE_TEAM_READ, P.HRMS_LEAVE_APPROVE_L1, P.HRMS_EMPLOYEE_READ]}>
+            <RouteGuard anyOf={[P.ATTENDANCE_TEAM_READ, P.HRMS_LEAVE_APPROVE_L1]}>
               <ModuleGate moduleKey="hrms"><TeamDashboard /></ModuleGate>
             </RouteGuard>
           }

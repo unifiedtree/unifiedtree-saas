@@ -117,3 +117,39 @@ export const api = {
   delete: (endpoint: string, options?: RequestInit) =>
     fetchWithAuth(endpoint, { ...options, method: 'DELETE' }),
 };
+
+/**
+ * Session restoration helper — exchange the httpOnly `ut_acct_rt` refresh
+ * cookie for a fresh account access token + account/workspaces payload.
+ *
+ * Never throws. A fresh visitor with no cookie legitimately gets a 401 here;
+ * a network blip should also NOT crash the store's hydration path. Callers
+ * treat `null` as "stay signed out silently" — see authStore.hydrate().
+ *
+ * We deliberately do NOT go through `fetchWithAuth` because:
+ *   1. This must NOT trip the global 401 → `window.location = '/login'`
+ *      redirect for a visitor who is legitimately signed-out.
+ *   2. There is no bearer token yet to attach; the cookie IS the credential.
+ */
+export async function refreshAccount(): Promise<{
+  accessToken: string;
+  account: any;
+  workspaces: any[];
+} | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/v1/accounts/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      // Empty body — backend reads the cookie. Sending {} keeps some servers
+      // (and CORS preflight matchers) happy that don't like a bodiless POST.
+      body: '{}',
+    });
+    if (!response.ok) return null;
+    if (response.status === 204) return null;
+    return await response.json();
+  } catch {
+    // Network error, CORS block, offline — treat as "no session".
+    return null;
+  }
+}

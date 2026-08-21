@@ -181,18 +181,6 @@ export function WhyDifferent() {
                 </motion.li>
               ))}
             </ul>
-
-            {/* One compact proof line, so the card closes on something
-                concrete instead of trailing off after the last tick. */}
-            <div className="mt-4 flex items-center gap-3 rounded-xl bg-primary-light px-3.5 py-2.5">
-              <span className="font-heading text-[17px] font-bold leading-none text-primary">
-                1 day
-              </span>
-              <span aria-hidden className="h-4 w-px shrink-0 bg-primary/20" />
-              <span className="text-[12.5px] leading-snug text-text-secondary">
-                Median go-live for a new workspace
-              </span>
-            </div>
           </motion.div>
         </div>
       </div>

@@ -20,10 +20,15 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -40,6 +45,19 @@ public class AccountService {
 
     private static final int LOCK_AFTER_FAILURES = 10;
     private static final String ACCOUNT_TOKEN_TYPE = "account";
+
+    /**
+     * Refresh-token lifetime for the account portal. 30 days matches the "sign
+     * in once a month" web UX target: shorter forces users through the login
+     * screen on every long weekend; longer widens the replay window on a
+     * stolen cookie.
+     *
+     * <p>The access-token TTL is unchanged (whatever {@link JwtService#issueAccountToken}
+     * mints) — this is the LONG-lived credential paired with it.
+     */
+    private static final Duration ACCOUNT_REFRESH_TTL = Duration.ofDays(30);
+
+    private static final SecureRandom RNG = new SecureRandom();
 
     private final JdbcTemplate jdbc;
     private final PasswordService passwords;
@@ -107,6 +125,124 @@ public class AccountService {
                 issued.expiresAt(),
                 toSummary(account),
                 workspacesForAccount(account.accountId()));
+    }
+
+    /**
+     * Mint a fresh refresh token for {@code accountId} and persist its SHA-256
+     * hash. Returns the plain token — the caller writes it into the
+     * {@code ut_acct_rt} cookie (web) and/or the JSON response body (mobile).
+     * The plaintext is never stored.
+     *
+     * <p>Optional {@code userAgent} / {@code requestIp} are recorded for the
+     * future "list active sessions" screen. Pass null when unknown.
+     */
+    public String issueRefresh(UUID accountId, String userAgent, String requestIp) {
+        if (accountId == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "accountId required");
+        }
+        String plain = randomOpaque(48);
+        String hash = sha256Hex(plain);
+        OffsetDateTime now = OffsetDateTime.now();
+        // gen_random_uuid() default fills id; issued_at defaults to now().
+        jdbc.update("""
+                INSERT INTO platform.account_refresh_tokens
+                    (account_id, token_hash, expires_at, user_agent, request_ip)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                accountId, hash,
+                now.plus(ACCOUNT_REFRESH_TTL),
+                truncate(userAgent, 512),
+                truncate(requestIp, 64));
+        return plain;
+    }
+
+    /**
+     * Rotate: consume the presented refresh token and hand back a fresh access
+     * token + workspace list, exactly as {@link #login} would. The presented
+     * row is DELETED atomically with the load so a replay of the same
+     * plaintext cannot succeed twice (stolen-token defence). A new refresh
+     * token is minted separately by the caller (controller) so the cookie is
+     * rewritten in the same response — otherwise the next reload would send a
+     * dead token and the user would silently be signed out.
+     *
+     * <p>Not @Transactional: the delete-then-select-then-insert pattern here
+     * mirrors AuthService.refresh (which also deletes on rotation). platform.*
+     * has no RLS (V002), so there's no tenant to set up before running.
+     */
+    public AccountLoginResponse refresh(String plainToken) {
+        if (plainToken == null || plainToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Refresh token missing");
+        }
+        String hash = sha256Hex(plainToken.trim());
+
+        // Load-and-check BEFORE deleting so we can return the right error
+        // (expired vs revoked vs unknown) — otherwise every failure looks
+        // identical and debugging session bugs becomes impossible.
+        StoredRefresh row;
+        try {
+            row = jdbc.queryForObject("""
+                    SELECT id, account_id, expires_at, revoked_at
+                      FROM platform.account_refresh_tokens
+                     WHERE token_hash = ?
+                    """, (rs, i) -> new StoredRefresh(
+                    UUID.fromString(rs.getString("id")),
+                    UUID.fromString(rs.getString("account_id")),
+                    rs.getObject("expires_at", OffsetDateTime.class),
+                    rs.getObject("revoked_at", OffsetDateTime.class)), hash);
+        } catch (EmptyResultDataAccessException e) {
+            // Unknown / already-rotated token. Same 401 as expired so we
+            // don't leak "this token used to exist" to an attacker.
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Session expired — please sign in again.");
+        }
+        if (row.revokedAt() != null) {
+            // Belt-and-braces: rotation deletes rather than stamps, but a
+            // manual admin revoke would set revoked_at. Delete now so the
+            // cookie replay stops working.
+            jdbc.update("DELETE FROM platform.account_refresh_tokens WHERE id = ?", row.id());
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Session expired — please sign in again.");
+        }
+        if (row.expiresAt() != null && row.expiresAt().isBefore(OffsetDateTime.now())) {
+            jdbc.update("DELETE FROM platform.account_refresh_tokens WHERE id = ?", row.id());
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Session expired — please sign in again.");
+        }
+
+        // Load account BEFORE deleting the token: if the account has been
+        // disabled between issue and refresh, we should NOT rotate — the
+        // cookie should die on the next call, but we still surface a clean
+        // 403 rather than silently issuing a fresh session for a dead user.
+        AccountCredential account = loadCredentialById(row.accountId());
+        if (!"ACTIVE".equals(account.status())) {
+            jdbc.update("DELETE FROM platform.account_refresh_tokens WHERE id = ?", row.id());
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is disabled");
+        }
+
+        // Atomically consume the presented row. Delete-by-id, not by hash —
+        // hash is UNIQUE anyway, but this way we could not accidentally nuke
+        // a different account's token even if a race duplicated the value.
+        int deleted = jdbc.update("DELETE FROM platform.account_refresh_tokens WHERE id = ?", row.id());
+        if (deleted == 0) {
+            // Someone else consumed it between the SELECT and the DELETE —
+            // treat as replayed. Refuse the rotation.
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Session expired — please sign in again.");
+        }
+
+        JwtService.IssuedToken issued = jwt.issueAccountToken(account.accountId(), account.email());
+        return new AccountLoginResponse(
+                issued.token(),
+                issued.expiresAt(),
+                toSummary(account),
+                workspacesForAccount(account.accountId()));
+    }
+
+    /**
+     * Sign out of the account portal: delete the presented refresh row so a
+     * cookie replay cannot restore the session. Idempotent — an already-gone
+     * token is a successful logout.
+     */
+    public void revokeRefresh(String plainToken) {
+        if (plainToken == null || plainToken.isBlank()) return;
+        String hash = sha256Hex(plainToken.trim());
+        jdbc.update("DELETE FROM platform.account_refresh_tokens WHERE token_hash = ?", hash);
     }
 
     public List<WorkspaceSummary> workspaces(Jwt accountJwt) {
@@ -386,6 +522,61 @@ public class AccountService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
     }
+
+    private AccountCredential loadCredentialById(UUID accountId) {
+        try {
+            return jdbc.queryForObject("""
+                    SELECT id, email, display_name, phone, password_hash, status::text,
+                           failed_login_count, locked_until
+                      FROM platform.accounts
+                     WHERE id = ?
+                    """, (rs, rowNum) -> new AccountCredential(
+                    UUID.fromString(rs.getString("id")),
+                    rs.getString("email"),
+                    rs.getString("display_name"),
+                    rs.getString("phone"),
+                    rs.getString("password_hash"),
+                    rs.getString("status"),
+                    rs.getInt("failed_login_count"),
+                    rs.getObject("locked_until", OffsetDateTime.class)), accountId);
+        } catch (EmptyResultDataAccessException e) {
+            // Account was deleted between issuing the refresh and consuming it.
+            // Same shape as a stale-token refresh — 401, no session.
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Session expired — please sign in again.");
+        }
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return null;
+        return s.length() <= max ? s : s.substring(0, max);
+    }
+
+    /**
+     * 48 random bytes → 64-char URL-safe base64. Same shape and entropy budget
+     * as AuthService.randomOpaque — deliberately kept lockstep so ops tooling
+     * that grep-matches refresh tokens ({@code ^[A-Za-z0-9_-]{64}$}) works
+     * for both tiers.
+     */
+    private static String randomOpaque(int byteLen) {
+        byte[] buf = new byte[byteLen];
+        RNG.nextBytes(buf);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
+    }
+
+    /** Mirror of AuthService.sha256Hex — 64 lowercase hex chars, fits CHAR(64). */
+    private static String sha256Hex(String s) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(s.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
+    private record StoredRefresh(UUID id, UUID accountId, OffsetDateTime expiresAt, OffsetDateTime revokedAt) {}
 
     private AccountSummary toSummary(AccountCredential account) {
         return new AccountSummary(

@@ -33,8 +33,6 @@ interface PanelCopy {
   heading: string
   body: string
   points: string[]
-  /** One concrete proof line per module — dummy numbers the client will swap. */
-  stat?: { value: string; label: string }
 }
 
 const panelCopy: Record<string, PanelCopy> = {
@@ -42,37 +40,31 @@ const panelCopy: Record<string, PanelCopy> = {
     heading: 'One screen that already knows the answer.',
     body: 'Revenue, headcount, attendance and cash position all resolve from the same ledger — so the number on the dashboard is the number in the report. No reconciliation step, no stale export.',
     points: ['Live cross-module KPIs', 'No exports to reconcile', 'Role-based visibility'],
-    stat: { value: '6 hrs', label: 'saved per week — leadership stops chasing numbers across tools.' },
   },
   hr: {
     heading: 'People records that stay correct on their own.',
     body: 'Onboarding, org structure, documents and role changes are entered once and propagate everywhere. Payroll, attendance and access control all read the same employee record.',
     points: ['Enter once, propagates', 'Org chart & documents', 'Feeds payroll directly'],
-    stat: { value: '3× faster', label: 'onboarding — new hires are payroll-ready on day one.' },
   },
   attendance: {
     heading: 'Attendance that works where the network does not.',
     body: 'Face capture runs on the device and queues locally, then syncs the moment you reconnect. Shifts, overtime and leave land straight in payroll without a spreadsheet in between.',
     points: ['Offline face capture', 'Shifts & overtime', 'Auto-syncs on reconnect'],
-    stat: { value: '99.4%', label: 'capture accuracy on the floor — even fully offline.' },
   },
   accounting: {
     heading: 'Books that close because nothing was ever loose.',
     body: 'Tax-compliant invoicing, ledgers and filings are generated from the transactions your team already recorded. Sales, purchases and payroll post themselves.',
     points: ['Tax-compliant invoicing', 'Auto-posted entries', 'Filing-ready returns'],
-    stat: { value: '12 days', label: 'faster monthly close for teams that switch to one ledger.' },
   },
   inventory: {
     heading: 'Stock you can trust across every location.',
     body: 'Batch tracking, multi-warehouse transfers and reorder signals stay live as orders move — so what sales promises is what the warehouse can actually ship today.',
     points: ['Multi-warehouse', 'Batch & expiry tracking', 'Reorder signals'],
-    stat: { value: '31% fewer', label: 'stockouts within the first quarter of going live.' },
   },
   crm: {
     heading: 'Lead to invoice, in one unbroken thread.',
     body: 'Deals carry their own context into billing. The moment a deal is marked won, the invoice, the ledger entry and the delivery order are already waiting.',
     points: ['Pipeline to invoice', 'Quotes & follow-ups', 'No manual handover'],
-    stat: { value: '2.4× more', label: 'deals invoiced the same day they close.' },
   },
 }
 
@@ -138,19 +130,6 @@ function ModuleArgument({ index, sizer = false }: { index: number; sizer?: boole
       <p className="mt-3.5 max-w-xl text-[14.5px] leading-relaxed text-text-secondary sm:text-[15px]">
         {copy.body}
       </p>
-
-      {/* One concrete proof line per module — a soft field, not a ruled quote */}
-      {copy.stat && (
-        <p className="mt-5 flex max-w-xl flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl bg-primary/[0.07] px-4 py-3">
-          <span
-            className="font-heading text-[22px] font-bold leading-none text-primary sm:text-[24px]"
-            style={{ letterSpacing: '-0.02em' }}
-          >
-            {copy.stat.value}
-          </span>
-          <span className="max-w-md text-[13px] leading-snug text-text-secondary">{copy.stat.label}</span>
-        </p>
-      )}
 
       {/* What this module actually gives you — concrete, per module */}
       <ul className="mt-5 flex flex-wrap gap-2">

@@ -18,6 +18,8 @@ import { GlobalSearch } from '@/shared/components/GlobalSearch'
 import { useNotificationStore } from '@/core/notifications/notificationStore'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
 import { formatDistanceToNow } from 'date-fns'
+// Canonical admin-roles SSOT — do NOT redeclare locally. See useRoles.ts.
+import { ADMIN_ROLES as CANONICAL_ADMIN_ROLES } from '@/shared/hooks/useRoles'
 
 // Sidebar collapse preference is per-tenant per-user within a browser:
 // without the suffix, switching workspaces on a shared laptop dragged the
@@ -53,7 +55,10 @@ interface NavItemDef { key: string; label: string; icon: React.ReactNode; path?:
 
 // ─── Top-level nav (the HRMS app's flat links) ────────────────────────────────
 const NAV_ITEMS: NavItemDef[] = [
-  { key: 'dashboard',   label: 'Overview',     icon: <LayoutDashboard size={18} />, path: '/dashboard', visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'] },
+  // DEPT_MANAGER included: managers landed on / and the shell hid Overview,
+  // so the analytics home was invisible to them even though every widget on
+  // it is permission-gated and 403s cleanly for anything they can't see.
+  { key: 'dashboard',   label: 'Overview',     icon: <LayoutDashboard size={18} />, path: '/dashboard', visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER'] },
   { key: 'myworkspace', label: 'My Workspace', icon: <UserCircle2 size={18} />,     path: '/me',        visibleForRoles: ['EMPLOYEE'] },
   { key: 'myteam',      label: 'My Team',      icon: <Users size={18} />,           path: '/team',      visibleForRoles: ['DEPT_MANAGER'] },
 ]
@@ -65,7 +70,15 @@ const NAV_ITEMS: NavItemDef[] = [
 const R_ADMIN     = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD']
 const R_ADMIN_MGR = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER']
 const R_HR        = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
-const R_FIN       = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'FINANCE_LEAD', 'HR_MANAGER']
+// R_FIN was one bundle that included HR_MANAGER, which let HR into rupee-only
+// screens (Payroll Dashboard, Salary Structure, Bank Disbursement, Payroll
+// Settings). Client rule: only admin/finance see rupees. Split into two:
+//   R_FIN_RUPEE — rupee screens; HR is not welcome.
+//   R_FIN_META  — R_FIN_RUPEE ∪ HR_MANAGER, for meta/workflow payroll surfaces
+//                 (payroll config, processing/payslips workflow, PLI) where HR
+//                 needs to operate but rupee KPIs are page-gated in components.
+const R_FIN_RUPEE = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'ADMIN', 'FINANCE_LEAD']
+const R_FIN_META  = [...R_FIN_RUPEE, 'HR_MANAGER']
 const R_ESS       = ['EMPLOYEE']
 
 // ─── Module items: HRMS nav groups (module 'hrms') + the sellable modules. ─────
@@ -79,9 +92,11 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'master', label: 'Master', icon: <Database size={18} />, module: 'hrms',
     children: [
-      { label: 'Workforce Directory', path: '/hrms/employees',         icon: <UserCheck size={15} />,     visibleForRoles: R_ADMIN_MGR },
+      // Workforce Directory restricted to HR/admin — DEPT_MANAGER should stay
+      // on My Team, not open the full company directory.
+      { label: 'Workforce Directory', path: '/hrms/employees',         icon: <UserCheck size={15} />,     visibleForRoles: R_HR },
       { label: 'Rules & Policies',    path: '/hrms/policies', icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
-      { label: 'Payroll Configuration', path: '/hrms/payroll/components', icon: <Receipt size={15} />,     visibleForRoles: R_FIN },
+      { label: 'Payroll Configuration', path: '/hrms/payroll/components', icon: <Receipt size={15} />,     visibleForRoles: R_FIN_META },
     ],
   },
   {
@@ -113,13 +128,16 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'payroll-hr', label: 'Payroll', icon: <CreditCard size={18} />, module: 'hrms',
     children: [
-      { label: 'Payroll Dashboard',          path: '/hrms/payroll-dashboard', icon: <LayoutDashboard size={15} />, visibleForRoles: R_FIN },
-      { label: 'Salary Structure',           path: '/hrms/salary-structure',  icon: <Receipt size={15} />,         visibleForRoles: R_FIN },
-      { label: 'Processing & Payslips',      path: '/hrms/payroll/runs',           icon: <Receipt size={15} />,         visibleForRoles: R_FIN },
-      { label: 'Payroll Settings',           path: '/hrms/payroll/settings',       icon: <Settings size={15} />,        visibleForRoles: R_FIN },
-      { label: 'Production-Linked Incentive', path: '/hrms/pli',              icon: <Target size={15} />,          visibleForRoles: R_FIN },
+      // R_FIN_RUPEE: HR_MANAGER is NOT welcome on the rupee screens.
+      { label: 'Payroll Dashboard',          path: '/hrms/payroll-dashboard', icon: <LayoutDashboard size={15} />, visibleForRoles: R_FIN_RUPEE },
+      { label: 'Salary Structure',           path: '/hrms/salary-structure',  icon: <Receipt size={15} />,         visibleForRoles: R_FIN_RUPEE },
+      // Processing & Payslips is a workflow surface — HR still runs it,
+      // but rupee KPIs on the child pages defer to the useRoles guard.
+      { label: 'Processing & Payslips',      path: '/hrms/payroll/runs',           icon: <Receipt size={15} />,         visibleForRoles: R_FIN_META },
+      { label: 'Payroll Settings',           path: '/hrms/payroll/settings',       icon: <Settings size={15} />,        visibleForRoles: R_FIN_RUPEE },
+      { label: 'Production-Linked Incentive', path: '/hrms/pli',              icon: <Target size={15} />,          visibleForRoles: R_FIN_META },
       { label: 'Advances & Loans',           path: '/hrms/advances',          icon: <Wallet size={15} />,          visibleForRoles: [...R_ADMIN_MGR, ...R_ESS] },
-      { label: 'Bank Disbursement',          path: '/hrms/bank-disbursement', icon: <CreditCard size={15} />,      visibleForRoles: R_FIN },
+      { label: 'Bank Disbursement',          path: '/hrms/bank-disbursement', icon: <CreditCard size={15} />,      visibleForRoles: R_FIN_RUPEE },
     ],
   },
   {
@@ -158,7 +176,7 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'reports', label: 'Reports & Analytics', icon: <FileBarChart2 size={18} />, module: 'hrms',
     children: [
-      { label: 'Reports Center',          path: '/hrms/reports',             icon: <FileBarChart2 size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_FIN] },
+      { label: 'Reports Center',          path: '/hrms/reports',             icon: <FileBarChart2 size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_FIN_META] },
       { label: 'Workforce Analytics',     path: '/hrms/workforce-analytics', icon: <TrendingUp size={15} />,   visibleForRoles: R_ADMIN },
     ],
   },
@@ -166,7 +184,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     key: 'exit', label: 'Employee Exit', icon: <LogOut size={18} />, module: 'hrms',
     children: [
       { label: 'Resignation & Exit',       path: '/hrms/fnf',  icon: <LogOut size={15} />,   visibleForRoles: R_HR },
-      { label: 'Full & Final Settlement',  path: '/hrms/fnf',          icon: <Wallet size={15} />,   visibleForRoles: R_FIN },
+      { label: 'Full & Final Settlement',  path: '/hrms/fnf',          icon: <Wallet size={15} />,   visibleForRoles: R_FIN_RUPEE },
     ],
   },
   {
@@ -379,8 +397,11 @@ export function PlatformShell() {
 
   useEffect(() => { setProfileOpen(false); setNotifOpen(false); setMobileOpen(false); setSwitcherOpen(false); setSearchOpen(false) }, [location.pathname])
 
-  const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
-  const isAdmin = userRoles.some(r => ADMIN_ROLES.includes(r)) || permissions.has('*')
+  // Canonical ADMIN_ROLES from useRoles. The previous local list dropped
+  // OWNER + ADMIN and pulled HR_MANAGER in, so an OWNER-only principal was
+  // treated as non-admin (no Settings tile, blocked from admin fallbacks)
+  // while an HR_MANAGER got admin-only affordances they weren't meant to see.
+  const isAdmin = userRoles.some(r => (CANONICAL_ADMIN_ROLES as readonly string[]).includes(r)) || permissions.has('*')
   const subdomain = tenant?.slug ?? ''
 
   const openEditWorkspace = (moduleKey: string) => {
@@ -388,10 +409,15 @@ export function PlatformShell() {
     window.open(`${websiteUrl}/edit-workspace?ws=${encodeURIComponent(subdomain)}&email=${encodeURIComponent(user?.email ?? '')}&add=${encodeURIComponent(moduleKey)}`, '_blank', 'noopener')
   }
 
+  // UNION check against every role the JWT carries — the earlier version
+  // gated on `primaryRole` alone, which HID Employee Self Service from an
+  // HR_MANAGER/admin who was ALSO an employee (their higher-priority role
+  // won primaryRole, and the ESS rows only listed 'EMPLOYEE'). Every role
+  // the user holds should get to reveal every menu it grants.
   function isVisible(item: { visibleForRoles?: string[] }): boolean {
     if (!item.visibleForRoles || item.visibleForRoles.length === 0) return true
-    if (!primaryRole) return false
-    return item.visibleForRoles.includes(primaryRole)
+    if (!userRoles.length) return false
+    return item.visibleForRoles.some((r) => userRoles.includes(r))
   }
 
   // ─── Which app owns the current route → drives the scoped sidebar ───────────

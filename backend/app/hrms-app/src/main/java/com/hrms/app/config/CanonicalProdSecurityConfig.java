@@ -187,6 +187,16 @@ public class CanonicalProdSecurityConfig {
                     // does not match, so an unsigned request gets nowhere.
                     "/v1/webhooks/razorpay",
                     "/v1/accounts/auth/login",
+                    // Account-tier refresh + logout. Same reasoning as
+                    // /v1/canonical-auth/refresh above: the whole point of the
+                    // refresh route is that the short-lived access token has
+                    // expired — its own credential is the ut_acct_rt cookie
+                    // (or the body token on mobile), which the controller
+                    // validates against platform.account_refresh_tokens.
+                    // Logout must work even when the access token is dead —
+                    // that is the moment users most want the button to fire.
+                    "/v1/accounts/auth/refresh",
+                    "/v1/accounts/auth/logout",
                     "/v1/platform/auth/login"
                 ).permitAll()
                 // Everything else requires a valid JWT

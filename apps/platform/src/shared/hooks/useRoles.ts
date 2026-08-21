@@ -37,16 +37,24 @@ export interface RoleBuckets {
   roles: string[]
 }
 
-const ADMIN_ROLES   = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'ADMIN']
-const HR_ROLES      = ['HR_MANAGER', 'HR']
-const MANAGER_ROLES = ['DEPT_MANAGER', 'MANAGER']
+/**
+ * CANONICAL role bucket lists — the single source of truth for every
+ * role-string check in the app. Do NOT redeclare these anywhere else
+ * (App.tsx's ComingSoonRoute and PlatformShell's local list previously
+ * kept their own disagreeing copies — an OWNER opening /accounts got
+ * bounced to /dashboard because the local list omitted OWNER; the
+ * shell's local copy dropped OWNER and pulled HR_MANAGER in).
+ */
+export const ADMIN_ROLES   = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'ADMIN'] as const
+export const HR_ROLES      = ['HR_MANAGER', 'HR'] as const
+export const MANAGER_ROLES = ['DEPT_MANAGER', 'MANAGER'] as const
 
 export function useRoles(): RoleBuckets {
   // Read the roles array reference directly. Allocating `[]` inside the
   // selector on every render would break zustand's equality check and refire
   // every subscriber on every store tick. Fall back once outside.
   const roles = useAuthStore((s) => s.user?.roles) ?? []
-  const has = (list: string[]) => list.some((r) => roles.includes(r))
+  const has = (list: readonly string[]) => list.some((r) => roles.includes(r))
 
   const isAdmin   = has(ADMIN_ROLES)
   const isHR      = has(HR_ROLES)

@@ -46,7 +46,7 @@ const ACCEPTED_TYPES = 'image/jpeg,image/jpg,image/png,image/webp,image/heic,ima
 
 function humanUploadError(status: number, fallback = 'Please try again.'): string {
   if (status === 413) return 'That image is over 5 MB. Please pick a smaller file.'
-  if (status === 415) return 'Only JPG or PNG images are supported.'
+  if (status === 415) return "This image format isn't supported. Try JPG, PNG, WebP, HEIC or GIF."
   if (status === 401) return 'Your session has expired. Please sign in again.'
   if (status === 403) return "You don't have permission to change your avatar."
   if (status >= 500) return "Something went wrong on our end. We're on it."
@@ -208,8 +208,8 @@ export const Profile: React.FC = () => {
                 <div className="flex-1 space-y-2 text-center sm:text-left">
                   <p className="text-sm font-semibold text-text-primary">{fullName}</p>
                   <p className="text-xs text-text-secondary">
-                    JPG or PNG, up to 5 MB. A square image reads best — non-square uploads are
-                    centre-cropped.
+                    JPG, PNG, WebP, HEIC or GIF, up to 5 MB. A square image reads best — non-square
+                    uploads are centre-cropped.
                   </p>
                   <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
                     <HrButton onClick={chooseFile} disabled={upload.isPending}>

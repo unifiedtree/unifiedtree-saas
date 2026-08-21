@@ -16,14 +16,50 @@ function moduleSummary(mods: WorkspaceSummary['activeModules']): string {
 }
 
 export function WorkspacesPage() {
-  const { workspaces, loadWorkspaces, isLoading, setTenantAuth, logoutAccount } = useAuthStore();
+  const {
+    workspaces,
+    loadWorkspaces,
+    isLoading,
+    isHydrating,
+    accountToken,
+    setTenantAuth,
+  } = useAuthStore();
   const [enteringId, setEnteringId] = useState<string | null>(null);
   const navigate = useNavigate();
   const reduce = useReducedMotion();
 
   useEffect(() => {
+    // Wait for session hydration to finish before firing the /me/workspaces
+    // call. Hitting it while `accountToken` is still null (the pre-refresh
+    // window) would return 401 and bounce the user to /login — the exact
+    // flash-of-logout the hydration flow exists to prevent.
+    if (isHydrating) return;
+    if (!accountToken) {
+      // Hydration finished with no session — send the visitor to /login
+      // rather than sitting on an empty "Your workspaces" screen.
+      navigate('/login', { replace: true });
+      return;
+    }
     loadWorkspaces().catch(() => {});
-  }, [loadWorkspaces]);
+  }, [loadWorkspaces, isHydrating, accountToken, navigate]);
+
+  // Hydration-in-flight shim: a signed-in user reloading the page should
+  // land back on their workspaces, not flash the login screen for ~300ms
+  // while the refresh-cookie exchange completes.
+  if (isHydrating) {
+    return (
+      <div className="surface-soft min-h-screen">
+        <Navbar tone="light" />
+        <main className="flex min-h-screen items-center justify-center px-4 pt-24">
+          <div
+            role="status"
+            aria-label="Restoring your session"
+            className="h-10 w-10 animate-spin rounded-full border-4 border-primary/20 border-t-primary"
+          />
+        </main>
+      </div>
+    );
+  }
 
   const handleEnterWorkspace = async (workspace: WorkspaceSummary) => {
     setEnteringId(workspace.tenantId);

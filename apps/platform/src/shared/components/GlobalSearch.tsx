@@ -11,40 +11,12 @@ interface SearchResult {
   icon?: string
 }
 
-const MOCK_DATA: Omit<SearchResult, 'score'>[] = [
-  // Pages
-  { id: 'p1', type: 'page', title: 'Dashboard', subtitle: 'Home', path: '/dashboard' },
-  { id: 'p2', type: 'page', title: 'Employee List', subtitle: 'HRMS', path: '/hrms/employees' },
-  { id: 'p3', type: 'page', title: 'Leave Management', subtitle: 'HRMS', path: '/hrms/leaves' },
-  { id: 'p4', type: 'page', title: 'Payroll', subtitle: 'HRMS', path: '/hrms/payroll' },
-  { id: 'p5', type: 'page', title: 'CRM Pipeline', subtitle: 'CRM', path: '/crm/pipeline' },
-  { id: 'p6', type: 'page', title: 'Leads', subtitle: 'CRM', path: '/crm/leads' },
-  { id: 'p7', type: 'page', title: 'Invoices', subtitle: 'Accounts', path: '/accounts/invoices' },
-  { id: 'p8', type: 'page', title: 'Settings', subtitle: 'Configuration', path: '/settings' },
-  // Employees
-  { id: 'e1', type: 'employee', title: 'Alice Martin', subtitle: 'Engineering · Senior Dev', path: '/hrms/employees/e1' },
-  { id: 'e2', type: 'employee', title: 'Bob Carter', subtitle: 'Marketing · Manager', path: '/hrms/employees/e2' },
-  { id: 'e3', type: 'employee', title: 'Carol White', subtitle: 'Finance · Analyst', path: '/hrms/employees/e3' },
-  { id: 'e4', type: 'employee', title: 'David Kim', subtitle: 'Design · Lead', path: '/hrms/employees/e4' },
-  // Leads
-  { id: 'l1', type: 'lead', title: 'Acme Corp', subtitle: 'Lead · $45,000', path: '/crm/leads/l1' },
-  { id: 'l2', type: 'lead', title: 'GlobalTech Ltd', subtitle: 'Lead · $128,000', path: '/crm/leads/l2' },
-  { id: 'l3', type: 'lead', title: 'Pinnacle Solutions', subtitle: 'Qualified · $67,500', path: '/crm/leads/l3' },
-  // Invoices
-  { id: 'inv1', type: 'invoice', title: 'INV-2025-001', subtitle: 'Acme Corp · $12,500', path: '/accounts/invoices/inv1' },
-  { id: 'inv2', type: 'invoice', title: 'INV-2025-002', subtitle: 'GlobalTech · $8,000', path: '/accounts/invoices/inv2' },
-]
-
-function scoreResult(result: Omit<SearchResult, 'score'>, query: string): number {
-  const q = query.toLowerCase()
-  const title = result.title.toLowerCase()
-  const subtitle = (result.subtitle ?? '').toLowerCase()
-  if (title === q) return 100
-  if (title.startsWith(q)) return 80
-  if (title.includes(q)) return 60
-  if (subtitle.includes(q)) return 30
-  return 0
-}
+// Global search over invented data ("Alice Martin", "Acme Corp Lead $45,000",
+// "INV-2025-001") was reported live in a real customer's Cmd-K panel on
+// 2026-08-10. The MOCK_DATA constant and its scoring helper have been removed
+// entirely so the palette cannot ever paint fake employees, leads or invoices
+// again. Data must come from a backend endpoint. Do not repopulate this
+// constant — wire a real /v1/search endpoint instead.
 
 const TYPE_ICONS: Record<SearchResult['type'], string> = {
   page: '📄',
@@ -71,14 +43,10 @@ export function GlobalSearch({ onSelect }: GlobalSearchProps) {
   const debouncedQuery = useDebounce(query, 200)
 
   const results = useMemo<SearchResult[]>(() => {
-    // Global search over invented data (MOCK_DATA hard-coded "Alice Martin",
-    // "Acme Corp Lead $45,000", "INV-2025-001") was reported live in a real
-    // customer's Cmd-K panel on 2026-08-10. Suppressed until a real search
-    // backend lands. Returning [] keeps the palette usable for the OTHER
-    // wired features (recent, favourites) if those are added, without
-    // showing anyone fake people or fake invoices.
+    // Suppressed until a real search backend lands. Returning [] keeps the
+    // palette usable for the OTHER wired features (recent, favourites) if
+    // those are added, without showing anyone fake people or fake invoices.
     void debouncedQuery
-    void MOCK_DATA
     return []
   }, [debouncedQuery])
 

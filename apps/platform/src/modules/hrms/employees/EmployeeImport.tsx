@@ -411,7 +411,7 @@ export const EmployeeImport: React.FC = () => {
           {validationResult && !validateMutation.isPending && (
             <div className="space-y-4">
               {/* Summary stat cards */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <HrStatCard
                   icon={<Users size={18} />}
                   color="blue"
