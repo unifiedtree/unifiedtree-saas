@@ -100,6 +100,10 @@ export function usePendingApprovals(page = 0) {
     queryFn: () =>
       apiJson<{ content: LeaveRequestResponse[]; totalElements: number }>(`/v1/leave/approvals/pending?page=${page}&size=20`),
     staleTime: 30_000,
+    // Approval queue — a manager parked on this screen has to see requests
+    // submitted from the mobile app without navigating away and back.
+    // Mirrors useAttendance's dashboard / logs polling.
+    refetchInterval: 30_000,
   })
 }
 
@@ -131,6 +135,9 @@ export function useLeaveDecision() {
       qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'approvals'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'my'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'balances'] })
+      // The overview carries pendingApprovals, so the dashboard's count read
+      // one stale until the next navigation. useApplyLeave already does this.
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'overview'] })
     },
   })
 }

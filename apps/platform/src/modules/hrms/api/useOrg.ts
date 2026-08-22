@@ -249,7 +249,11 @@ export function useGrades(companyId: string) {
     queryKey: ['hrms', 'org', 'grades', companyId],
     queryFn: () => apiJson<Grade[]>(`/v1/hrms/grades?companyId=${companyId}`),
     enabled: !!companyId,
-    staleTime: Infinity,
+    // Slow-moving reference data, not immutable — another admin (or the app)
+    // can add a grade while this tab is open. staleTime: Infinity pinned the
+    // list until a full browser reload.
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: 'always',
   })
 }
 
@@ -307,7 +311,10 @@ export function useEmploymentTypes(companyId: string) {
     queryKey: ['hrms', 'org', 'employment-types', companyId],
     queryFn: () => apiJson<EmploymentTypeRecord[]>(`/v1/hrms/employment-types?companyId=${companyId}`),
     enabled: !!companyId,
-    staleTime: Infinity,
+    // See useGrades — finite staleTime + focus refetch so a type added
+    // elsewhere shows up in the Add Employee dropdowns without a reload.
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: 'always',
   })
 }
 
@@ -342,79 +349,40 @@ export function useDeleteEmploymentType() {
 }
 
 // ── Shifts ────────────────────────────────────────────────────────────────────
-
-export interface Shift {
-  id: string
-  companyId: string
-  name: string
-  code?: string
-  startTime?: string
-  endTime?: string
-  breakMinutes: number
-  graceMinutes: number
-  daysBitmask: number
-  nightShift: boolean
-  active: boolean
-}
-
-export interface ShiftPayload {
-  companyId: string
-  name: string
-  code?: string
-  startTime?: string
-  endTime?: string
-  breakMinutes?: number
-  graceMinutes?: number
-  daysBitmask?: number
-  isNightShift?: boolean
-  // Sent forward-compat alongside isNightShift so the backend can start using
-  // it once the shift_type column lands. Unknown fields are ignored server-side.
-  shiftType?: 'FIXED' | 'FLEXIBLE' | 'ROTATIONAL' | 'NIGHT'
-}
-
-export function useShifts(companyId: string) {
-  return useQuery({
-    queryKey: ['hrms', 'org', 'shifts', companyId],
-    queryFn: () => apiJson<Shift[]>(`/v1/hrms/shifts?companyId=${companyId}`),
-    enabled: !!companyId,
-    staleTime: Infinity,
-  })
-}
-
-export function useCreateShift() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (data: ShiftPayload) =>
-      apiJson<Shift>('/v1/hrms/shifts', { method: 'POST', body: JSON.stringify(data) }),
-    onSuccess: (_, variables) =>
-      qc.invalidateQueries({ queryKey: ['hrms', 'org', 'shifts', variables.companyId], exact: true }),
-  })
-}
-
-export function useUpdateShift() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, ...data }: ShiftPayload & { id: string }) =>
-      apiJson<Shift>(`/v1/hrms/shifts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    onSuccess: (_, variables) =>
-      qc.invalidateQueries({ queryKey: ['hrms', 'org', 'shifts', variables.companyId], exact: true }),
-  })
-}
-
-export function useDeleteShift() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id }: { id: string; companyId: string }) =>
-      apiJson<void>(`/v1/hrms/shifts/${id}`, { method: 'DELETE' }),
-    onSuccess: (_, variables) =>
-      qc.invalidateQueries({ queryKey: ['hrms', 'org', 'shifts', variables.companyId], exact: true }),
-  })
-}
+//
+// There is deliberately NO shift hook here any more.
+//
+// `useShifts` / `useCreateShift` / `useUpdateShift` / `useDeleteShift` wrapped
+// `/v1/hrms/shifts` (table `org.shifts`, grace column `grace_minutes`, default
+// 10). Nothing in the attendance engine reads that table: the late-mark path is
+// AttendanceService.getShiftProfile() → `attendance.shift_policies`
+// (`grace_period_minutes`, default 15), with the cutoff derived as
+// shiftStart.plusMinutes(grace). So every shift edit made through those hooks
+// appeared to save and changed nothing — HR moved a shift to 10:00 with 30-min
+// grace on the web while the app kept marking everyone late at 09:15, and a
+// shift created in the app never showed up on the web at all.
+//
+// All web shift UI now uses ./useShiftPolicies (`/v1/shifts`), the same store
+// the mobile client writes. Repointed callers: organization/OrgSetup.tsx
+// (Shifts tab), attendance/ShiftsAndOt.tsx, and employees/EmployeeForm.tsx
+// (the picker whose id feeds assignEmployeeShift below).
+//
+// `/v1/hrms/shifts` and `org.shifts` are intentionally untouched on the backend
+// — only the frontend stopped pointing at them. If a genuinely non-attendance
+// use for org.shifts appears, give it a narrowly-named hook of its own rather
+// than resurrecting a generic `useShifts` that the next person will wire into
+// attendance by mistake.
 
 // Assign / reassign an employee to a shift. Backend endpoint is
 // POST /v1/shifts/employee/{employeeId}  body {shiftPolicyId, effectiveFrom?}
 // Used as a post-create side effect from the Add Employee wizard so the new
 // hire's attendance is scored against the right start-time from day one.
+//
+// NOTE the parameter name: `shiftPolicyId`. EmployeeShiftService.assignShift
+// resolves it via policyRepo.findById(...).orElseThrow, so it must be an
+// attendance.shift_policies id — i.e. one that came out of ./useShiftPolicies.
+// Feeding it an org.shifts id is rejected, which is exactly the failure that
+// used to disappear into EmployeeForm's empty catch block.
 export function assignEmployeeShift(
   employeeId: string,
   shiftPolicyId: string,

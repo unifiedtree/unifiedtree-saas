@@ -14,8 +14,16 @@ import {
 } from '../api/useWorkforce'
 import {
   useCompanies, useDepartments, useDesignations, useBranches,
-  useGrades, useEmploymentTypes, useShifts, assignEmployeeShift,
+  useGrades, useEmploymentTypes, assignEmployeeShift,
 } from '../api/useOrg'
+// The Shift picker MUST be sourced from attendance.shift_policies, because the
+// id it yields is posted straight to assignEmployeeShift → POST
+// /v1/shifts/employee/{id} {shiftPolicyId}, and EmployeeShiftService resolves
+// that id with policyRepo.findById(...).orElseThrow. It used to be filled from
+// useOrg's useShifts, i.e. org.shifts ids, so every assignment 404'd — silently,
+// because the catch below swallowed it. HR picked "General Shift", saw
+// "Employee created", and the new hire went live with no shift at all.
+import { useShiftPolicies } from '../api/useShiftPolicies'
 import { useGeofenceZones } from '../api/useGeofence'
 import { useTemplates } from '../onboarding/api/useOnboarding'
 import { sendInvite } from './api/useInvitation'
@@ -165,7 +173,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   const { data: _branches = [] } = useBranches(companyId)
   const { data: _grades = [] } = useGrades(companyId)
   const { data: employmentTypes = [] } = useEmploymentTypes(companyId)
-  const { data: shifts = [] } = useShifts(companyId)
+  const { data: shifts = [] } = useShiftPolicies(companyId)
   const { data: geofenceZones = [] } = useGeofenceZones()
   const { data: _templates = [] } = useTemplates(companyId || undefined)
   const { data: _managerPage } = useEmployeeDirectory({ companyId: companyId || undefined, pageSize: 200 })
@@ -469,6 +477,19 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
             ctcAnnual: ctc,
           },
         })
+        // The Shift picker renders on the Basic step in edit mode too, but the
+        // assignment call only ever ran on the create path — so an admin who
+        // changed an existing employee's shift here got "Employee updated" and
+        // no assignment. Guarded on shiftId, which starts empty, so an edit that
+        // doesn't touch the picker still can't reassign anyone by accident.
+        if (form.shiftId) {
+          try {
+            await assignEmployeeShift(employee.id, form.shiftId)
+          } catch (shiftErr: unknown) {
+            const m = (shiftErr as { message?: string })?.message || 'the shift could not be assigned'
+            toast(`Employee updated, but ${m}.`, 'warning')
+          }
+        }
         toast('Employee updated', 'success')
         onSuccess?.(result)
       } else {
@@ -572,14 +593,19 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
             throw createErr
           }
         }
-        // Best-effort shift assignment. Employee already exists — don't fail
-        // the whole onboarding if this hiccups, HR can set it later from the
-        // employee profile.
+        // Shift assignment. The employee row already exists, so a failure here
+        // must not roll the onboarding back — but it must not be invisible
+        // either. This used to be a bare `catch {}`, which meant a rejected
+        // assignment produced a plain "Employee created" toast and left the hire
+        // scored against the hardcoded 09:30 fallback with nobody aware.
+        // Surfaced as a warning toast, the same way a failed invitation is.
+        let shiftAssignError: string | null = null
         if (form.shiftId && result?.id) {
           try {
             await assignEmployeeShift(result.id, form.shiftId)
-          } catch {
-            // swallow — non-fatal
+          } catch (shiftErr: unknown) {
+            shiftAssignError =
+              (shiftErr as { message?: string })?.message || 'the shift could not be assigned'
           }
         }
         if (!isEdit && sendInvitation && canInvite) {
@@ -593,6 +619,12 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           }
         } else {
           toast('Employee created', 'success')
+        }
+        if (shiftAssignError) {
+          toast(
+            `Employee created, but ${shiftAssignError}. Until a shift is set from their profile, attendance is scored against the 9:30 AM default.`,
+            'warning',
+          )
         }
         onSuccess?.(result)
       }
@@ -898,13 +930,16 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               </Field>
 
               <Field label="Shift">
+                {/* No .filter(active): /v1/shifts only returns active policies —
+                    a soft-deleted one simply stops appearing in the list. */}
                 <Sel value={form.shiftId} onChange={(e) => set('shiftId', e.target.value)}>
                   <option value="">
                     {shifts.length === 0 ? 'No shifts configured — set up in Organization' : 'Default (9:30 AM)'}
                   </option>
-                  {shifts.filter((s) => s.active).map((s) => (
+                  {shifts.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name}{s.startTime && s.endTime ? ` (${s.startTime}–${s.endTime})` : ''}
+                      {s.name}
+                      {s.startTime && s.endTime ? ` (${s.startTime.slice(0, 5)}–${s.endTime.slice(0, 5)})` : ''}
                     </option>
                   ))}
                 </Sel>

@@ -68,13 +68,23 @@ const CASES: RoleCase[] = [
     label: 'FINANCE_LEAD',
     email: 'qa-invite-test-1786619014@unifiedtree.example',
     leave: {
-      // V066 revoked leave-approve from finance.
-      visible: ['My Leaves', 'Apply', 'Balances', 'Leave Types', 'Holidays'],
-      hidden: ['Approvals'],
+      // Approvals IS expected here. An earlier audit claimed V066 revoked
+      // hrms.leave.approve.l1 from FINANCE_LEAD, but the live JWT for this
+      // user carries both l1 and l2 — verified by decoding the token from
+      // POST /v1/canonical-auth/login. Trust the token, not the migration
+      // archaeology. (Whether finance SHOULD approve leave is a policy
+      // question for the client, not a frontend gating bug.)
+      visible: ['My Leaves', 'Apply', 'Balances', 'Approvals', 'Leave Types', 'Holidays'],
+      hidden: [],
     },
     dashboard: {
-      // isFinance fix: finance holds hrms.employee.read → workforce tiles show.
-      visible: ['Total Employees'],
+      // isFinance fix: FINANCE_LEAD holds hrms.employee.read, so
+      // canSeeWorkforceTiles is true and the workforce surfaces render.
+      // Asserted on "Recent Employees" rather than the "Total Employees"
+      // KPI: that KPI's query is gated on activeCompany?.id and sits in a
+      // skeleton state indefinitely for a user with no company assigned,
+      // which is a loading concern rather than a gating one.
+      visible: ['Recent Employees'],
       hidden: ['Team Attendance'],
     },
   },

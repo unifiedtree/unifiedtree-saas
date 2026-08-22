@@ -152,6 +152,32 @@ public class AttendanceService {
                                      String locationName, String zoneName,
                                      String deviceId, String clientEventId,
                                      boolean wfhDay) {
+        // Legacy 14-arg overload — no client capture timestamp and not an
+        // offline replay, so the punch is stamped with the server clock exactly
+        // as it always was.
+        return checkInJson(employeeId, companyId, branchId, departmentId, latitude, longitude,
+                faceBase64, checkInMethodStr, tenantId, locationName, zoneName, deviceId, clientEventId,
+                wfhDay, false, null);
+    }
+
+    /**
+     * @param capturedAt when the punch actually happened ON THE DEVICE. Offline
+     *                   punches sit in the mobile queue and can flush hours
+     *                   later; stamping them at flush time turned an on-time
+     *                   09:00 basement punch into an 18:00 LATE mark (and, past
+     *                   midnight, filed it on the wrong date). When present and
+     *                   within bounds it drives the attendance DATE, the
+     *                   check-in instant, and the late calculation. Pass
+     *                   {@code null} (online punches, older APKs, web) for the
+     *                   original server-clock behaviour.
+     */
+    @Transactional
+    public AttendanceDto checkInJson(UUID employeeId, UUID companyId, UUID branchId, UUID departmentId,
+                                     double latitude, double longitude,
+                                     String faceBase64, String checkInMethodStr, UUID tenantId,
+                                     String locationName, String zoneName,
+                                     String deviceId, String clientEventId,
+                                     boolean wfhDay, boolean offlineCaptured, Instant capturedAt) {
         if (clientEventId != null && !clientEventId.isBlank()) {
             Optional<AttendanceRecord> syncedRecord = attendanceRecordRepository.findByClientEventId(clientEventId);
             if (syncedRecord.isPresent()) {
@@ -159,7 +185,15 @@ public class AttendanceService {
             }
         }
 
-        LocalDate today = LocalDate.now(IST);
+        // The punch instant: the device's capture time when it is present and
+        // trustworthy, otherwise the server clock (identical to the old code).
+        Instant serverNow = Instant.now();
+        Instant checkInAt = resolvePunchInstant(capturedAt, offlineCaptured, serverNow, employeeId, "check-in");
+        boolean backdated = !checkInAt.equals(serverNow);
+        // The attendance DATE follows the punch instant, so a punch captured at
+        // 23:50 and flushed at 00:10 is filed on the day it was made. With no
+        // capturedAt this is exactly LocalDate.now(IST).
+        LocalDate today = checkInAt.atZone(IST).toLocalDate();
         attendanceRecordRepository.findByEmployeeIdAndAttendanceDate(employeeId, today)
                 .filter(r -> r.getCheckInAt() != null)
                 .ifPresent(r -> {
@@ -175,7 +209,7 @@ public class AttendanceService {
         record.setDepartmentId(departmentId);
         record.setBranchId(branchId);
         record.setAttendanceDate(today);
-        record.setCheckInAt(Instant.now());
+        record.setCheckInAt(checkInAt);
         // WFH punches record attendance_type=WFH so the team dashboard, calendar,
         // and monthly stats bucket the day correctly (already surfaced in
         // AttendanceController.countSummary as the "WFH" tile and in the mobile
@@ -218,7 +252,11 @@ public class AttendanceService {
         }
 
         AttendanceRecord saved = attendanceRecordRepository.save(record);
-        logEvent(saved, AttendanceEventType.CHECK_IN, latitude, longitude, locationName, zoneName, employeeId, null);
+        // Audit trail follows the punch: a backdated (offline) punch logs its
+        // capture instant, not the flush instant. Null => Instant.now(), the
+        // pre-existing behaviour for every online punch.
+        logEvent(saved, AttendanceEventType.CHECK_IN, latitude, longitude, locationName, zoneName, employeeId, null,
+                backdated ? checkInAt : null);
         log.info("Check-in recorded: id={}, employee={}, method={}", saved.getId(), employeeId, method);
 
         publishCheckinEvent(saved, tenantId, method);
@@ -240,7 +278,34 @@ public class AttendanceService {
                                   String locationName,
                                   String zoneName,
                                   String deviceId) {
-        LocalDate today = LocalDate.now(IST);
+        // Legacy 7-arg overload — no client capture timestamp and not an
+        // offline replay, so the server clock is used exactly as before.
+        return checkOut(employeeId, latitude, longitude, checkOutMethod, locationName, zoneName, deviceId,
+                false, null);
+    }
+
+    /**
+     * @param capturedAt when the punch-out actually happened ON THE DEVICE, or
+     *                   {@code null} for the original server-clock behaviour.
+     *                   Drives which day's record is closed, the check-out
+     *                   instant, and therefore working hours / overtime.
+     */
+    @Transactional
+    public AttendanceDto checkOut(UUID employeeId,
+                                  Double latitude,
+                                  Double longitude,
+                                  String checkOutMethod,
+                                  String locationName,
+                                  String zoneName,
+                                  String deviceId,
+                                  boolean offlineCaptured,
+                                  Instant capturedAt) {
+        Instant serverNow = Instant.now();
+        Instant checkOutAt = resolvePunchInstant(capturedAt, offlineCaptured, serverNow, employeeId, "check-out");
+        // Close the day the punch was MADE on, not the day it reached us — an
+        // 18:00 punch-out that flushes at 00:30 must not 404 against a fresh,
+        // empty record for the new date.
+        LocalDate today = checkOutAt.atZone(IST).toLocalDate();
         AttendanceRecord record = attendanceRecordRepository
                 .findByEmployeeIdAndAttendanceDate(employeeId, today)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -250,7 +315,28 @@ public class AttendanceService {
             return toDto(record);
         }
 
-        Instant checkOutAt = Instant.now();
+        // Never let a client timestamp produce a negative session. If the
+        // supplied capture instant predates the recorded check-in (clock skew
+        // or tampering), fall back to the server clock.
+        if (record.getCheckInAt() != null && checkOutAt.isBefore(record.getCheckInAt())) {
+            // ...but the record was located by the CAPTURED day, and serverNow
+            // may be on a LATER day (an offline punch-out flushed after
+            // midnight). Writing serverNow verbatim would compute working hours
+            // straight across the date boundary and fabricate a full night of
+            // overtime on a record that belongs to yesterday. Clamp the
+            // fallback into the record's own day.
+            Instant endOfRecordDay = today.atTime(LocalTime.MAX).atZone(IST).toInstant();
+            Instant fallback = serverNow.isAfter(endOfRecordDay) ? endOfRecordDay : serverNow;
+            if (fallback.isBefore(record.getCheckInAt())) {
+                fallback = record.getCheckInAt();   // zero-length beats negative
+            }
+            log.warn("capturedAt {} precedes check-in {} for employee={} on {} — falling back to {} "
+                            + "(serverNow={}, clamped into the record's day so hours cannot cross midnight)",
+                    checkOutAt, record.getCheckInAt(), employeeId, today, fallback, serverNow);
+            checkOutAt = fallback;
+        }
+        boolean backdated = !checkOutAt.equals(serverNow);
+
         record.setCheckOutAt(checkOutAt);
         record.setCheckOutLatitude(latitude);
         record.setCheckOutLongitude(longitude);
@@ -270,7 +356,8 @@ public class AttendanceService {
 
         AttendanceRecord saved = attendanceRecordRepository.save(record);
         logEvent(saved, AttendanceEventType.CHECK_OUT, latitude, longitude,
-                locationName, zoneName, employeeId, null);
+                locationName, zoneName, employeeId, null,
+                backdated ? checkOutAt : null);
         log.info("Check-out recorded: employee={}, workingHours={}", employeeId, saved.getWorkingHours());
         return toDto(saved);
     }
@@ -841,12 +928,30 @@ public class AttendanceService {
      */
     @Transactional
     public AttendanceRecordResponse processCheckOut(UUID employeeId, CheckOutRequest request) {
-        LocalDate today = LocalDate.now(IST);
+        // Same capture-time semantics as checkOut(...): honour a trustworthy
+        // client capturedAt, otherwise the server clock (unchanged behaviour).
+        Instant serverNow = Instant.now();
+        Instant resolved = resolvePunchInstant(request.capturedAt(), request.offlineCaptured(), serverNow, employeeId, "check-out");
+        LocalDate today = resolved.atZone(IST).toLocalDate();
         AttendanceRecord record = attendanceRecordRepository
                 .findByEmployeeIdAndAttendanceDate(employeeId, today)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No attendance record found for employee " + employeeId + " on " + today));
-        Instant checkOutAt = Instant.now();
+        // Same cross-day clamp as checkOut(...): the record was located by the
+        // captured day, so a raw serverNow fallback could sit on a LATER day
+        // and fabricate a night of overtime. Keep the fallback inside the
+        // record's own day, and never before check-in.
+        Instant checkOutAt = resolved;
+        if (record.getCheckInAt() != null && resolved.isBefore(record.getCheckInAt())) {
+            Instant endOfRecordDay = today.atTime(LocalTime.MAX).atZone(IST).toInstant();
+            Instant fallback = serverNow.isAfter(endOfRecordDay) ? endOfRecordDay : serverNow;
+            if (fallback.isBefore(record.getCheckInAt())) {
+                fallback = record.getCheckInAt();
+            }
+            log.warn("capturedAt {} precedes check-in {} for employee={} on {} — falling back to {} (serverNow={})",
+                    resolved, record.getCheckInAt(), employeeId, today, fallback, serverNow);
+            checkOutAt = fallback;
+        }
         record.setCheckOutAt(checkOutAt);
         record.setCheckOutLatitude(request.latitude());
         record.setCheckOutLongitude(request.longitude());
@@ -1240,6 +1345,123 @@ public class AttendanceService {
         return LATE_THRESHOLD;
     }
 
+    // ── Offline capture time (untrusted client input) ────────────────────────
+
+    /**
+     * How far in the FUTURE a client-supplied {@code capturedAt} may sit and
+     * still be honoured. Phone clocks drift and time zones are set by hand, so
+     * a small allowance avoids rejecting honest punches; anything beyond this
+     * is either a broken clock or an attempt to pre-date a punch.
+     */
+    private static final Duration CAPTURED_AT_FUTURE_SKEW = Duration.ofMinutes(5);
+
+    /**
+     * How OLD a client-supplied {@code capturedAt} may be. Mirrors the mobile
+     * offline queue's TTL — {@code Attendance_App/constants/config.ts} →
+     * {@code OFFLINE_PUNCH_TTL_MS = 24 * 60 * 60 * 1000}. The app itself drops
+     * queued punches older than this, so anything older cannot be a genuine
+     * queued punch. Without this bound an employee could hand-craft a request
+     * with last week's timestamp and defeat late-marking entirely.
+     *
+     * <p>Keep the two in sync: widening the app TTL without widening this makes
+     * the tail of the queue silently fall back to flush-time stamping.
+     */
+    private static final Duration CAPTURED_AT_MAX_AGE = Duration.ofHours(24);
+
+    /**
+     * Extra headroom on top of {@link #CAPTURED_AT_MAX_AGE}.
+     *
+     * <p>The client's TTL is measured from the moment a punch was ENQUEUED,
+     * while this bound is measured from {@code capturedAt} — and capturedAt is
+     * stamped before face verification, which can take ~60s. Without headroom a
+     * punch the app still considers valid (enqueued 23h59m ago) can carry a
+     * capturedAt fractionally older than 24h, get rejected here, and be stamped
+     * at flush time — the exact bug this whole change exists to fix, reappearing
+     * only for the tail of the queue where it is hardest to notice.
+     */
+    private static final Duration CAPTURED_AT_AGE_HEADROOM = Duration.ofMinutes(30);
+
+    private boolean isCapturedAtWithinBounds(Instant capturedAt, Instant serverNow) {
+        if (capturedAt == null) {
+            return false;
+        }
+        if (capturedAt.isAfter(serverNow.plus(CAPTURED_AT_FUTURE_SKEW))) {
+            return false;
+        }
+        return !capturedAt.isBefore(
+                serverNow.minus(CAPTURED_AT_MAX_AGE).minus(CAPTURED_AT_AGE_HEADROOM));
+    }
+
+    /**
+     * The instant a punch should be recorded at: the device's capture time when
+     * the client supplied one AND it survives the safety bounds, otherwise the
+     * server clock.
+     *
+     * <p>{@code capturedAt == null} — every online punch, every pre-capturedAt
+     * APK, and the web client — returns {@code serverNow}, i.e. behaviour
+     * identical to the previous {@code Instant.now()} code path.
+     *
+     * <p>A capturedAt that IS honoured and differs from now by more than a
+     * minute is logged at INFO so the backdating is auditable; one that is
+     * rejected is logged at WARN.
+     */
+    private Instant resolvePunchInstant(Instant capturedAt, boolean offlineCaptured,
+                                        Instant serverNow, UUID employeeId, String punchKind) {
+        if (capturedAt == null) {
+            return serverNow;
+        }
+        // A backdated punch is only meaningful for a punch that was genuinely
+        // queued offline. An ONLINE punch is happening right now, so the server
+        // clock is authoritative and there is no legitimate reason to accept a
+        // client time — accepting one would let anyone walk in at 11:30, send
+        // capturedAt=09:00, and be marked on time.
+        //
+        // offlineCaptured is itself client-supplied and therefore forgeable, so
+        // this is not a security boundary on its own; it is defence in depth.
+        // What it buys is that NORMAL app traffic never carries a backdate, so
+        // any accepted backdate is both rare and logged — abuse has to be
+        // deliberately hand-crafted and leaves an audit trail (below), rather
+        // than being a property of every request the app already sends.
+        if (!offlineCaptured) {
+            long drift = Math.abs(Duration.between(capturedAt, serverNow).getSeconds());
+            if (drift >= 60) {
+                log.warn("Ignoring capturedAt on an ONLINE {}: employee={}, capturedAt={}, serverNow={}, "
+                                + "driftSeconds={} — offlineCaptured was not set, so the server clock wins. "
+                                + "A large drift here may indicate a tampered client.",
+                        punchKind, employeeId, capturedAt, serverNow, drift);
+            }
+            return serverNow;
+        }
+        if (!isCapturedAtWithinBounds(capturedAt, serverNow)) {
+            log.warn("Rejected out-of-bounds capturedAt for {}: employee={}, capturedAt={}, serverNow={} "
+                            + "(allowed: {} in the future .. {} in the past) — using server time",
+                    punchKind, employeeId, capturedAt, serverNow,
+                    CAPTURED_AT_FUTURE_SKEW, CAPTURED_AT_MAX_AGE);
+            return serverNow;
+        }
+        long driftSeconds = Duration.between(capturedAt, serverNow).getSeconds();
+        if (Math.abs(driftSeconds) >= 60) {
+            log.info("Accepted offline capturedAt for {}: employee={}, capturedAt={}, serverNow={}, driftSeconds={} "
+                            + "— record stamped at capture time",
+                    punchKind, employeeId, capturedAt, serverNow, driftSeconds);
+        }
+        return capturedAt;
+    }
+
+    /**
+     * Public, side-effect-free view of the same rule, for callers outside this
+     * service that need the punch's effective IST date before delegating (see
+     * {@code AttendanceController.checkIn}, which resolves the approved-WFH day
+     * against it). Never logs — the authoritative, audited resolution happens
+     * inside the check-in / check-out paths.
+     */
+    public Instant effectivePunchInstant(Instant capturedAt, boolean offlineCaptured) {
+        Instant serverNow = Instant.now();
+        return (offlineCaptured && isCapturedAtWithinBounds(capturedAt, serverNow))
+                ? capturedAt
+                : serverNow;
+    }
+
     private Integer calculateOvertimeMinutes(Double workingHours) {
         if (workingHours == null) {
             return 0;
@@ -1341,6 +1563,25 @@ public class AttendanceService {
                           String zoneName,
                           UUID actorEmployeeId,
                           String note) {
+        logEvent(record, eventType, latitude, longitude, locationName, zoneName, actorEmployeeId, note, null);
+    }
+
+    /**
+     * @param eventAtOverride the instant to stamp on the audit row, used when a
+     *                        punch carried a trustworthy offline capture time so
+     *                        the activity log shows when it HAPPENED rather than
+     *                        when it synced. {@code null} => {@code Instant.now()},
+     *                        the behaviour for every other event.
+     */
+    private void logEvent(AttendanceRecord record,
+                          AttendanceEventType eventType,
+                          Double latitude,
+                          Double longitude,
+                          String locationName,
+                          String zoneName,
+                          UUID actorEmployeeId,
+                          String note,
+                          Instant eventAtOverride) {
         AttendanceEventLog event = new AttendanceEventLog();
         event.setTenantId(record.getTenantId() != null ? record.getTenantId() : TenantContext.getTenantId());
         event.setAttendanceRecordId(record.getId());
@@ -1349,7 +1590,7 @@ public class AttendanceService {
         event.setDepartmentId(record.getDepartmentId());
         event.setBranchId(record.getBranchId());
         event.setEventDate(record.getAttendanceDate());
-        event.setEventAt(Instant.now());
+        event.setEventAt(eventAtOverride != null ? eventAtOverride : Instant.now());
         event.setEventType(eventType);
         event.setAttendanceStatus(record.getAttendanceStatus());
         event.setLatitude(latitude);

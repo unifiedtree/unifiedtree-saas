@@ -49,6 +49,11 @@ export function useMyWfhRequests(page = 0, size = 20) {
     queryKey: ['hrms', 'wfh', 'my', page, size],
     queryFn: () => apiJson<PageResponse<WfhRequestResponse>>(`/v1/wfh/my?page=${page}&size=${size}`),
     staleTime: 30_000,
+    // There is no WFH *approvals* queue on web yet (see file footer), so this
+    // is the only WFH list that goes stale under someone's eyes: an employee
+    // parked on /me/wfh waiting for a decision. Poll it like the leave and
+    // correction queues rather than making them refresh the browser.
+    refetchInterval: 30_000,
   })
 }
 
@@ -71,3 +76,10 @@ export function useCancelWfh() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'wfh'] }),
   })
 }
+
+// NOTE: web has no WFH approvals queue. notificationStore.ts:177 routes
+// WFH_SUBMITTED to /hrms/leave?tab=approvals, but that tab renders
+// usePendingApprovals() from useLeave.ts, which reads
+// /v1/leave/approvals/pending — leave requests only. A WFH request submitted
+// from the app notifies the approver and then lands on a screen that cannot
+// show it. Approving WFH is app-only today; the web hook still needs writing.

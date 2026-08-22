@@ -26,7 +26,7 @@ import {
   useEmployeeStructure, useStructureHistory, useUpsertStructure, useSalaryComponents,
 } from '../api/usePayroll'
 import type { EmploymentType } from '../api/useWorkforce'
-import { useCompanies, useDepartments, useDesignations, useBranches, useGrades, useEmploymentTypes, useShifts } from '../api/useOrg'
+import { useCompanies, useDepartments, useDesignations, useBranches, useGrades, useEmploymentTypes } from '../api/useOrg'
 import {
   useEmployeeAddresses, useCreateAddress, useDeleteAddress,
   useEmployeeIdentity, useSaveIdentity,

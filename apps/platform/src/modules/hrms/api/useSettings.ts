@@ -21,7 +21,14 @@ export function useHolidays(companyId: string, year?: number) {
     queryKey: ['hrms', 'settings', 'holidays', companyId, year ?? 'all'],
     queryFn: () => apiJson<HolidayResponse[]>(`/v1/settings/holidays?${params}`),
     enabled: !!companyId,
-    staleTime: Infinity,
+    // Reference data, but NOT immutable — HR adds holidays from the mobile app
+    // and the open web calendar has to catch up without a browser reload.
+    // staleTime: Infinity meant "never re-fetch this tab, ever".
+    staleTime: 5 * 60_000,
+    // 'always' (not true) — refetch on focus even inside the staleTime window,
+    // so tabbing back from the app shows the new holiday immediately. Opted in
+    // per-query because the global default stays false (see QueryProvider).
+    refetchOnWindowFocus: 'always',
   })
 }
 

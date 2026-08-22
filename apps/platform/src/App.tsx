@@ -285,7 +285,7 @@ export default function App() {
           path="/hrms/attendance"
           element={
             <RouteGuard anyOf={[P.HRMS_ESS_READ, P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_CHECKIN_SELF]}>
-              <ModuleGate moduleKey="hrms"><Attendance /></ModuleGate>
+              <ModuleGate moduleKey="attendance"><Attendance /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -295,7 +295,7 @@ export default function App() {
           path="/hrms/attendance/geofencing"
           element={
             <RouteGuard anyOf={[P.ORG_GEOFENCE_WRITE, P.ATTENDANCE_TEAM_READ]}>
-              <ModuleGate moduleKey="hrms"><GeofenceZones /></ModuleGate>
+              <ModuleGate moduleKey="attendance"><GeofenceZones /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -303,7 +303,7 @@ export default function App() {
           path="/hrms/leave"
           element={
             <RouteGuard anyOf={[P.HRMS_LEAVE_READ, P.HRMS_ESS_READ, P.LEAVE_REQUEST_SELF]}>
-              <ModuleGate moduleKey="hrms"><Leave /></ModuleGate>
+              <ModuleGate moduleKey="leave"><Leave /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -327,7 +327,7 @@ export default function App() {
           path="/hrms/fnf"
           element={
             <RouteGuard anyOf={['hrms.fnf.read', 'hrms.fnf.process', 'hrms.fnf.approve']}>
-              <ModuleGate moduleKey="hrms"><FullAndFinal /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><FullAndFinal /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -359,7 +359,7 @@ export default function App() {
           path="/hrms/att-analytics"
           element={
             <RouteGuard anyOf={[P.HRMS_REPORT_ATTENDANCE, 'attendance.team.read']}>
-              <ModuleGate moduleKey="hrms"><AttendanceAnalytics /></ModuleGate>
+              <ModuleGate moduleKey="attendance"><AttendanceAnalytics /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -368,7 +368,7 @@ export default function App() {
           element={
             <RequirePermission code={P.PAYROLL_RUNS_READ}>
               <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-                <ModuleGate moduleKey="hrms"><PayrollDashboard /></ModuleGate>
+                <ModuleGate moduleKey="payroll"><PayrollDashboard /></ModuleGate>
               </RouteGuard>
             </RequirePermission>
           }
@@ -377,7 +377,7 @@ export default function App() {
           path="/hrms/salary-structure"
           element={
             <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-              <ModuleGate moduleKey="hrms"><SalaryStructureAdmin /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><SalaryStructureAdmin /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -385,7 +385,7 @@ export default function App() {
           path="/hrms/muster-roll"
           element={
             <RouteGuard anyOf={['attendance.team.read', P.HRMS_EMPLOYEE_READ]}>
-              <ModuleGate moduleKey="hrms"><MusterRoll /></ModuleGate>
+              <ModuleGate moduleKey="attendance"><MusterRoll /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -398,7 +398,7 @@ export default function App() {
           path="/hrms/attendance/manual-entry"
           element={
             <RouteGuard anyOf={['attendance.regularization.approve', 'attendance.team.read']}>
-              <ModuleGate moduleKey="hrms"><ManualEntry /></ModuleGate>
+              <ModuleGate moduleKey="attendance"><ManualEntry /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -409,7 +409,7 @@ export default function App() {
           path="/hrms/settings/work-time"
           element={
             <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE]}>
-              <ModuleGate moduleKey="hrms"><WorkTimeSettings /></ModuleGate>
+              <ModuleGate moduleKey="attendance"><WorkTimeSettings /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -418,7 +418,7 @@ export default function App() {
           element={
             <RequirePermission code={P.PAYROLL_RUNS_READ}>
               <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-                <ModuleGate moduleKey="hrms"><BankDisbursement /></ModuleGate>
+                <ModuleGate moduleKey="payroll"><BankDisbursement /></ModuleGate>
               </RouteGuard>
             </RequirePermission>
           }
@@ -459,7 +459,7 @@ export default function App() {
           path="/hrms/pli"
           element={
             <RouteGuard anyOf={['hrms.pli.read', 'hrms.pli.write', 'hrms.pli.read.self']}>
-              <ModuleGate moduleKey="hrms"><Pli /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><Pli /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -483,7 +483,7 @@ export default function App() {
           path="/hrms/shifts"
           element={
             <RouteGuard anyOf={['attendance.team.read', P.HRMS_EMPLOYEE_READ]}>
-              <ModuleGate moduleKey="hrms"><ShiftsAndOt /></ModuleGate>
+              <ModuleGate moduleKey="attendance"><ShiftsAndOt /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -560,7 +560,7 @@ export default function App() {
           path="/hrms/payroll/settings"
           element={
             <RouteGuard anyOf={[P.PAYROLL_SETTINGS_READ]}>
-              <ModuleGate moduleKey="hrms"><PayrollSettings /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><PayrollSettings /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -568,7 +568,7 @@ export default function App() {
           path="/hrms/payroll/components"
           element={
             <RouteGuard anyOf={[P.PAYROLL_COMPONENTS_READ]}>
-              <ModuleGate moduleKey="hrms"><SalaryComponents /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><SalaryComponents /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -576,7 +576,7 @@ export default function App() {
           path="/me/salary"
           element={
             <RouteGuard anyOf={[P.PAYROLL_STRUCTURE_READ_SELF]}>
-              <ModuleGate moduleKey="hrms"><MySalaryStructure /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><MySalaryStructure /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -585,7 +585,7 @@ export default function App() {
           element={
             <RequirePermission code={P.PAYROLL_RUNS_READ}>
               <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-                <ModuleGate moduleKey="hrms"><PayrollRuns /></ModuleGate>
+                <ModuleGate moduleKey="payroll"><PayrollRuns /></ModuleGate>
               </RouteGuard>
             </RequirePermission>
           }
@@ -594,7 +594,7 @@ export default function App() {
           path="/hrms/payroll/runs/:id"
           element={
             <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-              <ModuleGate moduleKey="hrms"><PayrollRunDetail /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><PayrollRunDetail /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -602,7 +602,7 @@ export default function App() {
           path="/me/payslips"
           element={
             <RouteGuard anyOf={[P.PAYROLL_PAYSLIP_READ_SELF]}>
-              <ModuleGate moduleKey="hrms"><EmployeePayslips /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><EmployeePayslips /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -626,7 +626,7 @@ export default function App() {
           path="/hrms/reports/attendance-summary"
           element={
             <RouteGuard anyOf={[P.HRMS_REPORT_ATTENDANCE]}>
-              <ModuleGate moduleKey="hrms"><AttendanceSummaryReport /></ModuleGate>
+              <ModuleGate moduleKey="attendance"><AttendanceSummaryReport /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -634,7 +634,7 @@ export default function App() {
           path="/hrms/reports/leave-balance"
           element={
             <RouteGuard anyOf={[P.HRMS_REPORT_LEAVE]}>
-              <ModuleGate moduleKey="hrms"><LeaveBalanceReport /></ModuleGate>
+              <ModuleGate moduleKey="leave"><LeaveBalanceReport /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -642,7 +642,7 @@ export default function App() {
           path="/hrms/reports/late-marks"
           element={
             <RouteGuard anyOf={[P.HRMS_REPORT_ATTENDANCE]}>
-              <ModuleGate moduleKey="hrms"><LateMarksReport /></ModuleGate>
+              <ModuleGate moduleKey="attendance"><LateMarksReport /></ModuleGate>
             </RouteGuard>
           }
         />

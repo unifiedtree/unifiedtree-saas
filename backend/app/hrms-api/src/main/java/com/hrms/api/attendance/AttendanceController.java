@@ -109,11 +109,18 @@ public class AttendanceController {
                 ctx.geoFenceRadius());
 
         // Approved-WFH override: an employee with an APPROVED WFH request that
-        // covers today's IST date is allowed to punch from any location. The
+        // covers the punch's IST date is allowed to punch from any location. The
         // face-recognition + FACE_MISMATCH checks in checkInJson still fire —
         // WFH is a location override, not an identity-verification bypass.
-        boolean wfhDay = attendanceService.isApprovedWfhDay(
-                employeeId, LocalDate.now(ZoneId.of("Asia/Kolkata")));
+        //
+        // The date is resolved from the punch's effective instant (the client's
+        // offline capturedAt when it passes the service's safety bounds, else
+        // server now) so a punch captured before midnight and flushed after it
+        // is still matched against the WFH approval for the day it was made.
+        LocalDate punchDate = attendanceService
+                .effectivePunchInstant(request.capturedAt(), request.offlineCaptured())
+                .atZone(ZoneId.of("Asia/Kolkata")).toLocalDate();
+        boolean wfhDay = attendanceService.isApprovedWfhDay(employeeId, punchDate);
 
         if (!geoValidation.withinFence() && geofenceEnforce && !wfhDay) {
             throw new BusinessRuleException(
@@ -135,7 +142,13 @@ public class AttendanceController {
                 request.zoneName(),
                 request.deviceId(),
                 request.clientEventId(),
-                wfhDay);
+                wfhDay,
+                // capturedAt is honoured ONLY when offlineCaptured is set — an
+                // online punch is happening now, so the server clock wins.
+                // Both are null/false for pre-capturedAt app builds, which keeps
+                // the server-clock behaviour byte-for-byte.
+                request.offlineCaptured(),
+                request.capturedAt());
         return ResponseEntity.ok(dto);
     }
 
@@ -160,7 +173,9 @@ public class AttendanceController {
                 request != null ? request.checkOutMethod() : null,
                 request != null ? request.locationName() : null,
                 request != null ? request.zoneName() : null,
-                request != null ? request.deviceId() : null));
+                request != null ? request.deviceId() : null,
+                request != null && request.offlineCaptured(),
+                request != null ? request.capturedAt() : null));
     }
 
     @Operation(summary = "Get checkout confirmation summary for the active session")

@@ -14,9 +14,18 @@ import {
   useDesignations, useCreateDesignation, useUpdateDesignation, useArchiveDesignation,
   useGrades, useCreateGrade, useUpdateGrade, useDeleteGrade,
   useEmploymentTypes, useCreateEmploymentType, useUpdateEmploymentType, useDeleteEmploymentType,
-  useShifts, useCreateShift, useUpdateShift, useDeleteShift,
-  type Company, type Designation, type Grade, type EmploymentTypeRecord, type Shift,
+  type Company, type Designation, type Grade, type EmploymentTypeRecord,
 } from '../api/useOrg'
+// Shifts on this page edit attendance.shift_policies — the ONLY shift table the
+// late-mark calculation reads (AttendanceService.getShiftProfile ~line 666 and
+// the shiftStart.plusMinutes(grace) cutoff ~lines 1234-1235). This tab used to
+// write org.shifts via useOrg's useShifts, which nothing in attendance reads:
+// HR would move a shift to 10:00 here, the app would keep marking people late
+// at 09:15, and the edit looked like it had worked. See useShiftPolicies.ts.
+import {
+  useShiftPolicies, useCreateShiftPolicy, useUpdateShiftPolicy, useDeleteShiftPolicy,
+  type ShiftPolicy, type ShiftPolicyPayload, type ShiftType,
+} from '../api/useShiftPolicies'
 import { useEmployeeDirectory } from '../api/useWorkforce'
 import { useHrConfig, useUpdateHrConfig } from '../api/useSettings'
 
@@ -32,39 +41,11 @@ const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: 'shifts',           label: 'Shifts',           icon: Clock },
 ]
 
-// ── Day bitmask helpers (bit 0 = Sun, bit 6 = Sat) ───────────────────────────
-
-const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-const DAY_BITS   = [1, 2, 4, 8, 16, 32, 64]
-
-function DayChips({ bitmask }: { bitmask: number }) {
-  return (
-    <div className="flex gap-0.5">
-      {DAY_LABELS.map((d, i) => (
-        <span key={i} className={clsx(
-          'w-5 h-5 rounded-full text-[10px] font-medium flex items-center justify-center',
-          bitmask & DAY_BITS[i] ? 'bg-primary/10 text-primary' : 'bg-bg-surface text-text-tertiary'
-        )}>{d}</span>
-      ))}
-    </div>
-  )
-}
-
-function DayToggle({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <div className="flex gap-1">
-      {DAY_LABELS.map((d, i) => (
-        <button key={i} type="button"
-          onClick={() => onChange(value ^ DAY_BITS[i])}
-          className={clsx(
-            'w-8 h-8 rounded-full text-xs font-medium transition-colors',
-            value & DAY_BITS[i] ? 'bg-[#059669] text-white' : 'bg-bg-surface text-text-tertiary hover:text-text-primary'
-          )}
-        >{d}</button>
-      ))}
-    </div>
-  )
-}
+// Day-bitmask helpers (DayChips / DayToggle) lived here to edit org.shifts
+// `days_bitmask`. attendance.shift_policies has no per-shift working-days
+// column, so the control had nowhere to write once this tab was repointed —
+// it was removed rather than left rendering a value the backend discards.
+// Per-employee weekly offs are still set on the employee record.
 
 // ── Department presets (mirror mobile) ───────────────────────────────────────
 // Backend may not persist these; we store per-device in localStorage so the
@@ -94,13 +75,23 @@ function writeDeptIcon(id: string, key: string) {
 }
 
 // ── Shift type ───────────────────────────────────────────────────────────────
-type ShiftType = 'FIXED' | 'FLEXIBLE' | 'ROTATIONAL' | 'NIGHT'
+// ShiftType is imported from useShiftPolicies so this picker can never drift
+// from the ShiftType enum the backend actually persists.
 const SHIFT_TYPES: { value: ShiftType; label: string }[] = [
   { value: 'FIXED',      label: 'Fixed' },
   { value: 'FLEXIBLE',   label: 'Flexible' },
   { value: 'ROTATIONAL', label: 'Rotational' },
   { value: 'NIGHT',      label: 'Night' },
 ]
+
+// Server-side bounds from ShiftDtos.ShiftPolicyRequest — mirrored so the admin
+// gets an inline message instead of a 400 out of bean validation.
+const GRACE_MIN = 0
+const GRACE_MAX = 120
+const HOURS_MIN = 0.5
+const HOURS_MAX = 24
+const OT_MIN = 1
+const OT_MAX = 9.99
 
 // Parse HH:MM into minutes-of-day. Returns null on malformed input so the
 // caller can skip the wrap check rather than blocking on garbage.
@@ -111,6 +102,9 @@ function parseHHMM(v: string): number | null {
   if (h < 0 || h > 23 || min < 0 || min > 59) return null
   return h * 60 + min
 }
+
+/** "09:00:00" → "09:00" for <input type="time">; tolerant of null/short values. */
+const hhmm = (t?: string | null) => (t ? t.slice(0, 5) : '')
 
 // ── Shared form primitives ────────────────────────────────────────────────────
 
@@ -1146,99 +1140,155 @@ function EmploymentTypesTab({ activeCompany }: CompanyProp) {
 }
 
 // ── Shifts Tab ────────────────────────────────────────────────────────────────
+//
+// Edits attendance.shift_policies through /v1/shifts (useShiftPolicies) — the
+// same rows the mobile app's Shift Timings screen writes, so an edit made here
+// is visible there and, crucially, actually moves the late cutoff.
+//
+// Writes require `attendance.regularization.approve` (ShiftController's
+// @PreAuthorize), NOT the `hrms.shift.write` that gated the old org.shifts
+// endpoint: gating on the retired code would show Save to people the API 403s
+// and hide it from the HR admins who can actually use it.
 
 function ShiftsTab({ activeCompany }: CompanyProp) {
   const { toast } = useToast()
   const confirm = useConfirmDialog()
-  const { data: shifts = [], isLoading, error, refetch } = useShifts(activeCompany?.id ?? '')
-  const createShift = useCreateShift()
-  const updateShift = useUpdateShift()
-  const deleteShift = useDeleteShift()
+  const companyId = activeCompany?.id ?? ''
+  const { data: shifts = [], isLoading, error, refetch } = useShiftPolicies(companyId)
+  const createShift = useCreateShiftPolicy()
+  const updateShift = useUpdateShiftPolicy()
+  const deleteShift = useDeleteShiftPolicy()
   const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState<Shift | null>(null)
-  const emptyForm = { name: '', code: '', startTime: '09:00', endTime: '18:00', breakMinutes: '30', graceMinutes: '15', daysBitmask: 62, shiftType: 'FIXED' as ShiftType }
+  const [editing, setEditing] = useState<ShiftPolicy | null>(null)
+  const emptyForm = {
+    name: '',
+    startTime: '09:00',
+    endTime: '18:00',
+    // 15 mirrors the attendance.shift_policies.grace_period_minutes default
+    // (org.shifts defaulted to 10 — that mismatch is part of what made the two
+    // screens disagree about who was late).
+    gracePeriodMinutes: '15',
+    workingHoursPerDay: '8',
+    overtimeApplicable: false,
+    overtimeMultiplier: '1.5',
+    shiftType: 'FIXED' as ShiftType,
+  }
   const [form, setForm] = useState(emptyForm)
 
   const openAdd = () => { setEditing(null); setForm(emptyForm); setOpen(true) }
-  const openEdit = (s: Shift) => {
+  const openEdit = (s: ShiftPolicy) => {
     setEditing(s)
     setForm({
-      name: s.name, code: s.code ?? '',
-      startTime: s.startTime ?? '09:00', endTime: s.endTime ?? '18:00',
-      breakMinutes: String(s.breakMinutes), graceMinutes: String(s.graceMinutes),
-      daysBitmask: s.daysBitmask,
-      // Backend only round-trips nightShift; infer type from that until the
-      // column lands. FIXED is the safe default for non-night existing rows.
-      shiftType: s.nightShift ? 'NIGHT' : 'FIXED',
+      name: s.name ?? '',
+      // Times arrive as "HH:mm:ss"; <input type="time"> wants "HH:mm".
+      startTime: hhmm(s.startTime) || '09:00',
+      endTime: hhmm(s.endTime) || '18:00',
+      gracePeriodMinutes: String(s.gracePeriodMinutes ?? 15),
+      workingHoursPerDay: s.workingHoursPerDay != null ? String(s.workingHoursPerDay) : '8',
+      overtimeApplicable: !!s.overtimeApplicable,
+      overtimeMultiplier: s.overtimeMultiplier != null ? String(Number(s.overtimeMultiplier)) : '1.5',
+      // shiftType round-trips on this endpoint, so it no longer has to be
+      // inferred from a nightShift boolean the way the org.shifts version did.
+      shiftType: s.shiftType ?? 'FIXED',
     })
     setOpen(true)
   }
   const set = (k: string, v: string | number | boolean) => setForm(p => ({ ...p, [k]: v }))
 
   const handleSave = async () => {
-    if (!activeCompany) return
+    if (!companyId) return
     const trimmedName = form.name.trim()
     if (!trimmedName) {
       toast('Shift name is required', 'error')
       return
     }
-    // End-vs-start sanity: FIXED / FLEXIBLE / ROTATIONAL cannot wrap past
-    // midnight. NIGHT is allowed to wrap (e.g. 22:00 → 06:00).
+    // Mirrors EmployeeShiftService.validateShiftWindow: a zero-length window is
+    // always rejected (the late-mark math divides by it), and only NIGHT may
+    // wrap past midnight (22:00 → 06:00).
     const startMin = parseHHMM(form.startTime)
     const endMin   = parseHHMM(form.endTime)
-    if (form.shiftType !== 'NIGHT' && startMin !== null && endMin !== null && endMin <= startMin) {
-      toast('End time must be after start time (use Night shift to wrap past midnight)', 'error')
+    if (startMin !== null && endMin !== null && startMin === endMin) {
+      toast('Shift start and end time must differ', 'error')
       return
     }
+    if (form.shiftType === 'FIXED' && startMin !== null && endMin !== null && endMin < startMin) {
+      toast('A fixed shift must end after it starts (use Night to wrap past midnight)', 'error')
+      return
+    }
+    const grace = Number(form.gracePeriodMinutes)
+    if (!Number.isFinite(grace) || grace < GRACE_MIN || grace > GRACE_MAX) {
+      toast(`Grace period must be between ${GRACE_MIN} and ${GRACE_MAX} minutes`, 'error')
+      return
+    }
+    const hours = Number(form.workingHoursPerDay)
+    if (!Number.isFinite(hours) || hours < HOURS_MIN || hours > HOURS_MAX) {
+      toast(`Working hours per day must be between ${HOURS_MIN} and ${HOURS_MAX}`, 'error')
+      return
+    }
+    const multiplier = Number(form.overtimeMultiplier)
+    if (form.overtimeApplicable && (!Number.isFinite(multiplier) || multiplier < OT_MIN || multiplier > OT_MAX)) {
+      toast(`Overtime rate must be between ${OT_MIN.toFixed(1)} and ${OT_MAX}`, 'error')
+      return
+    }
+
+    const payload: ShiftPolicyPayload = {
+      name: trimmedName,
+      shiftType: form.shiftType,
+      // Jackson accepts "HH:mm", but send seconds so what we PUT matches the
+      // "HH:mm:ss" the API hands back.
+      startTime: `${form.startTime}:00`,
+      endTime: `${form.endTime}:00`,
+      gracePeriodMinutes: grace,
+      workingHoursPerDay: hours,
+      overtimeApplicable: form.overtimeApplicable,
+      // Only send a multiplier when OT is on — the server bound is 1.0..9.99 and
+      // rejects anything below 1.0, so an OT-off shift must omit it entirely.
+      ...(form.overtimeApplicable ? { overtimeMultiplier: multiplier } : {}),
+    }
     try {
-      const isNight = form.shiftType === 'NIGHT'
-      const payload = {
-        companyId: activeCompany.id,
-        name: trimmedName,
-        code: form.code || undefined,
-        startTime: form.startTime || undefined,
-        endTime: form.endTime || undefined,
-        breakMinutes: Number(form.breakMinutes) || 30,
-        graceMinutes: Number(form.graceMinutes) || 15,
-        daysBitmask: form.daysBitmask,
-        // Send both for compatibility: legacy isNightShift boolean stays wired
-        // to the enum until the backend accepts shiftType directly.
-        isNightShift: isNight,
-        shiftType: form.shiftType,
-      }
       if (editing) {
-        await updateShift.mutateAsync({ id: editing.id, ...payload })
+        await updateShift.mutateAsync({ id: editing.id, companyId, data: payload })
         toast('Shift updated', 'success')
       } else {
-        await createShift.mutateAsync(payload)
+        await createShift.mutateAsync({ companyId, data: payload })
         toast('Shift created', 'success')
       }
       setOpen(false)
-    } catch { toast('Failed to save shift', 'error') }
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Failed to save shift', 'error')
+    }
   }
 
-  const handleDelete = async (s: Shift) => {
-    if (!activeCompany) return
+  const handleDelete = async (s: ShiftPolicy) => {
+    if (!companyId) return
     const ok = await confirm({
       title: `Delete shift ${s.name}?`,
-      body: 'This cannot be undone. Employees assigned to this shift will need to be rescheduled.',
+      body: 'Employees still assigned to this shift must be moved to another one first.',
       confirmLabel: 'Delete',
       tone: 'danger',
     })
     if (!ok) return
-    try { await deleteShift.mutateAsync({ id: s.id, companyId: activeCompany.id }); toast('Shift deleted', 'success') }
-    catch { toast('Failed to delete shift', 'error') }
+    try {
+      await deleteShift.mutateAsync({ id: s.id, companyId })
+      toast('Shift deleted', 'success')
+    } catch (e) {
+      // 409 SHIFT_IN_USE carries a "reassign employees first" message from the API.
+      toast((e as Error)?.message ?? 'Failed to delete shift', 'error')
+    }
   }
 
   const isPending = createShift.isPending || updateShift.isPending
 
-  const cols: Column<Shift>[] = [
+  // No Status column: /v1/shifts only ever returns active policies (delete is a
+  // soft-delete that drops the row from the list), so an Active/Inactive pill
+  // here would always read "Active".
+  const cols: Column<ShiftPolicy>[] = [
     {
       key: 'name', header: 'Shift',
       cell: (s) => (
         <div>
           <p className="font-medium text-text-primary text-sm">{s.name}</p>
-          {s.nightShift && <div className="mt-0.5"><HrStatusPill tone="info">Night</HrStatusPill></div>}
+          {s.shiftType === 'NIGHT' && <div className="mt-0.5"><HrStatusPill tone="info">Night</HrStatusPill></div>}
         </div>
       ),
     },
@@ -1246,22 +1296,26 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
       key: 'schedule', header: 'Schedule', hideBelow: 'md',
       cell: (s) => (
         <span className="text-sm text-text-secondary">
-          {s.startTime && s.endTime ? `${s.startTime} – ${s.endTime}` : '—'}
+          {s.startTime && s.endTime ? `${hhmm(s.startTime)} – ${hhmm(s.endTime)}` : '—'}
         </span>
       ),
     },
     {
-      key: 'days', header: 'Days',
-      cell: (s) => <DayChips bitmask={s.daysBitmask} />,
+      key: 'grace', header: 'Grace',
+      cell: (s) => <span className="text-sm text-text-secondary">{s.gracePeriodMinutes} min</span>,
     },
     {
-      key: 'status', header: 'Status',
-      cell: (s) => <HrStatusPill tone={s.active ? 'ok' : 'gray'}>{s.active ? 'Active' : 'Inactive'}</HrStatusPill>,
+      key: 'hours', header: 'Hours/Day', hideBelow: 'md',
+      cell: (s) => (
+        <span className="text-sm text-text-secondary">
+          {s.workingHoursPerDay != null ? `${s.workingHoursPerDay} h` : '—'}
+        </span>
+      ),
     },
     {
       key: 'actions', header: '',
       cell: (s) => (
-        <Can code={P.HRMS_SHIFT_WRITE}>
+        <Can code={P.ATTENDANCE_REGULARIZATION_APPROVE}>
           <div className="flex items-center gap-0.5">
             <button onClick={() => openEdit(s)} aria-label={`Edit shift ${s.name}`} className={BTN_ICON}><Pencil size={13} /></button>
             <button onClick={() => handleDelete(s)} aria-label={`Delete shift ${s.name}`} className={BTN_DEL}><Trash2 size={13} /></button>
@@ -1278,9 +1332,14 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Can code={P.HRMS_SHIFT_WRITE}>
-          <button onClick={openAdd} className={BTN_ADD}><Plus size={15} /> Add Shift</button>
+      <div className="flex items-start justify-between gap-3">
+        <p className="max-w-xl text-xs leading-relaxed text-text-tertiary">
+          These are the shift timings attendance is scored against, shared with the mobile app.
+          The <strong>grace period</strong> is how many minutes after the start time a check-in still
+          counts as on time — anything later is marked Late.
+        </p>
+        <Can code={P.ATTENDANCE_REGULARIZATION_APPROVE}>
+          <button onClick={openAdd} className={clsx(BTN_ADD, 'shrink-0')}><Plus size={15} /> Add Shift</button>
         </Can>
       </div>
 
@@ -1295,18 +1354,26 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
       <SlideModal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Shift' : 'Add Shift'}>
         <div className="space-y-4">
           <Field label="Name *"><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. General Shift" /></Field>
-          <Field label="Code"><Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. GEN" /></Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Start Time"><Input type="time" value={form.startTime} onChange={(e) => set('startTime', e.target.value)} /></Field>
             <Field label="End Time"><Input type="time" value={form.endTime} onChange={(e) => set('endTime', e.target.value)} /></Field>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Break (min)"><Input type="number" min="0" value={form.breakMinutes} onChange={(e) => set('breakMinutes', e.target.value)} /></Field>
-            <Field label="Grace (min)"><Input type="number" min="0" value={form.graceMinutes} onChange={(e) => set('graceMinutes', e.target.value)} /></Field>
+            <Field label="Grace (min)">
+              <Input type="number" min={GRACE_MIN} max={GRACE_MAX} value={form.gracePeriodMinutes}
+                onChange={(e) => set('gracePeriodMinutes', e.target.value)} />
+              <p className="mt-1 text-[11px] text-text-tertiary">
+                {GRACE_MIN}–{GRACE_MAX}. Check-ins inside this window are not marked Late.
+              </p>
+            </Field>
+            <Field label="Working Hours / Day">
+              <Input type="number" step="0.5" min={HOURS_MIN} max={HOURS_MAX} value={form.workingHoursPerDay}
+                onChange={(e) => set('workingHoursPerDay', e.target.value)} />
+              <p className="mt-1 text-[11px] text-text-tertiary">
+                {HOURS_MIN}–{HOURS_MAX}. The daily target for this shift.
+              </p>
+            </Field>
           </div>
-          <Field label="Working Days">
-            <DayToggle value={form.daysBitmask} onChange={(v) => set('daysBitmask', v)} />
-          </Field>
           <Field label="Shift Type *">
             <select
               value={form.shiftType}
@@ -1318,9 +1385,24 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
               ))}
             </select>
           </Field>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={form.overtimeApplicable}
+              onChange={(e) => set('overtimeApplicable', e.target.checked)}
+              className="accent-primary w-4 h-4" />
+            <span className="text-sm text-text-secondary">Overtime applicable</span>
+          </label>
+          {form.overtimeApplicable && (
+            <Field label="Overtime Rate (×)">
+              <Input type="number" step="0.1" min={OT_MIN} max={OT_MAX} value={form.overtimeMultiplier}
+                onChange={(e) => set('overtimeMultiplier', e.target.value)} />
+              <p className="mt-1 text-[11px] text-text-tertiary">
+                Stored as the configured rate — payroll does not apply it automatically yet.
+              </p>
+            </Field>
+          )}
           <div className="flex gap-3 pt-2">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
-            <Can code={P.HRMS_SHIFT_WRITE}>
+            <Can code={P.ATTENDANCE_REGULARIZATION_APPROVE}>
               <button onClick={handleSave} disabled={isPending} className={BTN_PRIMARY}>
                 {isPending ? 'Saving...' : editing ? 'Save Changes' : 'Create'}
               </button>

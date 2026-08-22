@@ -2,17 +2,30 @@ import React, { useMemo, useState } from 'react'
 import { Clock, Moon, Timer, Building2 } from 'lucide-react'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrAvatar } from '@/shared/components/hr'
-import { useCompanies, useShifts } from './../api/useOrg'
+import { useCompanies } from './../api/useOrg'
+// attendance.shift_policies, not org.shifts. This screen used to read useOrg's
+// useShifts (/v1/hrms/shifts), which is a different table that the attendance
+// engine never reads — so an "Attendance & Time" page was showing timings and a
+// grace value that had nothing to do with who actually got marked Late.
+// See useShiftPolicies.ts for the full trap.
+import { useShiftPolicies, type ShiftType } from './../api/useShiftPolicies'
 import { useAttendanceSummaryReport } from './../api/useReports'
 
 const hhmm = (t?: string) => (t ? t.slice(0, 5) : '—')
+
+const TYPE_LABEL: Record<ShiftType, string> = {
+  FIXED: 'Fixed',
+  FLEXIBLE: 'Flexible',
+  ROTATIONAL: 'Rotational',
+  NIGHT: 'Night',
+}
 
 export const ShiftsAndOt: React.FC = () => {
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState('')
   const activeCompany = companyId || companies[0]?.id || ''
 
-  const { data: shifts = [], isLoading: shiftsLoading } = useShifts(activeCompany)
+  const { data: shifts = [], isLoading: shiftsLoading } = useShiftPolicies(activeCompany)
 
   const now = new Date()
   const from = format(startOfMonth(now), 'yyyy-MM-dd')
@@ -29,7 +42,10 @@ export const ShiftsAndOt: React.FC = () => {
     () => Math.round((summary.reduce((s, r) => s + (r.total_overtime_mins ?? 0), 0) / 60) * 10) / 10,
     [summary],
   )
-  const activeShifts = shifts.filter((s) => s.active).length
+  // /v1/shifts only returns active policies (delete is a soft-delete that drops
+  // the row from the list), so an "Active Shifts" tile would just restate
+  // shifts.length. Count the night shifts instead — that's a real distinction.
+  const nightShifts = shifts.filter((s) => s.shiftType === 'NIGHT').length
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
@@ -53,7 +69,7 @@ export const ShiftsAndOt: React.FC = () => {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <HrStatCard icon={<Clock size={18} />} color="blue" value={shifts.length} label="Shifts Defined" loading={shiftsLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="green" value={activeShifts} label="Active Shifts" loading={shiftsLoading} />
+        <HrStatCard icon={<Moon size={18} />} color="green" value={nightShifts} label="Night Shifts" loading={shiftsLoading} />
         <HrStatCard icon={<Timer size={18} />} color="orange" value={`${totalOtHours}h`} label="Overtime (This Month)" loading={otLoading} />
       </div>
 
@@ -66,28 +82,26 @@ export const ShiftsAndOt: React.FC = () => {
               <tr>
                 <th>Shift</th>
                 <th>Timing</th>
-                <th className="hidden sm:table-cell">Break</th>
                 <th className="hidden sm:table-cell">Grace</th>
+                <th className="hidden sm:table-cell">Hours/Day</th>
                 <th>Type</th>
-                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {shiftsLoading ? (
-                [...Array(3)].map((_, i) => <tr key={i}><td colSpan={6} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
+                [...Array(3)].map((_, i) => <tr key={i}><td colSpan={5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
               ) : shifts.length === 0 ? (
-                <tr><td colSpan={6} className="py-12 text-center text-sm text-text-tertiary">No shifts defined for this company yet.</td></tr>
+                <tr><td colSpan={5} className="py-12 text-center text-sm text-text-tertiary">No shifts defined for this company yet.</td></tr>
               ) : shifts.map((s) => (
                 <tr key={s.id}>
                   <td>
                     <div className="font-medium text-text-primary">{s.name}</div>
-                    {s.code && <div className="text-xs text-text-tertiary">{s.code}</div>}
                   </td>
                   <td className="text-text-secondary">{hhmm(s.startTime)} – {hhmm(s.endTime)}</td>
-                  <td className="hidden sm:table-cell text-text-secondary">{s.breakMinutes} min</td>
-                  <td className="hidden sm:table-cell text-text-secondary">{s.graceMinutes} min</td>
-                  <td>{s.nightShift ? <HrStatusPill tone="purple"><Moon size={11} className="mr-1 inline" />Night</HrStatusPill> : <HrStatusPill tone="info">Day</HrStatusPill>}</td>
-                  <td><HrStatusPill tone={s.active ? 'ok' : 'gray'}>{s.active ? 'Active' : 'Inactive'}</HrStatusPill></td>
+                  {/* gracePeriodMinutes — the value the late-mark cutoff actually uses. */}
+                  <td className="hidden sm:table-cell text-text-secondary">{s.gracePeriodMinutes} min</td>
+                  <td className="hidden sm:table-cell text-text-secondary">{s.workingHoursPerDay != null ? `${s.workingHoursPerDay} h` : '—'}</td>
+                  <td>{s.shiftType === 'NIGHT' ? <HrStatusPill tone="purple"><Moon size={11} className="mr-1 inline" />Night</HrStatusPill> : <HrStatusPill tone="info">{TYPE_LABEL[s.shiftType] ?? 'Day'}</HrStatusPill>}</td>
                 </tr>
               ))}
             </tbody>
