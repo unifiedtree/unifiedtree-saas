@@ -17,6 +17,7 @@ import { useAuthStore } from '@unifiedtree/sdk'
  *  ADMIN     — OWNER, SUPER_ADMIN, COMPANY_ADMIN, ADMIN
  *  HR        — HR_MANAGER, HR
  *  MANAGER   — DEPT_MANAGER, MANAGER
+ *  FINANCE   — FINANCE_LEAD (backend grants hrms.employee.read + report perms)
  *  EMPLOYEE  — anything else (bare EMPLOYEE, or no elevated role at all)
  *
  * A single principal can hold roles from multiple buckets; the boolean flags
@@ -31,6 +32,8 @@ export interface RoleBuckets {
   isHR: boolean
   /** DEPT_MANAGER / MANAGER (not HR, not admin) */
   isManager: boolean
+  /** FINANCE_LEAD — holds hrms.employee.read + 5 report perms via backend seed */
+  isFinance: boolean
   /** No elevated role — bare EMPLOYEE, or a principal with no roles at all */
   isEmployee: boolean
   /** Raw roles array from the JWT (may be empty) */
@@ -48,6 +51,7 @@ export interface RoleBuckets {
 export const ADMIN_ROLES   = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'ADMIN'] as const
 export const HR_ROLES      = ['HR_MANAGER', 'HR'] as const
 export const MANAGER_ROLES = ['DEPT_MANAGER', 'MANAGER'] as const
+export const FINANCE_ROLES = ['FINANCE_LEAD'] as const
 
 export function useRoles(): RoleBuckets {
   // Read the roles array reference directly. Allocating `[]` inside the
@@ -59,9 +63,10 @@ export function useRoles(): RoleBuckets {
   const isAdmin   = has(ADMIN_ROLES)
   const isHR      = has(HR_ROLES)
   const isManager = has(MANAGER_ROLES)
+  const isFinance = has(FINANCE_ROLES)
   // "Employee" = no elevated bucket. Keeps the four flags mutually exclusive
   // for the common case where the JWT carries exactly one role string.
-  const isEmployee = !isAdmin && !isHR && !isManager
+  const isEmployee = !isAdmin && !isHR && !isManager && !isFinance
 
-  return { isAdmin, isHR, isManager, isEmployee, roles }
+  return { isAdmin, isHR, isManager, isFinance, isEmployee, roles }
 }

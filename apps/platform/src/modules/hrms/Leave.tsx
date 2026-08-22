@@ -5,6 +5,7 @@ import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { useToast } from '@/shared/hooks/useToast'
 import { useVisibleTabs } from '@/shared/hooks/useVisibleTabs'
+import { useRoles } from '@/shared/hooks/useRoles'
 import { usePermission, Can, P } from '@unifiedtree/sdk'
 import { CardSkeleton, Skeleton, EmptyState } from '@unifiedtree/ui-kit'
 import {
@@ -563,7 +564,16 @@ const ALL_TABS = [
 type TabKey = typeof ALL_TABS[number]['key']
 
 export const Leave: React.FC = () => {
-  const visibleTabs = useVisibleTabs([...ALL_TABS])
+  const { isAdmin } = useRoles()
+  // Client rule: ADMIN never applies for their own leave, so the personal
+  // tabs (My Leaves / Apply / Balances) are hidden for the admin bucket.
+  // Non-admin roles keep the full tab set; edit affordances on Leave Types
+  // and Holidays stay permission-gated inside the child components.
+  const roleFilteredTabs = React.useMemo(
+    () => ALL_TABS.filter((t) => !(isAdmin && (t.key === 'my' || t.key === 'apply' || t.key === 'balances'))),
+    [isAdmin],
+  )
+  const visibleTabs = useVisibleTabs([...roleFilteredTabs])
   const canEditHolidays = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
 
   // Support deep-linking to a specific tab via ?tab=approvals (etc). Notifications

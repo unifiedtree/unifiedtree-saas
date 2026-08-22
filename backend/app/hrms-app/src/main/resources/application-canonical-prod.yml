@@ -124,6 +124,30 @@ unifiedtree:
     refresh-ttl-days:    ${UNIFIEDTREE_JWT_REFRESH_TTL_DAYS:90}
 
   # ---------------------------------------------------------------------
+  # Google OAuth (Authorization-Code + PKCE) for /v1/accounts/auth/google
+  # ---------------------------------------------------------------------
+  # Both secrets MUST come from Secret Manager on Cloud Run. If either is
+  # missing, GoogleOauthService logs a warning at boot and /start returns
+  # 503 oauth_unavailable so the front end can grey the button. NEVER echo
+  # either value to a log — the client-secret is a bearer credential.
+  #
+  # The redirect-uri MUST match byte-for-byte between the /start authorize
+  # URL and the /token exchange, or Google returns redirect_uri_mismatch.
+  # It is also the exact string registered in the Google Cloud Console
+  # OAuth consent screen for this project.
+  #
+  # web-base-url is the target host of the post-login 302 — the marketing
+  # domain is acceptable because ut_acct_rt is Domain=.unifiedtree.com.
+  oauth:
+    google:
+      client-id:            ${GOOGLE_OAUTH_CLIENT_ID:}
+      client-secret:        ${GOOGLE_OAUTH_CLIENT_SECRET:}
+      redirect-uri:         ${GOOGLE_OAUTH_REDIRECT_URI:https://api.unifiedtree.com/api/v1/accounts/auth/google/callback}
+      web-base-url:         ${GOOGLE_OAUTH_WEB_BASE_URL:https://www.unifiedtree.com}
+      state-ttl-seconds:    ${GOOGLE_OAUTH_STATE_TTL_SECONDS:900}
+      jwks-cache-ttl-hours: ${GOOGLE_OAUTH_JWKS_CACHE_TTL_HOURS:24}
+
+  # ---------------------------------------------------------------------
   # Face verification (canonical attendance.face_* + Python worker)
   # ---------------------------------------------------------------------
   face:

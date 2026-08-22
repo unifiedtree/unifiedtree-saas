@@ -58,7 +58,7 @@ const NAV_ITEMS: NavItemDef[] = [
   // DEPT_MANAGER included: managers landed on / and the shell hid Overview,
   // so the analytics home was invisible to them even though every widget on
   // it is permission-gated and 403s cleanly for anything they can't see.
-  { key: 'dashboard',   label: 'Overview',     icon: <LayoutDashboard size={18} />, path: '/dashboard', visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER'] },
+  { key: 'dashboard',   label: 'Overview',     icon: <LayoutDashboard size={18} />, path: '/dashboard', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER'] },
   { key: 'myworkspace', label: 'My Workspace', icon: <UserCircle2 size={18} />,     path: '/me',        visibleForRoles: ['EMPLOYEE'] },
   { key: 'myteam',      label: 'My Team',      icon: <Users size={18} />,           path: '/team',      visibleForRoles: ['DEPT_MANAGER'] },
 ]
@@ -67,9 +67,13 @@ const NAV_ITEMS: NavItemDef[] = [
 // ROLE_PRIORITY comment above for why. Kept explicit (rather than folding into
 // a single ANY_ADMIN alias) so an on-call reader can still read each bundle
 // literally when triaging a "why can't this role see X" report.
-const R_ADMIN     = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD']
-const R_ADMIN_MGR = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER']
-const R_HR        = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
+// OWNER prepended to every admin bundle: an OWNER-only principal (the
+// workspace creator, common on brand-new tenants where no COMPANY_ADMIN has
+// been separately promoted yet) was falling through every visibleForRoles
+// filter and rendering an empty sidebar. Additive — no role removed.
+const R_ADMIN     = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD']
+const R_ADMIN_MGR = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER']
+const R_HR        = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
 // R_FIN was one bundle that included HR_MANAGER, which let HR into rupee-only
 // screens (Payroll Dashboard, Salary Structure, Bank Disbursement, Payroll
 // Settings). Client rule: only admin/finance see rupees. Split into two:
@@ -229,10 +233,10 @@ const MODULE_ITEMS: NavItemDef[] = [
 
 // ─── Platform admin items (the "Settings" app) ────────────────────────────────
 const PLATFORM_ITEMS: NavItemDef[] = [
-  { key: 'users',    label: 'Users & Access', icon: <Users size={18} />,       path: '/users',      visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 'roles',    label: 'Roles & Perms',  icon: <ShieldAlert size={18} />, path: '/roles',      visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 'audit',    label: 'Audit Logs',     icon: <FileText size={18} />,    path: '/audit-logs', visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 'settings', label: 'Configuration',  icon: <Settings size={18} />,    path: '/settings',   visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'] },
+  { key: 'users',    label: 'Users & Access', icon: <Users size={18} />,       path: '/users',      visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 'roles',    label: 'Roles & Perms',  icon: <ShieldAlert size={18} />, path: '/roles',      visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 'audit',    label: 'Audit Logs',     icon: <FileText size={18} />,    path: '/audit-logs', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 'settings', label: 'Configuration',  icon: <Settings size={18} />,    path: '/settings',   visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'] },
 ]
 
 // ─── Workspace Settings nav (the "Settings" app — workspace-level, NOT a module) ──
@@ -240,7 +244,7 @@ const PLATFORM_ITEMS: NavItemDef[] = [
 // is super-admin only. Each maps to a route the shell drives.
 const SETTINGS_NAV: NavItemDef[] = [
   { key: 's-profile',       label: 'Profile',             icon: <UserCircle2 size={18} />,  path: '/profile' },
-  { key: 's-branding',      label: 'Branding',            icon: <ImageIcon size={18} />,     path: '/settings/branding',      visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 's-branding',      label: 'Branding',            icon: <ImageIcon size={18} />,     path: '/settings/branding',      visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
   { key: 's-security',      label: 'Security',            icon: <Shield size={18} />,        path: '/settings/security' },
   // Notifications is deliberately open — every role can manage their OWN
   // notification preferences, so no visibleForRoles filter here.
@@ -250,9 +254,9 @@ const SETTINGS_NAV: NavItemDef[] = [
   // admins the backend actually lets manage billing.
   { key: 's-billing',       label: 'Billing & Plan',      icon: <CreditCard size={18} />,    path: '/settings/billing',       visibleForRoles: ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN'] },
   { key: 's-integrations',  label: 'Integrations',        icon: <Plug size={18} />,          path: '/settings/integrations' },
-  { key: 's-users',         label: 'Users & Access',      icon: <Users size={18} />,         path: '/users',      visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 's-roles',         label: 'Roles & Permissions', icon: <ShieldAlert size={18} />,   path: '/roles',      visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 's-audit',         label: 'Audit Logs',          icon: <FileText size={18} />,      path: '/audit-logs', visibleForRoles: ['SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 's-users',         label: 'Users & Access',      icon: <Users size={18} />,         path: '/users',      visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 's-roles',         label: 'Roles & Permissions', icon: <ShieldAlert size={18} />,   path: '/roles',      visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 's-audit',         label: 'Audit Logs',          icon: <FileText size={18} />,      path: '/audit-logs', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
   // Danger Zone is destructive tenant surgery — only SUPER_ADMIN and OWNER
   // (workspace owner) are allowed near it, never a HR/FIN admin.
   { key: 's-danger',        label: 'Danger Zone',         icon: <AlertTriangle size={18} />, path: '/settings/danger',        visibleForRoles: ['SUPER_ADMIN', 'OWNER'] },

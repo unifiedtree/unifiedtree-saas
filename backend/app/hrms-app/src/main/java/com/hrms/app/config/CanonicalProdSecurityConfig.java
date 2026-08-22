@@ -197,6 +197,17 @@ public class CanonicalProdSecurityConfig {
                     // that is the moment users most want the button to fire.
                     "/v1/accounts/auth/refresh",
                     "/v1/accounts/auth/logout",
+                    // Google Sign-In endpoints. Both are unauthenticated by
+                    // nature: /start is the entry point from the marketing
+                    // /login page (no session yet), and /callback is a
+                    // top-level GET from Google itself (Google cannot present
+                    // our JWT). Both respond ONLY with HTTP 302 — never JSON.
+                    // Security is provided by the double-check of the state
+                    // UUID (ut_oauth_state cookie vs query string) plus the
+                    // single-use auth.oauth_state row (deleted at /callback
+                    // before token exchange). See GoogleOauthService.
+                    "/v1/accounts/auth/google/start",
+                    "/v1/accounts/auth/google/callback",
                     "/v1/platform/auth/login"
                 ).permitAll()
                 // Everything else requires a valid JWT

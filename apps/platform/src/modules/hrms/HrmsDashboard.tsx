@@ -221,7 +221,7 @@ export const HrmsDashboard: React.FC = () => {
    *      "Company" — pure presentation).
    *  Every other gate is the permission check above. See useRoles.ts for
    *  the role-to-bucket map. */
-  const { isAdmin, isHR, isManager, isEmployee } = useRoles()
+  const { isAdmin, isHR, isManager, isFinance, isEmployee } = useRoles()
 
   // Attendance widgets. Client rule verbatim: "for admin no need attendance
   // history or his attendance summary in the dashboard." The dashboard's
@@ -231,21 +231,28 @@ export const HrmsDashboard: React.FC = () => {
   // their own attendance card — there is no other path for HR to see it.
   const canSeeOwnAttendance = !isAdmin
 
-  // Attendance card label bucket → wording. Manager shows their direct
-  // reports ("Team"), admin/HR would show "Company" but the card is hidden
-  // for them anyway, employees and mixed roles fall back to "My".
+  // Attendance card label bucket → wording. /monthly-stats returns the
+  // *caller's own* record for every role — there is no team-aggregate
+  // endpoint yet — so a manager sees "My Attendance" too, not "Team
+  // Attendance" (mislabeling per-user data as team data misleads the
+  // manager into thinking they're reading a roll-up). Admin/HR would
+  // show "Company" but the card is hidden for admin anyway; HR and mixed
+  // roles fall back to "Your Attendance". Restore the "Team" wording
+  // only when a real team-aggregate endpoint lands.
   const attendanceCardTitle = isManager && !isAdmin && !isHR
-    ? 'Team Attendance'
+    ? 'My Attendance'
     : isEmployee
       ? 'My Attendance'
       : 'Your Attendance'
 
   // Workforce-shaped tiles (Total Employees, Recent Employees, Headcount,
-  // Skills radar) — client matrix restricts these to ADMIN + HR. Manager
-  // may hold HRMS_EMPLOYEE_READ for their team but the client rule hides
-  // the workforce-wide surfaces from them ("HIDE: Total Employees … Skills,
-  // Recent Employees"), and employees never see them either.
-  const canSeeWorkforceTiles = canReadEmployees && (isAdmin || isHR)
+  // Skills radar) — client matrix restricts these to ADMIN + HR + FINANCE.
+  // Manager may hold HRMS_EMPLOYEE_READ for their team but the client rule
+  // hides the workforce-wide surfaces from them ("HIDE: Total Employees …
+  // Skills, Recent Employees"), and employees never see them either.
+  // FINANCE_LEAD holds hrms.employee.read + 5 report perms per the backend
+  // seed and needs the workforce roll-ups to do finance analysis.
+  const canSeeWorkforceTiles = canReadEmployees && (isAdmin || isHR || isFinance)
   // Positions Hired + Hiring KPI — same audience (ADMIN + HR only per the
   // client matrix; employees and managers do not see hiring stats).
   const canSeeHiringTiles = canReadHiring && (isAdmin || isHR)

@@ -110,6 +110,14 @@ interface StatusResponse {
 /** Response shape from GET /v1/workspace/plan/current. */
 interface CurrentSubscriptionsResponse {
   subscriptions: ActiveSubDto[]
+  /**
+   * Mirror of platform.tenants.free_trial_used for THIS tenant. When true,
+   * the workspace has already burned its 7-day free trial — the header,
+   * unbilled-plan banner, right-rail total and CTA all swap to "billing
+   * starts today" copy. When false the classic "first 7 days free" copy
+   * still applies. Populated by WorkspacePlanController#current.
+   */
+  freeTrialUsed: boolean
 }
 
 interface ActiveSubDto {
@@ -230,6 +238,13 @@ export const Plan: React.FC = () => {
   const [activeSubs, setActiveSubs] = useState<ActiveSubDto[]>([])
   const [activeSubsLoading, setActiveSubsLoading] = useState(true)
   const [subsLoadFailed, setSubsLoadFailed] = useState(false)
+  // Bug SRC-1: the tenant may have already used their 7-day trial — in that
+  // case every "free trial" phrase on this page is a lie, and the "Today ₹0"
+  // total on the right rail is wrong (they get charged immediately). Fetched
+  // alongside the subscription list so we never render the header before we
+  // know which copy is truthful. Defaults to false so a slow /current call
+  // never briefly promises a trial to someone who has burned it.
+  const [freeTrialUsed, setFreeTrialUsed] = useState(false)
   // Per-plan "pending seat change" state — the +/- on the current-plan card
   // is optimistic; we submit when the admin clicks Confirm.
   const [pendingSeatChanges, setPendingSeatChanges] = useState<Record<string, number>>({})
@@ -270,6 +285,7 @@ export const Plan: React.FC = () => {
       const r = await apiJson<CurrentSubscriptionsResponse>('/v1/workspace/plan/current')
       const list = r.subscriptions ?? []
       setActiveSubs(list)
+      setFreeTrialUsed(!!r.freeTrialUsed)
       setSubsLoadFailed(false)
       // Seed the seat picker for plans that are unlocked with no autopay
       // behind them. Their whole purpose on this page is "start paying for
@@ -341,6 +357,16 @@ export const Plan: React.FC = () => {
   }, [selectedPlans])
 
   const cycleTotal = billingCycle === 'annual' ? annualTotal : monthlyTotal
+
+  // Bug SRC-1: "trial active" means BOTH (a) this workspace still has a free
+  // trial to claim AND (b) there is at least one seat being purchased. If
+  // either is false, every "first 7 days free" / "Today ₹0" affordance on
+  // this page becomes a lie — trialUsed tenants get charged immediately, and
+  // an empty cart charges nothing regardless. One flag drives all four copy
+  // swaps below so the page stays internally consistent.
+  const trialActive = !freeTrialUsed && cycleTotal > 0
+  const todayCharge = trialActive ? 0 : cycleTotal
+  const cycleUnit   = billingCycle === 'annual' ? 'yr' : 'mo'
 
   // -- stepper helpers ------------------------------------------------------
   const inc = (key: string) => setSeatsByPlan(s => ({ ...s, [key]: Math.min(999, (s[key] ?? 0) + 1) }))
@@ -682,7 +708,9 @@ export const Plan: React.FC = () => {
             </button>
             <h1 className="text-3xl font-semibold tracking-tight text-[var(--text-primary)]">Manage your plan</h1>
             <p className="mt-1.5 text-sm text-[var(--text-secondary)]">
-              Pick modules for {tenantName} and set the seat count for each. First 7 days are free — autopay kicks in after.
+              {freeTrialUsed
+                ? <>Pick modules for {tenantName} and set the seat count for each. Billing starts on your first day.</>
+                : <>Pick modules for {tenantName} and set the seat count for each. First 7 days are free — autopay kicks in after.</>}
             </p>
           </div>
         </div>
@@ -867,8 +895,8 @@ export const Plan: React.FC = () => {
                     <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
                       These modules are unlocked and your team can use them, but there is no
                       active autopay behind them — so nothing is being charged. Set the number
-                      of seats above, then use <b>Pay ₹0 &amp; Set Up Autopay</b> to start the
-                      billing cycle. Your first 7 days stay free.
+                      of seats above, then use <b>{freeTrialUsed ? 'Set Up Autopay' : 'Pay ₹0 & Set Up Autopay'}</b> to
+                      start the billing cycle.{freeTrialUsed ? '' : ' Your first 7 days stay free.'}
                     </div>
                   )}
                   {sub.billed && !seatChangeAllowed && sub.status !== 'ACTIVE' && sub.status !== 'TRIALING' && (
@@ -1097,12 +1125,18 @@ export const Plan: React.FC = () => {
                 <div className="border-t border-[var(--border-subtle)] pt-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-[var(--text-secondary)]">Today</span>
-                    <span className="text-2xl font-bold text-[var(--accent-fg-strong)]">₹0</span>
+                    <span className="text-2xl font-bold text-[var(--accent-fg-strong)]">
+                      ₹{todayCharge.toLocaleString('en-IN')}
+                    </span>
                   </div>
                   {selectedPlans.length > 0 && (
                     <div className="rounded-lg bg-[var(--accent-bg)]/60 p-3 text-[11px] leading-snug text-[var(--text-secondary)]">
                       <Sparkles size={11} className="mr-1 inline text-[var(--accent-fg-strong)]" />
-                      Autopay of <span className="font-semibold text-[var(--text-primary)]">₹{cycleTotal.toLocaleString('en-IN')}/{billingCycle === 'annual' ? 'yr' : 'mo'}</span> begins after your 7-day free trial. Cancel anytime.
+                      {trialActive ? (
+                        <>Autopay of <span className="font-semibold text-[var(--text-primary)]">₹{cycleTotal.toLocaleString('en-IN')}/{cycleUnit}</span> begins after your 7-day free trial. Cancel anytime.</>
+                      ) : (
+                        <>Autopay of <span className="font-semibold text-[var(--text-primary)]">₹{cycleTotal.toLocaleString('en-IN')}/{cycleUnit}</span> starts today. Cancel anytime.</>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1121,7 +1155,13 @@ export const Plan: React.FC = () => {
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent-solid)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading && <Loader2 size={14} className="animate-spin" />}
-                  {loading ? 'Setting up autopay…' : 'Pay ₹0 & Set Up Autopay'}
+                  {loading
+                    ? 'Setting up autopay…'
+                    : trialActive
+                      ? 'Pay ₹0 & Set Up Autopay'
+                      : cycleTotal > 0
+                        ? `Set Up Autopay & Pay ₹${cycleTotal.toLocaleString('en-IN')}`
+                        : 'Set Up Autopay'}
                 </button>
 
                 <p className="flex items-center justify-center gap-1 text-[10px] text-[var(--text-tertiary)]">

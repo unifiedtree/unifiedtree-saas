@@ -24,10 +24,36 @@ const trustPoints = [
   'Bank-grade encryption (AES-256)',
 ]
 
+// Google OAuth kickoff — a plain full-page navigation (NOT a fetch). The
+// backend endpoint 302s to accounts.google.com, and cross-origin redirects
+// cannot be followed by XHR. Backend owns state, PKCE, and the client
+// secret — the frontend just points the browser at /start.
+const GOOGLE_OAUTH_START_URL =
+  'https://api.unifiedtree.com/api/v1/accounts/auth/google/start'
+
+// Human-readable copy for the ?error=<code> tag the backend redirects with
+// when Google sign-in fails. `oauth_cancelled` is intentionally silent — the
+// user chose to bail out on Google's consent screen, we shouldn't scold them.
+function googleErrorMessage(code: string | null): string {
+  switch (code) {
+    case 'oauth_state_lost':
+      return 'Your sign-in session expired. Please try again.'
+    case 'oauth_cancelled':
+      return ''
+    case 'oauth_email_unverified':
+      return 'Google says this email is not verified. Verify it on your Google account and try again.'
+    case 'oauth_failed':
+      return 'Sign-in with Google failed. Please try again or use email + password.'
+    default:
+      return ''
+  }
+}
+
 export function LoginPage() {
   const [searchParams] = useSearchParams()
   const initialEmail = searchParams.get('email') ?? ''
   const createdWorkspace = searchParams.get('created') === '1'
+  const initialGoogleError = googleErrorMessage(searchParams.get('error'))
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -135,7 +161,25 @@ export function LoginPage() {
   })
 
   const setAccountAuth = useAuthStore(s => s.setAccountAuth);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(
+    initialGoogleError || null,
+  );
+
+  // Strip the ?error=<code> tag from the URL after we've captured its copy
+  // into local state, so a later browser refresh doesn't re-surface the
+  // same "sign-in failed" banner. history.replaceState leaves the router in
+  // place — no navigation, no re-render loop.
+  useEffect(() => {
+    if (!searchParams.get('error')) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete('error')
+    window.history.replaceState(
+      window.history.state,
+      '',
+      url.pathname + (url.search ? url.search : '') + url.hash,
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const onSubmit = async (data: FormData) => {
     setLoading(true)
@@ -334,16 +378,18 @@ export function LoginPage() {
                 <div className="h-px flex-1 bg-border" />
               </div>
 
-              {/* Google SSO — backend endpoint /v1/accounts/auth/google/start
-                  doesn't exist yet (AccountController has no google/oauth route
-                  as of 2026-08). Disabled 'Coming soon' state so we don't ship
-                  a dead button that silently 404s. (Teammate's B12, ported.) */}
+              {/* Google SSO — plain full-page nav to the backend /start endpoint,
+                  which 302s to accounts.google.com. NOT a fetch: a cross-origin
+                  redirect cannot be followed by XHR, and the frontend does not
+                  hold the client secret / PKCE verifier — the backend owns the
+                  whole OAuth handshake. On success the callback sets the
+                  ut_acct_rt refresh cookie and 302s to /workspaces?welcome=1;
+                  on failure it 302s back here with ?error=<code>. */}
               <button
                 type="button"
-                disabled
-                aria-label="Google sign-in coming soon"
-                title="Google sign-in coming soon"
-                className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl border border-border bg-surface py-3 font-body text-sm font-semibold text-text-secondary opacity-70"
+                onClick={() => window.location.assign(GOOGLE_OAUTH_START_URL)}
+                aria-label="Continue with Google"
+                className="flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-surface py-3 font-body text-sm font-semibold text-text-primary transition-colors hover:bg-bg/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
                   <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
@@ -352,7 +398,6 @@ export function LoginPage() {
                   <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
                 </svg>
                 Continue with Google
-                <span className="ml-1 rounded-full bg-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text-tertiary">Soon</span>
               </button>
 
               <p className="mt-5 text-center font-body text-sm text-text-secondary">

@@ -219,7 +219,25 @@ public class WorkspacePlanController {
                     /*billed=*/ false,
                     /*autoRenew=*/ false));
         }
-        return ResponseEntity.ok(new CurrentSubscriptionsResponse(dtos));
+
+        // Bug SRC-1: the /plan UI needs to know whether this tenant has
+        // already burned its 7-day free trial so it can swap the "First 7
+        // days free" copy for "billing starts today" copy. platform.tenants
+        // owns the flag; we read it here as one indexed lookup rather than
+        // adding a second round-trip on the client.
+        boolean freeTrialUsed = false;
+        try {
+            Boolean flag = jdbc.queryForObject(
+                    "SELECT free_trial_used FROM platform.tenants WHERE id = ?",
+                    Boolean.class, claims.tenantId());
+            freeTrialUsed = Boolean.TRUE.equals(flag);
+        } catch (EmptyResultDataAccessException ignored) {
+            // Tenant row disappeared under us — leave the flag false so the
+            // client shows the more conservative "trial available" copy;
+            // requireAdmin already blocked non-members from getting this far.
+        }
+
+        return ResponseEntity.ok(new CurrentSubscriptionsResponse(dtos, freeTrialUsed));
     }
 
     /**
@@ -589,7 +607,16 @@ public class WorkspacePlanController {
     /** Result of a "I paid but it's still locked" recovery attempt. */
     public record RecoverResponse(int activated, String message) {}
 
-    public record CurrentSubscriptionsResponse(List<ActiveSubDto> subscriptions) {}
+    /**
+     * @param freeTrialUsed mirror of {@code platform.tenants.free_trial_used}
+     *        for the caller's tenant. The /plan UI swaps every "First 7 days
+     *        free" string for "billing starts today" copy when this is true —
+     *        without it, a tenant whose trial was already burned reads the
+     *        page as though a free trial is still on offer and is surprised
+     *        by the first charge (Bug SRC-1, audit 2026-08-22).
+     */
+    public record CurrentSubscriptionsResponse(List<ActiveSubDto> subscriptions,
+                                                boolean freeTrialUsed) {}
 
     /**
      * One line in "Your current plan".

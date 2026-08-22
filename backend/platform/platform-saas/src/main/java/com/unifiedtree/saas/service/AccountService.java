@@ -90,6 +90,14 @@ public class AccountService {
         if (account.lockedUntil() != null && account.lockedUntil().isAfter(OffsetDateTime.now())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is temporarily locked");
         }
+        if (account.passwordHash() == null || account.passwordHash().isBlank()) {
+            // Google-only account (V108): password_hash is now nullable. Return
+            // a specific 401 so the front end can nudge the user to the
+            // "Continue with Google" button rather than looping through the
+            // generic "invalid email or password" wall.
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "Use Continue with Google to sign in");
+        }
         if (!passwords.matches(password, account.passwordHash())) {
             int failures = account.failedLoginCount() + 1;
             if (failures >= LOCK_AFTER_FAILURES) {
@@ -247,6 +255,34 @@ public class AccountService {
 
     public List<WorkspaceSummary> workspaces(Jwt accountJwt) {
         return workspacesForAccount(requireAccountId(accountJwt));
+    }
+
+    /**
+     * OAuth callback helper: build the same {@link AccountLoginResponse} the
+     * password login returns, given an already-resolved account id. The caller
+     * ({@code GoogleOauthService}) has already verified the ID token,
+     * find-or-created the account row, and updated {@code last_login_at}
+     * inside its own {@code @Transactional} boundary. This method issues the
+     * access-token JWT and packages workspaces exactly as {@link #login}
+     * would — the front end on {@code /workspaces} then fetches the same
+     * shape via {@code /v1/accounts/auth/refresh}.
+     *
+     * <p>Deliberately does NOT touch {@code failed_login_count} /
+     * {@code last_login_at} — that is the OAuth service's job (it already
+     * did it inside the resolve transaction to keep the write atomic with
+     * the find-or-create).
+     */
+    public AccountLoginResponse buildLoginResponseAfterOauth(UUID accountId) {
+        AccountCredential account = loadCredentialById(accountId);
+        if (!"ACTIVE".equals(account.status())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is disabled");
+        }
+        JwtService.IssuedToken issued = jwt.issueAccountToken(account.accountId(), account.email());
+        return new AccountLoginResponse(
+                issued.token(),
+                issued.expiresAt(),
+                toSummary(account),
+                workspacesForAccount(account.accountId()));
     }
 
     public SignupResponse createWorkspace(Jwt accountJwt, CreateWorkspaceRequest request) {

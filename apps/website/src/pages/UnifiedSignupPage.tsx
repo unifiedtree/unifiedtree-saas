@@ -26,6 +26,13 @@ const TRIAL_DAYS = 7
 const POLL_INTERVAL_MS = 2500
 const POLL_MAX_MS = 30 * 60 * 1000   // give up after 30 min of polling
 
+// Google OAuth kickoff — plain full-page navigation to the backend, which
+// 302s to accounts.google.com. NOT a fetch: cross-origin redirects cannot be
+// followed by XHR. Same URL as LoginPage; the callback lands on
+// /workspaces?welcome=1 (success) or /login?error=<code> (failure).
+const GOOGLE_OAUTH_START_URL =
+  'https://api.unifiedtree.com/api/v1/accounts/auth/google/start'
+
 // -- schema (shared between TRIAL and PAID) --------------------------------
 // Password fields are optional on the type but required at submit time when
 // the caller is NOT signed in. Enforced at handleSubmit rather than in zod
@@ -727,6 +734,34 @@ export function UnifiedSignupPage() {
                     : 'Choose your team size and pay securely to activate instantly.'}
                 </p>
               </div>
+
+              {/* Google SSO — only makes sense when the visitor is not already
+                  signed in. When they are, the account layer above already
+                  handled auth and this form is only creating a fresh workspace
+                  under that account, so the Google button would be a dead-end. */}
+              {!accountToken && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => window.location.assign(GOOGLE_OAUTH_START_URL)}
+                    aria-label="Continue with Google"
+                    className="flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-white py-2.5 font-body text-sm font-semibold text-text-primary transition-colors hover:bg-bg/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                      <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                      <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+                      <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+                    </svg>
+                    Continue with Google
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-[10.5px] font-body font-semibold uppercase tracking-wider text-text-tertiary">or sign up with email</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                </>
+              )}
 
               {error && (
                 <div className="flex items-start gap-2 p-2.5 rounded-lg bg-danger/10 border border-danger/20 text-[13px] text-danger">

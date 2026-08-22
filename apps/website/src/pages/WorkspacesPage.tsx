@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore, WorkspaceSummary } from '../store/authStore';
 import { api, ApiError } from '../lib/api';
-import { Building2, Plus, ArrowRight, Star, Loader2, Settings } from 'lucide-react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { Building2, Plus, ArrowRight, Star, Loader2, Settings, Check, X as XIcon } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Navbar } from '../components/layout/Navbar';
 
 /* Compact one-line module summary for a workspace row — the rows stay quiet,
@@ -27,6 +27,32 @@ export function WorkspacesPage() {
   const [enteringId, setEnteringId] = useState<string | null>(null);
   const navigate = useNavigate();
   const reduce = useReducedMotion();
+
+  // Soft one-time acknowledgement after a successful Google OAuth round-trip.
+  // The backend /callback 302s here with ?welcome=1 once the ut_acct_rt
+  // refresh cookie is set — we surface a quiet banner so the user knows the
+  // sign-in landed, then strip the query so a reload doesn't re-show it.
+  // Read the flag from a synchronous searchParams snapshot rather than
+  // useSearchParams state so setSearchParams() elsewhere can't retrigger it.
+  const [searchParams] = useSearchParams();
+  const [welcome, setWelcome] = useState(() => searchParams.get('welcome') === '1');
+  useEffect(() => {
+    if (!welcome) return;
+    // Strip ?welcome=1 from the URL without triggering a navigation — the
+    // router keeps its current location but a browser refresh won't
+    // re-surface the banner.
+    const url = new URL(window.location.href);
+    url.searchParams.delete('welcome');
+    window.history.replaceState(
+      window.history.state,
+      '',
+      url.pathname + (url.search ? url.search : '') + url.hash,
+    );
+    // Auto-dismiss after ~5s so the layout returns to its resting state
+    // without the user having to click it away.
+    const t = window.setTimeout(() => setWelcome(false), 5000);
+    return () => window.clearTimeout(t);
+  }, [welcome]);
 
   useEffect(() => {
     // Wait for session hydration to finish before firing the /me/workspaces
@@ -120,6 +146,40 @@ export function WorkspacesPage() {
       {/* Centred composition: one rounded card floating on the soft ground,
           workspace list left, deep-emerald decorative pane right. Below lg
           the emerald pane is hidden and the page scrolls normally. */}
+      {/* Google-SSO acknowledgement — a soft toast anchored top-right of the
+          viewport, out of the way of the main workspace list. Fades in when
+          the user lands here via ?welcome=1 and auto-dismisses after 5s. */}
+      <AnimatePresence>
+        {welcome && (
+          <motion.div
+            initial={{ opacity: 0, y: reduce ? 0 : -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: reduce ? 0 : -8 }}
+            transition={{ duration: 0.25 }}
+            role="status"
+            aria-live="polite"
+            className="fixed right-4 top-20 z-40 flex max-w-sm items-start gap-2.5 rounded-xl border border-primary/20 bg-surface px-4 py-3 shadow-card-hover sm:right-6"
+          >
+            <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+              <Check size={12} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-body text-[13px] font-semibold text-text-primary">
+                Signed in with Google — welcome
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWelcome(false)}
+              aria-label="Dismiss"
+              className="shrink-0 rounded-md p-0.5 text-text-tertiary transition-colors hover:bg-bg hover:text-text-primary"
+            >
+              <XIcon size={14} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <main className="flex min-h-screen flex-col px-4 pb-10 pt-24 sm:px-6 lg:h-screen lg:min-h-0 lg:pb-6 lg:pt-24">
         <motion.div
           initial={{ opacity: 0, y: reduce ? 0 : 14 }}
