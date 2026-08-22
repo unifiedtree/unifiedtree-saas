@@ -255,13 +255,16 @@ public class EmployeeShiftService {
         if (req.endTime() != null) p.setEndTime(req.endTime());
         if (req.gracePeriodMinutes() != null) p.setGracePeriodMinutes(req.gracePeriodMinutes());
         if (req.workingHoursPerDay() != null) p.setWorkingHoursPerDay(req.workingHoursPerDay());
+        if (req.overtimeApplicable() != null) p.setOvertimeApplicable(req.overtimeApplicable());
+        if (req.overtimeMultiplier() != null) p.setOvertimeMultiplier(req.overtimeMultiplier());
     }
 
     private static ShiftPolicyResponse toPolicyResponse(ShiftPolicy p) {
         return new ShiftPolicyResponse(
                 p.getId(), p.getName(), p.getShiftType(),
                 p.getStartTime(), p.getEndTime(),
-                p.getGracePeriodMinutes(), p.getWorkingHoursPerDay());
+                p.getGracePeriodMinutes(), p.getWorkingHoursPerDay(),
+                p.isOvertimeApplicable(), p.getOvertimeMultiplier());
     }
 
     private static EmployeeShiftResponse toEmployeeResponse(UUID employeeId, EmployeeShiftAssignment a, ShiftPolicy p) {

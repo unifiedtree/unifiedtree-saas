@@ -64,6 +64,14 @@ public class AccountController {
     /** Matches AccountService.ACCOUNT_REFRESH_TTL (30 days). */
     private static final int RT_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
+    /**
+     * Per-workspace refresh cookie, written on "Enter Workspace". Name and TTL
+     * MUST match CanonicalAuthController's RT_COOKIE_PREFIX / 7-day max-age —
+     * that controller owns the /refresh endpoint which reads this cookie back.
+     */
+    private static final String WORKSPACE_RT_COOKIE_PREFIX = "ut_rt_";
+    private static final int WORKSPACE_RT_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
@@ -204,11 +212,45 @@ public class AccountController {
         return accounts.createWorkspace(jwt, request);
     }
 
+    /**
+     * "Enter Workspace" — exchange an account session for a workspace session.
+     *
+     * <p>Also writes the {@code ut_rt_<tenantId>} refresh cookie, exactly as
+     * {@code CanonicalAuthController.login()} does for a direct workspace
+     * password login. Without it the SSO-entered tab held its access token in
+     * memory only, so a single page reload logged the user straight back out —
+     * and worse, the cookie-less refresh used to fall back to whatever other
+     * {@code ut_rt_*} cookie the browser had, minting a DIFFERENT workspace's
+     * session inside this tab. Both were fixed together on 2026-08-22; this
+     * half removes the trigger, the refresh handler removes the fallback.
+     */
     @PostMapping("/v1/accounts/workspaces/session")
     @PreAuthorize("hasRole('ACCOUNT_USER')")
     public WorkspaceSessionResponse session(@AuthenticationPrincipal Jwt jwt,
-                                            @Valid @RequestBody WorkspaceSessionRequest request) {
-        return accounts.createWorkspaceSession(jwt, request.tenantId());
+                                            @Valid @RequestBody WorkspaceSessionRequest request,
+                                            HttpServletResponse res) {
+        WorkspaceSessionResponse out = accounts.createWorkspaceSession(jwt, request.tenantId());
+        if (out != null && out.auth() != null) {
+            writeWorkspaceRefreshCookie(res, out.auth().tenantId(), out.auth().refreshToken());
+        }
+        return out;
+    }
+
+    /**
+     * Mirror of {@code CanonicalAuthController.writeRefreshCookie} — the two
+     * MUST stay byte-identical in name and attributes, because the refresh
+     * endpoint that reads this cookie lives in that other controller. Cookie
+     * names may not contain '-', so the UUID is written un-hyphenated.
+     */
+    private void writeWorkspaceRefreshCookie(HttpServletResponse res, UUID tenantId, String refreshToken) {
+        if (res == null || tenantId == null || refreshToken == null || refreshToken.isBlank()) return;
+        String name = WORKSPACE_RT_COOKIE_PREFIX + tenantId.toString().replace("-", "");
+        res.addHeader("Set-Cookie", String.join("; ",
+                name + "=" + refreshToken,
+                "Max-Age=" + WORKSPACE_RT_COOKIE_MAX_AGE_SECONDS,
+                "Path=/",
+                "Domain=.unifiedtree.com",
+                "HttpOnly", "Secure", "SameSite=Lax"));
     }
 
     @GetMapping("/v1/workspace/context")

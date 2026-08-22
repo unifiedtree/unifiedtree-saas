@@ -7,6 +7,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -29,7 +30,9 @@ public final class ShiftDtos {
             LocalTime startTime,
             LocalTime endTime,
             int gracePeriodMinutes,
-            Double workingHoursPerDay) {}
+            Double workingHoursPerDay,
+            boolean overtimeApplicable,
+            BigDecimal overtimeMultiplier) {}
 
     /**
      * Create / update a shift definition.
@@ -40,7 +43,15 @@ public final class ShiftDtos {
      *       is almost always a data-entry error and defeats the late-mark logic).</li>
      *   <li>{@code workingHoursPerDay} — 0.5..24.0 (half-hour minimum, one full
      *       day maximum). Negative values silently corrupted overtime calc.</li>
+     *   <li>{@code overtimeMultiplier} — 1.0..9.99. The column is NUMERIC(4,2)
+     *       so it would accept up to 99.99, but an OT rate above 9.99x is a
+     *       data-entry error, not a policy. 1.0 = paid at plain time.</li>
      * </ul>
+     *
+     * <p>{@code overtimeApplicable} / {@code overtimeMultiplier} are stored on
+     * the policy only — nothing consumes them yet. Wiring overtime into payroll
+     * is deliberately out of scope until the client picks a model (multiplier on
+     * base vs a flat per-hour rupee rate).</p>
      *
      * <p>Cross-field {@code endTime > startTime} for {@link ShiftType#FIXED} is
      * enforced in {@code EmployeeShiftService} — a {@link ShiftType#NIGHT} shift
@@ -53,7 +64,9 @@ public final class ShiftDtos {
             LocalTime startTime,
             LocalTime endTime,
             @Min(0) @Max(120) Integer gracePeriodMinutes,
-            @DecimalMin("0.5") @DecimalMax("24.0") Double workingHoursPerDay) {}
+            @DecimalMin("0.5") @DecimalMax("24.0") Double workingHoursPerDay,
+            Boolean overtimeApplicable,
+            @DecimalMin("1.0") @DecimalMax("9.99") BigDecimal overtimeMultiplier) {}
 
     /** Assign a shift to an employee. effectiveFrom defaults to today when null. */
     public record AssignShiftRequest(

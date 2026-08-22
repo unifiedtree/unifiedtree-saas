@@ -267,7 +267,21 @@ function TypeRow({ type, onEdit, onDeactivate }: { type: LeaveTypeResponse; onEd
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function LeaveTypes() {
+/**
+ * Mounts standalone — it resolves its own company via `useCompanies()` and
+ * needs no props. Rendered both as the "Leave Types" tab of /hrms/leave and as
+ * the "Leave Rules" tab of /hrms/policies; the two optional header props let
+ * the host page re-crumb it without forking the form.
+ */
+interface LeaveTypesProps {
+  crumb?: string
+  subtitle?: string
+}
+
+export function LeaveTypes({
+  crumb = 'Leave Management',
+  subtitle = 'Configure leave types available to employees in this company',
+}: LeaveTypesProps = {}) {
   const { toast } = useToast()
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
@@ -311,9 +325,9 @@ export function LeaveTypes() {
   return (
     <div className="space-y-4">
       <HrPageHeader
-        crumb="Leave Management"
+        crumb={crumb}
         title="Leave Types"
-        subtitle="Configure leave types available to employees in this company"
+        subtitle={subtitle}
         actions={
           <Can code={P.LEAVE_TYPE_WRITE}>
             {!isLoading && types.length === 0 && (

@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.Filter;
 
+import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.util.UUID;
 
@@ -42,6 +43,12 @@ public class ShiftPolicy extends BaseEntity {
 
     @Column(name = "working_hours_per_day")
     private Double workingHoursPerDay = 8.0;
+
+    @Column(name = "overtime_applicable")
+    private boolean overtimeApplicable = false;
+
+    @Column(name = "overtime_multiplier")
+    private BigDecimal overtimeMultiplier = new BigDecimal("1.5");
 
     @Column(name = "is_active")
     private boolean active = true;

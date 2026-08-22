@@ -12,15 +12,20 @@ import { apiJson } from '@/core/api/client'
  * Fields (mirrors SeatQuotaService.Usage):
  *   purchased               — seats sold on the current subscription /
  *                             tenant_modules row, or 0 if no billing record.
- *   currentExcludingAdmin   — count of ACTIVE employees whose role is NOT in
- *                             {OWNER, SUPER_ADMIN}. OWNERs are billed as the
- *                             workspace owner, not as headcount, so they never
- *                             count against the paid seat cap.
- *   remaining               — max(purchased - currentExcludingAdmin, 0).
+ *   current                 — count of ALL active employees, admins included.
+ *                             Admins used to be subtracted here; the client
+ *                             asked for them to be billed like anyone else
+ *                             (2026-08-22), so every active employee counts.
+ *   currentExcludingAdmin   — deprecated alias of `current`, still emitted by
+ *                             the backend so a stale cached bundle keeps
+ *                             rendering. Do not use in new code.
+ *   remaining               — max(purchased - current, 0).
  */
 export interface SeatsUsage {
   purchased: number
-  currentExcludingAdmin: number
+  current: number
+  /** @deprecated same value as `current` — read `current` instead. */
+  currentExcludingAdmin?: number
   remaining: number
 }
 

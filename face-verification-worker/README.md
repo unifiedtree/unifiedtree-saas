@@ -128,6 +128,64 @@ TODO(production): swap `liveness.py` for a real anti-spoof ONNX model
 
 Verify endpoint targets <700 ms p95 on CPU per the project spec.
 
+### Per-stage timings
+
+`/face/enroll/sample` and `/face/verify` return a `stage_ms` block next
+to `latency_ms` so a slow punch can be attributed rather than guessed at:
+
+```jsonc
+"latency_ms": 118,
+"stage_ms": {
+  "decode": 38.68,      // base64 -> cv2.imdecode
+  "detect": 21.40,      // YuNet
+  "quality": 2.05,      // area + sharpness gate
+  "align_embed": 32.83, // SFace alignCrop + feature
+  "liveness": 44.29,    // app/liveness.py
+  "match":  0.20        // cosine vs candidate templates (verify only)
+}
+```
+
+`latency_ms` now **includes** base64/JPEG decode. It previously started
+its timer after `_decode`, so every historical latency number from this
+worker under-reports by roughly the `decode` figure above.
+
+The reject paths (`no face detected`, `more than one face`, `face too
+small/far`) also carry `stage_ms` + `latency_ms`. Spring parses the body
+into a raw `Map`, so these additive keys are safe for older callers.
+
+### Performance tuning
+
+| Env var                  | Default | Effect |
+|--------------------------|---------|--------|
+| `FACE_CV_NUM_THREADS`    | `1`     | Caps OpenCV's internal thread pool. Endpoints are sync `def`, so Starlette already runs them on a 40-slot threadpool; letting each one fan out to `nproc` OpenCV threads badly oversubscribes a 1-2 vCPU container. Set `-1` to restore OpenCV autodetection on a big dedicated box. |
+| `FACE_LIVENESS_FAST_ROI` | `false` | **Changes liveness scores - see below.** Runs the two passive liveness checks on the face rectangle with a `CV_32F` Laplacian instead of the whole frame with `CV_64F`. |
+
+#### `FACE_LIVENESS_FAST_ROI` — do not enable without re-tuning
+
+The default liveness path makes three full-frame passes (BGR2GRAY,
+`Laplacian(..., CV_64F)`, BGR2HSV + `np.std`). On 1920x1080 that measured
+**72.8 ms**; on the face ROI with `CV_32F` the same code is **8.2 ms**.
+
+That saving is real but it is **not free**: the score itself changes,
+because today's numbers include background wall, clothing and clutter.
+Measured on a synthetic print-like (smooth) frame:
+
+| Frame        | Full-frame (default) | ROI + CV_32F |
+|--------------|----------------------|--------------|
+| noisy/live   | 0.800                | 0.783        |
+| smooth/print | **0.209**            | **0.481**    |
+
+The Spring gate is `unifiedtree.face.liveness-threshold` (default
+`0.35`, in `application-canonical-prod.yml`). In that second row the
+flag flips a print-like frame from *below* the gate (rejected) to
+*above* it (accepted) — i.e. turning this on blind would weaken the
+anti-spoof gate.
+
+So it ships **OFF**. To adopt it: enable on a staging worker, collect
+the new score distribution over real captures (genuine punches *and*
+print/replay spoofs), pick a new `liveness-threshold`, then roll the
+flag and the threshold together.
+
 ## Load test
 
 ```bash

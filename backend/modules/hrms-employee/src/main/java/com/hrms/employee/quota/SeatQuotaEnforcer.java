@@ -131,15 +131,15 @@ public class SeatQuotaEnforcer {
             // bought nothing"): block it. Callers that want to fail-open on
             // missing config should not be assigning 0 as a cap.
             log.info("SEAT_LIMIT_EXCEEDED tenant={} purchased=0 current={} (no active plan)",
-                    tenantId, u.currentExcludingAdmin());
-            throw new SeatLimitExceededException(tenantId, 0, u.currentExcludingAdmin());
+                    tenantId, u.current());
+            throw new SeatLimitExceededException(tenantId, 0, u.current());
         }
 
-        if (u.currentExcludingAdmin() + additional > u.purchased()) {
+        if (u.current() + additional > u.purchased()) {
             log.info("SEAT_LIMIT_EXCEEDED tenant={} purchased={} current={} additional={}",
-                    tenantId, u.purchased(), u.currentExcludingAdmin(), additional);
+                    tenantId, u.purchased(), u.current(), additional);
             throw new SeatLimitExceededException(
-                    tenantId, u.purchased(), u.currentExcludingAdmin());
+                    tenantId, u.purchased(), u.current());
         }
     }
 }

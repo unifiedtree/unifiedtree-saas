@@ -62,7 +62,7 @@ const STYLES: Record<Tier, TierStyles> = {
  * (e.g. an "in trial" chip when the plan is on a trial subscription) can be
  * added without touching the render code.
  */
-function computeTier(usage: { purchased: number; currentExcludingAdmin: number; remaining: number }): Tier {
+function computeTier(usage: { purchased: number; current: number; remaining: number }): Tier {
   if (usage.purchased <= 0) return 'inactive'
   // A signed contract with unlimited seats would set purchased to a
   // sentinel (e.g. 9999). We treat >= 1000 as effectively unlimited so we
@@ -124,7 +124,7 @@ export const SeatsUsageTile: React.FC = () => {
   const style = STYLES[tier]
   const isFinite = tier !== 'unlimited' && tier !== 'inactive'
   const percentUsed = isFinite && data.purchased > 0
-    ? Math.min(100, Math.round((data.currentExcludingAdmin / data.purchased) * 100))
+    ? Math.min(100, Math.round((data.current / data.purchased) * 100))
     : 0
 
   return (
@@ -147,7 +147,7 @@ export const SeatsUsageTile: React.FC = () => {
             No active subscription on this workspace.
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            {data.currentExcludingAdmin.toLocaleString()} employee{data.currentExcludingAdmin === 1 ? '' : 's'} on file.
+            {data.current.toLocaleString()} employee{data.current === 1 ? '' : 's'} on file.
           </div>
           <HrButton size="sm" className="mt-4 w-full" onClick={() => navigate('/settings/billing')}>
             Choose a plan
@@ -156,7 +156,7 @@ export const SeatsUsageTile: React.FC = () => {
       ) : tier === 'unlimited' ? (
         <>
           <div className="mt-3 flex items-baseline gap-2">
-            <div className="text-3xl font-bold text-slate-900">{data.currentExcludingAdmin.toLocaleString()}</div>
+            <div className="text-3xl font-bold text-slate-900">{data.current.toLocaleString()}</div>
             <div className="text-sm text-slate-500">employees onboarded</div>
           </div>
           <div className="mt-1 text-xs text-slate-500">Enterprise plan — no seat cap.</div>
@@ -164,13 +164,13 @@ export const SeatsUsageTile: React.FC = () => {
       ) : (
         <>
           <div className="mt-3 flex items-baseline gap-2">
-            <div className="text-3xl font-bold text-slate-900">{data.currentExcludingAdmin.toLocaleString()}</div>
+            <div className="text-3xl font-bold text-slate-900">{data.current.toLocaleString()}</div>
             <div className="text-sm text-slate-500">
               of {data.purchased.toLocaleString()} seats used
             </div>
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            {data.remaining.toLocaleString()} remaining · owner/super-admin not counted
+            {data.remaining.toLocaleString()} remaining · admins included
           </div>
 
           <div

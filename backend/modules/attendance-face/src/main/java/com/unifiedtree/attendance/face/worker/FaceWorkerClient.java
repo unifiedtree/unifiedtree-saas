@@ -71,12 +71,19 @@ public class FaceWorkerClient {
             // just standing in line — fail fast, let the client retry.
             @Value("${unifiedtree.face.worker-bulkhead-wait-ms:500}") long bulkheadWaitMs) {
         this.workerUrl = workerUrl.replaceAll("/$", "");
-        // Connect timeout MUST tolerate a scale-to-zero worker: Railway holds the
-        // socket open while the container boots and lazy-loads its ONNX models.
-        // The old Math.min(750, readTimeout) cap made a cold worker unreachable,
-        // so the first punch after idle always 503'd. Both timeouts stay well
-        // under the mobile checkin timeout (60s) so Spring returns a real verdict
-        // before the app gives up with a bare "Network Error".
+        // Connect timeout MUST tolerate a cold worker: Cloud Run holds the socket
+        // open while the container boots and loads its ONNX models. The old
+        // Math.min(750, readTimeout) cap made a cold worker unreachable, so the
+        // first punch after idle always 503'd.
+        //
+        // These two apply SERIALLY (connect, then response), so the worst case
+        // Spring can spend here is connectTimeoutMs + timeoutMs = 24s at the
+        // 12000/12000 defaults. That MUST stay below the mobile client's
+        // FACE_TIMEOUT (30s, Attendance_App/services/api/face.api.ts) so Spring
+        // returns a real verdict — FAIL_MATCH, FAIL_LOW_QUALITY, a 402 — before
+        // the app gives up with a bare "Network Error". Raising either value
+        // without raising FACE_TIMEOUT first inverts that and degrades every
+        // genuine rejection into a generic connectivity error.
         this.readTimeout = Duration.ofMillis(timeoutMs);
         HttpClient httpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)

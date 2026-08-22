@@ -376,19 +376,34 @@ public class CanonicalAuthController {
                 token = targetCookie;
                 TenantContext.setTenantId(tenantId);
                 com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+            } else if (tenantId != null) {
+                // The tab IS pointed at a specific workspace (Host /
+                // X-Tenant-Subdomain resolved) but carries no cookie for it.
+                //
+                // NEVER fall back to another workspace's cookie here. Cookies
+                // are Domain=.unifiedtree.com, so every ut_rt_* the user owns
+                // is present on every subdomain. The old code took "first
+                // found" and switched tenantId to match, which minted
+                // workspace A's session inside workspace B's tab — the user
+                // then saw A's data under B's URL. Because tenant comes from
+                // the JWT claim in canonical-prod, nothing downstream caught
+                // it. (Cross-tenant leak found 2026-08-22; the class javadoc
+                // above always described the correct behaviour, the code just
+                // did not implement it.)
+                //
+                // Failing here is right: the caller gets REFRESH_MISSING and
+                // is sent to this workspace's own login page.
+                if (log.isDebugEnabled()) {
+                    log.debug("REFRESH_NO_COOKIE_FOR_TENANT tenant={} — refusing cross-tenant fallback", tenantId);
+                }
+                token = null;
             } else {
-                // No cookie for the resolved workspace. Two cases:
-                //   a) header not set at all (mobile / boot path) → legitimate
-                //      first-found fallback
-                //   b) header IS set but that workspace has no cookie in this
-                //      browser → also fall back, but log the mismatch so we
-                //      notice cross-workspace cookie confusion in the wild.
+                // No tenant could be resolved at all — the mobile / boot path
+                // where there is no subdomain to read. First-found is the only
+                // option and is safe: there is no "current workspace" to
+                // contradict.
                 java.util.Map.Entry<UUID, String> cookiePair = findAnyRefreshCookie(httpReq);
                 if (cookiePair != null) {
-                    if (tenantId != null && !tenantId.equals(cookiePair.getKey())) {
-                        log.warn("REFRESH_COOKIE_TENANT_MISMATCH resolved tenant={} but only cookie present is for tenant={}; falling back to cookie tenant",
-                                tenantId, cookiePair.getKey());
-                    }
                     tenantId = cookiePair.getKey();
                     token = cookiePair.getValue();
                     TenantContext.setTenantId(tenantId);

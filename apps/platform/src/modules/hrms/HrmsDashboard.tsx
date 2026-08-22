@@ -18,6 +18,7 @@ import { useHeadcountReport } from './api/useReports'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
 import { useRoles } from '@/shared/hooks/useRoles'
 import { UpcomingProbations } from './probation/UpcomingProbations'
+import { UpcomingMilestones } from './milestones/UpcomingMilestones'
 import { SeatsUsageTile } from './SeatsUsageTile'
 
 /**
@@ -716,6 +717,12 @@ export const HrmsDashboard: React.FC = () => {
             so a bare HRMS_EMPLOYEE_READ principal (who can list employees but
             not read the reminders feed) doesn't get a red 403 toast. */}
         {canSeeProbation && <UpcomingProbations />}
+
+        {/* Upcoming milestones — deliberately ungated: the endpoint is
+            isAuthenticated() and the payload is name + department + date only,
+            no salary or contact PII. Self-hides when all three lists are empty
+            so a quiet fortnight doesn't leave a dead card here. */}
+        <UpcomingMilestones />
       </div>
     </div>
   )

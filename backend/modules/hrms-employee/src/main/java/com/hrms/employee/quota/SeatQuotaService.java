@@ -21,12 +21,13 @@ import java.util.UUID;
  * </ul>
  *
  * <p><b>Seat counting.</b> An employee occupies a seat when
- * {@code hrms.employees.is_active = true}. Workspace-owner / super-admin
- * accounts (identified by their user_credentials role grants for OWNER or
- * SUPER_ADMIN — the only two admin codes seeded in rbac.roles) are excluded
- * so the workspace's paid seat count reflects employees, not the person who
- * runs the workspace. The exclusion is by ROLE, not by employee status, so a
- * self-onboarded owner who also has an employee row is counted zero times.
+ * {@code hrms.employees.is_active = true} — <em>including</em> admins.
+ * Until 2026-08-22 accounts holding OWNER / SUPER_ADMIN were subtracted from
+ * the used-seat count, on the theory that the person running the workspace
+ * is not an employee of it. The client rejected that: an admin with an
+ * employee record consumes a licence like anyone else, so billing must
+ * charge for them (Anil punchlist #1, 2026-08-22). The exclusion is gone and
+ * every active employee row counts exactly once.
  *
  * <p><b>Fallback cap.</b> When no subscription row exists we return
  * {@code TRIAL_FALLBACK_CAP} for trial-status workspaces (safe floor so
@@ -51,13 +52,23 @@ public class SeatQuotaService {
 
     /**
      * Snapshot of a workspace's seat position.
+     *
+     * <p>{@code currentExcludingAdmin} is a deprecated alias that carries the
+     * same value as {@code current}. It stays on the wire so an older cached
+     * frontend bundle keeps rendering while the new one rolls out; delete it
+     * once no client reads it. The name is a lie as of 2026-08-22 — admins are
+     * counted now — which is exactly why callers should move to {@code current}.
      */
-    public record Usage(int purchased, int currentExcludingAdmin, int remaining) {}
+    public record Usage(int purchased, int current, int currentExcludingAdmin, int remaining) {
+        public Usage(int purchased, int current, int remaining) {
+            this(purchased, current, current, remaining);
+        }
+    }
 
     @Transactional(readOnly = true)
     public Usage getUsage(UUID tenantId) {
         int purchased = seatCap(tenantId);
-        int used      = activeEmployeesExcludingAdmin(tenantId);
+        int used      = activeEmployees(tenantId);
         int remaining = Math.max(0, purchased - used);
         return new Usage(purchased, used, remaining);
     }
@@ -115,32 +126,25 @@ public class SeatQuotaService {
     }
 
     /**
-     * Count of active employees that occupy a paid seat. Excludes rows whose
-     * linked user_credentials row carries a workspace-admin role
-     * (SUPER_ADMIN / OWNER — the actual codes seeded in {@code rbac.roles};
-     * the legacy 'COMPANY_ADMIN' literal used to be here but no such row
-     * exists in canonical prod, so the filter was a dead branch that let two
-     * genuine admin accounts count against the paid cap).
-     * These are the people running the workspace, not employees against its
-     * plan. Fail-closed semantics live in {@link SeatQuotaEnforcer}: this
-     * method may throw, and the enforcer turns any such failure into a
+     * Count of active employees that occupy a paid seat — every one of them,
+     * admins included (client decision, Anil punchlist #1, 2026-08-22).
+     *
+     * <p>The previous implementation subtracted employees whose linked
+     * {@code auth.user_credentials} row carried OWNER or SUPER_ADMIN. That
+     * made the autopay subscription under-count: a five-person company whose
+     * founder is also the admin was billed for four. Admins use the product,
+     * so they consume a licence.
+     *
+     * <p>Fail-closed semantics live in {@link SeatQuotaEnforcer}: this method
+     * may throw, and the enforcer turns any such failure into a
      * {@code QUOTA_LOOKUP_FAILED} reject rather than a silent zero.
      */
-    int activeEmployeesExcludingAdmin(UUID tenantId) {
+    int activeEmployees(UUID tenantId) {
         if (tenantId == null) return 0;
         Integer n = jdbc.queryForObject("""
                 SELECT count(*)::int FROM hrms.employees e
                  WHERE e.tenant_id = ?
                    AND e.is_active = true
-                   AND NOT EXISTS (
-                       SELECT 1
-                         FROM auth.user_credentials uc
-                         JOIN rbac.user_roles ur ON ur.user_id = uc.id
-                         JOIN rbac.roles r       ON r.id = ur.role_id
-                        WHERE uc.employee_id = e.id
-                          AND uc.tenant_id = e.tenant_id
-                          AND r.code IN ('SUPER_ADMIN','OWNER')
-                   )
                 """, Integer.class, tenantId);
         return n == null ? 0 : n;
     }
