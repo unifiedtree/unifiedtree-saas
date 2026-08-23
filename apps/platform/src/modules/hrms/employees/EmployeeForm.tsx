@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useBlocker } from 'react-router-dom'
 import { X, ChevronRight, Send, Users, Pencil } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
@@ -235,6 +236,65 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     bankName: '',
     bankBranchName: '',
   })
+
+  // ─── Unsaved-work guard ──────────────────────────────────────────────────
+  //
+  // Anil hit this on 2026-08-23: opened Add Employee, typed a bunch of fields,
+  // clicked one of the top nav tabs (Rules & Policies / Payroll Configuration)
+  // and lost EVERYTHING because those tabs navigate the SPA route away and
+  // this component unmounts.
+  //
+  // We track two states:
+  //   dirty        — the admin has typed at least one field beyond the auto-
+  //                  seeded defaults (firstName/lastName/email/phone/employeeCode
+  //                  are the fields that would only ever be non-empty because
+  //                  someone typed them; other fields carry backend defaults).
+  //   confirmClose — a full-page beforeunload warning (browser tab close,
+  //                  refresh, or hard nav) fires natively when we set an
+  //                  onbeforeunload handler.
+  //
+  // For in-app SPA nav we use react-router's useBlocker. When the admin tries
+  // to click Rules & Policies (or the sidebar, the back button, anything that
+  // triggers a router transition) with a dirty form, useBlocker intercepts
+  // the navigation and we show a confirm. If they confirm, blocker.proceed()
+  // continues; if they cancel, blocker.reset() stays put and the form
+  // remains open with everything they typed intact.
+  // employeeCode / dateOfJoining / gender / employmentType / salaryFrequency
+  // all carry auto-seeded defaults on a new-hire form, so "non-empty" is the
+  // WRONG dirty signal for them — the form has "changed" before the admin has
+  // done anything. The four identity fields are only ever non-empty because
+  // someone typed them, so gate on those.
+  const dirty =
+    form.firstName.trim() !== '' ||
+    form.lastName.trim() !== '' ||
+    form.email.trim() !== '' ||
+    form.phone.trim() !== ''
+
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    dirty && currentLocation.pathname !== nextLocation.pathname,
+  )
+
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return
+    const proceed = window.confirm(
+      'You have unsaved employee details. Leave this page and lose your changes?',
+    )
+    if (proceed) blocker.proceed()
+    else blocker.reset()
+  }, [blocker])
+
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      // Modern browsers ignore custom text and show their own generic warning
+      // (deliberate anti-phishing measure), but we still need to call
+      // preventDefault + set returnValue for the prompt to appear at all.
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
   // Once identity + bank hooks resolve (edit mode only), fill in the Financial
   // step fields that were empty on first render. We deliberately do NOT
