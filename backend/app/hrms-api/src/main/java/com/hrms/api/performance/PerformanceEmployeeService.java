@@ -26,14 +26,24 @@ import java.util.UUID;
  * <p>{@code overallRating} is nullable when the employee has no submitted
  * review — LEFT JOIN plus {@code rs.getBigDecimal} which returns null on SQL
  * NULL. {@code scorePct} is computed at read time from
- * {@code rating / rating_scale_max × 100}, so a company with a 10-point scale
- * still gets a sensible percentage without any per-tenant math client-side.
+ * {@code rating / RATING_SCALE_MAX × 100}; see that constant for why the scale
+ * is fixed rather than read per cycle.
  */
 @Service
 public class PerformanceEmployeeService {
 
-    /** Default rating scale when a review row has no cycle (defensive; should never happen). */
-    private static final BigDecimal DEFAULT_RATING_SCALE = new BigDecimal("5.0");
+    /**
+     * The rating scale every review is scored out of.
+     *
+     * <p>This was previously read per-cycle from {@code review_cycles.rating_scale_max}
+     * — a column that exists in NO migration and on NO entity, so the whole query
+     * failed at runtime with "column rc.rating_scale_max does not exist" and this
+     * endpoint always 500'd. Until a real per-tenant scale is modelled, the scale is
+     * a fixed 5.0, which is what performance_reviews.overall_rating is already
+     * validated against. If a configurable scale is ever needed, add the column to
+     * review_cycles in a migration first, then select it here again.
+     */
+    private static final BigDecimal RATING_SCALE_MAX = new BigDecimal("5.0");
     private static final BigDecimal HUNDRED             = new BigDecimal("100");
 
     /** Reasonable page-size cap so a runaway ?size=999999 doesn't OOM. */
@@ -52,7 +62,7 @@ public class PerformanceEmployeeService {
             String     department,         // null when department_id is unset
             UUID       departmentId,
             BigDecimal overallRating,      // NULL when the employee has no submitted review
-            BigDecimal scorePct,           // rating / rating_scale_max × 100, HALF_UP, 1 dp; NULL if no review
+            BigDecimal scorePct,           // rating / 5.0 × 100, HALF_UP, 1 dp; NULL if no review
             String     lastReviewCycleName,
             String     lastReviewSubmittedAt,
             String     lastReviewStatus) {}
@@ -126,8 +136,7 @@ public class PerformanceEmployeeService {
                            pr.status                  AS review_status,
                            pr.submitted_at,
                            pr.cycle_id,
-                           rc.name                    AS cycle_name,
-                           rc.rating_scale_max
+                           rc.name                    AS cycle_name
                       FROM performance_mgmt.performance_reviews pr
                       LEFT JOIN performance_mgmt.review_cycles rc
                              ON rc.id = pr.cycle_id AND rc.tenant_id = pr.tenant_id
@@ -141,7 +150,6 @@ public class PerformanceEmployeeService {
                        d.name                                     AS department,
                        e.department_id                            AS department_id,
                        lr.overall_rating                          AS overall_rating,
-                       lr.rating_scale_max                        AS rating_scale_max,
                        lr.cycle_name                              AS cycle_name,
                        lr.submitted_at                            AS submitted_at,
                        lr.review_status                           AS review_status
@@ -156,11 +164,9 @@ public class PerformanceEmployeeService {
 
         List<EmployeePerformanceRowDto> rows = jdbc.query(sql, (rs, i) -> {
             BigDecimal rating = rs.getBigDecimal("overall_rating");
-            BigDecimal scaleMax = rs.getBigDecimal("rating_scale_max");
-            if (scaleMax == null || scaleMax.signum() <= 0) scaleMax = DEFAULT_RATING_SCALE;
             BigDecimal pct = rating == null
                     ? null
-                    : rating.multiply(HUNDRED).divide(scaleMax, 1, RoundingMode.HALF_UP);
+                    : rating.multiply(HUNDRED).divide(RATING_SCALE_MAX, 1, RoundingMode.HALF_UP);
             return new EmployeePerformanceRowDto(
                     rs.getObject("employee_id", UUID.class),
                     rs.getString("employee_code"),

@@ -112,7 +112,7 @@ public class AppraisalCycleService {
         }
         int peerCount = req.peerCount() == null ? DEFAULT_PEER_COUNT : Math.max(1, Math.min(10, req.peerCount()));
 
-        // Load cycle's company + rating_scale_max (needed later for progress calc)
+        // Load the cycle's company (needed later for the progress calc)
         UUID companyId = jdbc.queryForObject(
                 "SELECT company_id FROM performance_mgmt.review_cycles WHERE id = ?",
                 UUID.class, cycleId);

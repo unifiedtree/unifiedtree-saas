@@ -89,7 +89,9 @@ public class AuditController {
                 maskPii(e.getDiff()),
                 e.getActorIp(),
                 e.getActorUserAgent(),
-                e.getCorrelationId()
+                e.getCorrelationId(),
+                e.getModule(),
+                e.getSummary()
         );
     }
 
@@ -120,7 +122,21 @@ public class AuditController {
             String diff,
             String ip,
             String userAgent,
-            String traceId) {}
+            String traceId,
+            /** Owning module, e.g. "leave" / "attendance". Nullable. */
+            String module,
+            /**
+             * Human-readable one-line description of the event.
+             *
+             * <p>NOTE: as of 2026-08-22 NOTHING in the codebase calls
+             * {@code AuditEvent.setSummary(...)} — a repo-wide grep for
+             * {@code setSummary(} returns zero hits — so this is always null
+             * today. It is mapped here so that the moment a writer starts
+             * populating it the activity feed picks it up for free; until then
+             * clients must fall back to composing a label from
+             * {@code action} + {@code resourceType}.
+             */
+            String summary) {}
 
     public record PageMeta(int page, int size, long total) {}
 

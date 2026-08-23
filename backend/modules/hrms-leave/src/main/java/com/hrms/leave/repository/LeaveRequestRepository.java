@@ -134,4 +134,44 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
                                        @Param("statuses") Collection<ApprovalStatus> statuses,
                                        @Param("startDate") LocalDate startDate,
                                        @Param("endDate") LocalDate endDate);
+
+    /**
+     * Bulk "who is out today" lookup for the team dashboard. Returns the
+     * DISTINCT employee ids, from the supplied roster, that have an APPROVED
+     * leave covering {@code date} (same intersection predicate as
+     * {@link #findOverlapping}, collapsed to a single day).
+     *
+     * <p>Only APPROVED counts — a PENDING request has not taken the person out
+     * of the office yet, so counting it would overstate the On-Leave tile and
+     * understate Absent. Tenant isolation comes from Postgres RLS on
+     * leave_mgmt.leave_requests, matching every other query in this repository.
+     *
+     * <p>Returns ids rather than entities because the caller only needs set
+     * membership — an employee with two approved rows covering the same date
+     * (adjacent ranges, a split request) must not be counted twice, which
+     * DISTINCT guarantees.
+     */
+    @Query("SELECT DISTINCT lr.employeeId FROM LeaveRequest lr " +
+           "WHERE lr.employeeId IN :employeeIds " +
+           "AND lr.status = com.hrms.core.enums.ApprovalStatus.APPROVED " +
+           "AND lr.startDate <= :date " +
+           "AND lr.endDate >= :date")
+    List<UUID> findEmployeeIdsOnApprovedLeave(@Param("employeeIds") Collection<UUID> employeeIds,
+                                              @Param("date") LocalDate date);
+
+    /**
+     * Range variant of {@link #findEmployeeIdsOnApprovedLeave} for the trend
+     * chart. Returns every APPROVED leave for the roster whose date range
+     * intersects [{@code from}, {@code to}] — one round trip for the whole
+     * window, which the caller then buckets per day in memory rather than
+     * issuing one query per date.
+     */
+    @Query("SELECT lr FROM LeaveRequest lr " +
+           "WHERE lr.employeeId IN :employeeIds " +
+           "AND lr.status = com.hrms.core.enums.ApprovalStatus.APPROVED " +
+           "AND lr.startDate <= :to " +
+           "AND lr.endDate >= :from")
+    List<LeaveRequest> findApprovedLeaveInRange(@Param("employeeIds") Collection<UUID> employeeIds,
+                                                @Param("from") LocalDate from,
+                                                @Param("to") LocalDate to);
 }

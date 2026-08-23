@@ -28,6 +28,9 @@ import com.hrms.core.enums.ApprovalStatus;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.attendance.enums.CheckInMethod;
+import com.hrms.leave.entity.LeaveRequest;
+import com.hrms.leave.repository.LeaveRequestRepository;
 import com.hrms.employee.workforce.entity.Department;
 import com.hrms.employee.workforce.repository.WorkforceDepartmentRepository;
 import io.swagger.v3.oas.annotations.Operation;
@@ -50,9 +53,11 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -72,6 +77,10 @@ public class AttendanceController {
     private final AttendanceContextResolver contextResolver;
     private final EmployeeRepository employeeRepository;
     private final WorkforceDepartmentRepository departmentRepository;
+    private final LeaveRequestRepository leaveRequestRepository;
+
+    /** Longest window the trend endpoint will serve; longer requests are clamped. */
+    private static final int MAX_TREND_DAYS = 31;
 
     /**
      * When true, the geofence check on /checkin is enforced: punches outside the
@@ -85,12 +94,14 @@ public class AttendanceController {
                                 GeoValidationService geoValidationService,
                                 AttendanceContextResolver contextResolver,
                                 EmployeeRepository employeeRepository,
-                                WorkforceDepartmentRepository departmentRepository) {
+                                WorkforceDepartmentRepository departmentRepository,
+                                LeaveRequestRepository leaveRequestRepository) {
         this.attendanceService = attendanceService;
         this.geoValidationService = geoValidationService;
         this.contextResolver = contextResolver;
         this.employeeRepository = employeeRepository;
         this.departmentRepository = departmentRepository;
+        this.leaveRequestRepository = leaveRequestRepository;
     }
 
     @Operation(summary = "Check in — JSON body with optional face image (base64)")
@@ -293,8 +304,173 @@ public class AttendanceController {
                 .toList();
 
         return ResponseEntity.ok(new TeamDashboardResponse(
-                selectedDate, countSummary(employees, records, shiftEndByEmployee), staff));
+                selectedDate, countSummary(employees, records, shiftEndByEmployee, selectedDate), staff));
     }
+
+    /**
+     * Per-day attendance counts across a date range — the series behind the
+     * dashboard's attendance trend chart.
+     *
+     * <p>Deliberately ONE query for the whole window (plus one for leave)
+     * rather than re-running the single-day dashboard per date: a 31-day range
+     * would otherwise be 62 round trips and would re-ship the roster each time.
+     * Records are fetched once and bucketed by date in memory.
+     *
+     * <p>Days with no records still appear, as zero rows, so the chart keeps an
+     * unbroken x-axis over weekends and holidays instead of silently dropping
+     * them.
+     */
+    @Operation(summary = "Per-day attendance counts for a date range (trend chart)")
+    @GetMapping("/dashboard/trend")
+    @PreAuthorize("hasAuthority('attendance.team.read')")
+    public ResponseEntity<List<DailyAttendanceCounts>> dashboardTrend(
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to,
+            @RequestParam(required = false) UUID departmentId,
+            @AuthenticationPrincipal Jwt jwt) {
+        LocalDate end   = to != null ? to : LocalDate.now();
+        LocalDate start = from != null ? from : end.minusDays(6);
+        if (start.isAfter(end)) {
+            LocalDate swap = start; start = end; end = swap;
+        }
+        // Clamp rather than 400: a chart asking for too much should degrade to
+        // the most recent MAX_TREND_DAYS, not blow up in the user's face.
+        if (start.isBefore(end.minusDays(MAX_TREND_DAYS - 1L))) {
+            start = end.minusDays(MAX_TREND_DAYS - 1L);
+        }
+
+        List<Employee> employees = scopedEmployees(jwt, departmentId);
+        List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
+
+        List<AttendanceRecord> records = employeeIds.isEmpty()
+                ? List.of()
+                : attendanceService.getRecordsForEmployeesBetween(employeeIds, start, end);
+        Map<LocalDate, List<AttendanceRecord>> recordsByDate = records.stream()
+                .filter(record -> record.getAttendanceDate() != null)
+                .collect(Collectors.groupingBy(AttendanceRecord::getAttendanceDate));
+
+        // Approved leave for the window, expanded per day. One row can span
+        // many days, so it contributes to every date it covers inside [start,end].
+        Map<LocalDate, Set<UUID>> leaveByDate = new HashMap<>();
+        if (!employeeIds.isEmpty()) {
+            for (LeaveRequest leave : leaveRequestRepository.findApprovedLeaveInRange(employeeIds, start, end)) {
+                LocalDate cursor = leave.getStartDate().isBefore(start) ? start : leave.getStartDate();
+                LocalDate last   = leave.getEndDate().isAfter(end) ? end : leave.getEndDate();
+                while (!cursor.isAfter(last)) {
+                    leaveByDate.computeIfAbsent(cursor, key -> new HashSet<>()).add(leave.getEmployeeId());
+                    cursor = cursor.plusDays(1);
+                }
+            }
+        }
+
+        List<DailyAttendanceCounts> series = new java.util.ArrayList<>();
+        for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
+            List<AttendanceRecord> dayRecords = recordsByDate.getOrDefault(day, List.of());
+            Set<UUID> onLeaveIds = leaveByDate.getOrDefault(day, Set.of());
+            series.add(dailyCounts(day, employees.size(), dayRecords, onLeaveIds));
+        }
+        return ResponseEntity.ok(series);
+    }
+
+    /**
+     * Same bucket definitions as {@link #countSummary} so the trend chart and
+     * the KPI tiles can never disagree — present excludes late/half-day/WFH,
+     * and approved-leave people are removed from absent.
+     */
+    private DailyAttendanceCounts dailyCounts(LocalDate date,
+                                              int rosterSize,
+                                              List<AttendanceRecord> dayRecords,
+                                              Set<UUID> onLeaveIds) {
+        long late = dayRecords.stream()
+                .filter(r -> r.getAttendanceStatus() != null && r.getAttendanceStatus().name().equals("LATE"))
+                .count();
+        long halfDay = dayRecords.stream()
+                .filter(r -> r.getAttendanceStatus() != null && r.getAttendanceStatus().name().equals("HALF_DAY"))
+                .count();
+        long workFromHome = dayRecords.stream()
+                .filter(r -> r.getAttendanceType() != null && r.getAttendanceType().name().equals("WFH"))
+                .count();
+        long marked = dayRecords.stream().filter(r -> r.getCheckInAt() != null).count();
+        long present = Math.max(0, marked - late - halfDay - workFromHome);
+
+        Set<UUID> markedIds = dayRecords.stream()
+                .filter(r -> r.getCheckInAt() != null)
+                .map(AttendanceRecord::getEmployeeId)
+                .collect(Collectors.toSet());
+        long onLeaveUnmarked = onLeaveIds.stream().filter(id -> !markedIds.contains(id)).count();
+
+        long notMarked = Math.max(0, rosterSize - marked);
+        long absent = Math.max(0, notMarked - onLeaveUnmarked);
+        long overtimeMinutes = dayRecords.stream()
+                .filter(r -> r.getOvertimeMinutes() != null)
+                .mapToLong(AttendanceRecord::getOvertimeMinutes)
+                .sum();
+        return new DailyAttendanceCounts(
+                date, present, onLeaveIds.size(), late, halfDay, workFromHome, notMarked, absent,
+                overtimeMinutes);
+    }
+
+    /** One point on the attendance trend chart. */
+    public record DailyAttendanceCounts(
+            LocalDate date,
+            long present,
+            long onLeave,
+            long late,
+            long halfDay,
+            long workFromHome,
+            long notMarked,
+            long absent,
+            /** Total overtime clocked that day, in minutes, across the roster. */
+            long overtimeMinutes) {}
+
+    /**
+     * How today's punches arrived — face, GPS, PIN, biometric device, manual or
+     * manager override. Feeds the dashboard's "Attendance Source" panel.
+     *
+     * <p>Only rows with a check-in are counted: a NOT_MARKED employee has no
+     * method, and bucketing them under "manual" would invent a punch. Methods
+     * with a zero count are still returned so the panel keeps a stable shape
+     * instead of reflowing as usage shifts through the day.
+     */
+    @Operation(summary = "Today's check-ins grouped by capture method")
+    @GetMapping("/dashboard/sources")
+    @PreAuthorize("hasAuthority('attendance.team.read')")
+    public ResponseEntity<AttendanceSourceBreakdown> dashboardSources(
+            @RequestParam(required = false) LocalDate date,
+            @RequestParam(required = false) UUID departmentId,
+            @AuthenticationPrincipal Jwt jwt) {
+        LocalDate selectedDate = date != null ? date : LocalDate.now();
+        List<Employee> employees = scopedEmployees(jwt, departmentId);
+        List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
+        List<AttendanceRecord> records = employeeIds.isEmpty()
+                ? List.of()
+                : attendanceService.getRecordsForEmployeesOnDate(employeeIds, selectedDate);
+
+        Map<String, Long> byMethod = new HashMap<>();
+        for (CheckInMethod method : CheckInMethod.values()) byMethod.put(method.name(), 0L);
+        long unknown = 0;
+        for (AttendanceRecord record : records) {
+            if (record.getCheckInAt() == null) continue;
+            CheckInMethod method = record.getCheckInMethod();
+            if (method == null) { unknown++; continue; }
+            byMethod.merge(method.name(), 1L, Long::sum);
+        }
+        List<SourceCount> sources = byMethod.entrySet().stream()
+                .map(entry -> new SourceCount(entry.getKey(), entry.getValue()))
+                .sorted(Comparator.comparing(SourceCount::method))
+                .toList();
+        return ResponseEntity.ok(new AttendanceSourceBreakdown(selectedDate, sources, unknown));
+    }
+
+    /** One capture-method bucket. */
+    public record SourceCount(String method, long count) {}
+
+    /** Today's punches grouped by how they were captured. */
+    public record AttendanceSourceBreakdown(
+            LocalDate date,
+            List<SourceCount> sources,
+            /** Punches whose method was never recorded (legacy rows). */
+            long unknown) {}
 
     @Operation(summary = "Manager/Admin chronological attendance activity log")
     @GetMapping("/logs")
@@ -588,7 +764,8 @@ public class AttendanceController {
 
     private AttendanceSummaryCounts countSummary(List<Employee> employees,
                                                  List<AttendanceRecord> records,
-                                                 Map<UUID, LocalTime> shiftEndByEmployee) {
+                                                 Map<UUID, LocalTime> shiftEndByEmployee,
+                                                 LocalDate date) {
         long late = records.stream()
                 .filter(record -> record.getAttendanceStatus() != null && record.getAttendanceStatus().name().equals("LATE"))
                 .count();
@@ -600,7 +777,33 @@ public class AttendanceController {
                 .count();
         long marked = records.stream().filter(record -> record.getCheckInAt() != null).count();
         long present = Math.max(0, marked - late - halfDay - workFromHome);
+
+        // Who is legitimately out today. Only APPROVED leave counts — a pending
+        // request has not taken anyone out of the office. Restricted to the
+        // roster this dashboard is already scoped to, so a manager's tile never
+        // leaks org-wide numbers. Empty roster short-circuits: passing an empty
+        // IN (:ids) list is both pointless and invalid on some drivers.
+        Set<UUID> onLeaveIds = employees.isEmpty()
+                ? Set.of()
+                : Set.copyOf(leaveRequestRepository.findEmployeeIdsOnApprovedLeave(
+                        employees.stream().map(Employee::getId).toList(), date));
+        long onLeave = onLeaveIds.size();
+
+        // An employee on approved leave who also punched in is counted by the
+        // punch, not by the leave — otherwise the buckets would double-count.
+        Set<UUID> markedIds = records.stream()
+                .filter(record -> record.getCheckInAt() != null)
+                .map(AttendanceRecord::getEmployeeId)
+                .collect(Collectors.toSet());
+        long onLeaveUnmarked = onLeaveIds.stream().filter(id -> !markedIds.contains(id)).count();
+
+        // notMarked = no punch at all (the raw "nobody knows" bucket).
+        // absent    = no punch AND no approved leave, i.e. genuinely unexplained.
+        // Before this fix `absent` was literally `notMarked` passed twice, so the
+        // two tiles always rendered the same number and people on approved leave
+        // were reported as absent.
         long notMarked = Math.max(0, employees.size() - marked);
+        long absent = Math.max(0, notMarked - onLeaveUnmarked);
         // Early Out = checked out strictly before the assigned shift end_time
         // (IST wall-clock). See isEarlyCheckout for the exact predicate. An
         // employee can be simultaneously PRESENT/LATE/HALF_DAY *and* an Early
@@ -609,9 +812,8 @@ public class AttendanceController {
         long earlyCheckout = records.stream()
                 .filter(record -> isEarlyCheckout(record, shiftEndByEmployee))
                 .count();
-        // onLeave and absent are still hardcoded; tracked in a follow-up ticket
-        // (leave-request integration not yet wired to the dashboard).
-        return new AttendanceSummaryCounts(present, 0, late, halfDay, earlyCheckout, workFromHome, notMarked, notMarked);
+        return new AttendanceSummaryCounts(
+                present, onLeave, late, halfDay, earlyCheckout, workFromHome, notMarked, absent);
     }
 
     /**
