@@ -3,6 +3,7 @@ package com.hrms.employee.quota;
 import com.hrms.core.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,9 +46,11 @@ public class SeatQuotaService {
     public static final int TRIAL_FALLBACK_CAP = 5;
 
     private final JdbcTemplate jdbc;
+    private final ApplicationEventPublisher events;
 
-    public SeatQuotaService(JdbcTemplate jdbc) {
+    public SeatQuotaService(JdbcTemplate jdbc, ApplicationEventPublisher events) {
         this.jdbc = jdbc;
+        this.events = events;
     }
 
     /**
@@ -70,6 +73,30 @@ public class SeatQuotaService {
         int purchased = seatCap(tenantId);
         int used      = activeEmployees(tenantId);
         int remaining = Math.max(0, purchased - used);
+
+        // Grandfathered over-cap alert (Anil punchlist 2026-08-22): tenants
+        // that were already past their paid cap on the day SeatQuotaEnforcer's
+        // hard 402 shipped get a one-time-per-month warning nudging them to
+        // set up autopay for the extras. New tenants never satisfy this
+        // condition — the enforcer blocks the create that would push them
+        // over — so publishing here is self-selecting. Publish is best-effort;
+        // any listener failure is logged there, not here, so the read cannot
+        // be broken by a broken notifier.
+        //
+        // TODO(billing-ceiling): remove this event + its listener + the
+        // BILLING_OVER_CAP enum + the seat_overage_notifications dedup table
+        // when the Razorpay ceiling flow ships (see roadmap). At that point
+        // every tenant hits the 402 the moment they'd exceed cap and the
+        // warning surface is redundant.
+        if (purchased > 0 && used > purchased) {
+            try {
+                events.publishEvent(new SeatOverageDetectedEvent(tenantId, purchased, used));
+            } catch (RuntimeException ex) {
+                log.warn("seat overage event publish failed for tenant {}: {}",
+                        tenantId, ex.getMessage());
+            }
+        }
+
         return new Usage(purchased, used, remaining);
     }
 

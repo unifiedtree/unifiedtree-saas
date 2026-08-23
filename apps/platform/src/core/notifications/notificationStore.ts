@@ -38,6 +38,14 @@ export type AppNotificationType =
   | 'TRIAL_ENDING_SOON'
   | 'TRIAL_EXPIRED'
   | 'SUBSCRIPTION_HALTED'
+  // Grandfathered over-cap warning (Anil punchlist 2026-08-22). Fired at
+  // most once per (tenant, month) for workspaces that were already past
+  // their paid seat count when SeatQuotaEnforcer's hard 402 shipped. Deep-
+  // links to /plan where the matching amber banner explains the action.
+  //
+  // TODO(billing-ceiling): drop when the Razorpay ceiling flow retires the
+  // grandfather.
+  | 'BILLING_OVER_CAP'
   | 'GENERAL'
 
 /** Raw server DTO (see {@code NotificationDtos.NotificationDto}). */
@@ -200,6 +208,9 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   // Billing / subscription — the workspace admin lands on the /plan page
   // (the in-workspace plan configurator + autopay setup).
   if (type === 'TRIAL_ENDING_SOON' || type === 'TRIAL_EXPIRED' || type === 'SUBSCRIPTION_HALTED') return '/plan'
+  // Grandfathered over-cap warning routes to /plan where the amber banner
+  // (Plan.tsx) explains the "set up autopay for the extras" action.
+  if (type === 'BILLING_OVER_CAP') return '/plan'
 
   if (type === 'WELCOME') return '/'
   // Unknown / not-yet-mapped types: land the user on their own workspace
@@ -213,7 +224,7 @@ function severityFor(type: AppNotificationType): Notification['type'] {
   if (type.endsWith('_APPROVED') || type === 'FACE_ENROLLMENT_COMPLETE' || type === 'WELCOME') return 'success'
   if (type.endsWith('_REJECTED') || type === 'FACE_ENROLLMENT_FAILED' || type === 'TRIAL_EXPIRED' || type === 'SUBSCRIPTION_HALTED')
     return 'error'
-  if (type.endsWith('_SUBMITTED') || type === 'TRIAL_ENDING_SOON') return 'warning'
+  if (type.endsWith('_SUBMITTED') || type === 'TRIAL_ENDING_SOON' || type === 'BILLING_OVER_CAP') return 'warning'
   return 'info'
 }
 

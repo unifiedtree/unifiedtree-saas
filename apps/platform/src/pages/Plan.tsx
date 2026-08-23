@@ -12,6 +12,7 @@ import { apiJson } from '@/core/api/client'
 // loop's ACTIVATED branch — see below.
 import { useModulePlans, iconMap, effectiveUnit, type ModulePlan } from '@/core/api/modulePlans'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
+import { useSeatsUsage } from '@/modules/hrms/api/useSeats'
 
 /**
  * IN-WORKSPACE plan configurator + autopay setup.
@@ -194,6 +195,32 @@ export const Plan: React.FC = () => {
   const permissions  = useSdkStore(s => s.permissions)
   const roles: string[] = sdkUser?.roles ?? []
   const isAdmin      = roles.some(r => ADMIN_ROLES.includes(r)) || permissions.has('*')
+
+  // Grandfathered seat-overage warning (Anil punchlist 2026-08-22).
+  //
+  // Only these existing tenants (nclever, unifiedtree01 — and any other
+  // workspace whose active-employee count crept past its paid cap BEFORE
+  // SeatQuotaEnforcer's hard 402 shipped) ever satisfy `current > purchased`:
+  // every new customer signing up after this change hits the hard block on
+  // employee create the moment they'd exceed cap, so `current` cannot climb
+  // past `purchased` in the first place. The banner below is therefore a
+  // one-time bridge for the grandfathered set; it will simply not render for
+  // anyone else.
+  //
+  // TODO(billing-ceiling): retire this banner + the matching in-app
+  // BILLING_OVER_CAP notification when the Razorpay ceiling flow ships
+  // (roadmap item). At that point every tenant hits the hard 402 the moment
+  // they'd exceed cap and this warning surface is redundant.
+  //
+  // Field name is `current`, NOT `currentExcludingAdmin` — admins are billed
+  // like anyone else since the client rule on 2026-08-22 (see useSeats.ts).
+  // Only fires the query for the admins who can act on it; other roles are
+  // already blocked out of this page by the isAdmin guard.
+  const { data: seatsUsage } = useSeatsUsage({ enabled: isAdmin })
+  const seatOverage = seatsUsage && seatsUsage.purchased > 0
+      && seatsUsage.current > seatsUsage.purchased
+    ? { purchased: seatsUsage.purchased, current: seatsUsage.current }
+    : null
 
   const { data: allPlans = [], isLoading } = useModulePlans()
   const plans = useMemo(
@@ -714,6 +741,44 @@ export const Plan: React.FC = () => {
             </p>
           </div>
         </div>
+
+        {/* GRANDFATHERED SEAT-OVERAGE WARNING (Anil punchlist 2026-08-22).
+            Renders only when the workspace has more active employees than paid
+            seats — a state a NEW customer can never reach because
+            SeatQuotaEnforcer blocks the create that would push them over
+            (SEAT_LIMIT_EXCEEDED → 402). This banner therefore only ever shows
+            up for the small, self-selecting set of tenants that were already
+            past their cap on the day the hard block shipped (nclever,
+            unifiedtree01 today).
+
+            TODO(billing-ceiling): retire this banner + the in-app
+            BILLING_OVER_CAP notification once the Razorpay ceiling flow ships
+            (a separate roadmap item). The intended long-term behaviour is
+            that every tenant hits the 402 the moment they'd exceed cap — no
+            grandfather, no warning surface.
+
+            Styling matches the "unbilled modules" amber banner further down
+            in this same file so the two feel like one visual system. */}
+        {seatOverage && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-700" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-900">
+                You've exceeded your seat cap
+              </p>
+              <p className="mt-0.5 text-xs text-amber-800">
+                You have <b className="tabular-nums">{seatOverage.current}</b> active
+                employees but only <b className="tabular-nums">{seatOverage.purchased}</b> paid
+                seats. Your existing team can keep working, but{' '}
+                <b>adding a new employee will be blocked</b> until you cover
+                the extras. Adjust seat counts below and use{' '}
+                <b>{freeTrialUsed ? 'Set Up Autopay' : 'Pay ₹0 & Set Up Autopay'}</b>{' '}
+                — you will not be charged for the extras until the next billing
+                cycle.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Could not read the current plan. Say so plainly and block purchase:
             with no view of what this workspace already owns we cannot tell a
