@@ -78,6 +78,13 @@ public class SubscriptionAccessGuard implements HandlerInterceptor {
             "/v1/billing",              // future: renew-payment endpoints
             "/v1/subscription",         // future: cancel / update-mandate endpoints
             "/v1/workspace/context",    // workspace app calls this on load to detect state
+            "/v1/workspace/plan",       // /plan/current + /setup-autopay/status MUST work for a
+                                        // lapsed tenant — admin needs to see current state and
+                                        // start a renewal from the same page
+            "/v1/notifications",        // circular gate otherwise: the BILLING_OVER_CAP + renewal
+                                        // warnings we send when a sub lapses are FETCHED via this
+                                        // endpoint. Behind the guard, the customer never sees the
+                                        // very notification telling them to renew (Anil 2026-08-23)
             "/v3/api-docs",
             "/swagger-ui"
     );

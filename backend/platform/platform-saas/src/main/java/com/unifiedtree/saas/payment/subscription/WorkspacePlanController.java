@@ -133,9 +133,12 @@ public class WorkspacePlanController {
         List<String> activated = "ACTIVATED".equals(req.status())
                 ? req.items().stream().map(PlanChangeService.PlanItem::planKey).toList()
                 : List.of();
+        boolean wasReplacement = req.replacesSubscriptionId() != null
+                && !req.replacesSubscriptionId().isBlank();
         return ResponseEntity.ok(new StatusResponse(
                 req.status(), activated,
-                humaniseFailureReason(req.status(), req.failureReason())));
+                humaniseFailureReason(req.status(), req.failureReason()),
+                wasReplacement));
     }
 
     // -- current + change (Hotstar-style) --------------------------------------
@@ -564,7 +567,15 @@ public class WorkspacePlanController {
     public record StatusResponse(
             String status,
             List<String> activatedModules,
-            String failureReason
+            String failureReason,
+            /**
+             * True when this activation superseded an existing paid mandate.
+             * Frontend uses it to decide whether the "ignore your old UPI
+             * autopay for a few days" toast is truthful — a first-time signup
+             * has no old mandate and the copy would confuse the customer
+             * (Anil 2026-08-23, on a brand-new src workspace).
+             */
+            boolean wasReplacement
     ) {}
 
     public record CancelRequest(UUID id) {}

@@ -1232,7 +1232,8 @@ public class PlanChangeService {
                 r.id, r.tenantId, r.initiatorAccountId,
                 fromJson(r.planItemsJson),
                 r.billingCycle, r.razorpaySubscriptionId,
-                r.status, r.failureReason);
+                r.status, r.failureReason,
+                r.replacesSubscriptionId);
     }
 
     private static String toJson(List<PlanItem> items) {
@@ -1263,7 +1264,17 @@ public class PlanChangeService {
             UUID id, UUID tenantId, UUID initiatorAccountId,
             List<PlanItem> items, String billingCycle,
             String razorpaySubscriptionId,
-            String status, String failureReason) {}
+            String status, String failureReason,
+            /**
+             * Non-null when this request replaced an existing paid mandate — the
+             * caller cancels the old sub after the new one activates. Exposed on
+             * the record so the /setup-autopay/status endpoint can tell a real
+             * replacement apart from a first-time signup: the "please ignore
+             * your older UPI autopay for a few days" toast is only truthful for
+             * replacements, and telling a first-time customer to ignore an old
+             * mandate they never had is confusing (Anil 2026-08-23).
+             */
+            String replacesSubscriptionId) {}
 
     /** Snapshot of an active platform.subscriptions row for a tenant. Read by
      *  /v1/workspace/plan/current so the frontend can show current state

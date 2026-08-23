@@ -106,6 +106,14 @@ interface StatusResponse {
   status: 'AWAITING_MANDATE' | 'ACTIVATED' | 'FAILED' | 'CANCELLED' | 'EXPIRED'
   activatedModules?: string[]
   failureReason?: string
+  /**
+   * True only when this activation replaced an existing paid mandate. Gates
+   * the "please ignore your older UPI autopay for a few days" toast — that
+   * copy is only true when there IS an old mandate to ignore, and telling a
+   * first-time signup to ignore something they never had reads as a bug
+   * (Anil 2026-08-23, on a brand-new tenant with no prior subscription).
+   */
+  wasReplacement?: boolean
 }
 
 /** Response shape from GET /v1/workspace/plan/current. */
@@ -674,19 +682,23 @@ export const Plan: React.FC = () => {
           // update to the local store in case hydrate fails.
           try { await useSdkStore.getState().hydrate() } catch { /* fall through to refreshTenant */ }
           try { await refreshTenant() } catch { /* best-effort */ }
-          // One-time post-payment notice: after a NEW autopay setup, UPI apps
-          // (PhonePe / GPay) can keep showing the old superseded mandate for a
-          // few days. Tell the admin once, right here, so a real customer
-          // doesn't panic seeing a dead mandate in their UPI history. Sonner
-          // is already wired at src/main.tsx (Toaster richColors, top-right).
-          // The toast is NOT shown on every /plan visit — this branch runs
-          // only when a mandate actually just activated.
-          toast.success('Payment successful', {
-            description: 'Your subscription is active. If your UPI app still shows an older '
-              + 'UnifiedTree autopay for a few days, please ignore it — that one is cancelled '
-              + 'and nothing will be debited from it.',
-            duration: 9000,
-          })
+          // One-time post-payment notice. The "ignore old UPI autopay" copy
+          // is TRUE only when we actually replaced a prior mandate — for a
+          // first-time signup there is no old mandate and the customer sees
+          // it as gaslighting. Backend now flags this on the status response.
+          if (s.wasReplacement) {
+            toast.success('Payment successful', {
+              description: 'Your subscription is active. If your UPI app still shows an older '
+                + 'UnifiedTree autopay for a few days, please ignore it — that one is cancelled '
+                + 'and nothing will be debited from it.',
+              duration: 9000,
+            })
+          } else {
+            toast.success('Payment successful', {
+              description: 'Your subscription is active. Welcome aboard!',
+              duration: 5000,
+            })
+          }
           setAwaitingMandate(false)
           navigate('/modules')
         } else if (s.status === 'FAILED' || s.status === 'CANCELLED' || s.status === 'EXPIRED') {
