@@ -15,7 +15,15 @@ html {
 }
 
 body {
+  /* The ambient emerald ground every .ut-card refracts. Defined once here so
+     glass reads correctly on every screen, not just the ones that remember to
+     add a background. See .ut-ground for the gradient and its opt-outs. */
   background-color: var(--bg-base);
+  background-image:
+    radial-gradient(38% 32% at 8% 0%,    rgba(16, 185, 129, 0.10), transparent 70%),
+    radial-gradient(32% 28% at 92% 2%,   rgba(52, 211, 153, 0.09), transparent 70%),
+    radial-gradient(42% 36% at 70% 100%, rgba(5, 150, 105, 0.07), transparent 72%);
+  background-attachment: fixed;
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 14px;
@@ -122,6 +130,92 @@ table td, table th,
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
   border-color: var(--border-strong);
+}
+
+/* ============================================================
+ * .ut-card — THE card surface for the whole platform.
+ *
+ * One definition, three sizes. Every card in the product — a 90px stat tile,
+ * a chart panel, a full-width table shell, the login box — is this surface at
+ * a different scale, so the app reads as one material instead of a dozen
+ * slightly different white boxes.
+ *
+ * It is frosted glass, tinted emerald. Three things make it read as glass
+ * rather than as a grey rectangle:
+ *   1. a translucent gradient (never a flat fill) so the ground shows through;
+ *   2. backdrop-blur + saturate, which is what actually bends the ground;
+ *   3. an inset top highlight — the 1px bright edge a real glass pane catches.
+ * Remove any one and it collapses back into a plain card.
+ *
+ * Glass needs something behind it. `.ut-ground` paints the ambient emerald
+ * light that the blur refracts; a card on a flat background looks grey and
+ * slightly dirty. Screens get that from body, below.
+ *
+ * Accessibility: the surface stays >= #F2FBF7 effective, so the app's
+ * --text-primary (#171717) keeps ~15:1 on it. Do not darken the gradient
+ * without re-checking contrast.
+ * ========================================================== */
+.ut-card {
+  position: relative;
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg,
+      rgba(255, 255, 255, 0.88) 0%,
+      rgba(255, 255, 255, 0.72) 45%,
+      rgba(236, 253, 245, 0.62) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  box-shadow:
+    0 10px 36px -16px rgba(5, 150, 105, 0.28),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+  transition:
+    transform var(--motion-base),
+    box-shadow var(--motion-base),
+    border-color var(--motion-base);
+}
+
+/* Small tiles: tighter radius so a 90px tile doesn't read as a pill. */
+.ut-card-sm { border-radius: 14px; }
+/* Large surfaces: page-level panels, the login box. */
+.ut-card-lg { border-radius: 26px; }
+
+/* Opt-in lift. Only for cards that actually do something when clicked —
+   a static stat tile that rises on hover promises an action it doesn't have. */
+.ut-card-hover:disabled:hover { transform: none; }
+.ut-card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(5, 150, 105, 0.28);
+  box-shadow:
+    0 18px 44px -18px rgba(5, 150, 105, 0.40),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
+}
+
+/* Ambient emerald light for glass to refract. Fixed so it does not slide
+   under the cards as the page scrolls, which would shimmer distractingly. */
+.ut-ground {
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(38% 32% at 8% 0%,   rgba(16, 185, 129, 0.10), transparent 70%),
+    radial-gradient(32% 28% at 92% 2%,  rgba(52, 211, 153, 0.09), transparent 70%),
+    radial-gradient(42% 36% at 70% 100%, rgba(5, 150, 105, 0.07), transparent 72%);
+  background-attachment: fixed;
+}
+
+/* Cards must not blur or tint in print, and a reduced-transparency user has
+   asked not to be given translucent surfaces. */
+@media print {
+  .ut-card { background: #fff; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .ut-ground { background-image: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ut-card {
+    background: var(--bg-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: var(--border-default);
+  }
+  .ut-ground { background-image: none; }
 }
 
 /* ============================================================

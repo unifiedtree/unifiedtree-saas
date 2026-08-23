@@ -43,8 +43,8 @@ export function StatCard({
   return (
     <div
       className={cn(
-        'group rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 shadow-sm',
-        'transition-shadow duration-200 hover:shadow-md',
+        // Platform card surface — see .ut-card in apps/platform/src/globals.css.
+        'ut-card ut-card-sm group p-5',
         className,
       )}
     >

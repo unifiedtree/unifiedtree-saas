@@ -168,7 +168,10 @@ export const LoginPage: React.FC = () => {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[400px] rounded-xl bg-white px-8 pb-7 pt-8 shadow-[0_18px_50px_-18px_rgba(4,80,58,0.28),0_2px_8px_rgba(4,80,58,0.06)]"
+        /* Same .ut-card surface as every card inside the product, at the
+           large radius — the login box is the first card a user ever sees, so
+           it should be made of the same material as the rest. */
+        className="ut-card ut-card-lg relative w-full max-w-[400px] px-8 pb-7 pt-8"
       >
         {/* Workspace logo — theirs when uploaded; otherwise an Odoo-style
             "Your logo" placeholder (the striped texture is a small inside-the-

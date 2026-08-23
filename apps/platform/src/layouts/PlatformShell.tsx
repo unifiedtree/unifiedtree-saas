@@ -8,7 +8,7 @@ import {
   TrendingUp, CreditCard, Package, ShoppingCart, HelpCircle, Briefcase,
   UserCheck, Star, Receipt, DollarSign, Lock, MapPin,
   Database, Target, Wallet, Plug, Award, Shield, AlertTriangle,
-  PanelLeftClose, PanelLeft, LayoutGrid, ArrowLeft, Command,
+  LayoutGrid, ArrowLeft, Command,
   Image as ImageIcon,
 } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
@@ -21,19 +21,14 @@ import { formatDistanceToNow } from 'date-fns'
 // Canonical admin-roles SSOT — do NOT redeclare locally. See useRoles.ts.
 import { ADMIN_ROLES as CANONICAL_ADMIN_ROLES } from '@/shared/hooks/useRoles'
 
-// Sidebar collapse preference is per-tenant per-user within a browser:
-// without the suffix, switching workspaces on a shared laptop dragged the
-// previous workspace's collapsed/expanded state across, which is
-// disorienting when the sidebar geometry changes between apps. The key
-// shape `sidebar-collapsed:<tenantId>:<userId>` keeps two people sharing a
-// laptop from stepping on each other's preference; the legacy tenant-slug
-// key is read as a one-time fallback so existing users don't lose it.
-const SIDEBAR_KEY_PREFIX = 'sidebar-collapsed'
-const LEGACY_SIDEBAR_KEY_PREFIX = 'ut.sidebar.collapsed'
-function sidebarKey(tenantId: string | null, userId: string | null): string {
-  if (tenantId && userId) return `${SIDEBAR_KEY_PREFIX}:${tenantId}:${userId}`
-  return SIDEBAR_KEY_PREFIX
-}
+// The sidebar/rail collapse preference was removed (2026-08-22). It reclaimed
+// no space — the desktop rail is a fixed w-[96px] and the mobile drawer a fixed
+// w-[272px], neither of which resized when collapsed — so all it did was strip
+// the nav labels. Worse, its only toggle lived inside `sidebarContent`, which
+// renders solely in the md:hidden mobile drawer, so a desktop user carrying
+// `collapsed:true` in localStorage had no way to turn the labels back on.
+// Labels now always render; stale `sidebar-collapsed:*` keys are ignored,
+// which self-heals every browser that had one set.
 
 // COMPANY_ADMIN sits at rank 2 (equivalent to OWNER) — a role emitted by the
 // backend for a workspace admin who is not the global super-admin. Before it
@@ -58,9 +53,9 @@ const NAV_ITEMS: NavItemDef[] = [
   // DEPT_MANAGER included: managers landed on / and the shell hid Overview,
   // so the analytics home was invisible to them even though every widget on
   // it is permission-gated and 403s cleanly for anything they can't see.
-  { key: 'dashboard',   label: 'Overview',     icon: <LayoutDashboard size={18} />, path: '/dashboard', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER'] },
-  { key: 'myworkspace', label: 'My Workspace', icon: <UserCircle2 size={18} />,     path: '/me',        visibleForRoles: ['EMPLOYEE'] },
-  { key: 'myteam',      label: 'My Team',      icon: <Users size={18} />,           path: '/team',      visibleForRoles: ['DEPT_MANAGER'] },
+  { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} />, path: '/dashboard', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER'] },
+  { key: 'myworkspace', label: 'My Workspace', icon: <UserCircle2 size={18} />, path: '/me', visibleForRoles: ['EMPLOYEE'] },
+  { key: 'myteam', label: 'My Team', icon: <Users size={18} />, path: '/team', visibleForRoles: ['DEPT_MANAGER'] },
 ]
 
 // COMPANY_ADMIN is treated as admin-equivalent across every bundle — see the
@@ -71,9 +66,9 @@ const NAV_ITEMS: NavItemDef[] = [
 // workspace creator, common on brand-new tenants where no COMPANY_ADMIN has
 // been separately promoted yet) was falling through every visibleForRoles
 // filter and rendering an empty sidebar. Additive — no role removed.
-const R_ADMIN     = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD']
+const R_ADMIN = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD']
 const R_ADMIN_MGR = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER']
-const R_HR        = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
+const R_HR = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
 // R_FIN was one bundle that included HR_MANAGER, which let HR into rupee-only
 // screens (Payroll Dashboard, Salary Structure, Bank Disbursement, Payroll
 // Settings). Client rule: only admin/finance see rupees. Split into two:
@@ -82,8 +77,8 @@ const R_HR        = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
 //                 (payroll config, processing/payslips workflow, PLI) where HR
 //                 needs to operate but rupee KPIs are page-gated in components.
 const R_FIN_RUPEE = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'ADMIN', 'FINANCE_LEAD']
-const R_FIN_META  = [...R_FIN_RUPEE, 'HR_MANAGER']
-const R_ESS       = ['EMPLOYEE']
+const R_FIN_META = [...R_FIN_RUPEE, 'HR_MANAGER']
+const R_ESS = ['EMPLOYEE']
 
 // ─── Module items: HRMS nav groups (module 'hrms') + the sellable modules. ─────
 const MODULE_ITEMS: NavItemDef[] = [
@@ -98,18 +93,18 @@ const MODULE_ITEMS: NavItemDef[] = [
     children: [
       // Workforce Directory restricted to HR/admin — DEPT_MANAGER should stay
       // on My Team, not open the full company directory.
-      { label: 'Workforce Directory', path: '/hrms/employees',         icon: <UserCheck size={15} />,     visibleForRoles: R_HR },
-      { label: 'Rules & Policies',    path: '/hrms/policies', icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
-      { label: 'Payroll Configuration', path: '/hrms/payroll/components', icon: <Receipt size={15} />,     visibleForRoles: R_FIN_META },
+      { label: 'Workforce Directory', path: '/hrms/employees', icon: <UserCheck size={15} />, visibleForRoles: R_HR },
+      { label: 'Rules & Policies', path: '/hrms/policies', icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
+      { label: 'Payroll Configuration', path: '/hrms/payroll/components', icon: <Receipt size={15} />, visibleForRoles: R_FIN_META },
     ],
   },
   {
     key: 'attendance', label: 'Attendance & Time', icon: <Clock size={18} />, module: 'hrms',
     children: [
       { label: 'Attendance Analytics', path: '/hrms/att-analytics', icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN_MGR },
-      { label: 'Daily Tracking',       path: '/hrms/attendance',          icon: <Clock size={15} />,         visibleForRoles: R_ADMIN_MGR },
-      { label: 'Shifts & Overtime',    path: '/hrms/shifts',      icon: <Clock size={15} />,         visibleForRoles: R_HR },
-      { label: 'Geofencing',           path: '/hrms/attendance/geofencing', icon: <MapPin size={15} />,      visibleForRoles: R_HR },
+      { label: 'Daily Tracking', path: '/hrms/attendance', icon: <Clock size={15} />, visibleForRoles: R_ADMIN_MGR },
+      { label: 'Shifts & Overtime', path: '/hrms/shifts', icon: <Clock size={15} />, visibleForRoles: R_HR },
+      { label: 'Geofencing', path: '/hrms/attendance/geofencing', icon: <MapPin size={15} />, visibleForRoles: R_HR },
     ],
   },
   {
@@ -121,27 +116,27 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'recruit', label: 'Recruitment & Onboarding', icon: <UserCheck size={18} />, module: 'hrms',
     children: [
-      { label: 'Hiring Pipeline',      path: '/hrms/hiring',  icon: <UserCheck size={15} />,    visibleForRoles: R_HR },
-      { label: 'Onboarding & Assets',  path: '/hrms/onboarding/instances',  icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
-      { label: 'Letter Templates',     path: '/hrms/letters/templates',     icon: <FileText size={15} />,      visibleForRoles: R_HR },
-      { label: 'Generated Letters',    path: '/hrms/letters/generated',     icon: <FileText size={15} />,      visibleForRoles: R_HR },
-      { label: 'Letter Distributions', path: '/hrms/letters/distributions', icon: <FileText size={15} />,      visibleForRoles: R_HR },
-      { label: 'Employee Vault',       path: '/hrms/documents',        icon: <FileText size={15} />,      visibleForRoles: R_HR },
+      { label: 'Hiring Pipeline', path: '/hrms/hiring', icon: <UserCheck size={15} />, visibleForRoles: R_HR },
+      { label: 'Onboarding & Assets', path: '/hrms/onboarding/instances', icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
+      { label: 'Letter Templates', path: '/hrms/letters/templates', icon: <FileText size={15} />, visibleForRoles: R_HR },
+      { label: 'Generated Letters', path: '/hrms/letters/generated', icon: <FileText size={15} />, visibleForRoles: R_HR },
+      { label: 'Letter Distributions', path: '/hrms/letters/distributions', icon: <FileText size={15} />, visibleForRoles: R_HR },
+      { label: 'Employee Vault', path: '/hrms/documents', icon: <FileText size={15} />, visibleForRoles: R_HR },
     ],
   },
   {
     key: 'payroll-hr', label: 'Payroll', icon: <CreditCard size={18} />, module: 'hrms',
     children: [
       // R_FIN_RUPEE: HR_MANAGER is NOT welcome on the rupee screens.
-      { label: 'Payroll Dashboard',          path: '/hrms/payroll-dashboard', icon: <LayoutDashboard size={15} />, visibleForRoles: R_FIN_RUPEE },
-      { label: 'Salary Structure',           path: '/hrms/salary-structure',  icon: <Receipt size={15} />,         visibleForRoles: R_FIN_RUPEE },
+      { label: 'Payroll Dashboard', path: '/hrms/payroll-dashboard', icon: <LayoutDashboard size={15} />, visibleForRoles: R_FIN_RUPEE },
+      { label: 'Salary Structure', path: '/hrms/salary-structure', icon: <Receipt size={15} />, visibleForRoles: R_FIN_RUPEE },
       // Processing & Payslips is a workflow surface — HR still runs it,
       // but rupee KPIs on the child pages defer to the useRoles guard.
-      { label: 'Processing & Payslips',      path: '/hrms/payroll/runs',           icon: <Receipt size={15} />,         visibleForRoles: R_FIN_META },
-      { label: 'Payroll Settings',           path: '/hrms/payroll/settings',       icon: <Settings size={15} />,        visibleForRoles: R_FIN_RUPEE },
-      { label: 'Production-Linked Incentive', path: '/hrms/pli',              icon: <Target size={15} />,          visibleForRoles: R_FIN_META },
-      { label: 'Advances & Loans',           path: '/hrms/advances',          icon: <Wallet size={15} />,          visibleForRoles: [...R_ADMIN_MGR, ...R_ESS] },
-      { label: 'Bank Disbursement',          path: '/hrms/bank-disbursement', icon: <CreditCard size={15} />,      visibleForRoles: R_FIN_RUPEE },
+      { label: 'Processing & Payslips', path: '/hrms/payroll/runs', icon: <Receipt size={15} />, visibleForRoles: R_FIN_META },
+      { label: 'Payroll Settings', path: '/hrms/payroll/settings', icon: <Settings size={15} />, visibleForRoles: R_FIN_RUPEE },
+      { label: 'Production-Linked Incentive', path: '/hrms/pli', icon: <Target size={15} />, visibleForRoles: R_FIN_META },
+      { label: 'Advances & Loans', path: '/hrms/advances', icon: <Wallet size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_ESS] },
+      { label: 'Bank Disbursement', path: '/hrms/bank-disbursement', icon: <CreditCard size={15} />, visibleForRoles: R_FIN_RUPEE },
     ],
   },
   {
@@ -153,17 +148,17 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'ess', label: 'Employee Self Service', icon: <UserCircle2 size={18} />, module: 'hrms',
     children: [
-      { label: 'My Attendance & Leaves', path: '/hrms/attendance', icon: <Clock size={15} />,       visibleForRoles: R_ESS },
-      { label: 'My Payslip',             path: '/me/payslips',     icon: <Receipt size={15} />,      visibleForRoles: R_ESS },
-      { label: 'My Profile',             path: '/me',              icon: <UserCircle2 size={15} />,  visibleForRoles: R_ESS },
-      { label: 'Team Attendance',        path: '/team',            icon: <Users size={15} />,        visibleForRoles: ['DEPT_MANAGER'] },
+      { label: 'My Attendance & Leaves', path: '/hrms/attendance', icon: <Clock size={15} />, visibleForRoles: R_ESS },
+      { label: 'My Payslip', path: '/me/payslips', icon: <Receipt size={15} />, visibleForRoles: R_ESS },
+      { label: 'My Profile', path: '/me', icon: <UserCircle2 size={15} />, visibleForRoles: R_ESS },
+      { label: 'Team Attendance', path: '/team', icon: <Users size={15} />, visibleForRoles: ['DEPT_MANAGER'] },
     ],
   },
   {
     key: 'performance', label: 'Performance & Learning', icon: <Target size={18} />, module: 'hrms',
     children: [
-      { label: 'Performance Center',   path: '/hrms/performance', icon: <Target size={15} />,   visibleForRoles: [...R_ADMIN_MGR, ...R_ESS, ...R_HR] },
-      { label: 'Learning & Skills',    path: '/hrms/learning',    icon: <Award size={15} />,    visibleForRoles: R_HR },
+      { label: 'Performance Center', path: '/hrms/performance', icon: <Target size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_ESS, ...R_HR] },
+      { label: 'Learning & Skills', path: '/hrms/learning', icon: <Award size={15} />, visibleForRoles: R_HR },
     ],
   },
   {
@@ -173,38 +168,38 @@ const MODULE_ITEMS: NavItemDef[] = [
     // duplicate-key React warning in the desktop rail. Trimmed to the two
     // distinct destinations that actually exist.
     children: [
-      { label: 'Statutory Compliance', path: '/hrms/compliance',  icon: <ShieldAlert size={15} />, visibleForRoles: R_ADMIN },
-      { label: 'Muster Roll',          path: '/hrms/muster-roll', icon: <FileText size={15} />,    visibleForRoles: R_HR },
+      { label: 'Statutory Compliance', path: '/hrms/compliance', icon: <ShieldAlert size={15} />, visibleForRoles: R_ADMIN },
+      { label: 'Muster Roll', path: '/hrms/muster-roll', icon: <FileText size={15} />, visibleForRoles: R_HR },
     ],
   },
   {
     key: 'reports', label: 'Reports & Analytics', icon: <FileBarChart2 size={18} />, module: 'hrms',
     children: [
-      { label: 'Reports Center',          path: '/hrms/reports',             icon: <FileBarChart2 size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_FIN_META] },
-      { label: 'Workforce Analytics',     path: '/hrms/workforce-analytics', icon: <TrendingUp size={15} />,   visibleForRoles: R_ADMIN },
+      { label: 'Reports Center', path: '/hrms/reports', icon: <FileBarChart2 size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_FIN_META] },
+      { label: 'Workforce Analytics', path: '/hrms/workforce-analytics', icon: <TrendingUp size={15} />, visibleForRoles: R_ADMIN },
     ],
   },
   {
     key: 'exit', label: 'Employee Exit', icon: <LogOut size={18} />, module: 'hrms',
     children: [
-      { label: 'Resignation & Exit',       path: '/hrms/fnf',  icon: <LogOut size={15} />,   visibleForRoles: R_HR },
-      { label: 'Full & Final Settlement',  path: '/hrms/fnf',          icon: <Wallet size={15} />,   visibleForRoles: R_FIN_RUPEE },
+      { label: 'Resignation & Exit', path: '/hrms/fnf', icon: <LogOut size={15} />, visibleForRoles: R_HR },
+      { label: 'Full & Final Settlement', path: '/hrms/fnf', icon: <Wallet size={15} />, visibleForRoles: R_FIN_RUPEE },
     ],
   },
   {
     key: 'hrsettings', label: 'Settings', icon: <Settings size={18} />, module: 'hrms',
     children: [
-      { label: 'HR Configuration',      path: '/hrms/settings',                   icon: <Settings size={15} />, visibleForRoles: R_HR },
-      { label: 'Notification Templates', path: '/hrms/notification-templates', icon: <Bell size={15} />,    visibleForRoles: R_HR },
-      { label: 'Integrations',          path: '/hrms/integrations',          icon: <Plug size={15} />,     visibleForRoles: R_HR },
+      { label: 'HR Configuration', path: '/hrms/settings', icon: <Settings size={15} />, visibleForRoles: R_HR },
+      { label: 'Notification Templates', path: '/hrms/notification-templates', icon: <Bell size={15} />, visibleForRoles: R_HR },
+      { label: 'Integrations', path: '/hrms/integrations', icon: <Plug size={15} />, visibleForRoles: R_HR },
     ],
   },
   {
     key: 'crm', label: 'CRM', icon: <TrendingUp size={18} />, module: 'crm',
     children: [
-      { label: 'Leads',     path: '/crm/leads',     icon: <Star size={15} /> },
+      { label: 'Leads', path: '/crm/leads', icon: <Star size={15} /> },
       { label: 'Customers', path: '/crm/customers', icon: <Users size={15} /> },
-      { label: 'Deals',     path: '/crm/deals',     icon: <Briefcase size={15} /> },
+      { label: 'Deals', path: '/crm/deals', icon: <Briefcase size={15} /> },
     ],
   },
   {
@@ -219,11 +214,11 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'projects', label: 'Projects', icon: <Package size={18} />, module: 'projects',
     children: [
-      { label: 'All Projects', path: '/projects',       icon: <Package size={15} /> },
-      { label: 'Task Board',   path: '/projects/board', icon: <ClipboardList size={15} /> },
+      { label: 'All Projects', path: '/projects', icon: <Package size={15} /> },
+      { label: 'Task Board', path: '/projects/board', icon: <ClipboardList size={15} /> },
     ],
   },
-  { key: 'inventory',   label: 'Inventory',   icon: <Building2 size={18} />,    path: '/inventory',   module: 'inventory' },
+  { key: 'inventory', label: 'Inventory', icon: <Building2 size={18} />, path: '/inventory', module: 'inventory' },
   { key: 'procurement', label: 'Procurement', icon: <ShoppingCart size={18} />, path: '/procurement', module: 'procurement' },
   // Helpdesk was listed with a /helpdesk/tickets child but there is no
   // matching Route in App.tsx — clicking the sidebar link fell through to
@@ -233,33 +228,33 @@ const MODULE_ITEMS: NavItemDef[] = [
 
 // ─── Platform admin items (the "Settings" app) ────────────────────────────────
 const PLATFORM_ITEMS: NavItemDef[] = [
-  { key: 'users',    label: 'Users & Access', icon: <Users size={18} />,       path: '/users',      visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 'roles',    label: 'Roles & Perms',  icon: <ShieldAlert size={18} />, path: '/roles',      visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 'audit',    label: 'Audit Logs',     icon: <FileText size={18} />,    path: '/audit-logs', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 'settings', label: 'Configuration',  icon: <Settings size={18} />,    path: '/settings',   visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'] },
+  { key: 'users', label: 'Users & Access', icon: <Users size={18} />, path: '/users', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 'roles', label: 'Roles & Perms', icon: <ShieldAlert size={18} />, path: '/roles', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 'audit', label: 'Audit Logs', icon: <FileText size={18} />, path: '/audit-logs', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 'settings', label: 'Configuration', icon: <Settings size={18} />, path: '/settings', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD'] },
 ]
 
 // ─── Workspace Settings nav (the "Settings" app — workspace-level, NOT a module) ──
 // Account + Workspace sections everyone with settings access sees; Administration
 // is super-admin only. Each maps to a route the shell drives.
 const SETTINGS_NAV: NavItemDef[] = [
-  { key: 's-profile',       label: 'Profile',             icon: <UserCircle2 size={18} />,  path: '/profile' },
-  { key: 's-branding',      label: 'Branding',            icon: <ImageIcon size={18} />,     path: '/settings/branding',      visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 's-security',      label: 'Security',            icon: <Shield size={18} />,        path: '/settings/security' },
+  { key: 's-profile', label: 'Profile', icon: <UserCircle2 size={18} />, path: '/profile' },
+  { key: 's-branding', label: 'Branding', icon: <ImageIcon size={18} />, path: '/settings/branding', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 's-security', label: 'Security', icon: <Shield size={18} />, path: '/settings/security' },
   // Notifications is deliberately open — every role can manage their OWN
   // notification preferences, so no visibleForRoles filter here.
-  { key: 's-notifications', label: 'Notifications',       icon: <Bell size={18} />,          path: '/settings/notifications' },
+  { key: 's-notifications', label: 'Notifications', icon: <Bell size={18} />, path: '/settings/notifications' },
   // Billing was previously visible to every role — a plain EMPLOYEE would see
   // a "Billing & Plan" pill they had no authority to open. Restrict to the
   // admins the backend actually lets manage billing.
-  { key: 's-billing',       label: 'Billing & Plan',      icon: <CreditCard size={18} />,    path: '/settings/billing',       visibleForRoles: ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN'] },
-  { key: 's-integrations',  label: 'Integrations',        icon: <Plug size={18} />,          path: '/settings/integrations' },
-  { key: 's-users',         label: 'Users & Access',      icon: <Users size={18} />,         path: '/users',      visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 's-roles',         label: 'Roles & Permissions', icon: <ShieldAlert size={18} />,   path: '/roles',      visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 's-audit',         label: 'Audit Logs',          icon: <FileText size={18} />,      path: '/audit-logs', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 's-billing', label: 'Billing & Plan', icon: <CreditCard size={18} />, path: '/settings/billing', visibleForRoles: ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN'] },
+  { key: 's-integrations', label: 'Integrations', icon: <Plug size={18} />, path: '/settings/integrations' },
+  { key: 's-users', label: 'Users & Access', icon: <Users size={18} />, path: '/users', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 's-roles', label: 'Roles & Permissions', icon: <ShieldAlert size={18} />, path: '/roles', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 's-audit', label: 'Audit Logs', icon: <FileText size={18} />, path: '/audit-logs', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
   // Danger Zone is destructive tenant surgery — only SUPER_ADMIN and OWNER
   // (workspace owner) are allowed near it, never a HR/FIN admin.
-  { key: 's-danger',        label: 'Danger Zone',         icon: <AlertTriangle size={18} />, path: '/settings/danger',        visibleForRoles: ['SUPER_ADMIN', 'OWNER'] },
+  { key: 's-danger', label: 'Danger Zone', icon: <AlertTriangle size={18} />, path: '/settings/danger', visibleForRoles: ['SUPER_ADMIN', 'OWNER'] },
 ]
 
 // Non-HRMS modules become their own apps in the launcher / switcher.
@@ -273,7 +268,7 @@ const ROW_ACTIVE = 'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]'
 /** One-word labels for the Keka-style icon rail — the full names don't fit
  *  under an icon. Falls back to the first word of the nav label. */
 const RAIL_LABELS: Record<string, string> = {
-  dashboard: 'Home', myworkspace: 'Me', myteam: 'Team',
+  dashboard: 'Dashboard', myworkspace: 'Me', myteam: 'Team',
   company: 'Company', master: 'Master', attendance: 'Time', leave: 'Leave',
   recruit: 'Hire', 'payroll-hr': 'Payroll', expense: 'Expense', ess: 'Me',
   performance: 'Perform', compliance: 'Comply', reports: 'Reports', exit: 'Exit',
@@ -301,7 +296,7 @@ const RAIL_LABELS: Record<string, string> = {
  * distorted, and it doubles as the way back to the launcher (/modules).
  */
 const RAIL_BG = 'linear-gradient(180deg,#04503A 0%,#043B2C 55%,#02291E 100%)'
-const HEADER_BG = 'linear-gradient(90deg,#047857 0%,#058360 75%,#059669 100%)'
+const HEADER_BG = 'linear-gradient(90deg,#04503A 0%,#043B2C 55%,#02291E 100%)'
 
 function matchPath(pathname: string, p?: string) {
   return !!p && (pathname === p || pathname.startsWith(p + '/'))
@@ -324,24 +319,6 @@ function useDismiss(open: boolean, onClose: () => void) {
 }
 
 export function PlatformShell() {
-  // Read tenant+user ids synchronously so the collapse preference we look up
-  // matches the workspace/user about to render. Falls back to the legacy
-  // tenant-slug key and the fully-unscoped key for one-time migration paths.
-  const initialAuthSnapshot = useSdkStore.getState()
-  const initialTenantId = initialAuthSnapshot.tenant?.id ?? null
-  const initialUserId = initialAuthSnapshot.user?.id ?? null
-  const initialTenantSlug = initialAuthSnapshot.tenant?.slug ?? null
-  const [collapsed, setCollapsed] = useState(() => {
-    const scoped = localStorage.getItem(sidebarKey(initialTenantId, initialUserId))
-    if (scoped != null) return scoped === 'true'
-    // Legacy tenant-slug key — populated by an earlier revision.
-    if (initialTenantSlug) {
-      const legacyScoped = localStorage.getItem(`${LEGACY_SIDEBAR_KEY_PREFIX}:${initialTenantSlug}`)
-      if (legacyScoped != null) return legacyScoped === 'true'
-    }
-    // Fully-unscoped legacy value from the very first revision.
-    return localStorage.getItem(LEGACY_SIDEBAR_KEY_PREFIX) === 'true'
-  })
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -361,34 +338,12 @@ export function PlatformShell() {
   // them survive an 86px rail cell. tenantName comes from the auth store, which
   // is populated at login. The uploaded logo still appears where it has room
   // and belongs: the login page and Settings > Branding.
-  const tenantName    = useLocalAuthStore(s => s.tenant?.name)
+  const tenantName = useLocalAuthStore(s => s.tenant?.name)
   const hasModule = (k: string) => activeModules.includes(k)
   const tenant = useSdkStore(s => s.tenant)
   const permissions = useSdkStore(s => s.permissions)
   const userRoles: string[] = user?.roles ?? []
   const primaryRole = (ROLE_PRIORITY as readonly string[]).find(r => userRoles.includes(r)) ?? null
-
-  // Toggle handler for the sidebar collapse button. Writes the new state
-  // to the per-tenant per-user localStorage key so the preference survives
-  // a reload — the previous rework read the key on mount but never wrote
-  // back, so users could not manually collapse at all.
-  const collapseKey = sidebarKey(tenant?.id ?? null, user?.id ?? null)
-  const toggleCollapsed = React.useCallback(() => {
-    setCollapsed((prev) => {
-      const next = !prev
-      try { localStorage.setItem(collapseKey, String(next)) } catch { /* private mode / quota — ignore */ }
-      return next
-    })
-  }, [collapseKey])
-
-  // If the signed-in tenant or user changes while the shell is mounted
-  // (e.g. the user re-hydrates from cold cache after AuthProvider loads),
-  // re-read the collapse preference under the correct key.
-  useEffect(() => {
-    if (!tenant?.id || !user?.id) return
-    const stored = localStorage.getItem(sidebarKey(tenant.id, user.id))
-    if (stored != null) setCollapsed(stored === 'true')
-  }, [tenant?.id, user?.id])
 
   // ⌘K global search
   useEffect(() => {
@@ -589,25 +544,16 @@ export function PlatformShell() {
   // ─── Nav renderers ──────────────────────────────────────────────────────────
   const renderFlat = (item: NavItemDef) => (
     <NavLink key={item.key} to={item.path!} end={['/dashboard', '/me', '/team', '/settings'].includes(item.path!)}
-      className={({ isActive }) => clsx(ROW_BASE, isActive ? ROW_ACTIVE : ROW_IDLE, collapsed && 'mx-auto h-10 w-10 justify-center px-0')}
-      title={collapsed ? item.label : undefined}>
+      className={({ isActive }) => clsx(ROW_BASE, isActive ? ROW_ACTIVE : ROW_IDLE)}>
       {({ isActive }) => (<>
-        {!collapsed && <ActiveBar show={isActive} />}
+        <ActiveBar show={isActive} />
         <span className={clsx('shrink-0', isActive ? 'text-[var(--accent-fg)]' : 'text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]')}>{item.icon}</span>
-        {!collapsed && <span>{item.label}</span>}
+        <span>{item.label}</span>
       </>)}
     </NavLink>
   )
 
   const renderGroup = (item: NavItemDef) => {
-    if (collapsed) {
-      return (
-        <NavLink key={item.key} to={item.children?.[0]?.path ?? '/'} title={item.label}
-          className={({ isActive }) => clsx('relative mx-auto flex h-10 w-10 items-center justify-center rounded-lg transition-colors', isActive ? 'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]' : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]')}>
-          {item.icon}
-        </NavLink>
-      )
-    }
     const isOpen = openModules.includes(item.key)
     const hasActiveChild = item.children!.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
     return (
@@ -660,29 +606,15 @@ export function PlatformShell() {
   // ─── Sidebar ────────────────────────────────────────────────────────────────
   const sidebarContent = (
     <div className="flex h-full flex-col border-r border-[var(--border-default)] bg-[var(--bg-surface)]">
-      <div className={clsx('flex h-16 shrink-0 items-center border-b border-[var(--border-subtle)]', collapsed ? 'flex-col justify-center gap-1 px-2' : 'justify-between px-4')}>
-        {collapsed ? (
-          <>
-            <button onClick={() => navigate('/modules')} title="Back to apps" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-solid)] text-white shadow-sm"><LayoutGrid size={18} /></button>
-            <button onClick={toggleCollapsed} title="Expand sidebar" aria-label="Expand sidebar" className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><PanelLeft size={14} /></button>
-          </>
-        ) : (
-          <>
-            <WorkspaceMark />
-            <div className="flex items-center gap-1">
-              <AppSwitcher />
-              <button onClick={toggleCollapsed} title="Collapse sidebar" aria-label="Collapse sidebar" className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><PanelLeftClose size={16} /></button>
-            </div>
-          </>
-        )}
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
+        <WorkspaceMark />
+        <AppSwitcher />
       </div>
 
-      {!collapsed && (
-        <div className="flex items-center gap-2 px-4 pb-1 pt-3">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--accent-bg)] text-[var(--accent-fg)]">{appMeta.icon}</span>
-          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">{appMeta.label}</span>
-        </div>
-      )}
+      <div className="flex items-center gap-2 px-4 pb-1 pt-3">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--accent-bg)] text-[var(--accent-fg)]">{appMeta.icon}</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">{appMeta.label}</span>
+      </div>
 
       <nav className="scrollbar-hide flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
         {scoped.flat.map(renderFlat)}
@@ -692,25 +624,21 @@ export function PlatformShell() {
 
       <div className="relative border-t border-[var(--border-subtle)] p-3" ref={profileRef}>
         <AnimatePresence>
-          {profileOpen && !collapsed && (
+          {profileOpen && (
             <motion.div initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.98 }} transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               className="absolute bottom-[72px] left-3 right-3 z-dropdown overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
               {profileMenu}
             </motion.div>
           )}
         </AnimatePresence>
-        {collapsed ? (
-          <button onClick={logout} title="Sign out" className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--status-error-bg)] hover:text-[var(--status-error-fg)]"><LogOut size={18} /></button>
-        ) : (
-          <button onClick={() => setProfileOpen(v => !v)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--bg-subtle)]">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-sm font-semibold text-[var(--accent-fg-strong)]">{initials}</span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">{fullName}</span>
-              {roleBadgeText && <span className="block truncate text-[11px] text-[var(--text-tertiary)]">{roleBadgeText}</span>}
-            </span>
-            <ChevronDown size={15} className={clsx('shrink-0 text-[var(--text-tertiary)] transition-transform', profileOpen && 'rotate-180')} />
-          </button>
-        )}
+        <button onClick={() => setProfileOpen(v => !v)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--bg-subtle)]">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-sm font-semibold text-[var(--accent-fg-strong)]">{initials}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">{fullName}</span>
+            {roleBadgeText && <span className="block truncate text-[11px] text-[var(--text-tertiary)]">{roleBadgeText}</span>}
+          </span>
+          <ChevronDown size={15} className={clsx('shrink-0 text-[var(--text-tertiary)] transition-transform', profileOpen && 'rotate-180')} />
+        </button>
       </div>
     </div>
   )
@@ -787,15 +715,7 @@ export function PlatformShell() {
       )}
     >
       <span>{item.icon}</span>
-      {/* Interim collapsed variant: when the user has toggled the sidebar
-          collapsed we hide the tiny one-word label under each icon so the
-          rail visually reads as pure-icon. A full redesign of the rail's
-          collapsed geometry is deferred (see platform-objections). The
-          tooltip on the parent button still surfaces the full section name
-          for screen-reader and mouse hover users. */}
-      {!collapsed && (
-        <span className="text-[10px] font-semibold leading-none tracking-tight">{item.label}</span>
-      )}
+      <span className="text-[10px] font-semibold leading-none tracking-tight">{item.label}</span>
     </button>
   )
 
@@ -817,12 +737,9 @@ export function PlatformShell() {
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/95 text-[15px] font-bold text-[#047857] shadow-sm">
               {workspaceInitial}
             </span>
-            {/* Hidden in the collapsed rail — see renderRailItem's comment. */}
-            {!collapsed && (
-              <span className="w-full truncate px-0.5 text-center text-[10px] font-semibold leading-tight text-white">
-                {tenantName || 'Workspace'}
-              </span>
-            )}
+            <span className="w-full truncate px-0.5 text-center text-[10px] font-semibold leading-tight text-white">
+              {tenantName || 'Workspace'}
+            </span>
           </button>
         </div>
         <nav className="scrollbar-hide flex-1 space-y-1 overflow-y-auto px-2.5 pb-2 pt-2">
@@ -1003,10 +920,10 @@ function ShellNotificationBell({
                     n.type === 'error'
                       ? 'bg-red-500/10 text-red-500'
                       : n.type === 'warning'
-                      ? 'bg-amber-500/10 text-amber-600'
-                      : n.type === 'success'
-                      ? 'bg-emerald-500/10 text-emerald-600'
-                      : 'bg-blue-500/10 text-blue-600'
+                        ? 'bg-amber-500/10 text-amber-600'
+                        : n.type === 'success'
+                          ? 'bg-emerald-500/10 text-emerald-600'
+                          : 'bg-blue-500/10 text-blue-600'
                   return (
                     <button
                       key={n.id}

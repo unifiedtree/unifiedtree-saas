@@ -3,23 +3,27 @@ import { useNavigate } from 'react-router-dom'
 import {
   Users, UserCheck, Clock, CalendarDays, Building2, ArrowRight,
   Banknote, Rocket, UserPlus, FileText, BellRing, PartyPopper,
+  Home, LogIn, HelpCircle, UserX, Download, Activity,
 } from 'lucide-react'
 import {
-  ResponsiveContainer, BarChart, Bar,
+  ResponsiveContainer, BarChart, Bar, AreaChart, Area, Legend,
   XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
 import { HrStatusPill, HrButton, HrAvatar } from '@/shared/components/hr'
 import { SkeletonCardGrid } from '@/shared/components/SkeletonCard'
+import { apiBlob } from '@/core/api/client'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import { useCompanies } from './api/useOrg'
 import { useLeaveOverview } from './api/useLeave'
-import { useMonthlyStats } from './api/useAttendance'
+import { useMonthlyStats, useTeamDashboard, useAttendanceTrend } from './api/useAttendance'
+import { useActivityFeed, activityLabel, activityActor } from './api/useActivity'
 import { useHeadcountReport } from './api/useReports'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
 import { useRoles } from '@/shared/hooks/useRoles'
 import { UpcomingProbations } from './probation/UpcomingProbations'
 import { UpcomingMilestones } from './milestones/UpcomingMilestones'
 import { SeatsUsageTile } from './SeatsUsageTile'
+import { AttendanceOverview } from './dashboard/AttendanceOverview'
 
 /**
  * HRMS home — rebuilt in the reference card language (client-approved
@@ -49,6 +53,10 @@ import { SeatsUsageTile } from './SeatsUsageTile'
  *    encoding. ─────────────────────────────────────────────────────────── */
 const VIZ = {
   e600: '#059669',
+  // Second series for the attendance trend. Absent is deliberately a muted
+  // neutral rather than red: on a chart that is mostly "people showed up", a
+  // red band reads as an alarm every single day.
+  neutral: '#A3A3A3',
   grid: '#F0F0F0',
   tick: '#A3A3A3',
 }
@@ -94,7 +102,7 @@ function Card({ title, chip, className = '', children }: {
   children: React.ReactNode
 }) {
   return (
-    <section className={`rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 shadow-sm ${className}`}>
+    <section className={`ut-card p-5 ${className}`}>
       {(title || chip) && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           {title && <h2 className="text-[15px] font-semibold tracking-tight text-[var(--text-primary)]">{title}</h2>}
@@ -206,6 +214,11 @@ export const HrmsDashboard: React.FC = () => {
   // gate the tile on the same permission so a non-billing admin (rare, but
   // possible with custom RBAC) doesn't see a tile whose CTA they can't open.
   const canManageBilling = usePermission(P.WORKSPACE_BILLING_MANAGE)
+  // Org-wide attendance ("who is in today") and the audit feed are their own
+  // permissions — the endpoints are guarded by exactly these, so the tiles are
+  // gated on the same code rather than on a role string.
+  const canReadTeamAttendance = usePermission(P.ATTENDANCE_TEAM_READ)
+  const canReadAudit          = usePermission(P.AUDIT_READ)
   // Quick-action affordances follow the write authority the target action needs,
   // not role membership — HR_MANAGER holds both and sees both, exactly like the
   // backend allows.
@@ -284,6 +297,15 @@ export const HrmsDashboard: React.FC = () => {
   // Passing null disables the query (the hook gates on `enabled: !!companyId`),
   // which is how we keep an employee session from firing a report request the
   // backend would 403 on.
+  /* ── Live Overview: today's org-wide attendance split, plus the trailing
+   *    7-day series behind the trend chart. Both are disabled unless the
+   *    principal actually holds attendance.team.read, so a bare employee
+   *    never fires a request they'd get a 403 for. */
+  const todayIso = now.toISOString().slice(0, 10)
+  const teamDashboardQuery = useTeamDashboard(undefined, undefined, canReadTeamAttendance)
+  const trendQuery = useAttendanceTrend(undefined, undefined, undefined, canReadTeamAttendance)
+  const activityQuery = useActivityFeed(8, canReadAudit)
+
   const headcountQuery = useHeadcountReport(
     canSeeWorkforceTiles ? (activeCompany?.id ?? null) : null,
   )
@@ -324,6 +346,33 @@ export const HrmsDashboard: React.FC = () => {
   })()
 
   // Recent-employees filter — client-side, presentational only.
+  /* ── Generate Report — streams the headcount report as CSV from
+   *    GET /v1/reports/headcount/export.csv (added 2026-08-22; every report
+   *    endpoint gained a CSV sibling carrying the SAME @PreAuthorize as its
+   *    JSON twin, so this cannot expose a report the caller can't already read).
+   *    apiBlob is used rather than a bare <a href> because the download needs
+   *    the bearer token and tenant header that a plain navigation would drop. */
+  const [downloading, setDownloading] = React.useState(false)
+  const downloadHeadcountCsv = async () => {
+    if (!activeCompany?.id || downloading) return
+    setDownloading(true)
+    try {
+      const blob = await apiBlob(
+        `/v1/reports/headcount/export.csv?companyId=${encodeURIComponent(activeCompany.id)}`,
+      )
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `headcount-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   const [statusFilter, setStatusFilter] = React.useState('ALL')
   const filteredEmployees = statusFilter === 'ALL'
     ? recentEmployees
@@ -478,6 +527,74 @@ export const HrmsDashboard: React.FC = () => {
       </Card>,
     )
   }
+  // Attendance trend — real per-day series from GET /v1/attendance/dashboard/trend
+  // (added 2026-08-22). This is the chart the old fabricated "Headcount Growth"
+  // series pretended to be: same shape, but every point is a real count for a
+  // real date, and days with no records render as genuine zeros rather than
+  // being dropped from the axis.
+  const trendRows = (trendQuery.data ?? []).map((row) => ({
+    label: new Date(row.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' }),
+    Present: row.present,
+    Absent: row.absent,
+  }))
+  if (canReadTeamAttendance && trendRows.length > 0) {
+    chartTiles.push(
+      <Card key="attendance-trend" title="Attendance Trend"
+            chip={<span className="text-[11px] text-[var(--text-tertiary)]">Last 7 days</span>}>
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={trendRows} margin={{ top: 6, right: 6, bottom: 0, left: -18 }}>
+              <defs>
+                <linearGradient id="presentFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={VIZ.e600} stopOpacity={0.28} />
+                  <stop offset="100%" stopColor={VIZ.e600} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={VIZ.grid} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: VIZ.tick }} axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: VIZ.tick }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+              <Area type="monotone" dataKey="Present" stroke={VIZ.e600} strokeWidth={2}
+                    fill="url(#presentFill)" />
+              <Area type="monotone" dataKey="Absent" stroke={VIZ.neutral} strokeWidth={2}
+                    fill="none" strokeDasharray="4 3" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>,
+    )
+  }
+
+  // Recent activity — the tenant audit log, gated on audit.read because a
+  // cross-module feed can surface actions from areas the viewer cannot open.
+  // NOTE: audit.events.summary is never written by anything today, so
+  // activityLabel() composes a label from action + resourceType instead.
+  const activityRows = activityQuery.data?.data ?? []
+  if (canReadAudit && activityRows.length > 0) {
+    chartTiles.push(
+      <Card key="activity" title="Recent Activity"
+            chip={<HrStatusPill tone="gray">{activityRows.length}</HrStatusPill>}>
+        <ul className="space-y-3">
+          {activityRows.map((event) => (
+            <li key={event.id} className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent-bg)] text-[var(--accent-fg)]">
+                <Activity size={12} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-medium text-[var(--text-primary)]">{activityLabel(event)}</p>
+                <p className="truncate text-[11.5px] text-[var(--text-tertiary)]">
+                  {activityActor(event)}
+                  {event.occurredAt ? ` · ${new Date(event.occurredAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Card>,
+    )
+  }
+
   // "Positions Hired" removed 2026-08-18 — it charted a hardcoded
   // Sales-34/Engineering-12/Design-8/Support-21 series while the Hiring KPI
   // tile beside it correctly said "coming soon". Restore it when the hiring
@@ -504,9 +621,19 @@ export const HrmsDashboard: React.FC = () => {
               </p>
             )}
           </div>
-          <div className="text-right">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">Current time</p>
-            <p className="text-[26px] font-bold leading-tight tabular-nums text-[var(--text-primary)]">{clock}</p>
+          <div className="flex items-end gap-4">
+            {/* Export is gated on the same permission the CSV endpoint checks,
+                so the button never appears for someone who'd get a 403. */}
+            {canViewReports && activeCompany?.id && (
+              <HrButton variant="ghost" onClick={downloadHeadcountCsv} disabled={downloading}>
+                <Download size={15} />
+                {downloading ? 'Preparing…' : 'Generate Report'}
+              </HrButton>
+            )}
+            <div className="text-right">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">Current time</p>
+              <p className="text-[26px] font-bold leading-tight tabular-nums text-[var(--text-primary)]">{clock}</p>
+            </div>
           </div>
         </div>
 
@@ -519,6 +646,18 @@ export const HrmsDashboard: React.FC = () => {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
             {kpiTiles}
           </div>
+        )}
+
+        {/* ── Attendance command centre — the client's reference layout
+              (donut + status strip, weekly bars, capture sources, exceptions
+              and pending queues). Gated on attendance.team.read, the same
+              permission its endpoints check, so a bare employee never sees it
+              and never fires a request that would 403. */}
+        {canReadTeamAttendance && (
+          <AttendanceOverview
+            canApproveLeaves={canApproveLeaves}
+            pendingLeaveApprovals={pendingApprovals}
+          />
         )}
 
         {/* ── Plan status: Seats-Usage tile. Admin + billing-manager only per

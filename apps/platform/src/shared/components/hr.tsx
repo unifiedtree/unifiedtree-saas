@@ -34,7 +34,7 @@ export function HrStatCard({
   loading?: boolean
 }) {
   return (
-    <div className="group rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:shadow-md">
+    <div className="ut-card ut-card-sm ut-card-hover group p-5">
       <div className="flex items-start justify-between">
         <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl', STAT_ICON[color])}>
           {icon}
@@ -136,9 +136,9 @@ export function TableCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-sm">
+    <div className="ut-card overflow-hidden">
       {(search || actions) && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3.5 py-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/60 px-3.5 py-3">
           {search && (
             <div className="relative min-w-[220px] flex-1">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />

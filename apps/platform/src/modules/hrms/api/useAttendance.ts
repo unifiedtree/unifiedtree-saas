@@ -61,6 +61,9 @@ export interface AttendanceSummaryCounts {
   onLeave: number
   workFromHome: number
   notMarked: number
+  /** Checked out before the assigned shift end. The API has always returned
+   *  this; it was simply missing from the type, so no screen could read it. */
+  earlyCheckout: number
 }
 
 export interface TeamDashboardResponse {
@@ -167,6 +170,65 @@ export function useMyCorrections() {
 }
 
 // ── Manager / Admin ───────────────────────────────────────────────────────────
+
+/** One point on the dashboard attendance trend chart. */
+export interface DailyAttendanceCounts {
+  date: string
+  present: number
+  onLeave: number
+  late: number
+  halfDay: number
+  workFromHome: number
+  notMarked: number
+  absent: number
+  /** Total overtime clocked that day across the roster, in minutes. */
+  overtimeMinutes: number
+}
+
+/** One capture-method bucket from the attendance-source panel. */
+export interface SourceCount {
+  method: string
+  count: number
+}
+
+export interface AttendanceSourceBreakdown {
+  date: string
+  sources: SourceCount[]
+  unknown: number
+}
+
+/** How today's punches arrived — face, GPS, PIN, device, manual, override. */
+export function useAttendanceSources(date?: string, departmentId?: string, enabled: boolean = true) {
+  const params = new URLSearchParams()
+  if (date) params.set('date', date)
+  if (departmentId) params.set('departmentId', departmentId)
+  return useQuery({
+    queryKey: ['hrms', 'attendance', 'dashboard', 'sources', date, departmentId],
+    queryFn: () => apiJson<AttendanceSourceBreakdown>(`/v1/attendance/dashboard/sources?${params}`),
+    staleTime: 60_000,
+    enabled,
+  })
+}
+
+/**
+ * Per-day attendance counts for the trend chart.
+ *
+ * Defaults to the trailing 7 days when no range is given. The server clamps
+ * anything longer than 31 days and fills gaps with zero rows, so the series is
+ * always dense — the chart never has to guess at missing dates.
+ */
+export function useAttendanceTrend(from?: string, to?: string, departmentId?: string, enabled: boolean = true) {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  if (departmentId) params.set('departmentId', departmentId)
+  return useQuery({
+    queryKey: ['hrms', 'attendance', 'dashboard', 'trend', from, to, departmentId],
+    queryFn: () => apiJson<DailyAttendanceCounts[]>(`/v1/attendance/dashboard/trend?${params}`),
+    staleTime: 60_000,
+    enabled,
+  })
+}
 
 export function useTeamDashboard(date?: string, departmentId?: string, enabled: boolean = true) {
   const params = new URLSearchParams()
