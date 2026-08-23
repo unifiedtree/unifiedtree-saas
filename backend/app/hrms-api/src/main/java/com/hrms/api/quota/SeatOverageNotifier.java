@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -106,8 +107,17 @@ public class SeatOverageNotifier {
      * method bypasses the proxy, so no @Transactional helper method here —
      * everything runs in the ONE tx started by this annotation.
      */
+    /**
+     * MUST be REQUIRES_NEW. Spring refuses a plain @Transactional on a
+     * @TransactionalEventListener AFTER_COMMIT method (BeanInitialization
+     * failed startup on rev 00122 with exactly that error), because AFTER_COMMIT
+     * fires past the outer transaction — there is nothing to join, and joining
+     * would be nonsense. REQUIRES_NEW opens a fresh transaction on a fresh
+     * connection, which is what TenantAwareDataSource needs to re-issue
+     * SET LOCAL app.tenant_id for the RLS reads/writes below anyway.
+     */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onSeatOverageDetected(SeatOverageDetectedEvent e) {
         UUID tenantId = e.tenantId();
         int purchased = e.purchased();
