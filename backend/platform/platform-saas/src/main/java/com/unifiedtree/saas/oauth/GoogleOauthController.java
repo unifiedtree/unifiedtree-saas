@@ -55,13 +55,19 @@ public class GoogleOauthController {
     private static final int RT_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
     /**
-     * Short-lived cookie carrying the OAuth state UUID. Path scoped to
-     * /v1/accounts/auth/google so it is only ever sent to /start and
-     * /callback — no other endpoint sees it.
+     * Short-lived cookie carrying the OAuth state UUID. MUST include the
+     * {@code /api} context prefix — that prefix is added by Cloud Run's
+     * spring.webflux.base-path (server.servlet.context-path in this app), so
+     * the real path the browser sees is {@code /api/v1/accounts/auth/google/callback}.
+     * A cookie scoped to {@code /v1/accounts/auth/google} does NOT match a
+     * request to {@code /api/v1/accounts/auth/google/callback} — cookie Path
+     * is a plain prefix match, so the state cookie was never sent to the
+     * callback. Every Google sign-in attempt then failed with
+     * "session expired" (rev 00123 and earlier). Fixed 2026-08-23.
      */
     private static final String STATE_COOKIE_NAME = "ut_oauth_state";
     private static final int STATE_COOKIE_MAX_AGE_SECONDS = 15 * 60; // matches the DB row TTL
-    private static final String STATE_COOKIE_PATH = "/v1/accounts/auth/google";
+    private static final String STATE_COOKIE_PATH = "/api/v1/accounts/auth/google";
 
     /** /start budget: 20 per minute per IP — matches the design limit. */
     private static final int START_PER_MIN = 20;
