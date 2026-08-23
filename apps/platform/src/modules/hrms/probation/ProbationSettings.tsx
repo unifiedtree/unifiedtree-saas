@@ -57,7 +57,7 @@ export const ProbationSettings: React.FC = () => {
         subtitle="Configure when probation-ending reminders are sent to managers and HR."
       />
 
-      <div className="space-y-5 rounded-2xl border border-border-default bg-white p-6 shadow-sm">
+      <div className="ut-card ut-card-lg space-y-5 p-6">
         <Field label="Reminder days before probation ends" hint="How many days ahead of the probation end date to email the manager and HR (1–90).">
           <Input
             type="number" min={1} max={90} value={days}
@@ -78,7 +78,7 @@ export const ProbationSettings: React.FC = () => {
             <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
               style={{ transform: autoExtend ? 'translateX(18px)' : 'translateX(4px)' }} />
           </button>
-          <span className="text-sm font-medium text-text-primary">Auto-extend probation if no action is taken</span>
+          <span className="text-[13px] font-semibold text-text-primary">Auto-extend probation if no action is taken</span>
         </label>
 
         {autoExtend && (

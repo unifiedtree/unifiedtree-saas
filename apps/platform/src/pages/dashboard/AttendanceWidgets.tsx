@@ -40,7 +40,7 @@ export const TeamAttendanceWidgets: React.FC = () => {
         <StatCard title="Not Marked" value={teamData?.counts.notMarked.toString() ?? '0'} change="Pending check-in" changeType="neutral" icon={Clock} iconColor="text-amber-500" iconBg="bg-amber-50" subtitle="Staff members" />
       </motion.div>
 
-      <motion.div variants={fadeUp} className="mt-4 rounded-2xl border border-brand-100 bg-white p-5 shadow-card max-w-2xl">
+      <motion.div variants={fadeUp} className="ut-card mt-4 p-5 max-w-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="font-display text-base text-brand-900">Recent Attendance Logs</h3>
           <button

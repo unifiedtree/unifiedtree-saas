@@ -187,7 +187,7 @@ export const ShiftChangeRequest: React.FC = () => {
       />
 
       {/* Current shift (read-only) */}
-      <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+      <div className="ut-card ut-card-sm p-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Current shift</p>
         <div className="mt-1 flex items-center gap-2">
           <Clock size={16} className="text-text-tertiary" />
@@ -206,9 +206,9 @@ export const ShiftChangeRequest: React.FC = () => {
 
       {/* Form */}
       {!hasPending && (
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-border-default bg-white p-4 shadow-sm sm:p-6">
+        <form onSubmit={handleSubmit} className="ut-card ut-card-lg space-y-4 p-4 sm:p-6">
           <div>
-            <label htmlFor="scr-shift" className="mb-1 block text-sm font-medium text-text-primary">
+            <label htmlFor="scr-shift" className="mb-1 block text-[13px] font-semibold text-text-primary">
               Requested shift <span className="text-[#DC2626]">*</span>
             </label>
             <select
@@ -232,7 +232,7 @@ export const ShiftChangeRequest: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="scr-date" className="mb-1 block text-sm font-medium text-text-primary">
+            <label htmlFor="scr-date" className="mb-1 block text-[13px] font-semibold text-text-primary">
               Effective from <span className="text-[#DC2626]">*</span>
             </label>
             <input
@@ -249,7 +249,7 @@ export const ShiftChangeRequest: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="scr-reason" className="mb-1 block text-sm font-medium text-text-primary">
+            <label htmlFor="scr-reason" className="mb-1 block text-[13px] font-semibold text-text-primary">
               Reason <span className="text-[#DC2626]">*</span>
             </label>
             <textarea
@@ -294,7 +294,7 @@ export const ShiftChangeRequest: React.FC = () => {
       )}
 
       {/* Past requests */}
-      <div className="rounded-2xl border border-border-default bg-white shadow-sm">
+      <div className="ut-card">
         <div className="border-b border-border-default px-4 py-3">
           <h2 className="text-sm font-semibold text-text-primary">My shift-change requests</h2>
         </div>

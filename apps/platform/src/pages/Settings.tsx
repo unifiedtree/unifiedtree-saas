@@ -53,7 +53,7 @@ const ProfileTab: React.FC = () => {
             <p className="text-text-secondary text-sm">{user?.email}</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
           {[
             { label: 'First Name', value: user?.firstName ?? '' },
             { label: 'Last Name', value: user?.lastName ?? '' },
@@ -61,7 +61,7 @@ const ProfileTab: React.FC = () => {
             { label: 'Role', value: user?.role ?? '' },
           ].map(({ label, value }) => (
             <div key={label}>
-              <label className="block text-xs font-medium text-text-tertiary mb-1.5">{label}</label>
+              <label className="block text-[13px] font-semibold text-text-tertiary mb-1.5">{label}</label>
               <input
                 value={value}
                 readOnly
@@ -73,7 +73,7 @@ const ProfileTab: React.FC = () => {
       </div>
       <div>
         <h3 className="text-text-primary font-semibold mb-4">Organization</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-5">
           {[
             { label: 'Company Name', value: tenant?.name ?? '' },
             // Industry is not persisted anywhere on the backend — the
@@ -84,7 +84,7 @@ const ProfileTab: React.FC = () => {
             { label: 'Plan', value: tenant?.planType ?? '' },
           ].map(({ label, value }) => (
             <div key={label}>
-              <label className="block text-xs font-medium text-text-tertiary mb-1.5">{label}</label>
+              <label className="block text-[13px] font-semibold text-text-tertiary mb-1.5">{label}</label>
               <input
                 value={value}
                 readOnly
@@ -112,7 +112,7 @@ const ProfileTab: React.FC = () => {
 
 /** Small "not built yet" row, matching the Integrations treatment. */
 const SoonRow: React.FC<{ title: string; desc: string }> = ({ title, desc }) => (
-  <div className="flex items-center justify-between p-4 bg-white border border-border-default rounded-xl max-w-md opacity-75">
+  <div className="ut-card ut-card-sm flex items-center justify-between p-4 max-w-md opacity-75">
     <div>
       <p className="text-sm font-medium text-text-primary">{title}</p>
       <p className="text-xs text-text-secondary mt-0.5">{desc}</p>
@@ -341,7 +341,7 @@ const BrandingTab: React.FC = () => {
         )
       })()}
 
-      <div className="flex items-center gap-6 rounded-xl border border-border-default bg-white p-6">
+      <div className="ut-card flex items-center gap-6 p-6">
         <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-dashed border-border-default bg-bg-subtle">
           {logoUrl ? (
             <img
@@ -486,7 +486,7 @@ const NotificationsTab: React.FC = () => {
   ]
 
   const Row: React.FC<{ label: string; desc: string }> = ({ label, desc }) => (
-    <div className="flex items-center justify-between p-3.5 bg-white border border-border-default rounded-xl opacity-75">
+    <div className="ut-card ut-card-sm flex items-center justify-between p-3.5 opacity-75">
       <div>
         <p className="text-sm font-medium text-text-primary">{label}</p>
         <p className="text-xs text-text-secondary mt-0.5">{desc}</p>
@@ -499,7 +499,7 @@ const NotificationsTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-border-default bg-[#F8FAFC] p-4">
+      <div className="ut-card ut-card-sm p-4">
         <p className="text-sm text-text-primary font-medium">Per-person notification controls are on the way</p>
         <p className="mt-1 text-xs text-text-secondary">
           Until then, admins and approvers receive the notifications the workspace needs to
@@ -592,13 +592,13 @@ const BillingTab: React.FC = () => {
         </div>
 
         {subs === null ? (
-          <div className="h-24 animate-pulse rounded-2xl border border-border-default bg-white" />
+          <div className="ut-card ut-card-sm h-24 animate-pulse" />
         ) : failed ? (
           <div className="rounded-2xl border border-[#FCA5A5] bg-[#FEF2F2] p-5 text-sm text-[#B91C1C]">
             We couldn't load your billing details just now. Open Manage plan to see the latest.
           </div>
         ) : subs.length === 0 ? (
-          <div className="rounded-2xl border border-border-default bg-white p-6 text-center">
+          <div className="ut-card p-6 text-center">
             <p className="text-sm font-medium text-text-primary">No modules on autopay yet</p>
             <p className="mt-1 text-xs text-text-secondary">
               Pick the modules your team needs and set up autopay — the first 7 days are free.
@@ -615,7 +615,7 @@ const BillingTab: React.FC = () => {
               const next = fmtDate(s.nextChargeAt)
               return (
                 <div key={s.razorpaySubscriptionId ?? s.primaryPlanKey}
-                     className="flex flex-wrap items-center justify-between gap-3 p-5 bg-white border border-border-default rounded-2xl">
+                     className="ut-card ut-card-sm flex flex-wrap items-center justify-between gap-3 p-5">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold text-text-primary">
@@ -684,7 +684,7 @@ const IntegrationsTab: React.FC = () => {
         These integrations are on the roadmap and will light up here as they ship.
       </p>
       {integrations.map(({ key, name, desc, logo }) => (
-        <div key={key} className="flex items-center justify-between p-4 bg-white border border-border-default rounded-xl opacity-75">
+        <div key={key} className="ut-card ut-card-sm flex items-center justify-between p-4 opacity-75">
           <div className="flex items-center gap-4">
             <span className="text-2xl grayscale">{logo}</span>
             <div>
@@ -755,7 +755,7 @@ const DangerTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-border-default bg-[#F8FAFC] p-4">
+      <div className="ut-card ut-card-sm p-4">
         <p className="text-xs text-text-secondary">
           These actions are handled by our team so nothing irreversible happens by accident.
           Email us and we'll confirm with you before doing anything. Self-service controls are
@@ -796,7 +796,7 @@ export const Settings: React.FC = () => {
   return (
     <div className="animate-fade-in mx-auto max-w-4xl p-6 sm:p-8">
       <HrPageHeader crumb="Workspace Settings" title={meta.label} subtitle={meta.desc} />
-      <div className="rounded-2xl border border-border-default bg-white p-6">
+      <div className="ut-card ut-card-lg p-6">
         {tabContent[active]}
       </div>
     </div>

@@ -38,7 +38,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl border bg-white shadow-2xl pointer-events-auto animate-slide-up ${bgMap[t.type]}`}
+            className={`ut-card ut-card-sm flex items-center gap-3 px-4 py-3 pointer-events-auto animate-slide-up ${bgMap[t.type]}`}
             style={{ minWidth: 280, maxWidth: 380 }}
           >
             {icons[t.type]}

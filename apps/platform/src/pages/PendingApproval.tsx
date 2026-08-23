@@ -22,7 +22,7 @@ export const PendingApproval: React.FC = () => {
 
   return (
     <main className="min-h-screen bg-[#ECFDF5] px-4 py-16">
-      <section className="mx-auto max-w-3xl rounded-2xl border border-[#6EE7B7] bg-white p-8 shadow-xl shadow-amber-100/70">
+      <section className="ut-card ut-card-lg mx-auto max-w-3xl p-8">
         <div className="mb-10 inline-flex items-center gap-3">
           <img
             src="/assets/unifiedtree-logo.png"
@@ -46,7 +46,7 @@ export const PendingApproval: React.FC = () => {
           the requested modules manually.
         </p>
 
-        <div className="mt-8 rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] p-5">
+        <div className="mt-8 ut-card p-5">
           <p className="text-xs font-black uppercase tracking-wide text-text-tertiary">Workspace</p>
           <p className="mt-1 text-xl font-black text-[#047857]">
             {status ? `${status.subdomain}.unifiedtree.com` : 'Loading workspace...'}

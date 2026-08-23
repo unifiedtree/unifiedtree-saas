@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/shared/hooks/useToast'
 import { usePermission, Can, P } from '@unifiedtree/sdk'
 import { StatsSkeleton, Skeleton, EmptyState } from '@unifiedtree/ui-kit'
-import { HrStatCard, HrStatusPill, HrPageHeader, TableCard, HrAvatar, type PillTone } from '@/shared/components/hr'
+import { HrStatCard, HrStatusPill, HrPageHeader, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone } from '@/shared/components/hr'
 import {
   useMonthlyStats, useAttendanceHistory,
   useTeamDashboard, useMyCorrections, useCorrectionApprovals,
@@ -62,7 +62,7 @@ function MyAttendanceTab() {
         </div>
       </div>
 
-      <div className="lg:col-span-2 bg-white border border-border-default shadow-sm rounded-2xl p-3 sm:p-6">
+      <div className="lg:col-span-2 ut-card p-3 sm:p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-base font-bold text-text-primary font-heading">Daily Log</h3>
           <div className="text-sm font-medium text-text-secondary bg-bg-surface px-3 py-1.5 rounded-lg border border-border-default">
@@ -181,10 +181,12 @@ function TeamDashboardTab() {
       <TableCard
         search={{ value: search, onChange: setSearch, placeholder: 'Search team…' }}
         actions={
-          <input
-            type="date" value={date} onChange={(e) => setDate(e.target.value)}
-            className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm focus:border-[#059669] focus:outline-none"
-          />
+          <div className="w-40">
+            <input
+              type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="ut-input ut-input-sm"
+            />
+          </div>
         }
       >
         <table className="hr-table">
@@ -277,8 +279,8 @@ function CorrectionsTab() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="bg-white border border-border-default shadow-sm rounded-2xl p-6">
+    <div className={isManager ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'grid grid-cols-1 gap-6'}>
+      <div className="ut-card p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-base font-bold text-text-primary font-heading">My Corrections</h3>
           <Can code={P.ATTENDANCE_CHECKIN_SELF}>
@@ -296,32 +298,33 @@ function CorrectionsTab() {
               exit={{ height: 0, opacity: 0 }}
               className="overflow-hidden mb-6"
             >
-              <div className="bg-bg-surface border border-border-default rounded-2xl p-5 space-y-4 shadow-inner">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="ut-card p-5 space-y-4">
+                <h4 className="text-[15px] font-semibold text-text-primary">New Request</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-text-tertiary mb-1.5">Date *</label>
-                    <input type="date" value={form.requestedDate} onChange={(e) => setForm(p => ({ ...p, requestedDate: e.target.value }))} className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all" />
+                    <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Date *</label>
+                    <input type="date" value={form.requestedDate} onChange={(e) => setForm(p => ({ ...p, requestedDate: e.target.value }))} className="ut-input" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-text-tertiary mb-1.5">Attachment URL</label>
-                    <input type="url" value={form.attachmentUrl} onChange={(e) => setForm(p => ({ ...p, attachmentUrl: e.target.value }))} placeholder="https://…" className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all" />
+                    <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Attachment URL</label>
+                    <input type="url" value={form.attachmentUrl} onChange={(e) => setForm(p => ({ ...p, attachmentUrl: e.target.value }))} placeholder="https://…" className="ut-input" />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-text-tertiary mb-1.5">Requested In</label>
-                    <input type="time" value={form.requestedCheckInAt} onChange={(e) => setForm(p => ({ ...p, requestedCheckInAt: e.target.value }))} className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all" />
+                    <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Requested In</label>
+                    <input type="time" value={form.requestedCheckInAt} onChange={(e) => setForm(p => ({ ...p, requestedCheckInAt: e.target.value }))} className="ut-input" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-text-tertiary mb-1.5">Requested Out</label>
-                    <input type="time" value={form.requestedCheckOutAt} onChange={(e) => setForm(p => ({ ...p, requestedCheckOutAt: e.target.value }))} className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all" />
+                    <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Requested Out</label>
+                    <input type="time" value={form.requestedCheckOutAt} onChange={(e) => setForm(p => ({ ...p, requestedCheckOutAt: e.target.value }))} className="ut-input" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-text-tertiary mb-1.5">Reason *</label>
+                  <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Reason *</label>
                   <textarea rows={3} value={form.reason} onChange={(e) => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="Brief reason" className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all resize-y" />
                 </div>
-                <div className="flex justify-end gap-3 pt-2">
+                <div className="flex justify-end gap-3 border-t border-border-default pt-4">
                   <button onClick={() => setOpen(false)} className="px-4 py-2 text-text-secondary font-semibold text-sm hover:text-text-primary transition-colors">Cancel</button>
                   <button onClick={handleCreate} disabled={createCorrection.isPending} className="px-5 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all shadow-sm shadow-primary/30">
                     {createCorrection.isPending ? 'Submitting...' : 'Submit Request'}
@@ -357,7 +360,7 @@ function CorrectionsTab() {
       </div>
 
       {isManager && (
-        <div className="bg-white border border-border-default shadow-sm rounded-2xl p-6">
+        <div className="ut-card p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-base font-bold text-text-primary font-heading">Pending Approvals</h3>
             <span className="bg-warning text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
@@ -432,30 +435,16 @@ export const Attendance: React.FC = () => {
   ]
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-8">
+    <div className="max-w-7xl mx-auto p-4 sm:p-8">
       <HrPageHeader crumb="Attendance & Time" title="Attendance" subtitle="Track and manage attendance records." />
 
-      {/* Modern Tabs */}
-      <div className="flex items-center p-1 bg-bg-surface border border-border-default rounded-xl w-max shadow-inner">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => switchTab(t.key)}
-            className={clsx(
-              'relative px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-300',
-              tab === t.key ? 'text-text-primary shadow-sm bg-white' : 'text-text-secondary hover:text-text-primary hover:bg-white/50'
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => switchTab(k as Tab)} />
 
       {/* Tab Content Area */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {tab === 'my' && <MyAttendanceTab />}
-        {tab === 'team' && <TeamDashboardTab />}
-        {tab === 'corrections' && <CorrectionsTab />}
+        {tab === 'my' && <HrTabPanel tabKey="my"><MyAttendanceTab /></HrTabPanel>}
+        {tab === 'team' && <HrTabPanel tabKey="team"><TeamDashboardTab /></HrTabPanel>}
+        {tab === 'corrections' && <HrTabPanel tabKey="corrections"><CorrectionsTab /></HrTabPanel>}
       </div>
     </div>
   )

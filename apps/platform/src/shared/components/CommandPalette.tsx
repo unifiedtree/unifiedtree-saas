@@ -98,7 +98,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
   return (
     <div className="fixed inset-0 z-[300] flex items-start justify-center pt-[15vh]">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-white border border-border-default rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
+      <div className="ut-card ut-card-lg relative w-full max-w-xl overflow-hidden animate-slide-up">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border-default">
           <Search size={16} className="text-text-tertiary flex-shrink-0" />
           <input

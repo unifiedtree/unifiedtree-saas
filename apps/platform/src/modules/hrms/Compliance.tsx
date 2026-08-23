@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
@@ -22,7 +22,6 @@ const POSH_TONE: Record<PoshStatus, PillTone> = {
   RECEIVED: 'info', UNDER_INQUIRY: 'warn', RESOLVED: 'ok', DISMISSED: 'gray',
 }
 
-const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 const today = () => new Date().toISOString().slice(0, 10)
 const fmtDate = (d?: string) => (d ? format(new Date(d), 'd MMM yyyy') : '—')
 
@@ -47,30 +46,20 @@ export const Compliance: React.FC = () => {
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Compliance" title="Statutory Compliance" subtitle="Compliance calendar, statutory filings, and the POSH register" />
 
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1 border-b border-border-default">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-                tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
         {companies.length > 1 && (
-          <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none">
-            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <div className="mt-1 w-56">
+            <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm">
+              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
         )}
       </div>
 
-      {tab === 'calendar' && <CalendarTab companyId={activeCompany} canWrite={canWrite} />}
-      {tab === 'filings' && <FilingsTab companyId={activeCompany} canWrite={canWrite} />}
-      {tab === 'posh' && (canPosh ? <PoshTab companyId={activeCompany} /> : <PoshDenied />)}
+      {tab === 'calendar' && <HrTabPanel tabKey="calendar"><CalendarTab companyId={activeCompany} canWrite={canWrite} /></HrTabPanel>}
+      {tab === 'filings' && <HrTabPanel tabKey="filings"><FilingsTab companyId={activeCompany} canWrite={canWrite} /></HrTabPanel>}
+      {tab === 'posh' && <HrTabPanel tabKey="posh">{canPosh ? <PoshTab companyId={activeCompany} /> : <PoshDenied />}</HrTabPanel>}
     </div>
   )
 }
@@ -136,26 +125,26 @@ function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boo
       </div>
 
       {canWrite && (
-        <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+        <div className="ut-card flex flex-wrap items-end gap-2 p-4">
           <div className="flex-1 min-w-[180px]">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Obligation *</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. PF monthly return" className={inputCls} />
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Obligation *</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. PF monthly return" className="ut-input ut-input-sm" />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Category</label>
-            <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Statutory" className={`${inputCls} w-36`} />
+          <div className="w-36">
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Category</label>
+            <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Statutory" className="ut-input ut-input-sm" />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Due date *</label>
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`${inputCls} w-40`} />
+          <div className="w-40">
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Due date *</label>
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="ut-input ut-input-sm" />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Frequency</label>
-            <input value={frequency} onChange={(e) => setFrequency(e.target.value)} placeholder="e.g. Monthly" className={`${inputCls} w-32`} />
+          <div className="w-32">
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Frequency</label>
+            <input value={frequency} onChange={(e) => setFrequency(e.target.value)} placeholder="e.g. Monthly" className="ut-input ut-input-sm" />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Owner</label>
-            <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={`${inputCls} w-44`}>
+          <div className="w-44">
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Owner</label>
+            <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className="ut-select ut-select-sm">
               <option value="">Unassigned</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>{[e.firstName, e.lastName].filter(Boolean).join(' ')}{e.employeeCode ? ` (${e.employeeCode})` : ''}</option>
@@ -252,24 +241,24 @@ function FilingsTab({ companyId, canWrite }: { companyId: string; canWrite: bool
   return (
     <div className="space-y-5">
       {canWrite && (
-        <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-border-default bg-white p-4 shadow-sm">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Type</label>
-            <select value={filingType} onChange={(e) => setFilingType(e.target.value as FilingType)} className={`${inputCls} w-32`}>
+        <div className="ut-card flex flex-wrap items-end gap-2 p-4">
+          <div className="w-32">
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Type</label>
+            <select value={filingType} onChange={(e) => setFilingType(e.target.value as FilingType)} className="ut-select ut-select-sm">
               {FILING_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Period</label>
-            <input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="e.g. 2026-05" className={`${inputCls} w-32`} />
+          <div className="w-32">
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Period</label>
+            <input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="e.g. 2026-05" className="ut-input ut-input-sm" />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Amount (₹)</label>
-            <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Optional" className={`${inputCls} w-32`} />
+          <div className="w-32">
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Amount (₹)</label>
+            <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Optional" className="ut-input ut-input-sm" />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Due date *</label>
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`${inputCls} w-40`} />
+          <div className="w-40">
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Due date *</label>
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="ut-input ut-input-sm" />
           </div>
           <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Add Filing</HrButton>
         </div>
@@ -325,7 +314,7 @@ function FilingsTab({ companyId, canWrite }: { companyId: string; canWrite: bool
 
 function PoshDenied() {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-border-default bg-white py-16 text-center shadow-sm">
+    <div className="ut-card ut-card-lg flex flex-col items-center justify-center py-16 text-center">
       <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#FEE2E2] text-[#B91C1C]">
         <Lock size={22} />
       </div>
@@ -382,20 +371,20 @@ function PoshTab({ companyId }: { companyId: string }) {
         <p className="text-xs text-text-secondary">This register is confidential. Record only what is necessary and handle every entry in line with your POSH policy.</p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-border-default bg-white p-4 shadow-sm">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Filed date *</label>
-          <input type="date" value={filedDate} onChange={(e) => setFiledDate(e.target.value)} className={`${inputCls} w-40`} />
+      <div className="ut-card flex flex-wrap items-end gap-2 p-4">
+        <div className="w-40">
+          <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Filed date *</label>
+          <input type="date" value={filedDate} onChange={(e) => setFiledDate(e.target.value)} className="ut-input ut-input-sm" />
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Severity</label>
-          <select value={severity} onChange={(e) => setSeverity(e.target.value)} className={`${inputCls} w-32`}>
+        <div className="w-32">
+          <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Severity</label>
+          <select value={severity} onChange={(e) => setSeverity(e.target.value)} className="ut-select ut-select-sm">
             {POSH_SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[200px]">
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Description</label>
-          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief, factual summary" className={inputCls} />
+          <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Description</label>
+          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief, factual summary" className="ut-input ut-input-sm" />
         </div>
         <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Register</HrButton>
       </div>
@@ -427,17 +416,19 @@ function PoshTab({ companyId }: { companyId: string }) {
                 <td>
                   <div className="flex items-center justify-end gap-2">
                     {c.status !== 'RESOLVED' && c.status !== 'DISMISSED' ? (
-                      <select
-                        value=""
-                        onChange={(e) => { if (e.target.value) onAdvance(c.id, e.target.value as PoshStatus) }}
-                        disabled={updateStatus.isPending}
-                        className="rounded-lg border border-border-default bg-white px-2 py-1.5 text-xs text-text-primary focus:border-[#059669] focus:outline-none"
-                      >
-                        <option value="">Update status…</option>
-                        {POSH_STATUSES.filter((s) => s !== c.status).map((s) => (
-                          <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-                        ))}
-                      </select>
+                      <div className="w-40">
+                        <select
+                          value=""
+                          onChange={(e) => { if (e.target.value) onAdvance(c.id, e.target.value as PoshStatus) }}
+                          disabled={updateStatus.isPending}
+                          className="ut-select ut-select-sm"
+                        >
+                          <option value="">Update status…</option>
+                          {POSH_STATUSES.filter((s) => s !== c.status).map((s) => (
+                            <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                          ))}
+                        </select>
+                      </div>
                     ) : (
                       <span className="text-xs text-text-tertiary">Closed</span>
                     )}

@@ -87,7 +87,7 @@ export const TaskBoard: React.FC = () => {
                   return (
                     <div
                       key={task.id}
-                      className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 cursor-pointer hover:border-[#E2E8F0]/60 transition-colors group"
+                      className="ut-card ut-card-sm group p-3.5"
                     >
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <p className="text-slate-200 text-xs font-medium leading-relaxed flex-1">{task.title}</p>

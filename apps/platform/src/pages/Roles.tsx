@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react'
-import { Shield, Search, X, UserCog, Plus } from 'lucide-react'
+import { Shield, Search, X, UserCog, Plus, KeyRound, Copy, Pencil, Trash2 } from 'lucide-react'
 import {
-  DataTable, Badge, Drawer, Tabs, TabsList, TabsTrigger, TabsContent,
+  DataTable, Badge, Drawer,
   TableSkeleton, EmptyState, Button,
 } from '@unifiedtree/ui-kit'
 import type { Column } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
+import { HrTabs, HrTabPanel } from '@/shared/components/hr'
 import {
   useRoles, usePermissionsCatalogue, useRolePermissions, useSetRolePermissions,
   useUserRoles, useGrantRole, useRevokeRole,
@@ -154,7 +155,10 @@ function PermissionsDrawer({
           </div>
         )}
 
-        <div className="flex gap-2 border-t border-border-default pt-4">
+        <div className="flex justify-end gap-2 border-t border-border-default pt-4">
+          <Button size="sm" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             size="sm"
             loading={setPerms.isPending}
@@ -162,9 +166,6 @@ function PermissionsDrawer({
             disabled={!initialised || loadingPerms}
           >
             Save permissions
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            Cancel
           </Button>
         </div>
       </div>
@@ -213,14 +214,14 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
   return (
     <div className="grid gap-4 md:grid-cols-[300px_1fr]">
       {/* User list */}
-      <div className="rounded-xl border border-border-default bg-bg-surface overflow-hidden">
+      <div className="ut-card overflow-hidden">
         <div className="relative border-b border-border-default p-2.5">
           <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-tertiary" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search users…"
-            className="w-full rounded-lg border border-border-default bg-white py-1.5 pl-8 pr-3 text-sm focus:border-primary focus:outline-none"
+            className="ut-input ut-input-sm w-full pl-8"
           />
         </div>
         <div className="max-h-[60vh] overflow-y-auto">
@@ -246,7 +247,7 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
       </div>
 
       {/* Detail panel */}
-      <div className="rounded-xl border border-border-default bg-bg-surface p-5">
+      <div className="ut-card p-5">
         {!selectedUser ? (
           <div className="flex h-full min-h-[200px] flex-col items-center justify-center text-center text-text-tertiary">
             <UserCog size={28} className="mb-2" />
@@ -295,7 +296,7 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
                 value=""
                 disabled={busy || availableRoles.length === 0}
                 onChange={(e) => handleGrant(e.target.value)}
-                className="w-full max-w-sm rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
+                className="ut-select w-full max-w-sm"
               >
                 <option value="">
                   {availableRoles.length === 0 ? 'All roles already assigned' : 'Select a role to grant…'}
@@ -384,27 +385,27 @@ function RoleEditorModal({ state, onClose }: { state: RoleEditorState; onClose: 
       <div className="space-y-4">
         {isCreate && (
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-text-secondary">Role code <span className="text-danger">*</span></label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Role code <span className="text-danger">*</span></label>
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="e.g. REGIONAL_HR"
-              className="w-full rounded-xl border border-border/60 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
+              className="ut-input"
             />
             <p className="mt-1 text-xs text-text-tertiary">Uppercase identifier, unique within your workspace. Spaces become underscores.</p>
           </div>
         )}
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-text-secondary">Display name <span className="text-danger">*</span></label>
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Display name <span className="text-danger">*</span></label>
           <input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="e.g. Regional HR"
-            className="w-full rounded-xl border border-border/60 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            className="ut-input"
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-text-secondary">Description</label>
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Description</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -418,9 +419,9 @@ function RoleEditorModal({ state, onClose }: { state: RoleEditorState; onClose: 
             Permissions will be copied from <span className="font-medium text-text-primary">{role.displayName}</span>. You can adjust them afterward via “Edit permissions”.
           </p>
         )}
-        <div className="flex gap-2 border-t border-border-default pt-4">
-          <Button size="sm" loading={busy} onClick={submit}>{isCreate ? 'Create role' : 'Save changes'}</Button>
+        <div className="flex justify-end gap-2 border-t border-border-default pt-4">
           <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button size="sm" loading={busy} onClick={submit}>{isCreate ? 'Create role' : 'Save changes'}</Button>
         </div>
       </div>
     </Drawer>
@@ -436,7 +437,8 @@ function DeleteRoleConfirm({ role, onClose }: { role: RbacRole; onClose: () => v
           This permanently deletes the <span className="font-mono text-xs">{role.code}</span> role, its permission set,
           and removes it from every user who currently holds it. This cannot be undone.
         </p>
-        <div className="flex gap-2 border-t border-border-default pt-4">
+        <div className="flex justify-end gap-2 border-t border-border-default pt-4">
+          <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button
             size="sm"
             loading={del.isPending}
@@ -450,7 +452,6 @@ function DeleteRoleConfirm({ role, onClose }: { role: RbacRole; onClose: () => v
           >
             Delete role
           </Button>
-          <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
         </div>
       </div>
     </Drawer>
@@ -507,22 +508,46 @@ export const Roles: React.FC = () => {
       header: '',
       cell: (row) => (
         <Can code={P.RBAC_ROLE_WRITE}>
-          <div className="flex justify-end gap-1">
-            <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDrawerRole(row) }}>
-              Edit permissions
-            </Button>
-            <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditorState({ mode: 'clone', role: row }) }}>
-              Clone
-            </Button>
+          <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              aria-label={`Edit permissions for ${row.displayName}`}
+              title="Edit permissions"
+              onClick={(e) => { e.stopPropagation(); setDrawerRole(row) }}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+            >
+              <KeyRound size={15} />
+            </button>
+            <button
+              type="button"
+              aria-label={`Clone ${row.displayName}`}
+              title="Clone"
+              onClick={(e) => { e.stopPropagation(); setEditorState({ mode: 'clone', role: row }) }}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+            >
+              <Copy size={15} />
+            </button>
             {!row.systemRole && (
-              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditorState({ mode: 'edit', role: row }) }}>
-                Edit
-              </Button>
+              <button
+                type="button"
+                aria-label={`Edit ${row.displayName}`}
+                title="Edit"
+                onClick={(e) => { e.stopPropagation(); setEditorState({ mode: 'edit', role: row }) }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+              >
+                <Pencil size={15} />
+              </button>
             )}
             {!row.systemRole && (
-              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row) }}>
-                Delete
-              </Button>
+              <button
+                type="button"
+                aria-label={`Delete ${row.displayName}`}
+                title="Delete"
+                onClick={(e) => { e.stopPropagation(); setDeleteTarget(row) }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--status-error-bg)] hover:text-[var(--status-error-fg)]"
+              >
+                <Trash2 size={15} />
+              </button>
             )}
           </div>
         </Can>
@@ -578,15 +603,19 @@ export const Roles: React.FC = () => {
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="roles">Roles</TabsTrigger>
-          <TabsTrigger value="assignments">Assignments</TabsTrigger>
-          <TabsTrigger value="catalogue">Permission Catalogue</TabsTrigger>
-        </TabsList>
+      <HrTabs
+        tabs={[
+          { key: 'roles', label: 'Roles' },
+          { key: 'assignments', label: 'Assignments' },
+          { key: 'catalogue', label: 'Permission Catalogue' },
+        ]}
+        active={activeTab}
+        onChange={setActiveTab}
+      />
 
-        {/* ── Tab: Roles ──────────────────────────────────────────────────── */}
-        <TabsContent value="roles" className="mt-4">
+      {/* ── Tab: Roles ──────────────────────────────────────────────────── */}
+      {activeTab === 'roles' && (
+        <HrTabPanel tabKey="roles">
           <Can code={P.RBAC_ROLE_WRITE}>
             <div className="mb-3 flex justify-end">
               <Button size="sm" onClick={() => setEditorState({ mode: 'create' })}>
@@ -614,19 +643,23 @@ export const Roles: React.FC = () => {
               emptyVariant="first-run"
             />
           )}
-        </TabsContent>
+        </HrTabPanel>
+      )}
 
-        {/* ── Tab: Assignments ────────────────────────────────────────────── */}
-        <TabsContent value="assignments" className="mt-4">
+      {/* ── Tab: Assignments ────────────────────────────────────────────── */}
+      {activeTab === 'assignments' && (
+        <HrTabPanel tabKey="assignments">
           {rolesLoading ? (
             <TableSkeleton />
           ) : (
             <AssignmentsTab roles={roles} />
           )}
-        </TabsContent>
+        </HrTabPanel>
+      )}
 
-        {/* ── Tab: Permission Catalogue ───────────────────────────────────── */}
-        <TabsContent value="catalogue" className="mt-4">
+      {/* ── Tab: Permission Catalogue ───────────────────────────────────── */}
+      {activeTab === 'catalogue' && (
+        <HrTabPanel tabKey="catalogue">
           {!permsLoading && !permsError && modules.length > 0 && (
             <div className="mb-4 flex flex-wrap gap-2">
               <button
@@ -677,8 +710,8 @@ export const Roles: React.FC = () => {
               emptyVariant={moduleFilter ? 'filtered' : 'first-run'}
             />
           )}
-        </TabsContent>
-      </Tabs>
+        </HrTabPanel>
+      )}
 
       {drawerRole && (
         <PermissionsDrawer

@@ -61,7 +61,7 @@ export function AttritionReport() {
         </>
       }
     >
-      <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm">
+      <div className="ut-card ut-card-lg p-5">
         <ResponsiveContainer width="100%" height={280}>
           <ComposedChart data={chartData} margin={{ top: 4, right: 24, left: -10, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #E2E8F0)" />

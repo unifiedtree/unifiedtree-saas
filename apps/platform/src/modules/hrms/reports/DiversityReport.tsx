@@ -81,7 +81,7 @@ export function DiversityReport() {
     >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Pie — overall gender split */}
-        <div className="rounded-2xl border border-border-default bg-white p-5">
+        <div className="ut-card ut-card-lg p-5">
           <p className="text-xs text-text-secondary mb-3">Overall gender breakdown</p>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
@@ -109,7 +109,7 @@ export function DiversityReport() {
         </div>
 
         {/* Stacked bar — dept × gender */}
-        <div className="rounded-2xl border border-border-default bg-white p-5">
+        <div className="ut-card ut-card-lg p-5">
           <p className="text-xs text-text-secondary mb-3">By department</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={barData} margin={{ top: 4, right: 8, left: -10, bottom: 4 }}>
@@ -136,7 +136,7 @@ export function DiversityReport() {
       </div>
 
       {data.length === 0 ? (
-        <div className="rounded-xl border border-border-default bg-white px-6 py-12 text-center">
+        <div className="ut-card px-6 py-12 text-center">
           <p className="text-sm font-semibold text-text-primary">No diversity data</p>
           <p className="mt-1 text-sm text-text-secondary">No employee gender data available for this company.</p>
         </div>

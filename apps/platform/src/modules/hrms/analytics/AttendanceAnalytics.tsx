@@ -147,7 +147,7 @@ export const AttendanceAnalytics: React.FC = () => {
       {/* ── Charts row ─────────────────────────────────────────────────────────── */}
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Donut: today's status breakdown */}
-        <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm">
+        <div className="ut-card ut-card-lg p-5">
           <p className="text-sm font-semibold text-text-primary">Today's Status Breakdown</p>
           <p className="mb-3 text-xs text-text-tertiary">Live distribution across tracked staff</p>
           {dashLoading ? (
@@ -197,7 +197,7 @@ export const AttendanceAnalytics: React.FC = () => {
         </div>
 
         {/* Bar: late marks per employee (period to date) */}
-        <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm">
+        <div className="ut-card ut-card-lg p-5">
           <p className="text-sm font-semibold text-text-primary">Late Marks This Month</p>
           <p className="mb-3 text-xs text-text-tertiary">Top offenders since {format(startOfMonth(new Date()), 'd MMM')}</p>
           {!companyId ? (

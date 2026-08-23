@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, CheckCircle, AlertTriangle, XCircle, Info, Bell, Check } from 'lucide-react'
 import { clsx } from 'clsx'
+import { HrTabs, HrTabPanel } from '@/shared/components/hr'
 import { useNotificationStore } from '@/core/notifications/notificationStore'
 import type { Notification } from '@/types'
 import { formatDistanceToNow } from 'date-fns'
@@ -67,7 +68,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
   return (
     <>
       <div className="fixed inset-0 z-[150] bg-black/30" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-[160] w-96 bg-white border-l border-border-default flex flex-col shadow-2xl animate-slide-up">
+      <div className="ut-card ut-card-lg fixed right-0 top-0 bottom-0 z-[160] w-96 flex flex-col animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-default">
           <div className="flex items-center gap-2">
@@ -96,23 +97,22 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-4 py-2 border-b border-border-default">
-          {(['all', 'unread', 'priority'] as TabKey[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={clsx(
-                'px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors',
-                tab === t ? 'bg-[#ECFDF5] text-[#047857] border border-[#6EE7B7]' : 'text-text-secondary hover:text-text-primary hover:bg-[#ECFDF5]'
-              )}
-            >
-              {t === 'priority' ? 'High Priority' : t}
-            </button>
-          ))}
+        <div className="px-4 py-2 border-b border-border-default">
+          <HrTabs
+            className="mb-0"
+            tabs={[
+              { key: 'all', label: 'All' },
+              { key: 'unread', label: 'Unread' },
+              { key: 'priority', label: 'High Priority' },
+            ]}
+            active={tab}
+            onChange={(k) => setTab(k as TabKey)}
+          />
         </div>
 
         {/* Notifications */}
         <div className="flex-1 overflow-y-auto">
+          <HrTabPanel tabKey={tab}>
           {Object.entries(groups).map(([group, items]) => {
             if (items.length === 0) return null
             return (
@@ -149,7 +149,8 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
                       </div>
                       <button
                         onClick={(e) => { e.stopPropagation(); removeNotification(n.id) }}
-                        className="flex-shrink-0 p-1 text-text-tertiary hover:text-text-secondary rounded transition-colors opacity-0 group-hover:opacity-100"
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center self-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-red-50 hover:text-red-600"
+                        aria-label="Dismiss notification"
                         title="Dismiss"
                       >
                         <X size={12} />
@@ -169,6 +170,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
               </p>
             </div>
           )}
+          </HrTabPanel>
         </div>
 
         {/* Footer */}

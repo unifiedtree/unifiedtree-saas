@@ -64,7 +64,7 @@ export const ModuleComingSoon: React.FC = () => {
       >
         <ArrowLeft size={15} /> Back
       </button>
-      <div className="rounded-2xl border border-border-default bg-white p-10 text-center shadow-sm">
+      <div className="ut-card ut-card-lg p-10 text-center">
         <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#ECFDF5] text-[#059669]">
           <Hammer size={26} />
         </div>

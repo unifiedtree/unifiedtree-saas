@@ -88,8 +88,8 @@ export const ManageAccessDrawer: React.FC<Props> = ({ user, open, onClose }) => 
                       <div
                         key={role.roleCode}
                         className={clsx(
-                          'flex items-center justify-between rounded-xl border px-3.5 py-2.5 transition-colors',
-                          active ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60',
+                          'ut-card ut-card-sm flex items-center justify-between px-3.5 py-2.5',
+                          !active && 'opacity-60',
                         )}
                       >
                         <span className="text-sm font-medium text-slate-800">{role.displayName}</span>

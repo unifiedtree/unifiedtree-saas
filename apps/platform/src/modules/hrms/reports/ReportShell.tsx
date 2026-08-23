@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { Skeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { EmptyState } from '@unifiedtree/ui-kit'
 import { HrPageHeader } from '@/shared/components/hr'
 import { useCompanies } from '@/modules/hrms/api/useOrg'
 
@@ -66,8 +66,8 @@ export function ReportShell({
         />
       ) : isLoading ? (
         <div className="space-y-3">
-          <Skeleton className="h-64 w-full rounded-2xl" />
-          <Skeleton className="h-48 w-full rounded-2xl" />
+          <div className="ut-card ut-card-lg h-64 w-full animate-pulse" />
+          <div className="ut-card h-48 w-full animate-pulse" />
         </div>
       ) : !hasData ? (
         <EmptyState

@@ -110,7 +110,7 @@ const EMPLOYMENT_TYPE_ENUM = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'] as
 function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-text-secondary mb-1.5">
+      <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">
         {label} {required && <span className="text-danger">*</span>}
       </label>
       {children}
@@ -745,7 +745,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     return (
       <>
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
-        <div className="fixed left-1/2 top-1/2 z-[110] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="ut-card ut-card-lg fixed left-1/2 top-1/2 z-[110] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 p-6">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
             <Users size={22} className="text-amber-700" />
           </div>
@@ -838,7 +838,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   return (
     <>
       <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-[110] w-full max-w-lg bg-white border-l border-border flex flex-col shadow-2xl">
+      <div className="ut-card ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-lg flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h3 className="text-text-primary font-semibold">{isEdit ? 'Edit Employee' : 'Add Employee'}</h3>
@@ -885,7 +885,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
                 <Field label="First Name" required error={errors.firstName}>
                   <Input error={!!errors.firstName} value={form.firstName} onChange={(e) => set('firstName', e.target.value)} placeholder="First name" />
                 </Field>
@@ -953,7 +953,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 />
               </Field>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
                 <Field label="Date of Joining" required error={errors.dateOfJoining}>
                   <Input error={!!errors.dateOfJoining} type="date" value={form.dateOfJoining} onChange={(e) => set('dateOfJoining', e.target.value)} />
                 </Field>
@@ -1036,7 +1036,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
 
           {step === 'financial' && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
                 <Field label="Salary Frequency" required error={errors.salaryFrequency}>
                   <Sel error={!!errors.salaryFrequency} value={form.salaryFrequency} onChange={(e) => set('salaryFrequency', e.target.value)}>
                     <option value="MONTHLY">Monthly</option>
@@ -1096,7 +1096,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
               <Field label="IFSC Code" error={errors.bankIfsc}>
                 <Input error={!!errors.bankIfsc} value={form.bankIfsc} onChange={(e) => set('bankIfsc', e.target.value.toUpperCase())} placeholder="HDFC0001234" />
               </Field>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
                 <Field label="Bank Name">
                   <Input value={form.bankName} onChange={(e) => set('bankName', e.target.value)} placeholder="e.g. HDFC Bank" />
                 </Field>
@@ -1109,7 +1109,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
 
           {step === 'review' && !isEdit && (
             <>
-              <div className="rounded-xl border border-border bg-white p-4">
+              <div className="ut-card p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-semibold text-text-primary">Basic Information</h4>
                   <button
@@ -1135,7 +1135,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 <SummaryRow label="Weekly Offs" value={weekOffLabel} />
               </div>
 
-              <div className="rounded-xl border border-border bg-white p-4">
+              <div className="ut-card p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-semibold text-text-primary">Financial, Government &amp; Bank</h4>
                   <button

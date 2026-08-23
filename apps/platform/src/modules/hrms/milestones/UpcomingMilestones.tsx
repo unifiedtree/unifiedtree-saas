@@ -133,7 +133,7 @@ export const UpcomingMilestones: React.FC = () => {
   const open = (m: Milestone) => navigate(`/hrms/employees/${m.employeeId}`)
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-primary/15 bg-white shadow-sm">
+    <div className="ut-card overflow-hidden">
       <div className="flex items-center gap-2 border-b border-border-light px-5 py-4">
         <PartyPopper size={16} className="text-primary" aria-hidden />
         <h2 className="text-sm font-bold text-text-primary">Upcoming Milestones</h2>

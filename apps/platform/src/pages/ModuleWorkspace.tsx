@@ -14,6 +14,7 @@ import {
   CircleDot, Command, Download, SlidersHorizontal, type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { HrTabs, HrTabPanel } from '@/shared/components/hr'
 
 /**
  * ModuleWorkspace — a self-contained showcase of the module-workspace shell:
@@ -854,7 +855,7 @@ const STATUS_STYLE: Record<StatusKey, { cls: string; Icon: LucideIcon }> = {
 function StatusPill({ status, label }: { status: StatusKey; label: string }) {
   const { cls, Icon } = STATUS_STYLE[status]
   return (
-    <span className={clsx('inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold ring-1 ring-inset', cls)}>
+    <span className={clsx('inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset', cls)}>
       <Icon size={12} aria-hidden />
       {label}
     </span>
@@ -866,7 +867,7 @@ function StatusPill({ status, label }: { status: StatusKey; label: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={clsx('rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-card', className)}>
+    <div className={clsx('ut-card', className)}>
       {children}
     </div>
   )
@@ -879,7 +880,7 @@ function CardHead({ title, blurb, right }: { title: string; blurb: string; right
         <h3 className="font-heading text-[15px] font-bold leading-tight text-[var(--text-primary)]" style={{ letterSpacing: '-0.02em' }}>
           {title}
         </h3>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--text-tertiary)]">{blurb}</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-[var(--text-tertiary)]">{blurb}</p>
       </div>
       {right}
     </div>
@@ -915,7 +916,7 @@ function ChartTooltip({ active, label, payload, fmt }: TipProps) {
       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{label}</p>
       <ul className="space-y-1">
         {payload.map((p, i) => (
-          <li key={`${p.dataKey ?? i}`} className="flex items-center gap-2 text-[12.5px]">
+          <li key={`${p.dataKey ?? i}`} className="flex items-center gap-2 text-[12px]">
             <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: p.color }} />
             <span className="text-[var(--text-secondary)]">{p.name}</span>
             <span className="ml-auto pl-3 font-semibold tabular-nums text-[var(--text-primary)]">
@@ -942,9 +943,9 @@ function KpiCard({ kpi, index }: { kpi: Kpi; index: number }) {
       initial={reduce ? false : { opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: reduce ? 0 : index * 0.06, ease: [0.16, 1, 0.3, 1] }}
-      className="group rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover"
+      className="group ut-card ut-card-sm p-5"
     >
-      <p className="text-[12.5px] font-semibold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">{kpi.label}</p>
+      <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">{kpi.label}</p>
       <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-2">
         <span
           className="font-heading font-extrabold leading-none text-[var(--text-primary)]"
@@ -954,7 +955,7 @@ function KpiCard({ kpi, index }: { kpi: Kpi; index: number }) {
         </span>
         <span
           className={clsx(
-            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold ring-1 ring-inset',
+            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset',
             kpi.good
               ? 'bg-[var(--status-success-bg)] text-[var(--status-success-fg)] ring-[var(--status-success-border)]'
               : 'bg-[var(--status-error-bg)] text-[var(--status-error-fg)] ring-[var(--status-error-border)]',
@@ -964,7 +965,7 @@ function KpiCard({ kpi, index }: { kpi: Kpi; index: number }) {
           {kpi.delta}
         </span>
       </div>
-      <p className="mt-2 text-[12.5px] text-[var(--text-secondary)]">{kpi.sub}</p>
+      <p className="mt-2 text-[12px] text-[var(--text-secondary)]">{kpi.sub}</p>
     </motion.div>
   )
 }
@@ -1133,7 +1134,7 @@ function CompositionDonutCard({ spec }: { spec: DonutSpec }) {
       {/* Direct labels for every slice — the composition is readable without colour */}
       <ul className="space-y-2 px-5 pb-5 pt-2">
         {spec.data.map((d, i) => (
-          <li key={d.name} className="flex items-center gap-2.5 text-[12.5px]">
+          <li key={d.name} className="flex items-center gap-2.5 text-[12px]">
             <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: PART_COLORS[i % PART_COLORS.length] }} />
             <span className="min-w-0 flex-1 truncate text-[var(--text-secondary)]">{d.name}</span>
             <span className="font-semibold tabular-nums text-[var(--text-primary)]">{spec.fmt(d.value)}</span>
@@ -1172,14 +1173,14 @@ function StatusTableCard({ spec, dense }: { spec: TableSpec; dense?: boolean }) 
                   key={c}
                   scope="col"
                   className={clsx(
-                    'px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-tertiary)]',
+                    'px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-tertiary)]',
                     i === 2 && 'text-right',
                   )}
                 >
                   {c}
                 </th>
               ))}
-              <th scope="col" className="px-5 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">
+              <th scope="col" className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">
                 Status
               </th>
             </tr>
@@ -1187,14 +1188,14 @@ function StatusTableCard({ spec, dense }: { spec: TableSpec; dense?: boolean }) 
           <tbody>
             {rows.map(r => (
               <tr key={r.id} className="border-b border-[var(--border-subtle)] transition-colors last:border-0 hover:bg-[var(--bg-subtle)]">
-                <td className="px-5 py-3">
-                  <span className="block truncate text-[13.5px] font-semibold text-[var(--text-primary)]">{r.title}</span>
+                <td className="px-4 py-2.5">
+                  <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">{r.title}</span>
                 </td>
-                <td className="px-5 py-3">
-                  <span className="block truncate text-[12.5px] text-[var(--text-secondary)]">{r.meta}</span>
+                <td className="px-4 py-2.5">
+                  <span className="block truncate text-[12px] text-[var(--text-secondary)]">{r.meta}</span>
                 </td>
-                <td className="px-5 py-3 text-right text-[13px] font-semibold tabular-nums text-[var(--text-primary)]">{r.value}</td>
-                <td className="px-5 py-3 text-right">
+                <td className="px-4 py-2.5 text-right text-[13px] font-semibold tabular-nums text-[var(--text-primary)]">{r.value}</td>
+                <td className="px-4 py-2.5 text-right">
                   <StatusPill status={r.status} label={r.statusLabel} />
                 </td>
               </tr>
@@ -1216,7 +1217,7 @@ function Panel({ mod, tab }: { mod: ModuleDef; tab: SubTab }) {
   const heading = (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <p className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-[var(--accent-fg)]">{mod.title}</p>
+        <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--accent-fg)]">{mod.title}</p>
         <h2
           className="mt-1.5 font-heading font-extrabold leading-[1.05] text-[var(--text-primary)]"
           style={{ fontSize: 'clamp(1.5rem, 2.6vw, 2rem)', letterSpacing: '-0.035em' }}
@@ -1353,7 +1354,7 @@ function IconRail({ activeKey, onSelect }: { activeKey: string; onSelect: (k: st
               />
             )}
             <Icon size={19} className="relative z-10" aria-hidden />
-            <span className="relative z-10 text-[9.5px] font-semibold leading-tight">{m.label}</span>
+            <span className="relative z-10 text-[10px] font-semibold leading-tight">{m.label}</span>
           </button>
         )
       })}
@@ -1369,10 +1370,10 @@ function TopBar({ moduleLabel }: { moduleLabel: string }) {
     <header className="sticky top-0 z-sticky flex h-16 shrink-0 items-center gap-3 border-b border-[var(--border-default)] bg-[var(--bg-surface-overlay)] px-4 backdrop-blur-xl sm:px-6">
       <div className="flex min-w-0 items-center gap-2.5">
         <div className="min-w-0">
-          <p className="truncate font-heading text-[14.5px] font-bold leading-tight text-[var(--text-primary)]" style={{ letterSpacing: '-0.02em' }}>
+          <p className="truncate font-heading text-[14px] font-bold leading-tight text-[var(--text-primary)]" style={{ letterSpacing: '-0.02em' }}>
             Acme Manufacturing
           </p>
-          <p className="truncate text-[11.5px] text-[var(--text-tertiary)]">Bengaluru · {moduleLabel}</p>
+          <p className="truncate text-[12px] text-[var(--text-tertiary)]">Bengaluru · {moduleLabel}</p>
         </div>
       </div>
 
@@ -1384,7 +1385,7 @@ function TopBar({ moduleLabel }: { moduleLabel: string }) {
             id="mw-search"
             type="search"
             placeholder="Search people, records and reports…"
-            className="min-w-0 flex-1 bg-transparent text-[13.5px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+            className="min-w-0 flex-1 bg-transparent text-[14px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
           />
           <kbd className="hidden items-center gap-0.5 rounded border border-[var(--border-default)] bg-[var(--bg-surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)] lg:inline-flex">
             <Command size={10} aria-hidden /> K
@@ -1450,45 +1451,14 @@ export function ModuleWorkspace() {
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar moduleLabel={mod.title} />
 
-        {/* Sub-tabs — selecting one swaps the panel below in place, no route change */}
-        <div className="sticky top-16 z-sticky shrink-0 border-b border-[var(--border-default)] bg-[var(--bg-surface-overlay)] backdrop-blur-xl">
-          <div
-            role="tablist"
-            aria-label={`${mod.title} sections`}
-            className="scrollbar-hide flex items-center gap-1 overflow-x-auto px-4 sm:px-6"
-          >
-            {mod.tabs.map((t, i) => {
-              const active = i === tabState.index
-              return (
-                <button
-                  key={t.key}
-                  role="tab"
-                  type="button"
-                  aria-selected={active}
-                  aria-controls="mw-panel"
-                  onClick={() => selectTab(i)}
-                  className={clsx(
-                    'relative shrink-0 whitespace-nowrap px-3.5 py-3.5 text-[13.5px] font-semibold transition-colors duration-200',
-                    active ? 'text-[var(--accent-fg-strong)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]',
-                  )}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId={`mw-tab-underline-${mod.key}`}
-                      aria-hidden
-                      className="absolute inset-x-2 bottom-0 h-[2.5px] rounded-full bg-[var(--accent-solid)]"
-                      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-                    />
-                  )}
-                  {t.label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <main id="mw-panel" role="tabpanel" className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6 sm:py-8">
+            {/* Sub-tabs — selecting one swaps the panel below in place, no route change */}
+            <HrTabs
+              tabs={mod.tabs.map((t) => ({ key: t.key, label: t.label }))}
+              active={tab.key}
+              onChange={(k) => selectTab(mod.tabs.findIndex((t) => t.key === k))}
+            />
             <AnimatePresence mode="wait" custom={tabState.dir} initial={false}>
               <motion.div
                 key={`${mod.key}:${tab.key}`}
@@ -1499,7 +1469,9 @@ export function ModuleWorkspace() {
                 exit="exit"
                 transition={{ duration: reduce ? 0.15 : 0.32, ease: [0.16, 1, 0.3, 1] }}
               >
-                <Panel mod={mod} tab={tab} />
+                <HrTabPanel tabKey={tab.key}>
+                  <Panel mod={mod} tab={tab} />
+                </HrTabPanel>
               </motion.div>
             </AnimatePresence>
           </div>

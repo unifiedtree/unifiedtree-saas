@@ -18,8 +18,6 @@ function actionTone(action: string): PillTone {
   return 'gray'
 }
 
-const filterCls = 'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none'
-
 export const AuditLogs: React.FC = () => {
   const [actionFilter, setActionFilter] = useState('')
   const [from, setFrom] = useState('')
@@ -69,12 +67,12 @@ export const AuditLogs: React.FC = () => {
         <TableCard
           actions={
             <>
-              <select value={actionFilter} onChange={(e) => { setActionFilter(e.target.value); setPage(0) }} className={filterCls}>
+              <select value={actionFilter} onChange={(e) => { setActionFilter(e.target.value); setPage(0) }} className="ut-select ut-select-sm w-auto">
                 <option value="">All Actions</option>
                 {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
-              <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0) }} className={filterCls} />
-              <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(0) }} className={filterCls} />
+              <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0) }} className="ut-input ut-input-sm w-auto" />
+              <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(0) }} className="ut-input ut-input-sm w-auto" />
               {hasFilters && (
                 <button onClick={() => { setActionFilter(''); setFrom(''); setTo(''); setPage(0) }}
                   className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#047857] hover:bg-[#ECFDF5]">

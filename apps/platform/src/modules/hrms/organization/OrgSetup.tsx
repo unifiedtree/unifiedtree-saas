@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react'
-import { Plus, Building2, GitBranch, Layers, Award, Trash2, X, BarChart3, Briefcase, Clock, Pencil, Users, Laptop, Wallet, Brain } from 'lucide-react'
+import { Plus, Building2, GitBranch, Layers, Award, Trash2, BarChart3, Briefcase, Clock, Pencil, Users, Laptop, Wallet, Brain } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Can, P } from '@unifiedtree/sdk'
 import { DataTable, EmptyState } from '@unifiedtree/ui-kit'
 import type { Column, SortState } from '@unifiedtree/ui-kit'
-import { HrPageHeader, HrStatusPill } from '@/shared/components/hr'
+import { HrPageHeader, HrStatusPill, HrTabs, HrTabPanel, HrDrawer, HrSelect } from '@/shared/components/hr'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { useToast } from '@/shared/hooks/useToast'
 import {
@@ -111,45 +111,28 @@ const hhmm = (t?: string | null) => (t ? t.slice(0, 5) : '')
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-text-secondary mb-1.5">{label}</label>
+      <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">{label}</label>
       {children}
     </div>
   )
 }
 
 function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input {...props}
-      className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-[#059669] transition-colors"
-    />
-  )
+  return <input {...props} className="ut-input" />
 }
 
 function SlideModal({ open, onClose, title, children }: {
   open: boolean; onClose: () => void; title: string; children: React.ReactNode
 }) {
   if (!open) return null
-  return (
-    <>
-      <div className="fixed inset-0 z-[100] bg-text-primary/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md bg-white border-l border-border-default flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border-default">
-          <h3 className="text-text-primary font-semibold">{title}</h3>
-          <button onClick={onClose} className="p-1.5 text-text-tertiary hover:text-text-primary rounded-lg hover:bg-bg-surface">
-            <X size={16} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5">{children}</div>
-      </div>
-    </>
-  )
+  return <HrDrawer title={title} onClose={onClose}>{children}</HrDrawer>
 }
 
-const BTN_PRIMARY = 'flex-1 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors'
-const BTN_CANCEL  = 'flex-1 py-2.5 border border-border-default text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors'
+const BTN_PRIMARY = 'px-4 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors'
+const BTN_CANCEL  = 'px-4 py-2.5 border border-border-default text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors'
 const BTN_ADD     = 'flex items-center gap-2 px-4 py-2 bg-[#059669] hover:bg-[#047857] disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors'
-const BTN_ICON    = 'p-1.5 text-text-tertiary hover:text-text-secondary transition-colors'
-const BTN_DEL     = 'p-1.5 text-text-tertiary hover:text-red-600 transition-colors'
+const BTN_ICON    = 'flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
+const BTN_DEL     = 'flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]'
 
 // ── Companies Tab ─────────────────────────────────────────────────────────────
 
@@ -209,7 +192,7 @@ function CompaniesTab() {
       key: 'name', header: 'Company',
       cell: (co) => (
         <div>
-          <p className="font-medium text-text-primary text-sm">{co.name}</p>
+          <p className="font-semibold text-text-primary text-sm">{co.name}</p>
           {co.legalName && <p className="text-xs text-text-tertiary">{co.legalName}</p>}
         </div>
       ),
@@ -220,7 +203,7 @@ function CompaniesTab() {
     },
     {
       key: 'employees', header: 'Employees', hideBelow: 'lg',
-      cell: (co) => <span className="text-sm text-text-secondary">{co.employeeCount ?? 0}</span>,
+      cell: (co) => <span className="text-sm tabular-nums text-text-secondary">{co.employeeCount ?? 0}</span>,
     },
     {
       key: 'status', header: 'Status',
@@ -251,7 +234,7 @@ function CompaniesTab() {
         <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
       ) : (
         <DataTable columns={cols} data={companies} getRowKey={(c) => c.id}
-          isLoading={isLoading} emptyTitle="No companies yet"
+          className="[&_tbody_td]:py-2.5" isLoading={isLoading} emptyTitle="No companies yet"
           emptyDescription="Add your first company to get started." />
       )}
 
@@ -260,14 +243,14 @@ function CompaniesTab() {
           <Field label="Company Name *"><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Acme Pvt Ltd" /></Field>
           <Field label="Legal Name"><Input value={form.legalName} onChange={(e) => set('legalName', e.target.value)} placeholder="Registered legal name" /></Field>
           <Field label="Industry"><Input value={form.industry} onChange={(e) => set('industry', e.target.value)} placeholder="e.g. Technology" /></Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <Field label="Currency"><Input value={form.currency} onChange={(e) => set('currency', e.target.value)} /></Field>
             <Field label="Country"><Input value={form.country} onChange={(e) => set('country', e.target.value)} /></Field>
           </div>
 
           {editing ? <EmployeeCodeFormatSection companyId={editing.id} /> : null}
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <Can code={P.ORG_COMPANY_WRITE}>
               <button onClick={handleSave} disabled={isPending} className={BTN_PRIMARY}>
@@ -430,7 +413,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
       key: 'name', header: 'Branch',
       cell: (br) => (
         <div className="flex items-center gap-2">
-          <span className="font-medium text-text-primary text-sm">{br.name}</span>
+          <span className="font-semibold text-text-primary text-sm">{br.name}</span>
           {br.headquarters && <HrStatusPill tone="warn">HQ</HrStatusPill>}
         </div>
       ),
@@ -441,7 +424,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
     },
     {
       key: 'employees', header: 'Employees', hideBelow: 'lg',
-      cell: (br) => <span className="text-sm text-text-secondary">{br.employeeCount ?? 0}</span>,
+      cell: (br) => <span className="text-sm tabular-nums text-text-secondary">{br.employeeCount ?? 0}</span>,
     },
     {
       key: 'status', header: 'Status',
@@ -474,7 +457,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
         <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
       ) : (
         <DataTable columns={cols} data={branches} getRowKey={(b) => b.id}
-          isLoading={isLoading} emptyTitle="No branches yet"
+          className="[&_tbody_td]:py-2.5" isLoading={isLoading} emptyTitle="No branches yet"
           emptyDescription="Add a branch to map your office locations." />
       )}
 
@@ -482,7 +465,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
         <div className="space-y-4">
           <Field label="Branch Name *"><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Mumbai Office" /></Field>
           <Field label="Code"><Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. MUM" /></Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <Field label="City"><Input value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="Mumbai" /></Field>
             <Field label="State"><Input value={form.state} onChange={(e) => set('state', e.target.value)} placeholder="Maharashtra" /></Field>
           </div>
@@ -493,7 +476,7 @@ function BranchesTab({ activeCompany }: CompanyProp) {
               className="accent-primary w-4 h-4" />
             <span className="text-sm text-text-secondary">Mark as Headquarters</span>
           </label>
-          <div className="flex gap-3 pt-2">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <button onClick={handleCreate} disabled={createBranch.isPending} className={BTN_PRIMARY}>
               {createBranch.isPending ? 'Creating...' : 'Create'}
@@ -610,7 +593,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
             style={{ backgroundColor: readDeptColor(d.id) }}
             aria-hidden
           />
-          <span className="font-medium text-text-primary text-sm">{d.name}</span>
+          <span className="font-semibold text-text-primary text-sm">{d.name}</span>
         </div>
       ),
     },
@@ -623,7 +606,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
       cell: (d) => (
         <Can code={P.HRMS_DEPARTMENT_WRITE} fallback={<span className="text-sm text-text-secondary">{empLabel(d.departmentHeadEmployeeId) || '—'}</span>}>
           <select value={d.departmentHeadEmployeeId ?? ''} onChange={(e) => handleSetHead(d.id, e.target.value)}
-            className="bg-bg-surface border border-border-default rounded-lg px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-[#059669] max-w-[10rem]">
+            className="ut-select ut-select-sm w-auto max-w-[10rem]">
             <option value="">None</option>
             {employees.map((emp) => (
               <option key={emp.id} value={emp.id}>{[emp.firstName, emp.lastName].filter(Boolean).join(' ')}</option>
@@ -634,7 +617,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
     },
     {
       key: 'employees', header: 'Employees', hideBelow: 'lg',
-      cell: (d) => <span className="text-sm text-text-secondary">{d.employeeCount ?? 0}</span>,
+      cell: (d) => <span className="text-sm tabular-nums text-text-secondary">{d.employeeCount ?? 0}</span>,
     },
     {
       key: 'status', header: 'Status',
@@ -667,7 +650,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
         <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
       ) : (
         <DataTable columns={cols} data={departments} getRowKey={(d) => d.id}
-          isLoading={isLoading} emptyTitle="No departments yet"
+          className="[&_tbody_td]:py-2.5" isLoading={isLoading} emptyTitle="No departments yet"
           emptyDescription="Structure your company by adding departments." />
       )}
 
@@ -677,13 +660,14 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
           <Field label="Code"><Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. ENG" /></Field>
           <Field label="Description"><Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional" /></Field>
           <Field label="Department Head">
-            <select value={form.departmentHeadEmployeeId} onChange={(e) => set('departmentHeadEmployeeId', e.target.value)}
-              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#059669] transition-colors">
-              <option value="">None</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>{[emp.firstName, emp.lastName].filter(Boolean).join(' ')}</option>
-              ))}
-            </select>
+            <HrSelect
+              value={form.departmentHeadEmployeeId}
+              onChange={(v) => set('departmentHeadEmployeeId', v)}
+              options={[
+                { value: '', label: 'None' },
+                ...employees.map((emp) => ({ value: emp.id, label: [emp.firstName, emp.lastName].filter(Boolean).join(' ') })),
+              ]}
+            />
           </Field>
           <Field label="Colour">
             <div className="flex flex-wrap gap-2">
@@ -725,7 +709,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
               ))}
             </div>
           </Field>
-          <div className="flex gap-3 pt-2">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <button onClick={handleCreate} disabled={createDept.isPending} className={BTN_PRIMARY}>
               {createDept.isPending ? 'Creating...' : 'Create'}
@@ -791,7 +775,7 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
   const cols: Column<Desig>[] = [
     {
       key: 'title', header: 'Title',
-      cell: (d) => <span className="font-medium text-text-primary text-sm">{d.title}</span>,
+      cell: (d) => <span className="font-semibold text-text-primary text-sm">{d.title}</span>,
     },
     {
       key: 'grade', header: 'Grade', hideBelow: 'md',
@@ -799,7 +783,7 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
     },
     {
       key: 'headcount', header: 'Headcount', hideBelow: 'lg',
-      cell: (d) => <span className="text-sm text-text-secondary">{d.headcount ?? 0}</span>,
+      cell: (d) => <span className="text-sm tabular-nums text-text-secondary">{d.headcount ?? 0}</span>,
     },
     {
       key: 'status', header: 'Status',
@@ -835,7 +819,7 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
         <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
       ) : (
         <DataTable columns={cols} data={designations} getRowKey={(d) => d.id}
-          isLoading={isLoading} emptyTitle="No designations yet"
+          className="[&_tbody_td]:py-2.5" isLoading={isLoading} emptyTitle="No designations yet"
           emptyDescription="Define roles and job titles for your employees." />
       )}
 
@@ -843,7 +827,7 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
         <div className="space-y-4">
           <Field label="Title *"><Input value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Senior Engineer" /></Field>
           <Field label="Grade"><Input value={form.grade} onChange={(e) => set('grade', e.target.value)} placeholder="e.g. L4" /></Field>
-          <div className="flex gap-3 pt-2">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <Can code={P.HRMS_DESIGNATION_WRITE}>
               <button onClick={handleSave} disabled={isPending} className={BTN_PRIMARY}>
@@ -931,7 +915,7 @@ function GradesTab({ activeCompany }: CompanyProp) {
       key: 'name', header: 'Name',
       cell: (g) => (
         <div>
-          <p className="font-medium text-text-primary text-sm">{g.name}</p>
+          <p className="font-semibold text-text-primary text-sm">{g.name}</p>
           {g.description && <p className="text-xs text-text-tertiary">{g.description}</p>}
         </div>
       ),
@@ -974,7 +958,7 @@ function GradesTab({ activeCompany }: CompanyProp) {
         <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
       ) : (
         <DataTable columns={cols} data={sorted} getRowKey={(g) => g.id}
-          isLoading={isLoading} sortState={sort} onSortChange={setSort}
+          className="[&_tbody_td]:py-2.5" isLoading={isLoading} sortState={sort} onSortChange={setSort}
           emptyTitle="No grades configured"
           emptyDescription="Create pay grades to structure your compensation bands." />
       )}
@@ -988,7 +972,7 @@ function GradesTab({ activeCompany }: CompanyProp) {
               onChange={(e) => set('level', e.target.value)} placeholder="0" />
           </Field>
           <Field label="Description"><Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional" /></Field>
-          <div className="flex gap-3 pt-2">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <Can code={P.HRMS_GRADE_WRITE}>
               <button onClick={handleSave} disabled={isPending} className={BTN_PRIMARY}>
@@ -1064,7 +1048,7 @@ function EmploymentTypesTab({ activeCompany }: CompanyProp) {
       key: 'name', header: 'Name',
       cell: (t) => (
         <div className="flex items-center gap-2">
-          <span className="font-medium text-text-primary text-sm">{t.name}</span>
+          <span className="font-semibold text-text-primary text-sm">{t.name}</span>
           {t.system && <HrStatusPill tone="purple">System</HrStatusPill>}
         </div>
       ),
@@ -1111,7 +1095,7 @@ function EmploymentTypesTab({ activeCompany }: CompanyProp) {
         <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
       ) : (
         <DataTable columns={cols} data={types} getRowKey={(t) => t.id}
-          isLoading={isLoading} emptyTitle="No employment types"
+          className="[&_tbody_td]:py-2.5" isLoading={isLoading} emptyTitle="No employment types"
           emptyDescription="System types are seeded automatically. Add custom types here." />
       )}
 
@@ -1125,7 +1109,7 @@ function EmploymentTypesTab({ activeCompany }: CompanyProp) {
               className="accent-primary w-4 h-4" />
             <span className="text-sm text-text-secondary">Payroll eligible</span>
           </label>
-          <div className="flex gap-3 pt-2">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <Can code={P.HRMS_EMPLOYMENT_TYPE_WRITE}>
               <button onClick={handleSave} disabled={isPending} className={BTN_PRIMARY}>
@@ -1287,8 +1271,8 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
       key: 'name', header: 'Shift',
       cell: (s) => (
         <div>
-          <p className="font-medium text-text-primary text-sm">{s.name}</p>
-          {s.shiftType === 'NIGHT' && <div className="mt-0.5"><HrStatusPill tone="info">Night</HrStatusPill></div>}
+          <p className="font-semibold text-text-primary text-sm">{s.name}</p>
+          <p className="mt-0.5 text-xs capitalize text-text-tertiary">{(s.shiftType ?? '').toLowerCase()}</p>
         </div>
       ),
     },
@@ -1302,12 +1286,12 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
     },
     {
       key: 'grace', header: 'Grace',
-      cell: (s) => <span className="text-sm text-text-secondary">{s.gracePeriodMinutes} min</span>,
+      cell: (s) => <span className="text-sm tabular-nums text-text-secondary">{s.gracePeriodMinutes} min</span>,
     },
     {
       key: 'hours', header: 'Hours/Day', hideBelow: 'md',
       cell: (s) => (
-        <span className="text-sm text-text-secondary">
+        <span className="text-sm tabular-nums text-text-secondary">
           {s.workingHoursPerDay != null ? `${s.workingHoursPerDay} h` : '—'}
         </span>
       ),
@@ -1347,18 +1331,18 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
         <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
       ) : (
         <DataTable columns={cols} data={shifts} getRowKey={(s) => s.id}
-          isLoading={isLoading} emptyTitle="No shifts configured"
+          className="[&_tbody_td]:py-2.5" isLoading={isLoading} emptyTitle="No shifts configured"
           emptyDescription="Define work shifts and schedules for your teams." />
       )}
 
       <SlideModal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Shift' : 'Add Shift'}>
         <div className="space-y-4">
           <Field label="Name *"><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. General Shift" /></Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <Field label="Start Time"><Input type="time" value={form.startTime} onChange={(e) => set('startTime', e.target.value)} /></Field>
             <Field label="End Time"><Input type="time" value={form.endTime} onChange={(e) => set('endTime', e.target.value)} /></Field>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <Field label="Grace (min)">
               <Input type="number" min={GRACE_MIN} max={GRACE_MAX} value={form.gracePeriodMinutes}
                 onChange={(e) => set('gracePeriodMinutes', e.target.value)} />
@@ -1375,15 +1359,11 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
             </Field>
           </div>
           <Field label="Shift Type *">
-            <select
+            <HrSelect
               value={form.shiftType}
-              onChange={(e) => set('shiftType', e.target.value as ShiftType)}
-              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#059669] transition-colors"
-            >
-              {SHIFT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
+              onChange={(v) => set('shiftType', v as ShiftType)}
+              options={SHIFT_TYPES}
+            />
           </Field>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={form.overtimeApplicable}
@@ -1400,7 +1380,7 @@ function ShiftsTab({ activeCompany }: CompanyProp) {
               </p>
             </Field>
           )}
-          <div className="flex gap-3 pt-2">
+          <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <Can code={P.ATTENDANCE_REGULARIZATION_APPROVE}>
               <button onClick={handleSave} disabled={isPending} className={BTN_PRIMARY}>
@@ -1431,39 +1411,43 @@ export const OrgSetup: React.FC = () => {
         subtitle="Manage companies, branches, departments, designations, grades, employment types, and shifts"
       />
 
+      <HrTabs
+        tabs={TABS.map(({ key, label, icon: Icon }) => ({
+          key,
+          label: (
+            <span className="inline-flex items-center gap-1.5">
+              <Icon size={15} />
+              {label}
+            </span>
+          ),
+        }))}
+        active={tab}
+        onChange={(k) => setTab(k as Tab)}
+        className="!mb-0"
+      />
+
       {tab !== 'companies' && companies.length > 0 && (
-        <div className="flex items-center gap-3 bg-white border border-border-default rounded-xl px-4 py-2.5">
+        <div className="ut-card ut-card-sm flex items-center gap-3 px-4 py-2.5">
           <Building2 size={14} className="text-text-tertiary flex-shrink-0" />
           <span className="text-sm text-text-secondary">Viewing for:</span>
           <select value={activeCompany?.id ?? ''} onChange={(e) => setSelectedCompanyId(e.target.value)}
-            className="flex-1 bg-transparent text-text-primary text-sm focus:outline-none">
+            className="ut-select ut-select-sm w-auto min-w-[180px]">
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
       )}
 
-      <div className="flex gap-1 bg-bg-surface p-1.5 rounded-xl border border-border-default overflow-x-auto scrollbar-hide w-fit max-w-full shadow-sm">
-        {TABS.map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={clsx(
-              'flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all',
-              tab === key ? 'bg-white text-text-primary shadow-sm' : 'text-text-tertiary hover:text-text-primary hover:bg-white/50'
-            )}>
-            <Icon size={16} />
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div>
-        {tab === 'companies'        && <CompaniesTab />}
-        {tab === 'branches'         && <BranchesTab activeCompany={activeCompany} />}
-        {tab === 'departments'      && <DepartmentsTab activeCompany={activeCompany} />}
-        {tab === 'designations'     && <DesignationsTab activeCompany={activeCompany} />}
-        {tab === 'grades'           && <GradesTab activeCompany={activeCompany} />}
-        {tab === 'employment-types' && <EmploymentTypesTab activeCompany={activeCompany} />}
-        {tab === 'shifts'           && <ShiftsTab activeCompany={activeCompany} />}
-      </div>
+      <HrTabPanel tabKey={tab}>
+        <div className="ut-card ut-card-lg p-5">
+          {tab === 'companies'        && <CompaniesTab />}
+          {tab === 'branches'         && <BranchesTab activeCompany={activeCompany} />}
+          {tab === 'departments'      && <DepartmentsTab activeCompany={activeCompany} />}
+          {tab === 'designations'     && <DesignationsTab activeCompany={activeCompany} />}
+          {tab === 'grades'           && <GradesTab activeCompany={activeCompany} />}
+          {tab === 'employment-types' && <EmploymentTypesTab activeCompany={activeCompany} />}
+          {tab === 'shifts'           && <ShiftsTab activeCompany={activeCompany} />}
+        </div>
+      </HrTabPanel>
     </div>
   )
 }

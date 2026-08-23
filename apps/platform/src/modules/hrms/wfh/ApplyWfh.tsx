@@ -171,12 +171,12 @@ export const ApplyWfh: React.FC = () => {
       </div>
 
       {/* Form */}
-      <div className="rounded-2xl border border-border-default bg-white p-5 space-y-4 shadow-sm">
+      <div className="ut-card ut-card-lg p-5 space-y-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary mb-2">Select WFH Dates</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Start Date *</label>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Start Date *</label>
               <input
                 type="date"
                 required
@@ -193,7 +193,7 @@ export const ApplyWfh: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">End Date *</label>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">End Date *</label>
               <input
                 type="date"
                 required
@@ -234,7 +234,7 @@ export const ApplyWfh: React.FC = () => {
 
         <div>
           <div className="flex items-baseline justify-between mb-1.5">
-            <label className="block text-xs font-medium text-text-secondary">Reason / Notes *</label>
+            <label className="block text-[13px] font-semibold text-text-secondary">Reason / Notes *</label>
             <span className={clsx('text-[11px]', reason.length > 0 && reasonTooShort ? 'text-danger' : 'text-text-tertiary')}>
               {reason.length}/500{reason.length > 0 && reasonTooShort ? '  ·  min 10' : ''}
             </span>
@@ -286,7 +286,7 @@ export const ApplyWfh: React.FC = () => {
               const sc = STATUS_STYLE[r.status] ?? STATUS_STYLE['PENDING']
               const canCancel = r.status === 'PENDING' || r.status === 'PENDING_L2'
               return (
-                <div key={r.id} className="bg-white border border-border-default rounded-2xl px-4 py-3 flex items-center gap-4">
+                <div key={r.id} className="ut-card ut-card-sm px-4 py-3 flex items-center gap-4">
                   <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', sc.bg)}>
                     <sc.icon size={16} className={sc.color} />
                   </div>

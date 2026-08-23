@@ -5,7 +5,7 @@ import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import {
   useMyAdvances, usePendingAdvanceApprovals, useRequestAdvance, useAdvanceDecision, useDisburseAdvance,
@@ -34,23 +34,11 @@ export const Advance: React.FC = () => {
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Advance Management" title="Salary Advances" subtitle="Request, approve, and disburse employee salary advances" />
 
-      <div className="mb-5 flex gap-1 border-b border-border-default">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'my' && <MyAdvancesTab />}
-      {tab === 'request' && canRequest && <RequestTab onSubmitted={() => setTab('my')} />}
-      {tab === 'approvals' && (canApprove || canDisburse) && <ApprovalsTab canApprove={canApprove} canDisburse={canDisburse} />}
+      {tab === 'my' && <HrTabPanel tabKey="my"><MyAdvancesTab /></HrTabPanel>}
+      {tab === 'request' && canRequest && <HrTabPanel tabKey="request"><RequestTab onSubmitted={() => setTab('my')} /></HrTabPanel>}
+      {tab === 'approvals' && (canApprove || canDisburse) && <HrTabPanel tabKey="approvals"><ApprovalsTab canApprove={canApprove} canDisburse={canDisburse} /></HrTabPanel>}
     </div>
   )
 }
@@ -153,33 +141,34 @@ function RequestTab({ onSubmitted }: { onSubmitted: () => void }) {
   const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
   return (
-    <div className="max-w-2xl space-y-5">
-      <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-        <div className="grid grid-cols-2 gap-4">
+    <div className="max-w-2xl">
+      <div className="ut-card p-5">
+        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Request Advance</h3>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Advance Amount (₹) *</label>
-            <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 50000" className={inputCls} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Advance Amount (₹) *</label>
+            <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 50000" className="ut-input" />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Repayment (months) *</label>
-            <input type="number" min={1} max={60} step="1" value={months} onChange={(e) => setMonths(e.target.value)} className={inputCls} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Repayment (months) *</label>
+            <input type="number" min={1} max={60} step="1" value={months} onChange={(e) => setMonths(e.target.value)} className="ut-input" />
           </div>
         </div>
         <div className="mt-4">
-          <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Reason</label>
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Reason</label>
           <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Why do you need this advance?" className={inputCls} />
         </div>
-      </div>
 
-      <div className="flex items-center justify-between rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-5 py-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Monthly Deduction</p>
-          <p className="text-2xl font-bold text-text-primary">{inr(monthlyDeduction)}</p>
-          <p className="mt-0.5 text-xs text-text-tertiary">{monthsNum > 0 ? `${inr(amountNum)} recovered over ${monthsNum} month${monthsNum > 1 ? 's' : ''}` : 'Set an amount and term'}</p>
+        <div className="mt-5 flex items-center justify-between gap-4 border-t border-border-default pt-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Monthly Deduction</p>
+            <p className="text-2xl font-bold tabular-nums text-text-primary">{inr(monthlyDeduction)}</p>
+            <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">{monthsNum > 0 ? `${inr(amountNum)} recovered over ${monthsNum} month${monthsNum > 1 ? 's' : ''}` : 'Set an amount and term'}</p>
+          </div>
+          <HrButton onClick={handleSubmit} disabled={request.isPending}>
+            {request.isPending ? 'Submitting…' : 'Submit Request'}
+          </HrButton>
         </div>
-        <HrButton onClick={handleSubmit} disabled={request.isPending}>
-          {request.isPending ? 'Submitting…' : 'Submit Request'}
-        </HrButton>
       </div>
     </div>
   )

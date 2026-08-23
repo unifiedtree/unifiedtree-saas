@@ -722,7 +722,7 @@ export const Plan: React.FC = () => {
     return (
       <div className="min-h-full bg-[var(--bg-base)]">
         <div className="mx-auto max-w-2xl px-6 py-16">
-          <div className="rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-8 text-center">
+          <div className="ut-card ut-card-lg p-8 text-center">
             <Lock size={32} className="mx-auto text-[var(--text-tertiary)]" />
             <h1 className="mt-4 text-xl font-semibold text-[var(--text-primary)]">Only workspace admins can manage the plan</h1>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">Ask your admin to open Manage Plan and add modules for you.</p>
@@ -889,7 +889,7 @@ export const Plan: React.FC = () => {
                                              { text: sub.status,     cls: 'bg-slate-100 text-slate-700' }
               return (
                 <div key={bkey}
-                     className="rounded-xl border-2 border-[var(--accent-border)] bg-[var(--bg-surface)] p-5 shadow-sm">
+                     className="ut-card p-5 outline outline-2 outline-[color:var(--accent-border)]">
                   <div className="flex items-start gap-4">
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-[var(--accent-fg)]">
                       <Icon size={20} />
@@ -1065,7 +1065,7 @@ export const Plan: React.FC = () => {
                 selectedPlans' filter, but gating avoids the confusing flash. */}
             {(isLoading && available.length === 0) || activeSubsLoading || subsLoadFailed ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-24 animate-pulse rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]" />
+                <div key={i} className="ut-card h-24 animate-pulse" />
               ))
             ) : (
               plans.filter(p => !ownedPlanKeys.has(p.key)).map(plan => {
@@ -1077,12 +1077,10 @@ export const Plan: React.FC = () => {
                   <div
                     key={plan.key}
                     className={clsx(
-                      'rounded-xl border p-4 transition-colors',
+                      'ut-card p-4',
                       !isAvailable
-                        ? 'border-[var(--border-subtle)] bg-[var(--bg-subtle)]/40 opacity-70'
-                        : isSelected
-                          ? 'border-[var(--accent-border)] bg-[var(--accent-bg)]/40 shadow-sm'
-                          : 'border-[var(--border-default)] bg-[var(--bg-surface)]',
+                        ? 'opacity-70'
+                        : isSelected && 'outline outline-2 outline-[color:var(--accent-border)]',
                     )}
                   >
                     <div className="flex items-start gap-4">
@@ -1143,7 +1141,7 @@ export const Plan: React.FC = () => {
 
           {/* Plan summary */}
           <aside id="plan-summary" className="lg:sticky lg:top-6 lg:self-start">
-            <div className="overflow-hidden rounded-2xl border-2 border-[var(--accent-border)] bg-[var(--bg-surface)] shadow-sm">
+            <div className="ut-card overflow-hidden outline outline-2 outline-[color:var(--accent-border)]">
               <div className="bg-[var(--accent-solid)] px-5 py-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">Your plan</p>
                 <h2 className="text-lg font-bold text-white">
@@ -1253,7 +1251,7 @@ export const Plan: React.FC = () => {
       {/* Waiting-for-mandate overlay */}
       {awaitingMandate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
-          <div className="max-w-md w-full rounded-2xl bg-[var(--bg-surface)] p-8 text-center shadow-2xl">
+          <div className="ut-card ut-card-lg max-w-md w-full p-8 text-center">
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent-bg)]">
               <Loader2 size={24} className="animate-spin text-[var(--accent-fg-strong)]" />
             </div>

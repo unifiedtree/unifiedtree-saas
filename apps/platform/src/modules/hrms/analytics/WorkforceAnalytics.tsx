@@ -203,7 +203,7 @@ export const WorkforceAnalytics: React.FC = () => {
 
       {/* ── Charts row: dept bar + gender donut ─────────────────────────────── */}
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm lg:col-span-2">
+        <div className="ut-card ut-card-lg p-5 lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-text-primary">Headcount by Department</h2>
             <HrStatusPill tone="blue">{headcountRows.length} depts</HrStatusPill>
@@ -227,7 +227,7 @@ export const WorkforceAnalytics: React.FC = () => {
           )}
         </div>
 
-        <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm">
+        <div className="ut-card ut-card-lg p-5">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-text-primary">Gender Diversity</h2>
             <HrStatusPill tone="purple">{genderTotal.toLocaleString()} people</HrStatusPill>
@@ -262,7 +262,7 @@ export const WorkforceAnalytics: React.FC = () => {
       </div>
 
       {/* ── Attrition line ──────────────────────────────────────────────────── */}
-      <div className="mt-5 rounded-xl border border-border-default bg-white p-5 shadow-sm">
+      <div className="mt-5 ut-card ut-card-lg p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-text-primary">Monthly Attrition</h2>
           <span className="text-xs text-text-tertiary">

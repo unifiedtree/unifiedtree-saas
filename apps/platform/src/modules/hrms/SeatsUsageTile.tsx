@@ -49,12 +49,15 @@ interface TierStyles {
 }
 
 const STYLES: Record<Tier, TierStyles> = {
-  ok:         { ring: 'border-emerald-100',  bar: 'bg-emerald-500',  chipBg: 'bg-emerald-50',  chipText: 'text-emerald-700',  chipLabel: 'Healthy' },
-  low:        { ring: 'border-amber-200',    bar: 'bg-amber-500',    chipBg: 'bg-amber-50',    chipText: 'text-amber-800',    chipLabel: 'Running low' },
-  critical:   { ring: 'border-orange-300',   bar: 'bg-orange-500',   chipBg: 'bg-orange-50',   chipText: 'text-orange-800',   chipLabel: 'Almost full' },
-  exhausted:  { ring: 'border-red-300',      bar: 'bg-red-500',      chipBg: 'bg-red-50',      chipText: 'text-red-800',      chipLabel: 'Seats exhausted' },
-  unlimited:  { ring: 'border-emerald-100',  bar: 'bg-emerald-500',  chipBg: 'bg-emerald-50',  chipText: 'text-emerald-700',  chipLabel: 'Unlimited' },
-  inactive:   { ring: 'border-slate-200',    bar: 'bg-slate-400',    chipBg: 'bg-slate-100',   chipText: 'text-slate-700',    chipLabel: 'No active plan' },
+  // `ring` is a Tailwind ring (not the border): the ut-card surface owns the
+  // border, and the warning tiers draw their urgency colour as a ring on top
+  // so the glass card can still signal amber/red without forking the surface.
+  ok:         { ring: '',                          bar: 'bg-emerald-500',  chipBg: 'bg-emerald-50',  chipText: 'text-emerald-700',  chipLabel: 'Healthy' },
+  low:        { ring: 'ring-1 ring-amber-300/70',  bar: 'bg-amber-500',    chipBg: 'bg-amber-50',    chipText: 'text-amber-800',    chipLabel: 'Running low' },
+  critical:   { ring: 'ring-1 ring-orange-400/70', bar: 'bg-orange-500',   chipBg: 'bg-orange-50',   chipText: 'text-orange-800',   chipLabel: 'Almost full' },
+  exhausted:  { ring: 'ring-2 ring-red-400/60',    bar: 'bg-red-500',      chipBg: 'bg-red-50',      chipText: 'text-red-800',      chipLabel: 'Seats exhausted' },
+  unlimited:  { ring: '',                          bar: 'bg-emerald-500',  chipBg: 'bg-emerald-50',  chipText: 'text-emerald-700',  chipLabel: 'Unlimited' },
+  inactive:   { ring: '',                          bar: 'bg-slate-400',    chipBg: 'bg-slate-100',   chipText: 'text-slate-700',    chipLabel: 'No active plan' },
 }
 
 /**
@@ -83,7 +86,7 @@ export const SeatsUsageTile: React.FC = () => {
   // does not jump when it lands.
   if (isPending) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-5" role="status" aria-label="Loading seat usage">
+      <div className="ut-card p-5" role="status" aria-label="Loading seat usage">
         <div className="flex items-start justify-between">
           <div className="h-4 w-32 animate-pulse rounded bg-slate-200" />
           <div className="h-5 w-20 animate-pulse rounded-full bg-slate-100" />
@@ -99,7 +102,7 @@ export const SeatsUsageTile: React.FC = () => {
   // POST would fail too (both hit SeatQuotaService.getUsage).
   if (isError || !data) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50/40 p-5">
+      <div className="ut-card ring-1 ring-red-300/60 p-5">
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden />
           <div className="min-w-0">
@@ -128,7 +131,7 @@ export const SeatsUsageTile: React.FC = () => {
     : 0
 
   return (
-    <div className={`rounded-2xl border bg-white p-5 ${style.ring}`}>
+    <div className={`ut-card p-5 ${style.ring}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="rounded-lg bg-emerald-50 p-2 text-emerald-700">

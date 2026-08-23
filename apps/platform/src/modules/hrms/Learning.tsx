@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
@@ -23,7 +23,6 @@ const ENROLLMENT_TONE: Record<EnrollmentStatus, PillTone> = {
 }
 
 const fmtDate = (d?: string) => (d ? format(new Date(d), 'd MMM yyyy') : '—')
-const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
 type Tab = 'programs' | 'my' | 'skills'
 
@@ -43,23 +42,11 @@ export const Learning: React.FC = () => {
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Learning & Development" title="Learning Center" subtitle="Run training programs, track enrollments, and map team skills" />
 
-      <div className="mb-5 flex gap-1 border-b border-border-default">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'programs' && canRead && <ProgramsTab canWrite={canWrite} canEnroll={canEnroll} />}
-      {tab === 'my' && canEnroll && <MyTrainingTab />}
-      {tab === 'skills' && canRead && <SkillMatrixTab canWrite={canWrite} />}
+      {tab === 'programs' && canRead && <HrTabPanel tabKey="programs"><ProgramsTab canWrite={canWrite} canEnroll={canEnroll} /></HrTabPanel>}
+      {tab === 'my' && canEnroll && <HrTabPanel tabKey="my"><MyTrainingTab /></HrTabPanel>}
+      {tab === 'skills' && canRead && <HrTabPanel tabKey="skills"><SkillMatrixTab canWrite={canWrite} /></HrTabPanel>}
     </div>
   )
 }
@@ -151,38 +138,39 @@ function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: bo
       )}
 
       {canWrite && showForm && (
-        <div className="space-y-3 rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="ut-card p-5">
+          <h3 className="mb-4 text-[15px] font-semibold text-text-primary">New Training Program</h3>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-semibold text-text-secondary">Program Title *</label>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Advanced React Workshop" className={inputCls} />
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Program Title *</label>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Advanced React Workshop" className="ut-input" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Category</label>
-              <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Technical" className={inputCls} />
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Category</label>
+              <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Technical" className="ut-input" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Trainer</label>
-              <input value={trainer} onChange={(e) => setTrainer(e.target.value)} placeholder="Optional" className={inputCls} />
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Trainer</label>
+              <input value={trainer} onChange={(e) => setTrainer(e.target.value)} placeholder="Optional" className="ut-input" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Start Date</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Start Date</label>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="ut-input" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">End Date</label>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">End Date</label>
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="ut-input" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Capacity</label>
-              <input type="number" min={0} value={capacity} onChange={(e) => setCapacity(e.target.value)} placeholder="Unlimited" className={inputCls} />
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Capacity</label>
+              <input type="number" min={0} value={capacity} onChange={(e) => setCapacity(e.target.value)} placeholder="Unlimited" className="ut-input" />
             </div>
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Description</label>
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Optional" className={inputCls} />
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Description</label>
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Optional" className="w-full rounded-xl border border-border-default bg-white px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20" />
             </div>
           </div>
-          <div className="flex justify-end">
+          <div className="mt-5 flex justify-end border-t border-border-default pt-4">
             <HrButton onClick={onCreate} disabled={create.isPending}>{create.isPending ? 'Creating…' : 'Create Program'}</HrButton>
           </div>
         </div>
@@ -223,7 +211,8 @@ function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: bo
                         value={p.status}
                         onChange={(e) => onStatus(p.id, e.target.value as ProgramStatus)}
                         disabled={changeStatus.isPending}
-                        className="rounded-lg border border-border-default bg-white px-2 py-1 text-xs font-semibold text-text-primary focus:border-[#059669] focus:outline-none"
+                        className="ut-select ut-select-sm w-auto"
+                        aria-label="Change program status"
                       >
                         {PROGRAM_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -345,9 +334,9 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
-        <label className="mb-1 block text-xs font-semibold text-text-secondary">Employee</label>
-        <select value={activeEmployee} onChange={(e) => setEmployeeId(e.target.value)} className={inputCls}>
+      <div className="ut-card p-4">
+        <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee</label>
+        <select value={activeEmployee} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
           {employees.length === 0 && <option value="">No employees</option>}
           {employees.map((e) => (
             <option key={e.id} value={e.id}>{`${e.firstName} ${e.lastName ?? ''}`.trim()} {e.employeeCode ? `(${e.employeeCode})` : ''}</option>
@@ -356,16 +345,16 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
       </div>
 
       {canWrite && activeEmployee && (
-        <div className="space-y-3 rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Add / update skill for {empLabel(activeEmployee)}</p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="ut-card space-y-3 p-5">
+          <h3 className="text-[15px] font-semibold text-text-primary">Add / update skill for {empLabel(activeEmployee)}</h3>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Skill name</label>
-              <input value={skillName} onChange={(e) => setSkillName(e.target.value)} placeholder="e.g. TypeScript" className={inputCls} />
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Skill name</label>
+              <input value={skillName} onChange={(e) => setSkillName(e.target.value)} placeholder="e.g. TypeScript" className="ut-input" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Proficiency (1–5)</label>
-              <select value={proficiency} onChange={(e) => setProficiency(e.target.value)} className={inputCls}>
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Proficiency (1–5)</label>
+              <select value={proficiency} onChange={(e) => setProficiency(e.target.value)} className="ut-select">
                 {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
@@ -375,18 +364,18 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
             Certified
           </label>
           {certified && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Certification name</label>
-                <input value={certificationName} onChange={(e) => setCertificationName(e.target.value)} placeholder="e.g. AWS Solutions Architect" className={inputCls} />
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Certification name</label>
+                <input value={certificationName} onChange={(e) => setCertificationName(e.target.value)} placeholder="e.g. AWS Solutions Architect" className="ut-input" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Certified on</label>
-                <input type="date" value={certifiedOn} onChange={(e) => setCertifiedOn(e.target.value)} className={inputCls} />
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Certified on</label>
+                <input type="date" value={certifiedOn} onChange={(e) => setCertifiedOn(e.target.value)} className="ut-input" />
               </div>
             </div>
           )}
-          <div className="flex justify-end">
+          <div className="flex justify-end border-t border-border-default pt-4">
             <HrButton onClick={onAdd} disabled={upsert.isPending}><Plus size={15} /> {upsert.isPending ? 'Saving…' : 'Save Skill'}</HrButton>
           </div>
         </div>

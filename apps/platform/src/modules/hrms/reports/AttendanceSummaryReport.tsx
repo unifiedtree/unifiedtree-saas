@@ -57,7 +57,7 @@ export function AttendanceSummaryReport() {
         </>
       }
     >
-      <div className="rounded-2xl border border-border-default bg-white p-5">
+      <div className="ut-card ut-card-lg p-5">
         <p className="text-xs text-text-tertiary mb-3">Top 20 by late days</p>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 16, left: 80, bottom: 4 }}>

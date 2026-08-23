@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { EmptyState } from '@unifiedtree/ui-kit'
 import { Can, P } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
-import { HrPageHeader, HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { HrPageHeader, HrButton, HrStatusPill, HrTabs, HrTabPanel, HrDrawer, HrSelect, TableCard, type PillTone } from '@/shared/components/hr'
 import {
   useSalaryComponents, useSeedDefaultComponents, useCreateComponent, useUpdateComponent, useDeleteComponent,
   type SalaryComponent, type ComponentCategory,
@@ -28,6 +28,13 @@ const COMPUTATION_TYPES = ['FIXED', 'PERCENT_OF_BASIC', 'FORMULA', 'STATUTORY']
 
 const catTone: Record<ComponentCategory, PillTone> = {
   EARNING: 'ok', DEDUCTION: 'red', EMPLOYER_CONTRIBUTION: 'info', REIMBURSEMENT: 'gray',
+}
+
+// Visual-only sentence-case transform for the COMPUTATION column
+// (e.g. PERCENT_OF_BASIC → "Percent of basic"). Stored values untouched.
+const sentenceCase = (s: string) => {
+  const t = s.replace(/_/g, ' ').toLowerCase()
+  return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
 // ── Add / Edit Drawer ───────────────────────────────────────────────────────
@@ -86,70 +93,77 @@ function ComponentDrawer({ editComponent, onClose }: ComponentDrawerProps) {
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md bg-white border-l border-slate-200 flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-          <h3 className="text-slate-900 font-semibold">{isEdit ? 'Edit Component' : 'Add Component'}</h3>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100">×</button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <HrDrawer
+      title={isEdit ? 'Edit Component' : 'Add Component'}
+      onClose={onClose}
+      footer={
+        <>
+          <button onClick={onClose} className="px-4 py-2.5 border border-slate-200 text-slate-500 hover:text-slate-900 rounded-xl text-sm transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-xl bg-[#059669] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#047857] disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Component'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Code *</label>
+              <label className="block text-[13px] font-semibold text-slate-500 mb-1.5">Code *</label>
               <input
                 value={form.code}
                 onChange={(e) => set('code', e.target.value.toUpperCase())}
                 disabled={isEdit}
                 placeholder="e.g. HRA"
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 disabled:bg-slate-50 disabled:text-slate-400 focus:outline-none focus:border-primary transition-colors"
+                className="ut-input w-full"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Display Order</label>
+              <label className="block text-[13px] font-semibold text-slate-500 mb-1.5">Display Order</label>
               <input
                 type="number"
                 min={0}
                 value={form.displayOrder}
                 onChange={(e) => set('displayOrder', e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-primary transition-colors"
+                className="ut-input w-full"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Name *</label>
+            <label className="block text-[13px] font-semibold text-slate-500 mb-1.5">Name *</label>
             <input
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
               placeholder="e.g. House Rent Allowance"
-              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-primary transition-colors"
+              className="ut-input w-full"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Category</label>
-              <select
+              <label className="block text-[13px] font-semibold text-slate-500 mb-1.5">Category</label>
+              <HrSelect
                 value={form.category}
-                onChange={(e) => set('category', e.target.value as ComponentCategory)}
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-primary transition-colors"
-              >
-                {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
+                onChange={(v) => set('category', v as ComponentCategory)}
+                options={CATEGORIES}
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Computation</label>
-              <select
+              <label className="block text-[13px] font-semibold text-slate-500 mb-1.5">Computation</label>
+              <HrSelect
                 value={form.computationType}
-                onChange={(e) => set('computationType', e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-primary transition-colors"
-              >
-                {COMPUTATION_TYPES.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
-              </select>
+                onChange={(v) => set('computationType', v)}
+                options={COMPUTATION_TYPES.map((c) => ({ value: c, label: c.replace(/_/g, ' ') }))}
+              />
             </div>
           </div>
           {showPercent && (
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Percent of Basic (%)</label>
+              <label className="block text-[13px] font-semibold text-slate-500 mb-1.5">Percent of Basic (%)</label>
               <input
                 type="number"
                 min={0}
@@ -157,7 +171,7 @@ function ComponentDrawer({ editComponent, onClose }: ComponentDrawerProps) {
                 value={form.percentValue}
                 onChange={(e) => set('percentValue', e.target.value)}
                 placeholder="e.g. 40"
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-primary transition-colors"
+                className="ut-input w-full"
               />
             </div>
           )}
@@ -181,21 +195,8 @@ function ComponentDrawer({ editComponent, onClose }: ComponentDrawerProps) {
               <span className="text-sm text-slate-700">Statutory</span>
             </label>
           </div>
-        </div>
-        <div className="flex gap-3 p-5 border-t border-slate-200">
-          <button onClick={onClose} className="px-4 py-2.5 border border-slate-200 text-slate-500 hover:text-slate-900 rounded-xl text-sm transition-colors">
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 rounded-xl bg-[#059669] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#047857] disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Component'}
-          </button>
-        </div>
       </div>
-    </>
+    </HrDrawer>
   )
 }
 
@@ -240,50 +241,45 @@ export const SalaryComponents: React.FC = () => {
         />
       ) : (
         <>
-          <div className="mb-4 flex gap-1 border-b border-border-default">
-            {TABS.map(t => (
-              <button key={t.key} onClick={() => setTab(t.key)}
-                className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'}`}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <TableCard>
-            <table className="hr-table">
-              <thead>
-                <tr>
-                  <th>Code</th><th>Name</th><th>Category</th>
-                  <th className="hidden sm:table-cell">Statutory</th>
-                  <th className="hidden md:table-cell">Computation</th><th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  [...Array(4)].map((_, i) => <tr key={i}><td colSpan={6} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-                ) : filtered.length === 0 ? (
-                  <tr><td colSpan={6} className="py-12 text-center text-sm text-text-tertiary">No components in this category</td></tr>
-                ) : filtered.map((r) => (
-                  <tr key={r.id}>
-                    <td><span className="hr-mono">{r.code}</span></td>
-                    <td className="font-medium text-text-primary">{r.name}</td>
-                    <td><HrStatusPill tone={catTone[r.category]}>{r.category.replace('_', ' ')}</HrStatusPill></td>
-                    <td className="hidden sm:table-cell">{r.isStatutory ? <HrStatusPill tone="warn">Statutory</HrStatusPill> : <span className="text-text-tertiary">—</span>}</td>
-                    <td className="hidden md:table-cell text-text-secondary">{r.computationType}{r.percentValue ? ` (${r.percentValue}%)` : ''}</td>
-                    <td>
-                      <Can code={P.PAYROLL_COMPONENTS_MANAGE}>
-                        {!r.isSystem && (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => setEditing(r)} title="Edit" className="rounded-lg p-1.5 text-text-tertiary hover:text-[#047857]"><Pencil size={15} /></button>
-                            <button onClick={() => del.mutate(r.id, { onSuccess: () => toast('Component deleted', 'success'), onError: (e) => toast((e as Error).message, 'error') })} title="Delete" className="rounded-lg p-1.5 text-text-tertiary hover:text-rose-600"><Trash2 size={15} /></button>
-                          </div>
-                        )}
-                      </Can>
-                    </td>
+          <HrTabs tabs={TABS} active={tab} onChange={setTab} />
+          <HrTabPanel tabKey={tab}>
+            <TableCard>
+              <table className="hr-table">
+                <thead>
+                  <tr>
+                    <th>Code</th><th>Name</th><th>Category</th>
+                    <th className="hidden sm:table-cell">Statutory</th>
+                    <th className="hidden md:table-cell">Computation</th><th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableCard>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    [...Array(4)].map((_, i) => <tr key={i}><td colSpan={6} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
+                  ) : filtered.length === 0 ? (
+                    <tr><td colSpan={6} className="py-12 text-center text-sm text-text-tertiary">No components in this category</td></tr>
+                  ) : filtered.map((r) => (
+                    <tr key={r.id}>
+                      <td><span className="font-mono text-[12px] text-[var(--text-tertiary)]">{r.code}</span></td>
+                      <td className="font-semibold text-text-primary">{r.name}</td>
+                      <td><HrStatusPill tone={catTone[r.category]}>{r.category.replace('_', ' ')}</HrStatusPill></td>
+                      <td className="hidden sm:table-cell">{r.isStatutory ? <HrStatusPill tone="warn">Statutory</HrStatusPill> : <span className="text-text-tertiary">—</span>}</td>
+                      <td className="hidden md:table-cell text-text-secondary">{sentenceCase(r.computationType)}{r.percentValue ? ` (${r.percentValue}%)` : ''}</td>
+                      <td>
+                        <Can code={P.PAYROLL_COMPONENTS_MANAGE}>
+                          {!r.isSystem && (
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => setEditing(r)} title="Edit" aria-label="Edit component" className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><Pencil size={15} /></button>
+                              <button onClick={() => del.mutate(r.id, { onSuccess: () => toast('Component deleted', 'success'), onError: (e) => toast((e as Error).message, 'error') })} title="Delete" aria-label="Delete component" className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-rose-600"><Trash2 size={15} /></button>
+                            </div>
+                          )}
+                        </Can>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableCard>
+          </HrTabPanel>
         </>
       )}
 

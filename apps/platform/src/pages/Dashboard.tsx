@@ -58,6 +58,15 @@ export const Dashboard: React.FC = () => {
     { label: 'Settings', icon: Settings, path: '/settings', module: 'hrms', anyOf: ['settings.read', 'settings.hrconfig.write', 'settings.holidays.write', 'hrms.probation.config.read'] },
   ]
 
+  // The grid's column count follows how many actions actually render, so a
+  // lone permitted action never strands beside dead cells. Every combination
+  // below is a full literal class string (Tailwind cannot see dynamic ones).
+  const visibleActions = QUICK_ACTIONS.filter(({ module, anyOf }) => {
+    if (module && module !== 'hrms' && !hasModule(module)) return false
+    if (anyOf && !anyOf.some((p) => hasPermission(p))) return false
+    return true
+  })
+
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="mx-auto w-full max-w-7xl space-y-7 p-6 sm:p-8">
       {/* Welcome banner */}
@@ -113,7 +122,7 @@ export const Dashboard: React.FC = () => {
       {canTeam && (
         <motion.div variants={fadeUp} className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           {/* Attendance breakdown donut */}
-          <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
+          <div className="ut-card p-5">
             <h3 className="mb-1 text-sm font-bold text-text-primary">Today's Attendance</h3>
             <p className="mb-2 text-xs text-text-secondary">Live status across your team</p>
             {totalStaff === 0 ? (
@@ -151,7 +160,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Recent attendance logs */}
-          <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm lg:col-span-2">
+          <div className="ut-card p-5 lg:col-span-2">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-bold text-text-primary">Recent Attendance</h3>
               <button onClick={() => navigate('/hrms/attendance')} className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]">
@@ -179,26 +188,28 @@ export const Dashboard: React.FC = () => {
       {/* Quick actions */}
       <motion.div variants={fadeUp} className="space-y-3">
         <h3 className="px-1 text-sm font-bold text-text-primary">Quick Actions</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {QUICK_ACTIONS.map(({ label, icon: Icon, path, module, anyOf }) => {
-            if (module && module !== 'hrms' && !hasModule(module)) return null
-            if (anyOf && !anyOf.some((p) => hasPermission(p))) return null
-            return (
-              <motion.button
-                key={label}
-                whileHover={{ y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => navigate(path)}
-                className="group flex items-center gap-3.5 rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-5 py-4 text-left transition-all duration-300 hover:border-[#059669] hover:bg-[#059669] hover:shadow-lg hover:shadow-[#059669]/25"
-              >
-                <div className="rounded-xl bg-white p-2.5 text-[#047857] shadow-sm transition-colors group-hover:bg-white/20 group-hover:text-white">
-                  <Icon size={20} />
-                </div>
-                <span className="flex-1 text-sm font-bold text-text-primary group-hover:text-white">{label}</span>
-                <ArrowRight size={16} className="text-[#047857]/50 transition-all group-hover:translate-x-1 group-hover:text-white" />
-              </motion.button>
-            )
-          })}
+        <div
+          className={
+            visibleActions.length >= 4 ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'
+            : visibleActions.length === 3 ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'
+            : visibleActions.length === 2 ? 'grid grid-cols-1 gap-4 sm:grid-cols-2'
+            : 'grid grid-cols-1 gap-4'
+          }
+        >
+          {visibleActions.map(({ label, icon: Icon, path }) => (
+            <motion.button
+              key={label}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate(path)}
+              className="group ut-card ut-card-sm ut-card-hover flex items-center gap-3.5 px-5 py-4 text-left"
+            >
+              <div className="rounded-xl bg-white p-2.5 text-[#047857] shadow-sm">
+                <Icon size={20} />
+              </div>
+              <span className="flex-1 text-sm font-bold text-text-primary">{label}</span>
+              <ArrowRight size={16} className="text-[#047857]/50 transition-all group-hover:translate-x-1" />
+            </motion.button>
+          ))}
         </div>
       </motion.div>
     </motion.div>

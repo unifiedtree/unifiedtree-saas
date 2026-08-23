@@ -81,7 +81,7 @@ export const TeamDashboard: React.FC = () => {
       </div>
 
       {/* Team attendance status */}
-      <div className="overflow-hidden rounded-xl border border-border-default bg-white shadow-sm">
+      <div className="ut-card overflow-hidden">
         <div className="flex items-center justify-between border-b border-border-default px-5 py-4">
           <div className="flex items-center gap-2">
             <Users size={16} className="text-text-tertiary" />
@@ -135,7 +135,7 @@ export const TeamDashboard: React.FC = () => {
 
       {/* Pending leave approvals */}
       {pendingLeaves.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-border-default bg-white shadow-sm">
+        <div className="ut-card overflow-hidden">
           <div className="flex items-center justify-between border-b border-border-default px-5 py-4">
             <div className="flex items-center gap-2">
               <Clock size={16} className="text-text-tertiary" />

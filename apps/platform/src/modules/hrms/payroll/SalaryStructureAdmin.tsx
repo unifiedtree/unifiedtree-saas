@@ -270,7 +270,7 @@ export const SalaryStructureAdmin: React.FC = () => {
       {/* Chosen employee */}
       {selected && (
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-default bg-white px-4 py-3 shadow-sm">
+          <div className="ut-card ut-card-sm flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <HrAvatar name={fullName(selected)} sub={`${selected.employeeCode} · ${selected.email}`} seed={1} />
             <HrButton size="sm" variant="ghost" onClick={() => setSelected(null)}>
               <X size={14} /> Change employee
@@ -384,10 +384,11 @@ export const SalaryStructureAdmin: React.FC = () => {
                 </div>
               )}
 
-              {/* Charts */}
-              <div className="grid gap-6 lg:grid-cols-2">
+              {/* Charts — column count follows what renders so a lone chart
+                  spans full width instead of stranding beside a dead cell */}
+              <div className={pieData.length > 0 && trendData.length > 1 ? 'grid gap-6 lg:grid-cols-2' : 'grid gap-6'}>
                 {pieData.length > 0 && (
-                  <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm">
+                  <div className="ut-card p-5">
                     <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
                       <Users size={15} className="text-text-tertiary" /> Earnings composition
                     </h3>
@@ -418,7 +419,7 @@ export const SalaryStructureAdmin: React.FC = () => {
                 )}
 
                 {trendData.length > 1 && (
-                  <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm">
+                  <div className="ut-card p-5">
                     <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
                       <HistoryIcon size={15} className="text-text-tertiary" /> CTC revision history
                     </h3>

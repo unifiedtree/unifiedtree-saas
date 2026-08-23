@@ -168,44 +168,45 @@ function SubmitTab({ onSubmitted }: { onSubmitted: () => void }) {
 
   return (
     <div className="max-w-2xl space-y-5">
-      <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-        <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Claim Title *</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Client visit — Mumbai" className={inputCls} />
+      <div className="ut-card p-5">
+        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Submit Claim</h3>
+        <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Claim Title *</label>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Client visit — Mumbai" className="ut-input" />
       </div>
 
       <div className="space-y-3">
         {items.map((it, i) => (
-          <div key={i} className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+          <div key={i} className="ut-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Line item {i + 1}</span>
               {items.length > 1 && (
-                <button onClick={() => setItems((p) => p.filter((_, idx) => idx !== i))} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" aria-label="Remove item">
+                <button onClick={() => setItems((p) => p.filter((_, idx) => idx !== i))} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]" aria-label="Remove item">
                   <Trash2 size={14} />
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Category</label>
-                <select value={it.category} onChange={(e) => setItem(i, { category: e.target.value as ExpenseCategory })} className={inputCls}>
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Category</label>
+                <select value={it.category} onChange={(e) => setItem(i, { category: e.target.value as ExpenseCategory })} className="ut-select">
                   {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{fmtCat(c)}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Amount (₹)</label>
-                <input type="number" min={0} step="0.01" value={it.amount} onChange={(e) => setItem(i, { amount: e.target.value })} className={inputCls} />
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Amount (₹)</label>
+                <input type="number" min={0} step="0.01" value={it.amount} onChange={(e) => setItem(i, { amount: e.target.value })} className="ut-input" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Date</label>
-                <input type="date" value={it.expenseDate} onChange={(e) => setItem(i, { expenseDate: e.target.value })} className={inputCls} />
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Date</label>
+                <input type="date" value={it.expenseDate} onChange={(e) => setItem(i, { expenseDate: e.target.value })} className="ut-input" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Merchant</label>
-                <input value={it.merchantName} onChange={(e) => setItem(i, { merchantName: e.target.value })} placeholder="Optional" className={inputCls} />
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Merchant</label>
+                <input value={it.merchantName} onChange={(e) => setItem(i, { merchantName: e.target.value })} placeholder="Optional" className="ut-input" />
               </div>
               <div className="col-span-2">
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Description</label>
-                <input value={it.description} onChange={(e) => setItem(i, { description: e.target.value })} placeholder="Optional" className={inputCls} />
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Description</label>
+                <input value={it.description} onChange={(e) => setItem(i, { description: e.target.value })} placeholder="Optional" className="ut-input" />
               </div>
             </div>
           </div>
@@ -215,8 +216,8 @@ function SubmitTab({ onSubmitted }: { onSubmitted: () => void }) {
         </button>
       </div>
 
-      <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-        <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Notes</label>
+      <div className="ut-card p-5">
+        <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Notes</label>
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional context for the approver" className={inputCls} />
       </div>
 
@@ -330,31 +331,31 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
     }
   }
 
-  const inputCls = 'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none'
-
   return (
     <div className="space-y-4">
       {companies.length > 1 && (
-        <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className={inputCls}>
-          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <div className="w-56">
+          <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm">
+            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
       )}
 
       {canWrite && (
-        <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+        <div className="ut-card flex flex-wrap items-end gap-2 p-4">
           <div className="flex-1 min-w-[160px]">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Policy name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Domestic travel cap" className={`${inputCls} w-full`} />
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Policy name</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Domestic travel cap" className="ut-input ut-input-sm" />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Category</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)} className={inputCls}>
+          <div className="w-40">
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Category</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)} className="ut-select ut-select-sm">
               {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{fmtCat(c)}</option>)}
             </select>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Max / claim (₹)</label>
-            <input type="number" min={0} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} placeholder="No cap" className={`${inputCls} w-32`} />
+          <div className="w-32">
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Max / claim (₹)</label>
+            <input type="number" min={0} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} placeholder="No cap" className="ut-input ut-input-sm" />
           </div>
           <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Add Policy</HrButton>
         </div>
@@ -386,11 +387,13 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
                 <td><HrStatusPill tone={p.active ? 'ok' : 'gray'}>{p.active ? 'Active' : 'Inactive'}</HrStatusPill></td>
                 {canWrite && (
                   <td>
-                    {p.active && (
-                      <button onClick={() => remove.mutate(p.id, { onSuccess: () => toast('Policy deactivated', 'success') })} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Deactivate">
-                        <Trash2 size={14} />
-                      </button>
-                    )}
+                    <div className="flex items-center justify-end">
+                      {p.active && (
+                        <button onClick={() => remove.mutate(p.id, { onSuccess: () => toast('Policy deactivated', 'success') })} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Deactivate" aria-label="Deactivate policy">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>

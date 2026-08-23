@@ -10,7 +10,7 @@ import { useToast } from '@/shared/hooks/useToast'
 import { useVisibleTabs } from '@/shared/hooks/useVisibleTabs'
 import { TableSkeleton } from '@unifiedtree/ui-kit'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, HrTabs, HrTabPanel, TableCard, HrAvatar, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import {
@@ -70,25 +70,18 @@ export const Policies: React.FC = () => {
         subtitle="Configure shift rules and leave-type rules, and publish the policy documents employees acknowledge"
       />
 
-      <div className="mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border border-border-default bg-white p-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {visibleTabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key as Tab)}
-            className={clsx(
-              'whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-all',
-              activeTab === t.key ? 'bg-[#059669] text-white shadow' : 'text-text-secondary hover:text-text-primary',
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs
+        tabs={visibleTabs.map((t) => ({ key: t.key, label: t.label }))}
+        active={activeTab}
+        onChange={(k) => setTab(k as Tab)}
+      />
 
-      {activeTab === 'shifts' && <ShiftRulesTab />}
-      {activeTab === 'leaves' && <LeaveRulesTab />}
-      {activeTab === 'documents' && canRead && <PoliciesTab canAcknowledge={canAcknowledge} />}
-      {activeTab === 'manage' && canWrite && <ManageTab />}
+      <HrTabPanel tabKey={activeTab}>
+        {activeTab === 'shifts' && <ShiftRulesTab />}
+        {activeTab === 'leaves' && <LeaveRulesTab />}
+        {activeTab === 'documents' && canRead && <PoliciesTab canAcknowledge={canAcknowledge} />}
+        {activeTab === 'manage' && canWrite && <ManageTab />}
+      </HrTabPanel>
     </div>
   )
 }
@@ -251,13 +244,13 @@ function ShiftRulesTab() {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
+  const inputCls = 'ut-input'
   const saving = create.isPending || update.isPending
 
   return (
     <div className="space-y-5">
       {companies.length > 1 && !editingId && (
-        <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none">
+        <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm w-auto">
           {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       )}
@@ -272,29 +265,29 @@ function ShiftRulesTab() {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-bold text-text-primary">{editingId ? 'Edit shift rule' : 'Add a shift rule'}</h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="ut-card ut-card-lg p-5">
+        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">{editingId ? 'Edit shift rule' : 'Add a shift rule'}</h3>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Shift name *</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Shift name *</label>
             <input value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. General" className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Shift type</label>
-            <select value={draft.shiftType} onChange={(e) => set('shiftType', e.target.value as ShiftType)} className={inputCls}>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Shift type</label>
+            <select value={draft.shiftType} onChange={(e) => set('shiftType', e.target.value as ShiftType)} className="ut-select">
               {SHIFT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Start time</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Start time</label>
             <input type="time" value={draft.startTime} onChange={(e) => set('startTime', e.target.value)} className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">End time</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">End time</label>
             <input type="time" value={draft.endTime} onChange={(e) => set('endTime', e.target.value)} className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Grace period (minutes)</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Grace period (minutes)</label>
             <input
               type="number"
               min={GRACE_MIN}
@@ -303,10 +296,10 @@ function ShiftRulesTab() {
               onChange={(e) => set('gracePeriodMinutes', e.target.value)}
               className={inputCls}
             />
-            <p className="mt-1 text-[11px] text-text-tertiary">{GRACE_MIN}–{GRACE_MAX}. Check-ins within this window are not marked Late.</p>
+            <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{GRACE_MIN}–{GRACE_MAX}. Check-ins within this window are not marked Late.</p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Working hours per day</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Working hours per day</label>
             <input
               type="number"
               step="0.5"
@@ -316,7 +309,7 @@ function ShiftRulesTab() {
               onChange={(e) => set('workingHoursPerDay', e.target.value)}
               className={inputCls}
             />
-            <p className="mt-1 text-[11px] text-text-tertiary">{HOURS_MIN}–{HOURS_MAX}. The daily target for this shift.</p>
+            <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{HOURS_MIN}–{HOURS_MAX}. The daily target for this shift.</p>
           </div>
           <div className="sm:col-span-2">
             <label className="flex cursor-pointer items-center gap-2">
@@ -330,8 +323,8 @@ function ShiftRulesTab() {
             </label>
           </div>
           {draft.overtimeApplicable && (
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Amount per OT hour (rate multiplier)</label>
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Amount per OT hour (rate multiplier)</label>
               <input
                 type="number"
                 step="0.25"
@@ -341,13 +334,13 @@ function ShiftRulesTab() {
                 onChange={(e) => set('overtimeMultiplier', e.target.value)}
                 className={inputCls}
               />
-              <p className="mt-1 text-[11px] text-text-tertiary">
+              <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">
                 {OT_MIN.toFixed(1)}–{OT_MAX} × the normal hourly rate (2.0 = double pay). Stored as the configured rate.
               </p>
             </div>
           )}
         </div>
-        <div className="mt-4 flex items-center justify-end gap-2">
+        <div className="mt-5 flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
           {editingId && <HrButton variant="ghost" onClick={reset}>Cancel</HrButton>}
           <HrButton onClick={onSave} disabled={saving || !activeCompany}>
             {editingId ? <Check size={15} /> : <Plus size={15} />} {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Shift Rule'}
@@ -358,14 +351,14 @@ function ShiftRulesTab() {
       {isLoading ? (
         <TableSkeleton />
       ) : shifts.length === 0 ? (
-        <div className="rounded-2xl border border-border-default bg-white py-14 text-center shadow-sm">
+        <div className="ut-card py-14 text-center">
           <Clock size={30} className="mx-auto mb-3 text-text-tertiary" />
           <p className="text-sm font-semibold text-text-secondary">No shift rules yet</p>
           <p className="mt-1 text-xs text-text-tertiary">Add one above — attendance falls back to a 09:30 late cutoff until a shift is assigned.</p>
         </div>
       ) : (
         <TableCard>
-          <table className="hr-table">
+          <table className="hr-table [&_tbody_td]:!py-2.5">
             <thead>
               <tr>
                 <th>Shift</th>
@@ -388,19 +381,19 @@ function ShiftRulesTab() {
                     <td className="text-text-secondary">
                       <span className="hr-mono">{hhmm(s.startTime)} – {hhmm(s.endTime)}</span>
                     </td>
-                    <td className="text-text-secondary">{s.gracePeriodMinutes} min</td>
-                    <td className="text-text-secondary">{s.workingHoursPerDay ?? '—'}</td>
+                    <td className="tabular-nums text-text-secondary">{s.gracePeriodMinutes} min</td>
+                    <td className="tabular-nums text-text-secondary">{s.workingHoursPerDay ?? '—'}</td>
                     <td>
                       {s.overtimeApplicable && mult != null
                         ? <HrStatusPill tone="teal">{mult}× rate</HrStatusPill>
                         : <span className="text-text-tertiary">—</span>}
                     </td>
                     <td className="text-right">
-                      <div className="inline-flex items-center gap-1">
-                        <button onClick={() => startEdit(s)} title="Edit" className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-bg-base hover:text-[#047857]">
+                      <div className="inline-flex items-center justify-end gap-1">
+                        <button onClick={() => startEdit(s)} aria-label={`Edit shift rule ${s.name}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]">
                           <Pencil size={14} />
                         </button>
-                        <button onClick={() => onDelete(s)} title="Delete" className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]">
+                        <button onClick={() => onDelete(s)} aria-label={`Delete shift rule ${s.name}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -482,10 +475,10 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
 
       {isLoading ? (
         <div className="space-y-3">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-20 w-full animate-pulse rounded-2xl bg-bg-base" />)}
+          {[...Array(3)].map((_, i) => <div key={i} className="ut-card h-20 w-full animate-pulse" />)}
         </div>
       ) : policies.length === 0 ? (
-        <div className="rounded-2xl border border-border-default bg-white py-14 text-center shadow-sm">
+        <div className="ut-card py-14 text-center">
           <p className="text-sm font-semibold text-text-secondary">No active policies</p>
           <p className="mt-1 text-xs text-text-tertiary">Published policies will appear here for you to read and acknowledge.</p>
         </div>
@@ -495,7 +488,7 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
             const acked = ackSet.has(p.id)
             const open = openId === p.id
             return (
-              <div key={p.id} className="rounded-2xl border border-border-default bg-white shadow-sm">
+              <div key={p.id} className="ut-card">
                 <button
                   onClick={() => setOpenId(open ? null : p.id)}
                   className="flex w-full items-start justify-between gap-3 p-5 text-left"
@@ -621,42 +614,42 @@ function ManageTab() {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
+  const inputCls = 'ut-input'
   const saving = create.isPending || update.isPending
 
   return (
     <div className="space-y-5">
       {companies.length > 1 && !editingId && (
-        <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none">
+        <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm w-auto">
           {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       )}
 
-      <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-bold text-text-primary">{editingId ? 'Edit policy' : 'Publish a policy'}</h3>
-        <div className="grid grid-cols-2 gap-3">
+      <div className="ut-card ut-card-lg p-5">
+        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">{editingId ? 'Edit policy' : 'Publish a policy'}</h3>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
           <div className="col-span-2">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Title *</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Title *</label>
             <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="e.g. Remote Work Policy" className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Category</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Category</label>
             <input value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} placeholder="e.g. Workplace" className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Version</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Version</label>
             <input value={draft.version} onChange={(e) => setDraft({ ...draft, version: e.target.value })} placeholder="e.g. v1.0" className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Effective date</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Effective date</label>
             <input type="date" value={draft.effectiveDate} onChange={(e) => setDraft({ ...draft, effectiveDate: e.target.value })} className={inputCls} />
           </div>
           <div className="col-span-2">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Content</label>
-            <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={5} placeholder="The full policy text employees will read and acknowledge" className={inputCls} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Content</label>
+            <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={5} placeholder="The full policy text employees will read and acknowledge" className="w-full rounded-xl border border-border-default bg-white/90 px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary transition-colors focus:border-[var(--border-focus)] focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#059669]/10" />
           </div>
         </div>
-        <div className="mt-4 flex items-center justify-end gap-2">
+        <div className="mt-5 flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
           {editingId && <HrButton variant="ghost" onClick={reset}>Cancel</HrButton>}
           <HrButton onClick={onSave} disabled={saving}>
             {editingId ? <Check size={15} /> : <Plus size={15} />} {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Publish Policy'}
@@ -665,7 +658,7 @@ function ManageTab() {
       </div>
 
       <TableCard>
-        <table className="hr-table">
+        <table className="hr-table [&_tbody_td]:!py-2.5">
           <thead>
             <tr>
               <th>Policy</th>
@@ -684,20 +677,22 @@ function ManageTab() {
             ) : policies.map((p) => (
               <React.Fragment key={p.id}>
                 <tr>
-                  <td className="font-medium text-text-primary">{p.title}</td>
+                  <td className="font-semibold text-text-primary">{p.title}</td>
                   <td className="text-text-secondary">{p.category || '—'}</td>
                   <td className="text-text-secondary">{p.version || '—'}</td>
-                  <td>
+                  <td className="tabular-nums">
                     <button onClick={() => setDetailId(detailId === p.id ? null : p.id)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#047857] hover:text-[#064E3B]">
                       <Users size={14} /> {p.acknowledgementCount}
                     </button>
                   </td>
                   <td><HrStatusPill tone={STATUS_TONE[p.status]}>{p.status}</HrStatusPill></td>
                   <td>
-                    <div className="flex items-center justify-end gap-2">
-                      <HrButton size="sm" variant="ghost" onClick={() => startEdit(p)}>Edit</HrButton>
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => startEdit(p)} aria-label={`Edit policy ${p.title}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]">
+                        <Pencil size={14} />
+                      </button>
                       {p.status === 'ACTIVE' && (
-                        <button onClick={() => onArchive(p.id)} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Archive">
+                        <button onClick={() => onArchive(p.id)} aria-label={`Archive policy ${p.title}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]">
                           <Archive size={14} />
                         </button>
                       )}

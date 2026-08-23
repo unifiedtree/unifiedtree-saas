@@ -56,7 +56,7 @@ export function SkeletonCard({
       role="status"
       aria-label={ariaLabel}
       className={clsx(
-        'rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 shadow-sm',
+        'ut-card ut-card-sm p-5',
         className,
       )}
     >

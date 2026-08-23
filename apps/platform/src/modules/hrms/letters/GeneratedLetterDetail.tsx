@@ -77,7 +77,7 @@ function SendForm({
   return (
     <form onSubmit={handleSend} className="mt-3 space-y-3">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+        <label className="text-[13px] font-semibold text-text-secondary uppercase tracking-wider">
           To Email
         </label>
         <input
@@ -89,7 +89,7 @@ function SendForm({
         />
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+        <label className="text-[13px] font-semibold text-text-secondary uppercase tracking-wider">
           CC Email <span className="normal-case font-normal text-text-tertiary">(optional)</span>
         </label>
         <input
@@ -136,7 +136,7 @@ function VoidForm({ letterId }: { letterId: string }) {
   return (
     <form onSubmit={handleVoid} className="mt-3 space-y-3">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+        <label className="text-[13px] font-semibold text-text-secondary uppercase tracking-wider">
           Reason *
         </label>
         <textarea
@@ -244,7 +244,7 @@ export const GeneratedLetterDetail: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-4">
-          <div className="bg-white border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+          <div className="ut-card p-5 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
               <div>
                 <p className="text-xs text-text-tertiary">Created At</p>
@@ -274,7 +274,7 @@ export const GeneratedLetterDetail: React.FC = () => {
           </div>
 
           {contextEntries.length > 0 && (
-            <div className="bg-white border border-border-default rounded-2xl overflow-hidden shadow-sm">
+            <div className="ut-card overflow-hidden">
               <button
                 onClick={() => setContextOpen((v) => !v)}
                 className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-bg-base transition-colors"
@@ -309,7 +309,7 @@ export const GeneratedLetterDetail: React.FC = () => {
         </div>
 
         <div className="space-y-4">
-          <div className="bg-white border border-border-default rounded-2xl p-5 space-y-4 shadow-sm">
+          <div className="ut-card p-5 space-y-4">
             <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Actions</h2>
 
             <Can code={P.HRMS_LETTERS_SEND}>
@@ -396,7 +396,7 @@ export const GeneratedLetterDetail: React.FC = () => {
             </Can>
           </div>
 
-          <div className="bg-white border border-border-default rounded-2xl p-5 space-y-3 shadow-sm">
+          <div className="ut-card p-5 space-y-3">
             <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Status History</h2>
 
             {letter.sentAt ? (

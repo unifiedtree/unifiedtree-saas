@@ -159,7 +159,7 @@ export const MusterRoll: React.FC = () => {
       />
 
       {/* Controls: date stepper + department filter */}
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border-default bg-white p-3 shadow-sm">
+      <div className="ut-card ut-card-sm flex flex-wrap items-center gap-3 p-3">
         <div className="flex items-center gap-1">
           <button
             onClick={() => shiftDay(-1)}
@@ -243,7 +243,7 @@ export const MusterRoll: React.FC = () => {
       {/* Charts: distribution pie + status bar */}
       {!dashLoading && distributionTotal > 0 && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm">
+          <div className="ut-card p-5">
             <h3 className="mb-1 text-sm font-bold text-text-primary">Status Distribution</h3>
             <p className="mb-3 text-xs text-text-tertiary">Share of roster by attendance status</p>
             <div className="flex items-center gap-4">
@@ -272,7 +272,7 @@ export const MusterRoll: React.FC = () => {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm">
+          <div className="ut-card p-5">
             <h3 className="mb-1 text-sm font-bold text-text-primary">Headcount by Status</h3>
             <p className="mb-3 text-xs text-text-tertiary">Number of staff in each bucket</p>
             <div className="h-44">

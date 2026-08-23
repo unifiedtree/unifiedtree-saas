@@ -65,14 +65,14 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
   return (
     <>
       <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md bg-white border-l border-border-default flex flex-col shadow-2xl">
+      <div className="ut-card ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-default">
           <h3 className="text-text-primary font-semibold">Add Holiday</h3>
           <button onClick={onClose} className="p-1.5 text-text-tertiary hover:text-text-primary rounded-lg hover:bg-bg-base">×</button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Date *</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Date *</label>
             <input
               type="date"
               value={form.holidayDate}
@@ -83,7 +83,7 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Holiday Name *</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Holiday Name *</label>
             <input
               value={form.holidayName}
               onChange={(e) => setForm((p) => ({ ...p, holidayName: e.target.value }))}
@@ -92,7 +92,7 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Type</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Type</label>
             <select
               value={form.holidayType}
               onChange={(e) => setForm((p) => ({ ...p, holidayType: e.target.value as HolidayType }))}
@@ -104,7 +104,7 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Description</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Description</label>
             <input
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
@@ -207,7 +207,7 @@ export function HolidayCalendar({ canEdit }: HolidayCalendarProps = {}) {
       ) : (
         <div className="space-y-1.5">
           {sorted.map((h) => (
-            <div key={h.id} className="bg-white border border-border-default rounded-2xl px-4 py-3 flex items-center gap-4 shadow-sm">
+            <div key={h.id} className="ut-card ut-card-sm px-4 py-3 flex items-center gap-4">
               <div className="text-center w-12 flex-shrink-0">
                 <p className="text-lg font-bold text-text-primary leading-none">
                   {format(new Date(h.holidayDate + 'T00:00:00'), 'd')}

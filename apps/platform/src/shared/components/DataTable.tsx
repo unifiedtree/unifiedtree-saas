@@ -46,7 +46,7 @@ export function DataTable<T>({
 
   if (loading) {
     return (
-      <div className="animate-pulse space-y-3">
+      <div className="ut-card animate-pulse space-y-3 p-4">
         {[...Array(5)].map((_, i) => (
           <div key={i} className="h-12 bg-white/50 rounded-lg" />
         ))}
@@ -55,7 +55,7 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-[#E2E8F0]">
+    <div className="ut-card overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[#E2E8F0]">

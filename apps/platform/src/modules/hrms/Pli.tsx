@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
@@ -34,22 +34,10 @@ export const Pli: React.FC = () => {
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Performance-Linked Incentive" title="Incentive Center" subtitle="Propose, approve, and pay out performance-linked incentives" />
 
-      <div className="mb-5 flex gap-1 border-b border-border-default">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'all' && canReadAll && <AllAwardsTab canWrite={canWrite} />}
-      {tab === 'my' && canReadSelf && <MyIncentivesTab />}
+      {tab === 'all' && canReadAll && <HrTabPanel tabKey="all"><AllAwardsTab canWrite={canWrite} /></HrTabPanel>}
+      {tab === 'my' && canReadSelf && <HrTabPanel tabKey="my"><MyIncentivesTab /></HrTabPanel>}
     </div>
   )
 }
@@ -107,7 +95,7 @@ function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
                 <td><HrAvatar name={a.employeeName || 'Employee'} sub={a.employeeCode} seed={i} /></td>
                 <td className="text-text-primary">{a.planName}</td>
                 <td className="hidden sm:table-cell text-text-secondary">{a.period || '—'}</td>
-                <td className="font-semibold text-text-primary">{inr(a.amount)}</td>
+                <td className="font-semibold tabular-nums text-text-primary">{inr(a.amount)}</td>
                 <td><HrStatusPill tone={STATUS_TONE[a.status]}>{a.status}</HrStatusPill></td>
                 {canWrite && (
                   <td>
@@ -178,23 +166,23 @@ function CreateAwardForm() {
   const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
   return (
-    <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
+    <div className="ut-card ut-card-lg p-5">
       <div className="mb-3 flex items-center gap-2">
         <Award size={16} className="text-[#047857]" />
-        <h3 className="text-sm font-semibold text-text-primary">Propose Incentive Award</h3>
+        <h3 className="text-[15px] font-semibold text-text-primary">Propose Incentive Award</h3>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
         {companies.length > 1 && (
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Company</label>
-            <select value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setEmployeeId('') }} className={inputCls}>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Company</label>
+            <select value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setEmployeeId('') }} className="ut-select">
               {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
         )}
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Employee *</label>
-          <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={inputCls}>
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee *</label>
+          <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
             <option value="">Select employee…</option>
             {employees.map((emp) => (
               <option key={emp.id} value={emp.id}>
@@ -204,27 +192,27 @@ function CreateAwardForm() {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Plan name *</label>
-          <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="e.g. Q3 Sales Incentive" className={inputCls} />
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Plan name *</label>
+          <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="e.g. Q3 Sales Incentive" className="ut-input" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Period</label>
-          <input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="e.g. FY24-Q3" className={inputCls} />
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Period</label>
+          <input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="e.g. FY24-Q3" className="ut-input" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Amount (₹) *</label>
-          <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 25000" className={inputCls} />
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Amount (₹) *</label>
+          <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 25000" className="ut-input" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Rating basis</label>
-          <input type="number" min={0} max={5} step="0.1" value={ratingBasis} onChange={(e) => setRatingBasis(e.target.value)} placeholder="e.g. 4.5" className={inputCls} />
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Rating basis</label>
+          <input type="number" min={0} max={5} step="0.1" value={ratingBasis} onChange={(e) => setRatingBasis(e.target.value)} placeholder="e.g. 4.5" className="ut-input" />
         </div>
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Notes</label>
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Notes</label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional context for the approver" className={inputCls} />
         </div>
       </div>
-      <div className="mt-4 flex justify-end">
+      <div className="mt-5 flex justify-end border-t border-border-default pt-4">
         <HrButton onClick={onCreate} disabled={create.isPending}>
           <Plus size={15} /> {create.isPending ? 'Proposing…' : 'Propose Award'}
         </HrButton>
@@ -273,9 +261,9 @@ function MyIncentivesTab() {
               <tr><td colSpan={5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No incentives yet</p><p className="mt-1 text-xs text-text-tertiary">Performance-linked incentives awarded to you will appear here.</p></td></tr>
             ) : awards.map((a) => (
               <tr key={a.id}>
-                <td className="font-medium text-text-primary">{a.planName}</td>
+                <td className="font-semibold text-text-primary">{a.planName}</td>
                 <td className="hidden sm:table-cell text-text-secondary">{a.period || '—'}</td>
-                <td className="font-semibold text-text-primary">{inr(a.amount)}</td>
+                <td className="font-semibold tabular-nums text-text-primary">{inr(a.amount)}</td>
                 <td><HrStatusPill tone={STATUS_TONE[a.status]}>{a.status}</HrStatusPill></td>
                 <td className="hidden sm:table-cell text-text-secondary">{a.createdAt ? format(new Date(a.createdAt), 'd MMM yyyy') : '—'}</td>
               </tr>

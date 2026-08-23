@@ -32,7 +32,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 }
 
 const Card: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-4">
+  <div className="ut-card p-6 space-y-4">
     <h2 className="text-sm font-bold text-slate-800">{title}</h2>
     {children}
   </div>
@@ -70,7 +70,7 @@ export const PayrollSettings: React.FC = () => {
           <Toggle on={!!s.pfEnabled} onChange={(v) => set('pfEnabled', v)} />
         </label>
         {s.pfEnabled && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5">
             <Field label="Employee %"><Input type="number" step="0.001" value={s.pfEmployeePercent ?? 12} onChange={(e) => set('pfEmployeePercent', Number(e.target.value))} /></Field>
             <Field label="Employer %"><Input type="number" step="0.001" value={s.pfEmployerPercent ?? 12} onChange={(e) => set('pfEmployerPercent', Number(e.target.value))} /></Field>
             <Field label="Wage ceiling (₹)"><Input type="number" value={s.pfWageCeiling ?? 15000} onChange={(e) => set('pfWageCeiling', Number(e.target.value))} /></Field>
@@ -87,7 +87,7 @@ export const PayrollSettings: React.FC = () => {
           <Toggle on={!!s.esiEnabled} onChange={(v) => set('esiEnabled', v)} />
         </label>
         {s.esiEnabled && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5">
             <Field label="Employee %"><Input type="number" step="0.001" value={s.esiEmployeePercent ?? 0.75} onChange={(e) => set('esiEmployeePercent', Number(e.target.value))} /></Field>
             <Field label="Employer %"><Input type="number" step="0.001" value={s.esiEmployerPercent ?? 3.25} onChange={(e) => set('esiEmployerPercent', Number(e.target.value))} /></Field>
             <Field label="Wage ceiling (₹)"><Input type="number" value={s.esiWageCeiling ?? 21000} onChange={(e) => set('esiWageCeiling', Number(e.target.value))} /></Field>
@@ -123,7 +123,7 @@ export const PayrollSettings: React.FC = () => {
           <Toggle on={!!s.lwfEnabled} onChange={(v) => set('lwfEnabled', v)} />
         </label>
         {s.lwfEnabled && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5">
             <Field label="Employee amount (₹)"><Input type="number" value={s.lwfEmployeeAmount ?? 0} onChange={(e) => set('lwfEmployeeAmount', Number(e.target.value))} /></Field>
             <Field label="Employer amount (₹)"><Input type="number" value={s.lwfEmployerAmount ?? 0} onChange={(e) => set('lwfEmployerAmount', Number(e.target.value))} /></Field>
           </div>
@@ -131,7 +131,7 @@ export const PayrollSettings: React.FC = () => {
       </Card>
 
       <Card title="Payroll Cycle & LOP">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-x-4 gap-y-5">
           <Field label="Cycle start day"><Input type="number" min={1} max={31} value={s.payrollCycleStartDay ?? 1} onChange={(e) => set('payrollCycleStartDay', Number(e.target.value))} /></Field>
           <Field label="Cycle end day"><Input type="number" min={1} max={31} value={s.payrollCycleEndDay ?? 31} onChange={(e) => set('payrollCycleEndDay', Number(e.target.value))} /></Field>
           <Field label="Processing day"><Input type="number" min={1} max={31} value={s.salaryProcessingDay ?? 28} onChange={(e) => set('salaryProcessingDay', Number(e.target.value))} /></Field>

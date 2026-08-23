@@ -72,7 +72,7 @@ export const EssDashboard: React.FC = () => {
       </div>
 
       {/* Leave balances — same loading/error treatment as the stats block. */}
-      <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+      <div className="ut-card p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-text-primary">Leave Balances</h2>
           <button onClick={() => navigate('/hrms/leave')} className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]">
@@ -105,7 +105,7 @@ export const EssDashboard: React.FC = () => {
       </div>
 
       {/* Onboarding tasks shortcut */}
-      <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+      <div className="ut-card ut-card-sm p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
@@ -129,7 +129,7 @@ export const EssDashboard: React.FC = () => {
           and "Shift Change" so desk employees can raise these from a laptop
           without a phone. Kept as two adjacent cards to preserve the existing
           spacing rhythm; teammate can restyle into a single row/grid later. */}
-      <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+      <div className="ut-card ut-card-sm p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
@@ -149,7 +149,7 @@ export const EssDashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+      <div className="ut-card ut-card-sm p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
@@ -171,7 +171,7 @@ export const EssDashboard: React.FC = () => {
 
       {/* Recent leave requests */}
       {recentLeaves.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border border-border-default bg-white shadow-sm">
+        <div className="ut-card overflow-hidden">
           <div className="flex items-center justify-between border-b border-border-default px-4 py-3">
             <h2 className="text-sm font-semibold text-text-primary">Recent Leave Requests</h2>
             {pendingLeaves > 0 && <HrStatusPill tone="warn">{pendingLeaves} pending</HrStatusPill>}

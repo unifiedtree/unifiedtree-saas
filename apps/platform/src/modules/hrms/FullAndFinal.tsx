@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
@@ -35,22 +35,10 @@ export const FullAndFinal: React.FC = () => {
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Full & Final" title="Full & Final Settlement" subtitle="Process, approve, and pay out exit settlements" />
 
-      <div className="mb-5 flex gap-1 border-b border-border-default">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'settlements' && canRead && <SettlementsTab canApprove={canApprove} />}
-      {tab === 'create' && canProcess && <CreateTab onCreated={() => setTab(canRead ? 'settlements' : 'create')} />}
+      {tab === 'settlements' && canRead && <HrTabPanel tabKey="settlements"><SettlementsTab canApprove={canApprove} /></HrTabPanel>}
+      {tab === 'create' && canProcess && <HrTabPanel tabKey="create"><CreateTab onCreated={() => setTab(canRead ? 'settlements' : 'create')} /></HrTabPanel>}
     </div>
   )
 }
@@ -203,15 +191,14 @@ function CreateTab({ onCreated }: { onCreated: () => void }) {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
-
   return (
     <div className="max-w-2xl space-y-5">
-      <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-        <div className="grid grid-cols-2 gap-3">
+      <div className="ut-card p-5">
+        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Settlement Details</h3>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Employee *</label>
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={inputCls}>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee *</label>
+            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
               <option value="">Select employee…</option>
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
@@ -221,15 +208,15 @@ function CreateTab({ onCreated }: { onCreated: () => void }) {
             </select>
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Last Working Day *</label>
-            <input type="date" value={lastWorkingDay} onChange={(e) => setLastWorkingDay(e.target.value)} className={inputCls} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Last Working Day *</label>
+            <input type="date" value={lastWorkingDay} onChange={(e) => setLastWorkingDay(e.target.value)} className="ut-input" />
           </div>
         </div>
       </div>
 
       <div className="space-y-3">
         {components.map((c, i) => (
-          <div key={i} className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+          <div key={i} className="ut-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Component {i + 1}</span>
               {components.length > 1 && (
@@ -238,21 +225,21 @@ function CreateTab({ onCreated }: { onCreated: () => void }) {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
               <div className="col-span-2 sm:col-span-1">
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Label</label>
-                <input value={c.label} onChange={(e) => setComponent(i, { label: e.target.value })} placeholder="e.g. Leave encashment" className={inputCls} />
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Label</label>
+                <input value={c.label} onChange={(e) => setComponent(i, { label: e.target.value })} placeholder="e.g. Leave encashment" className="ut-input" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Type</label>
-                <select value={c.type} onChange={(e) => setComponent(i, { type: e.target.value as FnfComponentType })} className={inputCls}>
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Type</label>
+                <select value={c.type} onChange={(e) => setComponent(i, { type: e.target.value as FnfComponentType })} className="ut-select">
                   <option value="EARNING">Earning</option>
                   <option value="DEDUCTION">Deduction</option>
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Amount (₹)</label>
-                <input type="number" min={0} step="0.01" value={c.amount} onChange={(e) => setComponent(i, { amount: e.target.value })} className={inputCls} />
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Amount (₹)</label>
+                <input type="number" min={0} step="0.01" value={c.amount} onChange={(e) => setComponent(i, { amount: e.target.value })} className="ut-input" />
               </div>
             </div>
           </div>
@@ -267,9 +254,9 @@ function CreateTab({ onCreated }: { onCreated: () => void }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-        <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Notes</label>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional context for the approver" className={inputCls} />
+      <div className="ut-card p-5">
+        <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Notes</label>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional context for the approver" className="w-full rounded-xl border border-border-default bg-white px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20" />
       </div>
 
       <div className="rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-5 py-4">
@@ -287,7 +274,7 @@ function CreateTab({ onCreated }: { onCreated: () => void }) {
             <p className="text-lg font-bold text-text-primary">{inr(totals.net)}</p>
           </div>
         </div>
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex justify-end border-t border-[#A7F3D0] pt-4">
           <HrButton onClick={handleSubmit} disabled={process.isPending}>
             {process.isPending ? 'Processing…' : 'Process Settlement'}
           </HrButton>

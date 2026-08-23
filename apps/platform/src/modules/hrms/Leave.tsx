@@ -17,7 +17,7 @@ import { useCompanies } from './api/useOrg'
 import { useHrConfig } from './api/useSettings'
 import { LeaveTypes } from './leave/LeaveTypes'
 import { HolidayCalendar } from './leave/HolidayCalendar'
-import { HrPageHeader, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { HrPageHeader, HrStatusPill, HrTabs, HrTabPanel, type PillTone } from '@/shared/components/hr'
 
 const STATUS_STYLE: Record<LeaveApprovalStatus, { label: string; color: string; bg: string; icon: React.ElementType; tone: PillTone }> = {
   PENDING:    { label: 'Pending',     color: 'text-[#B45309]', bg: 'bg-[#FEF3C7]', icon: Clock,       tone: 'warn' },
@@ -63,7 +63,7 @@ function MyLeavesTab() {
         leaves.map((leave) => {
           const sc = STATUS_STYLE[leave.status] ?? STATUS_STYLE['PENDING']
           return (
-            <div key={leave.id} className="bg-white border border-border-default rounded-2xl px-4 py-3 flex items-center gap-4">
+            <div key={leave.id} className="ut-card ut-card-sm flex items-center gap-4 px-4 py-3">
               <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', sc.bg)}>
                 <sc.icon size={16} className={sc.color} />
               </div>
@@ -253,16 +253,18 @@ function ApplyTab() {
   }
 
   return (
-    <div className="max-w-lg space-y-4">
+    <div className="ut-card max-w-lg p-5">
+      <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Apply for Leave</h3>
+      <div className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-text-secondary mb-1.5">Leave Type *</label>
+        <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Leave Type *</label>
         {typesLoading ? (
           <Skeleton className="h-10 w-full rounded-xl" />
         ) : (
           <select
             value={form.leaveTypeId}
             onChange={(e) => setForm((p) => ({ ...p, leaveTypeId: e.target.value }))}
-            className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
+            className="ut-select"
           >
             <option value="">Select leave type</option>
             {leaveTypes.filter((t) => t.isActive).map((t) => (
@@ -272,36 +274,36 @@ function ApplyTab() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
         <div>
-          <label className="block text-xs font-medium text-text-secondary mb-1.5">Start Date *</label>
+          <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Start Date *</label>
           <input
             type="date"
             min={todayIso}
             value={form.startDate}
             onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-            className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary"
+            className="ut-input"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-text-secondary mb-1.5">End Date *</label>
+          <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">End Date *</label>
           <input
             type="date"
             min={form.startDate || todayIso}
             value={effectiveEndDate}
             disabled={isHalfDay}
             onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
-            className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary disabled:bg-surface-2 disabled:cursor-not-allowed"
+            className="ut-input"
           />
         </div>
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-text-secondary mb-1.5">Duration</label>
+        <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Duration</label>
         <select
           value={form.duration}
           onChange={(e) => setForm((p) => ({ ...p, duration: e.target.value as typeof form.duration }))}
-          className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary"
+          className="ut-select"
         >
           <option value="FULL_DAY">Full Day</option>
           <option value="HALF_DAY_MORNING">Half Day (Morning)</option>
@@ -311,7 +313,7 @@ function ApplyTab() {
 
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <label className="block text-xs font-medium text-text-secondary">Reason *</label>
+          <label className="block text-[13px] font-semibold text-text-secondary">Reason *</label>
           <span className={clsx('text-[10px]', form.reason.length > REASON_MAX ? 'text-danger' : 'text-text-tertiary')}>
             {form.reason.length}/{REASON_MAX}
           </span>
@@ -339,15 +341,18 @@ function ApplyTab() {
           Requested {effectiveDays} day{effectiveDays !== 1 ? 's' : ''} exceeds available balance of {availableBalance.toFixed(1)}
         </div>
       )}
+      </div>
 
-      <button
-        onClick={handleSubmit}
-        disabled={submitDisabled}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-xl transition-colors shadow-sm"
-      >
-        <Plus size={16} />
-        {applyLeave.isPending ? 'Submitting...' : 'Apply for Leave'}
-      </button>
+      <div className="mt-5 flex justify-end border-t border-border-default pt-4">
+        <button
+          onClick={handleSubmit}
+          disabled={submitDisabled}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#059669] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Plus size={16} />
+          {applyLeave.isPending ? 'Submitting...' : 'Apply for Leave'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -375,7 +380,7 @@ function BalancesTab() {
           {balances.map((balance) => {
             const pct = balance.totalEntitlement > 0 ? (balance.used / balance.totalEntitlement) * 100 : 0
             return (
-              <div key={balance.id} className="bg-white border border-border-default rounded-2xl p-4">
+              <div key={balance.id} className="ut-card ut-card-sm p-4">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-text-primary font-semibold text-sm">{balance.leaveTypeName}</p>
                   <span className="text-lg font-bold text-text-primary">{balance.available.toFixed(1)}</span>
@@ -443,7 +448,7 @@ function ApprovalsTab() {
         </div>
       ) : (
         approvals.map((leave) => (
-          <div key={leave.id} className="bg-white border border-border-default rounded-2xl px-4 py-3">
+          <div key={leave.id} className="ut-card ut-card-sm px-4 py-3">
             {/* Header row: employee identity on the left, status + inline
                 actions on the right so buttons stay compact and don't grow
                 with the card width (previous flex-1 layout stretched to
@@ -493,7 +498,7 @@ function ApprovalsTab() {
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   placeholder={commenting.approved ? 'Approval note (optional)' : 'Rejection reason (optional)'}
-                  className="w-full rounded-xl border border-border-default/60 bg-white px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:border-primary focus:outline-none"
+                  className="ut-input ut-input-sm"
                 />
                 <div className="flex justify-end gap-2">
                   <button
@@ -631,20 +636,18 @@ export const Leave: React.FC = () => {
         subtitle="Apply for leave, track balances, and manage approvals"
       />
 
-      <div className="flex gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] bg-white border border-border-default p-1 rounded-xl w-fit max-w-full">
-        {visibleTabs.map((t) => (
-          <button key={t.key} onClick={() => switchTab(t.key as TabKey)} className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t.key ? 'bg-[#059669] text-white shadow' : 'text-text-secondary hover:text-text-primary')}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs
+        tabs={visibleTabs.map((t) => ({ key: t.key, label: t.label }))}
+        active={tab}
+        onChange={(k) => switchTab(k as TabKey)}
+      />
 
-      {tab === 'my' && <MyLeavesTab />}
-      {tab === 'apply' && <ApplyTab />}
-      {tab === 'balances' && <BalancesTab />}
-      {tab === 'approvals' && <ApprovalsTab />}
-      {tab === 'types' && <LeaveTypes />}
-      {tab === 'holidays' && <HolidayCalendar canEdit={canEditHolidays} />}
+      {tab === 'my' && <HrTabPanel tabKey="my"><MyLeavesTab /></HrTabPanel>}
+      {tab === 'apply' && <HrTabPanel tabKey="apply"><ApplyTab /></HrTabPanel>}
+      {tab === 'balances' && <HrTabPanel tabKey="balances"><BalancesTab /></HrTabPanel>}
+      {tab === 'approvals' && <HrTabPanel tabKey="approvals"><ApprovalsTab /></HrTabPanel>}
+      {tab === 'types' && <HrTabPanel tabKey="types"><LeaveTypes /></HrTabPanel>}
+      {tab === 'holidays' && <HrTabPanel tabKey="holidays"><HolidayCalendar canEdit={canEditHolidays} /></HrTabPanel>}
     </div>
   )
 }

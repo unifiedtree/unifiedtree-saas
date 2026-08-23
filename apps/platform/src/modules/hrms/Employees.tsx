@@ -175,7 +175,7 @@ export const Employees: React.FC = () => {
                   setBranchId('')
                   resetPage()
                 }}
-                className="h-9 cursor-pointer rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] shadow-xs outline-none transition-[border-color,box-shadow] hover:border-[var(--border-strong)] focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12"
+                className="ut-select ut-select-sm w-auto"
               >
                 {companies.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
@@ -185,7 +185,7 @@ export const Employees: React.FC = () => {
             <select
               value={departmentId}
               onChange={(e) => { setDepartmentId(e.target.value); resetPage() }}
-              className="h-9 cursor-pointer rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] shadow-xs outline-none transition-[border-color,box-shadow] hover:border-[var(--border-strong)] focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12"
+              className="ut-select ut-select-sm w-auto"
             >
               <option value="">All Departments</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -193,7 +193,7 @@ export const Employees: React.FC = () => {
             <select
               value={branchId}
               onChange={(e) => { setBranchId(e.target.value); resetPage() }}
-              className="h-9 cursor-pointer rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] shadow-xs outline-none transition-[border-color,box-shadow] hover:border-[var(--border-strong)] focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12"
+              className="ut-select ut-select-sm w-auto"
             >
               <option value="">All Branches</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -201,7 +201,7 @@ export const Employees: React.FC = () => {
             <select
               value={status}
               onChange={(e) => { setStatus(e.target.value); resetPage() }}
-              className="h-9 cursor-pointer rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] shadow-xs outline-none transition-[border-color,box-shadow] hover:border-[var(--border-strong)] focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12"
+              className="ut-select ut-select-sm w-auto"
             >
               {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>

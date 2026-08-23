@@ -96,14 +96,14 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
   return (
     <>
       <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md bg-white border-l border-border flex flex-col shadow-2xl">
+      <div className="ut-card ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h3 className="text-text-primary font-semibold">{isEdit ? 'Edit Leave Type' : 'Add Leave Type'}</h3>
           <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg hover:bg-white/5">×</button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Name *</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Name *</label>
             <input
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
@@ -111,9 +111,9 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
               className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm text-text-primary placeholder-slate-500 focus:outline-none focus:border-primary transition-colors"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Code *</label>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Code *</label>
               <input
                 value={form.code}
                 onChange={(e) => set('code', e.target.value.toUpperCase())}
@@ -122,7 +122,7 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Category</label>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Category</label>
               <select
                 value={form.category}
                 onChange={(e) => set('category', e.target.value)}
@@ -140,9 +140,9 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Days / Year</label>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Days / Year</label>
               <input
                 type="number"
                 min={0}
@@ -152,7 +152,7 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Max Consecutive</label>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Max Consecutive</label>
               <input
                 type="number"
                 min={0}
@@ -184,7 +184,7 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
           </div>
           {form.isCarryForwardAllowed && (
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Max Carry Forward Days</label>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Max Carry Forward Days</label>
               <input
                 type="number"
                 min={0}
@@ -195,7 +195,7 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
             </div>
           )}
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Description</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Description</label>
             <textarea
               value={form.description}
               onChange={(e) => set('description', e.target.value)}

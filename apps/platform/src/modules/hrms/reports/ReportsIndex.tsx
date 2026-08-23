@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { Users, TrendingDown, Clock, Calendar, AlarmClock, PieChart } from 'lucide-react'
-import { Can, P } from '@unifiedtree/sdk'
+import { Can, P, usePermission } from '@unifiedtree/sdk'
 import { HrPageHeader } from '@/shared/components/hr'
 
 interface ReportCard {
@@ -65,16 +65,33 @@ const REPORT_CARDS: ReportCard[] = [
 ]
 
 export function ReportsIndex() {
+  // One usePermission call per card, in REPORT_CARDS order (module constant, so
+  // hook order is stable). Lets the grid's column count follow how many cards
+  // actually render — a lone permitted card otherwise strands in a 3-col grid.
+  const visibleCount = [
+    usePermission(REPORT_CARDS[0].permCode),
+    usePermission(REPORT_CARDS[1].permCode),
+    usePermission(REPORT_CARDS[2].permCode),
+    usePermission(REPORT_CARDS[3].permCode),
+    usePermission(REPORT_CARDS[4].permCode),
+    usePermission(REPORT_CARDS[5].permCode),
+  ].filter(Boolean).length
+
+  const gridClass =
+    visibleCount >= 3 ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'
+    : visibleCount === 2 ? 'grid grid-cols-1 gap-4 sm:grid-cols-2'
+    : 'grid grid-cols-1 gap-4'
+
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
       <HrPageHeader crumb="Reports & Analytics" title="Reports" subtitle="Analytical views of your workforce data" />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={gridClass}>
         {REPORT_CARDS.map((card) => (
           <Can key={card.to} code={card.permCode}>
             <Link
               to={card.to}
-              className="group flex flex-col gap-3 rounded-2xl border border-border-default bg-white p-5 shadow-sm transition-all hover:border-[#6EE7B7] hover:bg-[#ECFDF5]/40 hover:shadow-md"
+              className="ut-card ut-card-hover group flex flex-col gap-3 p-5"
             >
               <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-bg-base ${card.color}`}>
                 {card.icon}

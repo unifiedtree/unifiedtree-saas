@@ -69,7 +69,7 @@ function GenerateLetterModal({
     <>
       <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-2xl border border-border-default bg-white p-6 shadow-2xl">
+        <div className="ut-card ut-card-lg w-full max-w-md p-6">
           <h3 className="mb-4 font-semibold text-text-primary">Generate Letter</h3>
           {activeTemplates.length === 0 ? (
             <div className="space-y-4">
@@ -92,7 +92,7 @@ function GenerateLetterModal({
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-medium uppercase tracking-wider text-text-tertiary">Template *</label>
+                <label className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary">Template *</label>
                 <select required value={templateId} onChange={(e) => setTemplateId(e.target.value)} className={selectCls}>
                   <option value="">Select a template</option>
                   {activeTemplates.map((t) => (
@@ -101,7 +101,7 @@ function GenerateLetterModal({
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium uppercase tracking-wider text-text-tertiary">Employee *</label>
+                <label className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary">Employee *</label>
                 <select required value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={selectCls}>
                   <option value="">Select an employee</option>
                   {employees.map((emp) => (

@@ -125,13 +125,13 @@ export const ManualEntry: React.FC = () => {
 
       <form
         onSubmit={onSubmit}
-        className="space-y-5 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 shadow-sm"
+        className="ut-card ut-card-lg space-y-5 p-6"
       >
         {/* Employee picker: type-to-filter combo. When arriving with a
             ?employeeId= deep-link we show the current selection above the
             list so the admin sees who they're editing. */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+          <label className="mb-1.5 block text-[13px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
             Employee *
           </label>
           {selected && (
@@ -166,9 +166,9 @@ export const ManualEntry: React.FC = () => {
           </select>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-3">
           <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+            <label className="mb-1.5 block text-[13px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
               Date *
             </label>
             <input
@@ -180,7 +180,7 @@ export const ManualEntry: React.FC = () => {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+            <label className="mb-1.5 block text-[13px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
               Check-in
             </label>
             <input
@@ -191,7 +191,7 @@ export const ManualEntry: React.FC = () => {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+            <label className="mb-1.5 block text-[13px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
               Check-out
             </label>
             <input
@@ -204,7 +204,7 @@ export const ManualEntry: React.FC = () => {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+          <label className="mb-1.5 block text-[13px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
             Reason *
           </label>
           <textarea

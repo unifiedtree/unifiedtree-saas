@@ -41,27 +41,39 @@ export const UpcomingProbations: React.FC = () => {
   const navigate = useNavigate()
   const { data = [], isLoading } = useUpcomingProbations(30)
 
+  const empty = !isLoading && data.length === 0
+
   return (
-    <div className="bg-white border border-primary/15 rounded-2xl shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-5 py-4 border-b border-border-light">
+    <div className="ut-card overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-border-light px-5 py-4">
         <CalendarClock size={16} className="text-primary" />
         <h2 className="text-sm font-bold text-text-primary">Upcoming Probation Confirmations</h2>
         {data.length > 0 && (
-          <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-semibold">
+          <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
             {data.length}
           </span>
         )}
+        {empty && (
+          /* The quiet state lives in the header row instead of a ~300px
+             centred empty-block below it — a reminder card with nothing to
+             remind about should cost one line, not a third of the screen. */
+          <span className="ml-auto text-xs text-text-tertiary">
+            None ending in the next 30 days
+          </span>
+        )}
       </div>
-      <DataTable
-        columns={columns}
-        data={data}
-        getRowKey={(r) => r.employeeId}
-        isLoading={isLoading}
-        onRowClick={(r) => navigate(`/hrms/employees/${r.employeeId}`)}
-        emptyVariant="first-run"
-        emptyTitle="No upcoming confirmations"
-        emptyDescription="No employees have probation ending in the next 30 days."
-      />
+      {!empty && (
+        <DataTable
+          columns={columns}
+          data={data}
+          getRowKey={(r) => r.employeeId}
+          isLoading={isLoading}
+          onRowClick={(r) => navigate(`/hrms/employees/${r.employeeId}`)}
+          emptyVariant="first-run"
+          emptyTitle="No upcoming confirmations"
+          emptyDescription="No employees have probation ending in the next 30 days."
+        />
+      )}
     </div>
   )
 }

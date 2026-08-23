@@ -296,7 +296,7 @@ export const EmployeeImport: React.FC = () => {
 
       {/* ── Step 1: Download template ────────────────────────────────────── */}
       {step === 1 && (
-        <div className="bg-white border border-border-default rounded-2xl p-6 space-y-5">
+        <div className="ut-card p-6 space-y-5">
           <div>
             <h3 className="text-text-primary font-semibold text-base mb-1">Download the template</h3>
             <p className="text-text-secondary text-sm leading-relaxed">
@@ -351,7 +351,7 @@ export const EmployeeImport: React.FC = () => {
         <div className="space-y-4">
           {/* Company selector */}
           {companies.length > 1 && (
-            <div className="bg-white border border-border-default rounded-2xl p-4">
+            <div className="ut-card p-4">
               <label className="block text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
                 Import into company
               </label>
@@ -372,7 +372,7 @@ export const EmployeeImport: React.FC = () => {
           )}
 
           {/* Drop zone */}
-          <div className="bg-white border border-border-default rounded-2xl p-6 space-y-4">
+          <div className="ut-card p-6 space-y-4">
             <DropZone
               file={file}
               disabled={validateMutation.isPending}
@@ -521,7 +521,7 @@ export const EmployeeImport: React.FC = () => {
 
       {/* ── Step 3: Confirm & commit ─────────────────────────────────────── */}
       {step === 3 && !commitMutation.isPending && !commitMutation.isError && !commitMutation.isSuccess && (
-        <div className="bg-white border border-border-default rounded-2xl p-6 space-y-5">
+        <div className="ut-card p-6 space-y-5">
           <div>
             <h3 className="text-text-primary font-semibold text-base mb-1">Confirm import</h3>
             <p className="text-text-secondary text-sm leading-relaxed">
@@ -570,7 +570,7 @@ export const EmployeeImport: React.FC = () => {
 
       {/* Committing in progress */}
       {step === 3 && commitMutation.isPending && (
-        <div className="bg-white border border-border-default rounded-2xl p-8 flex flex-col items-center gap-4">
+        <div className="ut-card p-8 flex flex-col items-center gap-4">
           <Loader2 size={32} className="animate-spin text-[#059669]" />
           <p className="text-text-primary font-medium">Creating employees…</p>
           {commitMutation.uploadProgress > 0 && commitMutation.uploadProgress < 100 && (
@@ -590,7 +590,7 @@ export const EmployeeImport: React.FC = () => {
 
       {/* ── Step 'done': Commit result ───────────────────────────────────── */}
       {step === 'done' && commitResult?.committed && (
-        <div className="bg-white border border-[#BBF7D0] rounded-2xl p-6 space-y-4">
+        <div className="ut-card p-6 space-y-4">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 bg-[#DCFCE7] rounded-xl flex items-center justify-center flex-shrink-0">
               <CheckCircle size={22} className="text-[#15803D]" />
@@ -620,7 +620,7 @@ export const EmployeeImport: React.FC = () => {
       )}
 
       {step === 'done' && commitResult && !commitResult.committed && (
-        <div className="bg-white border border-[#FDE68A] rounded-2xl p-6 space-y-4">
+        <div className="ut-card p-6 space-y-4">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 bg-[#FEF3C7] rounded-xl flex items-center justify-center flex-shrink-0">
               <AlertCircle size={22} className="text-[#B45309]" />

@@ -74,7 +74,7 @@ export function LateMarksReport() {
         </>
       }
     >
-      <div className="rounded-2xl border border-border-default bg-white p-5">
+      <div className="ut-card ut-card-lg p-5">
         <p className="text-xs text-text-tertiary mb-3">Top 15 offenders by total minutes late</p>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 16, left: 90, bottom: 4 }}>

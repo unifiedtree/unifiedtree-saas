@@ -114,7 +114,7 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
   return (
     <>
       <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-[110] w-full max-w-xl bg-white border-l border-border flex flex-col shadow-2xl">
+      <div className="ut-card ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-xl flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h3 className="text-text-primary font-semibold">New Distribution</h3>
           <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg"><X size={16} /></button>
@@ -133,7 +133,7 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
           {/* Step 1 — Template */}
           {step === 1 && (
             <>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Letter template</label>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Letter template</label>
               <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}
                 className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30">
                 <option value="">{templates.length === 0 ? 'No active templates — create one first' : 'Select a template…'}</option>
@@ -188,17 +188,17 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
           {step === 3 && (
             <>
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">Title <span className="text-danger">*</span></label>
+                <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Title <span className="text-danger">*</span></label>
                 <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. November 2026 Salary Slips"
                   className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">Email subject (optional)</label>
+                <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Email subject (optional)</label>
                 <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Defaults to a standard subject"
                   className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">Message to recipients</label>
+                <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Message to recipients</label>
                 <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={5}
                   placeholder="e.g. Please find attached your salary slip for November 2026."
                   className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/30 resize-none" />

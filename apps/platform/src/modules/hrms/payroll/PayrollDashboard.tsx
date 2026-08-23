@@ -141,7 +141,7 @@ export const PayrollDashboard: React.FC = () => {
       {/* Chart + status breakdown */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* 6-month cost trend — backed by /v1/payroll/dashboard/trend */}
-        <div className="lg:col-span-2 rounded-xl border border-border-default bg-white p-5 shadow-sm">
+        <div className="ut-card lg:col-span-2 p-5">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-text-primary">Payroll Cost — Last 6 Months</h2>
@@ -185,7 +185,7 @@ export const PayrollDashboard: React.FC = () => {
         </div>
 
         {/* Status breakdown */}
-        <div className="rounded-xl border border-border-default bg-white p-5 shadow-sm">
+        <div className="ut-card p-5">
           <h2 className="mb-4 text-sm font-semibold text-text-primary">Run Status Breakdown</h2>
           {isLoading ? (
             <div className="space-y-3">

@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import {
@@ -41,22 +41,10 @@ export const Hiring: React.FC = () => {
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Recruitment" title="Hiring Center" subtitle="Open requisitions and move candidates through the pipeline" />
 
-      <div className="mb-5 flex gap-1 border-b border-border-default">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'requisitions' && <RequisitionsTab canWrite={canWrite} />}
-      {tab === 'pipeline' && canRead && <PipelineTab canCandidateWrite={canCandidateWrite} />}
+      {tab === 'requisitions' && <HrTabPanel tabKey="requisitions"><RequisitionsTab canWrite={canWrite} /></HrTabPanel>}
+      {tab === 'pipeline' && canRead && <HrTabPanel tabKey="pipeline"><PipelineTab canCandidateWrite={canCandidateWrite} /></HrTabPanel>}
     </div>
   )
 }
@@ -111,8 +99,6 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
     }
   }
 
-  const inputCls = 'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
-
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -123,22 +109,22 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
       </div>
 
       {canWrite && (
-        <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+        <div className="ut-card flex flex-wrap items-end gap-2 p-4">
           <div className="flex-1 min-w-[180px]">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Job title</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Senior Backend Engineer" className={`${inputCls} w-full`} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Job title</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Senior Backend Engineer" className="ut-input" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Openings</label>
-            <input type="number" min={1} value={openings} onChange={(e) => setOpenings(e.target.value)} className={`${inputCls} w-24`} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Openings</label>
+            <input type="number" min={1} value={openings} onChange={(e) => setOpenings(e.target.value)} className="ut-input w-24" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Location</label>
-            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Bengaluru" className={`${inputCls} w-40`} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Location</label>
+            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Bengaluru" className="ut-input w-40" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Type</label>
-            <select value={employmentType} onChange={(e) => setEmploymentType(e.target.value as EmploymentType)} className={inputCls}>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Type</label>
+            <select value={employmentType} onChange={(e) => setEmploymentType(e.target.value as EmploymentType)} className="ut-select w-auto">
               {EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{fmtEnum(t)}</option>)}
             </select>
           </div>
@@ -244,13 +230,11 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
     }
   }
 
-  const inputCls = 'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-xs font-semibold text-text-secondary">Requisition</label>
-        <select value={requisitionId} onChange={(e) => setRequisitionId(e.target.value)} className={`${inputCls} min-w-[240px]`}>
+        <label className="text-[13px] font-semibold text-text-secondary">Requisition</label>
+        <select value={requisitionId} onChange={(e) => setRequisitionId(e.target.value)} className="ut-select ut-select-sm w-auto min-w-[240px]">
           {requisitions.length === 0 && <option value="">No requisitions</option>}
           {requisitions.map((r) => (
             <option key={r.id} value={r.id}>{r.title} ({fmtEnum(r.status)})</option>
@@ -262,22 +246,22 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
       </div>
 
       {canAdd && (
-        <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+        <div className="ut-card flex flex-wrap items-end gap-2 p-4">
           <div className="flex-1 min-w-[160px]">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Full name</label>
-            <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Priya Sharma" className={`${inputCls} w-full`} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Full name</label>
+            <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Priya Sharma" className="ut-input" />
           </div>
           <div className="flex-1 min-w-[160px]">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Optional" className={`${inputCls} w-full`} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Optional" className="ut-input" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Source</label>
-            <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. LinkedIn" className={`${inputCls} w-36`} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Source</label>
+            <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. LinkedIn" className="ut-input w-36" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Expected CTC (₹)</label>
-            <input type="number" min={0} value={expectedCtc} onChange={(e) => setExpectedCtc(e.target.value)} placeholder="Optional" className={`${inputCls} w-32`} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Expected CTC (₹)</label>
+            <input type="number" min={0} value={expectedCtc} onChange={(e) => setExpectedCtc(e.target.value)} placeholder="Optional" className="ut-input w-32" />
           </div>
           <HrButton onClick={onAdd} disabled={addCandidate.isPending}><Plus size={15} /> Add Candidate</HrButton>
         </div>
@@ -314,7 +298,7 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
                         value={c.stage}
                         onChange={(e) => onStage(c.id, e.target.value as CandidateStage)}
                         disabled={updateStage.isPending}
-                        className={inputCls}
+                        className="ut-select ut-select-sm w-auto"
                         aria-label="Advance candidate stage"
                       >
                         {CANDIDATE_STAGES.map((s) => <option key={s} value={s}>{fmtEnum(s)}</option>)}

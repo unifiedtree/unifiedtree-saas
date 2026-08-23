@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
@@ -41,24 +41,12 @@ export const Performance: React.FC = () => {
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Performance Management" title="Performance Center" subtitle="Track goals, run review cycles, and manage performance reviews" />
 
-      <div className="mb-5 flex gap-1 border-b border-border-default">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'goals' && canSelf && <MyGoalsTab />}
-      {tab === 'reviews' && canSelf && <MyReviewsTab />}
-      {tab === 'cycles' && canWrite && <CyclesTab />}
-      {tab === 'admin' && canRead && <AdminReviewsTab canWrite={canWrite} />}
+      {tab === 'goals' && canSelf && <HrTabPanel tabKey="goals"><MyGoalsTab /></HrTabPanel>}
+      {tab === 'reviews' && canSelf && <HrTabPanel tabKey="reviews"><MyReviewsTab /></HrTabPanel>}
+      {tab === 'cycles' && canWrite && <HrTabPanel tabKey="cycles"><CyclesTab /></HrTabPanel>}
+      {tab === 'admin' && canRead && <HrTabPanel tabKey="admin"><AdminReviewsTab canWrite={canWrite} /></HrTabPanel>}
     </div>
   )
 }
@@ -116,27 +104,27 @@ function MyGoalsTab() {
         <HrStatCard icon={<TrendingUp size={18} />} color="orange" value={`${stats.avg}%`} label="Avg Progress" loading={isLoading} />
       </div>
 
-      <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+      <div className="ut-card flex flex-wrap items-end gap-2 p-4">
         <div className="flex-1 min-w-[180px]">
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Goal title</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ship the billing revamp" className={inputCls} />
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Goal title</label>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ship the billing revamp" className="ut-input" />
         </div>
         <div className="flex-1 min-w-[180px]">
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Description</label>
-          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" className={inputCls} />
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Description</label>
+          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" className="ut-input" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Weight</label>
-          <input type="number" min={0} max={100} value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0" className={`${inputCls} w-24`} />
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Weight</label>
+          <input type="number" min={0} max={100} value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0" className="ut-input w-24" />
         </div>
         <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Add Goal</HrButton>
       </div>
 
       <div className="space-y-3">
         {isLoading ? (
-          [...Array(3)].map((_, i) => <div key={i} className="h-20 animate-pulse rounded-2xl bg-bg-base" />)
+          [...Array(3)].map((_, i) => <div key={i} className="ut-card ut-card-sm h-20 animate-pulse" />)
         ) : goals.length === 0 ? (
-          <div className="rounded-2xl border border-border-default bg-white py-14 text-center shadow-sm">
+          <div className="ut-card py-14 text-center">
             <p className="text-sm font-semibold text-text-secondary">No goals yet</p>
             <p className="mt-1 text-xs text-text-tertiary">Add your first goal above to start tracking progress.</p>
           </div>
@@ -144,7 +132,7 @@ function MyGoalsTab() {
           const value = drafts[g.id] ?? g.progress
           const dirty = drafts[g.id] !== undefined && drafts[g.id] !== g.progress
           return (
-            <div key={g.id} className="rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+            <div key={g.id} className="ut-card ut-card-sm p-4">
               <div className="mb-2 flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-text-primary">{g.title}</p>
@@ -182,9 +170,9 @@ function MyReviewsTab() {
   return (
     <div className="space-y-3">
       {isLoading ? (
-        [...Array(3)].map((_, i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-bg-base" />)
+        [...Array(3)].map((_, i) => <div key={i} className="ut-card h-24 animate-pulse" />)
       ) : reviews.length === 0 ? (
-        <div className="rounded-2xl border border-border-default bg-white py-14 text-center shadow-sm">
+        <div className="ut-card py-14 text-center">
           <p className="text-sm font-semibold text-text-secondary">No reviews assigned</p>
           <p className="mt-1 text-xs text-text-tertiary">Your performance reviews will appear here once a cycle is opened.</p>
         </div>
@@ -217,7 +205,7 @@ function MyReviewCard({ review }: { review: PerformanceReview }) {
   }
 
   return (
-    <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
+    <div className="ut-card p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Review</p>
@@ -231,18 +219,18 @@ function MyReviewCard({ review }: { review: PerformanceReview }) {
 
       {review.status === 'PENDING' ? (
         <div className="space-y-3 border-t border-border-default pt-3">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Overall rating (0–5)</label>
-              <input type="number" min={0} max={5} step="0.1" value={rating} onChange={(e) => setRating(e.target.value)} className={inputCls} />
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Overall rating (0–5)</label>
+              <input type="number" min={0} max={5} step="0.1" value={rating} onChange={(e) => setRating(e.target.value)} className="ut-input" />
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Strengths</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Strengths</label>
             <textarea value={strengths} onChange={(e) => setStrengths(e.target.value)} rows={2} placeholder="What went well" className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Areas to improve</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Areas to improve</label>
             <textarea value={improvements} onChange={(e) => setImprovements(e.target.value)} rows={2} placeholder="What to focus on next" className={inputCls} />
           </div>
           <div className="flex justify-end">
@@ -306,18 +294,18 @@ function CyclesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+      <div className="ut-card flex flex-wrap items-end gap-2 p-4">
         <div className="flex-1 min-w-[180px]">
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Cycle name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. H1 2026 Appraisal" className={inputCls} />
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Cycle name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. H1 2026 Appraisal" className="ut-input" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Period start</label>
-          <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className={inputCls} />
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Period start</label>
+          <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="ut-input" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Period end</label>
-          <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className={inputCls} />
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Period end</label>
+          <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="ut-input" />
         </div>
         <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Create Cycle</HrButton>
       </div>
@@ -339,7 +327,7 @@ function CyclesTab() {
               <tr><td colSpan={4} className="py-14 text-center text-sm text-text-tertiary">No review cycles defined yet.</td></tr>
             ) : cycles.map((c) => (
               <tr key={c.id}>
-                <td className="font-medium text-text-primary">
+                <td className="font-semibold text-text-primary">
                   <span className="inline-flex items-center gap-2"><CalendarRange size={15} className="text-text-tertiary" />{c.name}</span>
                 </td>
                 <td className="text-text-secondary">
@@ -396,8 +384,8 @@ function AdminReviewsTab({ canWrite }: { canWrite: boolean }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-2">
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-secondary">Review cycle</label>
-          <select value={activeCycle} onChange={(e) => setCycleId(e.target.value)} className={`${inputCls} w-auto min-w-[220px]`}>
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Review cycle</label>
+          <select value={activeCycle} onChange={(e) => setCycleId(e.target.value)} className="ut-select ut-select-sm w-auto min-w-[220px]">
             {cycles.length === 0 && <option value="">No cycles</option>}
             {cycles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -405,10 +393,10 @@ function AdminReviewsTab({ canWrite }: { canWrite: boolean }) {
       </div>
 
       {canWrite && (
-        <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+        <div className="ut-card flex flex-wrap items-end gap-2 p-4">
           <div className="flex-1 min-w-[200px]">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Add review for employee</label>
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={inputCls}>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Add review for employee</label>
+            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
               <option value="">Select employee…</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>{`${e.firstName} ${e.lastName ?? ''}`.trim()} ({e.employeeCode})</option>
@@ -438,7 +426,7 @@ function AdminReviewsTab({ canWrite }: { canWrite: boolean }) {
               <tr key={r.id}>
                 <td><HrAvatar name={r.employeeName || 'Employee'} sub={r.employeeCode} seed={i} /></td>
                 <td className="text-text-secondary">{r.reviewerName || '—'}</td>
-                <td className="font-semibold text-text-primary">
+                <td className="font-semibold tabular-nums text-text-primary">
                   {r.overallRating != null ? (
                     <span className="inline-flex items-center gap-1"><Star size={14} className="text-[#059669]" />{r.overallRating}</span>
                   ) : '—'}

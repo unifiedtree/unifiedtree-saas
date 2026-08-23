@@ -106,13 +106,13 @@ export const WorkTimeSettings: React.FC = () => {
       {/* Company selector — only rendered when there's more than one company
           in the tenant, to keep single-company workspaces uncluttered. */}
       {companies.length > 1 && (
-        <div className="flex items-center gap-3 rounded-xl border border-[var(--border-default)] bg-white px-4 py-2.5">
+        <div className="ut-card ut-card-sm flex items-center gap-3 px-4 py-2.5">
           <Building2 size={14} className="flex-shrink-0 text-[var(--text-tertiary)]" />
           <span className="text-sm text-[var(--text-secondary)]">Viewing for:</span>
           <select
             value={companyId}
             onChange={(e) => { setCompanyId(e.target.value); setDirty(false) }}
-            className="flex-1 bg-transparent text-sm text-[var(--text-primary)] focus:outline-none"
+            className="ut-select ut-select-sm w-auto min-w-[180px]"
           >
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -120,13 +120,13 @@ export const WorkTimeSettings: React.FC = () => {
       )}
 
       {!companyId && !companiesLoading ? (
-        <div className="rounded-xl border border-[var(--border-default)] bg-white p-8 text-center text-sm text-[var(--text-secondary)]">
+        <div className="ut-card ut-card-lg p-8 text-center text-sm text-[var(--text-secondary)]">
           Create a company first to configure its work time settings.
         </div>
       ) : (
         <form
           onSubmit={(e) => { e.preventDefault(); onSave() }}
-          className="space-y-6 rounded-xl border border-[var(--border-default)] bg-white p-6 shadow-sm"
+          className="ut-card ut-card-lg space-y-6 p-6"
         >
           {busy && (
             <p className="text-xs text-[var(--text-tertiary)]">Loading current settings…</p>
@@ -137,16 +137,16 @@ export const WorkTimeSettings: React.FC = () => {
             <div className="flex items-start gap-2">
               <Clock size={16} className="mt-0.5 text-[var(--text-tertiary)]" />
               <div>
-                <h3 className="text-sm font-semibold text-[var(--text-primary)]">Late arrival</h3>
+                <h3 className="text-[15px] font-semibold text-[var(--text-primary)]">Late arrival</h3>
                 <p className="text-xs text-[var(--text-secondary)]">
                   Punches after the shift-start + grace window count as late.
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[var(--text-secondary)]">
                   Grace minutes
                 </label>
                 <input
@@ -156,7 +156,7 @@ export const WorkTimeSettings: React.FC = () => {
                   max={999}
                   value={graceMinutes}
                   onChange={(e) => { setGraceMinutes(e.target.value.replace(/\D/g, '').slice(0, 3)); setDirty(true) }}
-                  className="w-full rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20"
+                  className="ut-input"
                 />
                 {!graceOk && graceMinutes.length > 0 && (
                   <p className="mt-1 text-xs text-rose-600">Enter a whole number between 0 and 999.</p>
@@ -164,10 +164,10 @@ export const WorkTimeSettings: React.FC = () => {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                <label className="mb-1.5 block text-[13px] font-semibold text-[var(--text-secondary)]">
                   Auto-deduct late minutes
                 </label>
-                <label className="flex h-[38px] items-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-3 text-sm text-[var(--text-primary)] cursor-pointer">
+                <label className="flex h-10 items-center gap-2 rounded-xl border border-[var(--border-default)] bg-white/90 px-3.5 text-sm text-[var(--text-primary)] cursor-pointer">
                   <input
                     type="checkbox"
                     checked={enableAutoDeduct}
@@ -176,7 +176,7 @@ export const WorkTimeSettings: React.FC = () => {
                   />
                   <span>{enableAutoDeduct ? 'Enabled' : 'Disabled'}</span>
                 </label>
-                <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+                <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">
                   When on, minutes past the grace window are subtracted from paid hours.
                 </p>
               </div>
@@ -186,27 +186,27 @@ export const WorkTimeSettings: React.FC = () => {
           {/* Workweek definition */}
           <section className="space-y-3 border-t border-[var(--border-subtle)] pt-6">
             <div>
-              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Workweek</h3>
+              <h3 className="text-[15px] font-semibold text-[var(--text-primary)]">Workweek</h3>
               <p className="text-xs text-[var(--text-secondary)]">
                 First day of the working week + which days count as weekends.
               </p>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+              <label className="mb-1.5 block text-[13px] font-semibold text-[var(--text-secondary)]">
                 Workweek starts on
               </label>
               <select
                 value={workweekStartDay}
                 onChange={(e) => { setWorkweekStartDay(Number(e.target.value)); setDirty(true) }}
-                className="w-full max-w-xs rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20"
+                className="ut-select max-w-xs"
               >
                 {WEEKDAYS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+              <label className="mb-1.5 block text-[13px] font-semibold text-[var(--text-secondary)]">
                 Weekend days
               </label>
               <div className="flex flex-wrap gap-2">

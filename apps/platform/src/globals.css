@@ -219,6 +219,59 @@ table td, table th,
 }
 
 /* ============================================================
+ * .ut-input / .ut-select — the shared form controls.
+ *
+ * One height (40px), one radius, one focus treatment, so a select never
+ * sits a few pixels off beside an input again. The select gets its own
+ * chevron (appearance:none kills the platform arrow, which never matched
+ * the design) drawn as an inline SVG so it inherits nothing weird.
+ * The OS still owns the dropdown LIST — that part cannot be styled —
+ * but the trigger, which is what sits in our layouts, now can.
+ * ========================================================== */
+.ut-input,
+.ut-select {
+  height: 40px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border-default);
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 0 14px;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background-color var(--motion-fast);
+}
+.ut-input::placeholder { color: var(--text-tertiary); }
+.ut-input:hover,
+.ut-select:hover { border-color: var(--border-strong); }
+.ut-input:focus,
+.ut-select:focus {
+  border-color: var(--border-focus);
+  background-color: #fff;
+  box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.12);
+}
+.ut-input:disabled,
+.ut-select:disabled { opacity: 0.55; cursor: not-allowed; }
+.ut-input[aria-invalid='true'],
+.ut-select[aria-invalid='true'] {
+  border-color: var(--status-error-fg);
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.10);
+}
+.ut-select {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+/* Compact variant for toolbars/filter rows. */
+.ut-input-sm,
+.ut-select-sm { height: 34px; border-radius: 10px; font-size: 13px; }
+.ut-select-sm { padding-right: 34px; background-position: right 10px center; }
+
+/* ============================================================
  * .hr-table — the shared list-screen table (used by 50+ screens).
  * Redesigned here so every screen inherits the premium look at once:
  * sticky header, uppercase micro-labels, hairline row dividers,

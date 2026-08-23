@@ -89,7 +89,7 @@ function MergeFieldDropdown({ onInsert }: { onInsert: (key: string) => void }) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-50 w-64 bg-white border border-border-default rounded-xl shadow-2xl overflow-hidden">
+        <div className="ut-card absolute left-0 top-full mt-1 z-50 w-64 overflow-hidden">
           <div className="max-h-72 overflow-y-auto p-1">
             {Object.entries(grouped).map(([category, entries]) => (
               <div key={category}>
@@ -138,7 +138,7 @@ function EditorToolbar({
   }
 
   return (
-    <div className="flex items-center gap-1 flex-wrap px-3 py-2 border-b border-border-default bg-white">
+    <div className="flex items-center gap-1 flex-wrap px-3 py-2 border-b border-border-default">
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBold().run()}
         active={editor.isActive('bold')}
@@ -236,7 +236,7 @@ function PreviewPane({ templateId }: { templateId: string | undefined }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="bg-white border border-border-default rounded-2xl p-4 space-y-3">
+      <div className="ut-card p-4 space-y-3">
         <h3 className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
           Preview as employee
         </h3>
@@ -275,7 +275,7 @@ function PreviewPane({ templateId }: { templateId: string | undefined }) {
       {previewMut.isPending ? (
         <CardSkeleton />
       ) : previewHtml ? (
-        <div className="bg-white border border-border-default rounded-2xl overflow-hidden">
+        <div className="ut-card overflow-hidden">
           <div className="px-4 py-2.5 border-b border-border-default">
             <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Rendered output</p>
           </div>
@@ -412,9 +412,9 @@ export const LetterTemplateEditor: React.FC = () => {
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 space-y-4">
-          <div className="bg-white border border-border-default rounded-2xl p-4 space-y-4">
+          <div className="ut-card p-4 space-y-4">
             <div>
-              <label className="block text-xs font-medium text-text-tertiary mb-1.5">
+              <label className="block text-[13px] font-semibold text-text-tertiary mb-1.5">
                 Template name *
               </label>
               <input
@@ -425,9 +425,9 @@ export const LetterTemplateEditor: React.FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
               <div>
-                <label className="block text-xs font-medium text-text-tertiary mb-1.5">
+                <label className="block text-[13px] font-semibold text-text-tertiary mb-1.5">
                   Letter type
                 </label>
                 <select
@@ -441,7 +441,7 @@ export const LetterTemplateEditor: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-tertiary mb-1.5">
+                <label className="block text-[13px] font-semibold text-text-tertiary mb-1.5">
                   Subject
                 </label>
                 <input
@@ -454,7 +454,7 @@ export const LetterTemplateEditor: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-white border border-border-default rounded-2xl overflow-hidden">
+          <div className="ut-card overflow-hidden">
             <div className="px-4 py-2.5 border-b border-border-default">
               <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Body</p>
             </div>

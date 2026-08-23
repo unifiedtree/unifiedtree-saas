@@ -31,7 +31,7 @@ export const ForgotPassword: React.FC = () => {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[420px] bg-white rounded-3xl shadow-xl border border-slate-100 p-10"
+        className="ut-card ut-card-lg w-full max-w-[420px] p-10"
       >
         <div className="flex items-center gap-2.5 mb-8">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#059669]">
@@ -69,7 +69,7 @@ export const ForgotPassword: React.FC = () => {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label className="block text-[13px] font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Email Address
                 </label>
                 <div className="relative">

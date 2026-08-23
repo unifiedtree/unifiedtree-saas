@@ -219,7 +219,7 @@ export const BankDisbursement: React.FC = () => {
 
           {/* ── Net-pay distribution chart ─────────────────────────── */}
           {!rowsLoading && rows.length > 0 && (
-            <div className="mb-5 rounded-xl border border-border-default bg-white p-5 shadow-sm">
+            <div className="ut-card mb-5 p-5">
               <p className="mb-4 text-sm font-semibold text-text-primary">Net-pay distribution</p>
               <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">

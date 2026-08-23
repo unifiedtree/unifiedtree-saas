@@ -667,15 +667,26 @@ export const HrmsDashboard: React.FC = () => {
               would compress the progress bar + CTA. Grid caps at 2 columns so
               the tile stays readable on wide screens (paired with room for a
               second billing tile like Subscription Status when that ships). */}
-        {canSeeSeatsTile && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <SeatsUsageTile />
-          </div>
-        )}
+        {/* Seats tile packs into the adaptive chart grid below — it used to
+            own a md:grid-cols-2 row as the only child, leaving a permanent
+            dead half-row on every admin dashboard. */}
 
         {/* ── Row: attendance gauge + trend + comparison ────────────────── */}
-        {chartTiles.length > 0 && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {(chartTiles.length > 0 || canSeeSeatsTile) && (
+          /* Column count follows the rendered tile count. This grid's children
+             are all conditional (role, endpoint availability, seats gate), and
+             a fixed lg:grid-cols-3 stranded a lone Headcount chart in the left
+             third with two dead cells beside it. Tailwind cannot compile
+             dynamic class strings, so the map is explicit. */
+          <div
+            className={(() => {
+              const n = chartTiles.length + (canSeeSeatsTile ? 1 : 0)
+              if (n === 1) return 'grid grid-cols-1 gap-6'
+              if (n === 2 || n === 4) return 'grid grid-cols-1 gap-6 lg:grid-cols-2'
+              return 'grid grid-cols-1 gap-6 lg:grid-cols-3'
+            })()}
+          >
+            {canSeeSeatsTile && <SeatsUsageTile />}
             {chartTiles}
           </div>
         )}
@@ -699,7 +710,7 @@ export const HrmsDashboard: React.FC = () => {
               the rail spans the full width. */}
         <div className={`grid grid-cols-1 gap-6 ${canSeeWorkforceTiles ? 'lg:grid-cols-3' : ''}`}>
           {canSeeWorkforceTiles && (
-            <section className="overflow-hidden rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-sm lg:col-span-2">
+            <section className="ut-card overflow-hidden lg:col-span-2">
               <div className="flex flex-wrap items-center justify-between gap-2 px-5 pb-3 pt-4">
                 <h2 className="text-[15px] font-semibold tracking-tight text-[var(--text-primary)]">Recent Employees</h2>
                 <HrButton variant="ghost" size="sm" onClick={() => navigate('/hrms/employees')}>
@@ -712,7 +723,7 @@ export const HrmsDashboard: React.FC = () => {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="h-8 rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--border-focus)]"
+                    className="ut-select ut-select-sm w-auto min-w-[110px]"
                   >
                     <option value="ALL">All</option>
                     <option value="ACTIVE">Active</option>
@@ -839,7 +850,7 @@ export const HrmsDashboard: React.FC = () => {
                   <button
                     key={a.label}
                     onClick={() => navigate(a.path)}
-                    className="flex flex-col items-center gap-1.5 rounded-xl border border-[var(--border-default)] px-1.5 py-3 transition-colors hover:border-[var(--accent-solid)] hover:bg-[var(--accent-bg)]"
+                    className="ut-card ut-card-sm ut-card-hover flex flex-col items-center gap-1.5 px-1.5 py-3"
                   >
                     <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-[var(--accent-fg)]">
                       <a.icon size={15} />

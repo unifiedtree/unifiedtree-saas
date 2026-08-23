@@ -61,31 +61,40 @@ export function GlobalSearch({ onSelect }: GlobalSearchProps) {
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border-subtle)]">
-        <svg className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
+      {/* The search row IS the focus affordance: the modal autofocuses this
+          input, so the global :focus-visible outline only drew a stray green
+          box around a bare input (the "off" look). The row communicates the
+          active state instead — icon, generous height, kbd hint. */}
+      <div className="flex items-center gap-3 border-b border-[var(--border-subtle)] px-5 py-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-bg)] text-[var(--accent-fg)]">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </span>
         <input
           autoFocus
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search pages, employees, leads, invoices..."
-          className="flex-1 bg-transparent text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-sm"
+          placeholder="Search pages, employees, leaves, payslips…"
+          className="flex-1 bg-transparent text-[15px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none focus-visible:outline-none"
         />
-        {query && (
-          <button onClick={() => setQuery('')} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        {query ? (
+          <button onClick={() => setQuery('')} aria-label="Clear search" className="rounded-md p-1 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+        ) : (
+          <kbd className="rounded-md border border-[var(--border-default)] bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--text-tertiary)]">ESC</kbd>
         )}
       </div>
 
       <div className="max-h-96 overflow-y-auto">
         {!debouncedQuery && (
-          <div className="p-6 text-center text-[var(--text-tertiary)] text-sm">
-            Start typing to search your workspace
+          <div className="px-6 py-8 text-center">
+            <p className="text-sm text-[var(--text-secondary)]">Start typing to search your workspace</p>
+            <p className="mt-1 text-xs text-[var(--text-tertiary)]">Pages, employees, leaves and payslips</p>
           </div>
         )}
         {debouncedQuery && results.length === 0 && (

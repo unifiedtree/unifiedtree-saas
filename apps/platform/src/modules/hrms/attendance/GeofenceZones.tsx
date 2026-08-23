@@ -129,7 +129,7 @@ function ZoneFormModal({
   return (
     <>
       <div className="fixed inset-0 z-[100] bg-text-primary/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md bg-white border-l border-border-default flex flex-col shadow-2xl">
+      <div className="ut-card ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-default">
           <h3 className="text-text-primary font-semibold">{isEditing ? 'Edit Zone' : 'Add Zone'}</h3>
           <button onClick={onClose} className="p-1.5 text-text-tertiary hover:text-text-primary rounded-lg hover:bg-bg-surface">
@@ -139,7 +139,7 @@ function ZoneFormModal({
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Zone Name *</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Zone Name *</label>
             <input
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
@@ -148,9 +148,9 @@ function ZoneFormModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5">
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Latitude *</label>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Latitude *</label>
               <input
                 value={form.latitude}
                 onChange={(e) => set('latitude', e.target.value)}
@@ -160,7 +160,7 @@ function ZoneFormModal({
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Longitude *</label>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Longitude *</label>
               <input
                 value={form.longitude}
                 onChange={(e) => set('longitude', e.target.value)}
@@ -180,7 +180,7 @@ function ZoneFormModal({
           </button>
 
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Radius (meters) *</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Radius (meters) *</label>
             <input
               value={form.radiusMeters}
               onChange={(e) => set('radiusMeters', e.target.value)}
@@ -191,7 +191,7 @@ function ZoneFormModal({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Assign to Department</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Assign to Department</label>
             <select
               value={form.departmentId}
               onChange={(e) => set('departmentId', e.target.value)}
@@ -205,7 +205,7 @@ function ZoneFormModal({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Punch Method</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Punch Method</label>
             <div className="flex flex-wrap gap-2">
               {PUNCH_METHODS.map((m) => (
                 <button
@@ -226,7 +226,7 @@ function ZoneFormModal({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Zone Color</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Zone Color</label>
             <div className="flex flex-wrap gap-2.5">
               {COLOR_PRESETS.map((c) => (
                 <button
@@ -323,7 +323,7 @@ export const GeofenceZones: React.FC = () => {
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="ut-card h-40 w-full animate-pulse" />)}
         </div>
       ) : error ? (
         <EmptyState variant="error" title="Failed to load zones" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
@@ -336,7 +336,7 @@ export const GeofenceZones: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {zones.map((z) => (
-            <div key={z.id} className="bg-white border border-border-default shadow-sm rounded-2xl p-5 flex flex-col">
+            <div key={z.id} className="ut-card p-5 flex flex-col">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: z.colorHex || '#059669' }} />

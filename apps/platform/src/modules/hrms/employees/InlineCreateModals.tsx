@@ -53,7 +53,7 @@ function ModalShell({
       <div
         role="dialog"
         aria-modal="true"
-        className="fixed left-1/2 top-1/2 z-[210] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white shadow-2xl"
+        className="fixed left-1/2 top-1/2 z-[210] w-full max-w-md -translate-x-1/2 -translate-y-1/2 ut-card ut-card-lg"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h3 className="text-text-primary font-semibold text-sm">{title}</h3>
@@ -78,7 +78,7 @@ function MField({ label, required, error, children }: {
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-text-secondary mb-1.5">
+      <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">
         {label} {required && <span className="text-danger">*</span>}
       </label>
       {children}
@@ -404,7 +404,7 @@ export function InlineCreateZoneModal({
           autoFocus
         />
       </MField>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-5">
         <MField label="Latitude" required error={errs.latitude}>
           <MInput
             invalid={!!errs.latitude}

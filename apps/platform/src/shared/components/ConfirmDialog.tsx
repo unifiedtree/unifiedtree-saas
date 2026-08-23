@@ -80,7 +80,7 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
             onClick={() => close(false)}
             aria-hidden
           />
-          <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-5 shadow-2xl">
+          <div className="ut-card ut-card-lg relative w-full max-w-sm p-5">
             <div className="flex items-start gap-3">
               {pending.tone === 'danger' && (
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#FEE2E2] text-[#B91C1C]">

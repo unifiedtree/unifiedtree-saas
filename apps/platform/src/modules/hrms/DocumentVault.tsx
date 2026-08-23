@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
@@ -51,23 +51,11 @@ export const DocumentVault: React.FC = () => {
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Document Vault" title="Employee Documents" subtitle="Store, browse, and access employee documents" />
 
-      <div className="mb-5 flex gap-1 border-b border-border-default">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-              tab === t.key ? 'border-[#059669] text-[#047857]' : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'my' && canReadSelf && <MyDocumentsTab />}
-      {tab === 'all' && canRead && <AllDocumentsTab />}
-      {tab === 'upload' && canWrite && <UploadTab onUploaded={() => setTab(canRead ? 'all' : 'upload')} />}
+      {tab === 'my' && canReadSelf && <HrTabPanel tabKey="my"><MyDocumentsTab /></HrTabPanel>}
+      {tab === 'all' && canRead && <HrTabPanel tabKey="all"><AllDocumentsTab /></HrTabPanel>}
+      {tab === 'upload' && canWrite && <HrTabPanel tabKey="upload"><UploadTab onUploaded={() => setTab(canRead ? 'all' : 'upload')} /></HrTabPanel>}
     </div>
   )
 }
@@ -125,11 +113,13 @@ function DocumentTable({
                 </td>
                 {canWrite && (
                   <td>
-                    {onDelete && (
-                      <button onClick={() => onDelete(d.id)} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Delete document" aria-label="Delete document">
-                        <Trash2 size={14} />
-                      </button>
-                    )}
+                    <div className="flex items-center justify-end">
+                      {onDelete && (
+                        <button onClick={() => onDelete(d.id)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Delete document" aria-label="Delete document">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
@@ -193,13 +183,11 @@ function AllDocumentsTab() {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
-
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-        <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Employee</label>
-        <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={inputCls}>
+      <div className="ut-card p-5">
+        <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee</label>
+        <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
           <option value="">Select an employee…</option>
           {employees.map((emp) => (
             <option key={emp.id} value={emp.id}>
@@ -270,12 +258,13 @@ function UploadTab({ onUploaded }: { onUploaded: () => void }) {
   const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
   return (
-    <div className="max-w-2xl space-y-5">
-      <div className="rounded-2xl border border-border-default bg-white p-5 shadow-sm">
-        <div className="grid grid-cols-2 gap-3">
+    <div className="max-w-2xl">
+      <div className="ut-card p-5">
+        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Store Document</h3>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
           <div className="col-span-2">
-            <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Employee *</label>
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={inputCls}>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee *</label>
+            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
               <option value="">Select employee…</option>
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
@@ -285,38 +274,38 @@ function UploadTab({ onUploaded }: { onUploaded: () => void }) {
             </select>
           </div>
           <div className="col-span-2">
-            <label className="mb-1.5 block text-xs font-semibold text-text-secondary">Title *</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Employment contract 2026" className={inputCls} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Title *</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Employment contract 2026" className="ut-input" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Category</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value as DocumentCategory)} className={inputCls}>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Category</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value as DocumentCategory)} className="ut-select">
               {DOCUMENT_CATEGORIES.map((c) => <option key={c} value={c}>{fmtCat(c)}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Document URL *</label>
-            <input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="https://…" className={inputCls} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Document URL *</label>
+            <input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="https://…" className="ut-input" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Issued Date</label>
-            <input type="date" value={issuedDate} onChange={(e) => setIssuedDate(e.target.value)} className={inputCls} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Issued Date</label>
+            <input type="date" value={issuedDate} onChange={(e) => setIssuedDate(e.target.value)} className="ut-input" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Expiry Date</label>
-            <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className={inputCls} />
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Expiry Date</label>
+            <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="ut-input" />
           </div>
           <div className="col-span-2">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Notes</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Notes</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional context" className={inputCls} />
           </div>
         </div>
-      </div>
 
-      <div className="flex justify-end">
-        <HrButton onClick={handleSubmit} disabled={create.isPending}>
-          <Plus size={15} /> {create.isPending ? 'Storing…' : 'Store Document'}
-        </HrButton>
+        <div className="mt-5 flex justify-end border-t border-border-default pt-4">
+          <HrButton onClick={handleSubmit} disabled={create.isPending}>
+            <Plus size={15} /> {create.isPending ? 'Storing…' : 'Store Document'}
+          </HrButton>
+        </div>
       </div>
     </div>
   )

@@ -110,17 +110,17 @@ export const Integrations: React.FC = () => {
       )}
 
       {canWrite && (
-        <div className="mb-5 flex flex-wrap items-end gap-2 rounded-2xl border border-border-default bg-white p-4 shadow-sm">
+        <div className="ut-card mb-5 flex flex-wrap items-end gap-2 p-4">
           <div className="min-w-[180px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Name</label>
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Name</label>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Payroll Slack alerts" className={`${inputCls} w-full`} />
           </div>
           <div className="min-w-[140px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Provider</label>
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Provider</label>
             <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="e.g. Slack" className={`${inputCls} w-full`} />
           </div>
           <div className="min-w-[140px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-text-secondary">Category</label>
+            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Category</label>
             <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Communication" className={`${inputCls} w-full`} />
           </div>
           <HrButton onClick={onCreate} disabled={create.isPending}>

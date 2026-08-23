@@ -6,6 +6,7 @@ import {
 } from '@unifiedtree/ui-kit'
 import { Can, P } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
+import { HrTabs, HrTabPanel } from '@/shared/components/hr'
 import {
   useRun, useRunEmployees, useProcessRun, useLockRun, useRunPayslip, useRunSkipped, downloadPayslipPdf,
   MONTHS, statusTone, inr, inr2,
@@ -13,6 +14,11 @@ import {
 } from '../api/usePayrollRuns'
 
 const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleString('en-IN') : '—')
+
+const RUN_TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'employees', label: 'Employees' },
+]
 
 const PayslipBody: React.FC<{ runId: string; empId: string }> = ({ runId, empId }) => {
   const { toast } = useToast()
@@ -185,41 +191,36 @@ export const PayrollRunDetail: React.FC = () => {
         <StatCard label="Net pay" value={inr(run.totalNet)} icon={IndianRupee} tone="success" />
       </div>
 
-      <div className="flex gap-1 border-b border-slate-200">
-        {(['overview', 'employees'] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 capitalize ${
-              tab === t ? 'border-[#047857] text-[#047857]' : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}>
-            {t}
-          </button>
-        ))}
-      </div>
+      <HrTabs tabs={RUN_TABS} active={tab} onChange={(k) => setTab(k as 'overview' | 'employees')} />
 
       {tab === 'overview' && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <Row k="Period" v={`${run.periodStart} → ${run.periodEnd}`} />
-          <Row k="Company" v={run.companyName} />
-          <Row k="Status" v={run.status} />
-          <Row k="Employees" v={String(run.employeeCount)} />
-          <Row k="Processed" v={fmtDate(run.processedAt)} />
-          <Row k="Locked" v={fmtDate(run.lockedAt)} />
-          <Row k="Created" v={fmtDate(run.createdAt)} />
-        </div>
+        <HrTabPanel tabKey="overview">
+          <div className="ut-card p-6 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+            <Row k="Period" v={`${run.periodStart} → ${run.periodEnd}`} />
+            <Row k="Company" v={run.companyName} />
+            <Row k="Status" v={run.status} />
+            <Row k="Employees" v={String(run.employeeCount)} />
+            <Row k="Processed" v={fmtDate(run.processedAt)} />
+            <Row k="Locked" v={fmtDate(run.lockedAt)} />
+            <Row k="Created" v={fmtDate(run.createdAt)} />
+          </div>
+        </HrTabPanel>
       )}
 
       {tab === 'employees' && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <DataTable
-            columns={empColumns}
-            data={emps}
-            getRowKey={(r) => r.employeeId}
-            isLoading={empsLoading}
-            onRowClick={(r) => setSlipEmp(r.employeeId)}
-            emptyTitle="No payslips yet"
-            emptyDescription={run.status === 'DRAFT' ? 'Process the run to generate payslips.' : 'No eligible employees for this period.'}
-          />
-        </div>
+        <HrTabPanel tabKey="employees">
+          <div className="ut-card overflow-hidden">
+            <DataTable
+              columns={empColumns}
+              data={emps}
+              getRowKey={(r) => r.employeeId}
+              isLoading={empsLoading}
+              onRowClick={(r) => setSlipEmp(r.employeeId)}
+              emptyTitle="No payslips yet"
+              emptyDescription={run.status === 'DRAFT' ? 'Process the run to generate payslips.' : 'No eligible employees for this period.'}
+            />
+          </div>
+        </HrTabPanel>
       )}
 
       <Drawer open={!!slipEmp} onOpenChange={(o) => !o && setSlipEmp(null)} title="Payslip">

@@ -151,7 +151,7 @@ export const NotificationTemplates: React.FC = () => {
       )}
 
       {canWrite && (
-        <div className="mb-5 rounded-2xl border border-border-default bg-white p-5 shadow-sm">
+        <div className="ut-card mb-5 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-text-primary">
               {editingId ? 'Edit template' : 'New template'}
@@ -163,27 +163,27 @@ export const NotificationTemplates: React.FC = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Name *</label>
+              <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Name *</label>
               <input value={form.name} onChange={(e) => setField({ name: e.target.value })} placeholder="e.g. Leave approved — email" className={inputCls} />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Channel *</label>
+              <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Channel *</label>
               <select value={form.channel} onChange={(e) => setField({ channel: e.target.value as NotificationChannel })} className={inputCls}>
                 {NOTIFICATION_CHANNELS.map((c) => <option key={c} value={c}>{fmtChannel(c)}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Event key *</label>
+              <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Event key *</label>
               <input value={form.eventKey} onChange={(e) => setField({ eventKey: e.target.value })} placeholder="e.g. leave.approved" className={inputCls} />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Subject</label>
+              <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Subject</label>
               <input value={form.subject} onChange={(e) => setField({ subject: e.target.value })} placeholder="Optional (e.g. email subject line)" className={inputCls} />
             </div>
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-text-secondary">Body *</label>
+              <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Body *</label>
               <textarea value={form.body} onChange={(e) => setField({ body: e.target.value })} rows={4} placeholder="Message body — use {{placeholders}} for dynamic values" className={inputCls} />
             </div>
           </div>

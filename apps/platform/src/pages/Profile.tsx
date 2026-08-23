@@ -155,7 +155,7 @@ export const Profile: React.FC = () => {
         subtitle="Your personal details, avatar and notification preferences."
       />
 
-      <div className="rounded-2xl border border-border-default bg-white p-6 sm:p-8">
+      <div className="ut-card ut-card-lg p-6 sm:p-8">
         {isLoading && !user ? (
           <ProfileSkeleton />
         ) : isError || !user ? (
@@ -226,7 +226,7 @@ export const Profile: React.FC = () => {
             {/* ── Personal settings ─────────────────────────────────────── */}
             <section>
               <h3 className="mb-4 text-sm font-semibold text-text-primary">Personal settings</h3>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-x-4 gap-y-5 md:grid-cols-2">
                 <Field label="Display name">
                   <input
                     type="text"
@@ -308,7 +308,7 @@ export const Profile: React.FC = () => {
 /** Small labelled field wrapper — kept private so the layout stays consistent. */
 const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode }> = ({ label, hint, children }) => (
   <div>
-    <label className="mb-1.5 block text-xs font-medium text-text-tertiary">{label}</label>
+    <label className="mb-1.5 block text-[13px] font-semibold text-text-tertiary">{label}</label>
     {children}
     {hint && <p className="mt-1 text-[11px] text-text-tertiary">{hint}</p>}
   </div>
@@ -322,7 +322,7 @@ const PrefRow: React.FC<{
   enabled: boolean
   onChange: (v: boolean) => void
 }> = ({ label, desc, enabled, onChange }) => (
-  <div className="flex items-center justify-between rounded-xl border border-border-default bg-white p-4">
+  <div className="ut-card ut-card-sm flex items-center justify-between p-4">
     <div>
       <p className="text-sm font-medium text-text-primary">{label}</p>
       <p className="mt-0.5 text-xs text-text-secondary">{desc}</p>
@@ -358,7 +358,7 @@ const ProfileSkeleton: React.FC = () => (
         <SkeletonBlock className="h-9 w-32 rounded-lg" />
       </div>
     </div>
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-x-4 gap-y-5 md:grid-cols-2">
       <SkeletonBlock className="h-16" />
       <SkeletonBlock className="h-16" />
       <SkeletonBlock className="h-16" />
