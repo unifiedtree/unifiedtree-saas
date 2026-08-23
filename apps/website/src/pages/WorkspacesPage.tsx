@@ -180,117 +180,109 @@ export function WorkspacesPage() {
         )}
       </AnimatePresence>
 
-      <main className="flex min-h-screen flex-col px-4 pb-10 pt-24 sm:px-6 lg:h-screen lg:min-h-0 lg:pb-6 lg:pt-24">
+      <main className="flex min-h-screen flex-col px-4 pb-10 pt-24 sm:px-6 lg:h-screen lg:min-h-0 lg:pb-12 lg:pt-32">
         <motion.div
-          initial={{ opacity: 0, y: reduce ? 0 : 14 }}
+          initial={{ opacity: 0, y: reduce ? 0 : 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="m-auto w-full max-w-5xl"
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="m-auto w-full max-w-6xl"
         >
-          <div className="grid overflow-hidden rounded-3xl border border-border bg-surface shadow-card-hover lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]">
-
+          <div className="grid overflow-hidden rounded-[2.5rem] border border-border/40 bg-surface shadow-[0_24px_64px_-12px_rgba(0,0,0,0.08)] lg:grid-cols-[minmax(0,13fr)_minmax(0,11fr)]">
+            
             {/* ── List pane ─────────────────────────────────────────────── */}
-            <div className="flex flex-col p-4 sm:p-8 lg:justify-center lg:px-10 lg:py-9">
+            <div className="flex flex-col p-6 sm:p-10 lg:justify-center lg:px-14 lg:py-12">
               <h1
-                className="font-heading text-[24px] font-bold tracking-tight text-text-primary"
+                className="font-heading text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl"
                 style={{ fontVariationSettings: "'opsz' 32" }}
               >
                 Your workspaces
               </h1>
-              <p className="mt-1 font-body text-sm text-text-secondary">
+              <p className="mt-2 font-body text-[15px] text-text-secondary/90">
                 Select a workspace to enter, or create a new one to get started.
               </p>
 
               {isLoading && workspaces.length === 0 ? (
-                <div className="mt-6 flex items-center justify-center rounded-2xl border border-border/70 bg-surface-2/60 py-16">
+                <div className="mt-8 flex items-center justify-center rounded-3xl border border-border/40 bg-surface-2/30 py-20">
                   <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
                 </div>
               ) : workspaces.length === 0 ? (
-                <div className="mt-6 rounded-2xl border border-border/70 bg-surface-2/60 px-6 py-10 text-center">
-                  <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-primary/10">
-                    <Building2 className="h-7 w-7 text-primary" />
+                <div className="mt-8 rounded-3xl border border-border/40 bg-surface-2/30 px-6 py-12 text-center">
+                  <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 shadow-inner">
+                    <Building2 className="h-8 w-8 text-primary" />
                   </div>
-                  <h3 className="font-heading text-lg font-bold text-text-primary">No workspaces yet</h3>
-                  <p className="mx-auto mt-1 max-w-xs font-body text-sm text-text-secondary">
+                  <h3 className="font-heading text-xl font-bold text-text-primary">No workspaces yet</h3>
+                  <p className="mx-auto mt-2 max-w-sm font-body text-[15px] text-text-secondary/90">
                     Create your first workspace to start managing your organization's HR and operations.
                   </p>
                   <button
                     onClick={() => navigate('/pricing')}
-                    className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 font-body text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark"
+                    className="mt-8 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-primary to-emerald-600 px-7 py-3 font-body text-[15px] font-semibold text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-xl hover:from-primary hover:to-emerald-500"
                   >
-                    <Plus size={16} />
+                    <Plus size={18} />
                     Create your first Workspace
                   </button>
                 </div>
               ) : (
                 <>
-                  {/* Soft container, one quiet row per workspace. Caps at ~3
-                      visible rows on desktop and scrolls internally beyond. */}
-                  <div className="mt-6 overscroll-contain rounded-2xl border border-border/70 bg-surface-2/60 p-1.5 sm:p-2 lg:max-h-[264px] lg:overflow-y-auto">
-                    <ul className="divide-y divide-border/60">
+                  <div className="mt-8 overscroll-contain lg:max-h-[340px] lg:overflow-y-auto lg:pr-2">
+                    <ul className="space-y-3">
                       {workspaces.map((ws, i) => (
                         <motion.li
                           key={ws.tenantId}
-                          initial={{ opacity: 0, y: reduce ? 0 : 8 }}
+                          initial={{ opacity: 0, y: reduce ? 0 : 12 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.35, delay: reduce ? 0 : 0.05 * i }}
-                          className="flex items-center gap-2.5 px-2 py-3 sm:gap-3 sm:px-3"
+                          transition={{ duration: 0.4, delay: reduce ? 0 : 0.08 * i }}
+                          className="group/card relative flex items-center gap-3.5 rounded-2xl border border-border/40 bg-surface p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-primary/20 hover:shadow-md sm:gap-4 sm:p-5"
                         >
                           {/* Initial tile */}
                           <div
-                            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl font-heading text-base font-bold text-white shadow-sm sm:h-11 sm:w-11"
+                            className="grid h-12 w-12 shrink-0 place-items-center rounded-[14px] font-heading text-lg font-bold text-white shadow-inner sm:h-14 sm:w-14"
                             style={{ background: 'linear-gradient(135deg, #059669, #047857)' }}
                           >
                             {ws.tenantName.charAt(0).toUpperCase()}
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <h3 className="truncate font-heading text-[15px] font-bold text-text-primary">{ws.tenantName}</h3>
-                              <span className="shrink-0 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-widest text-text-secondary">
+                            <div className="flex items-center gap-2.5">
+                              <h3 className="truncate font-heading text-base font-bold text-text-primary transition-colors group-hover/card:text-primary">{ws.tenantName}</h3>
+                              <span className="shrink-0 rounded-md border border-border bg-surface-2 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-widest text-text-secondary">
                                 {ws.role}
                               </span>
                               {ws.defaultWorkspace && (
                                 <span title="Default Workspace" className="shrink-0">
-                                  <Star size={13} className="fill-warning text-warning" />
+                                  <Star size={14} className="fill-warning text-warning" />
                                 </span>
                               )}
                             </div>
-                            <p className="mt-0.5 truncate font-body text-xs font-medium text-text-secondary">
+                            <p className="mt-0.5 truncate font-body text-[13px] font-medium text-text-secondary/80">
                               {ws.subdomain}.unifiedtree.com
                             </p>
-                            <p className="font-body text-xs text-text-tertiary">{moduleSummary(ws.activeModules)}</p>
+                            <p className="mt-1 font-body text-[13px] text-text-tertiary">{moduleSummary(ws.activeModules)}</p>
                           </div>
 
-                          {/* Goes to the workspace's own admin-gated plan page.
-                              Previously opened the public /edit-workspace editor,
-                              which changed modules with no authentication at all —
-                              removed 2026-08-08, see App.tsx. Managing modules is a
-                              billing action and belongs behind a login. */}
                           <a
                             href={`https://${ws.subdomain}.unifiedtree.com/plan`}
                             onClick={(e) => e.stopPropagation()}
-                            className="shrink-0 rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-primary/10 hover:text-primary"
+                            className="shrink-0 rounded-xl p-2 text-text-tertiary opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover/card:opacity-100 focus:opacity-100"
                             title="Manage plan & modules"
                           >
-                            <Settings size={16} />
+                            <Settings size={18} />
                           </a>
 
-                          {/* Row primary action — same launch flow as before */}
                           <button
                             onClick={() => handleEnterWorkspace(ws)}
                             disabled={enteringId === ws.tenantId}
-                            className="group/btn flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-2.5 py-2 font-body text-[13px] font-semibold text-white shadow-sm transition-all hover:bg-primary-dark disabled:opacity-60 sm:px-4"
+                            className="group/btn flex shrink-0 items-center gap-2 rounded-full bg-surface-2 px-4 py-2.5 font-body text-[14px] font-semibold text-text-primary shadow-sm ring-1 ring-inset ring-border/50 transition-all hover:bg-primary hover:text-white hover:ring-primary hover:shadow-md disabled:opacity-60 sm:px-5"
                           >
                             {enteringId === ws.tenantId ? (
                               <>
-                                <Loader2 size={14} className="animate-spin" />
+                                <Loader2 size={16} className="animate-spin" />
                                 <span className="hidden sm:inline">Entering…</span>
                               </>
                             ) : (
                               <>
                                 <span className="hidden sm:inline">Enter</span>
-                                <ArrowRight size={14} className="transition-transform group-hover/btn:translate-x-0.5" />
+                                <ArrowRight size={16} className="transition-transform group-hover/btn:translate-x-1" />
                               </>
                             )}
                           </button>
@@ -299,15 +291,14 @@ export function WorkspacesPage() {
                     </ul>
                   </div>
 
-                  {/* Quiet create row below the container */}
                   <button
                     onClick={() => navigate('/pricing')}
-                    className="group mt-4 flex items-center gap-3 self-start rounded-xl p-1 pr-3 text-left transition-colors"
+                    className="group mt-5 flex items-center gap-3.5 self-start rounded-2xl p-1.5 pr-4 text-left transition-all hover:bg-surface-2/50"
                   >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-dashed border-border bg-surface-2/60 text-text-secondary transition-colors group-hover:border-primary/40 group-hover:text-primary">
-                      <Plus size={18} />
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[14px] border border-dashed border-border/80 bg-surface-2/40 text-text-secondary transition-colors group-hover:border-primary/40 group-hover:bg-primary/5 group-hover:text-primary">
+                      <Plus size={20} />
                     </span>
-                    <span className="font-body text-sm font-semibold text-text-secondary transition-colors group-hover:text-text-primary">
+                    <span className="font-body text-[15px] font-semibold text-text-secondary transition-colors group-hover:text-primary">
                       Create new workspace
                     </span>
                   </button>
@@ -315,45 +306,48 @@ export function WorkspacesPage() {
               )}
             </div>
 
-            {/* ── Decorative pane — deep emerald, colour-on-colour geometry,
-                   one real customer quote at the bottom. Hidden below lg. ── */}
+            {/* ── Decorative pane ────────────────────────────────────────── */}
             <div
-              className="relative hidden overflow-hidden lg:flex lg:min-h-[480px] lg:flex-col"
-              style={{ background: 'linear-gradient(160deg, #04503A 0%, #033325 55%, #02291E 100%)' }}
+              className="relative hidden overflow-hidden lg:flex lg:min-h-[560px] lg:flex-col"
+              style={{ background: 'linear-gradient(160deg, #02291E 0%, #033325 50%, #04503A 100%)' }}
             >
+              {/* Glassmorphic decorative orbs */}
               <div
                 aria-hidden
-                className={`absolute -right-24 -top-20 h-72 w-72 rotate-12 rounded-[56px] ${reduce ? '' : 'animate-float'}`}
-                style={{ background: 'rgba(16,185,129,0.16)' }}
+                className={`absolute -right-20 -top-20 h-96 w-96 rounded-full blur-[80px] ${reduce ? '' : 'animate-pulse'}`}
+                style={{ background: 'rgba(5, 150, 105, 0.4)', animationDuration: '8s' }}
               />
               <div
                 aria-hidden
-                className="absolute -left-16 top-1/3 h-56 w-56 -rotate-6 rounded-[48px]"
-                style={{ background: 'rgba(167,243,208,0.10)' }}
+                className="absolute -left-20 top-1/4 h-72 w-72 rounded-full blur-[60px]"
+                style={{ background: 'rgba(4, 120, 87, 0.3)' }}
               />
               <div
                 aria-hidden
-                className={`absolute bottom-36 right-10 h-40 w-40 rotate-45 rounded-[36px] ${reduce ? '' : 'animate-float'}`}
-                style={{ background: 'rgba(16,185,129,0.12)', animationDelay: '2.2s' }}
+                className={`absolute bottom-10 right-10 h-64 w-64 rounded-full blur-[60px] ${reduce ? '' : 'animate-pulse'}`}
+                style={{ background: 'rgba(16, 185, 129, 0.25)', animationDelay: '4s', animationDuration: '10s' }}
               />
-              <span aria-hidden className="grain grain-dark" />
+              <span aria-hidden className="grain grain-dark opacity-30" />
 
-              {/* Fabricated "Vikram Patel / VPL Industries" testimonial
-                  removed 2026-08-17 (CRIT #5). Replaced with a neutral
-                  product statement that says what the platform actually
-                  does — no invented attribution. */}
-              <figure className="relative mt-auto p-8 xl:p-10">
-                <blockquote className="font-body text-[15px] leading-relaxed text-white/85">
-                  One connected core: HR, Payroll and Attendance share the same
-                  records the moment you unlock them. Statutory calculations
-                  (PF, ESI, TDS) run against the same ledger — no exports, no
-                  re-keying.
-                </blockquote>
-                <figcaption className="mt-4">
-                  <p className="font-body text-sm font-semibold text-white">Platform promise</p>
-                  <p className="font-body text-xs text-white/60">The same records everywhere, from day one</p>
-                </figcaption>
-              </figure>
+              <div className="relative z-10 flex h-full flex-col p-10 xl:p-14">
+                <figure className="mt-auto rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-md">
+                  <blockquote className="font-body text-[16px] leading-relaxed text-emerald-50">
+                    One connected core: HR, Payroll and Attendance share the same
+                    records the moment you unlock them. Statutory calculations
+                    (PF, ESI, TDS) run against the same ledger — no exports, no
+                    re-keying.
+                  </blockquote>
+                  <figcaption className="mt-6 flex items-center gap-4">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 shadow-inner">
+                      <Star className="h-5 w-5 text-emerald-200" />
+                    </div>
+                    <div>
+                      <p className="font-heading text-[15px] font-bold tracking-wide text-white">Platform promise</p>
+                      <p className="font-body text-[13px] font-medium text-emerald-200/80">The same records everywhere, from day one</p>
+                    </div>
+                  </figcaption>
+                </figure>
+              </div>
             </div>
 
           </div>

@@ -53,9 +53,37 @@ h2 { font-variation-settings: 'opsz' 72; letter-spacing: -0.03em;  line-height: 
 h3 { font-variation-settings: 'opsz' 40; letter-spacing: -0.02em;  line-height: 1.15; }
 h4, h5, h6 { font-variation-settings: 'opsz' 24; letter-spacing: -0.012em; line-height: 1.25; }
 
-/* Display utility for hero-scale type set outside a heading tag */
+/* Display utility for hero-scale type set outside a heading tag.
+   NOTE: this pins the POSTER cut (opsz 96). Anything rendered below ~30px must
+   also carry an .opsz-* utility below, or Bricolage draws billboard letterforms
+   at UI size — pinched sidebearings, closed apertures, muddy at 15px. */
 .font-display, .font-heading {
   font-variation-settings: 'opsz' 96;
+}
+
+/* Optical-size steps for .font-heading used at UI scale. Named for the size
+   they are meant to be set at, so the axis can track the rendered size instead
+   of every call site remembering an inline fontVariationSettings. */
+.opsz-14 { font-variation-settings: 'opsz' 14; }
+.opsz-16 { font-variation-settings: 'opsz' 16; }
+.opsz-20 { font-variation-settings: 'opsz' 20; }
+.opsz-24 { font-variation-settings: 'opsz' 24; }
+.opsz-32 { font-variation-settings: 'opsz' 32; }
+
+/* Browser autofill. Chrome paints its own pale-blue fill and near-black text on
+   autofilled controls, so a saved email sat in a blue box beside white ones.
+   The inset shadow is the only way to override the fill; the long transition
+   delay stops Chrome repainting it on blur. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+select:-webkit-autofill,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-primary);
+  -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset;
+  box-shadow: 0 0 0 1000px #FFFFFF inset;
+  caret-color: var(--text-primary);
+  transition: background-color 100000s ease-in-out 0s;
 }
 
 code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
@@ -183,7 +211,11 @@ code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
 ::selection { background: #A7F3D0; color: #059669; }
 
 /* Focus ring */
-:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+/* Never set border-radius here. This rule sits after @tailwind utilities, so at
+   equal specificity it BEAT .rounded-xl and squared off every focused input to
+   4px — the field visibly changed shape on focus. Modern browsers already draw
+   the outline following the element's own radius. */
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .transition-all { transition: all 0.2s ease; }
 

@@ -461,9 +461,12 @@ export function UnifiedSignupPage() {
   // Field chrome is one step tighter than the marketing default: the whole
   // card has to clear a 900px viewport with the site header on top. This is
   // sizing only — field names, validation and the submit payload are unchanged.
-  const inputCls = (err: boolean) =>
-    `w-full pl-9 pr-3 py-2.5 text-sm font-body text-text-primary placeholder:text-text-tertiary bg-white outline-none rounded-xl border transition-all ${
-      err ? 'border-danger ring-2 ring-danger/10' : 'border-border focus:border-primary focus:ring-2 focus:ring-primary/10'
+  // `hasIcon` drives the left padding: the seven tax fields have no icon, and
+  // the old unconditional pl-9 left them with 36px of empty gutter.
+  // h-11 on every control so inputs, the select and PhoneField share one height.
+  const inputCls = (err: boolean, hasIcon = true) =>
+    `h-11 w-full ${hasIcon ? 'pl-9 pr-3' : 'px-3.5'} text-[14px] font-body text-text-primary placeholder:text-text-tertiary bg-white outline-none rounded-xl border transition-all ${
+      err ? 'border-danger ring-2 ring-danger/15' : 'border-border focus:border-primary focus:ring-2 focus:ring-primary/10'
     }`
 
   const [showTaxDetails, setShowTaxDetails] = useState(false)
@@ -650,25 +653,94 @@ export function UnifiedSignupPage() {
         >
           <div className="grid overflow-hidden rounded-3xl border border-border bg-surface shadow-card-hover lg:h-[min(50rem,calc(100vh-7.5rem))] lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:grid-rows-[minmax(0,1fr)]">
 
-            {/* ── Photo pane — the client-supplied sapling photograph ────
-                Copy sits over the dark soil at the image's bottom, behind a
-                deep-emerald scrim; the bright bokeh top stays text-free.
+            {/* ── Brand pane — a geometric composition rather than a photo.
+                A stock photograph competes with the form for attention and
+                carries no meaning; overlapping shapes in the brand emeralds
+                read as "one system, many parts" and cost nothing to load.
+                Shapes deliberately bleed past the right edge so the panel
+                feels like a window onto something larger, not a framed tile.
                 Below lg the pane collapses to a short banner above the form. */}
-            <div className="relative h-28 sm:h-44 lg:h-auto">
-              <img
-                src="/assets/signup.jpg"
-                alt="A young sapling growing from dark soil"
-                className="absolute inset-0 h-full w-full object-cover"
-              />
+            <div className="relative h-28 overflow-hidden bg-[#04503A] sm:h-44 lg:h-auto">
+              <svg
+                aria-hidden
+                className="absolute inset-0 h-full w-full"
+                viewBox="0 0 600 900"
+                preserveAspectRatio="xMidYMid slice"
+              >
+                <defs>
+                  <linearGradient id="suGround" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#047857" />
+                    <stop offset="55%" stopColor="#04503A" />
+                    <stop offset="100%" stopColor="#022C21" />
+                  </linearGradient>
+                </defs>
+                <rect width="600" height="900" fill="url(#suGround)" />
+                {/* A four-step VALUE ladder, every shape opaque.
+                    An earlier pass stacked translucent fills and let opacity do
+                    the mixing; three landed within ~5% relative luminance, so
+                    different hues composited into one flat mid-tone field —
+                    mud, not a composition. Opaque steps give each form a hard
+                    edge against its neighbour.
+                    Ladder: #ECFDF5 (L .93) / #A7F3D0 (L .78) / #10B981 (L .40)
+                    / #047857 (L .16).
+
+                    BAND DISCIPLINE. The panel is three horizontal zones, and
+                    the rule is about VALUE, not just position:
+                      y   0-280  brand lock-up — clean dark ground only
+                      y 280-520  the composition
+                      y 520-900  headline, bullets, plan summary
+                    Dark shapes may run past 520 (white copy still reads on
+                    them); LIGHT shapes must not, or they punch holes through
+                    the text. Both rules were learned the hard way — a light
+                    circle first ate the wordmark, then a light squircle ate
+                    the "PAID WORKSPACE" eyebrow. */}
+
+                {/* Primary mass, cropped by the right edge so the panel reads
+                    as a window onto something larger. Dark, so it may extend
+                    behind the copy. */}
+                <circle cx="500" cy="300" r="180" fill="#047857" />
+
+                {/* Committed overlap into the primary — not the 7px near-miss
+                    that read as printing misregistration. */}
+                <circle cx="452" cy="414" r="92" fill="#A7F3D0" />
+
+                {/* Quarter-round, cutting in from the left. */}
+                <path d="M170 300 h132 a132 132 0 0 1 -132 132 Z" fill="#10B981" />
+
+                {/* Lightest step — small, high, and kept clear of the copy. */}
+                <rect x="288" y="366" width="94" height="94" rx="30" fill="#ECFDF5" opacity="0.94" />
+              </svg>
+              {/* Legibility scrim — the copy sits low, so the ground darkens
+                  downward without dimming the shapes up top. */}
               <div
                 aria-hidden
                 className="absolute inset-0"
                 style={{
                   background:
-                    'linear-gradient(180deg, rgba(3,43,32,0.30) 0%, rgba(3,43,32,0.04) 24%, rgba(2,26,19,0.22) 42%, rgba(2,26,19,0.82) 60%, rgba(2,26,19,0.97) 100%)',
+                    'linear-gradient(180deg, rgba(2,26,19,0.42) 0%, rgba(2,26,19,0.10) 26%, rgba(2,26,19,0.04) 46%, rgba(2,26,19,0.60) 70%, rgba(2,26,19,0.94) 100%)',
                 }}
               />
               <span aria-hidden className="grain grain-dark" />
+
+              {/* Brand lock-up, centred in the open upper half like the
+                  reference. Hidden below lg, where the pane is only a banner. */}
+              <div className="absolute inset-x-0 top-0 z-10 hidden items-center justify-center pt-16 lg:flex">
+                <div className="text-center">
+                  <img
+                    src="/assets/UnifiedTreeLogo-withoutBG.png"
+                    alt=""
+                    aria-hidden
+                    className="mx-auto h-11 w-auto brightness-0 invert"
+                  />
+                  <p className="mt-3 font-heading text-[26px] font-bold leading-none tracking-tight text-white">
+                    UnifiedTree
+                  </p>
+                  <p className="mt-1.5 text-[12.5px] font-medium tracking-[0.18em] text-white/70">
+                    ONE ROOT · EVERY BRANCH
+                  </p>
+                </div>
+              </div>
+
               <div className="absolute inset-x-0 bottom-0 z-10 p-6 lg:p-8">
                 <Eyebrow>{mode === 'trial' ? 'Free workspace' : 'Paid workspace'}</Eyebrow>
 
@@ -718,17 +790,17 @@ export function UnifiedSignupPage() {
                   inside an overflow container clips its own top when it grows. */}
               <div className="m-auto w-full p-5 sm:p-8 lg:px-9 lg:py-6">
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+            {/* noValidate: Field injects `required` onto every control, so
+                without this Chrome's native bubbles fire first and the whole
+                zod/react-hook-form error design never renders. */}
+            <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
               <div>
-                <h2
-                  className="font-heading text-[21px] font-bold leading-tight tracking-tight text-text-primary sm:text-[23px]"
-                  style={{ fontVariationSettings: "'opsz' 24" }}
-                >
+                <h2 className="opsz-24 font-heading text-[24px] font-bold leading-[1.15] tracking-[-0.02em] text-text-primary sm:text-[26px]">
                   {mode === 'trial' ? 'Create your free workspace' : 'Create your workspace'}
                 </h2>
                 {/* Hidden from lg up: the dark panel already carries this
                     message there, and the card needs the vertical room. */}
-                <p className="mt-1 text-[12.5px] leading-snug text-text-secondary lg:hidden">
+                <p className="mt-1.5 text-[13px] leading-snug text-text-secondary lg:hidden">
                   {mode === 'trial'
                     ? 'Instant setup, no card required.'
                     : 'Choose your team size and pay securely to activate instantly.'}
@@ -755,16 +827,16 @@ export function UnifiedSignupPage() {
                     </svg>
                     Continue with Google
                   </button>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 py-0.5">
                     <div className="h-px flex-1 bg-border" />
-                    <span className="text-[10.5px] font-body font-semibold uppercase tracking-wider text-text-tertiary">or sign up with email</span>
+                    <span className="text-[11px] font-body font-semibold uppercase tracking-[0.08em] text-text-tertiary">or sign up with email</span>
                     <div className="h-px flex-1 bg-border" />
                   </div>
                 </>
               )}
 
               {error && (
-                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-danger/10 border border-danger/20 text-[13px] text-danger">
+                <div role="alert" className="flex items-start gap-2 rounded-xl border border-danger/25 bg-danger/10 p-3 text-[13px] text-[#B91C1C]">
                   <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -783,7 +855,7 @@ export function UnifiedSignupPage() {
               )}
 
               {/* Basic identity — paired on desktop, stacked below lg */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-x-4 gap-y-5 lg:grid-cols-2">
                 <Field label="First and Last Name" required icon={<User size={15} />} error={errors.adminName?.message}>
                   <input {...register('adminName')} placeholder="Your full name" className={inputCls(!!errors.adminName)} />
                 </Field>
@@ -794,7 +866,7 @@ export function UnifiedSignupPage() {
               </div>
 
               {/* Email + Phone */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-x-4 gap-y-5 lg:grid-cols-2">
                 <Field label="Email Address" required icon={<Mail size={15} />} error={errors.adminEmail?.message}>
                   <input
                     {...register('adminEmail')}
@@ -804,8 +876,13 @@ export function UnifiedSignupPage() {
                     className={`${inputCls(!!errors.adminEmail)} ${accountToken ? 'bg-slate-50 cursor-not-allowed text-text-secondary' : ''}`}
                   />
                 </Field>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[12px] font-body font-semibold leading-4 text-text-primary">Phone Number</label>
+                <div className="flex flex-col">
+                  {/* Same label markup as Field so this row cannot drift from
+                      its neighbours again. PhoneField is a composite control,
+                      so it cannot be a Field child without an id/htmlFor prop. */}
+                  <label className="mb-1.5 block text-[13px] font-body font-semibold leading-5 text-text-primary">
+                    Phone Number
+                  </label>
                   {/* PhoneField is shared with other forms, so its own padding
                       is nudged from here rather than edited at the source —
                       this keeps it the same height as the inputs beside it. */}
@@ -815,14 +892,16 @@ export function UnifiedSignupPage() {
                     onChange={(v) => setValue('adminMobile', v, { shouldValidate: true, shouldDirty: true })}
                     error={errors.adminMobile?.message}
                   />
-                  {errors.adminMobile && <span className="text-danger text-[11px]">{errors.adminMobile.message}</span>}
+                  {errors.adminMobile && <span role="alert" className="mt-1 block text-[12px] text-[#B91C1C]">{errors.adminMobile.message}</span>}
                 </div>
               </div>
 
               {/* Subdomain — full width */}
               <div>
-                <label className="text-[12px] font-body font-semibold leading-4 text-text-primary mb-1 block">
+                <label htmlFor="subdomain-control" className="mb-1.5 block text-[13px] font-body font-semibold leading-5 text-text-primary">
                   Your workspace domain
+                  <span aria-hidden="true" className="ml-0.5 text-[#B91C1C]">*</span>
+                  <span className="sr-only"> required</span>
                 </label>
                 <div className="px-3 py-2 bg-bg rounded-xl border border-border">
                   <div className="flex items-center gap-1">
@@ -831,13 +910,14 @@ export function UnifiedSignupPage() {
                         {...register('subdomain')}
                         onBlur={() => { subdomainTouched.current = true; setIsEditingSubdomain(false) }}
                         autoFocus
-                        className="flex-1 min-w-0 text-[15px] font-heading font-bold bg-white border border-primary rounded-lg px-2.5 py-1 outline-none"
+                        id="subdomain-control"
+                        className="opsz-16 flex-1 min-w-0 rounded-lg border border-primary bg-white px-2.5 py-1 text-[15px] font-heading font-bold outline-none"
                       />
                     ) : (
                       <button type="button"
                               onClick={() => setIsEditingSubdomain(true)}
                               className="flex-1 min-w-0 text-left flex items-center gap-2">
-                        <span className="truncate text-[15px] font-heading font-bold text-primary bg-primary-light/60 px-2.5 py-1 rounded-lg">
+                        <span className="opsz-16 truncate rounded-lg bg-primary-light/60 px-2.5 py-1 text-[15px] font-heading font-bold text-primary">
                           {subdomainValue || 'yourcompany'}
                         </span>
                         <span className="text-[13px] text-text-secondary font-body font-semibold">.unifiedtree.com</span>
@@ -857,7 +937,7 @@ export function UnifiedSignupPage() {
 
               {/* Password (hidden when signed in) */}
               {!accountToken && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-x-4 gap-y-5 lg:grid-cols-2">
                   <Field label="Password" required icon={<Lock size={15} />} error={errors.password?.message}>
                     <input {...register('password')} type="password" placeholder="Create a password" className={inputCls(!!errors.password)} />
                   </Field>
@@ -867,8 +947,12 @@ export function UnifiedSignupPage() {
                 </div>
               )}
 
-              {/* Seats (PAID only — TRIAL picks seats per-module inside the workspace) + Country */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {/* Seats (PAID only — TRIAL picks seats per-module inside the
+                  workspace) + Country. The column count is mode-dependent:
+                  with a static lg:grid-cols-2 the trial page rendered Country
+                  as the only child, stranding it in the left half with a dead
+                  cell beside it. */}
+              <div className={`grid gap-x-4 gap-y-5 ${mode === 'trial' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
                 {mode !== 'trial' && (
                   <Field label="Number of Users" required icon={<Users size={15} />} error={errors.seats?.message}>
                     <input {...register('seats', { valueAsNumber: true })} type="number" min={1} className={inputCls(!!errors.seats)} />
@@ -882,7 +966,7 @@ export function UnifiedSignupPage() {
               </div>
 
               {/* Optional company / tax details */}
-              <div>
+              <div className="pt-1">
                 <button type="button" onClick={() => setShowTaxDetails((v) => !v)}
                         className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors ${showTaxDetails ? 'border-primary/30 bg-primary-light' : 'border-primary/15 bg-primary-light/60 hover:border-primary/30 hover:bg-primary-light'}`}>
                   <Receipt size={14} className="flex-shrink-0 text-primary" />
@@ -895,13 +979,13 @@ export function UnifiedSignupPage() {
                 </button>
                 {showTaxDetails && (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
-                    <Field label="PAN"><input {...register('pan')} placeholder="ABCDE1234F" className={inputCls(false)} /></Field>
-                    <Field label="GSTIN"><input {...register('gstin')} placeholder="29ABCDE1234F1Z5" className={inputCls(false)} /></Field>
-                    <Field label="Address Line 1"><input {...register('addressLine1')} className={inputCls(false)} /></Field>
-                    <Field label="Address Line 2"><input {...register('addressLine2')} className={inputCls(false)} /></Field>
-                    <Field label="City"><input {...register('city')} className={inputCls(false)} /></Field>
-                    <Field label="State"><input {...register('state')} className={inputCls(false)} /></Field>
-                    <Field label="Postal Code"><input {...register('postalCode')} className={inputCls(false)} /></Field>
+                    <Field label="PAN"><input {...register('pan')} placeholder="ABCDE1234F" className={inputCls(false, false)} /></Field>
+                    <Field label="GSTIN"><input {...register('gstin')} placeholder="29ABCDE1234F1Z5" className={inputCls(false, false)} /></Field>
+                    <Field label="Address Line 1"><input {...register('addressLine1')} className={inputCls(false, false)} /></Field>
+                    <Field label="Address Line 2"><input {...register('addressLine2')} className={inputCls(false, false)} /></Field>
+                    <Field label="City"><input {...register('city')} className={inputCls(false, false)} /></Field>
+                    <Field label="State"><input {...register('state')} className={inputCls(false, false)} /></Field>
+                    <Field label="Postal Code"><input {...register('postalCode')} className={inputCls(false, false)} /></Field>
                   </div>
                 )}
               </div>
@@ -1050,11 +1134,17 @@ function Field({
     : children
   return (
     <div>
-      <label htmlFor={fieldId} className="text-[12px] font-body font-semibold leading-4 text-text-primary mb-1 block">
+      {/* 13px, not 12px: the label was the smallest non-micro text in the pane,
+          which inverted the hierarchy — it sat below the footer line and the
+          static domain suffix in size while being the most important small text
+          in the form. */}
+      <label htmlFor={fieldId} className="mb-1.5 block text-[13px] font-body font-semibold leading-5 text-text-primary">
         {label}
         {required && (
           <>
-            <span aria-hidden="true" className="text-danger ml-0.5">*</span>
+            {/* #B91C1C, not --danger (#EF4444): the lighter red is 3.76:1 on
+                white, under the 4.5:1 AA floor for text this size. */}
+            <span aria-hidden="true" className="ml-0.5 text-[#B91C1C]">*</span>
             <span className="sr-only"> required</span>
           </>
         )}
@@ -1063,7 +1153,7 @@ function Field({
         {icon && <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary">{icon}</div>}
         {enhanced}
       </div>
-      {error && <span id={errorId} className="text-danger text-[11px] mt-1 block">{error}</span>}
+      {error && <span id={errorId} role="alert" className="mt-1 block text-[12px] leading-snug text-[#B91C1C]">{error}</span>}
     </div>
   )
 }
