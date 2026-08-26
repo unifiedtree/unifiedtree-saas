@@ -114,7 +114,7 @@ export function DistributionWizard({ onClose, onCreated }: { onClose: () => void
   return (
     <>
       <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="ut-card ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-xl flex flex-col">
+      <div className="ut-card ut-glass ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-xl flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h3 className="text-text-primary font-semibold">New Distribution</h3>
           <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg"><X size={16} /></button>

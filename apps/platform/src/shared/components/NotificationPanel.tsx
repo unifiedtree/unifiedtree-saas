@@ -68,7 +68,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, on
   return (
     <>
       <div className="fixed inset-0 z-[150] bg-black/30" onClick={onClose} />
-      <div className="ut-card ut-card-lg fixed right-0 top-0 bottom-0 z-[160] w-96 flex flex-col animate-slide-up">
+      <div className="ut-card ut-glass ut-card-lg fixed right-0 top-0 bottom-0 z-[160] w-96 flex flex-col animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-default">
           <div className="flex items-center gap-2">

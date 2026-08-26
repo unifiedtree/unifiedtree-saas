@@ -65,7 +65,7 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
   return (
     <>
       <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="ut-card ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md flex flex-col">
+      <div className="ut-card ut-glass ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-default">
           <h3 className="text-text-primary font-semibold">Add Holiday</h3>
           <button onClick={onClose} className="p-1.5 text-text-tertiary hover:text-text-primary rounded-lg hover:bg-bg-base">×</button>

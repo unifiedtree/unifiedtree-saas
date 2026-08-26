@@ -140,16 +140,19 @@ table td, table th,
  * a different scale, so the app reads as one material instead of a dozen
  * slightly different white boxes.
  *
- * It is frosted glass, tinted emerald. Three things make it read as glass
- * rather than as a grey rectangle:
- *   1. a translucent gradient (never a flat fill) so the ground shows through;
- *   2. backdrop-blur + saturate, which is what actually bends the ground;
- *   3. an inset top highlight — the 1px bright edge a real glass pane catches.
- * Remove any one and it collapses back into a plain card.
+ * It reads as glass from a translucent gradient (never a flat fill) plus an
+ * inset top highlight — the 1px bright edge a real pane catches.
  *
- * Glass needs something behind it. `.ut-ground` paints the ambient emerald
- * light that the blur refracts; a card on a flat background looks grey and
- * slightly dirty. Screens get that from body, below.
+ * ⚠️ NO backdrop-filter HERE, DELIBERATELY. An element with backdrop-filter
+ * becomes the containing block for every `position: fixed` DESCENDANT, so a
+ * fixed drawer/modal rendered inside a card stops being viewport-fixed and gets
+ * clipped to the card's box. That shipped on 2026-08-23 and broke the add/edit
+ * drawers on 14 screens (OrgSetup's "Add Company" panel was cut in half inside
+ * the tab card). Neither tsc nor the build can catch it — it only shows when a
+ * drawer opens.
+ *
+ * If a specific surface genuinely needs the blur AND provably contains no fixed
+ * descendant, add `.ut-glass` alongside `.ut-card`. Do not put it back here.
  *
  * Accessibility: the surface stays >= #F2FBF7 effective, so the app's
  * --text-primary (#171717) keeps ~15:1 on it. Do not darken the gradient
@@ -164,8 +167,6 @@ table td, table th,
       rgba(255, 255, 255, 0.72) 45%,
       rgba(236, 253, 245, 0.62) 100%);
   border: 1px solid rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
   box-shadow:
     0 10px 36px -16px rgba(5, 150, 105, 0.28),
     inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
@@ -173,6 +174,14 @@ table td, table th,
     transform var(--motion-base),
     box-shadow var(--motion-base),
     border-color var(--motion-base);
+}
+
+/* Opt-in blur, for surfaces with NO position:fixed descendants — see the
+   containing-block warning above. Overlay panels (modals, drawers, popovers)
+   are the safe case: they ARE the fixed element, not its ancestor. */
+.ut-glass {
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
 }
 
 /* Small tiles: tighter radius so a 90px tile doesn't read as a pill. */
