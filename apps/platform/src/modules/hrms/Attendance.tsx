@@ -34,10 +34,18 @@ function MyAttendanceTab() {
   const { data: stats, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useMonthlyStats(year, month)
   const { data: history = [], isLoading: histLoading, error: histError, refetch: refetchHist } = useAttendanceHistory(year, month)
 
+  // Explicit palette — see the legend below for the reason (Anil docx #14).
+  // Same colours as the legend dots so a filled day-cell reads unambiguously
+  // against its legend entry.
   const STATUS_BG: Record<string, string> = {
-    PRESENT: 'bg-success text-white shadow-sm', ABSENT: 'bg-danger text-white shadow-sm', LATE: 'bg-warning text-white shadow-sm',
-    HALF_DAY: 'bg-orange-500 text-white shadow-sm', ON_LEAVE: 'bg-accent-default text-white shadow-sm', HOLIDAY: 'bg-purple-500 text-white shadow-sm',
-    WEEKEND: 'bg-bg-base text-text-secondary border border-border-default', WFH: 'bg-cyan-500 text-white shadow-sm',
+    PRESENT: 'bg-emerald-500 text-white shadow-sm',
+    ABSENT:  'bg-red-500 text-white shadow-sm',
+    LATE:    'bg-amber-500 text-white shadow-sm',
+    HALF_DAY:'bg-orange-500 text-white shadow-sm',
+    ON_LEAVE:'bg-sky-500 text-white shadow-sm',
+    HOLIDAY: 'bg-purple-500 text-white shadow-sm',
+    WEEKEND: 'bg-slate-100 text-slate-500 border border-slate-200',
+    WFH:     'bg-cyan-500 text-white shadow-sm',
   }
 
   return (
@@ -78,9 +86,26 @@ function MyAttendanceTab() {
           <MyAttendanceCalendar year={year} month={month} history={history} statusBg={STATUS_BG} />
         )}
         <div className="flex flex-wrap gap-4 mt-8 pt-6 border-t border-border-default">
-          {[['PRESENT', 'bg-success'], ['ABSENT', 'bg-danger'], ['LATE', 'bg-warning'], ['ON_LEAVE', 'bg-accent-default'], ['HOLIDAY', 'bg-purple-500'], ['WEEKEND', 'bg-bg-base border border-border-default']].map(([label, bg]) => (
+          {/*
+            Explicit palette. Semantic tokens (bg-success / bg-warning /
+            bg-bg-base) render as very pale surface fills after the 2026-08-26
+            redesign — fine for chip backgrounds behind dark text, invisible
+            as 12px dots on a white card. Anil docx item 14: PRESENT / LATE /
+            WEEKEND had no visible colour. Palette here mirrors the mobile
+            attendance Badge variants (green / amber / red / cyan / purple)
+            so the legend, calendar cell fills, and app all use the same
+            colours for the same status.
+          */}
+          {[
+            ['PRESENT',  'bg-emerald-500'],
+            ['ABSENT',   'bg-red-500'],
+            ['LATE',     'bg-amber-500'],
+            ['ON_LEAVE', 'bg-sky-500'],
+            ['HOLIDAY',  'bg-purple-500'],
+            ['WEEKEND',  'bg-slate-400'],
+          ].map(([label, bg]) => (
             <div key={label} className="flex items-center gap-2">
-              <div className={clsx('w-3 h-3 rounded-full shadow-sm', bg)} />
+              <div className={clsx('w-3 h-3 rounded-full shadow-sm ring-1 ring-white/70', bg)} />
               <span className="text-xs font-medium text-text-secondary">{label.replace('_', ' ')}</span>
             </div>
           ))}
