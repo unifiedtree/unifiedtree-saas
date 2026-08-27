@@ -442,8 +442,20 @@ export function HrDrawer({
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null)
 
+  // Focus the panel ONCE on mount for keyboard-user accessibility. Do NOT put
+  // this in the same effect as the Escape listener: every parent re-render
+  // (e.g. a form's setState on every keystroke) hands us a new `onClose`
+  // closure, and the combined effect below used to re-fire on every
+  // identity-only change of that dep. `panelRef.current?.focus()` then
+  // stole focus back to the panel div — meaning every keystroke in every
+  // input inside the drawer lost focus and the cursor jumped out.
+  // Anil documented this for all 8 Company/Branch/Dept/Designation/Grade/
+  // EmpType/Shift add+edit flows on 2026-08-27.
   React.useEffect(() => {
     panelRef.current?.focus()
+  }, [])
+
+  React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
