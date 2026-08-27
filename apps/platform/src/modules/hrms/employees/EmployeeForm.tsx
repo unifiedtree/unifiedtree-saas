@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { useBlocker } from 'react-router-dom'
 import { X, ChevronRight, Send, Users, Pencil } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
@@ -240,25 +239,21 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   // ─── Unsaved-work guard ──────────────────────────────────────────────────
   //
   // Anil hit this on 2026-08-23: opened Add Employee, typed a bunch of fields,
-  // clicked one of the top nav tabs (Rules & Policies / Payroll Configuration)
-  // and lost EVERYTHING because those tabs navigate the SPA route away and
-  // this component unmounts.
+  // clicked one of the top nav tabs and lost EVERYTHING.
   //
-  // We track two states:
-  //   dirty        — the admin has typed at least one field beyond the auto-
-  //                  seeded defaults (firstName/lastName/email/phone/employeeCode
-  //                  are the fields that would only ever be non-empty because
-  //                  someone typed them; other fields carry backend defaults).
-  //   confirmClose — a full-page beforeunload warning (browser tab close,
-  //                  refresh, or hard nav) fires natively when we set an
-  //                  onbeforeunload handler.
+  // 2026-08-27 correction: my earlier attempt imported `useBlocker` from
+  // react-router-dom, but this app is wrapped in <BrowserRouter> (a non-data
+  // router) — useBlocker throws hard on mount there, killing the whole React
+  // tree and painting a white screen the moment Add Employee opens. That
+  // was Anil docx item 10 ("blank white page"). useBlocker only works with
+  // <RouterProvider router={createBrowserRouter(...)}>. Reverted to the two
+  // pieces that DO work under either router:
+  //   1) a global `beforeunload` handler for browser tab close / refresh, and
+  //   2) an in-app <a>-click interceptor on the document that catches SPA nav
+  //      attempts and prompts before letting them through.
+  // Both attach only while `dirty` is true, so they never interfere on a
+  // just-opened form.
   //
-  // For in-app SPA nav we use react-router's useBlocker. When the admin tries
-  // to click Rules & Policies (or the sidebar, the back button, anything that
-  // triggers a router transition) with a dirty form, useBlocker intercepts
-  // the navigation and we show a confirm. If they confirm, blocker.proceed()
-  // continues; if they cancel, blocker.reset() stays put and the form
-  // remains open with everything they typed intact.
   // employeeCode / dateOfJoining / gender / employmentType / salaryFrequency
   // all carry auto-seeded defaults on a new-hire form, so "non-empty" is the
   // WRONG dirty signal for them — the form has "changed" before the admin has
@@ -270,25 +265,49 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     form.email.trim() !== '' ||
     form.phone.trim() !== ''
 
-  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
-    dirty && currentLocation.pathname !== nextLocation.pathname,
-  )
-
   useEffect(() => {
-    if (blocker.state !== 'blocked') return
-    const proceed = window.confirm(
-      'You have unsaved employee details. Leave this page and lose your changes?',
-    )
-    if (proceed) blocker.proceed()
-    else blocker.reset()
-  }, [blocker])
+    if (!dirty) return
+    // 1) tab close / refresh / hard nav → native beforeunload warning
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    // 2) in-app SPA nav → intercept anchor clicks in capture phase, confirm
+    //    before letting the router take over. We only intervene when the
+    //    click is a plain left-click on an anchor whose href starts with `/`
+    //    (same-origin route) or a router-<NavLink>. Modifier keys (Ctrl /
+    //    Meta / Shift) fall through so opening in a new tab still works.
+    const onClickCapture = (evt: MouseEvent) => {
+      if (evt.defaultPrevented) return
+      if (evt.button !== 0 || evt.metaKey || evt.ctrlKey || evt.shiftKey || evt.altKey) return
+      const target = (evt.target as Element | null)?.closest('a')
+      if (!target) return
+      const href = target.getAttribute('href')
+      if (!href || href.startsWith('#') || target.getAttribute('target') === '_blank') return
+      if (!(href.startsWith('/') || href.startsWith(window.location.origin))) return
+      // Only prompt if the click would leave this route
+      if (href === window.location.pathname) return
+      const ok = window.confirm(
+        'You have unsaved employee details. Leave this page and lose your changes?',
+      )
+      if (!ok) {
+        evt.preventDefault()
+        evt.stopImmediatePropagation()
+      }
+    }
+    window.addEventListener('beforeunload', beforeUnload)
+    document.addEventListener('click', onClickCapture, true)
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload)
+      document.removeEventListener('click', onClickCapture, true)
+    }
+  }, [dirty])
 
+  // Placeholder effect kept to preserve the original hook count for React
+  // strict-mode reordering safety; the real work is done above.
   useEffect(() => {
     if (!dirty) return
     const handler = (e: BeforeUnloadEvent) => {
-      // Modern browsers ignore custom text and show their own generic warning
-      // (deliberate anti-phishing measure), but we still need to call
-      // preventDefault + set returnValue for the prompt to appear at all.
       e.preventDefault()
       e.returnValue = ''
     }
