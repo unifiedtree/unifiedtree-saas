@@ -158,19 +158,6 @@ table td, table th,
  * --text-primary (#171717) keeps ~15:1 on it. Do not darken the gradient
  * without re-checking contrast.
  * ========================================================== */
-/*
- * MUST live inside @layer components so Tailwind's @layer utilities (fixed /
- * absolute / sticky) beat the `position: relative` this rule sets. Anil hit
- * this on 2026-08-27: every drawer/modal that uses `ut-card ... fixed ...`
- * (Add Leave Type, Add Holiday, Add Zone, New Distribution, Edit Leave Type)
- * lost its `fixed` because globals.css loads AFTER Tailwind, so an
- * unlayered `.ut-card { position: relative }` won on source-order tiebreak
- * and turned the drawer into a static block that rendered at the bottom of
- * the page. `@layer components` demotes this rule below the utilities layer,
- * so `.fixed` wins for drawers while ordinary cards still get their
- * `position: relative` for absolutely-positioned children.
- */
-@layer components {
 .ut-card {
   position: relative;
   border-radius: 20px;
@@ -188,7 +175,21 @@ table td, table th,
     box-shadow var(--motion-base),
     border-color var(--motion-base);
 }
-}
+/*
+ * Restore Tailwind's position utilities when a .ut-card is ALSO given one.
+ * .ut-card sets `position: relative` for cards with absolute descendants,
+ * but the drawer/modal pattern is `<div className="ut-card ... fixed ...">`
+ * and .ut-card was silently overriding the .fixed on source-order tiebreak
+ * — turning a right-slide drawer into a static block that rendered at the
+ * bottom of the page (Anil 2026-08-27, items 11 / 16 / 17 / 18 / 21).
+ * These two-class selectors have specificity (0,2,0) vs .ut-card's (0,1,0),
+ * so they win regardless of source order. Layer tricks didn't take because
+ * Tailwind's build reorders the emitted rules unpredictably.
+ */
+.ut-card.fixed    { position: fixed; }
+.ut-card.absolute { position: absolute; }
+.ut-card.sticky   { position: sticky; }
+.ut-card.static   { position: static; }
 
 /* Opt-in blur, for surfaces with NO position:fixed descendants — see the
    containing-block warning above. Overlay panels (modals, drawers, popovers)
@@ -251,16 +252,6 @@ table td, table th,
  * The OS still owns the dropdown LIST — that part cannot be styled —
  * but the trigger, which is what sits in our layouts, now can.
  * ========================================================== */
-/*
- * Same @layer components trick as .ut-card above: without it, .ut-input's
- * shorthand `padding: 0 14px` beats Tailwind's `pl-9` on source-order tie,
- * so any icon-in-input pattern (`<Search className="absolute left-3">` +
- * `<input className="ut-input pl-9">`) has its placeholder text render at
- * 14px from the left — right under the icon. Anil hit this on 2026-08-27
- * on the Workforce Directory / Team Attendance / Recipient Picker search
- * boxes. Demoting to @layer components lets utility overrides win.
- */
-@layer components {
 .ut-input,
 .ut-select {
   height: 40px;
@@ -303,7 +294,27 @@ table td, table th,
 .ut-input-sm,
 .ut-select-sm { height: 34px; border-radius: 10px; font-size: 13px; }
 .ut-select-sm { padding-right: 34px; background-position: right 10px center; }
-}
+
+/*
+ * Restore Tailwind's padding utilities when they're paired with .ut-input.
+ * Same reason as `.ut-card.fixed` above: `.ut-input { padding: 0 14px }` was
+ * silently overriding `pl-9` (used by every search input with a leading
+ * icon) on source-order tiebreak, and the placeholder rendered right under
+ * the magnifying-glass icon (Anil 2026-08-27, items 9 / 15 / and every other
+ * TableCard search box).
+ *
+ * The full padding utility set is emitted from a JIT scan of the codebase,
+ * so covering pl-9 / pl-10 / pl-11 / pl-12 / pr-9 etc. explicitly is safer
+ * than trying to catch them all with an attribute selector.
+ */
+.ut-input.pl-9  { padding-left: 2.25rem; }
+.ut-input.pl-10 { padding-left: 2.5rem; }
+.ut-input.pl-11 { padding-left: 2.75rem; }
+.ut-input.pl-12 { padding-left: 3rem; }
+.ut-input.pr-9  { padding-right: 2.25rem; }
+.ut-input.pr-10 { padding-right: 2.5rem; }
+.ut-input.pr-11 { padding-right: 2.75rem; }
+.ut-input.pr-12 { padding-right: 3rem; }
 
 /* ============================================================
  * .hr-table — the shared list-screen table (used by 50+ screens).
