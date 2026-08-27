@@ -28,6 +28,27 @@ const LETTER_TYPES: { value: LetterType; label: string }[] = [
   { value: 'CUSTOM',          label: 'Custom' },
 ]
 
+/**
+ * Force this toolbar to re-render on every editor state change. Without it,
+ * `editor.isActive('bold')` and `editor.isActive('italic')` snapshot at the
+ * INITIAL render (usually both true for an empty doc's implicit marks) and
+ * never update — so clicking Bold lights up both B and I at once and neither
+ * button ever visibly toggles off (Anil 2026-08-27, item 20). Standard TipTap
+ * React pattern: listen for selectionUpdate + transaction and bump a tick.
+ */
+function useEditorTick(editor: ReturnType<typeof useEditor>) {
+  const [, forceRender] = React.useReducer((x: number) => x + 1, 0)
+  useEffect(() => {
+    if (!editor) return
+    editor.on('selectionUpdate', forceRender)
+    editor.on('transaction', forceRender)
+    return () => {
+      editor.off('selectionUpdate', forceRender)
+      editor.off('transaction', forceRender)
+    }
+  }, [editor])
+}
+
 function ToolbarButton({
   onClick,
   active,
@@ -131,6 +152,9 @@ function EditorToolbar({
 }: {
   editor: ReturnType<typeof useEditor>
 }) {
+  // MUST be called before any early return — Rules of Hooks. The tick keeps
+  // this toolbar in sync with editor state (bold/italic/heading active).
+  useEditorTick(editor)
   if (!editor) return null
 
   const insertMergeField = (key: string) => {

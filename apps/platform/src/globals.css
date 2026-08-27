@@ -158,6 +158,19 @@ table td, table th,
  * --text-primary (#171717) keeps ~15:1 on it. Do not darken the gradient
  * without re-checking contrast.
  * ========================================================== */
+/*
+ * MUST live inside @layer components so Tailwind's @layer utilities (fixed /
+ * absolute / sticky) beat the `position: relative` this rule sets. Anil hit
+ * this on 2026-08-27: every drawer/modal that uses `ut-card ... fixed ...`
+ * (Add Leave Type, Add Holiday, Add Zone, New Distribution, Edit Leave Type)
+ * lost its `fixed` because globals.css loads AFTER Tailwind, so an
+ * unlayered `.ut-card { position: relative }` won on source-order tiebreak
+ * and turned the drawer into a static block that rendered at the bottom of
+ * the page. `@layer components` demotes this rule below the utilities layer,
+ * so `.fixed` wins for drawers while ordinary cards still get their
+ * `position: relative` for absolutely-positioned children.
+ */
+@layer components {
 .ut-card {
   position: relative;
   border-radius: 20px;
@@ -174,6 +187,7 @@ table td, table th,
     transform var(--motion-base),
     box-shadow var(--motion-base),
     border-color var(--motion-base);
+}
 }
 
 /* Opt-in blur, for surfaces with NO position:fixed descendants — see the
@@ -237,6 +251,16 @@ table td, table th,
  * The OS still owns the dropdown LIST — that part cannot be styled —
  * but the trigger, which is what sits in our layouts, now can.
  * ========================================================== */
+/*
+ * Same @layer components trick as .ut-card above: without it, .ut-input's
+ * shorthand `padding: 0 14px` beats Tailwind's `pl-9` on source-order tie,
+ * so any icon-in-input pattern (`<Search className="absolute left-3">` +
+ * `<input className="ut-input pl-9">`) has its placeholder text render at
+ * 14px from the left — right under the icon. Anil hit this on 2026-08-27
+ * on the Workforce Directory / Team Attendance / Recipient Picker search
+ * boxes. Demoting to @layer components lets utility overrides win.
+ */
+@layer components {
 .ut-input,
 .ut-select {
   height: 40px;
@@ -279,6 +303,7 @@ table td, table th,
 .ut-input-sm,
 .ut-select-sm { height: 34px; border-radius: 10px; font-size: 13px; }
 .ut-select-sm { padding-right: 34px; background-position: right 10px center; }
+}
 
 /* ============================================================
  * .hr-table — the shared list-screen table (used by 50+ screens).
