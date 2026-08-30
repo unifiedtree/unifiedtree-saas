@@ -26,9 +26,30 @@ public class GradeService {
     }
 
     @Transactional
+    /**
+     * Revives a soft-deleted grade with the same code instead of rejecting it.
+     * archive() only sets active=false and the list filters activeTrue, so the
+     * row is hidden from the user but still seen by the old exists-check —
+     * "add, delete, add the same again" returned 422 (client report
+     * 2026-08-30). Filtering the check by active would instead collide with the
+     * non-partial unique index uq_grade_tenant_code and surface as a 500.
+     */
     public Grade create(Grade grade) {
-        if (grade.getCode() != null && repo.existsByCompanyIdAndCode(grade.getCompanyId(), grade.getCode())) {
+        Grade existing = grade.getCode() == null ? null
+                : repo.findByCompanyIdAndCode(grade.getCompanyId(), grade.getCode()).orElse(null);
+
+        if (existing != null && existing.isActive()) {
             throw new BusinessRuleException("Grade code already exists for this company: " + grade.getCode());
+        }
+        if (existing != null) {
+            // Copy the incoming values onto the archived row so it keeps its id
+            // (and every FK pointing at it) while taking the new content.
+            existing.setName(grade.getName());
+            existing.setLevel(grade.getLevel());
+            existing.setDescription(grade.getDescription());
+            existing.setActive(true);
+            existing.setTenantId(TenantContext.getTenantId());
+            return repo.save(existing);
         }
         grade.setTenantId(TenantContext.getTenantId());
         return repo.save(grade);

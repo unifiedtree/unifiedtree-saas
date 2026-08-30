@@ -28,11 +28,42 @@ public class DepartmentService {
                 .stream().map(this::toResponse).toList();
     }
 
+    /**
+     * Create a department, REVIVING a previously archived one of the same name
+     * rather than rejecting it.
+     *
+     * <p>Why the revive branch exists: {@link #archive(UUID)} is a SOFT delete
+     * (sets active=false, the row stays), and {@code listForCompany} filters on
+     * activeTrue — so after archiving, the user sees the department gone. The
+     * old duplicate check called {@code existsByCompanyIdAndNameIgnoreCase},
+     * which has NO active filter, so it still saw the hidden row and threw
+     * DUPLICATE_DEPARTMENT (HTTP 422). Net effect reported by the client on
+     * 2026-08-30: "add a department, delete it, add the same one again -> 422",
+     * with nothing on screen to explain why.
+     *
+     * <p>Simply adding {@code AndActiveTrue} to the check would be WORSE: the
+     * unique index {@code uq_dept_tenant_name (tenant_id, company_id, name)} is
+     * NOT partial, so a second row with the same name would pass validation and
+     * then fail at the database with a constraint violation — a 500 instead of
+     * a 422.
+     *
+     * <p>Reviving is also the semantically right answer: employees and other
+     * rows may still carry this department's id as an FK, so re-using the row
+     * keeps those references intact instead of orphaning them.
+     */
     public DepartmentResponse create(CreateDepartmentRequest req) {
-        if (repository.existsByCompanyIdAndNameIgnoreCase(req.companyId(), req.name())) {
+        Department existing = repository
+                .findByCompanyIdAndNameIgnoreCase(req.companyId(), req.name())
+                .orElse(null);
+
+        if (existing != null && existing.isActive()) {
+            // A genuinely live department with this name — real duplicate.
             throw new BusinessRuleException("Department '" + req.name() + "' already exists", "DUPLICATE_DEPARTMENT");
         }
-        Department d = new Department();
+
+        // Either revive the archived row (keeps its id, and therefore every FK
+        // pointing at it) or start a fresh one.
+        Department d = existing != null ? existing : new Department();
         d.setCompanyId(req.companyId());
         d.setName(req.name());
         d.setCode(req.code());

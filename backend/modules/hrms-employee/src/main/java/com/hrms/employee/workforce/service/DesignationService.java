@@ -39,11 +39,23 @@ public class DesignationService {
         return filtered.stream().map(this::toResponse).toList();
     }
 
+    /**
+     * Revives a soft-deleted designation of the same title rather than
+     * rejecting it. archive() only flips active=false and the list filters on
+     * activeTrue, so the row is invisible to the user but still visible to the
+     * old exists-check — "add, delete, add the same again" returned 422
+     * (client report 2026-08-30). Filtering the check by active would instead
+     * hit the non-partial unique index uq_designation_tenant_title and fail as
+     * a 500. Re-using the row also keeps any FK pointing at this designation.
+     */
     public DesignationResponse create(CreateDesignationRequest req) {
-        if (repository.existsByCompanyIdAndTitleIgnoreCase(req.companyId(), req.title())) {
+        Designation existing = repository
+                .findByCompanyIdAndTitleIgnoreCase(req.companyId(), req.title())
+                .orElse(null);
+        if (existing != null && existing.isActive()) {
             throw new BusinessRuleException("Designation '" + req.title() + "' already exists", "DUPLICATE_DESIGNATION");
         }
-        Designation d = new Designation();
+        Designation d = existing != null ? existing : new Designation();
         d.setCompanyId(req.companyId());
         d.setTitle(req.title());
         d.setGrade(req.grade());

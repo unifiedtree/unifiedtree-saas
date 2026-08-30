@@ -26,9 +26,29 @@ public class EmploymentTypeService {
     }
 
     @Transactional
+    /**
+     * Revives a soft-deleted employment type with the same code instead of
+     * rejecting it. archive() only sets active=false and the list filters
+     * activeTrue, so the row is hidden from the user but still seen by the old
+     * exists-check — "add, delete, add the same again" returned 422 (client
+     * report 2026-08-30). Filtering the check by active would instead collide
+     * with the non-partial unique index uq_emp_type_tenant_code and surface as
+     * a 500.
+     */
     public EmploymentType create(EmploymentType type) {
-        if (repo.existsByCompanyIdAndCode(type.getCompanyId(), type.getCode())) {
+        EmploymentType existing = repo
+                .findByCompanyIdAndCode(type.getCompanyId(), type.getCode())
+                .orElse(null);
+
+        if (existing != null && existing.isActive()) {
             throw new BusinessRuleException("Employment type code already exists: " + type.getCode());
+        }
+        if (existing != null) {
+            existing.setName(type.getName());
+            existing.setPayrollEligible(type.isPayrollEligible());
+            existing.setActive(true);
+            existing.setTenantId(TenantContext.getTenantId());
+            return repo.save(existing);
         }
         type.setTenantId(TenantContext.getTenantId());
         return repo.save(type);
