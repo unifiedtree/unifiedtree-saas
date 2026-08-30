@@ -41,3 +41,7 @@ coverage/
 # Type check
 *.tsbuildinfo
 .claude/worktrees/
+
+# Throwaway Playwright scratch specs created by QA agents mid-run
+apps/platform/e2e/live/tmp-*.spec.ts
+apps/platform/e2e/live/qa-*.spec.ts
