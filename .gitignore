@@ -45,3 +45,9 @@ coverage/
 # Throwaway Playwright scratch specs created by QA agents mid-run
 apps/platform/e2e/live/tmp-*.spec.ts
 apps/platform/e2e/live/qa-*.spec.ts
+
+# Playwright / QA run output — screenshots, traces, route dumps. Regenerated
+# on every run; several MB of PNGs per run and never useful in a diff.
+apps/platform/qa-*-artifacts/
+apps/platform/test-results/
+apps/platform/playwright-report/
