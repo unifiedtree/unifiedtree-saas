@@ -60,13 +60,39 @@ export function Modal({
               onInteractOutside={handleInteractOutside}
               asChild
             >
+              {/*
+                CENTRING LIVES IN framer-motion's x/y, NOT in Tailwind.
+
+                This used to be `-translate-x-1/2 -translate-y-1/2` in the
+                className with `animate={{ y: 0 }}` on the motion props. Motion
+                writes its animated values into an INLINE `transform`, which
+                wins over the utility classes — so the resting transform became
+                effectively `none` and the panel's TOP-LEFT CORNER pinned to the
+                viewport centre instead of the panel being centred on it.
+
+                At 1280x720 the Invite-user modal measured x=640 y=360 h=676:
+                316px hung below the fold, and because it is `position: fixed`
+                it could not be scrolled to. The role pickers and the Send-invite
+                button were physically unreachable — an admin could not invite
+                anyone (QA 2026-08-30, P0-4). Five modals share this component.
+
+                Expressing the -50%/-50% as motion values means they compose
+                into the same inline transform as scale/opacity instead of
+                fighting it. The 8px entry offset is folded into the y calc so
+                the slide-up feel is unchanged.
+
+                max-h + overflow-y-auto is the belt-and-braces half: a panel
+                taller than the viewport now scrolls internally rather than
+                putting its footer out of reach.
+              */}
               <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 8 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                initial={{ opacity: 0, scale: 0.96, x: '-50%', y: 'calc(-50% + 8px)' }}
+                animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
+                exit={{ opacity: 0, scale: 0.96, x: '-50%', y: 'calc(-50% + 8px)' }}
                 transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className={cn(
-                  'fixed left-1/2 top-1/2 z-[var(--z-modal)] w-full -translate-x-1/2 -translate-y-1/2',
+                  'fixed left-1/2 top-1/2 z-[var(--z-modal)] w-full',
+                  'max-h-[calc(100vh-2rem)] overflow-y-auto',
                   'rounded-2xl border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 shadow-xl',
                   modalSizes[size],
                   className,

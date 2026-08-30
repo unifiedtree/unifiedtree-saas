@@ -778,9 +778,20 @@ const DangerTab: React.FC = () => {
   )
 }
 
-export const Settings: React.FC = () => {
+/**
+ * @param tab  Forces the active tab, for routes that declare a LITERAL path
+ *             (/settings/billing, /settings/danger) rather than /settings/:tab.
+ *             Those routes have no `:tab` param, so useParams().tab is
+ *             undefined and the fallback below silently rendered Profile —
+ *             the rail highlighted "Billing", the header read "Billing & Plan",
+ *             and the body showed the user's own name and email. Billing was
+ *             unreachable by anyone including the OWNER (QA 2026-08-30, P0-7).
+ */
+export const Settings: React.FC<{ tab?: TabKey }> = ({ tab: tabProp }) => {
   const { tab } = useParams<{ tab?: string }>()
-  const active: TabKey = VALID_TABS.includes(tab as TabKey) ? (tab as TabKey) : 'profile'
+  // An explicit prop wins over the route param — literal-path routes supply it.
+  const resolved = tabProp ?? tab
+  const active: TabKey = VALID_TABS.includes(resolved as TabKey) ? (resolved as TabKey) : 'profile'
   const meta = TAB_META[active]
 
   const tabContent: Record<TabKey, React.ReactNode> = {

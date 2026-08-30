@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 
 // Must match backend WorkforceEmployee.EmploymentStatus exactly (@Enumerated(STRING)).
@@ -178,6 +178,16 @@ export function useEmployeeDirectory(filters: EmployeeDirectoryFilters, opts?: {
     queryKey: ['hrms', 'employees', filters],
     queryFn: () => apiJson<PageResponse<WorkforceEmployee>>(`/v1/hrms/employees?${params.toString()}`),
     enabled: opts?.enabled ?? true,
+    // `filters` (which includes `search`) is part of the key, so every
+    // keystroke starts a NEW query. Without this, `isLoading` flips true on
+    // each one and Employees.tsx unmounts the whole <TableCard> — including
+    // the search input the user is typing into. Focus jumped to <body> after
+    // the first character and the rest were swallowed: typing "Aisha" left
+    // "A" in the box (QA 2026-08-30, P0-6). Keeping the previous page's data
+    // means isLoading is only ever true for the very first load, so the input
+    // survives. The isFetching opacity treatment at Employees.tsx:161 was
+    // clearly written expecting this behaviour.
+    placeholderData: keepPreviousData,
   })
 }
 
