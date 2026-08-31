@@ -231,8 +231,36 @@ public class WorkforceController {
     }
 
     // -- Workforce directory (employees) -------------------------------------
+    // SECURITY (QA 2026-08-30, P0-1): guard on the PERMISSION ONLY.
+    //
+    // This used to read:
+    //   hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')
+    //     or hasAuthority('hrms.employee.read')
+    // The role-name half made the permission half decorative. A DEPT_MANAGER
+    // token returned 200 with the ENTIRE company roster -- bankIfsc, uan, esi
+    // and dateOfBirth included, byte-identical to the OWNER's payload -- and
+    // revoking hrms.employee.read from the role changed nothing, because the
+    // role NAME still satisfied the guard.
+    //
+    // That also silently broke the product's own promise: Settings -> Roles &
+    // Permissions (PUT /v1/rbac/roles/{id}/permissions) lets an admin decide
+    // what each role may see, but no revoke made there could ever close this
+    // endpoint. Dropping the hasAnyRole clause makes the admin screen
+    // authoritative here.
+    //
+    // Safe to drop, verified against the live seed before changing:
+    //   HR_MANAGER, SUPER_ADMIN, OWNER, ADMIN, FINANCE_LEAD all hold
+    //   hrms.employee.read, so they are unaffected.
+    //   COMPANY_ADMIN does not exist as a role anywhere in the database.
+    //   OWNER was never in the hasAnyRole list to begin with and already
+    //   reached this endpoint purely through the permission -- proof the
+    //   permission path works on its own.
+    //   DEPT_MANAGER/MANAGER lose it by design (client rule 2026-08-30:
+    //   "dept manager cannot see ... admin can modify the access"). Their team
+    //   views are unaffected -- /team, /hrms/attendance and /hrms/att-analytics
+    //   all resolve through attendance.team.read instead.
     @GetMapping("/employees")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER') or hasAuthority('hrms.employee.read')")
+    @PreAuthorize("hasAuthority('hrms.employee.read')")
     public PageResponse<WorkforceEmployeeResponse> directory(
             @RequestParam(required = false) UUID companyId,
             @RequestParam(required = false) UUID departmentId,
@@ -245,7 +273,7 @@ public class WorkforceController {
     }
 
     @GetMapping("/employees/{id}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER') or hasAuthority('hrms.employee.read')")
+    @PreAuthorize("hasAuthority('hrms.employee.read')")
     public WorkforceEmployeeResponse getEmployee(@PathVariable UUID id) {
         return employees.get(id);
     }
