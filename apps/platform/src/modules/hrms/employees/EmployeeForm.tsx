@@ -347,17 +347,34 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   }, [existingIdentity, primaryBank])
   // Weekly off days kept as an ISO-day array so the chip UI can toggle
   // membership cheaply; serialised to CSV ("6,7") on submit to match the
-  // backend column shape. Edit mode seeds from the CSV the server stored
-  // on this employee (may be missing from the response DTO — safe fallback
-  // to the tenant default of Sat+Sun).
-  const parseWeekOffCsv = (csv?: string): number[] => {
-    if (!csv) return [...DEFAULT_WEEK_OFFS]
-    const parts = csv.split(',').map((s) => parseInt(s.trim(), 10)).filter(
-      (n) => Number.isFinite(n) && n >= 1 && n <= 7)
-    return parts.length > 0 ? parts : [...DEFAULT_WEEK_OFFS]
+  // backend column shape.
+  //
+  // The backend DTO (WorkforceEmployeeResponse.weeklyOffDays) projects this
+  // as List<Integer> — see WorkforceDtos.java:206 — not the CSV string the
+  // DB column holds. Anil doc-2 issue 2 (2026-09-01): the "click Edit → blank
+  // page" bug was this: the code used to cast `employee.weeklyOffDays` to
+  // string and call `.split(',')` on what is actually an array of ints,
+  // crashing the whole EmployeeForm render with "TypeError: D.split is not
+  // a function" and leaving EmployeeDetail with just its header block
+  // visible. Now we accept either shape.
+  const parseWeekOffs = (raw: unknown): number[] => {
+    // Array-of-numbers (canonical DTO shape).
+    if (Array.isArray(raw)) {
+      const parts = raw
+        .map((n) => (typeof n === 'string' ? parseInt(n, 10) : (n as number)))
+        .filter((n) => Number.isFinite(n) && n >= 1 && n <= 7)
+      return parts.length > 0 ? parts : [...DEFAULT_WEEK_OFFS]
+    }
+    // Legacy CSV string, in case an older backend returns it.
+    if (typeof raw === 'string' && raw.length > 0) {
+      const parts = raw.split(',').map((s) => parseInt(s.trim(), 10)).filter(
+        (n) => Number.isFinite(n) && n >= 1 && n <= 7)
+      return parts.length > 0 ? parts : [...DEFAULT_WEEK_OFFS]
+    }
+    return [...DEFAULT_WEEK_OFFS]
   }
   const [weeklyOffDays, setWeeklyOffDays] = useState<number[]>(
-    isEdit ? parseWeekOffCsv((employee as unknown as { weeklyOffDays?: string })?.weeklyOffDays)
+    isEdit ? parseWeekOffs((employee as { weeklyOffDays?: unknown })?.weeklyOffDays)
            : [...DEFAULT_WEEK_OFFS],
   )
   const toggleWeekOff = (iso: number) =>

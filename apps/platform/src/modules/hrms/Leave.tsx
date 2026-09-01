@@ -13,6 +13,7 @@ import {
   useApplyLeave, useLeaveDecision, useCancelLeave,
   type LeaveApprovalStatus, type LeaveDuration,
 } from './api/useLeave'
+import { usePendingWfhApprovals, useWfhDecision } from './api/useWfh'
 import { useCompanies } from './api/useOrg'
 import { useHrConfig } from './api/useSettings'
 import { LeaveTypes } from './leave/LeaveTypes'
@@ -412,22 +413,100 @@ function BalancesTab() {
 
 // ── Approvals Tab ─────────────────────────────────────────────────────────────
 
+// Approvals tab renders leave + WFH in one merged list — see Anil doc-2 issue 4
+// (2026-09-01). Rows are discriminated by `kind` so decide/reject calls hit the
+// right endpoint. Both queries pageinate independently but the tab is a single
+// scroll; page 0 for now (paging returns if the union grows past 40 rows).
+
+interface MergedApproval {
+  kind: 'leave' | 'wfh'
+  id: string
+  employeeName?: string | null
+  employeeCode?: string | null
+  departmentName?: string | null
+  startDate: string
+  endDate: string
+  totalDays: number
+  reason: string | null
+  leaveTypeName?: string | null // leave only
+  createdAt?: string
+}
+
 function ApprovalsTab() {
   const { toast } = useToast()
   const [page, setPage] = useState(0)
   const { data, isLoading, error: approvalsError, refetch: refetchApprovals } = usePendingApprovals(page)
+  const { data: wfhData, isLoading: wfhLoading, error: wfhError, refetch: refetchWfh } = usePendingWfhApprovals(page)
   const decide = useLeaveDecision()
-  const [commenting, setCommenting] = useState<{ id: string; approved: boolean } | null>(null)
+  const decideWfh = useWfhDecision()
+  const [commenting, setCommenting] = useState<{ id: string; kind: 'leave' | 'wfh'; approved: boolean } | null>(null)
   const [comment, setComment] = useState('')
 
-  const approvals = data?.content ?? []
-  const total = data?.totalElements ?? 0
+  const leaveRows: MergedApproval[] = (data?.content ?? []).map((l) => ({
+    kind: 'leave' as const,
+    id: l.id,
+    employeeName: l.employeeName,
+    employeeCode: l.employeeCode,
+    departmentName: l.departmentName,
+    startDate: l.startDate,
+    endDate: l.endDate,
+    totalDays: l.totalDays,
+    reason: l.reason,
+    leaveTypeName: l.leaveTypeName ?? 'Leave',
+    createdAt: l.createdAt,
+  }))
+  const wfhRows: MergedApproval[] = (wfhData?.content ?? []).map((w) => {
+    // WFH DTO ships fromDate/toDate (LocalDate). Duration is inclusive-day count.
+    const from = new Date(w.fromDate)
+    const to = new Date(w.toDate)
+    const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+    return {
+      kind: 'wfh' as const,
+      id: w.id,
+      employeeName: w.employeeName,
+      employeeCode: w.employeeCode,
+      departmentName: w.departmentName,
+      startDate: w.fromDate,
+      endDate: w.toDate,
+      totalDays: days,
+      reason: w.reason,
+      leaveTypeName: 'Work From Home',
+      createdAt: w.createdAt,
+    }
+  })
+  // Union then sort by createdAt DESC so freshest requests bubble to the top,
+  // regardless of which endpoint they came from.
+  const approvals: MergedApproval[] = [...leaveRows, ...wfhRows].sort((a, b) => {
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
+    return tb - ta
+  })
+  const total = (data?.totalElements ?? 0) + (wfhData?.totalElements ?? 0)
 
   const handleDecide = async () => {
     if (!commenting) return
+    // WFH rejection MUST carry a comment — backend rejects with
+    // WFH_REJECT_REASON_REQUIRED otherwise. Enforce it in the UI too.
+    if (commenting.kind === 'wfh' && !commenting.approved && !comment.trim()) {
+      toast('A rejection reason is required', 'error')
+      return
+    }
     try {
-      await decide.mutateAsync({ requestId: commenting.id, status: commenting.approved ? 'APPROVED' : 'REJECTED', comment: comment || undefined })
-      toast(commenting.approved ? 'Leave approved' : 'Leave rejected', 'success')
+      if (commenting.kind === 'leave') {
+        await decide.mutateAsync({
+          requestId: commenting.id,
+          status: commenting.approved ? 'APPROVED' : 'REJECTED',
+          comment: comment || undefined,
+        })
+      } else {
+        await decideWfh.mutateAsync({
+          requestId: commenting.id,
+          approved: commenting.approved,
+          comment: comment || undefined,
+        })
+      }
+      const kindLabel = commenting.kind === 'wfh' ? 'WFH' : 'Leave'
+      toast(commenting.approved ? `${kindLabel} approved` : `${kindLabel} rejected`, 'success')
       setCommenting(null)
       setComment('')
     } catch {
@@ -435,50 +514,55 @@ function ApprovalsTab() {
     }
   }
 
+  const anyLoading = isLoading || wfhLoading
+  const hardError = approvalsError && wfhError // both failed = show error state
   return (
     <div className="space-y-3">
-      {isLoading ? (
+      {anyLoading ? (
         <CardSkeleton />
-      ) : approvalsError ? (
-        <EmptyState variant="error" title="Failed to load approvals" primaryAction={{ label: 'Retry', onClick: () => refetchApprovals() }} />
+      ) : hardError ? (
+        <EmptyState variant="error" title="Failed to load approvals" primaryAction={{ label: 'Retry', onClick: () => { refetchApprovals(); refetchWfh() } }} />
       ) : approvals.length === 0 ? (
         <div className="text-center py-16">
           <CheckCircle size={32} className="mx-auto mb-3 text-text-tertiary" />
           <p className="text-text-secondary text-sm">No pending approvals</p>
         </div>
       ) : (
-        approvals.map((leave) => (
-          <div key={leave.id} className="ut-card ut-card-sm px-4 py-3">
+        approvals.map((row) => (
+          <div key={`${row.kind}-${row.id}`} className="ut-card ut-card-sm px-4 py-3">
             {/* Header row: employee identity on the left, status + inline
                 actions on the right so buttons stay compact and don't grow
-                with the card width (previous flex-1 layout stretched to
-                ~500px each on desktop and looked broken). */}
+                with the card width. Kind pill (Leave / WFH) sits next to the
+                pending pill so approvers can tell the two apart at a glance. */}
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-text-primary font-medium text-sm">
-                  {leave.employeeName ?? 'Employee'}{leave.employeeCode ? ` · ${leave.employeeCode}` : ''}
+                  {row.employeeName ?? 'Employee'}{row.employeeCode ? ` · ${row.employeeCode}` : ''}
                 </p>
                 <p className="text-text-secondary text-xs mt-0.5">
-                  {leave.leaveTypeName ?? 'Leave'}
-                  {' · '}{format(new Date(leave.startDate), 'd MMM')} – {format(new Date(leave.endDate), 'd MMM yyyy')}
-                  {' · '}{leave.totalDays} day{leave.totalDays !== 1 ? 's' : ''}
+                  {row.leaveTypeName ?? 'Leave'}
+                  {' · '}{format(new Date(row.startDate), 'd MMM')} – {format(new Date(row.endDate), 'd MMM yyyy')}
+                  {' · '}{row.totalDays} day{row.totalDays !== 1 ? 's' : ''}
                 </p>
-                {leave.departmentName && <p className="text-text-tertiary text-xs mt-0.5">{leave.departmentName}</p>}
-                {leave.reason && <p className="text-text-secondary text-xs mt-1 italic">&ldquo;{leave.reason}&rdquo;</p>}
+                {row.departmentName && <p className="text-text-tertiary text-xs mt-0.5">{row.departmentName}</p>}
+                {row.reason && <p className="text-text-secondary text-xs mt-1 italic">&ldquo;{row.reason}&rdquo;</p>}
               </div>
               <div className="flex flex-shrink-0 items-center gap-2">
+                <HrStatusPill tone={row.kind === 'wfh' ? 'purple' : 'blue'}>
+                  {row.kind === 'wfh' ? 'WFH' : 'Leave'}
+                </HrStatusPill>
                 <HrStatusPill tone="warn">Pending</HrStatusPill>
-                {commenting?.id !== leave.id && (
+                {commenting?.id !== row.id && (
                   <Can code={P.HRMS_LEAVE_APPROVE_L1}>
                     <button
-                      onClick={() => setCommenting({ id: leave.id, approved: false })}
+                      onClick={() => setCommenting({ id: row.id, kind: row.kind, approved: false })}
                       className="inline-flex items-center gap-1 rounded-lg bg-[#FEE2E2] px-2.5 py-1 text-xs font-medium text-[#B91C1C] transition-colors hover:bg-[#FECACA]"
                       aria-label="Reject"
                     >
                       <XIcon size={13} /> Reject
                     </button>
                     <button
-                      onClick={() => setCommenting({ id: leave.id, approved: true })}
+                      onClick={() => setCommenting({ id: row.id, kind: row.kind, approved: true })}
                       className="inline-flex items-center gap-1 rounded-lg bg-[#DCFCE7] px-2.5 py-1 text-xs font-medium text-[#15803D] transition-colors hover:bg-[#BBF7D0]"
                       aria-label="Approve"
                     >
@@ -492,12 +576,18 @@ function ApprovalsTab() {
             {/* Comment box appears only when the reviewer chose Approve or
                 Reject and needs to add an optional note. Kept below the
                 header so the row above stays compact. */}
-            {commenting?.id === leave.id && (
+            {commenting?.id === row.id && (
               <div className="mt-3 space-y-2 border-t border-border-default/40 pt-3">
                 <input
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder={commenting.approved ? 'Approval note (optional)' : 'Rejection reason (optional)'}
+                  placeholder={
+                    commenting.approved
+                      ? 'Approval note (optional)'
+                      : commenting.kind === 'wfh'
+                        ? 'Rejection reason (required)'
+                        : 'Rejection reason (optional)'
+                  }
                   className="ut-input ut-input-sm"
                 />
                 <div className="flex justify-end gap-2">
@@ -509,7 +599,7 @@ function ApprovalsTab() {
                   </button>
                   <button
                     onClick={handleDecide}
-                    disabled={decide.isPending}
+                    disabled={decide.isPending || decideWfh.isPending}
                     className={clsx(
                       'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50',
                       commenting.approved
@@ -518,7 +608,7 @@ function ApprovalsTab() {
                     )}
                   >
                     {commenting.approved ? <Check size={13} /> : <XIcon size={13} />}
-                    {decide.isPending ? 'Working…' : commenting.approved ? 'Confirm Approve' : 'Confirm Reject'}
+                    {(decide.isPending || decideWfh.isPending) ? 'Working…' : commenting.approved ? 'Confirm Approve' : 'Confirm Reject'}
                   </button>
                 </div>
               </div>

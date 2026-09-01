@@ -54,6 +54,18 @@
             <version>1.0.10</version>
         </dependency>
 
+        <!-- Anil doc-2 fix (2026-09-01): normalize TipTap-emitted HTML5 void
+             tags (<br>, <hr>, <img>) to XHTML self-closing form BEFORE the
+             OpenHtmlToPdf Xerces parser sees them. Without this, any letter
+             body that contains a Shift+Enter or Horizontal Rule crashes
+             synchronous /v1/letters/generate with 500 and every recipient
+             in a distribution job fails with "must be terminated" errors. -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.15.3</version>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

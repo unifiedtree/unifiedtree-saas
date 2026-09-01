@@ -192,8 +192,18 @@ public class WorkforceEmployeeService {
         e.setGender(req.gender());
         e.setDepartmentId(req.departmentId());
         e.setDesignationId(req.designationId());
-        e.setBranchId(req.branchId());
+        // Anil doc-2 issue 1 (2026-09-01): HR sets a Geofence per employee but
+        // rarely sets Branch — the Directory Branch column showed "—" for every
+        // row. GeoFenceZone already carries a branch_id (client's model:
+        // Branch → Geofence → Employee), so when the caller doesn't supply
+        // branchId explicitly but does supply a geofence, we derive branchId
+        // from the zone. Explicit branchId (including explicit null on a
+        // future edit) always wins so an admin can override.
         e.setGeoFenceZoneId(req.geoFenceZoneId());
+        UUID resolvedBranchId = req.branchId() != null
+                ? req.branchId()
+                : deriveBranchFromGeofence(req.geoFenceZoneId());
+        e.setBranchId(resolvedBranchId);
         // Weekly off days CSV (ISO 1=Mon..7=Sun). Default Sat+Sun when unset.
         e.setWeeklyOffDays((req.weeklyOffDays() == null || req.weeklyOffDays().isBlank())
                 ? "6,7" : req.weeklyOffDays().trim());
@@ -248,8 +258,17 @@ public class WorkforceEmployeeService {
         if (req.gender()           != null) e.setGender(req.gender());
         if (req.departmentId()     != null) e.setDepartmentId(req.departmentId());
         if (req.designationId()    != null) e.setDesignationId(req.designationId());
+        // Branch / geofence: process together so that assigning a geofence
+        // without also picking a branch back-fills the branch from the zone
+        // (same rule as create()). See Anil doc-2 issue 1.
         if (req.branchId()         != null) e.setBranchId(req.branchId());
-        if (req.geoFenceZoneId()   != null) e.setGeoFenceZoneId(req.geoFenceZoneId());
+        if (req.geoFenceZoneId()   != null) {
+            e.setGeoFenceZoneId(req.geoFenceZoneId());
+            if (req.branchId() == null && e.getBranchId() == null) {
+                UUID derived = deriveBranchFromGeofence(req.geoFenceZoneId());
+                if (derived != null) e.setBranchId(derived);
+            }
+        }
         if (req.reportingManagerId() != null) e.setReportingManagerId(req.reportingManagerId());
         if (req.employmentType()   != null) e.setEmploymentType(req.employmentType());
         if (req.employmentStatus() != null) e.setEmploymentStatus(req.employmentStatus());
@@ -509,6 +528,30 @@ public class WorkforceEmployeeService {
                 parseWeeklyOffDays(e.getWeeklyOffDays()),
                 e.getProfilePhotoUrl(),
                 e.isFaceEnrolled(), checkHasAccount(e.getId()), e.isActive());
+    }
+
+    /**
+     * Look up a geofence's parent branch_id via a single JDBC query. Returns
+     * null if the zone id is null, doesn't exist, or the zone has no branch
+     * attached. RLS on attendance.geo_fence_zones already scopes this to the
+     * caller's tenant. Kept in the service (rather than adding a hrms-attendance
+     * repository dependency) to avoid a cross-module JPA import for one column.
+     */
+    private UUID deriveBranchFromGeofence(UUID zoneId) {
+        if (zoneId == null) return null;
+        try {
+            // Schema is public.geo_fence_zones (@Table on GeoFenceZone), NOT
+            // attendance.* — verified against prod DB 2026-09-01.
+            List<Map<String, Object>> rows = jdbc.queryForList(
+                    "SELECT branch_id FROM public.geo_fence_zones WHERE id = ?",
+                    zoneId);
+            if (rows.isEmpty()) return null;
+            Object v = rows.get(0).get("branch_id");
+            return v == null ? null : (UUID) v;
+        } catch (Exception ex) {
+            log.warn("branch-derive from geofence {} failed: {}", zoneId, ex.getMessage());
+            return null;
+        }
     }
 
     private boolean checkHasAccount(UUID employeeId) {

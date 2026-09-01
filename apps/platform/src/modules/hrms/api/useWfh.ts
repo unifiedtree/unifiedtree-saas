@@ -77,9 +77,50 @@ export function useCancelWfh() {
   })
 }
 
-// NOTE: web has no WFH approvals queue. notificationStore.ts:177 routes
-// WFH_SUBMITTED to /hrms/leave?tab=approvals, but that tab renders
-// usePendingApprovals() from useLeave.ts, which reads
-// /v1/leave/approvals/pending — leave requests only. A WFH request submitted
-// from the app notifies the approver and then lands on a screen that cannot
-// show it. Approving WFH is app-only today; the web hook still needs writing.
+// ─── Approver queue + decisions (Anil doc-2 issue 4, 2026-09-01) ──────────
+// The web Approvals tab used to be leave-only. Employees applying for WFH
+// from the mobile app notified the approver, but the approver landed on a
+// screen that couldn't render the request. Both are now merged client-side
+// in Leave.tsx ApprovalsTab; the backend endpoints have existed since
+// WfhController shipped, so no server change is required.
+
+/** Pending WFH approvals for the current caller (broadens to tenant-wide
+ *  when the caller has hrms.leave.approve.l2 — HR/admin). Poll every 30s
+ *  like the leave queue so a fresh mobile submission surfaces without a
+ *  browser refresh. */
+export function usePendingWfhApprovals(page = 0, size = 20) {
+  return useQuery({
+    queryKey: ['hrms', 'wfh', 'pending-approvals', page, size],
+    queryFn: () =>
+      apiJson<PageResponse<WfhRequestResponse>>(
+        `/v1/wfh/pending-approvals?page=${page}&size=${size}`,
+      ),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  })
+}
+
+/** Approve or reject one WFH request. Mirrors useLeaveDecision so the
+ *  Approvals tab can pick the right hook per row (row.type === 'wfh'). */
+export function useWfhDecision() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: { requestId: string; approved: boolean; comment?: string }) => {
+      const path = args.approved
+        ? `/v1/wfh/${args.requestId}/approve`
+        : `/v1/wfh/${args.requestId}/reject`
+      // Rejection reason is required by the backend (WFH_REJECT_REASON_REQUIRED);
+      // callers must pass a comment when approved=false.
+      return apiJson<WfhRequestResponse>(path, {
+        method: 'POST',
+        body: JSON.stringify({ comment: args.comment ?? '' }),
+      })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'wfh'] })
+      // The leave approvals queue includes WFH now — invalidate both so the
+      // union list re-renders without a stale row.
+      qc.invalidateQueries({ queryKey: ['hrms', 'leave', 'approvals'] })
+    },
+  })
+}

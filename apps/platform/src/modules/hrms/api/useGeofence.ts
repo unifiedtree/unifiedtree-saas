@@ -33,6 +33,10 @@ export interface GeoFenceZonePayload {
   latitude: number
   longitude: number
   radiusMeters: number
+  // Anil doc-2 issue 1 (2026-09-01): the zone→branch link is the anchor of
+  // the client's mental model (Branch → Geofence → Employee). Backend DTO
+  // accepts branchId already; frontend just wasn't sending it.
+  branchId?: string
   departmentId?: string
   punchMethod?: string
   colorHex?: string

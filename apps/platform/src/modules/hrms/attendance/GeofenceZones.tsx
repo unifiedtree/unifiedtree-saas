@@ -5,7 +5,7 @@ import { usePermission, P } from '@unifiedtree/sdk'
 import { EmptyState, Skeleton } from '@unifiedtree/ui-kit'
 import { HrPageHeader, HrStatusPill, HrButton } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
-import { useCompanies, useDepartments } from '../api/useOrg'
+import { useCompanies, useDepartments, useBranches } from '../api/useOrg'
 import {
   useGeofenceZones, useCreateGeofenceZone, useUpdateGeofenceZone, useDeleteGeofenceZone,
   type GeoFenceZone, type GeoFenceZonePayload,
@@ -23,6 +23,11 @@ interface ZoneFormState {
   latitude: string
   longitude: string
   radiusMeters: string
+  // Branch this zone covers. Anil doc-2 issue 1: setting this here is what
+  // populates the Workforce Directory "Branch" column for employees assigned
+  // to the zone (WorkforceEmployeeService derives Employee.branchId from
+  // GeoFenceZone.branchId when HR leaves the employee's Branch blank).
+  branchId: string
   departmentId: string
   punchMethod: string
   colorHex: string
@@ -31,7 +36,7 @@ interface ZoneFormState {
 function emptyForm(): ZoneFormState {
   return {
     name: '', latitude: '', longitude: '', radiusMeters: '100',
-    departmentId: '', punchMethod: 'FACE_RECOGNITION', colorHex: COLOR_PRESETS[0],
+    branchId: '', departmentId: '', punchMethod: 'FACE_RECOGNITION', colorHex: COLOR_PRESETS[0],
   }
 }
 
@@ -41,6 +46,7 @@ function formFromZone(z: GeoFenceZone): ZoneFormState {
     latitude: z.latitude != null ? String(z.latitude) : '',
     longitude: z.longitude != null ? String(z.longitude) : '',
     radiusMeters: z.radiusMeters != null ? String(z.radiusMeters) : '100',
+    branchId: z.branchId ?? '',
     departmentId: z.departmentId ?? '',
     punchMethod: z.punchMethod ?? 'FACE_RECOGNITION',
     colorHex: z.colorHex ?? COLOR_PRESETS[0],
@@ -65,6 +71,7 @@ function ZoneFormModal({
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
   const { data: departments = [] } = useDepartments(companyId)
+  const { data: branches = [] } = useBranches(companyId)
 
   const [form, setForm] = useState<ZoneFormState>(emptyForm())
   // Re-seed the form whenever the modal opens for a different zone.
@@ -104,6 +111,7 @@ function ZoneFormModal({
       latitude: lat,
       longitude: lng,
       radiusMeters: radius,
+      branchId: form.branchId || undefined,
       departmentId: form.departmentId || undefined,
       punchMethod: form.punchMethod || undefined,
       colorHex: form.colorHex,
@@ -188,6 +196,23 @@ function ZoneFormModal({
               inputMode="numeric"
               className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary transition-colors"
             />
+          </div>
+
+          <div>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Assign to Branch</label>
+            <select
+              value={form.branchId}
+              onChange={(e) => set('branchId', e.target.value)}
+              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
+            >
+              <option value="">None (company-wide)</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-text-tertiary">
+              Employees assigned to this zone will be shown under this branch in the Workforce Directory.
+            </p>
           </div>
 
           <div>
