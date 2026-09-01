@@ -427,7 +427,8 @@ interface MergedApproval {
   startDate: string
   endDate: string
   totalDays: number
-  reason: string | null
+  // Widened to accept both string|undefined (leave DTO) and string|null (WFH DTO).
+  reason?: string | null
   leaveTypeName?: string | null // leave only
   createdAt?: string
 }
