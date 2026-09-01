@@ -76,10 +76,10 @@ test('issue 2: employee detail → Edit pencil no longer crashes with empty page
   await page.waitForTimeout(1500)
   await page.screenshot({ path: testInfo.outputPath('detail.png'), fullPage: true })
 
-  // Now click the Edit pencil in the header
-  const editBtn = page.locator('button:has(svg)').filter({ has: page.locator('svg') }).nth(0)
-  // More specific: look for the button next to Notice Period / Active pill
-  const pencilBtn = page.locator('button[class*="p-2"]:has(svg)').first()
+  // Click the Edit pencil (aria-label added on EmployeeDetail 2026-09-01
+  // exactly so this selector is unambiguous — there are ~20 buttons on
+  // this page and a class-based selector clashed with the hamburger).
+  const pencilBtn = page.getByRole('button', { name: /Edit employee/i })
   await expect(pencilBtn).toBeVisible()
   await pencilBtn.click()
   await page.waitForTimeout(1500)
@@ -191,13 +191,20 @@ test('issues 5+6: /v1/letters/generate returns 201 with <br>/<hr>/<img> body', a
   if (genResp.status() >= 400) console.log(`  body: ${body.slice(0, 400)}`)
   expect(genResp.status(), 'generate 2xx').toBeLessThan(300)
 
-  // Distribution path also uses the same generate under the hood.
+  // Distribution path also uses the same generate under the hood — the
+  // request payload needs `recipientFilter` per CreateDistributionRequest
+  // (backend rejects 400 VALIDATION_FAILED otherwise). The filter shape
+  // is a discriminated union — the simplest form is EMPLOYEES with an
+  // explicit employeeIds list.
   const distResp = await request.post(`${BACKEND}/api/v1/letters/distributions`, {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     data: {
       templateId,
       title: `E2E-DIST-${Date.now()}`,
-      recipients: employees.slice(0, 1).map((e: { id: string; email: string }) => ({ employeeId: e.id, email: e.email })),
+      recipientFilter: {
+        type: 'CUSTOM_LIST',
+        employeeIds: employees.slice(0, 1).map((e: { id: string }) => e.id),
+      },
     },
   })
   const distBody = await distResp.text()

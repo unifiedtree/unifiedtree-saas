@@ -1468,7 +1468,11 @@ export const EmployeeDetail: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <HrStatusPill tone={PILL_TONE[statusInfo.tone] ?? 'gray'}>{statusInfo.label}</HrStatusPill>
-                <button onClick={() => setShowEdit(true)} className="p-2 bg-white hover:bg-surface-2 text-text-primary rounded-xl transition-colors">
+                <button
+                  onClick={() => setShowEdit(true)}
+                  aria-label="Edit employee"
+                  title="Edit employee"
+                  className="p-2 bg-white hover:bg-surface-2 text-text-primary rounded-xl transition-colors">
                   <Edit3 size={14} />
                 </button>
               </div>
