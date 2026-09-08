@@ -157,6 +157,18 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   // requireAdmin, or we would send an HR manager to a page that 403s them.
   const canManageBilling = useAuthStore(
     s => (s.user?.roles ?? []).some(r => ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN'].includes(r)))
+  // Mobile parity (staff-onboarding.tsx:119-123): when a DEPT_MANAGER onboards
+  // someone, the new hire reports to THAT manager, not to the department head.
+  // Web never sent reportingManagerId at all, so a manager-created hire always
+  // fell through to the backend's department-head fallback — wrong reporting
+  // line, and it silently breaks that manager's approval queue.
+  const isDeptManager = useAuthStore(
+    s => (s.user?.roles ?? []).some(r => r === 'DEPT_MANAGER')
+      && !(s.user?.roles ?? []).some(r => ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN', 'HR_MANAGER'].includes(r)))
+  // AuthUser.id IS the employee id — the login response returns identical
+  // values for userId and employeeId, and core/api/client.ts documents them
+  // as "the same logical user identifier". AuthUser has no employeeId field.
+  const ownEmployeeId = useAuthStore(s => s.user?.id)
 
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState(employee?.companyId ?? '')
@@ -623,6 +635,10 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
             ? form.designationText.trim()
             : undefined,
           geoFenceZoneId: form.geoFenceZoneId || undefined,
+          // Manager-created hires report to that manager (mobile parity).
+          // Left undefined for admin/HR so the backend keeps its existing
+          // resolveReportingManager() department-head fallback.
+          reportingManagerId: isDeptManager && ownEmployeeId ? ownEmployeeId : undefined,
           weeklyOffDays: weeklyOffDays.length ? formatWeekOffs(weeklyOffDays) : undefined,
           employmentType: form.employmentType as WorkforceEmployee['employmentType'],
           dateOfJoining: form.dateOfJoining || undefined,
@@ -1034,6 +1050,28 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
                 </Sel>
               </Field>
+
+              {/* Read-only reporting-line preview, mirroring the mobile form's
+                  "Report To" row. HR could previously save an employee with no
+                  idea who the approval chain would route to — and a wrong
+                  reporting line silently breaks leave/WFH approvals. */}
+              {!isEdit && (
+                <Field label="Report To">
+                  <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-2/50 px-3 py-2">
+                    <Users size={14} className="flex-shrink-0 text-text-tertiary" />
+                    <span className="text-sm text-text-secondary">
+                      {isDeptManager
+                        ? 'You — this new hire will report to you'
+                        : departmentId
+                          ? `Head of ${departments.find((d) => d.id === departmentId)?.name ?? 'the selected department'}`
+                          : 'Head of the selected department'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Set automatically. Change it later from the employee&rsquo;s profile if needed.
+                  </p>
+                </Field>
+              )}
 
               <Field label="Geofence Zone (Punch)">
                 <div className="flex items-center gap-2">
