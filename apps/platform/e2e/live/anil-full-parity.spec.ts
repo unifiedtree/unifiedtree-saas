@@ -120,9 +120,15 @@ async function login(request: APIRequestContext, email: string, password: string
 
 test.beforeAll(async ({ request }) => {
   // Preflight — bail loudly if the backend is unreachable (billing outage etc.)
+  // Prod actuator lives on port 8081 with context path /mgmt (not exposed via
+  // api.unifiedtree.com LB), so probe the login endpoint with an obviously-
+  // wrong body — any well-formed 400/401/415 means the app is serving.
   try {
-    const h = await request.get(`${BACKEND}/actuator/health`, { timeout: 10_000 })
-    if (!h.ok()) throw new Error(`health ${h.status()}`)
+    const h = await request.post(`${BACKEND}/api/v1/canonical-auth/login`, {
+      data: { probe: true },
+      timeout: 10_000,
+    })
+    if (h.status() >= 500) throw new Error(`preflight ${h.status()}`)
   } catch (e) {
     throw new Error(
       `BACKEND UNREACHABLE (${(e as Error).message}). ` +

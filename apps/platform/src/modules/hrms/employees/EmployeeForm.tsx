@@ -464,7 +464,16 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     }
     if (!departmentId) errs.departmentId = 'Select a department'
     if (!form.employeeCode.trim()) errs.employeeCode = 'Employee code is required'
-    if (!form.dateOfJoining) errs.dateOfJoining = 'Date of joining is required'
+    if (!form.dateOfJoining) {
+      errs.dateOfJoining = 'Date of joining is required'
+    } else if (form.dateOfJoining > todayLocalIso()) {
+      // Mobile parity (staff-onboarding.tsx:682-689) — the app rejects a
+      // future DOJ, web silently accepted it. A future joining date breaks
+      // attendance (no expected working days), payroll proration, and the
+      // probation-end calculation, so it must be blocked here too.
+      // ISO yyyy-MM-dd strings compare correctly lexicographically.
+      errs.dateOfJoining = 'Date of joining cannot be in the future'
+    }
     // DOB is OPTIONAL per mobile parity — format is naturally enforced by
     // <input type="date">, so no manual check needed when a value is set.
     return errs
@@ -881,20 +890,35 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
           <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg hover:bg-white/5"><X size={16} /></button>
         </div>
 
-        {/* Step pills — 3 dots (2 in edit) mirroring the mobile stepper */}
+        {/* Step pills — 3 dots (2 in edit) mirroring the mobile stepper.
+            Mobile parity (staff-onboarding.tsx): pills navigate BACKWARD only.
+            Web previously let you jump straight to Review, skipping every
+            validation gate, and then submit an incomplete employee. Forward
+            movement must go through Next so validateBasic/validateFinancial
+            actually run. */}
         <div className="flex gap-1 px-5 py-3 border-b border-border overflow-x-auto scrollbar-hide">
-          {visibleSteps.map((s, i) => (
-            <button
-              key={s.key}
-              onClick={() => setStep(s.key)}
-              className={clsx(
-                'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all',
-                step === s.key ? 'bg-primary text-white shadow-sm' : 'bg-white text-text-secondary hover:text-text-primary'
-              )}
-            >
-              {i + 1}. {s.label}
-            </button>
-          ))}
+          {visibleSteps.map((s, i) => {
+            const currentIdx = visibleSteps.findIndex((v) => v.key === step)
+            const isForward = i > currentIdx
+            return (
+              <button
+                key={s.key}
+                onClick={() => { if (!isForward) setStep(s.key) }}
+                disabled={isForward}
+                title={isForward ? 'Use Next — the current step has to be valid first' : undefined}
+                className={clsx(
+                  'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+                  step === s.key
+                    ? 'bg-primary text-white shadow-sm'
+                    : isForward
+                      ? 'bg-white/60 text-text-tertiary cursor-not-allowed'
+                      : 'bg-white text-text-secondary hover:text-text-primary'
+                )}
+              >
+                {i + 1}. {s.label}
+              </button>
+            )
+          })}
         </div>
 
         {/* Body */}
@@ -991,7 +1015,10 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
                 <Field label="Date of Joining" required error={errors.dateOfJoining}>
-                  <Input error={!!errors.dateOfJoining} type="date" value={form.dateOfJoining} onChange={(e) => set('dateOfJoining', e.target.value)} />
+                  {/* max stops the picker offering future dates at all; the
+                      validateBasic check is the real gate (a user can still
+                      type into the field on some browsers). */}
+                  <Input error={!!errors.dateOfJoining} type="date" max={todayLocalIso()} value={form.dateOfJoining} onChange={(e) => set('dateOfJoining', e.target.value)} />
                 </Field>
                 <Field label="Date of Birth" error={errors.dateOfBirth}>
                   <Input error={!!errors.dateOfBirth} type="date" value={form.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} />

@@ -124,6 +124,11 @@ public class WorkforceEmployee extends BaseEntity {
     @Column(name = "bank_account_number",      length = 50)  private String bankAccountNumber;
     @Column(name = "bank_ifsc",                length = 15)  private String bankIfsc;
     @Column(name = "bank_account_holder_name", length = 150) private String bankAccountHolderName;
+    // The hrms.employees.bank_branch_name column has existed since the original
+    // schema but was never mapped here, so every branch name HR typed into the
+    // Add-Employee form was silently dropped between the DTO and the DB
+    // (found 2026-09-08 during the full-parity audit).
+    @Column(name = "bank_branch_name",          length = 150) private String bankBranchName;
 
     // -- address -------------------------------------------------------------
     @Column(name = "current_address_line",      length = 255) private String currentAddressLine;

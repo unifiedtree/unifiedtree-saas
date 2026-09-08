@@ -191,7 +191,15 @@ public class WorkforceEmployeeService {
         e.setDateOfBirth(req.dateOfBirth());
         e.setGender(req.gender());
         e.setDepartmentId(req.departmentId());
-        e.setDesignationId(req.designationId());
+        // Designation: explicit id wins. When the tenant has no designations
+        // configured the web form falls back to a free-text input and sends
+        // `designation` — before 2026-09-08 that value had no DTO field and was
+        // silently dropped, so the new hire ended up with no designation at all.
+        // Now we resolve-or-create so the typed title is preserved AND becomes
+        // reusable for the next hire.
+        e.setDesignationId(req.designationId() != null
+                ? req.designationId()
+                : resolveOrCreateDesignation(req.companyId(), req.designation()));
         // Anil doc-2 issue 1 (2026-09-01): HR sets a Geofence per employee but
         // rarely sets Branch — the Directory Branch column showed "—" for every
         // row. GeoFenceZone already carries a branch_id (client's model:
@@ -230,6 +238,8 @@ public class WorkforceEmployeeService {
         e.setBankName(req.bankName());
         e.setBankAccountNumber(req.bankAccountNumber());
         e.setBankIfsc(req.bankIfsc());
+        // 2026-09-08: bank_branch_name column existed but was never mapped.
+        e.setBankBranchName(req.bankBranchName());
 
         e.setCurrentAddressLine(req.currentAddressLine());
         e.setCurrentAddressCity(req.currentAddressCity());
@@ -287,6 +297,7 @@ public class WorkforceEmployeeService {
         if (req.esi()              != null) e.setEsiNumber(req.esi());
         if (req.bankAccountNumber()!= null) e.setBankAccountNumber(req.bankAccountNumber());
         if (req.bankIfsc()         != null) e.setBankIfsc(req.bankIfsc());
+        if (req.bankBranchName()   != null) e.setBankBranchName(req.bankBranchName());
         if (req.monthlySalary()    != null) e.setMonthlySalary(req.monthlySalary());
         if (req.salaryFrequency()  != null) e.setSalaryFrequency(req.salaryFrequency());
         if (req.weeklyOffDays()    != null) e.setWeeklyOffDays(req.weeklyOffDays().trim());
@@ -445,6 +456,7 @@ public class WorkforceEmployeeService {
                 e.getConfirmationDate(), e.getLastWorkingDay(),
                 ctc,
                 e.getPfUan(), e.getEsiNumber(),
+                e.getBankBranchName(),
                 bankAcct, e.getBankIfsc(),
                 monthlySalary, e.getSalaryFrequency(),
                 parseWeeklyOffDays(e.getWeeklyOffDays()),
@@ -523,11 +535,61 @@ public class WorkforceEmployeeService {
                 e.getConfirmationDate(), e.getLastWorkingDay(),
                 null /* ctcAnnual — redacted in list responses */,
                 null /* uan */, null /* esi */,
+                null /* bankBranchName — PII-adjacent, redacted in list */,
                 null /* bankAcct */, null /* bankIfsc */,
                 null /* monthlySalary */, null /* salaryFrequency */,
                 parseWeeklyOffDays(e.getWeeklyOffDays()),
                 e.getProfilePhotoUrl(),
                 e.isFaceEnrolled(), checkHasAccount(e.getId()), e.isActive());
+    }
+
+    /**
+     * Resolve a free-text designation title to a designation id, creating the
+     * row if the tenant doesn't have it yet.
+     *
+     * <p>Context (2026-09-08 data-loss audit): the web Add-Employee form renders
+     * a plain text input for Designation whenever the tenant has no designations
+     * configured, and posts the typed value as {@code designation}. That key had
+     * no field on {@link CreateWorkforceEmployeeRequest}, so Jackson dropped it
+     * and the employee was saved with a null designation — HR typed a job title,
+     * saw "Employee created", and the title vanished.
+     *
+     * <p>Match is case-insensitive on title within the company, and includes
+     * archived rows so a previously-deleted title revives instead of colliding
+     * with the non-partial unique index (same trap documented for departments /
+     * designations in the org soft-delete fix).
+     *
+     * @return the designation id, or null when the title is blank
+     */
+    private UUID resolveOrCreateDesignation(UUID companyId, String title) {
+        if (companyId == null || title == null || title.isBlank()) return null;
+        String clean = title.trim();
+        try {
+            List<Map<String, Object>> existing = jdbc.queryForList(
+                    "SELECT id, is_active FROM hrms.designations "
+                            + "WHERE company_id = ? AND lower(title) = lower(?) LIMIT 1",
+                    companyId, clean);
+            if (!existing.isEmpty()) {
+                UUID id = (UUID) existing.get(0).get("id");
+                Boolean active = (Boolean) existing.get(0).get("is_active");
+                if (Boolean.FALSE.equals(active)) {
+                    // Revive rather than insert a duplicate — the unique index on
+                    // (tenant_id, company_id, title) is NOT partial.
+                    jdbc.update("UPDATE hrms.designations SET is_active = true WHERE id = ?", id);
+                }
+                return id;
+            }
+            return jdbc.queryForObject("""
+                    INSERT INTO hrms.designations (id, tenant_id, company_id, title, is_active, created_at, updated_at)
+                    VALUES (gen_random_uuid(), current_tenant_id(), ?, ?, true, now(), now())
+                    RETURNING id
+                    """, UUID.class, companyId, clean);
+        } catch (Exception ex) {
+            // Never fail the whole employee create over a designation lookup —
+            // log and continue with a null designation.
+            log.warn("resolveOrCreateDesignation('{}') failed: {}", clean, ex.getMessage());
+            return null;
+        }
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.hrms.employee.workforce.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.hrms.employee.workforce.entity.WorkforceEmployee;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -192,6 +193,9 @@ public final class WorkforceDtos {
             // hrms.employees.pii.read permission — see WorkforceEmployeeService.toResponse.
             String uan,
             String esi,
+            // 2026-09-08: projected so edit-mode prefill can hydrate the field
+            // instead of blanking a previously-saved branch name on every save.
+            String bankBranchName,
             @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
             String bankAccountNumber,
             String bankIfsc,
@@ -234,14 +238,31 @@ public final class WorkforceDtos {
             String aadhaarNumber,
             String passportNumber,
             // B2 FIX: statutory + salary fields (were silently dropped by create/update)
-            String uan,
-            String esi,
+            //
+            // 2026-09-08 DATA-LOSS FIX: both clients POST `uanNumber` / `esiNumber`
+            // (web EmployeeForm.tsx:625-626, mobile staff-onboarding.tsx payload),
+            // but this record declared only `uan` / `esi` and Jackson has no
+            // case/name fuzzing — so every UAN and ESI number HR typed was
+            // silently discarded while the form said "Employee created".
+            // @JsonAlias accepts BOTH spellings so neither client needs a change
+            // and older callers keep working.
+            @JsonAlias({"uanNumber", "pfUan"})  String uan,
+            @JsonAlias({"esiNumber"})           String esi,
             BigDecimal monthlySalary,
             String salaryFrequency,
             // bank
             String bankName,
             String bankAccountNumber,
             String bankIfsc,
+            // Same 2026-09-08 fix: the column hrms.employees.bank_branch_name has
+            // always existed and both clients send bankBranchName, but there was
+            // no field here to receive it.
+            String bankBranchName,
+            // Free-text designation. The web form falls back to a text input when
+            // the tenant has no designations configured yet (EmployeeForm.tsx:613);
+            // that value had nowhere to land. The service now auto-creates a
+            // Designation row from it and links designationId.
+            String designation,
             // address
             String currentAddressLine,
             String currentAddressCity,
@@ -277,12 +298,18 @@ public final class WorkforceDtos {
             LocalDate lastWorkingDay,
             String exitReason,
             BigDecimal ctcAnnual,
+            // 2026-09-08: mirror the create-side alias fix so an EDIT doesn't
+            // silently wipe/ignore statutory + branch fields either.
+            String bankBranchName,
             String profilePhotoUrl,
             // B2 FIX (audit 2026-08-15): HR could edit these fields on the
             // employee form and get a "Saved" toast, but the service silently
             // dropped them. Wire them through the update path.
-            String uan,
-            String esi,
+            //
+            // 2026-09-08: same @JsonAlias fix as the create record — clients
+            // send uanNumber/esiNumber, this record declared uan/esi.
+            @JsonAlias({"uanNumber", "pfUan"})  String uan,
+            @JsonAlias({"esiNumber"})           String esi,
             String bankAccountNumber,
             String bankIfsc,
             BigDecimal monthlySalary,
