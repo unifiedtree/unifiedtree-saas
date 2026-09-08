@@ -210,18 +210,17 @@ public class WorkspaceAccessService {
             }
             String first = (req.firstName() == null || req.firstName().isBlank())
                 ? req.email().split("@")[0] : req.firstName();
-            // Positional ctor. Everything past name/email is unset for a
-            // workspace-invite-created employee — including geoFenceZoneId and
-            // weeklyOffDays (defaults applied server-side). B2 FIX 2026-08-15:
-            // uan/esi/monthlySalary/salaryFrequency added between passport and
-            // bank fields, so this call now has 4 extra trailing nulls.
-            CreateWorkforceEmployeeRequest cr = new CreateWorkforceEmployeeRequest(
-                req.companyId(), null, first, null, req.lastName(), req.email(),
-                null, null, null, null, null, null,
-                null, null, null, null, null, null, null,
-                null, null, null,
-                null, null, null, null,   // uan, esi, monthlySalary, salaryFrequency
-                null, null, null, null, null, null, null, null, null, null);
+            // Everything past name/email is unset for a workspace-invite-created
+            // employee — server-side defaults fill in weeklyOffDays (Sat+Sun),
+            // employmentType (FULL_TIME) and roleCode (EMPLOYEE).
+            //
+            // This used to be a positional call with ~36 trailing nulls and it
+            // broke on EVERY field addition to the record (2026-08-15 statutory
+            // fields, then 2026-09-08 bankBranchName/designation). Use the
+            // factory that lives next to the component list instead, so a new
+            // field is a one-line change there and never touches this file.
+            CreateWorkforceEmployeeRequest cr = CreateWorkforceEmployeeRequest.minimal(
+                req.companyId(), first, req.lastName(), req.email());
             WorkforceEmployeeResponse emp = workforceService.create(cr);
 
             InvitationService.InvitationResult result =

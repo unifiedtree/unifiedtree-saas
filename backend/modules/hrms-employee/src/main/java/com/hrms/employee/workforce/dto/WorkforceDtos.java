@@ -274,7 +274,67 @@ public final class WorkforceDtos {
             String emergencyContactPhone,
             // role to assign on invitation (defaults to EMPLOYEE if null)
             String roleCode
-    ) { }
+    ) {
+        /**
+         * Build the minimal request used by the workspace-invite path, where we
+         * only know a company, a name and an email — everything else is filled
+         * in later by the employee or HR.
+         *
+         * <p>This exists because {@code WorkspaceAccessService} used to call the
+         * canonical constructor positionally with ~36 trailing nulls, and that
+         * call site broke every single time a field was added to this record
+         * (twice now: the B2 statutory fields on 2026-08-15, then bankBranchName
+         * and designation on 2026-09-08 — the second one got past a local
+         * incremental {@code mvn compile} and only failed in Cloud Build).
+         *
+         * <p>Keep this factory adjacent to the component list: adding a field
+         * above means adding exactly one {@code null} here, and no call site
+         * anywhere else has to change.
+         */
+        public static CreateWorkforceEmployeeRequest minimal(
+                UUID companyId, String firstName, String lastName, String email) {
+            return new CreateWorkforceEmployeeRequest(
+                    companyId,
+                    null,            // employeeCode — generated server-side
+                    firstName,
+                    null,            // middleName
+                    lastName,
+                    email,
+                    null,            // phone
+                    null,            // dateOfBirth
+                    null,            // gender
+                    null,            // departmentId
+                    null,            // designationId
+                    null,            // branchId
+                    null,            // geoFenceZoneId
+                    null,            // weeklyOffDays — server default Sat+Sun
+                    null,            // reportingManagerId
+                    null,            // employmentType — server default FULL_TIME
+                    null,            // dateOfJoining
+                    null,            // ctcAnnual
+                    null,            // panNumber
+                    null,            // aadhaarNumber
+                    null,            // passportNumber
+                    null,            // uan
+                    null,            // esi
+                    null,            // monthlySalary
+                    null,            // salaryFrequency
+                    null,            // bankName
+                    null,            // bankAccountNumber
+                    null,            // bankIfsc
+                    null,            // bankBranchName
+                    null,            // designation
+                    null,            // currentAddressLine
+                    null,            // currentAddressCity
+                    null,            // currentAddressState
+                    null,            // currentAddressPincode
+                    null,            // emergencyContactName
+                    null,            // emergencyContactRelation
+                    null,            // emergencyContactPhone
+                    null             // roleCode — server default EMPLOYEE
+            );
+        }
+    }
 
     public record UpdateWorkforceEmployeeRequest(
             String firstName,
