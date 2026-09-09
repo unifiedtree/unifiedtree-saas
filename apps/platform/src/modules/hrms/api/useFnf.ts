@@ -46,10 +46,20 @@ export const inr = (n?: number) =>
 
 // ── Settlements ──────────────────────────────────────────────────────────────
 
+/**
+ * Rows per page for the settlements ledger. Exported so the pager's
+ * "Showing 1–20 of N" is computed from the size we actually request — a literal
+ * at the call site would silently start lying the day this number changes.
+ * FnfController declares @PageableDefault(size = 20) on GET /settlements.
+ */
+export const FNF_PAGE_SIZE = 20
+
 export function useFnfSettlements(page = 0) {
   return useQuery({
+    // `page` is part of the key: without it react-query would hand page 2 the
+    // cached page-1 rows and the table would never appear to advance.
     queryKey: ['hrms', 'fnf', 'settlements', page],
-    queryFn: () => apiJson<Page<FnfSettlement>>(`/v1/fnf/settlements?page=${page}&size=20`),
+    queryFn: () => apiJson<Page<FnfSettlement>>(`/v1/fnf/settlements?page=${page}&size=${FNF_PAGE_SIZE}`),
     staleTime: 15_000,
   })
 }

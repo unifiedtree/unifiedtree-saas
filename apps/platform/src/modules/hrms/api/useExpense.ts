@@ -84,10 +84,21 @@ export function useExpenseClaim(id: string | undefined) {
   })
 }
 
+/**
+ * Rows per page for the approvals queue. Exported so the pager's
+ * "Showing 1–20 of N" is computed from the size we actually request — a literal
+ * at the call site would silently start lying the day this number changes.
+ * ExpenseController declares @PageableDefault(size = 20) on
+ * GET /claims/approvals.
+ */
+export const EXPENSE_APPROVALS_PAGE_SIZE = 20
+
 export function usePendingExpenseApprovals(page = 0, enabled = true) {
   return useQuery({
+    // `page` is part of the key: without it react-query would hand page 2 the
+    // cached page-1 rows and the queue would never appear to advance.
     queryKey: ['hrms', 'expense', 'approvals', page],
-    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/claims/approvals?page=${page}&size=20`),
+    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/claims/approvals?page=${page}&size=${EXPENSE_APPROVALS_PAGE_SIZE}`),
     staleTime: 15_000,
     enabled,
   })

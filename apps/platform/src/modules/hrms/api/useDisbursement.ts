@@ -117,10 +117,32 @@ export function useCreateBankProfile() {
   })
 }
 
+/**
+ * Field-for-field mirror of BankProfileService.UpdateBankProfileRequest.
+ *
+ * Every member is optional and the server null-guards each one, so an omitted
+ * field keeps its current value — which also means clearing a nullable text
+ * field needs an explicit '' rather than an omission.
+ *
+ * Not derived from CreateBankProfilePayload any more (2026-09-09): that type
+ * carries `companyId`, which UpdateBankProfileRequest has no component for. A
+ * profile cannot be moved between companies through this route, and the field
+ * was being serialised into the PUT body where it did nothing.
+ */
+export interface UpdateBankProfilePayload {
+  profileName?: string
+  bankFormat?: BankFormat
+  corporateId?: string
+  debitAccountNo?: string
+  ifsc?: string
+  isDefault?: boolean
+  isActive?: boolean
+}
+
 export function useUpdateBankProfile() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string } & Partial<CreateBankProfilePayload> & { isActive?: boolean }) =>
+    mutationFn: ({ id, ...body }: { id: string } & UpdateBankProfilePayload) =>
       apiJson<BankProfile>(`/v1/payroll/bank-profiles/${id}`, {
         method: 'PUT',
         body: JSON.stringify(body),

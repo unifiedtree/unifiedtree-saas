@@ -33,10 +33,20 @@ export const inr = (n?: number) =>
 
 // ── Awards (admin) ───────────────────────────────────────────────────────────
 
+/**
+ * Rows per page for both award lists. Exported so the pager's "Showing 1–20 of
+ * N" is computed from the size we actually request — a literal at the call site
+ * would silently start lying the day this number changes. PliController
+ * declares @PageableDefault(size = 20) for /awards and /my.
+ */
+export const PLI_PAGE_SIZE = 20
+
 export function useAllAwards(page = 0, enabled = true) {
   return useQuery({
+    // `page` is part of the key: without it react-query would hand page 2 the
+    // cached page-1 rows and the table would never appear to advance.
     queryKey: ['hrms', 'pli', 'awards', page],
-    queryFn: () => apiJson<Page<PliAward>>(`/v1/pli/awards?page=${page}&size=20`),
+    queryFn: () => apiJson<Page<PliAward>>(`/v1/pli/awards?page=${page}&size=${PLI_PAGE_SIZE}`),
     staleTime: 15_000,
     enabled,
   })
@@ -45,7 +55,7 @@ export function useAllAwards(page = 0, enabled = true) {
 export function useMyIncentives(page = 0, enabled = true) {
   return useQuery({
     queryKey: ['hrms', 'pli', 'my', page],
-    queryFn: () => apiJson<Page<PliAward>>(`/v1/pli/my?page=${page}&size=20`),
+    queryFn: () => apiJson<Page<PliAward>>(`/v1/pli/my?page=${page}&size=${PLI_PAGE_SIZE}`),
     staleTime: 30_000,
     enabled,
   })

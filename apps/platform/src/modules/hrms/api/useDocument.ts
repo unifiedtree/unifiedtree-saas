@@ -35,10 +35,20 @@ export interface Page<T> {
 
 // ── My documents ─────────────────────────────────────────────────────────────
 
+/**
+ * Rows per page for both vault lists. Exported so the pager's "Showing 1–20 of
+ * N" is computed from the size we actually put on the query string — a literal
+ * at the call site would silently start lying the day this number changes.
+ * DocumentController declares @PageableDefault(size = 20) for both endpoints.
+ */
+export const DOCUMENT_PAGE_SIZE = 20
+
 export function useMyDocuments(page = 0) {
   return useQuery({
+    // `page` is part of the key: without it react-query would hand page 2 the
+    // cached page-1 rows and the table would never appear to advance.
     queryKey: ['hrms', 'document', 'my', page],
-    queryFn: () => apiJson<Page<EmployeeDocument>>(`/v1/document/my?page=${page}&size=20`),
+    queryFn: () => apiJson<Page<EmployeeDocument>>(`/v1/document/my?page=${page}&size=${DOCUMENT_PAGE_SIZE}`),
     staleTime: 30_000,
   })
 }
@@ -46,7 +56,7 @@ export function useMyDocuments(page = 0) {
 export function useEmployeeDocuments(employeeId: string | undefined, page = 0, enabled = true) {
   return useQuery({
     queryKey: ['hrms', 'document', 'employee', employeeId, page],
-    queryFn: () => apiJson<Page<EmployeeDocument>>(`/v1/document/employee/${employeeId}?page=${page}&size=20`),
+    queryFn: () => apiJson<Page<EmployeeDocument>>(`/v1/document/employee/${employeeId}?page=${page}&size=${DOCUMENT_PAGE_SIZE}`),
     enabled: !!employeeId && enabled,
     staleTime: 15_000,
   })

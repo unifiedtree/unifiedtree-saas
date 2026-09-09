@@ -6,11 +6,12 @@ import { useToast } from '@/shared/hooks/useToast'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
+import { hrPaginationFooter } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useFnfSettlements, useProcessSettlement, useApproveSettlement, usePaySettlement,
-  inr,
+  inr, FNF_PAGE_SIZE,
   type FnfStatus, type FnfComponentType,
 } from './api/useFnf'
 
@@ -53,10 +54,17 @@ export const FullAndFinal: React.FC = () => {
 function SettlementsTab({ canApprove, canPay }: { canApprove: boolean; canPay: boolean }) {
   const { toast } = useToast()
   const showActions = canApprove || canPay
-  const { data, isLoading } = useFnfSettlements(0)
+  // Was hard-coded to page 0 with no control, so once a tenant had processed
+  // more than FNF_PAGE_SIZE leavers the older settlements — including any still
+  // sitting at PROCESSED, waiting to be approved — dropped out of the product
+  // entirely.
+  const [page, setPage] = useState(0)
+  const { data, isLoading } = useFnfSettlements(page)
   const approve = useApproveSettlement()
   const pay = usePaySettlement()
   const settlements = data?.content ?? []
+  const total = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
 
   const stats = useMemo(() => {
     const processed = settlements.filter((s) => s.status === 'PROCESSED').length
@@ -84,16 +92,28 @@ function SettlementsTab({ canApprove, canPay }: { canApprove: boolean; canPay: b
     }
   }
 
+  // Awaiting Approval / Approved / Paid Out are reduced over the rows we hold,
+  // so they describe the current page only — /v1/fnf exposes no status
+  // aggregate to call instead. On a money screen a partial "Paid Out" that
+  // looks like a company total is actively misleading, so say which rows it
+  // covers. "Total Settlements" is the real tenant-wide count (totalElements);
+  // it used to show settlements.length, which never exceeded one page.
+  const pageScoped = totalPages > 1 ? 'On this page' : undefined
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<FileText size={18} />} color="blue" value={settlements.length} label="Total Settlements" loading={isLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.processed} label="Awaiting Approval" loading={isLoading} />
-        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved" loading={isLoading} />
-        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.paid)} label="Paid Out" loading={isLoading} />
+        <HrStatCard icon={<FileText size={18} />} color="blue" value={total} label="Total Settlements" loading={isLoading} />
+        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.processed} label="Awaiting Approval" sub={pageScoped} loading={isLoading} />
+        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved" sub={pageScoped} loading={isLoading} />
+        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.paid)} label="Paid Out" sub={pageScoped} loading={isLoading} />
       </div>
 
-      <TableCard>
+      <TableCard
+        footer={hrPaginationFooter({
+          page, pageSize: FNF_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+        })}
+      >
         <table className="hr-table">
           <thead>
             <tr>

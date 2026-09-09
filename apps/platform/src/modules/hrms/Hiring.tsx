@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Plus, Briefcase, DoorOpen, Lock, Users, XCircle } from 'lucide-react'
+import { Plus, Briefcase, DoorOpen, Lock, Pencil, Users, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
+  HrPageHeader, HrButton, HrDrawer, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import {
-  useRequisitions, useCreateRequisition, useCloseRequisition,
+  useRequisitions, useRequisition, useCreateRequisition, useUpdateRequisition, useCloseRequisition,
   useCandidates, useAddCandidate, useUpdateCandidateStage,
   inr, CANDIDATE_STAGES, EMPLOYMENT_TYPES,
   type RequisitionStatus, type CandidateStage, type EmploymentType, type JobRequisition,
@@ -56,13 +56,53 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
   const { data: companies = [] } = useCompanies()
   const { data, isLoading } = useRequisitions(0)
   const create = useCreateRequisition()
+  const update = useUpdateRequisition()
   const close = useCloseRequisition()
-  const requisitions = data?.content ?? []
+  // Memoised like PipelineTab's copy below: `data?.content ?? []` is a fresh
+  // array every render, which re-ran the stats memo on each keystroke in the
+  // create form.
+  const requisitions = useMemo(() => data?.content ?? [], [data])
 
   const [title, setTitle] = useState('')
   const [openings, setOpenings] = useState('1')
   const [location, setLocation] = useState('')
   const [employmentType, setEmploymentType] = useState<EmploymentType>('FULL_TIME')
+
+  // ── Edit one requisition ───────────────────────────────────────────────────
+  // The row is re-fetched through GET /v1/hiring/requisitions/{id} rather than
+  // reused from the list page, so the drawer edits what the server currently
+  // holds (the list is cached for 30s and someone else may have moved it on).
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const { data: editing, isLoading: editingLoading } = useRequisition(editingId ?? undefined)
+  const emptyEdit = { title: '', openings: '1', location: '', employmentType: '', description: '' }
+  const [editForm, setEditForm] = useState(emptyEdit)
+  // Prefill once per requisition, keyed on the id we've already loaded. Keying
+  // the effect on the `editing` OBJECT instead would re-run on every background
+  // refetch and wipe whatever the user had typed mid-edit.
+  const [prefilledId, setPrefilledId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!editing || editing.id === prefilledId) return
+    setEditForm({
+      title: editing.title ?? '',
+      openings: String(editing.openings ?? 1),
+      location: editing.location ?? '',
+      employmentType: editing.employmentType ?? '',
+      description: editing.description ?? '',
+    })
+    setPrefilledId(editing.id)
+  }, [editing, prefilledId])
+
+  // employmentType is a free String on the backend (JobRequisitionRequest), not
+  // an enum, so a requisition can legitimately carry a value that isn't in
+  // EMPLOYMENT_TYPES. Keep it as an option, otherwise opening the drawer would
+  // show the wrong type and saving would quietly rewrite it.
+  const typeOptions = useMemo(() => {
+    const current = editForm.employmentType
+    const known = EMPLOYMENT_TYPES as readonly string[]
+    return current && !known.includes(current) ? [current, ...known] : [...known]
+  }, [editForm.employmentType])
+
+  const closeEdit = () => { setEditingId(null); setPrefilledId(null); setEditForm(emptyEdit) }
 
   const stats = useMemo(() => {
     const open = requisitions.filter((r) => r.status === 'OPEN').length
@@ -87,6 +127,36 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
       setTitle(''); setOpenings('1'); setLocation('')
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed to open requisition', 'error')
+    }
+  }
+
+  const onSaveEdit = async () => {
+    if (!editing) return
+    const nextTitle = editForm.title.trim()
+    if (!nextTitle) { toast('Give the requisition a title', 'error'); return }
+    try {
+      await update.mutateAsync({
+        id: editing.id,
+        // PUT /requisitions/{id} is a FULL REPLACE: HiringService.updateRequisition
+        // calls setDepartmentId / setEmploymentType / setLocation / setDescription /
+        // setHiringManagerId unconditionally, so any field left out of this body is
+        // written back as NULL. departmentId and hiringManagerId aren't editable on
+        // this page, so they're echoed from the loaded record to survive the save.
+        // (openings is the one exception — the service ignores null/<=0 — but it is
+        // @Positive-validated, so send a clamped value rather than relying on that.)
+        companyId: editing.companyId,
+        departmentId: editing.departmentId,
+        hiringManagerId: editing.hiringManagerId,
+        title: nextTitle,
+        openings: Math.max(1, parseInt(editForm.openings, 10) || 1),
+        location: editForm.location.trim() || undefined,
+        employmentType: editForm.employmentType || undefined,
+        description: editForm.description.trim() || undefined,
+      })
+      toast('Requisition updated', 'success')
+      closeEdit()
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Failed to update requisition', 'error')
     }
   }
 
@@ -142,7 +212,7 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
               <th>Candidates</th>
               <th>Status</th>
               <th className="hidden sm:table-cell">Opened</th>
-              {canWrite && <th className="text-right">Action</th>}
+              {canWrite && <th className="text-right">Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -160,7 +230,13 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
                 <td className="hidden sm:table-cell text-text-secondary">{r.createdAt ? format(new Date(r.createdAt), 'd MMM yyyy') : '—'}</td>
                 {canWrite && (
                   <td>
-                    <div className="flex items-center justify-end">
+                    {/* canWrite is hrms.hiring.write — the same authority
+                        @PreAuthorize'd on PUT /v1/hiring/requisitions/{id} and on
+                        the close endpoint. Edit stays available on CLOSED rows:
+                        the update endpoint accepts them and never touches status,
+                        so a typo in a closed requisition can still be corrected. */}
+                    <div className="flex items-center justify-end gap-1.5">
+                      <HrButton size="sm" variant="ghost" onClick={() => setEditingId(r.id)}><Pencil size={14} /> Edit</HrButton>
                       {r.status !== 'CLOSED' && (
                         <HrButton size="sm" variant="ghost" onClick={() => onClose(r.id)} disabled={close.isPending}><XCircle size={14} /> Close</HrButton>
                       )}
@@ -172,6 +248,80 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
           </tbody>
         </table>
       </TableCard>
+
+      {editingId && (
+        <HrDrawer
+          title="Edit Requisition"
+          onClose={closeEdit}
+          footer={
+            <>
+              <HrButton variant="ghost" onClick={closeEdit}>Cancel</HrButton>
+              <HrButton onClick={onSaveEdit} disabled={update.isPending || !editing}>
+                {update.isPending ? 'Saving…' : 'Save Changes'}
+              </HrButton>
+            </>
+          }
+        >
+          {editingLoading && !editing ? (
+            <div className="space-y-3">
+              {[...Array(4)].map((_, i) => <div key={i} className="h-9 w-full animate-pulse rounded-xl bg-bg-base" />)}
+            </div>
+          ) : !editing ? (
+            <p className="text-sm text-text-secondary">This requisition could not be loaded. Close and try again.</p>
+          ) : (
+            <div className="space-y-4">
+              {/* Single-requisition view: the fields the list can't show, read-only.
+                  hiringManagerName is enriched server-side by HiringController and
+                  there is no endpoint to reassign the manager, so it is displayed
+                  rather than edited (its id is echoed back on save). */}
+              <div className="flex flex-wrap items-center gap-2 rounded-xl bg-bg-base px-3 py-2.5">
+                <HrStatusPill tone={STATUS_TONE[editing.status]}>{fmtEnum(editing.status)}</HrStatusPill>
+                <span className="text-xs text-text-tertiary">
+                  {editing.candidateCount} candidate{editing.candidateCount === 1 ? '' : 's'}
+                  {editing.hiringManagerName ? ` · Hiring manager: ${editing.hiringManagerName}` : ''}
+                  {editing.createdAt ? ` · Opened ${format(new Date(editing.createdAt), 'd MMM yyyy')}` : ''}
+                </span>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Job title *</label>
+                <input value={editForm.title} onChange={(e) => setEditForm((p) => ({ ...p, title: e.target.value }))}
+                  placeholder="e.g. Senior Backend Engineer" className="ut-input" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Openings</label>
+                  <input type="number" min={1} value={editForm.openings}
+                    onChange={(e) => setEditForm((p) => ({ ...p, openings: e.target.value }))} className="ut-input" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Type</label>
+                  <select value={editForm.employmentType}
+                    onChange={(e) => setEditForm((p) => ({ ...p, employmentType: e.target.value }))} className="ut-select">
+                    <option value="">Not set</option>
+                    {typeOptions.map((t) => <option key={t} value={t}>{fmtEnum(t)}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Location</label>
+                <input value={editForm.location} onChange={(e) => setEditForm((p) => ({ ...p, location: e.target.value }))}
+                  placeholder="e.g. Bengaluru" className="ut-input" />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Description</label>
+                <textarea value={editForm.description} rows={5}
+                  onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))}
+                  placeholder="Responsibilities, must-have skills, interview loop…"
+                  className="w-full resize-y rounded-xl border border-border-default bg-white px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20" />
+              </div>
+            </div>
+          )}
+        </HrDrawer>
+      )}
     </div>
   )
 }

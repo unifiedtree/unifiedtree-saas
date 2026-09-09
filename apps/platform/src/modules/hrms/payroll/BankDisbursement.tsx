@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Banknote, Users, Wallet, ListChecks, Landmark, Download, Plus, Trash2, CheckCircle2, XCircle, Building2 } from 'lucide-react'
+import { Banknote, Users, Wallet, ListChecks, Landmark, Download, Plus, Pencil, Power, Trash2, CheckCircle2, XCircle, Building2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import {
@@ -14,11 +14,11 @@ import {
   useRuns, useRunEmployees, MONTHS, inr, type RunStatus,
 } from '../api/usePayrollRuns'
 import {
-  useBankProfiles, useCreateBankProfile, useDeleteBankProfile,
+  useBankProfiles, useCreateBankProfile, useUpdateBankProfile, useDeleteBankProfile,
   useDisbursementBatches, useBuildBatch, useDownloadBatchFile,
   useMarkBatchPaid, useCancelBatch,
   BANK_FORMATS, IFSC_PATTERN,
-  type BankFormat, type BatchStatus,
+  type BankFormat, type BatchStatus, type BankProfile,
 } from '../api/useDisbursement'
 
 // Map payroll run status → client status-pill tone.
@@ -143,9 +143,17 @@ export const BankDisbursement: React.FC = () => {
   const markPaid = useMarkBatchPaid()
   const cancelBatch = useCancelBatch()
   const createProfile = useCreateBankProfile()
+  const updateProfile = useUpdateBankProfile()
   const deleteProfile = useDeleteBankProfile()
 
   const [showProfileForm, setShowProfileForm] = useState(false)
+  // Null = the panel is in "add" mode; an id = editing that row. The same form
+  // markup serves both, so a field added to one can never go missing from the
+  // other. Added 2026-09-09: the panel shipped with Add + Delete only, so
+  // correcting a typo'd IFSC or account number meant deleting and recreating a
+  // profile that live disbursement batches hold a foreign key to (and which the
+  // server refuses to delete once any batch references it).
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
   const [profileName, setProfileName]         = useState('')
   const [bankFormat, setBankFormat]           = useState<BankFormat>('GENERIC_CSV')
   const [corporateId, setCorporateId]         = useState('')
@@ -161,8 +169,41 @@ export const BankDisbursement: React.FC = () => {
     }
   }, [profiles, selectedProfileId])
 
-  const onCreateProfile = async () => {
-    if (!effectiveCompanyId) { toast('Pick a company first', 'error'); return }
+  const resetProfileForm = () => {
+    setProfileName(''); setCorporateId(''); setDebitAccountNo(''); setIfsc('')
+    setProfileIsDefault(false); setBankFormat('GENERIC_CSV')
+  }
+
+  const closeProfileForm = () => {
+    setShowProfileForm(false)
+    setEditingProfileId(null)
+    resetProfileForm()
+  }
+
+  /** Header button: opens a blank form, or drops an in-progress edit back to
+   *  "add" mode so a half-finished edit's id can never leak into a create. */
+  const toggleAddProfileForm = () => {
+    if (showProfileForm && !editingProfileId) { closeProfileForm(); return }
+    resetProfileForm()
+    setEditingProfileId(null)
+    setShowProfileForm(true)
+  }
+
+  const openEditProfileForm = (p: BankProfile) => {
+    setProfileName(p.profileName)
+    setBankFormat(p.bankFormat)
+    setCorporateId(p.corporateId ?? '')
+    setDebitAccountNo(p.debitAccountNo)
+    setIfsc(p.ifsc)
+    setProfileIsDefault(p.isDefault)
+    setEditingProfileId(p.id)
+    setShowProfileForm(true)
+  }
+
+  const onSubmitProfile = async () => {
+    // Shared validation: the create and update routes run the same server-side
+    // checks (BankProfileService.validateIfsc / validateFormat), so validating
+    // once here keeps the two paths from drifting apart.
     if (!profileName.trim()) { toast('Profile name is required', 'error'); return }
     if (!debitAccountNo.trim()) { toast('Debit account number is required', 'error'); return }
     if (!IFSC_PATTERN.test(ifsc.trim().toUpperCase())) {
@@ -170,6 +211,34 @@ export const BankDisbursement: React.FC = () => {
       // operator doesn't wait a round-trip to learn the code is malformed.
       toast('IFSC must look like ABCD0XXXXXX (11 chars, 5th is zero)', 'error'); return
     }
+
+    if (editingProfileId) {
+      try {
+        await updateProfile.mutateAsync({
+          id: editingProfileId,
+          profileName: profileName.trim(),
+          bankFormat,
+          // '' rather than undefined on purpose: the server null-guards every
+          // field, so OMITTING corporateId would leave the old value in place
+          // and an operator clearing the box would silently keep a stale
+          // corporate id on the file the bank receives.
+          corporateId: corporateId.trim(),
+          debitAccountNo: debitAccountNo.trim(),
+          ifsc: ifsc.trim().toUpperCase(),
+          isDefault: profileIsDefault,
+          // isActive is deliberately not sent — activation is its own row
+          // control, so saving an edit never silently reactivates a profile
+          // somebody deactivated.
+        })
+        toast('Bank profile updated', 'success')
+        closeProfileForm()
+      } catch (e) {
+        toast((e as Error)?.message ?? 'Failed to update bank profile', 'error')
+      }
+      return
+    }
+
+    if (!effectiveCompanyId) { toast('Pick a company first', 'error'); return }
     try {
       await createProfile.mutateAsync({
         companyId: effectiveCompanyId,
@@ -181,11 +250,24 @@ export const BankDisbursement: React.FC = () => {
         isDefault: profileIsDefault,
       })
       toast('Bank profile added', 'success')
-      setShowProfileForm(false)
-      setProfileName(''); setCorporateId(''); setDebitAccountNo(''); setIfsc('')
-      setProfileIsDefault(false); setBankFormat('GENERIC_CSV')
+      closeProfileForm()
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed to create bank profile', 'error')
+    }
+  }
+
+  /**
+   * Deactivating is the supported alternative to deleting: the server refuses
+   * to delete a profile any disbursement batch references (BANK_PROFILE_IN_USE),
+   * and the build-batch picker below already lists active profiles only.
+   */
+  const onToggleProfileActive = async (p: BankProfile) => {
+    if (p.isActive && !window.confirm(`Deactivate bank profile "${p.profileName}"? Existing batches keep it, but it can no longer be picked when building a new batch.`)) return
+    try {
+      await updateProfile.mutateAsync({ id: p.id, isActive: !p.isActive })
+      toast(p.isActive ? `"${p.profileName}" deactivated` : `"${p.profileName}" activated`, 'success')
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Failed to update bank profile', 'error')
     }
   }
 
@@ -193,6 +275,9 @@ export const BankDisbursement: React.FC = () => {
     if (!window.confirm(`Delete bank profile "${name}"? Existing batches keep their reference; new batches can no longer use it.`)) return
     try {
       await deleteProfile.mutateAsync(id)
+      // Close the editor if it was pointed at the row that just vanished —
+      // otherwise Save would PUT to a deleted id and 404.
+      if (editingProfileId === id) closeProfileForm()
       toast('Bank profile deleted', 'success')
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed to delete bank profile', 'error')
@@ -359,14 +444,24 @@ export const BankDisbursement: React.FC = () => {
               </p>
             </div>
             {canManageProfile && (
-              <HrButton variant={showProfileForm ? 'ghost' : 'primary'} size="sm" onClick={() => setShowProfileForm((s) => !s)}>
-                <Plus size={14} /> {showProfileForm ? 'Close' : 'Add profile'}
+              <HrButton
+                variant={showProfileForm && !editingProfileId ? 'ghost' : 'primary'}
+                size="sm"
+                onClick={toggleAddProfileForm}
+              >
+                <Plus size={14} /> {showProfileForm && !editingProfileId ? 'Close' : 'Add profile'}
               </HrButton>
             )}
           </div>
 
           {showProfileForm && canManageProfile && (
             <div className="mb-4 rounded-xl border border-border-default bg-white p-4">
+              {/* Same markup for both modes — only the heading and the submit
+                  handler differ, so a field can never exist on one and not the
+                  other. */}
+              <p className="mb-3 text-[13px] font-semibold text-text-primary">
+                {editingProfileId ? 'Edit bank profile' : 'New bank profile'}
+              </p>
               <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Profile name *</label>
@@ -403,9 +498,12 @@ export const BankDisbursement: React.FC = () => {
                   </label>
                 </div>
               </div>
-              <div className="mt-4 flex justify-end border-t border-border-default pt-3">
-                <HrButton size="sm" onClick={onCreateProfile} disabled={createProfile.isPending}>
-                  {createProfile.isPending ? 'Saving…' : 'Save profile'}
+              <div className="mt-4 flex justify-end gap-2 border-t border-border-default pt-3">
+                {editingProfileId && (
+                  <HrButton size="sm" variant="ghost" onClick={closeProfileForm}>Cancel</HrButton>
+                )}
+                <HrButton size="sm" onClick={onSubmitProfile} disabled={createProfile.isPending || updateProfile.isPending}>
+                  {createProfile.isPending || updateProfile.isPending ? 'Saving…' : (editingProfileId ? 'Save changes' : 'Save profile')}
                 </HrButton>
               </div>
             </div>
@@ -445,7 +543,28 @@ export const BankDisbursement: React.FC = () => {
                       </td>
                       {canManageProfile && (
                         <td>
-                          <div className="flex justify-end">
+                          {/* All three controls hit BankProfileController and are
+                              gated on hrms.bank_profile.manage: PUT /{id} for
+                              edit and for the active toggle, DELETE /{id} for
+                              remove. */}
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => openEditProfileForm(p)}
+                              className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-emerald-50 hover:text-[#047857]"
+                              aria-label={`Edit ${p.profileName}`}
+                              disabled={updateProfile.isPending}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              onClick={() => onToggleProfileActive(p)}
+                              className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-amber-50 hover:text-amber-700"
+                              aria-label={`${p.isActive ? 'Deactivate' : 'Activate'} ${p.profileName}`}
+                              title={p.isActive ? 'Deactivate' : 'Activate'}
+                              disabled={updateProfile.isPending}
+                            >
+                              <Power size={14} />
+                            </button>
                             <button
                               onClick={() => onDeleteProfile(p.id, p.profileName)}
                               className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-red-50 hover:text-red-600"

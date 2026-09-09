@@ -59,6 +59,13 @@ public class EmploymentTypeService {
         EmploymentType existing = repo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("EmploymentType", id));
         existing.setName(update.getName());
+        // 2026-09-09: neither code nor payrollEligible was copied, so both the
+        // Code field and the "Payroll eligible" checkbox were accepted and
+        // silently discarded. payrollEligible is the flag that decides whether
+        // an employment type gets paid at all, so an admin could untick it,
+        // see "saved", and still have that population run through payroll.
+        existing.setCode(update.getCode());
+        existing.setPayrollEligible(update.isPayrollEligible());
         existing.setActive(update.isActive());
         return repo.save(existing);
     }

@@ -210,10 +210,16 @@ export function useCreateDesignation() {
   })
 }
 
+// PUT /v1/hrms/designations/{id} (hrms.designation.write) is a FULL REPLACE:
+// DesignationService.update calls setDepartmentId / setReportsToDesignationId /
+// setJobResponsibilities unconditionally, so every field omitted from the body
+// is persisted as NULL. reportsToDesignationId was missing from this payload
+// type entirely, which meant callers could not echo it back even if they
+// wanted to — see the echo in OrgSetup's DesignationsTab.
 export function useUpdateDesignation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; title: string; grade?: string; departmentId?: string; jobResponsibilities?: string }) =>
+    mutationFn: ({ id, ...data }: { id: string; title: string; grade?: string; departmentId?: string; reportsToDesignationId?: string; jobResponsibilities?: string }) =>
       apiJson<Designation>(`/v1/hrms/designations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'designations'] }),
   })

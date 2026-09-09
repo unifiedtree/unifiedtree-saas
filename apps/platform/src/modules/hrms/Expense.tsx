@@ -9,11 +9,12 @@ import { useToast } from '@/shared/hooks/useToast'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
+import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
 import {
   useMyClaims, usePendingExpenseApprovals, useExpenseClaim, useSubmitClaim, useExpenseDecision, useReimburseClaim,
   useExpensePolicies, useCreatePolicy, useDeletePolicy,
-  inr, EXPENSE_CATEGORIES,
+  inr, EXPENSE_CATEGORIES, EXPENSE_APPROVALS_PAGE_SIZE,
   type ExpenseStatus, type ExpenseCategory, type ExpensePolicy,
 } from './api/useExpense'
 
@@ -356,11 +357,29 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
   // hand-built custom role need not — so gate the expander rather than offer
   // a control that 403s.
   const canReadClaim = usePermission('hrms.expense.claim.read')
-  const { data, isLoading, isError, refetch } = usePendingExpenseApprovals(0)
+  // Was hard-coded to page 0 with no control. On a busy month-end the queue
+  // runs well past EXPENSE_APPROVALS_PAGE_SIZE and every claim below the cut
+  // was unreachable — not merely hidden, but impossible to approve or
+  // reimburse through the product at all.
+  const [page, setPage] = useState(0)
+  const { data, isLoading, isError, refetch } = usePendingExpenseApprovals(page)
   const decide = useExpenseDecision()
   const reimburse = useReimburseClaim()
   const claims = data?.content ?? []
+  const total = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // Rejecting or reimbursing removes rows from this queue, so the last page can
+  // vanish while the user is standing on it. Pass the RAW data?.totalPages, not
+  // the `?? 1` fallback — that fallback is 1 while a page change is in flight
+  // and would bounce every navigation straight back to page 1.
+  useClampedPage(page, data?.totalPages, setPage)
+
+  // Collapse the expander when the page changes: expandedId holds a claim id
+  // that is no longer on screen, and leaving it set would re-expand that row if
+  // the user paged back.
+  const goToPage = (next: number) => { setExpandedId(null); setPage(next) }
 
   const onDecide = async (id: string, approved: boolean) => {
     let comment: string | undefined
@@ -390,7 +409,11 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
   }
 
   return (
-    <TableCard>
+    <TableCard
+      footer={hrPaginationFooter({
+        page, pageSize: EXPENSE_APPROVALS_PAGE_SIZE, totalElements: total, totalPages, onPageChange: goToPage,
+      })}
+    >
       <table className="hr-table">
         <thead>
           <tr>

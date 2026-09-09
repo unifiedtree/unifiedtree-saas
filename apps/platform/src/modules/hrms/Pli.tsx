@@ -6,11 +6,12 @@ import { useToast } from '@/shared/hooks/useToast'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
+import { hrPaginationFooter } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useAllAwards, useMyIncentives, useCreateAward, usePliDecision, usePayAward,
-  inr, type PliStatus,
+  inr, PLI_PAGE_SIZE, type PliStatus,
 } from './api/usePli'
 
 const STATUS_TONE: Record<PliStatus, PillTone> = {
@@ -46,10 +47,16 @@ export const Pli: React.FC = () => {
 
 function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
   const { toast } = useToast()
-  const { data, isLoading } = useAllAwards(0)
+  // Was hard-coded to page 0 with no control, so only the newest
+  // PLI_PAGE_SIZE awards in the whole tenant were reachable — every older
+  // award was invisible to the approver.
+  const [page, setPage] = useState(0)
+  const { data, isLoading } = useAllAwards(page)
   const decide = usePliDecision()
   const pay = usePayAward()
   const awards = data?.content ?? []
+  const total = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
 
   const onDecide = async (id: string, approved: boolean) => {
     try {
@@ -73,7 +80,11 @@ function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
     <div className="space-y-5">
       {canWrite && <CreateAwardForm />}
 
-      <TableCard>
+      <TableCard
+        footer={hrPaginationFooter({
+          page, pageSize: PLI_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+        })}
+      >
         <table className="hr-table">
           <thead>
             <tr>
@@ -224,8 +235,13 @@ function CreateAwardForm() {
 // ── My Incentives ──────────────────────────────────────────────────────────────
 
 function MyIncentivesTab() {
-  const { data, isLoading } = useMyIncentives(0)
+  // Was hard-coded to page 0 with no control, so a long-serving employee could
+  // not see any incentive older than their most recent PLI_PAGE_SIZE awards.
+  const [page, setPage] = useState(0)
+  const { data, isLoading } = useMyIncentives(page)
   const awards = data?.content ?? []
+  const total = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
 
   const stats = useMemo(() => {
     const proposed = awards.filter((a) => a.status === 'PROPOSED').length
@@ -234,16 +250,28 @@ function MyIncentivesTab() {
     return { proposed, approved, paid }
   }, [awards])
 
+  // Proposed / Approved / Paid Out are reduced over the rows we hold, so they
+  // describe the current page only — /v1/pli exposes no status aggregate to
+  // call instead. Label them as such rather than let a partial "Paid Out"
+  // figure read as a career total. "Total Awards" is genuinely tenant-wide
+  // (totalElements), so it stays unqualified — it used to show awards.length,
+  // which never exceeded one page.
+  const pageScoped = totalPages > 1 ? 'On this page' : undefined
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<Trophy size={18} />} color="blue" value={awards.length} label="Total Awards" loading={isLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.proposed} label="Proposed" loading={isLoading} />
-        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved" loading={isLoading} />
-        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.paid)} label="Paid Out" loading={isLoading} />
+        <HrStatCard icon={<Trophy size={18} />} color="blue" value={total} label="Total Awards" loading={isLoading} />
+        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.proposed} label="Proposed" sub={pageScoped} loading={isLoading} />
+        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved" sub={pageScoped} loading={isLoading} />
+        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.paid)} label="Paid Out" sub={pageScoped} loading={isLoading} />
       </div>
 
-      <TableCard>
+      <TableCard
+        footer={hrPaginationFooter({
+          page, pageSize: PLI_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+        })}
+      >
         <table className="hr-table">
           <thead>
             <tr>

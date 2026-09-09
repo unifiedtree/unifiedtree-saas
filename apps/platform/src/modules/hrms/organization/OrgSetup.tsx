@@ -10,11 +10,11 @@ import { useToast } from '@/shared/hooks/useToast'
 import {
   useCompanies, useCreateCompany, useUpdateCompany, useArchiveCompany,
   useBranches, useCreateBranch, useArchiveBranch,
-  useDepartments, useCreateDepartment, useArchiveDepartment, useSetDepartmentHead,
+  useDepartments, useCreateDepartment, useRenameDepartment, useArchiveDepartment, useSetDepartmentHead,
   useDesignations, useCreateDesignation, useUpdateDesignation, useArchiveDesignation,
   useGrades, useCreateGrade, useUpdateGrade, useDeleteGrade,
   useEmploymentTypes, useCreateEmploymentType, useUpdateEmploymentType, useDeleteEmploymentType,
-  type Company, type Designation, type Grade, type EmploymentTypeRecord,
+  type Company, type Department, type Designation, type Grade, type EmploymentTypeRecord,
 } from '../api/useOrg'
 // Shifts on this page edit attendance.shift_policies — the ONLY shift table the
 // late-mark calculation reads (AttendanceService.getShiftProfile ~line 666 and
@@ -72,6 +72,13 @@ function writeDeptColor(id: string, hex: string) {
 function writeDeptIcon(id: string, key: string) {
   if (typeof window === 'undefined') return
   try { window.localStorage.setItem(`dept_icon_${id}`, key) } catch { /* ignore */ }
+}
+// Counterpart to writeDeptIcon — needed so the Edit drawer opens on the icon
+// that was picked at create time instead of silently resetting everyone to
+// "team" the first time a department is renamed.
+function readDeptIcon(id: string): string {
+  if (typeof window === 'undefined') return DEFAULT_DEPT_ICON
+  try { return window.localStorage.getItem(`dept_icon_${id}`) || DEFAULT_DEPT_ICON } catch { return DEFAULT_DEPT_ICON }
 }
 
 // ── Shift type ───────────────────────────────────────────────────────────────
@@ -529,12 +536,34 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
   const { data: empPage } = useEmployeeDirectory({ companyId: activeCompany?.id, pageSize: 200 })
   const employees = empPage?.content ?? []
   const createDept = useCreateDepartment()
+  const renameDept = useRenameDepartment()
   const archiveDept = useArchiveDepartment()
   const setHead = useSetDepartmentHead()
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<Department | null>(null)
   const emptyDeptForm = { name: '', code: '', description: '', departmentHeadEmployeeId: '', colorHex: DEFAULT_DEPT_COLOR, iconKey: DEFAULT_DEPT_ICON }
   const [form, setForm] = useState(emptyDeptForm)
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
+  // Colour/icon are per-device presets in localStorage, not server state, so a
+  // colour-only save changes nothing react-query can invalidate and the table
+  // would keep painting the old dot until an unrelated refetch. The counter's
+  // value is never read — bumping it is purely the re-render that makes the
+  // cells call readDeptColor again.
+  const [, setPresetTick] = useState(0)
+
+  const openAdd = () => { setEditing(null); setForm(emptyDeptForm); setOpen(true) }
+  const openEdit = (d: Department) => {
+    setEditing(d)
+    setForm({
+      name: d.name,
+      code: d.code ?? '',
+      description: d.description ?? '',
+      departmentHeadEmployeeId: d.departmentHeadEmployeeId ?? '',
+      colorHex: readDeptColor(d.id),
+      iconKey: readDeptIcon(d.id),
+    })
+    setOpen(true)
+  }
 
   const empLabel = (id?: string) => {
     const e = employees.find((x) => x.id === id)
@@ -594,6 +623,62 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
       toast('Failed to create department', 'error')
     }
   }
+
+  // Edit path. Deliberately narrow: the backend exposes NO full-update endpoint
+  // for a department — WorkforceController only has
+  //   PATCH /v1/hrms/departments/{id}/name?name=…   (hrms.department.write)
+  //   PATCH /v1/hrms/departments/{id}/head?employeeId=…  (hrms.department.write)
+  // so name and head are the only server-side fields that can change here. Code
+  // and description are rendered read-only in edit mode rather than collected
+  // into a payload nothing would persist — a save that silently drops half the
+  // form is worse than a field the user can see is locked.
+  const handleUpdate = async () => {
+    if (!editing) return
+    const trimmed = form.name.trim()
+    if (!trimmed) return
+
+    // Same case-insensitive duplicate guard as create, but excluding the row
+    // being edited — otherwise re-saving "Sales" as "Sales" (e.g. after only
+    // changing the head) would fail its own check. DepartmentService.rename
+    // enforces this server-side too (DUPLICATE_DEPARTMENT); this just answers
+    // instantly instead of after a round-trip.
+    const norm = trimmed.toLowerCase()
+    if (norm !== editing.name.trim().toLowerCase()
+      && departments.some((d) => d.id !== editing.id && d.name.trim().toLowerCase() === norm)) {
+      toast('A department with this name already exists', 'error')
+      return
+    }
+
+    try {
+      // Each PATCH is skipped when its field is untouched, so renaming a
+      // department doesn't rewrite its head (and vice versa).
+      if (trimmed !== editing.name) {
+        await renameDept.mutateAsync({ id: editing.id, name: trimmed })
+      }
+      const nextHead = form.departmentHeadEmployeeId || undefined
+      if (nextHead !== (editing.departmentHeadEmployeeId || undefined)) {
+        await setHead.mutateAsync({ id: editing.id, employeeId: nextHead })
+      }
+      writeDeptColor(editing.id, form.colorHex)
+      writeDeptIcon(editing.id, form.iconKey)
+      setPresetTick((t) => t + 1)
+      toast('Department updated', 'success')
+      setOpen(false)
+      setEditing(null)
+      setForm(emptyDeptForm)
+    } catch (e) {
+      // Surface the API message: a rename collision comes back as
+      // DUPLICATE_DEPARTMENT with "Department 'X' already exists", which is far
+      // more useful than a generic failure toast.
+      toast((e as Error)?.message ?? 'Failed to update department', 'error')
+    }
+  }
+
+  const handleSave = () => (editing ? handleUpdate() : handleCreate())
+
+  // An edit can fire two PATCHes (name, head), so the button has to stay
+  // disabled while either is in flight — not just the create mutation.
+  const isDeptPending = createDept.isPending || renameDept.isPending || setHead.isPending
 
   const handleArchive = async (dept: { id: string; name: string }) => {
     const ok = await confirm({
@@ -658,8 +743,14 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
     {
       key: 'actions', header: '',
       cell: (d) => (
+        // hrms.department.write is exactly what PATCH /departments/{id}/name and
+        // /head both @PreAuthorize, so Edit shows for precisely the people the
+        // API will accept it from.
         <Can code={P.HRMS_DEPARTMENT_WRITE}>
-          <button onClick={() => handleArchive(d)} aria-label={`Archive department ${d.name}`} className={BTN_DEL}><Trash2 size={14} /></button>
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => openEdit(d)} aria-label={`Edit department ${d.name}`} className={BTN_ICON}><Pencil size={13} /></button>
+            <button onClick={() => handleArchive(d)} aria-label={`Archive department ${d.name}`} className={BTN_DEL}><Trash2 size={13} /></button>
+          </div>
         </Can>
       ),
     },
@@ -674,7 +765,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
     <div className="space-y-4">
       <div className="flex justify-end">
         <Can code={P.HRMS_DEPARTMENT_WRITE}>
-          <button onClick={() => setOpen(true)} className={BTN_ADD}><Plus size={15} /> Add Department</button>
+          <button onClick={openAdd} className={BTN_ADD}><Plus size={15} /> Add Department</button>
         </Can>
       </div>
 
@@ -686,11 +777,24 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
           emptyDescription="Structure your company by adding departments." />
       )}
 
-      <SlideModal open={open} onClose={() => setOpen(false)} title="Add Department">
+      <SlideModal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Department' : 'Add Department'}>
         <div className="space-y-4">
           <Field label="Department Name *"><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Engineering" /></Field>
-          <Field label="Code"><Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. ENG" /></Field>
-          <Field label="Description"><Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional" /></Field>
+          <Field label="Code">
+            <Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. ENG" disabled={!!editing} />
+          </Field>
+          <Field label="Description">
+            <Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional" disabled={!!editing} />
+          </Field>
+          {editing && (
+            // Honest read-only rather than inputs whose edits get dropped: the
+            // department API only exposes rename + set-head, so code and
+            // description are fixed once the department exists.
+            <p className="-mt-2 text-xs text-text-tertiary">
+              Code and description are set when the department is created and can't be changed here.
+              Rename and department head can.
+            </p>
+          )}
           <Field label="Department Head">
             <HrSelect
               value={form.departmentHeadEmployeeId}
@@ -743,9 +847,11 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
           </Field>
           <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
-            <button onClick={handleCreate} disabled={createDept.isPending} className={BTN_PRIMARY}>
-              {createDept.isPending ? 'Creating...' : 'Create'}
-            </button>
+            <Can code={P.HRMS_DEPARTMENT_WRITE}>
+              <button onClick={handleSave} disabled={isDeptPending} className={BTN_PRIMARY}>
+                {isDeptPending ? 'Saving...' : editing ? 'Save Changes' : 'Create'}
+              </button>
+            </Can>
           </div>
         </div>
       </SlideModal>
@@ -779,7 +885,18 @@ function DesignationsTab({ activeCompany }: CompanyProp) {
     if (!activeCompany || !form.title.trim()) return
     try {
       if (editing) {
-        await updateDesig.mutateAsync({ id: editing.id, ...form })
+        // The update endpoint is a full replace (see useUpdateDesignation), and
+        // this drawer only edits title + grade. Echo the fields it doesn't show
+        // so they survive the save — until this echo existed, fixing a typo in a
+        // designation title silently NULLed its department, reporting line and
+        // job responsibilities.
+        await updateDesig.mutateAsync({
+          id: editing.id,
+          ...form,
+          departmentId: editing.departmentId,
+          reportsToDesignationId: editing.reportsToDesignationId,
+          jobResponsibilities: editing.jobResponsibilities,
+        })
         toast('Designation updated', 'success')
       } else {
         await createDesig.mutateAsync({ companyId: activeCompany.id, ...form })

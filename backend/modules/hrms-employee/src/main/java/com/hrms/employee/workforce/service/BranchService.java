@@ -3,6 +3,7 @@ package com.hrms.employee.workforce.service;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.employee.workforce.dto.WorkforceDtos.BranchResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateBranchRequest;
+import com.hrms.employee.workforce.dto.WorkforceDtos;
 import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateGeofenceRequest;
 import com.hrms.employee.workforce.entity.Branch;
 import com.hrms.employee.workforce.repository.WorkforceBranchRepository;
@@ -49,6 +50,26 @@ public class BranchService {
         b.setGeoFenceRadiusMeters(req.geoFenceRadiusMeters() != null ? req.geoFenceRadiusMeters() : 500);
         b.setHeadquarters(Boolean.TRUE.equals(req.isHeadquarters()));
         b.setActive(true);
+        return toResponse(repository.save(b));
+    }
+
+    /**
+     * Correct a branch's details. Partial: only non-null fields are applied, so
+     * a caller sending {name} cannot blank the address. See UpdateBranchRequest
+     * for why that matters here.
+     */
+    public BranchResponse update(UUID branchId, WorkforceDtos.UpdateBranchRequest req) {
+        Branch b = repository.findById(branchId)
+                .orElseThrow(() -> new ResourceNotFoundException("Branch " + branchId + " not found"));
+        if (req.name() != null && !req.name().isBlank()) b.setName(req.name().trim());
+        if (req.code() != null)          b.setCode(req.code().isBlank() ? null : req.code().trim());
+        if (req.addressLine() != null)   b.setAddressLine(req.addressLine());
+        if (req.city() != null)          b.setCity(req.city());
+        if (req.state() != null)         b.setState(req.state());
+        if (req.country() != null)       b.setCountry(req.country());
+        if (req.pincode() != null)       b.setPincode(req.pincode());
+        if (req.isHeadquarters() != null) b.setHeadquarters(req.isHeadquarters());
+        if (req.isActive() != null)      b.setActive(req.isActive());
         return toResponse(repository.save(b));
     }
 

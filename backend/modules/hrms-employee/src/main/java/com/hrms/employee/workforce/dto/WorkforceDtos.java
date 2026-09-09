@@ -98,6 +98,31 @@ public final class WorkforceDtos {
             Boolean isHeadquarters
     ) { }
 
+    /**
+     * Partial branch update. 2026-09-09: BranchService had create, geofence and
+     * archive but NO update, so a branch's name, code or address could never be
+     * corrected from any client — web or mobile. A typo was permanent short of
+     * archiving the branch and re-creating it, which orphans the employees
+     * pointing at it.
+     *
+     * <p>Every field is nullable and applied only when present. That is
+     * deliberate and load-bearing: CompanyService.update took the opposite
+     * approach and unconditionally copied registrationNumber / panNumber /
+     * gstin, so every company edit silently NULLed the statutory ids used for
+     * PF, ESI and TDS. Partial-and-null-guarded is the pattern here.
+     */
+    public record UpdateBranchRequest(
+            @Size(max = 150) String name,
+            @Size(max = 30)  String code,
+            @Size(max = 255) String addressLine,
+            @Size(max = 100) String city,
+            @Size(max = 100) String state,
+            String country,
+            String pincode,
+            Boolean isHeadquarters,
+            Boolean isActive
+    ) { }
+
     public record UpdateGeofenceRequest(
             @NotNull BigDecimal latitude,
             @NotNull BigDecimal longitude,

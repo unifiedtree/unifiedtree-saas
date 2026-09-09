@@ -3,7 +3,16 @@ import { apiJson } from '@/core/api/client'
 
 // Mirrors backend com.hrms.learning.enums
 export type ProgramStatus = 'PLANNED' | 'ONGOING' | 'COMPLETED' | 'CANCELLED'
-export type EnrollmentStatus = 'ENROLLED' | 'COMPLETED' | 'DROPPED'
+
+/**
+ * LearningService.ENROLLMENT_STATES is
+ * {ENROLLED, IN_PROGRESS, COMPLETED, DROPPED} — IN_PROGRESS was missing here.
+ * No write path sets it today, but `status` is a plain VARCHAR(30) with no
+ * CHECK constraint (V073) and complete() explicitly treats it as a legal
+ * starting state, so a row can carry it. Omitting it made the tone lookup in
+ * Learning.tsx return undefined and the pill render unstyled.
+ */
+export type EnrollmentStatus = 'ENROLLED' | 'IN_PROGRESS' | 'COMPLETED' | 'DROPPED'
 
 export const PROGRAM_STATUSES: ProgramStatus[] = ['PLANNED', 'ONGOING', 'COMPLETED', 'CANCELLED']
 
@@ -35,17 +44,30 @@ export interface TrainingProgram {
   createdAt: string
 }
 
+/**
+ * Field-for-field mirror of LearningService.EnrollmentDto, in record order:
+ *   id, programId, programTitle, employeeId, employeeName,
+ *   status, score, completedAt, createdAt, updatedAt
+ *
+ * 2026-09-09 drift fix. This interface declared `employeeCode`, which the DTO
+ * has never carried — the roster column bound to it would have rendered blank
+ * forever with tsc perfectly happy, exactly how the UAN/ESI field-drop got
+ * through review. `updatedAt` was missing in the other direction. Nullable
+ * members are the ones the record genuinely hands back null for: programTitle
+ * and employeeName come from LEFT JOINs, score/completedAt are unset until an
+ * enrollment is completed.
+ */
 export interface Enrollment {
   id: string
   programId: string
-  programTitle?: string
+  programTitle?: string | null
   employeeId: string
-  employeeName?: string
-  employeeCode?: string
+  employeeName?: string | null
   status: EnrollmentStatus
-  completedAt?: string
   score?: number | null
+  completedAt?: string | null
   createdAt: string
+  updatedAt?: string | null
 }
 
 export interface EmployeeSkill {
@@ -190,6 +212,58 @@ export function useCompleteEnrollment() {
         method: 'POST',
         body: JSON.stringify({ score: score ?? null }),
       }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'learning'] }),
+  })
+}
+
+/** Mirrors LearningService.BulkEnrollResult — counts, never an error, so the
+ *  caller must render all three or a fully-rejected batch looks like success. */
+export interface BulkEnrollResult {
+  enrolled: number
+  alreadyEnrolled: number
+  rejectedForCapacity: number
+}
+
+/**
+ * HR enrolling other people. POST /programs/{id}/enrollments/bulk, gated on
+ * hrms.learning.write — the self-enrol route takes its employee id from the
+ * token and cannot be used to enrol somebody else.
+ */
+export function useBulkEnroll() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ programId, employeeIds }: { programId: string; employeeIds: string[] }) =>
+      apiJson<BulkEnrollResult>(`/v1/learning/programs/${programId}/enrollments/bulk`, {
+        method: 'POST',
+        body: JSON.stringify({ employeeIds }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'learning'] }),
+  })
+}
+
+/**
+ * HR/manager drops someone else's enrollment (hrms.learning.write).
+ *
+ * Distinct from useDropEnrollment on purpose: /drop is the self-service route
+ * and the service rejects it with ENROLLMENT_NOT_OWN when the actor's
+ * employee_id is not the enrollment's owner (the IDOR fix from 2026-08-11), so
+ * pointing an admin roster at /drop would fail for every row but the actor's.
+ */
+export function useAdminDropEnrollment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiJson<Enrollment>(`/v1/learning/enrollments/${id}/admin-drop`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'learning'] }),
+  })
+}
+
+/** Employee leaves their OWN program (hrms.learning.enroll.self). */
+export function useDropEnrollment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiJson<Enrollment>(`/v1/learning/enrollments/${id}/drop`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'learning'] }),
   })
 }

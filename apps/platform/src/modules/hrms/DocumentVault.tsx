@@ -6,11 +6,12 @@ import { useToast } from '@/shared/hooks/useToast'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
+import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useMyDocuments, useEmployeeDocuments, useCreateDocument, useDeleteDocument,
-  DOCUMENT_CATEGORIES,
+  DOCUMENT_CATEGORIES, DOCUMENT_PAGE_SIZE,
   type DocumentCategory, type EmployeeDocument,
 } from './api/useDocument'
 
@@ -63,17 +64,19 @@ export const DocumentVault: React.FC = () => {
 // ── Shared document table ────────────────────────────────────────────────────
 
 function DocumentTable({
-  documents, isLoading, showOwner, canWrite, onDelete,
+  documents, isLoading, showOwner, canWrite, onDelete, footer,
 }: {
   documents: EmployeeDocument[]
   isLoading: boolean
   showOwner?: boolean
   canWrite?: boolean
   onDelete?: (id: string) => void
+  /** Pager built by the owning tab — see hrPaginationFooter. */
+  footer?: React.ReactNode
 }) {
   const cols = 4 + (showOwner ? 1 : 0) + (canWrite ? 1 : 0)
   return (
-    <TableCard>
+    <TableCard footer={footer}>
       <table className="hr-table">
         <thead>
           <tr>
@@ -134,8 +137,13 @@ function DocumentTable({
 // ── My Documents ─────────────────────────────────────────────────────────────
 
 function MyDocumentsTab() {
-  const { data, isLoading } = useMyDocuments(0)
+  // Was hard-coded to page 0 with no control, so an employee with more than
+  // DOCUMENT_PAGE_SIZE documents simply could not reach the rest of their vault.
+  const [page, setPage] = useState(0)
+  const { data, isLoading } = useMyDocuments(page)
   const documents = data?.content ?? []
+  const total = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
 
   const stats = useMemo(() => {
     const expiring = documents.filter((d) => {
@@ -146,14 +154,28 @@ function MyDocumentsTab() {
     return { expiring, expired }
   }, [documents])
 
+  // Expiry is derived client-side from the rows we hold, so these two counts
+  // only ever describe the page on screen — there is no server-side expiry
+  // aggregate to call. Say so on the card rather than let a "2 Expired" read as
+  // the whole vault. "Total Documents" is different: totalElements is the real
+  // tenant-wide figure, so it stays unqualified (it used to show
+  // documents.length, i.e. never more than one page's worth).
+  const pageScoped = totalPages > 1 ? 'On this page' : undefined
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <HrStatCard icon={<FileText size={18} />} color="blue" value={documents.length} label="Total Documents" loading={isLoading} />
-        <HrStatCard icon={<ShieldAlert size={18} />} color="orange" value={stats.expiring} label="Expiring Soon" loading={isLoading} />
-        <HrStatCard icon={<ShieldAlert size={18} />} color="red" value={stats.expired} label="Expired" loading={isLoading} />
+        <HrStatCard icon={<FileText size={18} />} color="blue" value={total} label="Total Documents" loading={isLoading} />
+        <HrStatCard icon={<ShieldAlert size={18} />} color="orange" value={stats.expiring} label="Expiring Soon" sub={pageScoped} loading={isLoading} />
+        <HrStatCard icon={<ShieldAlert size={18} />} color="red" value={stats.expired} label="Expired" sub={pageScoped} loading={isLoading} />
       </div>
-      <DocumentTable documents={documents} isLoading={isLoading} />
+      <DocumentTable
+        documents={documents}
+        isLoading={isLoading}
+        footer={hrPaginationFooter({
+          page, pageSize: DOCUMENT_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+        })}
+      />
     </div>
   )
 }
@@ -169,9 +191,21 @@ function AllDocumentsTab() {
   const employees = dir?.content ?? []
 
   const [employeeId, setEmployeeId] = useState('')
-  const { data, isLoading } = useEmployeeDocuments(employeeId || undefined, 0)
+  // Was hard-coded to page 0 with no control, so anyone whose vault held more
+  // than DOCUMENT_PAGE_SIZE documents appeared to be missing the rest.
+  const [page, setPage] = useState(0)
+  const { data, isLoading } = useEmployeeDocuments(employeeId || undefined, page)
   const documents = data?.content ?? []
+  const total = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
   const remove = useDeleteDocument()
+
+  // Deleting the only row on the last page shrinks totalPages under us; without
+  // this the next fetch asks for a page the server no longer has and the vault
+  // reads as empty. Pass the RAW data?.totalPages, not the `?? 1` fallback —
+  // that fallback is 1 while a page change is in flight and would bounce every
+  // navigation straight back to page 1.
+  useClampedPage(page, data?.totalPages, setPage)
 
   const onDelete = async (id: string) => {
     if (!window.confirm('Delete this document? This cannot be undone.')) return
@@ -187,7 +221,14 @@ function AllDocumentsTab() {
     <div className="space-y-4">
       <div className="ut-card p-5">
         <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee</label>
-        <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
+        <select
+          value={employeeId}
+          // Switching employee resets to page 0: the new vault may be shorter
+          // than the old one, and holding page 3 would land the user on an
+          // out-of-range page that renders as an empty table.
+          onChange={(e) => { setEmployeeId(e.target.value); setPage(0) }}
+          className="ut-select"
+        >
           <option value="">Select an employee…</option>
           {employees.map((emp) => (
             <option key={emp.id} value={emp.id}>
@@ -204,6 +245,9 @@ function AllDocumentsTab() {
           showOwner
           canWrite={canWrite}
           onDelete={canWrite ? onDelete : undefined}
+          footer={hrPaginationFooter({
+            page, pageSize: DOCUMENT_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+          })}
         />
       ) : (
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border-default bg-white py-16 text-center">

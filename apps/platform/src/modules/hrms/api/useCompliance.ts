@@ -66,12 +66,24 @@ export const inr = (n?: number | null) =>
 
 // ── Compliance calendar ──────────────────────────────────────────────────────
 
+/**
+ * Rows per page for all three compliance registers. Exported so the pager's
+ * "Showing 1–50 of N" is computed from the size we actually request — a literal
+ * at the call site would silently start lying the day this number changes.
+ * ComplianceController declares @PageableDefault(size = 50) on /items,
+ * /filings and /posh alike, so one constant covers all three.
+ */
+export const COMPLIANCE_PAGE_SIZE = 50
+
 export function useComplianceItems(companyId?: string, page = 0) {
   return useQuery({
+    // `companyId` AND `page` are both in the key: without the page react-query
+    // would hand page 2 the cached page-1 rows and the table would never appear
+    // to advance.
     queryKey: ['hrms', 'compliance', 'items', companyId, page],
     queryFn: () =>
       apiJson<Page<ComplianceItem>>(
-        `/v1/compliance/items?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=50`,
+        `/v1/compliance/items?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=${COMPLIANCE_PAGE_SIZE}`,
       ),
     staleTime: 30_000,
   })
@@ -112,7 +124,7 @@ export function useStatutoryFilings(companyId?: string, page = 0) {
     queryKey: ['hrms', 'compliance', 'filings', companyId, page],
     queryFn: () =>
       apiJson<Page<StatutoryFiling>>(
-        `/v1/compliance/filings?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=50`,
+        `/v1/compliance/filings?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=${COMPLIANCE_PAGE_SIZE}`,
       ),
     staleTime: 30_000,
   })
@@ -154,7 +166,7 @@ export function usePoshComplaints(companyId?: string, page = 0, enabled = true) 
     queryKey: ['hrms', 'compliance', 'posh', companyId, page],
     queryFn: () =>
       apiJson<Page<PoshComplaint>>(
-        `/v1/compliance/posh?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=50`,
+        `/v1/compliance/posh?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=${COMPLIANCE_PAGE_SIZE}`,
       ),
     staleTime: 15_000,
     enabled,

@@ -6,13 +6,14 @@ import { useToast } from '@/shared/hooks/useToast'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
+import { hrPaginationFooter } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useComplianceItems, useCreateComplianceItem, useMarkComplianceDone,
   useStatutoryFilings, useCreateFiling, useFileFiling,
   usePoshComplaints, useCreatePoshComplaint, useUpdatePoshStatus,
-  inr, FILING_TYPES, POSH_STATUSES, POSH_SEVERITIES,
+  inr, FILING_TYPES, POSH_STATUSES, POSH_SEVERITIES, COMPLIANCE_PAGE_SIZE,
   type ComplianceStatus, type FilingType, type FilingStatus, type PoshStatus,
 } from './api/useCompliance'
 
@@ -68,12 +69,24 @@ export const Compliance: React.FC = () => {
 
 function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boolean }) {
   const { toast } = useToast()
-  const { data, isLoading } = useComplianceItems(companyId || undefined)
+  // Was hard-coded to page 0 with no control, so a tenant tracking more than
+  // COMPLIANCE_PAGE_SIZE obligations could not see the rest of its calendar —
+  // on a statutory screen, a due date you cannot see is a due date you miss.
+  const [page, setPage] = useState(0)
+  const { data, isLoading } = useComplianceItems(companyId || undefined, page)
   const create = useCreateComplianceItem()
   const markDone = useMarkComplianceDone()
   const { data: dir } = useEmployeeDirectory({ companyId, pageSize: 100 }, { enabled: !!companyId })
   const employees = dir?.content ?? []
   const items = data?.content ?? []
+  const total = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
+
+  // The company selector lives on the parent, so the only way to notice a
+  // filter change down here is to watch the prop. Without this, switching to a
+  // company with fewer obligations while on page 3 asks the server for a page
+  // it does not have and the calendar renders empty.
+  React.useEffect(() => { setPage(0) }, [companyId])
 
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('')
@@ -116,12 +129,18 @@ function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boo
     }
   }
 
+  // Pending / Overdue / Completed are counted over the rows we hold, so they
+  // describe the current page only — /v1/compliance exposes no status
+  // aggregate to call instead. Say so rather than let "0 Overdue" on page 1
+  // imply the company is clean when page 2 is full of late filings.
+  const pageScoped = totalPages > 1 ? 'On this page' : undefined
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <HrStatCard icon={<CalendarClock size={18} />} color="orange" value={stats.pending} label="Pending" loading={isLoading} />
-        <HrStatCard icon={<AlertTriangle size={18} />} color="red" value={stats.overdue} label="Overdue" loading={isLoading} />
-        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.done} label="Completed" loading={isLoading} />
+        <HrStatCard icon={<CalendarClock size={18} />} color="orange" value={stats.pending} label="Pending" sub={pageScoped} loading={isLoading} />
+        <HrStatCard icon={<AlertTriangle size={18} />} color="red" value={stats.overdue} label="Overdue" sub={pageScoped} loading={isLoading} />
+        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.done} label="Completed" sub={pageScoped} loading={isLoading} />
       </div>
 
       {canWrite && (
@@ -155,7 +174,11 @@ function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boo
         </div>
       )}
 
-      <TableCard>
+      <TableCard
+        footer={hrPaginationFooter({
+          page, pageSize: COMPLIANCE_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+        })}
+      >
         <table className="hr-table">
           <thead>
             <tr>
@@ -201,10 +224,23 @@ function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boo
 
 function FilingsTab({ companyId, canWrite }: { companyId: string; canWrite: boolean }) {
   const { toast } = useToast()
-  const { data, isLoading } = useStatutoryFilings(companyId || undefined)
+  // Was hard-coded to page 0 with no control. The filings ledger is append-only
+  // and grows every month, so past COMPLIANCE_PAGE_SIZE rows the older PF / ESI
+  // / TDS history simply disappeared from the product — including anything
+  // still DUE.
+  const [page, setPage] = useState(0)
+  const { data, isLoading } = useStatutoryFilings(companyId || undefined, page)
   const create = useCreateFiling()
   const file = useFileFiling()
   const filings = data?.content ?? []
+  const total = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
+
+  // The company selector lives on the parent, so watching the prop is the only
+  // way to notice a filter change down here. Without this, switching to a
+  // company with a shorter ledger while on page 3 asks for a page the server
+  // does not have and the table renders empty.
+  React.useEffect(() => { setPage(0) }, [companyId])
 
   const [filingType, setFilingType] = useState<FilingType>('PF')
   const [period, setPeriod] = useState('')
@@ -269,7 +305,11 @@ function FilingsTab({ companyId, canWrite }: { companyId: string; canWrite: bool
         </div>
       )}
 
-      <TableCard>
+      <TableCard
+        footer={hrPaginationFooter({
+          page, pageSize: COMPLIANCE_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+        })}
+      >
         <table className="hr-table">
           <thead>
             <tr>
@@ -331,10 +371,19 @@ function PoshDenied() {
 
 function PoshTab({ companyId }: { companyId: string }) {
   const { toast } = useToast()
-  const { data, isLoading } = usePoshComplaints(companyId || undefined)
+  // Same defect as the other two registers: hard-coded page 0 with no control.
+  // Not in the original bug list, but it is the third paginated table in this
+  // file and an unreachable POSH case is a legal-register gap, so it is fixed
+  // here alongside them.
+  const [page, setPage] = useState(0)
+  const { data, isLoading } = usePoshComplaints(companyId || undefined, page)
   const create = useCreatePoshComplaint()
   const updateStatus = useUpdatePoshStatus()
   const complaints = data?.content ?? []
+  const total = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
+
+  React.useEffect(() => { setPage(0) }, [companyId])
 
   const [filedDate, setFiledDate] = useState(today())
   const [severity, setSeverity] = useState(POSH_SEVERITIES[1])
@@ -402,7 +451,11 @@ function PoshTab({ companyId }: { companyId: string }) {
         <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Register</HrButton>
       </div>
 
-      <TableCard>
+      <TableCard
+        footer={hrPaginationFooter({
+          page, pageSize: COMPLIANCE_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+        })}
+      >
         <table className="hr-table">
           <thead>
             <tr>

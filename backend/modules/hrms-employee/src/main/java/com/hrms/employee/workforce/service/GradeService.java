@@ -60,6 +60,10 @@ public class GradeService {
         Grade existing = repo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Grade", id));
         existing.setName(update.getName());
+        // 2026-09-09: code was never copied, so the Code field on the grade
+        // edit form was accepted by the API and silently discarded — the
+        // request succeeded, the toast said saved, the value never changed.
+        existing.setCode(update.getCode());
         existing.setLevel(update.getLevel());
         existing.setDescription(update.getDescription());
         existing.setActive(update.isActive());

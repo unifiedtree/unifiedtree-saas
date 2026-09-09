@@ -78,8 +78,22 @@ public class LearningController {
 
     // ── Enrollments ──────────────────────────────────────────────────────────
 
+    /**
+     * A program's roster — who is enrolled, their status and their SCORE.
+     *
+     * <p>2026-09-09: was hrms.learning.read, which V073 grants to EMPLOYEE and
+     * DEPT_MANAGER so they can browse the training catalogue. That made every
+     * colleague's training result readable by the whole company through a
+     * single GET — the same leak the narrower hrms.learning.skill.read (V116)
+     * was created to close on the skill matrix, via a different door.
+     *
+     * <p>Hiding the control in the SPA is not enough; the client's rule for
+     * this workspace is to drop the capability and let the admin grant it back.
+     * Managing a roster is a write-tier activity, so it takes the write
+     * permission. Employees still see their OWN enrollments at /enrollments/me.
+     */
     @GetMapping("/programs/{id}/enrollments")
-    @PreAuthorize("hasAuthority('hrms.learning.read')")
+    @PreAuthorize("hasAuthority('hrms.learning.write')")
     public List<LearningService.EnrollmentDto> listEnrollments(@PathVariable UUID id) {
         return service.listEnrollments(TenantContext.getTenantId(), id);
     }

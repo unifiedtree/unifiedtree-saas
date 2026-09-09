@@ -152,6 +152,17 @@ public class WorkforceController {
         return branches.create(req);
     }
 
+    /** Correct a branch's details. Partial — see UpdateBranchRequest: there was
+     *  no update route at all until 2026-09-09, so a mistyped branch name was
+     *  permanent short of archiving and recreating it, which orphans every
+     *  employee pointing at that branch. */
+    @PutMapping("/branches/{id}")
+    @PreAuthorize("hasAuthority('org.company.write')")
+    public BranchResponse updateBranch(@PathVariable UUID id,
+                                       @Valid @RequestBody com.hrms.employee.workforce.dto.WorkforceDtos.UpdateBranchRequest req) {
+        return branches.update(id, req);
+    }
+
     @PutMapping("/branches/{id}/geofence")
     @PreAuthorize("hasAuthority('org.geofence.write')")
     public BranchResponse updateGeofence(@PathVariable UUID id,
