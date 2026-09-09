@@ -15,5 +15,15 @@ public record ExpensePolicyRequest(
         BigDecimal maxAmountPerClaim,
         Boolean requiresReceipt,
         Boolean requiresManagerApproval,
-        Boolean requiresHrApproval
+        Boolean requiresHrApproval,
+        /**
+         * 2026-09-09: there was no way back from deactivating a policy. The
+         * request record had no active flag and apply() never touched the
+         * column, so even a PUT could not restore one — and the SPA's trash
+         * icon had no confirm. A single mis-click retired a spend policy
+         * permanently, recoverable only by editing the database.
+         *
+         * Null means "leave as-is", so existing callers are unaffected.
+         */
+        Boolean isActive
 ) {}

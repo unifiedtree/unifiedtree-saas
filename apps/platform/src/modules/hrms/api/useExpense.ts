@@ -160,6 +160,18 @@ export interface PolicyPayload {
   requiresReceipt?: boolean
   requiresManagerApproval?: boolean
   requiresHrApproval?: boolean
+  /**
+   * 2026-09-09: added so a deactivated policy can be restored. There was no
+   * way back before — the request record carried no active flag and the
+   * service never touched the column, so even a PUT could not revive one, and
+   * the deactivate (trash) icon had no confirm. One mis-click retired a spend
+   * policy permanently.
+   *
+   * On UPDATE the server now treats every omitted field as "leave alone", so
+   * sending only { isActive: true } restores a policy without disturbing its
+   * cap or approval rules.
+   */
+  isActive?: boolean
 }
 
 export function useCreatePolicy() {

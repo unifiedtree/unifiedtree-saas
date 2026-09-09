@@ -49,7 +49,7 @@ public class ExpensePolicyService {
     public ExpensePolicyResponse updatePolicy(UUID policyId, ExpensePolicyRequest request) {
         ExpensePolicy policy = policyRepository.findById(policyId)
                 .orElseThrow(() -> new ResourceNotFoundException("ExpensePolicy", policyId));
-        apply(policy, request);
+        applyUpdate(policy, request);
         policy = policyRepository.save(policy);
         return toResponse(policy);
     }
@@ -62,6 +62,10 @@ public class ExpensePolicyService {
         policyRepository.save(policy);
     }
 
+    /**
+     * Create-time mapping. Omitted booleans take their product defaults here,
+     * which is right for a NEW policy but wrong for an edit — see applyUpdate.
+     */
     private void apply(ExpensePolicy policy, ExpensePolicyRequest request) {
         policy.setName(request.name());
         policy.setCategory(request.category());
@@ -69,6 +73,27 @@ public class ExpensePolicyService {
         policy.setRequiresReceipt(request.requiresReceipt() == null || request.requiresReceipt());
         policy.setRequiresManagerApproval(request.requiresManagerApproval() == null || request.requiresManagerApproval());
         policy.setRequiresHrApproval(request.requiresHrApproval() != null && request.requiresHrApproval());
+        if (request.isActive() != null) policy.setActive(request.isActive());
+    }
+
+    /**
+     * Update mapping — null means "leave alone", not "reset to default".
+     *
+     * <p>2026-09-09: update used the create mapping, so a PUT that omitted
+     * requiresReceipt silently turned it ON (`== null || value`), and one that
+     * omitted requiresHrApproval silently turned it OFF. An edit that only
+     * meant to change a cap could therefore flip two compliance rules the
+     * caller never mentioned. That is the same silent-change family as
+     * CompanyService.update NULLing PAN/GSTIN on every company edit.
+     */
+    private void applyUpdate(ExpensePolicy policy, ExpensePolicyRequest request) {
+        if (request.name() != null && !request.name().isBlank()) policy.setName(request.name());
+        if (request.category() != null)              policy.setCategory(request.category());
+        if (request.maxAmountPerClaim() != null)     policy.setMaxAmountPerClaim(request.maxAmountPerClaim());
+        if (request.requiresReceipt() != null)       policy.setRequiresReceipt(request.requiresReceipt());
+        if (request.requiresManagerApproval() != null) policy.setRequiresManagerApproval(request.requiresManagerApproval());
+        if (request.requiresHrApproval() != null)    policy.setRequiresHrApproval(request.requiresHrApproval());
+        if (request.isActive() != null)              policy.setActive(request.isActive());
     }
 
     private ExpensePolicyResponse toResponse(ExpensePolicy p) {

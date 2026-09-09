@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import {
   Plus, Trash2, Receipt, Check, X, Wallet, Clock, BadgeCheck,
-  ChevronDown, ChevronRight, AlertTriangle, ExternalLink,
+  ChevronDown, ChevronRight, AlertTriangle, ExternalLink, Pencil, RotateCcw,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
@@ -13,7 +13,7 @@ import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagina
 import { useCompanies } from './api/useOrg'
 import {
   useMyClaims, usePendingExpenseApprovals, useExpenseClaim, useSubmitClaim, useExpenseDecision, useReimburseClaim,
-  useExpensePolicies, useCreatePolicy, useDeletePolicy,
+  useExpensePolicies, useCreatePolicy, useUpdatePolicy, useDeletePolicy,
   inr, EXPENSE_CATEGORIES, EXPENSE_APPROVALS_PAGE_SIZE,
   type ExpenseStatus, type ExpenseCategory, type ExpensePolicy,
 } from './api/useExpense'
@@ -581,15 +581,61 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
   const activeCompany = companyId || companies[0]?.id || ''
   const { data: policies = [], isLoading } = useExpensePolicies(activeCompany)
   const create = useCreatePolicy()
+  const update = useUpdatePolicy()
   const remove = useDeletePolicy()
 
   const [name, setName] = useState('')
   const [category, setCategory] = useState<ExpenseCategory>('TRAVEL')
   const [maxAmount, setMaxAmount] = useState('')
+  // null = the form is creating; an id = editing that policy. One form serves
+  // both so a field cannot exist on one path and be missing from the other.
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  const onStartEdit = (p: ExpensePolicy) => {
+    setEditingId(p.id)
+    setName(p.name)
+    setCategory(p.category)
+    setMaxAmount(p.maxAmountPerClaim != null ? String(p.maxAmountPerClaim) : '')
+  }
+
+  const onCancelEdit = () => {
+    setEditingId(null); setName(''); setMaxAmount(''); setCategory('TRAVEL')
+  }
+
+  /** Restore sends ONLY isActive — the server treats omitted fields as
+   *  "leave alone" on update, so this cannot disturb the cap or approval
+   *  rules the policy was retired with. */
+  const onRestore = async (p: ExpensePolicy) => {
+    try {
+      await update.mutateAsync({ id: p.id, name: p.name, category: p.category, isActive: true })
+      toast('Policy restored', 'success')
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Failed to restore policy', 'error')
+    }
+  }
+
+  const onDeactivate = (p: ExpensePolicy) => {
+    if (!window.confirm(`Deactivate “${p.name}”? Claims will stop being checked against this cap. You can restore it from this table afterwards.`)) return
+    remove.mutate(p.id, {
+      onSuccess: () => toast('Policy deactivated', 'success'),
+      onError: (e) => toast((e as Error)?.message ?? 'Failed to deactivate policy', 'error'),
+    })
+  }
 
   const onCreate = async () => {
     if (!name.trim()) { toast('Policy name is required', 'error'); return }
     try {
+      if (editingId) {
+        await update.mutateAsync({
+          id: editingId,
+          name: name.trim(),
+          category,
+          maxAmountPerClaim: maxAmount ? parseFloat(maxAmount) : null,
+        })
+        toast('Policy updated', 'success')
+        onCancelEdit()
+        return
+      }
       await create.mutateAsync({
         companyId: activeCompany,
         name: name.trim(),
@@ -657,12 +703,41 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
                 <td className="text-text-secondary">{p.maxAmountPerClaim != null ? inr(p.maxAmountPerClaim) : 'No cap'}</td>
                 <td className="text-text-secondary">{p.requiresReceipt ? 'Required' : 'Optional'}</td>
                 <td><HrStatusPill tone={p.active ? 'ok' : 'gray'}>{p.active ? 'Active' : 'Inactive'}</HrStatusPill></td>
+                {/* 2026-09-09: this cell used to hold ONE control, wrapped in
+                    {p.active && …}, so an inactive row had no actions at all
+                    and a policy's cap could never be corrected — HR had to
+                    deactivate and recreate, and the deactivate itself was
+                    one-way and had no confirm. Now: Edit on any row, Restore
+                    on inactive ones, and the deactivate asks first. */}
                 {canWrite && (
                   <td>
-                    <div className="flex items-center justify-end">
-                      {p.active && (
-                        <button onClick={() => remove.mutate(p.id, { onSuccess: () => toast('Policy deactivated', 'success') })} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Deactivate" aria-label="Deactivate policy">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => onStartEdit(p)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-bg-base hover:text-text-primary"
+                        title="Edit policy"
+                        aria-label={`Edit ${p.name}`}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      {p.active ? (
+                        <button
+                          onClick={() => onDeactivate(p)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
+                          title="Deactivate"
+                          aria-label={`Deactivate ${p.name}`}
+                        >
                           <Trash2 size={14} />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => onRestore(p)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#ECFDF5] hover:text-[#047857]"
+                          title="Restore policy"
+                          aria-label={`Restore ${p.name}`}
+                          disabled={update.isPending}
+                        >
+                          <RotateCcw size={14} />
                         </button>
                       )}
                     </div>
