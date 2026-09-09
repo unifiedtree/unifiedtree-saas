@@ -229,7 +229,12 @@ function FilingsTab({ companyId, canWrite }: { companyId: string; canWrite: bool
   }
 
   const onFile = async (id: string) => {
-    const referenceNo = window.prompt('Challan / acknowledgement reference (optional):') ?? undefined
+    // Cancel must abort — marking a statutory return as "filed" when the user
+    // backed out of the prompt creates a false compliance record, which is
+    // exactly what an inspector would catch (2026-09-08 audit).
+    const answer = window.prompt('Challan / acknowledgement reference (optional):')
+    if (answer === null) return
+    const referenceNo: string | undefined = answer
     try {
       await file.mutateAsync({ id, referenceNo: referenceNo?.trim() || undefined })
       toast('Filing recorded', 'success')
@@ -354,7 +359,15 @@ function PoshTab({ companyId }: { companyId: string }) {
   const onAdvance = async (id: string, status: PoshStatus) => {
     let resolution: string | undefined
     if (status === 'RESOLVED' || status === 'DISMISSED') {
-      resolution = window.prompt('Resolution / closing note (optional):') ?? undefined
+      // window.prompt returns null when the user presses Cancel and '' when
+      // they submit an empty box. The old code did `?? undefined`, which
+      // collapsed BOTH into undefined and then always fell through to the
+      // mutation — so hitting Cancel still closed a POSH case. On a
+      // confidential legal register that is an unacceptable accidental
+      // state change, so Cancel must abort outright (2026-09-08 audit).
+      const answer = window.prompt('Resolution / closing note (optional):')
+      if (answer === null) return // Cancel — do not change the case at all
+      resolution = answer
     }
     try {
       await updateStatus.mutateAsync({ id, status, resolution: resolution?.trim() || undefined })

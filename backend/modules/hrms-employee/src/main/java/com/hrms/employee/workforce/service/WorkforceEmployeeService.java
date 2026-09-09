@@ -298,6 +298,11 @@ public class WorkforceEmployeeService {
         if (req.bankAccountNumber()!= null) e.setBankAccountNumber(req.bankAccountNumber());
         if (req.bankIfsc()         != null) e.setBankIfsc(req.bankIfsc());
         if (req.bankBranchName()   != null) e.setBankBranchName(req.bankBranchName());
+        // 2026-09-08 audit: create() persisted these three, update() ignored
+        // them — an HR correction to a mistyped PAN could never be saved.
+        if (req.panNumber()        != null) e.setPanNumber(req.panNumber());
+        if (req.aadhaarNumber()    != null) e.setAadhaarNumber(req.aadhaarNumber());
+        if (req.bankName()         != null) e.setBankName(req.bankName());
         if (req.monthlySalary()    != null) e.setMonthlySalary(req.monthlySalary());
         if (req.salaryFrequency()  != null) e.setSalaryFrequency(req.salaryFrequency());
         if (req.weeklyOffDays()    != null) e.setWeeklyOffDays(req.weeklyOffDays().trim());

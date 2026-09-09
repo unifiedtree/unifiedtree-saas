@@ -370,6 +370,13 @@ public final class WorkforceDtos {
             // send uanNumber/esiNumber, this record declared uan/esi.
             @JsonAlias({"uanNumber", "pfUan"})  String uan,
             @JsonAlias({"esiNumber"})           String esi,
+            // 2026-09-08 audit: CREATE accepted panNumber / aadhaarNumber /
+            // bankName but UPDATE did not, so those three could be set once at
+            // hire time and never corrected. The employee form pre-fills them
+            // in edit mode, which made the omission look like a save bug.
+            String panNumber,
+            String aadhaarNumber,
+            String bankName,
             String bankAccountNumber,
             String bankIfsc,
             BigDecimal monthlySalary,

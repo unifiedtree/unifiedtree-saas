@@ -187,7 +187,11 @@ function ApprovalsTab({ canApprove, canDisburse }: { canApprove: boolean; canDis
   const onDecide = async (id: string, approved: boolean) => {
     let comment: string | undefined
     if (!approved) {
-      comment = window.prompt('Reason for rejection (optional):') ?? undefined
+      // Cancel must abort the rejection, not fall through to it — see the
+      // matching fix in Expense.tsx / Compliance.tsx (2026-09-08 audit).
+      const answer = window.prompt('Reason for rejection (optional):')
+      if (answer === null) return
+      comment = answer
     }
     try {
       await decide.mutateAsync({ id, approved, comment })

@@ -113,10 +113,28 @@ export interface UpdateWorkforceEmployeePayload {
   departmentId?: string
   designationId?: string
   branchId?: string
+  geoFenceZoneId?: string
   reportingManagerId?: string
   employmentType?: EmploymentType
   ctcAnnual?: number
   profilePhotoUrl?: string
+  // ── Financial / statutory ───────────────────────────────────────────
+  // 2026-09-08 audit: these were absent from the type AND from the edit
+  // submit, so every Financial-step change in edit mode was silently
+  // dropped while the UI reported "Employee updated". Key names match what
+  // the backend record accepts (uanNumber/esiNumber land on uan/esi via
+  // @JsonAlias).
+  monthlySalary?: number
+  salaryFrequency?: string
+  weeklyOffDays?: string
+  panNumber?: string
+  aadhaarNumber?: string
+  uanNumber?: string
+  esiNumber?: string
+  bankName?: string
+  bankBranchName?: string
+  bankAccountNumber?: string
+  bankIfsc?: string
 }
 
 /** Aggregated status counts for the Workforce Directory stat cards. */

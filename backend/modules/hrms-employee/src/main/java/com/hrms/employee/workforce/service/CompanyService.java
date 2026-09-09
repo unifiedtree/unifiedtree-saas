@@ -55,19 +55,36 @@ public class CompanyService {
         }
     }
 
+    /**
+     * Patch semantics: a field is written ONLY when the caller supplied it.
+     *
+     * <p>2026-09-08 audit fix — this used to call setRegistrationNumber /
+     * setPanNumber / setGstin / setLegalName / setIndustry unconditionally,
+     * while country/timezone/currency/fiscalYearStart were already null-guarded.
+     * The Edit Company drawer only sends {name, legalName, industry, currency,
+     * country}, so PAN, GSTIN and the registration number arrived as null and
+     * were written as null on every single edit — silently destroying the
+     * statutory identifiers payroll needs for PF / ESI / TDS filings, while
+     * the UI reported "Company updated".
+     *
+     * <p>Consequence of the guard: a field can no longer be CLEARED through
+     * this endpoint. That is the correct trade-off here — the form has no
+     * inputs for those three fields, so any null is "not supplied", never
+     * "deliberately blanked".
+     */
     public CompanyResponse update(UUID id, UpdateCompanyRequest req) {
         Company c = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Company " + id + " not found"));
-        c.setName(req.name());
-        c.setLegalName(req.legalName());
-        c.setRegistrationNumber(req.registrationNumber());
-        c.setPanNumber(req.panNumber());
-        c.setGstin(req.gstin());
-        c.setIndustry(req.industry());
-        if (req.country() != null) c.setCountry(req.country());
-        if (req.timezone() != null) c.setTimezone(req.timezone());
-        if (req.currency() != null) c.setCurrency(req.currency());
-        if (req.fiscalYearStart() != null) c.setFiscalYearStart(req.fiscalYearStart());
+        if (req.name()               != null) c.setName(req.name());
+        if (req.legalName()          != null) c.setLegalName(req.legalName());
+        if (req.registrationNumber() != null) c.setRegistrationNumber(req.registrationNumber());
+        if (req.panNumber()          != null) c.setPanNumber(req.panNumber());
+        if (req.gstin()              != null) c.setGstin(req.gstin());
+        if (req.industry()           != null) c.setIndustry(req.industry());
+        if (req.country()            != null) c.setCountry(req.country());
+        if (req.timezone()           != null) c.setTimezone(req.timezone());
+        if (req.currency()           != null) c.setCurrency(req.currency());
+        if (req.fiscalYearStart()    != null) c.setFiscalYearStart(req.fiscalYearStart());
         try {
             return toResponse(repository.save(c));
         } catch (org.springframework.dao.DataIntegrityViolationException e) {

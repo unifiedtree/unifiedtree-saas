@@ -145,7 +145,14 @@ function CompaniesTab() {
   const archiveCompany = useArchiveCompany()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Company | null>(null)
-  const emptyForm = { name: '', legalName: '', industry: '', currency: 'INR', country: 'India' }
+  // registrationNumber / panNumber / gstin are the statutory identifiers PF,
+  // ESI and TDS filings are generated against. The form never collected them,
+  // so every company in prod had them NULL — and the update endpoint used to
+  // blank them on each save. Both halves fixed 2026-09-08.
+  const emptyForm = {
+    name: '', legalName: '', industry: '', currency: 'INR', country: 'India',
+    registrationNumber: '', panNumber: '', gstin: '',
+  }
   const [form, setForm] = useState(emptyForm)
 
   const openAdd = () => { setEditing(null); setForm(emptyForm); setOpen(true) }
@@ -154,6 +161,8 @@ function CompaniesTab() {
     setForm({
       name: co.name, legalName: co.legalName ?? '', industry: co.industry ?? '',
       currency: co.currency ?? 'INR', country: co.country ?? 'India',
+      registrationNumber: co.registrationNumber ?? '', panNumber: co.panNumber ?? '',
+      gstin: co.gstin ?? '',
     })
     setOpen(true)
   }
@@ -246,6 +255,29 @@ function CompaniesTab() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <Field label="Currency"><Input value={form.currency} onChange={(e) => set('currency', e.target.value)} /></Field>
             <Field label="Country"><Input value={form.country} onChange={(e) => set('country', e.target.value)} /></Field>
+          </div>
+
+          {/* Statutory identifiers — required on PF / ESI / TDS returns. The
+              form previously had no inputs for these at all, so payroll had
+              nothing to file against. */}
+          <div className="rounded-xl border border-[var(--border-subtle)] p-3">
+            <p className="mb-3 text-[13px] font-semibold text-text-secondary">Statutory details</p>
+            <div className="space-y-4">
+              <Field label="Registration Number">
+                <Input value={form.registrationNumber} onChange={(e) => set('registrationNumber', e.target.value)} placeholder="CIN / registration no." />
+              </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
+                <Field label="Company PAN">
+                  <Input value={form.panNumber} onChange={(e) => set('panNumber', e.target.value.toUpperCase())} placeholder="ABCDE1234F" />
+                </Field>
+                <Field label="GSTIN">
+                  <Input value={form.gstin} onChange={(e) => set('gstin', e.target.value.toUpperCase())} placeholder="22ABCDE1234F1Z5" />
+                </Field>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-text-tertiary">
+              Used on PF, ESI and TDS filings. Leave blank if not yet registered.
+            </p>
           </div>
 
           {editing ? <EmployeeCodeFormatSection companyId={editing.id} /> : null}

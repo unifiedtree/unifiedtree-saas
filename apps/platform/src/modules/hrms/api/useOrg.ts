@@ -74,7 +74,10 @@ export function useCompanies() {
 export function useCreateCompany() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { name: string; legalName?: string; industry?: string; currency?: string; country?: string; timezone?: string }) =>
+    // registrationNumber / panNumber / gstin were absent from this payload
+    // type, so even though the Company response carries them they could never
+    // be SENT — every company in prod had all three NULL (2026-09-08 audit).
+    mutationFn: (data: { name: string; legalName?: string; industry?: string; currency?: string; country?: string; timezone?: string; registrationNumber?: string; panNumber?: string; gstin?: string }) =>
       apiJson<Company>('/v1/hrms/companies', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'companies'] }),
   })
@@ -83,7 +86,7 @@ export function useCreateCompany() {
 export function useUpdateCompany() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name: string; legalName?: string; industry?: string; currency?: string; country?: string; timezone?: string }) =>
+    mutationFn: ({ id, ...data }: { id: string; name: string; legalName?: string; industry?: string; currency?: string; country?: string; timezone?: string; registrationNumber?: string; panNumber?: string; gstin?: string }) =>
       apiJson<Company>(`/v1/hrms/companies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'companies'] }),
   })

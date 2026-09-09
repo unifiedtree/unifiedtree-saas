@@ -246,7 +246,12 @@ function ApprovalsTab({ canReimburse }: { canReimburse: boolean }) {
   const onDecide = async (id: string, approved: boolean) => {
     let comment: string | undefined
     if (!approved) {
-      comment = window.prompt('Reason for rejection (optional):') ?? undefined
+      // Cancel must abort the rejection, not fall through to it. `?? undefined`
+      // collapsed null (Cancel) and '' (empty submit) into the same value, so
+      // dismissing the prompt still rejected the claim (2026-09-08 audit).
+      const answer = window.prompt('Reason for rejection (optional):')
+      if (answer === null) return
+      comment = answer
     }
     try {
       await decide.mutateAsync({ id, approved, comment })

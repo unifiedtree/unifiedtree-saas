@@ -579,6 +579,13 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     const ctc = monthly !== undefined && !Number.isNaN(monthly) ? monthly * 12 : undefined
     try {
       if (isEdit) {
+        // 2026-09-08 audit fix: this used to send only the ten Basic-step
+        // fields. Every Financial-step value the form pre-fills in edit mode
+        // — PAN, Aadhaar, UAN, ESI, bank name/account/IFSC/branch, salary,
+        // frequency — was collected, validated, shown back to the admin, and
+        // then dropped on submit. "Employee updated" was a lie for all of
+        // them. Send the full set now; the backend applies each only when
+        // non-null, so untouched fields still aren't clobbered.
         const result = await updateEmp.mutateAsync({
           id: employee.id,
           data: {
@@ -592,6 +599,19 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
             designationId: form.designationId || undefined,
             employmentType: form.employmentType as WorkforceEmployee['employmentType'],
             ctcAnnual: ctc,
+            // ── Financial step (previously dropped) ────────────────────
+            geoFenceZoneId: form.geoFenceZoneId || undefined,
+            weeklyOffDays: weeklyOffDays.length ? formatWeekOffs(weeklyOffDays) : undefined,
+            monthlySalary: monthly !== undefined && !Number.isNaN(monthly) ? monthly : undefined,
+            salaryFrequency: form.salaryFrequency || undefined,
+            panNumber: form.panNumber ? form.panNumber.toUpperCase() : undefined,
+            aadhaarNumber: form.aadhaarNumber ? stripWs(form.aadhaarNumber) : undefined,
+            uanNumber: form.uanNumber ? stripWs(form.uanNumber) : undefined,
+            esiNumber: form.esiNumber ? stripWs(form.esiNumber) : undefined,
+            bankName: form.bankName || undefined,
+            bankBranchName: form.bankBranchName || undefined,
+            bankAccountNumber: form.bankAccountNumber ? stripWs(form.bankAccountNumber) : undefined,
+            bankIfsc: form.bankIfsc ? form.bankIfsc.toUpperCase() : undefined,
           },
         })
         // The Shift picker renders on the Basic step in edit mode too, but the
