@@ -91,11 +91,30 @@ public class OnboardingController {
 
     // ── Instances ─────────────────────────────────────────────────────────
 
+    // 2026-09-08 audit: horizontal privilege escalation. V038 seeds the base
+    // EMPLOYEE role with instance.read + task.complete (so a new hire can follow
+    // their OWN checklist), but every instance endpoint was tenant-scoped only.
+    // Any employee could list every colleague's onboarding, open their checklist,
+    // and mark their tasks complete. HR/admin — identified by instance.write —
+    // keep the tenant-wide view; everyone else is scoped to their own employee id.
+
     @GetMapping("/instances")
-    @Operation(summary = "List onboarding instances for the tenant (optionally filtered by status)")
+    @Operation(summary = "List onboarding instances (tenant-wide for HR/admin, own-only otherwise)")
     @PreAuthorize("@perm.check('hrms.onboarding.instance.read')")
-    public List<OnboardingInstance> listInstances(@RequestParam(required = false) String status) {
-        return onboardingService.listInstances(status);
+    public List<OnboardingInstance> listInstances(@RequestParam(required = false) String status,
+                                                  @AuthenticationPrincipal Jwt jwt) {
+        if (isHrOrAdmin(jwt)) return onboardingService.listInstances(status);
+        return onboardingService.listInstancesForEmployee(extractEmployeeId(jwt), status);
+    }
+
+    @GetMapping("/instances/{instanceId}")
+    @Operation(summary = "Get one onboarding instance by id")
+    @PreAuthorize("@perm.check('hrms.onboarding.instance.read')")
+    public OnboardingInstance getInstance(@PathVariable UUID instanceId,
+                                          @AuthenticationPrincipal Jwt jwt) {
+        OnboardingInstance instance = onboardingService.getInstance(instanceId);
+        assertCanView(instance, jwt);
+        return instance;
     }
 
     @PostMapping("/instances")
@@ -108,16 +127,26 @@ public class OnboardingController {
     }
 
     @GetMapping("/instances/employee/{employeeId}")
-    @Operation(summary = "Get the active onboarding instance for an employee")
+    @Operation(summary = "Get the latest onboarding instance for an employee (any status)")
     @PreAuthorize("@perm.check('hrms.onboarding.instance.read')")
-    public OnboardingInstance getInstanceForEmployee(@PathVariable UUID employeeId) {
-        return onboardingService.getInstanceForEmployee(employeeId);
+    public OnboardingInstance getInstanceForEmployee(@PathVariable UUID employeeId,
+                                                     @AuthenticationPrincipal Jwt jwt) {
+        if (!isHrOrAdmin(jwt) && !employeeId.equals(extractEmployeeId(jwt))) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "You can only view your own onboarding checklist.");
+        }
+        // Was IN_PROGRESS-only; a finished run then read as "no onboarding".
+        return onboardingService.getLatestInstanceForEmployee(employeeId);
     }
 
     @GetMapping("/instances/{instanceId}/tasks")
     @Operation(summary = "List tasks for an onboarding instance")
     @PreAuthorize("@perm.check('hrms.onboarding.instance.read')")
-    public List<OnboardingInstanceTask> getInstanceTasks(@PathVariable UUID instanceId) {
+    public List<OnboardingInstanceTask> getInstanceTasks(@PathVariable UUID instanceId,
+                                                         @AuthenticationPrincipal Jwt jwt) {
+        if (!isHrOrAdmin(jwt)) {
+            assertCanView(onboardingService.getInstance(instanceId), jwt);
+        }
         return onboardingService.getTasksForInstance(instanceId);
     }
 
@@ -127,6 +156,9 @@ public class OnboardingController {
     public OnboardingInstanceTask completeTask(@PathVariable UUID taskId,
                                                @RequestBody CompleteTaskRequest req,
                                                @AuthenticationPrincipal Jwt jwt) {
+        if (!isHrOrAdmin(jwt)) {
+            onboardingService.assertTaskBelongsToEmployee(taskId, extractEmployeeId(jwt));
+        }
         UUID actorId = UUID.fromString(jwt.getSubject());
         return onboardingService.completeTask(taskId, actorId, req.notes());
     }
@@ -137,8 +169,34 @@ public class OnboardingController {
     public OnboardingInstanceTask skipTask(@PathVariable UUID taskId,
                                            @RequestBody CompleteTaskRequest req,
                                            @AuthenticationPrincipal Jwt jwt) {
+        if (!isHrOrAdmin(jwt)) {
+            onboardingService.assertTaskBelongsToEmployee(taskId, extractEmployeeId(jwt));
+        }
         UUID actorId = UUID.fromString(jwt.getSubject());
         return onboardingService.skipTask(taskId, actorId, req.notes());
+    }
+
+    // ── Scoping helpers ───────────────────────────────────────────────────
+
+    /** HR/admin tier = anyone who can CREATE instances. Same marker the leave
+     *  and expense controllers use for "sees the whole tenant". */
+    private static boolean isHrOrAdmin(Jwt jwt) {
+        List<String> perms = jwt.getClaimAsStringList("permissions");
+        return perms != null && perms.contains("hrms.onboarding.instance.write");
+    }
+
+    private static UUID extractEmployeeId(Jwt jwt) {
+        String empId = jwt.getClaimAsString("employee_id");
+        return empId != null ? UUID.fromString(empId) : UUID.fromString(jwt.getSubject());
+    }
+
+    private static void assertCanView(OnboardingInstance instance, Jwt jwt) {
+        if (isHrOrAdmin(jwt)) return;
+        UUID mine = extractEmployeeId(jwt);
+        if (instance == null || instance.getEmployeeId() == null || !instance.getEmployeeId().equals(mine)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "You can only view your own onboarding checklist.");
+        }
     }
 
     // ── Request records ───────────────────────────────────────────────────

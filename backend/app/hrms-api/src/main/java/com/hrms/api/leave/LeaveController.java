@@ -132,13 +132,23 @@ public class LeaveController {
     @PreAuthorize("hasAuthority('leave.balance.read')")
     public ResponseEntity<LeaveOverviewResponse> overview(
             @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth,
             @RequestParam(defaultValue = "#{T(java.time.Year).now().value}") int year) {
         UUID employeeId = extractEmployeeId(jwt);
         ensureBalancesForEmployee(employeeId, year);
         List<LeaveBalanceResponse> balances = leaveService.getMyBalances(employeeId, year);
         PageResponse<LeaveRequestResponse> recent = leaveService.getMyLeaves(employeeId, Pageable.ofSize(5));
-        long pendingApprovals = leaveService
-                .getPendingApprovalsForManager(employeeId, Pageable.ofSize(1))
+        // 2026-09-08 audit: this count ALWAYS used the reporting-manager-scoped
+        // query, while GET /approvals/pending branches on the L2 authority and
+        // returns the tenant-wide queue for admin/HR. So an OWNER or HR_MANAGER
+        // saw "Pending Leaves 0" on the dashboard while the Approvals tab held
+        // the real backlog — and the dashboard CTA then routed them to their
+        // OWN leaves instead of the queue. Mirror the same branch here.
+        boolean adminOrHr = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
+        long pendingApprovals = (adminOrHr
+                ? leaveService.getAllPending(Pageable.ofSize(1))
+                : leaveService.getPendingApprovalsForManager(employeeId, Pageable.ofSize(1)))
                 .totalElements();
         return ResponseEntity.ok(new LeaveOverviewResponse(balances, recent.content(), pendingApprovals));
     }

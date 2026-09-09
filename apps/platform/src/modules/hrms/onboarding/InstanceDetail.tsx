@@ -4,7 +4,7 @@ import { ArrowLeft, CheckCircle2, SkipForward, Clock } from 'lucide-react'
 import { TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
 import { Can, P } from '@unifiedtree/sdk'
-import { useEmployeeInstance, useInstanceTasks, useCompleteTask, useSkipTask } from './api/useOnboarding'
+import { useInstance, useInstanceTasks, useCompleteTask, useSkipTask } from './api/useOnboarding'
 import type { OnboardingInstanceTask } from './api/useOnboarding'
 import { HrPageHeader, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
 import { clsx } from 'clsx'
@@ -133,10 +133,12 @@ function TaskCard({
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 export const InstanceDetail: React.FC = () => {
-  const { employeeId } = useParams<{ employeeId: string }>()
+  // Keyed by INSTANCE id now (was employeeId → IN_PROGRESS-only lookup that
+  // dead-ended every COMPLETED row). See useInstance().
+  const { instanceId } = useParams<{ instanceId: string }>()
   const navigate = useNavigate()
 
-  const { data: instance, isLoading: instLoading, error: instError, refetch: refetchInst } = useEmployeeInstance(employeeId!)
+  const { data: instance, isLoading: instLoading, error: instError, refetch: refetchInst } = useInstance(instanceId!)
   const { data: tasks = [], isLoading: tasksLoading, error: tasksError, refetch: refetchTasks } = useInstanceTasks(instance?.id ?? '')
 
   const isLoading = instLoading || (!!instance && tasksLoading)

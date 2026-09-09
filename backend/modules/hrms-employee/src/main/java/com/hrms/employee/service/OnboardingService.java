@@ -232,4 +232,60 @@ public class OnboardingService {
     public List<OnboardingInstanceTask> getTasksForInstance(UUID instanceId) {
         return instanceTaskRepo.findByInstanceIdOrderBySequenceNoAsc(instanceId);
     }
+
+    // ── 2026-09-08 audit additions ────────────────────────────────────────
+
+    /** Fetch by instance id. The Instances list used to navigate by employeeId
+     *  into getInstanceForEmployee(), which only matched IN_PROGRESS — so every
+     *  COMPLETED row (the whole "Completed" filter) dead-ended on an empty page. */
+    @Transactional(readOnly = true)
+    public OnboardingInstance getInstance(UUID instanceId) {
+        OnboardingInstance instance = instanceRepo.findById(instanceId)
+                .orElseThrow(() -> new ResourceNotFoundException("OnboardingInstance", instanceId));
+        instance.getInstanceTasks().size();
+        return instance;
+    }
+
+    /** Latest instance for an employee regardless of status (employee-keyed deep links). */
+    @Transactional(readOnly = true)
+    public OnboardingInstance getLatestInstanceForEmployee(UUID employeeId) {
+        OnboardingInstance instance = instanceRepo.findFirstByEmployeeIdOrderByCreatedAtDesc(employeeId)
+                .orElse(null);
+        if (instance != null) {
+            instance.getInstanceTasks().size();
+        }
+        return instance;
+    }
+
+    /** Self-scoped list for non-HR callers (the EMPLOYEE role is seeded
+     *  instance.read + task.complete so a new hire can follow their OWN checklist —
+     *  it was never meant to expose every colleague's). */
+    @Transactional(readOnly = true)
+    public List<OnboardingInstance> listInstancesForEmployee(UUID employeeId, String status) {
+        List<OnboardingInstance> all = instanceRepo.findByEmployeeId(employeeId);
+        List<OnboardingInstance> out = status == null
+                ? all
+                : all.stream().filter(i -> status.equals(i.getStatus())).toList();
+        out.forEach(i -> i.getInstanceTasks().size());
+        return out;
+    }
+
+    /**
+     * Ownership guard for complete/skip. completeTask()/skipTask() resolve the
+     * task by id only, so before this any employee who reached
+     * /hrms/onboarding/instances/&lt;colleague&gt; could tick off a colleague's
+     * tasks — and flip that colleague's instance to COMPLETED. HR/admin
+     * callers bypass this in the controller; everyone else must own the run.
+     */
+    @Transactional(readOnly = true)
+    public void assertTaskBelongsToEmployee(UUID instanceTaskId, UUID employeeId) {
+        OnboardingInstanceTask task = instanceTaskRepo.findById(instanceTaskId)
+                .orElseThrow(() -> new ResourceNotFoundException("OnboardingInstanceTask", instanceTaskId));
+        OnboardingInstance instance = instanceRepo.findById(task.getInstanceId())
+                .orElseThrow(() -> new ResourceNotFoundException("OnboardingInstance", task.getInstanceId()));
+        if (employeeId == null || !employeeId.equals(instance.getEmployeeId())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "You can only complete tasks on your own onboarding checklist.");
+        }
+    }
 }

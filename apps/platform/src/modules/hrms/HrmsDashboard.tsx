@@ -12,6 +12,7 @@ import {
 import { HrStatusPill, HrButton, HrAvatar } from '@/shared/components/hr'
 import { SkeletonCardGrid } from '@/shared/components/SkeletonCard'
 import { apiBlob } from '@/core/api/client'
+import { toast } from 'sonner'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import { useCompanies } from './api/useOrg'
 import { useLeaveOverview } from './api/useLeave'
@@ -201,8 +202,9 @@ export const HrmsDashboard: React.FC = () => {
   // Quick-action "View Reports" — any of the HRMS report perms is enough to
   // land on /hrms/reports without a 403 (the page picks whichever tab the
   // caller can open).
+  const canExportHeadcount = usePermission(P.HRMS_REPORT_HEADCOUNT)
   const canViewReports   =
-    usePermission(P.HRMS_REPORT_HEADCOUNT) ||
+    canExportHeadcount ||
     usePermission(P.HRMS_REPORT_ATTRITION) ||
     usePermission(P.HRMS_REPORT_ATTENDANCE) ||
     usePermission(P.HRMS_REPORT_LEAVE) ||
@@ -368,6 +370,16 @@ export const HrmsDashboard: React.FC = () => {
       link.click()
       link.remove()
       URL.revokeObjectURL(url)
+    } catch (err) {
+      // try/finally with NO catch: apiBlob throws on any non-2xx, so a 403,
+      // 500 or network drop produced zero feedback — the label flipped back
+      // and nothing downloaded (2026-09-08 audit).
+      const status = (err as Error & { status?: number }).status
+      toast.error('Could not generate the report', {
+        description: status === 403
+          ? "Your role doesn't include the headcount report."
+          : (err as Error)?.message || 'Please try again.',
+      })
     } finally {
       setDownloading(false)
     }
@@ -622,9 +634,11 @@ export const HrmsDashboard: React.FC = () => {
             )}
           </div>
           <div className="flex items-end gap-4">
-            {/* Export is gated on the same permission the CSV endpoint checks,
-                so the button never appears for someone who'd get a 403. */}
-            {canViewReports && activeCompany?.id && (
+            {/* Export is gated on the SPECIFIC permission the CSV endpoint checks
+                (hrms.report.headcount) — not the OR-of-five that opens /reports.
+                A role with only report.leave saw this button and got a silent
+                403 (2026-09-08 audit). */}
+            {canExportHeadcount && activeCompany?.id && (
               <HrButton variant="ghost" onClick={downloadHeadcountCsv} disabled={downloading}>
                 <Download size={15} />
                 {downloading ? 'Preparing…' : 'Generate Report'}

@@ -430,13 +430,26 @@ const ATT_TABS: readonly Tab[] = ['my', 'team', 'corrections']
 
 export const Attendance: React.FC = () => {
   const isManager = usePermission(P.ATTENDANCE_TEAM_READ)
+  // The My Attendance panel calls /v1/attendance/monthly-stats + /history, both
+  // gated on attendance.checkin.self. The route admits HRMS_EMPLOYEE_READ too,
+  // so a role WITHOUT self-checkin (the workspace ADMIN / MANAGER roles were
+  // seeded team.read but not checkin.self) landed on this tab by default and
+  // got two red "Failed to load" blocks — with a Retry that re-issued the same
+  // 403 forever. That was the literal "nothing works" screenshot
+  // (2026-09-08 audit). Only offer the tab to roles that can load it, and
+  // default such roles to the Team dashboard instead.
+  const canSelfCheckin = usePermission(P.ATTENDANCE_CHECKIN_SELF)
 
   // Deep-linking support for ?tab=corrections / ?tab=team so notifications
   // and other pages can land the user on the right tab. Same pattern as
   // Leave.tsx.
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab') as Tab | null
-  const initialTab: Tab = requestedTab && ATT_TABS.includes(requestedTab) ? requestedTab : 'my'
+  const fallbackTab: Tab = canSelfCheckin ? 'my' : isManager ? 'team' : 'corrections'
+  const initialTab: Tab =
+    requestedTab && ATT_TABS.includes(requestedTab) && !(requestedTab === 'my' && !canSelfCheckin)
+      ? requestedTab
+      : fallbackTab
   const [tab, setTab] = useState<Tab>(initialTab)
 
   useEffect(() => {
@@ -454,7 +467,7 @@ export const Attendance: React.FC = () => {
   }
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'my', label: 'My Attendance' },
+    ...(canSelfCheckin ? [{ key: 'my' as Tab, label: 'My Attendance' }] : []),
     ...(isManager ? [{ key: 'team' as Tab, label: 'Team Dashboard' }] : []),
     { key: 'corrections', label: 'Corrections' },
   ]
@@ -467,7 +480,7 @@ export const Attendance: React.FC = () => {
 
       {/* Tab Content Area */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {tab === 'my' && <HrTabPanel tabKey="my"><MyAttendanceTab /></HrTabPanel>}
+        {tab === 'my' && canSelfCheckin && <HrTabPanel tabKey="my"><MyAttendanceTab /></HrTabPanel>}
         {tab === 'team' && <HrTabPanel tabKey="team"><TeamDashboardTab /></HrTabPanel>}
         {tab === 'corrections' && <HrTabPanel tabKey="corrections"><CorrectionsTab /></HrTabPanel>}
       </div>

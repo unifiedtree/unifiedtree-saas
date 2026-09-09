@@ -295,8 +295,8 @@ const RAIL_LABELS: Record<string, string> = {
  * the workspace name in tiny white text under it instead: always legible, never
  * distorted, and it doubles as the way back to the launcher (/modules).
  */
-const RAIL_BG = 'linear-gradient(180deg,#04503A 0%,#043B2C 55%,#02291E 100%)'
-const HEADER_BG = 'linear-gradient(90deg,#04503A 0%,#043B2C 55%,#02291E 100%)'
+const RAIL_BG = 'linear-gradient(180deg, #090D16 0%, #0C1525 50%, #052E22 100%)'
+const HEADER_BG = 'linear-gradient(90deg, #090D16 0%, #0B192C 40%, #0F6E56 100%)'
 
 function matchPath(pathname: string, p?: string) {
   return !!p && (pathname === p || pathname.startsWith(p + '/'))

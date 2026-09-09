@@ -86,6 +86,14 @@ export const P = {
   HRMS_LEAVE_APPROVE_L2:           'hrms.leave.approve.l2',
   HRMS_LEAVE_READ:                 'hrms.leave.read',
 
+  // ── HRMS: Work From Home ─────────────────────────────────────────────────
+  // WfhController gates on these (wfh.approve for approve/reject/pending).
+  // They were missing here, so the Leave Approvals tab could only gate WFH rows
+  // on the LEAVE code and a manager holding wfh.approve without leave.approve.l1
+  // (or vice-versa) got a 403 on click (2026-09-08 audit).
+  WFH_REQUEST_SELF:                'wfh.request.self',
+  WFH_APPROVE:                     'wfh.approve',
+
   // ── HRMS: Payroll ─────────────────────────────────────────────────────────
   HRMS_PAYROLL_READ:               'hrms.payroll.read',
   HRMS_PAYROLL_WRITE:              'hrms.payroll.write',

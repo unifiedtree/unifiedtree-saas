@@ -15,6 +15,9 @@ public interface OnboardingInstanceRepository extends JpaRepository<OnboardingIn
 
     Optional<OnboardingInstance> findByEmployeeIdAndStatus(UUID employeeId, String status);
 
+    /** Latest instance for an employee regardless of status — a COMPLETED run must still be openable. */
+    Optional<OnboardingInstance> findFirstByEmployeeIdOrderByCreatedAtDesc(UUID employeeId);
+
     List<OnboardingInstance> findByStatusOrderByCreatedAtDesc(String status);
 
     /** All onboarding instances for the current tenant (RLS-scoped), newest first. */

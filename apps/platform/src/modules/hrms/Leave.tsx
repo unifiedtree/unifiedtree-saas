@@ -554,7 +554,9 @@ function ApprovalsTab() {
                 </HrStatusPill>
                 <HrStatusPill tone="warn">Pending</HrStatusPill>
                 {commenting?.id !== row.id && (
-                  <Can code={P.HRMS_LEAVE_APPROVE_L1}>
+                  // WFH rows hit /v1/wfh/{id}/approve (wfh.approve); leave rows hit
+                  // the leave decision endpoint (hrms.leave.approve.l1). Gate per row.
+                  <Can code={row.kind === 'wfh' ? P.WFH_APPROVE : P.HRMS_LEAVE_APPROVE_L1}>
                     <button
                       onClick={() => setCommenting({ id: row.id, kind: row.kind, approved: false })}
                       className="inline-flex items-center gap-1 rounded-lg bg-[#FEE2E2] px-2.5 py-1 text-xs font-medium text-[#B91C1C] transition-colors hover:bg-[#FECACA]"

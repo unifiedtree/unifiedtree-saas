@@ -179,6 +179,20 @@ export function useEmployeeInstance(employeeId: string) {
   })
 }
 
+/**
+ * Fetch one instance by its own id. The Instances list used to navigate by
+ * employeeId into the employee-keyed endpoint, which only matched IN_PROGRESS —
+ * so every COMPLETED row dead-ended on "No onboarding instance"
+ * (2026-09-08 audit).
+ */
+export function useInstance(instanceId: string) {
+  return useQuery({
+    queryKey: ['onboarding', 'instance-by-id', instanceId] as const,
+    queryFn: () => apiJson<OnboardingInstance>(`/v1/onboarding/instances/${instanceId}`),
+    enabled: !!instanceId,
+  })
+}
+
 export function useInstanceTasks(instanceId: string) {
   return useQuery({
     queryKey: instanceTasksKey(instanceId),

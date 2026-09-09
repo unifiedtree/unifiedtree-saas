@@ -27,28 +27,28 @@ export const StatCard: React.FC<StatCardProps> = ({
   <motion.div
     initial={{ opacity: 0, y: 14 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-    className="ut-card ut-card-sm p-5"
+    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+    className="ut-card ut-card-sm ut-card-hover group p-5 transition-all duration-300"
   >
     <div className="mb-4 flex items-start justify-between">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{title}</p>
-        <p className="mt-1.5 font-display text-3xl font-bold tracking-tight text-text-primary">{value}</p>
-        {subtitle && <p className="mt-0.5 text-xs text-text-tertiary">{subtitle}</p>}
+        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{title}</p>
+        <p className="mt-2 font-display text-3xl font-bold tracking-tight text-[var(--text-primary)]">{value}</p>
+        {subtitle && <p className="mt-1 text-xs font-medium text-[var(--text-tertiary)]">{subtitle}</p>}
       </div>
-      <div className={clsx('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl', iconBg)}>
-        <Icon size={19} className={iconColor} />
+      <div className={clsx('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl shadow-2xs transition-transform duration-200 group-hover:scale-105', iconBg)}>
+        <Icon size={20} className={iconColor} />
       </div>
     </div>
     {change && (
       <div className={clsx(
-        'flex items-center gap-1.5 text-xs font-semibold',
-        changeType === 'positive' && 'text-brand-600',
-        changeType === 'negative' && 'text-rose-500',
-        changeType === 'neutral'  && 'text-brand-900/55',
+        'flex items-center gap-1.5 text-xs font-bold',
+        changeType === 'positive' && 'text-emerald-600 dark:text-emerald-400',
+        changeType === 'negative' && 'text-rose-600 dark:text-rose-400',
+        changeType === 'neutral'  && 'text-[var(--text-tertiary)]',
       )}>
         <span>{change}</span>
-        <span className="font-normal text-brand-900/40">vs last month</span>
+        <span className="font-medium text-[var(--text-disabled)]">vs last month</span>
       </div>
     )}
   </motion.div>

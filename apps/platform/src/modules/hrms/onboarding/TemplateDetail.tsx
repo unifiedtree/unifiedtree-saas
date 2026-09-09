@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Plus, Trash2, GripVertical, Pencil } from 'lucide-react'
 import { Drawer, Button, CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
-import { Can, P } from '@unifiedtree/sdk'
+import { Can, P, usePermission } from '@unifiedtree/sdk'
 import { HrPageHeader, HrStatusPill, HrButton } from '@/shared/components/hr'
 import {
   useTemplate, useCreateTemplateTask, useDeleteTemplateTask, useUpdateTemplate,
@@ -231,9 +231,14 @@ function TaskRow({
       </div>
       {canWrite && (
         <button
-          onClick={() => del.mutate(task.id, {
-            onError: () => toast.error('Failed to delete task'),
-          })}
+          onClick={() => {
+            // Single-click destructive action with no confirm, unlike Archive
+            // template which does confirm (2026-09-08 audit).
+            if (!window.confirm(`Delete task "${task.title}" from this template?`)) return
+            del.mutate(task.id, {
+              onError: () => toast.error('Failed to delete task'),
+            })
+          }}
           disabled={del.isPending}
           className="flex-shrink-0 rounded-lg p-1.5 text-text-tertiary hover:bg-status-danger-bg hover:text-status-danger-fg transition-colors disabled:opacity-40"
           aria-label="Delete task"
@@ -252,6 +257,10 @@ export const TemplateDetail: React.FC = () => {
   const navigate = useNavigate()
   const [addOpen, setAddOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  // TaskRow was rendered with canWrite={true} hardcoded — the only ungated
+  // control in the module. Read-only viewers saw the trash icon and got a 403
+  // "Failed to delete task" (2026-09-08 audit).
+  const canWrite = usePermission(P.HRMS_ONBOARDING_TEMPLATE_WRITE)
 
   const { data: template, isLoading, error, refetch } = useTemplate(id!)
 
@@ -325,7 +334,7 @@ export const TemplateDetail: React.FC = () => {
                     key={task.id}
                     task={task}
                     templateId={template.id}
-                    canWrite={true}
+                    canWrite={canWrite}
                   />
                 ))}
               </div>

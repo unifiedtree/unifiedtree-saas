@@ -24,6 +24,11 @@ export const FullAndFinal: React.FC = () => {
   const canRead = usePermission('hrms.fnf.read')
   const canProcess = usePermission('hrms.fnf.process')
   const canApprove = usePermission('hrms.fnf.approve')
+  // V101 split hrms.fnf.pay out of approve (segregation of duties). The UI
+  // kept gating Pay on approve, so an approver-only role saw Pay and 403'd,
+  // and a finance role with pay-but-not-approve never got the Action column
+  // at all (2026-09-08 audit).
+  const canPay = usePermission('hrms.fnf.pay')
   const [tab, setTab] = useState<Tab>(canRead ? 'settlements' : 'create')
 
   const tabs: { key: Tab; label: string }[] = [
@@ -37,7 +42,7 @@ export const FullAndFinal: React.FC = () => {
 
       <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'settlements' && canRead && <HrTabPanel tabKey="settlements"><SettlementsTab canApprove={canApprove} /></HrTabPanel>}
+      {tab === 'settlements' && canRead && <HrTabPanel tabKey="settlements"><SettlementsTab canApprove={canApprove} canPay={canPay} /></HrTabPanel>}
       {tab === 'create' && canProcess && <HrTabPanel tabKey="create"><CreateTab onCreated={() => setTab(canRead ? 'settlements' : 'create')} /></HrTabPanel>}
     </div>
   )
@@ -45,8 +50,9 @@ export const FullAndFinal: React.FC = () => {
 
 // ── Settlements ────────────────────────────────────────────────────────────────
 
-function SettlementsTab({ canApprove }: { canApprove: boolean }) {
+function SettlementsTab({ canApprove, canPay }: { canApprove: boolean; canPay: boolean }) {
   const { toast } = useToast()
+  const showActions = canApprove || canPay
   const { data, isLoading } = useFnfSettlements(0)
   const approve = useApproveSettlement()
   const pay = usePaySettlement()
@@ -95,30 +101,34 @@ function SettlementsTab({ canApprove }: { canApprove: boolean }) {
               <th className="hidden sm:table-cell">Last Working Day</th>
               <th>Net Settlement</th>
               <th>Status</th>
-              {canApprove && <th className="text-right">Action</th>}
+              {showActions && <th className="text-right">Action</th>}
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              [...Array(4)].map((_, i) => <tr key={i}><td colSpan={canApprove ? 5 : 4} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
+              [...Array(4)].map((_, i) => <tr key={i}><td colSpan={showActions ? 5 : 4} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
             ) : settlements.length === 0 ? (
-              <tr><td colSpan={canApprove ? 5 : 4} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No settlements yet</p><p className="mt-1 text-xs text-text-tertiary">Use “Create Settlement” to process a leaver's full &amp; final.</p></td></tr>
+              <tr><td colSpan={showActions ? 5 : 4} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No settlements yet</p><p className="mt-1 text-xs text-text-tertiary">Use “Create Settlement” to process a leaver's full &amp; final.</p></td></tr>
             ) : settlements.map((s, i) => (
               <tr key={s.id}>
                 <td><HrAvatar name={s.employeeName || 'Employee'} sub={s.employeeCode} seed={i} /></td>
                 <td className="hidden sm:table-cell text-text-secondary">{s.lastWorkingDay ? format(new Date(s.lastWorkingDay), 'd MMM yyyy') : '—'}</td>
                 <td className="font-semibold text-text-primary">{inr(s.netSettlement)}</td>
                 <td><HrStatusPill tone={STATUS_TONE[s.status]}>{s.status}</HrStatusPill></td>
-                {canApprove && (
+                {showActions && (
                   <td>
                     <div className="flex items-center justify-end gap-2">
-                      {s.status === 'PROCESSED' && (
+                      {s.status === 'PROCESSED' && canApprove && (
                         <HrButton size="sm" onClick={() => onApprove(s.id)} disabled={approve.isPending}><Check size={14} /> Approve</HrButton>
                       )}
-                      {s.status === 'APPROVED' && (
+                      {/* Pay is gated on hrms.fnf.pay. The backend additionally
+                          refuses approver==payer (segregation of duties) with a
+                          clear message, which onPay surfaces via toast. */}
+                      {s.status === 'APPROVED' && canPay && (
                         <HrButton size="sm" onClick={() => onPay(s.id)} disabled={pay.isPending}><CircleDollarSign size={14} /> Pay</HrButton>
                       )}
-                      {(s.status === 'PAID' || s.status === 'INITIATED') && (
+                      {((s.status === 'PROCESSED' && !canApprove) || (s.status === 'APPROVED' && !canPay)
+                        || s.status === 'PAID' || s.status === 'INITIATED') && (
                         <span className="text-xs text-text-tertiary">—</span>
                       )}
                     </div>

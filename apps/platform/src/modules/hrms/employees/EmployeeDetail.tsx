@@ -294,8 +294,14 @@ function AccountCard({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceE
  * the existing templates are giving false rejections.
  */
 function FaceResetRow({ employeeId, employeeName }: { employeeId: string; employeeName: string }) {
+  // Backend is @PreAuthorize attendance.face.admin.reset (V034 grants it to
+  // SUPER_ADMIN + HR_MANAGER only). This row rendered for every viewer of the
+  // card, so COMPANY_ADMIN / DEPT_MANAGER clicked it and got a red 403
+  // (2026-09-08 audit). Hooks must run before the early return.
+  const canResetFace = usePermission('attendance.face.admin.reset')
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
+  if (!canResetFace) return null
   const doReset = async () => {
     setBusy(true)
     try {
@@ -1468,13 +1474,19 @@ export const EmployeeDetail: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <HrStatusPill tone={PILL_TONE[statusInfo.tone] ?? 'gray'}>{statusInfo.label}</HrStatusPill>
-                <button
-                  onClick={() => setShowEdit(true)}
-                  aria-label="Edit employee"
-                  title="Edit employee"
-                  className="p-2 bg-white hover:bg-surface-2 text-text-primary rounded-xl transition-colors">
-                  <Edit3 size={14} />
-                </button>
+                {/* Every other lifecycle action on this page is wrapped in
+                    <Can HRMS_EMPLOYEE_WRITE>; this one was missed. The route
+                    only needs employee.read, so a read-only viewer filled the
+                    whole edit wizard and got a 403 on Save (2026-09-08 audit). */}
+                <Can code={P.HRMS_EMPLOYEE_WRITE}>
+                  <button
+                    onClick={() => setShowEdit(true)}
+                    aria-label="Edit employee"
+                    title="Edit employee"
+                    className="p-2 bg-white hover:bg-surface-2 text-text-primary rounded-xl transition-colors">
+                    <Edit3 size={14} />
+                  </button>
+                </Can>
               </div>
             </div>
 

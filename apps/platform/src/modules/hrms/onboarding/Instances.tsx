@@ -107,7 +107,7 @@ export const Instances: React.FC = () => {
               {instances.map((row, i) => {
                 const { done, total, pct } = progressOf(row)
                 return (
-                  <tr key={row.id} onClick={() => navigate(`/hrms/onboarding/instances/${row.employeeId}`)} className="cursor-pointer">
+                  <tr key={row.id} onClick={() => navigate(`/hrms/onboarding/instances/${row.id}`)} className="cursor-pointer">
                     <td><HrAvatar name={employeeName.get(row.employeeId) || 'Unknown employee'} seed={i} /></td>
                     <td className="hidden sm:table-cell text-text-secondary">{templateName.get(row.templateId) || '—'}</td>
                     <td><HrStatusPill tone={row.status === 'COMPLETED' ? 'ok' : 'info'}>{row.status}</HrStatusPill></td>

@@ -32,7 +32,9 @@ export const Expense: React.FC = () => {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'my', label: 'My Claims' },
     { key: 'submit', label: 'Submit Claim' },
-    ...(canApprove ? [{ key: 'approvals' as Tab, label: 'Approvals' }] : []),
+    // Reimbursement-only roles (finance) need this tab too — it's where
+    // APPROVED claims are marked paid (2026-09-08 audit).
+    ...(canApprove || canReimburse ? [{ key: 'approvals' as Tab, label: 'Approvals' }] : []),
     ...(canPolicyRead ? [{ key: 'policies' as Tab, label: 'Policies' }] : []),
   ]
 
@@ -44,7 +46,7 @@ export const Expense: React.FC = () => {
 
       {tab === 'my' && <HrTabPanel tabKey="my"><MyClaimsTab /></HrTabPanel>}
       {tab === 'submit' && <HrTabPanel tabKey="submit"><SubmitTab onSubmitted={() => setTab('my')} /></HrTabPanel>}
-      {tab === 'approvals' && canApprove && <HrTabPanel tabKey="approvals"><ApprovalsTab canReimburse={canReimburse} /></HrTabPanel>}
+      {tab === 'approvals' && (canApprove || canReimburse) && <HrTabPanel tabKey="approvals"><ApprovalsTab canApprove={canApprove} canReimburse={canReimburse} /></HrTabPanel>}
       {tab === 'policies' && canPolicyRead && <HrTabPanel tabKey="policies"><PoliciesTab canWrite={canPolicyWrite} /></HrTabPanel>}
     </div>
   )
@@ -236,9 +238,9 @@ function SubmitTab({ onSubmitted }: { onSubmitted: () => void }) {
 
 // ── Approvals ──────────────────────────────────────────────────────────────
 
-function ApprovalsTab({ canReimburse }: { canReimburse: boolean }) {
+function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canReimburse: boolean }) {
   const { toast } = useToast()
-  const { data, isLoading } = usePendingExpenseApprovals(0)
+  const { data, isLoading, isError, refetch } = usePendingExpenseApprovals(0)
   const decide = useExpenseDecision()
   const reimburse = useReimburseClaim()
   const claims = data?.content ?? []
@@ -278,23 +280,41 @@ function ApprovalsTab({ canReimburse }: { canReimburse: boolean }) {
             <th>Employee</th>
             <th>Claim</th>
             <th>Amount</th>
+            <th>Status</th>
             <th className="text-right">Action</th>
           </tr>
         </thead>
         <tbody>
           {isLoading ? (
-            [...Array(3)].map((_, i) => <tr key={i}><td colSpan={4} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
+            [...Array(3)].map((_, i) => <tr key={i}><td colSpan={5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
+          ) : isError ? (
+            <tr><td colSpan={5} className="py-10 text-center"><p className="text-sm font-semibold text-red-700">Couldn&rsquo;t load the approvals queue</p><button type="button" onClick={() => refetch()} className="mt-2 text-xs font-medium text-[#047857] underline underline-offset-2">Try again</button></td></tr>
           ) : claims.length === 0 ? (
-            <tr><td colSpan={4} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">Nothing awaiting approval</p><p className="mt-1 text-xs text-text-tertiary">Submitted claims will appear here.</p></td></tr>
+            <tr><td colSpan={5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">Nothing awaiting action</p><p className="mt-1 text-xs text-text-tertiary">Submitted claims wait here for approval; approved claims wait here to be reimbursed.</p></td></tr>
           ) : claims.map((c, i) => (
             <tr key={c.id}>
               <td><HrAvatar name={c.employeeName || 'Employee'} sub={c.employeeCode} seed={i} /></td>
               <td className="text-text-primary">{c.title}</td>
               <td className="font-semibold text-text-primary">{inr(c.totalAmount)}</td>
+              <td><HrStatusPill tone={STATUS_TONE[c.status]}>{c.status}</HrStatusPill></td>
               <td>
                 <div className="flex items-center justify-end gap-2">
-                  <HrButton size="sm" onClick={() => onDecide(c.id, true)} disabled={decide.isPending}><Check size={14} /> Approve</HrButton>
-                  <HrButton size="sm" variant="ghost" onClick={() => onDecide(c.id, false)} disabled={decide.isPending}><X size={14} /> Reject</HrButton>
+                  {/* The queue now carries SUBMITTED (to approve) and APPROVED
+                      (to reimburse). Before, approved claims vanished from every
+                      screen and the reimburse endpoint was unreachable — nobody
+                      was ever paid through the product (2026-09-08 audit). */}
+                  {c.status === 'SUBMITTED' && canApprove && (
+                    <>
+                      <HrButton size="sm" onClick={() => onDecide(c.id, true)} disabled={decide.isPending}><Check size={14} /> Approve</HrButton>
+                      <HrButton size="sm" variant="ghost" onClick={() => onDecide(c.id, false)} disabled={decide.isPending}><X size={14} /> Reject</HrButton>
+                    </>
+                  )}
+                  {c.status === 'APPROVED' && canReimburse && (
+                    <HrButton size="sm" onClick={() => onReimburse(c.id)} disabled={reimburse.isPending}><Wallet size={14} /> Mark Reimbursed</HrButton>
+                  )}
+                  {((c.status === 'SUBMITTED' && !canApprove) || (c.status === 'APPROVED' && !canReimburse)) && (
+                    <span className="text-xs text-text-tertiary">—</span>
+                  )}
                 </div>
               </td>
             </tr>

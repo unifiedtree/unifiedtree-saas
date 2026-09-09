@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ArrowLeft, Save, UserPlus } from 'lucide-react'
+import { usePermission, P } from '@unifiedtree/sdk'
 import { HrPageHeader, HrButton } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies } from '../api/useOrg'
@@ -48,12 +49,27 @@ export const ManualEntry: React.FC = () => {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
 
-  const { data: page, isLoading: dirLoading } = useEmployeeDirectory({
+  const { data: page, isLoading: dirLoading, isError: dirError } = useEmployeeDirectory({
     companyId,
     search: debouncedSearch || undefined,
     pageSize: PICKER_PAGE_SIZE,
   })
   const employees = page?.content ?? []
+
+  // 2026-09-08 audit. Two permission mismatches on this page:
+  //  * The directory is hrms.employee.read, which V112 deliberately removed
+  //    from DEPT_MANAGER (the PII-leak fix) — yet DEPT_MANAGER is exactly the
+  //    role that holds attendance.regularization.approve, i.e. the role this
+  //    page exists for. The 403 was swallowed into an empty picker that read as
+  //    "no employees match". Their working path is Muster Roll → row action →
+  //    here with ?employeeId= pre-filled (submit only needs the id), so when
+  //    the directory 403s we say so and point at that path instead of hiding a
+  //    dead search box.
+  //  * The route guard admits attendance.team.read, but POST /manual-entry
+  //    needs attendance.regularization.approve. ADMIN/MANAGER workspace roles
+  //    hold team.read alone, filled the form, and got a generic "Failed to
+  //    save". Gate Save on the real permission and say why.
+  const canSaveEntry = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
 
   const [employeeId, setEmployeeId] = useState<string>(prefillEmployeeId)
   const [date, setDate] = useState<string>(prefillDate)
@@ -75,6 +91,7 @@ export const ManualEntry: React.FC = () => {
   const manual = useManualEntry()
 
   const canSubmit =
+    canSaveEntry &&
     employeeId.trim().length > 0 &&
     date.trim().length > 0 &&
     reason.trim().length > 0 &&
@@ -141,30 +158,63 @@ export const ManualEntry: React.FC = () => {
               <span className="text-xs text-[var(--text-tertiary)]">· {selected.employeeCode}</span>
             </p>
           )}
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, code or email…"
-            className="mb-2 w-full rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20"
-          />
-          <select
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            size={6}
-            className="w-full rounded-lg border border-[var(--border-default)] bg-white px-2 py-1.5 text-sm text-[var(--text-primary)] focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20"
-          >
-            {dirLoading && <option>Loading…</option>}
-            {!dirLoading && employees.length === 0 && (
-              <option disabled>No employees match — try a different search</option>
-            )}
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {fullName(e)} · {e.employeeCode}
-              </option>
-            ))}
-          </select>
+          {dirError ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+              {employeeId ? (
+                <>
+                  <span className="font-semibold">Employee pre-selected from the muster roll.</span>{' '}
+                  Your role can't browse the full directory, but you can still save this entry.
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold">Your role can't browse the employee directory.</span>{' '}
+                  Open the{' '}
+                  <button
+                    type="button"
+                    className="font-semibold underline underline-offset-2"
+                    onClick={() => navigate('/hrms/muster-roll' + (date ? `?date=${date}` : ''))}
+                  >
+                    muster roll
+                  </button>{' '}
+                  and use the row action there — it brings you back here with the employee filled in.
+                </>
+              )}
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, code or email…"
+                className="mb-2 w-full rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20"
+              />
+              <select
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                size={6}
+                className="w-full rounded-lg border border-[var(--border-default)] bg-white px-2 py-1.5 text-sm text-[var(--text-primary)] focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20"
+              >
+                {dirLoading && <option>Loading…</option>}
+                {!dirLoading && employees.length === 0 && (
+                  <option disabled>No employees match — try a different search</option>
+                )}
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {fullName(e)} · {e.employeeCode}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
+
+        {!canSaveEntry && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-800">
+            You can view this form but your role can&rsquo;t record manual attendance
+            (needs the &ldquo;approve regularization&rdquo; permission). Ask HR or an admin to save it.
+          </p>
+        )}
 
         <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-3">
           <div>

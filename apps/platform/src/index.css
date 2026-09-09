@@ -3,14 +3,24 @@
 @tailwind utilities;
 
 :root {
-  --color-bg-primary: #f4f4f6;
-  --color-bg-secondary: #f4f4f6;
+  --color-bg-primary: #f8fafc;
+  --color-bg-secondary: #f1f5f9;
   --color-bg-card: #ffffff;
-  --color-border: #e5e7eb;
-  --color-text-primary: #1f2937;
-  --color-text-secondary: #6b7280;
+  --color-border: #e2e8f0;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
   --color-brand: #0F6E56;
   --color-brand-dark: #0A5240;
+  --color-brand-mint: #10B981;
+}
+
+[data-theme='dark'] {
+  --color-bg-primary: #090d16;
+  --color-bg-secondary: #0f172a;
+  --color-bg-card: #0f172a;
+  --color-border: #334155;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #cbd5e1;
 }
 
 * {
@@ -22,18 +32,20 @@ html {
 }
 
 body {
-  background: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
+  background: var(--bg-canvas, #f8fafc);
+  color: var(--text-primary, #0f172a);
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13.5px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
+/* ── Custom Scrollbar ──────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-track {
@@ -41,12 +53,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(15, 110, 86, 0.22);
-  border-radius: 8px;
+  background: rgba(15, 110, 86, 0.25);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 110, 86, 0.42);
+  background: rgba(15, 110, 86, 0.5);
 }
 
 ::selection {
@@ -54,52 +66,115 @@ body {
   color: #053B2E;
 }
 
+/* ── Text Gradients ────────────────────────────────────────── */
 .text-gradient {
-  background: linear-gradient(135deg, #0A5240 0%, #0F6E56 50%, #34D399 100%);
+  background: linear-gradient(135deg, #0A5240 0%, #0F6E56 45%, #10B981 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-.text-gradient-peach {
-  background: linear-gradient(135deg, #0F6E56 0%, #14B8A6 100%);
+.text-gradient-emerald {
+  background: linear-gradient(135deg, #0F6E56 0%, #34D399 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* ── Client HR table pattern (the repeated list-screen table) ─────────────── */
+/* ── Enterprise Cards & Surfaces ───────────────────────────── */
+.ut-card {
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-default, #e2e8f0);
+  border-radius: var(--radius-xl, 18px);
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ut-card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(15, 110, 86, 0.25);
+  box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.07), 0 4px 12px -2px rgba(15, 110, 86, 0.08);
+}
+
+.ut-card-sm {
+  border-radius: var(--radius-lg, 14px);
+}
+
+/* ── Glassmorphism ─────────────────────────────────────────── */
+.ut-glass {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+[data-theme='dark'] .ut-glass {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(51, 65, 85, 0.6);
+}
+
+.ut-glass-sidebar {
+  background: linear-gradient(180deg, #090d16 0%, #0c1424 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* ── Custom Input Styling ──────────────────────────────────── */
+.ut-input {
+  width: 100%;
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-default, #e2e8f0);
+  border-radius: var(--radius-md, 10px);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary, #0f172a);
+  transition: all 0.15s ease;
+}
+
+.ut-input-sm {
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+
+.ut-input:focus {
+  outline: none;
+  border-color: #0F6E56;
+  box-shadow: 0 0 0 3px rgba(15, 110, 86, 0.15);
+}
+
+/* ── Enterprise HR Table ────────────────────────────────────── */
 .hr-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12.5px;
 }
 
 .hr-table thead th {
   position: sticky;
   top: 0;
-  background: #ffffff;
+  z-index: 10;
+  background: var(--bg-subtle, #f8fafc);
   text-align: left;
   white-space: nowrap;
-  padding: 10px 14px;
+  padding: 11px 16px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #6b7280;
-  /* WCAG AA: #9ca3af on white was 2.5:1 (fail); #6b7280 is 4.83:1 */
-  border-bottom: 1px solid #e5e7eb;
+  color: var(--text-tertiary, #64748b);
+  border-bottom: 1px solid var(--border-default, #e2e8f0);
 }
 
 .hr-table tbody td {
-  padding: 12px 14px;
-  border-bottom: 1px solid #f3f4f6;
-  color: #1f2937;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border-subtle, #f1f5f9);
+  color: var(--text-primary, #0f172a);
   vertical-align: middle;
+  transition: background-color 0.15s ease;
 }
 
 .hr-table tbody tr:hover td {
-  background: #f9fafb;
+  background: var(--bg-hover, #f8fafc);
 }
 
 .hr-table tbody tr:last-child td {
@@ -109,45 +184,26 @@ body {
 .hr-table .hr-mono {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
-  color: #6b7280;
+  font-weight: 500;
+  color: var(--text-secondary, #475569);
 }
 
-.glass {
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border: 1px solid rgba(15, 110, 86, 0.12);
-}
-
-.orb {
-  position: absolute;
-  border-radius: 9999px;
-  filter: blur(72px);
-  pointer-events: none;
-  will-change: transform;
-}
-
+/* ── Interactive Physics ────────────────────────────────────── */
 .btn-press {
-  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, background-color 0.2s ease;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, background-color 0.15s ease;
 }
 
 .btn-press:active {
   transform: scale(0.97);
 }
 
-/* ── Accessibility ─────────────────────────────────────────────────────────── */
-/* Visible keyboard focus ring everywhere (WCAG 2.4.7). The codebase uses
-   `focus:outline-none` widely, which removed the focus indicator for keyboard
-   users; this restores a consistent green ring on keyboard focus only
-   (:focus-visible excludes mouse/pointer focus, so clicks stay clean). */
+/* ── Accessibility ─────────────────────────────────────────── */
 :focus-visible {
   outline: 2px solid #0F6E56 !important;
   outline-offset: 2px;
 }
 
-/* Respect the user's reduced-motion preference (WCAG 2.3.3). */
 @media (prefers-reduced-motion: reduce) {
-
   *,
   *::before,
   *::after {

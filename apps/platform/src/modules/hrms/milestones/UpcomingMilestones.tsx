@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Cake, Award, PartyPopper, type LucideIcon } from 'lucide-react'
+import { usePermission, P } from '@unifiedtree/sdk'
 import { useMilestones, type Milestone } from '../api/useMilestones'
 
 /**
@@ -118,6 +119,13 @@ const Column: React.FC<ColumnProps> = ({
 
 export const UpcomingMilestones: React.FC = () => {
   const navigate = useNavigate()
+  // The card itself is deliberately open to everyone (GET /v1/hrms/milestones
+  // is isAuthenticated), but the row click goes to /hrms/employees/:id, which
+  // is RouteGuard hrms.employee.read — removed from EMPLOYEE (V051) and from
+  // DEPT_MANAGER/MANAGER (V112). For most seats a birthday click landed on
+  // "Access Restricted" (2026-09-08 audit). Only navigate when the target
+  // route will actually open; otherwise the row is informational.
+  const canOpenEmployee = usePermission(P.HRMS_EMPLOYEE_READ)
   const { data, isLoading } = useMilestones({ birthdayDays: 14, anniversaryDays: 31, retirementMonths: 6 })
 
   const birthdays = data?.birthdays ?? []
@@ -130,7 +138,9 @@ export const UpcomingMilestones: React.FC = () => {
   // a small workspace and an empty card reads as broken.
   if (!isLoading && total === 0) return null
 
-  const open = (m: Milestone) => navigate(`/hrms/employees/${m.employeeId}`)
+  const open = (m: Milestone) => {
+    if (canOpenEmployee) navigate(`/hrms/employees/${m.employeeId}`)
+  }
 
   return (
     <div className="ut-card overflow-hidden">

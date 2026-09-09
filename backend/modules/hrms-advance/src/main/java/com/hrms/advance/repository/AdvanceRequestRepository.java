@@ -15,4 +15,7 @@ public interface AdvanceRequestRepository extends JpaRepository<AdvanceRequest, 
     Page<AdvanceRequest> findByEmployeeIdOrderByCreatedAtDesc(UUID employeeId, Pageable pageable);
 
     Page<AdvanceRequest> findByStatusOrderByCreatedAtDesc(AdvanceStatus status, Pageable pageable);
+
+    /** Approvals queue needs REQUESTED (to approve) + APPROVED (to disburse) in one list. */
+    Page<AdvanceRequest> findByStatusInOrderByCreatedAtDesc(java.util.Collection<AdvanceStatus> statuses, Pageable pageable);
 }

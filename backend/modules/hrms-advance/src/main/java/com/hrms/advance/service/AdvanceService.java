@@ -79,6 +79,11 @@ public class AdvanceService {
     }
 
     @Transactional(readOnly = true)
+    public PageResponse<AdvanceResponse> getByStatuses(java.util.Collection<AdvanceStatus> statuses, Pageable pageable) {
+        return toPage(advanceRepository.findByStatusInOrderByCreatedAtDesc(statuses, pageable));
+    }
+
+    @Transactional(readOnly = true)
     public AdvanceResponse getRequest(UUID requestId) {
         AdvanceRequest advance = advanceRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("AdvanceRequest", requestId));

@@ -179,7 +179,7 @@ function RequestTab({ onSubmitted }: { onSubmitted: () => void }) {
 function ApprovalsTab({ canApprove, canDisburse }: { canApprove: boolean; canDisburse: boolean }) {
   const { toast } = useToast()
   const confirm = useConfirmDialog()
-  const { data, isLoading } = usePendingAdvanceApprovals(0)
+  const { data, isLoading, isError, refetch } = usePendingAdvanceApprovals(0)
   const decide = useAdvanceDecision()
   const disburse = useDisburseAdvance()
   const advances = data?.content ?? []
@@ -233,8 +233,12 @@ function ApprovalsTab({ canApprove, canDisburse }: { canApprove: boolean; canDis
         <tbody>
           {isLoading ? (
             [...Array(3)].map((_, i) => <tr key={i}><td colSpan={5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
+          ) : isError ? (
+            // There was no error branch: a 403 rendered as "Nothing awaiting
+            // approval" forever (2026-09-08 audit).
+            <tr><td colSpan={5} className="py-10 text-center"><p className="text-sm font-semibold text-red-700">Couldn&rsquo;t load the approvals queue</p><button type="button" onClick={() => refetch()} className="mt-2 text-xs font-medium text-[#047857] underline underline-offset-2">Try again</button></td></tr>
           ) : advances.length === 0 ? (
-            <tr><td colSpan={5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">Nothing awaiting approval</p><p className="mt-1 text-xs text-text-tertiary">Requested advances will appear here.</p></td></tr>
+            <tr><td colSpan={5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">Nothing awaiting action</p><p className="mt-1 text-xs text-text-tertiary">Requested advances wait here for approval; approved ones wait here to be disbursed.</p></td></tr>
           ) : advances.map((a, i) => (
             <tr key={a.id}>
               <td><HrAvatar name={a.employeeName || 'Employee'} sub={a.employeeCode} seed={i} /></td>

@@ -117,12 +117,21 @@ public class AdvanceController {
 
     // ─── Approvals (manager / HR) ────────────────────────────────────────────
 
-    @Operation(summary = "List salary advance requests awaiting approval")
+    @Operation(summary = "List salary advance requests awaiting approval OR disbursement")
     @GetMapping("/requests/approvals")
-    @PreAuthorize("@perm.check('hrms.advance.approve')")
+    // 2026-09-08 audit: two fixes in one.
+    //  1. Was approve-only. FINANCE_LEAD is seeded hrms.advance.disburse WITHOUT
+    //     approve (V068), so the Approvals tab 403'd for exactly the role that
+    //     pays advances out, and the UI rendered "Nothing awaiting approval".
+    //  2. Was hard-coded to REQUESTED. The Disburse button in Advance.tsx only
+    //     renders for status==='APPROVED', so it was unreachable — advances
+    //     could be approved but never disbursed, and since disburse seeds the
+    //     salary-recovery schedule, recovery never started either.
+    @PreAuthorize("hasAnyAuthority('hrms.advance.approve','hrms.advance.disburse')")
     public ResponseEntity<PageResponse<AdvanceResponse>> pendingApprovals(
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(advanceService.getByStatus(AdvanceStatus.REQUESTED, pageable)));
+        return ResponseEntity.ok(enrichPage(advanceService.getByStatuses(
+                java.util.List.of(AdvanceStatus.REQUESTED, AdvanceStatus.APPROVED), pageable)));
     }
 
     @Operation(summary = "Approve or reject a salary advance request")

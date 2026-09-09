@@ -17,4 +17,10 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
     Page<ExpenseClaim> findByApproverIdAndStatusOrderByCreatedAtDesc(UUID approverId, ExpenseStatus status, Pageable pageable);
 
     Page<ExpenseClaim> findByStatusOrderByCreatedAtDesc(ExpenseStatus status, Pageable pageable);
+
+    /** Tenant-wide open queue (finance/admin): SUBMITTED to approve + APPROVED to reimburse. */
+    Page<ExpenseClaim> findByStatusInOrderByCreatedAtDesc(java.util.Collection<ExpenseStatus> statuses, Pageable pageable);
+
+    /** Approver-scoped open queue (managers): only claims routed to this approver. */
+    Page<ExpenseClaim> findByApproverIdAndStatusInOrderByCreatedAtDesc(UUID approverId, java.util.Collection<ExpenseStatus> statuses, Pageable pageable);
 }

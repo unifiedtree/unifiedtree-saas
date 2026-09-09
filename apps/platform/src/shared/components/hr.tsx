@@ -15,12 +15,12 @@ import { Check, ChevronDown, Search, X } from 'lucide-react'
 // ── KPI stat card ──────────────────────────────────────────────────────────────
 type StatColor = 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'teal'
 const STAT_ICON: Record<StatColor, string> = {
-  green:  'bg-[var(--accent-bg)] text-[var(--accent-fg)]',
-  blue:   'bg-[#EFF6FF] text-[#2563EB]',
-  orange: 'bg-[#FFFBEB] text-[#D97706]',
-  red:    'bg-[#FEF2F2] text-[#DC2626]',
-  purple: 'bg-[#F5F3FF] text-[#7C3AED]',
-  teal:   'bg-[#F0FDFA] text-[#0D9488]',
+  green:  'bg-emerald-50 text-[#0F6E56] border border-emerald-200/60 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/40',
+  blue:   'bg-blue-50 text-blue-600 border border-blue-200/60 dark:bg-blue-950/60 dark:text-blue-400 dark:border-blue-800/40',
+  orange: 'bg-amber-50 text-amber-600 border border-amber-200/60 dark:bg-amber-950/60 dark:text-amber-400 dark:border-amber-800/40',
+  red:    'bg-rose-50 text-rose-600 border border-rose-200/60 dark:bg-rose-950/60 dark:text-rose-400 dark:border-rose-800/40',
+  purple: 'bg-purple-50 text-purple-600 border border-purple-200/60 dark:bg-purple-950/60 dark:text-purple-400 dark:border-purple-800/40',
+  teal:   'bg-teal-50 text-teal-600 border border-teal-200/60 dark:bg-teal-950/60 dark:text-teal-400 dark:border-teal-800/40',
 }
 
 export function HrStatCard({
@@ -35,27 +35,27 @@ export function HrStatCard({
   loading?: boolean
 }) {
   return (
-    <div className="ut-card ut-card-sm ut-card-hover group p-5">
+    <div className="ut-card ut-card-sm ut-card-hover group relative overflow-hidden p-5 transition-all duration-300">
       <div className="flex items-start justify-between">
-        <div className={clsx('flex h-10 w-10 items-center justify-center rounded-xl', STAT_ICON[color])}>
+        <div className={clsx('flex h-11 w-11 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:scale-105', STAT_ICON[color])}>
           {icon}
         </div>
         {trend && (
           <span className={clsx(
-            'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+            'inline-flex items-center gap-0.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-tight',
             trend.dir === 'up'
-              ? 'bg-[var(--status-success-bg)] text-[var(--status-success-fg)]'
-              : 'bg-[var(--status-error-bg)] text-[var(--status-error-fg)]',
+              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
+              : 'bg-rose-50 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300',
           )}>
             {trend.dir === 'up' ? '↑' : '↓'} {trend.value}
           </span>
         )}
       </div>
-      <p className="mt-4 text-[28px] font-semibold leading-none tracking-tight tabular-nums text-[var(--text-primary)]">
-        {loading ? <span className="inline-block h-7 w-16 animate-pulse-subtle rounded bg-[var(--bg-subtle)]" /> : value}
+      <p className="mt-4 text-[28px] font-bold leading-none tracking-tight tabular-nums text-[var(--text-primary)]">
+        {loading ? <span className="inline-block h-7 w-20 animate-pulse-subtle rounded-md bg-[var(--bg-subtle)]" /> : value}
       </p>
-      <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">{label}</p>
-      {sub && <p className="mt-1 text-xs text-[var(--text-secondary)]">{sub}</p>}
+      <p className="mt-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{label}</p>
+      {sub && <p className="mt-1 text-xs font-medium text-[var(--text-secondary)]">{sub}</p>}
     </div>
   )
 }
@@ -63,23 +63,23 @@ export function HrStatCard({
 // ── Status pill ──────────────────────────────────────────────────────────────
 export type PillTone = 'ok' | 'warn' | 'info' | 'late' | 'purple' | 'red' | 'pink' | 'teal' | 'gray' | 'green' | 'orange' | 'blue'
 const PILL: Record<PillTone, string> = {
-  ok:     'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
-  green:  'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
-  warn:   'bg-amber-50 text-amber-700 ring-amber-600/20',
-  orange: 'bg-orange-50 text-orange-700 ring-orange-600/20',
-  info:   'bg-blue-50 text-blue-700 ring-blue-700/10',
-  blue:   'bg-blue-50 text-blue-700 ring-blue-700/10',
-  late:   'bg-orange-50 text-orange-700 ring-orange-600/20',
-  purple: 'bg-purple-50 text-purple-700 ring-purple-700/10',
-  red:    'bg-rose-50 text-rose-700 ring-rose-600/10',
-  pink:   'bg-pink-50 text-pink-700 ring-pink-700/10',
-  teal:   'bg-teal-50 text-teal-700 ring-teal-600/20',
-  gray:   'bg-slate-50 text-slate-600 ring-slate-500/10',
+  ok:     'bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/40',
+  green:  'bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/40',
+  warn:   'bg-amber-50 text-amber-700 border border-amber-200/80 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/40',
+  orange: 'bg-orange-50 text-orange-700 border border-orange-200/80 dark:bg-orange-950/60 dark:text-orange-300 dark:border-orange-800/40',
+  info:   'bg-blue-50 text-blue-700 border border-blue-200/80 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/40',
+  blue:   'bg-blue-50 text-blue-700 border border-blue-200/80 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/40',
+  late:   'bg-orange-50 text-orange-700 border border-orange-200/80 dark:bg-orange-950/60 dark:text-orange-300 dark:border-orange-800/40',
+  purple: 'bg-purple-50 text-purple-700 border border-purple-200/80 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800/40',
+  red:    'bg-rose-50 text-rose-700 border border-rose-200/80 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800/40',
+  pink:   'bg-pink-50 text-pink-700 border border-pink-200/80 dark:bg-pink-950/60 dark:text-pink-300 dark:border-pink-800/40',
+  teal:   'bg-teal-50 text-teal-700 border border-teal-200/80 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800/40',
+  gray:   'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
 }
 
 export function HrStatusPill({ tone = 'gray', children }: { tone?: PillTone; children: React.ReactNode }) {
   return (
-    <span className={clsx('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset', PILL[tone])}>
+    <span className={clsx('inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-tight shadow-2xs', PILL[tone])}>
       {children}
     </span>
   )
@@ -97,11 +97,11 @@ export function HrPageHeader({
   return (
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
-        {crumb && <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{crumb}</p>}
-        <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-[var(--text-primary)]">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-[var(--text-secondary)]">{subtitle}</p>}
+        {crumb && <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--accent-fg)]">{crumb}</p>}
+        <h1 className="text-[26px] font-bold leading-tight tracking-tight text-[var(--text-primary)]">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm font-medium text-[var(--text-secondary)]">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
     </div>
   )
 }
@@ -114,9 +114,9 @@ export function HrButton({
     <button
       {...rest}
       className={clsx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
-        size === 'sm' ? 'h-8 px-3 text-xs' : 'h-9 px-4 text-sm',
-        variant === 'primary' && 'bg-[var(--interactive-primary)] text-white shadow-sm hover:bg-[var(--interactive-primary-hover)]',
+        'btn-press inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+        size === 'sm' ? 'h-8 px-3 text-xs' : 'h-9.5 px-4 text-sm',
+        variant === 'primary' && 'bg-[var(--interactive-primary)] text-white shadow-[0_4px_14px_0_rgba(15,110,86,0.35)] hover:bg-[var(--interactive-primary-hover)] hover:shadow-[0_6px_20px_0_rgba(15,110,86,0.45)]',
         variant === 'ghost' && 'border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs hover:bg-[var(--bg-subtle)] hover:border-[var(--border-strong)]',
         variant === 'danger' && 'bg-[var(--interactive-danger)] text-white shadow-sm hover:bg-[var(--interactive-danger-hover)]',
         className,
@@ -127,7 +127,7 @@ export function HrButton({
   )
 }
 
-// ── Table card: gray toolbar (search + actions) → scrollable table → footer ──
+// ── Table card: toolbar (search + actions) → scrollable table → footer ──
 export function TableCard({
   search, actions, footer, children,
 }: {
@@ -139,40 +139,40 @@ export function TableCard({
   return (
     <div className="ut-card overflow-hidden">
       {(search || actions) && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-white/60 px-3.5 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3.5">
           {search && (
-            <div className="relative min-w-[220px] flex-1">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+            <div className="relative min-w-[240px] flex-1">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
               <input
                 value={search.value}
                 onChange={(e) => search.onChange(e.target.value)}
-                placeholder={search.placeholder ?? 'Search…'}
-                className="ut-input ut-input-sm pl-9"
+                placeholder={search.placeholder ?? 'Search records…'}
+                className="ut-input ut-input-sm pl-9.5"
               />
             </div>
           )}
-          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+          {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
         </div>
       )}
       <div className="overflow-x-auto">{children}</div>
-      {footer && <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3">{footer}</div>}
+      {footer && <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3.5">{footer}</div>}
     </div>
   )
 }
 
 // ── Row avatar (colored initials + name/sub) ─────────────────────────────────
-const AV_COLORS = ['#6C5CE7', '#E8590C', '#059669', '#2563EB', '#D97706', '#DB2777', '#0D9488', '#7C3AED', '#0891B2', '#65A30D']
+const AV_COLORS = ['#0F6E56', '#2563EB', '#D97706', '#DB2777', '#0D9488', '#7C3AED', '#0891B2', '#059669']
 export function HrAvatar({ name, sub, seed = 0 }: { name: string; sub?: string; seed?: number }) {
   const initials = name.split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?'
   const bg = AV_COLORS[Math.abs(seed) % AV_COLORS.length]
   return (
-    <div className="flex items-center gap-2.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white" style={{ background: bg }}>
+    <div className="flex items-center gap-3">
+      <div className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold text-white shadow-xs" style={{ background: bg }}>
         {initials}
       </div>
       <div className="min-w-0">
         <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{name}</p>
-        {sub && <p className="truncate text-xs text-[var(--text-tertiary)]">{sub}</p>}
+        {sub && <p className="truncate text-xs font-medium text-[var(--text-tertiary)]">{sub}</p>}
       </div>
     </div>
   )
@@ -180,17 +180,6 @@ export function HrAvatar({ name, sub, seed = 0 }: { name: string; sub?: string; 
 
 // ── Accessible tab bar (role=tablist + roving focus + arrow keys) ────────────
 export interface HrTab { key: string; label: React.ReactNode; badge?: React.ReactNode }
-/**
- * Segmented tab bar — THE sub-section switcher for every page (client ask,
- * 2026-08-23): a rounded glass container in which the active tab is a filled
- * emerald pill that SLIDES to its new position (framer-motion layoutId),
- * the way consumer apps switch between their top-level feeds.
- *
- * It replaced an underline tab row. Rules preserved from that version:
- * full roving-tabindex keyboard support, aria tab semantics, badge slot.
- * The layoutId is namespaced with useId so two tab bars on one screen
- * animate independently instead of stealing each other's pill.
- */
 export function HrTabs({ tabs, active, onChange, className }: {
   tabs: HrTab[]
   active: string
@@ -217,7 +206,7 @@ export function HrTabs({ tabs, active, onChange, className }: {
         ref={ref}
         role="tablist"
         onKeyDown={onKeyDown}
-        className="ut-card ut-card-sm inline-flex w-max items-center gap-0.5 p-1"
+        className="ut-card ut-card-sm inline-flex w-max items-center gap-1 p-1.5"
       >
         {tabs.map((t) => {
           const sel = t.key === active
@@ -231,7 +220,7 @@ export function HrTabs({ tabs, active, onChange, className }: {
               tabIndex={sel ? 0 : -1}
               onClick={() => onChange(t.key)}
               className={clsx(
-                'relative shrink-0 rounded-[10px] px-4 py-2 text-sm font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]',
+                'relative shrink-0 rounded-xl px-4 py-2 text-xs font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]',
                 sel ? 'text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
               )}
             >
@@ -239,18 +228,18 @@ export function HrTabs({ tabs, active, onChange, className }: {
                 <motion.span
                   layoutId={`hrtab-pill-${pillId}`}
                   aria-hidden
-                  className="absolute inset-0 rounded-[10px] bg-[var(--interactive-primary)] shadow-[0_4px_12px_-4px_rgba(5,150,105,0.55)]"
+                  className="absolute inset-0 rounded-xl bg-[var(--interactive-primary)] shadow-[0_4px_14px_0_rgba(15,110,86,0.35)]"
                   transition={{ type: 'spring', stiffness: 420, damping: 34 }}
                 />
               )}
-              <span className="relative z-10 inline-flex items-center gap-1.5">
+              <span className="relative z-10 inline-flex items-center gap-2">
                 {t.label}
                 {t.badge != null && (
                   <span
                     aria-hidden
                     className={clsx(
-                      'rounded-full px-1.5 py-0.5 text-[10.5px] font-bold leading-none',
-                      sel ? 'bg-white/25 text-white' : 'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]',
+                      'rounded-full px-2 py-0.5 text-[10px] font-bold leading-none',
+                      sel ? 'bg-white/20 text-white' : 'bg-[var(--accent-bg)] text-[var(--accent-fg)]',
                     )}
                   >
                     {t.badge}
@@ -265,24 +254,12 @@ export function HrTabs({ tabs, active, onChange, className }: {
   )
 }
 
-// Wrap the active tab's content so screen readers associate it with its tab.
 export function HrTabPanel({ tabKey, children }: { tabKey: string; children: React.ReactNode }) {
   return <div role="tabpanel" id={`panel-${tabKey}`} aria-labelledby={`tab-${tabKey}`} tabIndex={0} className="focus:outline-none">{children}</div>
 }
 
 // ── Custom select (listbox) ──────────────────────────────────────────────────
 export interface HrSelectOption { value: string; label: React.ReactNode }
-/**
- * Replaces native <select> wherever the dropdown LIST needs to match the
- * design system — the OS owns a native select's popup, so `.ut-select` could
- * only ever style the closed trigger. This renders its own listbox: emerald
- * hover/selected states, check mark, spring-fast open, full keyboard support
- * (arrows / Enter / Escape / Home / End) and listbox ARIA semantics.
- *
- * The trigger reuses `.ut-input` (not `.ut-select`, whose CSS paints its own
- * chevron — it would double with the icon here) so it sits pixel-identical
- * beside inputs in a form row.
- */
 export function HrSelect({
   value, onChange, options, placeholder = 'Select…', size = 'md', disabled, className,
 }: {
@@ -318,7 +295,6 @@ export function HrSelect({
     close()
   }
 
-  // Click / tap outside closes without stealing the click.
   React.useEffect(() => {
     if (!open) return
     const onPointerDown = (e: PointerEvent) => {
@@ -328,7 +304,6 @@ export function HrSelect({
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [open])
 
-  // Keep the highlighted option visible while arrowing through a long list.
   React.useEffect(() => {
     if (!open) return
     listRef.current
@@ -366,9 +341,9 @@ export function HrSelect({
         aria-controls={open ? listboxId : undefined}
         onClick={() => (open ? close() : openList())}
         className={clsx(
-          'ut-input flex items-center justify-between gap-2 text-left',
+          'ut-input flex items-center justify-between gap-2 text-left font-medium',
           size === 'sm' && 'ut-input-sm',
-          open && '!border-[var(--border-focus)] !bg-white shadow-[0_0_0_4px_rgba(5,150,105,0.12)]',
+          open && '!border-[var(--border-focus)] !bg-white shadow-[0_0_0_4px_rgba(15,110,86,0.15)]',
         )}
       >
         <span className={clsx('truncate', !selected && 'text-[var(--text-tertiary)]')}>
@@ -389,7 +364,7 @@ export function HrSelect({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.13, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute left-0 right-0 top-[calc(100%+6px)] z-dropdown max-h-60 origin-top overflow-y-auto rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] py-1.5 shadow-[0_16px_48px_-16px_rgba(2,44,34,0.30)]"
+            className="absolute left-0 right-0 top-[calc(100%+6px)] z-dropdown max-h-60 origin-top overflow-y-auto rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] py-1.5 shadow-[0_16px_48px_-16px_rgba(15,110,86,0.25)]"
           >
             {options.map((o, i) => {
               const isSelected = o.value === value
@@ -402,13 +377,13 @@ export function HrSelect({
                   onClick={() => commit(i)}
                   onMouseEnter={() => setActive(i)}
                   className={clsx(
-                    'flex w-full items-center justify-between gap-2 px-3.5 py-2 text-left text-sm transition-colors',
+                    'flex w-full items-center justify-between gap-2 px-3.5 py-2 text-left text-sm font-medium transition-colors',
                     i === active && 'bg-[var(--accent-bg)]',
-                    isSelected ? 'font-semibold text-[var(--accent-fg)]' : 'text-[var(--text-primary)]',
+                    isSelected ? 'font-bold text-[var(--accent-fg)]' : 'text-[var(--text-primary)]',
                   )}
                 >
                   <span className="truncate">{o.label}</span>
-                  {isSelected && <Check size={15} className="shrink-0" />}
+                  {isSelected && <Check size={15} className="shrink-0 text-[var(--accent-fg)]" />}
                 </button>
               )
             })}
@@ -420,17 +395,6 @@ export function HrSelect({
 }
 
 // ── Right-hand slide-over drawer ─────────────────────────────────────────────
-/**
- * THE add/edit panel for HR screens. Two deliberate departures from .ut-card,
- * which earlier drawers borrowed and which made them look broken:
- *
- *   1. Opaque surface. The glass card's translucency + backdrop-blur smears
- *      the dimmed page through the panel, reading as a torn / "cut" edge.
- *      A full-height overlay panel needs a solid surface of its own.
- *   2. z-modal (500), above the app header (z-sticky, 200). The old z-[110]
- *      left the header un-dimmed and sliced the drawer's title bar off
- *      behind it.
- */
 export function HrDrawer({
   title, onClose, footer, children, width = 'max-w-md',
 }: {
@@ -442,15 +406,6 @@ export function HrDrawer({
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null)
 
-  // Focus the panel ONCE on mount for keyboard-user accessibility. Do NOT put
-  // this in the same effect as the Escape listener: every parent re-render
-  // (e.g. a form's setState on every keystroke) hands us a new `onClose`
-  // closure, and the combined effect below used to re-fire on every
-  // identity-only change of that dep. `panelRef.current?.focus()` then
-  // stole focus back to the panel div — meaning every keystroke in every
-  // input inside the drawer lost focus and the cursor jumped out.
-  // Anil documented this for all 8 Company/Branch/Dept/Designation/Grade/
-  // EmpType/Shift add+edit flows on 2026-08-27.
   React.useEffect(() => {
     panelRef.current?.focus()
   }, [])
@@ -469,7 +424,7 @@ export function HrDrawer({
         transition={{ duration: 0.18 }}
         onClick={onClose}
         aria-hidden
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
       />
       <motion.div
         ref={panelRef}
@@ -478,23 +433,23 @@ export function HrDrawer({
         animate={{ x: 0, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 400, damping: 36 }}
         className={clsx(
-          'absolute bottom-0 right-0 top-0 z-modal flex w-full flex-col border-l border-[var(--border-default)] bg-[var(--bg-surface)] shadow-[-32px_0_72px_-32px_rgba(2,44,34,0.40)] focus:outline-none',
+          'absolute bottom-0 right-0 top-0 z-modal flex w-full flex-col border-l border-[var(--border-default)] bg-[var(--bg-surface)] shadow-[-32px_0_72px_-32px_rgba(15,110,86,0.35)] focus:outline-none',
           width,
         )}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
-          <h3 className="text-[15px] font-semibold text-[var(--text-primary)]">{title}</h3>
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4.5">
+          <h3 className="text-base font-bold text-[var(--text-primary)]">{title}</h3>
           <button
             onClick={onClose}
             aria-label="Close panel"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
           >
-            <X size={16} />
+            <X size={17} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+        <div className="flex-1 overflow-y-auto p-6">{children}</div>
         {footer && (
-          <div className="flex shrink-0 justify-end gap-3 border-t border-[var(--border-subtle)] p-5">
+          <div className="flex shrink-0 justify-end gap-3 border-t border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50 p-5">
             {footer}
           </div>
         )}

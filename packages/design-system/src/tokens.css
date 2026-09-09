@@ -1,132 +1,122 @@
 /* ============================================================
  * UnifiedTree Design System — Semantic Design Tokens
  * ------------------------------------------------------------
- * Light theme is the default; dark theme via [data-theme='dark'].
- *
- * Brand: Emerald — the single source of truth for "primary".
- *   primary #059669 · hover #047857 · active #065F46
- *   tint #ECFDF5 · ink #171717
- * Green is used ONLY for primary actions, active nav, focus,
- * success, charts and highlights. Everything else is neutral.
- *
- * Contrast: all text tiers meet WCAG AA on their intended
- * surface. Values are hand-tuned, not auto-generated.
+ * Light theme is default; Dark theme via [data-theme='dark'].
+ * Primary Brand: Emerald & Mint (#0F6E56 / #10B981)
+ * Premium modern enterprise aesthetic with crisp surface hierarchy,
+ * ambient shadows, glassmorphism, and high-contrast typography.
  * ============================================================ */
 
 :root,
 [data-theme='light'] {
-  /* ── Backgrounds ─────────────────────────────────────────
-     A calm near-white canvas with pure-white raised surfaces.
-     The tiny step between base and surface is what makes cards
-     read as "lifted" without heavy borders. */
-  --bg-base:             #fafafa;
-  --bg-surface:          #ffffff;
+  /* ── Canvas & Surface Hierarchy ──────────────────────────── */
+  --bg-canvas:           #f8fafc;   /* Slate-50 soft canvas tint    */
+  --bg-base:             #f8fafc;
+  --bg-surface:          #ffffff;   /* Pure white elevated cards    */
   --bg-surface-raised:   #ffffff;
   --bg-surface-overlay:  rgba(255, 255, 255, 0.85);
-  --bg-subtle:           #f5f5f5;
-  --bg-inset:            #fafafa;
-  --bg-muted:            #ecfdf5;
-  --bg-hover:            #f5f5f5;
+  --bg-subtle:           #f1f5f9;   /* Slate-100                    */
+  --bg-inset:            #f8fafc;
+  --bg-muted:            #ecfdf5;   /* Emerald-50 soft tint         */
+  --bg-hover:            #f1f5f9;
+  --bg-glass:            rgba(255, 255, 255, 0.75);
 
-  /* ── Accent / Brand (Emerald) ────────────────────────────── */
-  --accent-bg:           #ecfdf5;   /* emerald-50  — tint surface   */
-  --accent-bg-strong:    #a7f3d0;   /* emerald-200 — strong tint    */
-  --accent-fg:           #059669;   /* emerald-600 — primary        */
-  --accent-fg-strong:    #047857;   /* emerald-700 — on tint text   */
+  /* ── Accent / Brand (Emerald & Mint) ──────────────────────── */
+  --accent-bg:           #ecfdf5;   /* emerald-50                   */
+  --accent-bg-strong:    #a7f3d0;   /* emerald-200                  */
+  --accent-fg:           #0f6e56;   /* Primary Emerald              */
+  --accent-fg-strong:    #0a5240;   /* Deep Emerald                 */
   --accent-border:       #6ee7b7;   /* emerald-300                  */
-  --accent-solid:        #059669;
-  --accent-solid-hover:  #047857;
-  /* Aliases some app CSS references directly */
-  --accent-default:      #059669;
+  --accent-solid:        #0f6e56;
+  --accent-solid-hover:  #0a5240;
+  --accent-default:      #0f6e56;
   --accent-subtle:       #ecfdf5;
+  --accent-mint:         #10b981;   /* Vibrant mint highlight       */
 
-  /* ── Text ── 4-tier neutral scale, AA on white ──────────────
-     primary #171717 17.4:1 · secondary #525252 8.1:1
-     tertiary #737373 4.74:1 · disabled #a3a3a3 (decorative). */
-  --text-primary:        #171717;
-  --text-secondary:      #525252;
-  --text-tertiary:       #737373;
-  --text-disabled:       #a3a3a3;
+  /* ── Text Hierarchy (High-contrast WCAG AA) ──────────────── */
+  --text-primary:        #0f172a;   /* Slate-900                    */
+  --text-secondary:      #475569;   /* Slate-600                    */
+  --text-tertiary:       #64748b;   /* Slate-500                    */
+  --text-disabled:       #94a3b8;   /* Slate-400                    */
   --text-inverse:        #ffffff;
   --text-on-accent:      #ffffff;
-  --text-link:           #047857;
+  --text-link:           #0f6e56;
 
-  /* ── Border / Divider ────────────────────────────────────── */
-  --border-subtle:       #f5f5f5;
-  --border-default:      #e5e5e5;
-  --border-strong:       #d4d4d4;
-  --border-focus:        #059669;
+  /* ── Borders & Dividers ──────────────────────────────────── */
+  --border-subtle:       #f1f5f9;   /* Slate-100                    */
+  --border-default:      #e2e8f0;   /* Slate-200                    */
+  --border-strong:       #cbd5e1;   /* Slate-300                    */
+  --border-focus:        #0f6e56;
   --border-accent:       #6ee7b7;
+  --border-glass:        rgba(15, 110, 86, 0.12);
 
-  /* ── Status: Success (emerald family, distinct from brand) ── */
+  /* ── Status Colors ────────────────────────────────────────── */
   --status-success-bg:     #ecfdf5;
-  --status-success-fg:     #059669;
+  --status-success-fg:     #047857;
   --status-success-solid:  #10b981;
   --status-success-border: #a7f3d0;
 
-  /* ── Status: Warning ─────────────────────────────────────── */
   --status-warning-bg:     #fffbeb;
   --status-warning-fg:     #b45309;
   --status-warning-solid:  #f59e0b;
   --status-warning-border: #fde68a;
 
-  /* ── Status: Error ───────────────────────────────────────── */
   --status-error-bg:       #fef2f2;
   --status-error-fg:       #dc2626;
   --status-error-solid:    #ef4444;
   --status-error-border:   #fecaca;
 
-  /* ── Status: Info ────────────────────────────────────────── */
   --status-info-bg:        #eff6ff;
-  --status-info-fg:        #2563eb;
+  --status-info-fg:        #1d4ed8;
   --status-info-solid:     #3b82f6;
   --status-info-border:    #bfdbfe;
 
-  /* ── Interactive ─────────────────────────────────────────── */
-  --interactive-primary:        #059669;
-  --interactive-primary-hover:  #047857;
-  --interactive-primary-active: #065f46;
+  /* ── Interactive States ──────────────────────────────────── */
+  --interactive-primary:        #0f6e56;
+  --interactive-primary-hover:  #0a5240;
+  --interactive-primary-active: #063d2f;
   --interactive-secondary:      #ffffff;
-  --interactive-secondary-hover:#f5f5f5;
+  --interactive-secondary-hover:#f8fafc;
   --interactive-danger:         #dc2626;
   --interactive-danger-hover:   #b91c1c;
-  --interactive-ghost-hover:    #f5f5f5;
+  --interactive-ghost-hover:    #f1f5f9;
 
-  /* ── Chart palette (emerald-led, harmonious) ─────────────── */
-  --chart-1: #059669;
-  --chart-2: #34d399;
-  --chart-3: #0d9488;
-  --chart-4: #64748b;
+  /* ── Chart Colors ─────────────────────────────────────────── */
+  --chart-1: #0f6e56;
+  --chart-2: #10b981;
+  --chart-3: #06b6d4;
+  --chart-4: #6366f1;
   --chart-5: #f59e0b;
-  --chart-6: #6366f1;
-  --chart-grid: #ececec;
+  --chart-6: #ec4899;
+  --chart-grid: #e2e8f0;
 
-  /* ── Typography ──────────────────────────────────────────── */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* ── Typography Fallbacks ────────────────────────────────── */
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* ── Radius Scale ────────────────────────────────────────── */
   --radius-xs:   4px;
   --radius-sm:   6px;
-  --radius-md:   8px;
-  --radius-lg:   10px;
-  --radius-xl:   14px;
-  --radius-2xl:  18px;
-  --radius-3xl:  24px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   18px;
+  --radius-2xl:  24px;
+  --radius-3xl:  32px;
   --radius-full: 9999px;
 
-  /* ── Shadow Scale ── soft, layered, low-opacity ("expensive") */
-  --shadow-xs:   0 1px 2px 0 rgb(16 24 40 / 0.04);
-  --shadow-sm:   0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06);
-  --shadow-md:   0 2px 4px -1px rgb(16 24 40 / 0.04), 0 6px 12px -2px rgb(16 24 40 / 0.08);
-  --shadow-lg:   0 4px 8px -2px rgb(16 24 40 / 0.05), 0 12px 24px -4px rgb(16 24 40 / 0.10);
-  --shadow-xl:   0 8px 16px -4px rgb(16 24 40 / 0.06), 0 24px 48px -8px rgb(16 24 40 / 0.14);
-  --shadow-2xl:  0 24px 48px -12px rgb(16 24 40 / 0.24);
-  --shadow-glow: 0 0 0 4px rgb(5 150 105 / 0.12);
-  --shadow-focus:0 0 0 3px rgb(5 150 105 / 0.16);
+  /* ── Shadow Scale (Multi-layer Ambient Shadows) ─────────── */
+  --shadow-xs:   0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  --shadow-sm:   0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  --shadow-md:   0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.03);
+  --shadow-lg:   0 10px 15px -3px rgba(15, 23, 42, 0.06), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  --shadow-xl:   0 20px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+  --shadow-2xl:  0 25px 50px -12px rgba(15, 23, 42, 0.18);
+  --shadow-glow: 0 0 20px -3px rgba(15, 110, 86, 0.35);
+  --shadow-emerald-sm: 0 4px 14px 0 rgba(15, 110, 86, 0.25);
+  --shadow-focus: 0 0 0 3px rgba(15, 110, 86, 0.2);
 
-  /* ── Motion ──────────────────────────────────────────────── */
+  /* ── Motion Timings ──────────────────────────────────────── */
   --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
   --motion-fast:   120ms var(--ease-out);
@@ -146,86 +136,89 @@
   --z-tooltip:        700;
 }
 
-/* ── Dark Theme ─────────────────────────────────────────────
-   Neutral-cool near-black with emerald that lifts to stay
-   legible on dark surfaces. */
+/* ── Dark Theme ───────────────────────────────────────────── */
 [data-theme='dark'] {
-  --bg-base:             #0a0a0a;
-  --bg-surface:          #141414;
-  --bg-surface-raised:   #1c1c1c;
-  --bg-surface-overlay:  rgba(20, 20, 20, 0.85);
-  --bg-subtle:           #1c1c1c;
-  --bg-inset:            #0a0a0a;
-  --bg-muted:            #052e22;
-  --bg-hover:            #1f1f1f;
+  --bg-canvas:           #090d16;   /* Midnight Onyx                */
+  --bg-base:             #090d16;
+  --bg-surface:          #0f172a;   /* Slate-900 elevated           */
+  --bg-surface-raised:   #1e293b;   /* Slate-800                    */
+  --bg-surface-overlay:  rgba(15, 23, 42, 0.85);
+  --bg-subtle:           #1e293b;
+  --bg-inset:            #090d16;
+  --bg-muted:            #064e3b;
+  --bg-hover:            #1e293b;
+  --bg-glass:            rgba(15, 23, 42, 0.8);
 
-  --accent-bg:           #052e22;
-  --accent-bg-strong:    #064e3b;
+  --accent-bg:           #064e3b;
+  --accent-bg-strong:    #047857;
   --accent-fg:           #34d399;
   --accent-fg-strong:    #6ee7b7;
-  --accent-border:       #065f46;
+  --accent-border:       #0f6e56;
   --accent-solid:        #10b981;
   --accent-solid-hover:  #34d399;
   --accent-default:      #34d399;
-  --accent-subtle:       #052e22;
+  --accent-subtle:       #064e3b;
+  --accent-mint:         #34d399;
 
-  --text-primary:        #f5f5f5;
-  --text-secondary:      #a3a3a3;
-  --text-tertiary:       #737373;
-  --text-disabled:       #525252;
-  --text-inverse:        #0a0a0a;
-  --text-on-accent:      #052014;
+  --text-primary:        #f8fafc;   /* Slate-50                     */
+  --text-secondary:      #cbd5e1;   /* Slate-300                    */
+  --text-tertiary:       #94a3b8;   /* Slate-400                    */
+  --text-disabled:       #64748b;   /* Slate-500                    */
+  --text-inverse:        #090d16;
+  --text-on-accent:      #042f2e;
   --text-link:           #34d399;
 
-  --border-subtle:       #1f1f1f;
-  --border-default:      #292929;
-  --border-strong:       #3d3d3d;
+  --border-subtle:       #1e293b;
+  --border-default:      #334155;   /* Slate-700                    */
+  --border-strong:       #475569;
   --border-focus:        #34d399;
-  --border-accent:       #065f46;
+  --border-accent:       #0f6e56;
+  --border-glass:        rgba(52, 211, 153, 0.15);
 
-  --status-success-bg:     #052e22;
+  --status-success-bg:     #064e3b;
   --status-success-fg:     #34d399;
   --status-success-solid:  #10b981;
-  --status-success-border: #065f46;
+  --status-success-border: #047857;
 
-  --status-warning-bg:     #2a1e05;
+  --status-warning-bg:     #451a03;
   --status-warning-fg:     #fbbf24;
   --status-warning-solid:  #f59e0b;
-  --status-warning-border: #4a3508;
+  --status-warning-border: #78350f;
 
-  --status-error-bg:       #2a0f0f;
+  --status-error-bg:       #450a0a;
   --status-error-fg:       #f87171;
   --status-error-solid:    #ef4444;
-  --status-error-border:   #5b1717;
+  --status-error-border:   #7f1d1d;
 
-  --status-info-bg:        #0d1b2e;
+  --status-info-bg:        #172554;
   --status-info-fg:        #60a5fa;
   --status-info-solid:     #3b82f6;
-  --status-info-border:    #1e3a5f;
+  --status-info-border:    #1e40af;
 
   --interactive-primary:        #10b981;
   --interactive-primary-hover:  #34d399;
   --interactive-primary-active: #6ee7b7;
-  --interactive-secondary:      #1c1c1c;
-  --interactive-secondary-hover:#262626;
+  --interactive-secondary:      #1e293b;
+  --interactive-secondary-hover:#334155;
   --interactive-danger:         #ef4444;
   --interactive-danger-hover:   #f87171;
-  --interactive-ghost-hover:    #1f1f1f;
+  --interactive-ghost-hover:    #1e293b;
 
   --chart-1: #34d399;
   --chart-2: #10b981;
-  --chart-3: #2dd4bf;
-  --chart-4: #94a3b8;
+  --chart-3: #22d3ee;
+  --chart-4: #818cf8;
   --chart-5: #fbbf24;
-  --chart-6: #818cf8;
-  --chart-grid: #262626;
+  --chart-6: #f472b6;
+  --chart-grid: #334155;
 
-  --shadow-xs:   0 1px 2px 0 rgb(0 0 0 / 0.5);
-  --shadow-sm:   0 1px 2px 0 rgb(0 0 0 / 0.5), 0 1px 3px 0 rgb(0 0 0 / 0.4);
-  --shadow-md:   0 2px 4px -1px rgb(0 0 0 / 0.5), 0 6px 12px -2px rgb(0 0 0 / 0.5);
-  --shadow-lg:   0 4px 8px -2px rgb(0 0 0 / 0.5), 0 12px 24px -4px rgb(0 0 0 / 0.55);
-  --shadow-xl:   0 8px 16px -4px rgb(0 0 0 / 0.55), 0 24px 48px -8px rgb(0 0 0 / 0.6);
-  --shadow-2xl:  0 24px 48px -12px rgb(0 0 0 / 0.7);
-  --shadow-glow: 0 0 0 4px rgb(16 185 129 / 0.22);
-  --shadow-focus:0 0 0 3px rgb(16 185 129 / 0.28);
+  --shadow-xs:   0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-sm:   0 1px 3px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md:   0 4px 6px -1px rgba(0, 0, 0, 0.5);
+  --shadow-lg:   0 10px 15px -3px rgba(0, 0, 0, 0.6);
+  --shadow-xl:   0 20px 25px -5px rgba(0, 0, 0, 0.7);
+  --shadow-2xl:  0 25px 50px -12px rgba(0, 0, 0, 0.85);
+  --shadow-glow: 0 0 25px -2px rgba(16, 185, 129, 0.35);
+  --shadow-emerald-sm: 0 4px 14px 0 rgba(16, 185, 129, 0.3);
+  --shadow-focus: 0 0 0 3px rgba(52, 211, 153, 0.3);
 }

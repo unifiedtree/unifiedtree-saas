@@ -100,13 +100,33 @@ public class ExpenseController {
 
     // ─── Approvals (manager / HR) ────────────────────────────────────────────
 
-    @Operation(summary = "List expense claims awaiting approval")
+    @Operation(summary = "List expense claims awaiting approval (SUBMITTED) or reimbursement (APPROVED)")
     @GetMapping("/claims/approvals")
-    @PreAuthorize("@perm.check('hrms.expense.claim.approve')")
+    // 2026-09-08 audit: three fixes in one.
+    //  1. SCOPE. Was tenant-wide getByStatus(SUBMITTED) for anyone holding
+    //     claim.approve — a DEPT_MANAGER could see and approve every claim in
+    //     the company, other departments' and executives' included.
+    //     ExpenseService.getPendingApprovals(approverId, ...) existed for exactly
+    //     this and was never called. Now: finance/admin (reimbursement holders)
+    //     see the tenant; plain approvers see only claims routed to them.
+    //  2. STATUS. Was SUBMITTED-only, so the moment a claim was approved it
+    //     vanished from every screen and nobody could reach the reimburse
+    //     endpoint — every claim stalled at APPROVED. Now returns SUBMITTED +
+    //     APPROVED; the UI shows Approve/Reject or Mark-Reimbursed per row.
+    //  3. AUTH. Reimbursement-only roles could not load the tab at all.
+    @PreAuthorize("hasAnyAuthority('hrms.expense.claim.approve','hrms.expense.reimbursement')")
     public ResponseEntity<PageResponse<ExpenseClaimResponse>> pendingApprovals(
+            @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(expenseService.getByStatus(
-                com.hrms.expense.enums.ExpenseStatus.SUBMITTED, pageable)));
+        java.util.List<String> perms = jwt.getClaimAsStringList("permissions");
+        boolean financeOrAdmin = perms != null && perms.contains("hrms.expense.reimbursement");
+        java.util.List<com.hrms.expense.enums.ExpenseStatus> open = java.util.List.of(
+                com.hrms.expense.enums.ExpenseStatus.SUBMITTED,
+                com.hrms.expense.enums.ExpenseStatus.APPROVED);
+        PageResponse<ExpenseClaimResponse> page = financeOrAdmin
+                ? expenseService.getByStatuses(open, pageable)
+                : expenseService.getPendingForApprover(extractEmployeeId(jwt), open, pageable);
+        return ResponseEntity.ok(enrichPage(page));
     }
 
     @Operation(summary = "Approve or reject an expense claim")

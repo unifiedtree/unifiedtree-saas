@@ -520,7 +520,7 @@ export default function App() {
           }
         />
         <Route
-          path="/hrms/onboarding/instances/:employeeId"
+          path="/hrms/onboarding/instances/:instanceId"
           element={
             <RouteGuard anyOf={[P.HRMS_ONBOARDING_INSTANCE_READ, P.HRMS_ONBOARDING_TASK_COMPLETE]}>
               <ModuleGate moduleKey="hrms"><InstanceDetail /></ModuleGate>

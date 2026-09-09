@@ -102,6 +102,16 @@ public class ExpenseService {
     }
 
     @Transactional(readOnly = true)
+    public PageResponse<ExpenseClaimResponse> getByStatuses(java.util.Collection<ExpenseStatus> statuses, Pageable pageable) {
+        return toPage(claimRepository.findByStatusInOrderByCreatedAtDesc(statuses, pageable));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<ExpenseClaimResponse> getPendingForApprover(UUID approverId, java.util.Collection<ExpenseStatus> statuses, Pageable pageable) {
+        return toPage(claimRepository.findByApproverIdAndStatusInOrderByCreatedAtDesc(approverId, statuses, pageable));
+    }
+
+    @Transactional(readOnly = true)
     public ExpenseClaimResponse getClaim(UUID claimId) {
         ExpenseClaim claim = claimRepository.findById(claimId)
                 .orElseThrow(() -> new ResourceNotFoundException("ExpenseClaim", claimId));
