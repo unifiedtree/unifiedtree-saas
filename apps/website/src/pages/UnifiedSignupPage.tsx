@@ -285,24 +285,51 @@ export function UnifiedSignupPage() {
           return
         }
 
-        // Auto-login on the account we just created (or the pre-existing
-        // one when signed in) so the visitor lands on /workspaces with a
-        // session already established. Then navigate them to their new
-        // workspace tile — they click Launch to enter.
+        // Establish an ACCOUNT session — fresh signups log in with the password
+        // they just typed; signed-in callers already have one. Needed for the
+        // workspace-session exchange below.
+        let haveAccountSession = !!accountToken
         try {
           if (!accountToken && data.password) {
             const resp = await api.post('/v1/accounts/auth/login', {
               email: data.adminEmail, password: data.password,
             })
             setAccountAuth(resp.accessToken, resp.account, resp.workspaces)
+            haveAccountSession = true
           } else if (accountToken) {
             await loadWorkspaces().catch(() => {})
           }
-        } catch { /* rare — the account was just created; user can login manually */ }
+        } catch { haveAccountSession = false }
 
-        // Open the new workspace directly (client asked: "redirects to
-        // their company.unifiedtree.com"). The null case is handled by the
-        // anti-enumeration guard above, so no fallback branch remains here.
+        // 2026-09-09: land the visitor INSIDE the new workspace, not on its
+        // login page. Exchange the account session for a workspace session
+        // exactly as the Workspaces page's "Enter Workspace" does — that
+        // response also sets the ut_rt_<tenantId> refresh cookie
+        // (Domain=.unifiedtree.com), so a reload keeps them signed in.
+        //
+        // Before this the redirect went to /login?email=… and the user had to
+        // type a password. For signed-in callers (usually Google accounts) the
+        // workspace credential had no usable password at all, so every such
+        // signup ended on "Invalid email or password" — seen in prod on
+        // 2026-09-09 (src) and 2026-08-27 (xyz).
+        if (haveAccountSession) {
+          try {
+            const session = await api.post('/v1/accounts/workspaces/session', { tenantId: r.tenantId })
+            const token: string | undefined = session?.auth?.accessToken
+            if (token) {
+              const host = window.location.hostname.toLowerCase()
+              const isLocal = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost')
+              const base = isLocal
+                ? `http://${r.subdomain}.localhost:${DEV_PLATFORM_PORT}`
+                : (r.workspaceUrl || `https://${r.subdomain}.unifiedtree.com`).replace(/\/$/, '')
+              window.location.href = `${base}/?token=${encodeURIComponent(token)}`
+              return
+            }
+          } catch { /* fall through to the login page below */ }
+        }
+
+        // Fallback only (no account session, or the exchange failed): the
+        // workspace login page with the email pre-filled.
         const loginUrl = workspaceLoginUrl(r.subdomain, r.email || data.adminEmail, r.workspaceUrl)
         window.location.href = loginUrl
         return
