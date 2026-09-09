@@ -65,12 +65,25 @@ public class PolicyController {
                 .body(policyService.createPolicy(resolvedCompany, request));
     }
 
-    @Operation(summary = "List active HR policies")
+    /**
+     * {@code status} added 2026-09-09 so archived policies are reachable at
+     * all. Defaults to ACTIVE, so every existing caller — the SPA's employee
+     * list, the mobile app — keeps its current behaviour with no change.
+     */
+    @Operation(summary = "List HR policies (defaults to ACTIVE)")
     @GetMapping("/policies")
     @PreAuthorize("hasAuthority('hrms.policy.read')")
     public ResponseEntity<PageResponse<PolicyResponse>> listPolicies(
+            @RequestParam(required = false) com.hrms.policy.enums.PolicyStatus status,
             @PageableDefault(size = 50) Pageable pageable) {
-        return ResponseEntity.ok(policyService.listActivePolicies(pageable));
+        return ResponseEntity.ok(policyService.listPolicies(status, pageable));
+    }
+
+    @Operation(summary = "Restore an archived HR policy")
+    @PostMapping("/policies/{id}/unarchive")
+    @PreAuthorize("hasAuthority('hrms.policy.write')")
+    public ResponseEntity<PolicyResponse> unarchivePolicy(@PathVariable UUID id) {
+        return ResponseEntity.ok(policyService.unarchivePolicy(id));
     }
 
     @Operation(summary = "Get a single HR policy")

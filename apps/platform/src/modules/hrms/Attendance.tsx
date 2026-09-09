@@ -244,16 +244,34 @@ function TeamDashboardTab() {
 
 // ── Corrections Tab ───────────────────────────────────────────────────────────
 
-function CorrectionsTab() {
+/**
+ * "My Corrections" — own request history + the raise-a-request form.
+ *
+ * Deliberately its own component so the whole panel, and with it the
+ * `useMyCorrections()` call inside, mounts ONLY for roles that hold
+ * `attendance.checkin.self`.
+ *
+ * The bug: CorrectionsTab called useMyCorrections() unconditionally. It hits
+ * GET /v1/attendance/corrections/my, which AttendanceController gates on
+ * `hasAuthority('attendance.checkin.self')` — the code the workspace ADMIN and
+ * MANAGER roles do not hold (they were seeded attendance.team.read instead; see
+ * the note on the Attendance page component below, from the 2026-09-08 audit).
+ * Those roles got a 403, react-query left `data` undefined, and
+ * `(myCorr?.content ?? []).length === 0` rendered the cheerful "No correction
+ * requests". A wrong-empty is indistinguishable from a real empty, which is
+ * precisely why nobody ever reported it: the screen looked like it worked. The
+ * sibling approvals fetch had already been gated with `enabled: isManager` for
+ * exactly this reason; this one had not.
+ *
+ * Gating by mount rather than by an `enabled` flag because useMyCorrections()
+ * takes no options object — and useAttendance.ts is outside this change's
+ * blast radius. Mounting conditionally is the same fix without touching a
+ * shared hook every other screen depends on.
+ */
+function MyCorrectionsPanel() {
   const { toast } = useToast()
-  const isManager = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
   const { data: myCorr } = useMyCorrections()
-  // Approvals endpoint 403s for non-managers — gate the fetch so an employee
-  // on the Corrections tab doesn't trigger a "Permission denied" toast on
-  // every render just because the tab is visible for their own history.
-  const { data: pending } = useCorrectionApprovals('PENDING', { enabled: isManager })
   const createCorrection = useCreateCorrection()
-  const decide = useDecideCorrection()
   const [open, setOpen] = useState(false)
   const todayLocal = () => {
     const d = new Date()
@@ -296,23 +314,16 @@ function CorrectionsTab() {
     } catch { toast('Failed to submit correction', 'error') }
   }
 
-  const handleDecide = async (id: string, approved: boolean) => {
-    try {
-      await decide.mutateAsync({ id, status: approved ? 'APPROVED' : 'REJECTED' })
-      toast(approved ? 'Correction Approved' : 'Correction Rejected', 'success')
-    } catch { toast('Action failed', 'error') }
-  }
-
   return (
-    <div className={isManager ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'grid grid-cols-1 gap-6'}>
-      <div className="ut-card p-6">
+    <div className="ut-card p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-base font-bold text-text-primary font-heading">My Corrections</h3>
-          <Can code={P.ATTENDANCE_CHECKIN_SELF}>
-            <button onClick={() => setOpen(!open)} className="text-xs font-bold px-4 py-2 bg-bg-surface hover:bg-interactive-hover border border-border-default text-text-primary rounded-xl transition-colors shadow-sm">
-              {open ? 'Close' : '+ New Request'}
-            </button>
-          </Can>
+          {/* The panel itself only mounts for attendance.checkin.self, which is
+              the same authority POST /v1/attendance/corrections enforces, so no
+              second <Can> guard is needed around the button. */}
+          <button onClick={() => setOpen(!open)} className="text-xs font-bold px-4 py-2 bg-bg-surface hover:bg-interactive-hover border border-border-default text-text-primary rounded-xl transition-colors shadow-sm">
+            {open ? 'Close' : '+ New Request'}
+          </button>
         </div>
 
         <AnimatePresence>
@@ -365,6 +376,8 @@ function CorrectionsTab() {
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-bg-surface mb-3">
               <Clock size={20} className="text-text-tertiary" />
             </div>
+            {/* Trustworthy now: this panel only mounts when the caller can
+                actually read /corrections/my, so "none" really does mean none. */}
             <p className="text-text-secondary text-sm font-medium">No correction requests</p>
           </div>
         ) : (
@@ -382,44 +395,99 @@ function CorrectionsTab() {
             ))}
           </div>
         )}
+    </div>
+  )
+}
+
+/**
+ * Approvals queue.
+ *
+ * Mounted only for `attendance.regularization.approve`, the authority both
+ * GET /v1/attendance/corrections/approvals and the decision endpoint enforce.
+ * That mount condition replaces the old `enabled: isManager` flag — same effect
+ * (the approvals endpoint 403s for non-managers, so an employee opening the
+ * Corrections tab must never issue the request), now expressed once, the same
+ * way MyCorrectionsPanel is gated.
+ */
+function ApprovalsPanel() {
+  const { toast } = useToast()
+  const { data: pending } = useCorrectionApprovals('PENDING')
+  const decide = useDecideCorrection()
+
+  const handleDecide = async (id: string, approved: boolean) => {
+    try {
+      await decide.mutateAsync({ id, status: approved ? 'APPROVED' : 'REJECTED' })
+      toast(approved ? 'Correction Approved' : 'Correction Rejected', 'success')
+    } catch { toast('Action failed', 'error') }
+  }
+
+  return (
+    <div className="ut-card p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-base font-bold text-text-primary font-heading">Pending Approvals</h3>
+        <span className="bg-warning text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
+          {(pending?.content ?? []).length}
+        </span>
       </div>
 
-      {isManager && (
-        <div className="ut-card p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-base font-bold text-text-primary font-heading">Pending Approvals</h3>
-            <span className="bg-warning text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
-              {(pending?.content ?? []).length}
-            </span>
+      {(pending?.content ?? []).length === 0 ? (
+        <div className="text-center py-10">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-bg-surface mb-3">
+            <CheckCircle size={20} className="text-text-tertiary" />
           </div>
-
-          {(pending?.content ?? []).length === 0 ? (
-            <div className="text-center py-10">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-bg-surface mb-3">
-                <CheckCircle size={20} className="text-text-tertiary" />
+          <p className="text-text-secondary text-sm font-medium">No pending corrections</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {(pending?.content ?? []).map((c) => (
+            <div key={c.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-bg-base border border-border-default rounded-xl p-4 gap-4">
+              <div>
+                <p className="text-text-primary text-sm font-bold">{c.requestedDate}</p>
+                <p className="text-text-secondary text-xs font-medium mt-1">{c.reason}</p>
               </div>
-              <p className="text-text-secondary text-sm font-medium">No pending corrections</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {(pending?.content ?? []).map((c) => (
-                <div key={c.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-bg-base border border-border-default rounded-xl p-4 gap-4">
-                  <div>
-                    <p className="text-text-primary text-sm font-bold">{c.requestedDate}</p>
-                    <p className="text-text-secondary text-xs font-medium mt-1">{c.reason}</p>
-                  </div>
-                  <Can code={P.ATTENDANCE_REGULARIZATION_APPROVE}>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleDecide(c.id, true)} className="px-4 py-2 bg-success/10 text-success hover:bg-success hover:text-white border border-success/20 hover:border-success text-xs font-bold rounded-xl transition-all shadow-sm">Approve</button>
-                      <button onClick={() => handleDecide(c.id, false)} className="px-4 py-2 bg-danger/10 text-danger hover:bg-danger hover:text-white border border-danger/20 hover:border-danger text-xs font-bold rounded-xl transition-all shadow-sm">Reject</button>
-                    </div>
-                  </Can>
+              <Can code={P.ATTENDANCE_REGULARIZATION_APPROVE}>
+                <div className="flex gap-2">
+                  <button onClick={() => handleDecide(c.id, true)} className="px-4 py-2 bg-success/10 text-success hover:bg-success hover:text-white border border-success/20 hover:border-success text-xs font-bold rounded-xl transition-all shadow-sm">Approve</button>
+                  <button onClick={() => handleDecide(c.id, false)} className="px-4 py-2 bg-danger/10 text-danger hover:bg-danger hover:text-white border border-danger/20 hover:border-danger text-xs font-bold rounded-xl transition-all shadow-sm">Reject</button>
                 </div>
-              ))}
+              </Can>
             </div>
-          )}
+          ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Corrections tab shell.
+ *
+ * The tab is offered to every role (see ATT_TABS), but its two panels are backed
+ * by two DIFFERENT authorities, and a role can hold neither:
+ *   · My Corrections   → attendance.checkin.self          (GET /corrections/my)
+ *   · Pending Approvals→ attendance.regularization.approve (GET /corrections/approvals)
+ * Previously the "my" panel rendered unconditionally, so a role with neither
+ * authority saw a confident "No correction requests" built entirely out of a
+ * 403. Mount each panel only behind its own authority, and when the caller has
+ * neither, say so instead of inventing an empty list.
+ */
+function CorrectionsTab() {
+  const canSelfCheckin = usePermission(P.ATTENDANCE_CHECKIN_SELF)
+  const isManager = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
+
+  if (!canSelfCheckin && !isManager) {
+    return (
+      <EmptyState
+        title="Corrections aren't available for your role"
+        description="Raising an attendance correction needs self check-in access, and reviewing one needs approval access. Your role has neither — ask an admin to grant the right permission if you should see this."
+      />
+    )
+  }
+
+  return (
+    <div className={canSelfCheckin && isManager ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'grid grid-cols-1 gap-6'}>
+      {canSelfCheckin && <MyCorrectionsPanel />}
+      {isManager && <ApprovalsPanel />}
     </div>
   )
 }

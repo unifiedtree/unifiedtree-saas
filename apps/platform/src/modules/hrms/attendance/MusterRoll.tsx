@@ -3,17 +3,19 @@ import { useNavigate } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import {
   CalendarDays, ChevronLeft, ChevronRight, Users, CheckCircle2,
-  Clock, UserX, Plane, Home, RefreshCw, ClipboardEdit,
+  Clock, UserX, Plane, Home, RefreshCw, ClipboardEdit, Download,
 } from 'lucide-react'
 import {
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
+import { usePermission, P } from '@unifiedtree/sdk'
 import {
   HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrButton, HrAvatar,
   type PillTone,
 } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
+import { apiBlob } from '@/core/api/client'
 import { useCompanies, useDepartments } from '../api/useOrg'
 import { useTeamDashboard, useAttendanceLogs, type StaffStatusResponse } from '../api/useAttendance'
 
@@ -73,6 +75,13 @@ export const MusterRoll: React.FC = () => {
   const [deptId, setDeptId] = useState<string>('')
   const [search, setSearch] = useState('')
 
+  const [exporting, setExporting] = useState(false)
+
+  // GET /v1/reports/attendance-summary/export.csv is gated on
+  // @perm.check('hrms.report.attendance') (ReportController). Gate the button on
+  // the same code so we never render a download that answers 403.
+  const canExport = usePermission(P.HRMS_REPORT_ATTENDANCE)
+
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
   const { data: departments = [] } = useDepartments(companyId)
@@ -85,10 +94,64 @@ export const MusterRoll: React.FC = () => {
     refetch: refetchDash,
   } = useTeamDashboard(date, deptId || undefined)
 
+  // Unfiltered roster for the same day. This is the department filter's second
+  // source — see departmentOptions below. When no department is selected this
+  // resolves to the SAME react-query key as the filtered call above (both pass
+  // departmentId: undefined), so it costs zero extra requests in the default
+  // case and one while a filter is applied.
+  const { data: rosterAll } = useTeamDashboard(date)
+
   const { data: logs = [], refetch: refetchLogs } = useAttendanceLogs(date, deptId || undefined)
 
   const counts = dashboard?.counts
   const staff = dashboard?.staffStatuses ?? []
+
+  /*
+   * Department filter options — why this is a union of two sources.
+   *
+   * The filter used to read ONLY useDepartments(companies[0].id). That made the
+   * whole control depend on GET /v1/hrms/companies, which WorkforceController
+   * gates on `hasAuthority('org.company.read') or hasAuthority('platform.admin')`,
+   * and on GET /v1/hrms/departments, gated on
+   * `hasAuthority('hrms.department.read') or hasAuthority('platform.admin')`.
+   * Two ways that dependency chain leaves the dropdown showing nothing but "All
+   * departments" even though the roster below it is full of departments:
+   *
+   *  1. A role the route admits but that holds neither org code. The route guard
+   *     is anyOf(['attendance.team.read', 'hrms.employee.read']) (App.tsx), and
+   *     nothing ties either of those to org.company.read. The eight seeded roles
+   *     do get both codes (V065 grants org.company.read + hrms.department.read to
+   *     SUPER_ADMIN/HR_MANAGER/FINANCE_LEAD/EMPLOYEE/DEPT_MANAGER/OWNER/ADMIN/
+   *     MANAGER, V105 re-copies the EMPLOYEE baseline into the manager roles, and
+   *     EmployeeBaselinePermissions unions it again at token mint) — but a custom
+   *     role built in the workspace Roles & Permissions screen, or a credential
+   *     with no employee_id claim to trigger that baseline union, hits this.
+   *  2. A multi-company tenant. companies[0] is an arbitrary pick, so the list
+   *     could only ever describe ONE company while the roster spans the caller's
+   *     entire scope — every other company's departments were unselectable.
+   *
+   * The roster itself already carries departmentId + departmentName on every
+   * StaffStatusResponse, and it arrives on `attendance.team.read` — the exact
+   * authority this page already needs to render at all. So union the org list
+   * (authoritative names, includes departments with nobody on shift today) with
+   * the departments actually present on the unfiltered roster. No new endpoint,
+   * no new permission, and the control works for every role the route admits.
+   */
+  const departmentOptions = useMemo(() => {
+    const byId = new Map<string, string>()
+    for (const d of departments) byId.set(d.id, d.name)
+    for (const s of rosterAll?.staffStatuses ?? []) {
+      if (s.departmentId && !byId.has(s.departmentId)) {
+        byId.set(s.departmentId, s.departmentName?.trim() || 'Unnamed department')
+      }
+    }
+    // Keep a selection alive even if that department has nobody on the newly
+    // picked date, so the control never renders blank against a live filter.
+    if (deptId && !byId.has(deptId)) byId.set(deptId, 'Selected department')
+    return [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [departments, rosterAll, deptId])
 
   // Punch counts per employee (from raw events) enrich the register's "punches" column.
   const punchByEmp = useMemo(() => {
@@ -140,6 +203,58 @@ export const MusterRoll: React.FC = () => {
     toast('Muster roll refreshed', 'info')
   }
 
+  /*
+   * Export the register.
+   *
+   * A muster roll is a statutory record a labour inspector asks for on paper,
+   * and this page shipped with no Export / Download / Print control at all.
+   *
+   * Endpoint: GET /v1/reports/attendance-summary/export.csv
+   *   (ReportController, class-level @RequestMapping("/v1/reports"))
+   *   params:  companyId (UUID, required), from + to (ISO LocalDate, required)
+   *   guard:   @perm.check('hrms.report.attendance')
+   * The muster roll is a single-day register, so from and to are both the
+   * selected date — that is what makes the file match what is on screen.
+   *
+   * The department filter deliberately is NOT sent: attendanceSummaryCsv accepts
+   * only companyId/from/to, and inventing a departmentId param would be silently
+   * ignored by Spring and hand the inspector a wider file than the screen showed.
+   * When a department is selected we say so out loud instead.
+   *
+   * Downloaded with apiBlob (same pattern as downloadLetterPdf in
+   * letters/api/useLetters.ts) so the auth header + refresh-on-401 retry apply.
+   * Wrapped in try/catch that toasts: a silent failure here reads as "the button
+   * does nothing", which is the exact complaint that got this page reopened.
+   */
+  const onExportCsv = async () => {
+    if (exporting) return
+    if (!companyId) {
+      toast('No company is visible to your role, so the register cannot be exported', 'error')
+      return
+    }
+    setExporting(true)
+    let url: string | undefined
+    try {
+      const params = new URLSearchParams({ companyId, from: date, to: date })
+      const blob = await apiBlob(`/v1/reports/attendance-summary/export.csv?${params}`)
+      url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `muster-roll-${date}.csv`
+      a.click()
+      if (deptId) {
+        toast('Exported — note the CSV covers all departments; the server export has no department filter', 'info')
+      } else {
+        toast('Muster roll exported', 'success')
+      }
+    } catch (err) {
+      toast((err as Error)?.message || 'Failed to export the muster roll', 'error')
+    } finally {
+      if (url) URL.revokeObjectURL(url)
+      setExporting(false)
+    }
+  }
+
   const isToday = date === today
   const headcountLabel = counts
     ? `${counts.present + counts.late + counts.workFromHome} of ${distributionTotal} marked in`
@@ -152,9 +267,24 @@ export const MusterRoll: React.FC = () => {
         title="Muster Roll"
         subtitle="Daily attendance register — every staff member's status and punch times for the selected day."
         actions={
-          <HrButton variant="ghost" onClick={onRefresh} disabled={dashFetching}>
-            <RefreshCw size={16} className={dashFetching ? 'animate-spin' : ''} /> Refresh
-          </HrButton>
+          <>
+            <HrButton variant="ghost" onClick={onRefresh} disabled={dashFetching}>
+              <RefreshCw size={16} className={dashFetching ? 'animate-spin' : ''} /> Refresh
+            </HrButton>
+            {/* Gated on hrms.report.attendance — the code ReportController's
+                @perm.check enforces on the export route. */}
+            {canExport && (
+              <HrButton
+                onClick={onExportCsv}
+                disabled={exporting || !companyId}
+                title={companyId
+                  ? `Download the register for ${date} as CSV`
+                  : 'No company is visible to your role, so the register cannot be exported'}
+              >
+                <Download size={16} /> {exporting ? 'Exporting…' : 'Export CSV'}
+              </HrButton>
+            )}
+          </>
         }
       />
 
@@ -198,16 +328,28 @@ export const MusterRoll: React.FC = () => {
 
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Department</span>
-          <select
-            value={deptId}
-            onChange={(e) => setDeptId(e.target.value)}
-            className="rounded-lg border border-border-default bg-white py-2 pl-3 pr-8 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20"
-          >
-            <option value="">All departments</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
+          {/* An enabled dropdown whose only entry is "All departments" is a lie —
+              it looks like a working filter and can never filter anything. When
+              neither source yielded a department, disable it and say why. */}
+          {departmentOptions.length === 0 ? (
+            <span
+              className="rounded-lg border border-dashed border-border-default bg-bg-base px-3 py-2 text-sm text-text-tertiary"
+              title="No departments are readable for your role, or none have staff on this date."
+            >
+              No departments available
+            </span>
+          ) : (
+            <select
+              value={deptId}
+              onChange={(e) => setDeptId(e.target.value)}
+              className="rounded-lg border border-border-default bg-white py-2 pl-3 pr-8 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20"
+            >
+              <option value="">All departments</option>
+              {departmentOptions.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 

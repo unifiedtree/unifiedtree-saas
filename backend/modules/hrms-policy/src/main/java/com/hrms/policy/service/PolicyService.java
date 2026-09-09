@@ -93,10 +93,47 @@ public class PolicyService {
 
     @Transactional(readOnly = true)
     public PageResponse<PolicyResponse> listActivePolicies(Pageable pageable) {
-        Page<HrPolicy> page = policyRepository.findByStatusOrderByEffectiveDateDescCreatedAtDesc(PolicyStatus.ACTIVE, pageable);
+        return listPolicies(PolicyStatus.ACTIVE, pageable);
+    }
+
+    /**
+     * List policies in one lifecycle state.
+     *
+     * <p>2026-09-09: the only list path was ACTIVE-only, so archiving a policy
+     * made it vanish from the admin table with no way back — there was no
+     * unarchive endpoint and no status filter, and the SPA's Archive icon
+     * fired without a confirm. One misclick permanently removed a published
+     * policy from the product; recovery meant editing the database. The
+     * ARCHIVED branch of the SPA's own status-tone map was unreachable dead
+     * code, which is the tell.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<PolicyResponse> listPolicies(PolicyStatus status, Pageable pageable) {
+        Page<HrPolicy> page = policyRepository
+                .findByStatusOrderByEffectiveDateDescCreatedAtDesc(
+                        status == null ? PolicyStatus.ACTIVE : status, pageable);
         List<PolicyResponse> content = page.getContent().stream().map(this::toResponse).toList();
         return new PageResponse<>(content, page.getNumber(), page.getSize(),
                 page.getTotalElements(), page.getTotalPages(), page.isLast());
+    }
+
+    /**
+     * ARCHIVED → ACTIVE. The inverse of archivePolicy, so an accidental
+     * archive is recoverable from the product rather than from psql.
+     */
+    @Transactional
+    public PolicyResponse unarchivePolicy(UUID policyId) {
+        HrPolicy policy = policyRepository.findById(policyId)
+                .orElseThrow(() -> new ResourceNotFoundException("HrPolicy", policyId));
+        if (policy.getStatus() != PolicyStatus.ARCHIVED) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "Only an archived policy can be restored (current status: " + policy.getStatus() + ")",
+                    "POLICY_NOT_ARCHIVED");
+        }
+        policy.setStatus(PolicyStatus.ACTIVE);
+        policy = policyRepository.save(policy);
+        log.info("Policy {} restored from ARCHIVED to ACTIVE", policyId);
+        return toResponse(policy);
     }
 
     @Transactional(readOnly = true)
@@ -181,10 +218,38 @@ public class PolicyService {
                 page.getTotalElements(), page.getTotalPages(), page.isLast());
     }
 
+    /**
+     * Policies this employee has acknowledged AT THEIR CURRENT VERSION.
+     *
+     * <p>2026-09-09: this returned bare policy ids with no version filter,
+     * while acknowledge() and needsAcknowledgment() are both version-aware
+     * (B7, 2026-08-15). The two disagreed the moment an admin bumped a
+     * version: the backend correctly treated everyone as un-acknowledged, but
+     * the SPA builds its ackSet from this list, so it kept rendering the
+     * static "You acknowledged this policy" label and never re-rendered the
+     * Acknowledge button. Re-acknowledgement was impossible from the web —
+     * for the exact policy change that required it.
+     *
+     * <p>Filtering here rather than in the SPA keeps the rule in one place:
+     * an ack counts only against the version it was given for.
+     */
     @Transactional(readOnly = true)
     public List<UUID> getMyAcknowledgedPolicyIds(UUID employeeId) {
-        return ackRepository.findByEmployeeId(employeeId).stream()
+        List<PolicyAcknowledgement> acks = ackRepository.findByEmployeeId(employeeId);
+        if (acks.isEmpty()) return List.of();
+
+        // One lookup per distinct policy, not per ack row.
+        java.util.Map<UUID, String> currentVersionByPolicy = new java.util.HashMap<>();
+        for (PolicyAcknowledgement a : acks) {
+            currentVersionByPolicy.computeIfAbsent(a.getPolicyId(), id ->
+                    policyRepository.findById(id).map(HrPolicy::getPolicyVersion).orElse(null));
+        }
+
+        return acks.stream()
+                .filter(a -> java.util.Objects.equals(
+                        a.getPolicyVersion(), currentVersionByPolicy.get(a.getPolicyId())))
                 .map(PolicyAcknowledgement::getPolicyId)
+                .distinct()
                 .toList();
     }
 
@@ -202,7 +267,12 @@ public class PolicyService {
         return new PolicyResponse(
                 p.getId(), p.getCompanyId(), p.getTitle(), p.getCategory(),
                 p.getContent(), p.getPolicyVersion(), p.getEffectiveDate(), p.getStatus(),
-                ackRepository.countByPolicyId(p.getId()), p.getCreatedAt());
+                // Count acks for THIS version only — see
+                // countByPolicyIdAndPolicyVersion. Counting every version made
+                // the compliance figure read 100% right after a version bump,
+                // when the true figure for the current text was 0%.
+                ackRepository.countByPolicyIdAndPolicyVersion(p.getId(), p.getPolicyVersion()),
+                p.getCreatedAt());
     }
 
     private AcknowledgementResponse toAck(PolicyAcknowledgement a) {
