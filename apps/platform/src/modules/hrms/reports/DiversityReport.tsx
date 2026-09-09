@@ -75,6 +75,9 @@ export function DiversityReport() {
       error={error}
       hasData={data.length > 0}
       onRetry={refetch}
+      report="diversity"
+      /* Diversity takes no filter beyond companyId — matches its JSON sibling. */
+      exportParams={{}}
       filters={
         <CompanySelector value={companyId} onChange={(v) => set('company', v)} />
       }

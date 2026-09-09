@@ -43,6 +43,9 @@ export function AttritionReport() {
       error={error}
       hasData={data.length > 0}
       onRetry={refetch}
+      report="attrition"
+      /* Same from/to the JSON query above ran with, so the CSV is the table. */
+      exportParams={{ from, to }}
       filters={
         <>
           <CompanySelector value={companyId} onChange={(v) => set('company', v)} />

@@ -35,6 +35,9 @@ export function HeadcountReport() {
       error={error}
       hasData={data.length > 0}
       onRetry={refetch}
+      report="headcount"
+      /* Same asOf the JSON query above ran with, so the CSV is the table. */
+      exportParams={{ asOf }}
       filters={
         <>
           <CompanySelector value={companyId} onChange={(v) => set('company', v)} />

@@ -28,6 +28,32 @@ export interface WorkforceEmployee {
   confirmationDate?: string
   lastWorkingDay?: string
   ctcAnnual?: number
+  // ── Fields the backend has always returned but this type never declared ──
+  //
+  // 2026-09-09: WorkforceEmployeeResponse projects all of the below, but the
+  // interface stopped at ctcAnnual. Because the type lied about the shape,
+  // EmployeeForm had to reach them through `as unknown as { ... }` casts, and
+  // a cast is exactly the thing that stops the compiler noticing when a field
+  // is dropped from an edit payload. That is how the UAN / ESI / bank-branch /
+  // designation drop (fixed 2026-09-08) survived review: the types could not
+  // contradict it. Declaring the real shape lets tsc guard these instead.
+  //
+  // Note weeklyOffDays is List<Integer> on the wire (ISO 1=Mon..7=Sun) while
+  // the CREATE/UPDATE payloads take a CSV string — the asymmetry is real and
+  // deliberate on the backend, so the two types differ on purpose.
+  geoFenceZoneId?: string
+  weeklyOffDays?: number[]
+  uan?: string
+  esi?: string
+  bankName?: string
+  bankBranchName?: string
+  /** Masked to last-4 unless the caller holds hrms.employees.pii.read. */
+  bankAccountNumber?: string
+  bankIfsc?: string
+  panNumber?: string
+  aadhaarNumber?: string
+  monthlySalary?: number
+  salaryFrequency?: string
   profilePhotoUrl?: string
   faceEnrolled: boolean
   hasAccount?: boolean

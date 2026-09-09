@@ -56,6 +56,11 @@ export function LateMarksReport() {
       error={error}
       hasData={data.length > 0}
       onRetry={refetch}
+      report="late-marks"
+      /* Same from/to the JSON query above ran with, so the CSV is the table.
+         Note the CSV holds every late record in range, not just the top-15
+         offenders the chart aggregates — same rows as the table below. */
+      exportParams={{ from, to }}
       filters={
         <>
           <CompanySelector value={companyId} onChange={(v) => set('company', v)} />

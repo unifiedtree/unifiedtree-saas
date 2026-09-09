@@ -50,6 +50,9 @@ export function LeaveBalanceReport() {
       error={error}
       hasData={data.length > 0}
       onRetry={refetch}
+      report="leave-balance"
+      /* Same year the JSON query above ran with, so the CSV is the table. */
+      exportParams={{ year }}
       filters={
         <>
           <CompanySelector value={companyId} onChange={(v) => set('company', v)} />

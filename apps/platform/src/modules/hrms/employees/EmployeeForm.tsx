@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { X, ChevronRight, Send, Users, Pencil } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
-import { useAuthStore } from '@unifiedtree/sdk'
+import { useAuthStore, usePermission } from '@unifiedtree/sdk'
 import { P } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
 import {
@@ -195,6 +195,30 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
   // stays editable so admin can override for special cases.
   const { data: nextCodePreview } = useNextEmployeeCode(isEdit ? undefined : companyId || undefined)
 
+  // ─── Inline-create permissions ───────────────────────────────────────────
+  //
+  // 2026-09-09 audit: all four "+ Add" pills on the Basic step were ungated.
+  // Being able to add an EMPLOYEE (hrms.employee.write) does not imply being
+  // able to create the ORG LOOKUPS an employee references — those are separate
+  // permissions and several real roles hold one without the other
+  // (FINANCE_LEAD, DEPT_MANAGER, and any custom role). Those users saw the
+  // affordance, filled in the modal, and got a red "Could not add …" box on
+  // submit: the backend 403s. Employees.tsx already gates its own
+  // "Create a company" action on org.company.write — this inline path just
+  // skipped the same check.
+  //
+  // Codes below are exactly the @PreAuthorize on each POST:
+  //   POST /v1/hrms/companies             org.company.write     (WorkforceController)
+  //   POST /v1/hrms/departments           hrms.department.write (WorkforceController)
+  //   POST /v1/hrms/designations          hrms.designation.write(WorkforceController)
+  //   POST /v1/attendance/geofence/zones  org.geofence.write    (LegacyAttendanceExtrasController)
+  const canCreateCompany     = usePermission('org.company.write')
+  const canCreateDepartment  = usePermission('hrms.department.write')
+  const canCreateDesignation = usePermission('hrms.designation.write')
+  const canCreateZone        = usePermission('org.geofence.write')
+  //   POST /v1/shifts/employee/{id}       attendance.regularization.approve
+  const canAssignShift       = usePermission('attendance.regularization.approve')
+
   // Edit-mode prefill sources — the workforce DTO doesn't ship PII, so these
   // hooks pull identity + bank from the same endpoints EmployeeDetail uses.
   // No-op in create mode (empty employeeId disables the underlying query).
@@ -229,10 +253,14 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     // free-text value is sent as `designation` (mobile-parity payload key).
     designationId: employee?.designationId ?? '',
     designationText: '',
-    // `geoFenceZoneId` isn't on the workforce response DTO typing yet — the
-    // field is set at create time and read-only per employee — so fall back
-    // to '' in edit mode until the DTO grows the field.
-    geoFenceZoneId: (employee as unknown as { geoFenceZoneId?: string })?.geoFenceZoneId ?? '',
+    // 2026-09-09: this used to read through `as unknown as { geoFenceZoneId?:
+    // string }` with a comment claiming the response DTO lacked the field.
+    // It does not — WorkforceEmployeeResponse has projected geoFenceZoneId
+    // since Wave 1 and the service populates it in both projections. The TS
+    // interface was simply missing it, and the cast hid that. Both are fixed,
+    // so edit mode now pre-selects the employee's real zone instead of always
+    // showing "No specific zone" and silently re-saving it.
+    geoFenceZoneId: employee?.geoFenceZoneId ?? '',
     shiftId: '',
     // ── Financial ─────────────────────────────────────────────────────────
     salaryFrequency: 'MONTHLY',
@@ -386,7 +414,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
     return [...DEFAULT_WEEK_OFFS]
   }
   const [weeklyOffDays, setWeeklyOffDays] = useState<number[]>(
-    isEdit ? parseWeekOffs((employee as { weeklyOffDays?: unknown })?.weeklyOffDays)
+    isEdit ? parseWeekOffs(employee?.weeklyOffDays)
            : [...DEFAULT_WEEK_OFFS],
   )
   const toggleWeekOff = (iso: number) =>
@@ -967,17 +995,21 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     <Sel error={!!errors.companyId} value={companyId} onChange={(e) => { setCompanyId(e.target.value); setErrors(p => ({ ...p, companyId: '' })) }}>
                       {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </Sel>
-                    <AddNewButton onClick={() => setShowAddCompany(true)} label="+ Add" />
+                    {canCreateCompany && <AddNewButton onClick={() => setShowAddCompany(true)} label="+ Add" />}
                   </div>
                 </Field>
               )}
               {!isEdit && companies.length === 0 && (
                 <div className={`rounded-xl border px-4 py-3 text-sm ${errors.companyId ? 'border-red-400 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
-                  No company exists yet. Create one now to keep the details you've entered so far.
+                  {canCreateCompany
+                    ? "No company exists yet. Create one now to keep the details you've entered so far."
+                    : 'No company exists yet, and your role cannot create one. Ask an administrator to add a company before onboarding employees.'}
                   {errors.companyId && <p className="mt-1 font-semibold text-red-600">{errors.companyId}</p>}
-                  <div className="mt-2">
-                    <AddNewButton onClick={() => setShowAddCompany(true)} label="+ Add Company" />
-                  </div>
+                  {canCreateCompany && (
+                    <div className="mt-2">
+                      <AddNewButton onClick={() => setShowAddCompany(true)} label="+ Add Company" />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1007,7 +1039,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                         onChange={(e) => set('designationText', e.target.value)}
                         placeholder="e.g. Software Engineer"
                       />
-                      <AddNewButton onClick={() => setShowAddDesignation(true)} label="+ Save to list" />
+                      {canCreateDesignation && <AddNewButton onClick={() => setShowAddDesignation(true)} label="+ Save to list" />}
                     </div>
                     <p className="mt-1 text-xs text-text-secondary">
                       Typed in-line, or press "Save to list" to add a reusable designation for future hires.
@@ -1019,7 +1051,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                       <option value="">Select designation</option>
                       {designations.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
                     </Sel>
-                    <AddNewButton onClick={() => setShowAddDesignation(true)} label="+ Add" />
+                    {canCreateDesignation && <AddNewButton onClick={() => setShowAddDesignation(true)} label="+ Add" />}
                   </div>
                 )}
               </Field>
@@ -1032,11 +1064,15 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     onChange={(e) => { setDepartmentId(e.target.value); setErrors(p => ({ ...p, departmentId: '' })) }}
                   >
                     <option value="">
-                      {departments.length === 0 ? 'No departments yet — click Add to create one' : 'Select department'}
+                      {departments.length === 0
+                        ? (canCreateDepartment
+                            ? 'No departments yet — click Add to create one'
+                            : 'No departments yet — ask an administrator to add one')
+                        : 'Select department'}
                     </option>
                     {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </Sel>
-                  <AddNewButton onClick={() => setShowAddDept(true)} label="+ Add" />
+                  {canCreateDepartment && <AddNewButton onClick={() => setShowAddDept(true)} label="+ Add" />}
                 </div>
               </Field>
 
@@ -1103,13 +1139,23 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                       <option key={z.id} value={z.id}>{z.name}</option>
                     ))}
                   </Sel>
-                  <AddNewButton onClick={() => setShowAddZone(true)} label="+ Add" />
+                  {canCreateZone && <AddNewButton onClick={() => setShowAddZone(true)} label="+ Add" />}
                 </div>
                 <p className="mt-1 text-xs text-text-secondary">
                   Optional — when set, the employee can only punch in from inside this zone.
                 </p>
               </Field>
 
+              {/* Assigning a shift POSTs /v1/shifts/employee/{id}, which is
+                  @PreAuthorize("hasAuthority('attendance.regularization.approve')").
+                  That is granted to HR_MANAGER / COMPANY_ADMIN / DEPT_MANAGER and
+                  explicitly stripped from FINANCE_LEAD (V066). Showing the picker
+                  to everyone who can reach this wizard meant those roles picked a
+                  shift, submitted, and got "Employee created, but the shift could
+                  not be assigned" — with the hire silently left on the 09:30
+                  default. Hide the control rather than advertise an action the
+                  role cannot complete (2026-09-09 audit). */}
+              {canAssignShift && (
               <Field label="Shift">
                 {/* No .filter(active): /v1/shifts only returns active policies —
                     a soft-deleted one simply stops appearing in the list. */}
@@ -1125,6 +1171,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   ))}
                 </Sel>
               </Field>
+              )}
 
               <Field label="Weekly Off Days">
                 {/* ISO day chips (1=Mon..7=Sun). Serialized to CSV on submit to
