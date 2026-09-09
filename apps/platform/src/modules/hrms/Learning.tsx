@@ -13,7 +13,7 @@ import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useTrainingPrograms, useCreateProgram, useChangeProgramStatus, useEnroll,
-  useMyEnrollments, useEmployeeSkills, useUpsertSkill,
+  useMyEnrollments, useEmployeeSkills, useUpsertSkill, useMySkills,
   useProgramEnrollments, useCompleteEnrollment, useBulkEnroll,
   useAdminDropEnrollment, useDropEnrollment,
   ALLOWED_TRANSITIONS,
@@ -619,6 +619,77 @@ function MyTrainingTab() {
           </tbody>
         </table>
       </TableCard>
+
+      <MySkillsPanel />
+    </div>
+  )
+}
+
+/**
+ * The employee's own skill record.
+ *
+ * Gating the Skill Matrix on hrms.learning.skill.read (V116) was right — it
+ * stopped every employee reading the whole company's proficiency scores — but
+ * it left employees with no way to see their OWN, and /skills/me existed with
+ * no caller at all. Reading your own record needs no extra permission: the
+ * endpoint is gated on hrms.learning.enroll.self, which is exactly what this
+ * tab already requires, and it resolves the employee from the token rather
+ * than a path parameter, so it cannot be pointed at anyone else.
+ *
+ * Read-only on purpose: writing skills is POST /v1/learning/skills, which the
+ * backend gates on hrms.learning.write. Rendering an editor here would be an
+ * affordance that 403s for the very people it is shown to.
+ */
+function MySkillsPanel() {
+  const { data: skills = [], isLoading } = useMySkills()
+
+  // Nothing recorded and nothing loading — say so once, inside the tab, rather
+  // than showing an empty table that reads like a failure.
+  if (!isLoading && skills.length === 0) {
+    return (
+      <div className="ut-card p-5">
+        <p className="text-sm font-semibold text-text-primary">My Skills</p>
+        <p className="mt-1 text-xs text-text-tertiary">
+          No skills recorded for you yet. HR maintains this from the Skill Matrix.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="ut-card p-5">
+      <p className="mb-3 text-sm font-semibold text-text-primary">My Skills</p>
+      {isLoading ? (
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => <div key={i} className="h-5 w-full animate-pulse rounded bg-bg-base" />)}
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {skills.map((s) => (
+            <li key={s.id} className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-text-primary">{s.skillName}</p>
+                {s.certified && (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+                    <Award size={12} className="text-[#047857]" />
+                    {s.certificationName || 'Certified'}
+                    {s.certifiedOn && <span className="text-text-tertiary">· {fmtDate(s.certifiedOn)}</span>}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <div className="flex h-2 w-24 overflow-hidden rounded-full bg-bg-base">
+                  <div
+                    className="h-full rounded-full bg-[#059669]"
+                    style={{ width: `${(Math.min(Math.max(s.proficiency, 0), 5) / 5) * 100}%` }}
+                  />
+                </div>
+                <span className="text-xs font-semibold text-text-secondary">{s.proficiency}/5</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
