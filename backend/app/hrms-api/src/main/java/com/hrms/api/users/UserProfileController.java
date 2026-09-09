@@ -57,6 +57,18 @@ public class UserProfileController {
         this.mapper  = mapper;
     }
 
+    /**
+     * Bind the tenant for RLS. Mirrors the bindTenant() every service in this
+     * codebase defines: the two TenantContexts plus the Postgres GUC the RLS
+     * policies read. SET LOCAL only survives inside a transaction, so callers
+     * must be @Transactional.
+     */
+    private void bindTenant(UUID tenantId) {
+        com.unifiedtree.security.tenant.TenantContext.setTenantId(tenantId);
+        com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
+        jdbc.execute("SET LOCAL app.tenant_id = '" + tenantId + "'");
+    }
+
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     public UserMeResponse me() {
@@ -128,12 +140,27 @@ public class UserProfileController {
      */
     @PutMapping("/me")
     @PreAuthorize("isAuthenticated()")
+    // 2026-09-09: was neither transactional nor tenant-bound, and silently
+    // persisted NOTHING while returning 200 with the unchanged row — verified
+    // against prod: PUT {displayName} returned 200 and display_name stayed
+    // NULL. auth.user_credentials carries an RLS policy
+    // (tenant_id = current_tenant_id()) that applies to UPDATE as well as
+    // SELECT. app.tenant_id is set with SET LOCAL, which lives only for the
+    // duration of a transaction — with no transaction around this handler the
+    // GUC was gone by the time the UPDATE ran, current_tenant_id() was NULL,
+    // the predicate matched no rows, and the write vanished.
+    //
+    // Every other JDBC write in this codebase (LearningService, InvitationService,
+    // DisbursementBatchService ...) is @Transactional and calls a bindTenant()
+    // that does exactly the three lines below. This handler was the odd one out.
+    @org.springframework.transaction.annotation.Transactional
     public UserMeResponse update(@RequestBody UpdateMeRequest req) {
         UUID userId   = TenantContext.getUserId();
         UUID tenantId = TenantContext.getTenantId();
         if (userId == null || tenantId == null) {
             throw new BusinessRuleException("No active session", "NOT_AUTHENTICATED");
         }
+        bindTenant(tenantId);
 
         // Build a partial UPDATE — no clause when nothing to change, one clause
         // per supplied field so a caller who sends only { phone } doesn't wipe
@@ -166,8 +193,15 @@ public class UserProfileController {
             args.add(tenantId);
             int updated = jdbc.update(sql.toString(), args.toArray());
             if (updated == 0) {
-                throw new BusinessRuleException("No active session", "NOT_AUTHENTICATED");
+                // Reaching here means the row is invisible to this session —
+                // almost always RLS, not a bad id. Log it: the previous
+                // version of this handler failed silently and the Profile page
+                // reported success for a year's worth of saves that never
+                // happened.
+                log.warn("PUT /v1/users/me updated 0 rows for user={} tenant={}", userId, tenantId);
+                throw new BusinessRuleException("Could not save your profile", "PROFILE_UPDATE_FAILED");
             }
+            log.info("Profile updated user={} fields={}", userId, args.size() - 2);
         }
         // Echo the fresh row — matches what useUpdateCurrentUser expects.
         return me();

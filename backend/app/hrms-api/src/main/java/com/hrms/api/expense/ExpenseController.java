@@ -136,7 +136,30 @@ public class ExpenseController {
             @PathVariable UUID id,
             @Valid @RequestBody ExpenseDecisionRequest decision,
             @AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(enrichOne(expenseService.decide(id, extractEmployeeId(jwt), decision)));
+        UUID approver = extractEmployeeId(jwt);
+        // 2026-09-09: object-level authz on the WRITE path (intra-tenant IDOR).
+        // The 2026-09-08 audit scoped the approvals QUEUE — a DEPT_MANAGER now
+        // only lists claims routed to them — but left this endpoint wide open:
+        // holding claim.approve was enough to POST a decision on ANY claim id
+        // in the tenant, including other departments' and executives'. Scoping
+        // the read without scoping the write just hides the target, it does not
+        // protect it.
+        //
+        // The rule deliberately mirrors pendingApprovals exactly, so what you
+        // can act on equals what your queue shows you: holders of
+        // hrms.expense.reimbursement (OWNER / SUPER_ADMIN — FINANCE_LEAD is not
+        // seeded claim.approve, so @perm.check already stops them) get the same
+        // tenant-wide reach they get in the list; everyone else must be the
+        // claim's assigned approver. Claims with a null approver_id (submitter
+        // had no manager) fall to the tenant-wide holders, which is also the
+        // only place they appear in the queue — so nothing becomes unreachable.
+        ExpenseClaimResponse existing = expenseService.getClaim(id);
+        if (!callerHasPermission(jwt, "hrms.expense.reimbursement")
+                && !Objects.equals(existing.approverId(), approver)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "This expense claim is not routed to you for approval.");
+        }
+        return ResponseEntity.ok(enrichOne(expenseService.decide(id, approver, decision)));
     }
 
     // ─── Reimbursement (finance) ─────────────────────────────────────────────
