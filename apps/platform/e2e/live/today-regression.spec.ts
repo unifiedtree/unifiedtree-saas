@@ -19,7 +19,25 @@ import { test, expect, type Page } from '@playwright/test'
  * and "table has rows" would fail for reasons that are not defects.
  */
 
-const ADMIN = { email: 'reviewer@unifiedtree.com', password: 'Reviewer@2026' }
+/**
+ * All four roles, not just admin.
+ *
+ * Testing as an administrator proves almost nothing about the seats the client
+ * actually staffs. On 2026-09-09 the two worst defects were both invisible to
+ * an admin account: PUT /v1/users/me silently discarded every Profile save,
+ * and a missing @securityHelper bean 500'd every plain employee reading their
+ * own record — while admins got a clean 200 on both, because a SpEL
+ * short-circuit meant they never evaluated the broken half of the guard. An
+ * admin-only sweep would have gone green through both.
+ */
+const ACCOUNTS = {
+  ADMIN: { email: 'reviewer@unifiedtree.com',              password: 'Reviewer@2026' },
+  HR:    { email: 'e2e-hr-parity@unifiedtree.example',     password: 'E2eParity@2026' },
+  MGR:   { email: 'e2e-mgr-parity@unifiedtree.example',    password: 'E2eParity@2026' },
+  EMP:   { email: 'e2e-emp-parity@unifiedtree.example',    password: 'E2eParity@2026' },
+} as const
+
+type RoleName = keyof typeof ACCOUNTS
 
 /** Every route whose page or hooks changed on 2026-09-09. */
 const ROUTES: { path: string; label: string }[] = [
@@ -55,17 +73,19 @@ const ROUTES: { path: string; label: string }[] = [
  * on those regexes finds nothing. Target the two textboxes positionally
  * instead, which is stable against copy changes.
  */
-async function login(page: Page) {
+async function login(page: Page, role: RoleName) {
+  const creds = ACCOUNTS[role]
   await page.goto('/login', { waitUntil: 'domcontentloaded' })
   const boxes = page.getByRole('textbox')
   await boxes.first().waitFor({ state: 'visible', timeout: 30_000 })
-  await boxes.nth(0).fill(ADMIN.email)
-  await boxes.nth(1).fill(ADMIN.password)
+  await boxes.nth(0).fill(creds.email)
+  await boxes.nth(1).fill(creds.password)
   await page.getByRole('button', { name: /^log ?in$|^sign ?in$/i }).first().click()
   await page.waitForURL((u) => !u.pathname.includes('/login'), { timeout: 60_000 })
 }
 
-test.describe('2026-09-09 regression — pages render without crashing', () => {
+for (const role of Object.keys(ACCOUNTS) as RoleName[]) {
+test.describe(`2026-09-09 regression [${role}] — pages render without crashing`, () => {
   test.describe.configure({ mode: 'serial' })
 
   let page: Page
@@ -75,13 +95,13 @@ test.describe('2026-09-09 regression — pages render without crashing', () => {
   test.beforeAll(async ({ browser }) => {
     test.setTimeout(180_000)
     page = await browser.newPage()
-    await login(page)
+    await login(page, role)
   })
 
   test.afterAll(async () => { await page?.close() })
 
   for (const route of ROUTES) {
-    test(route.label, async () => {
+    test(`${role}: ${route.label}`, async () => {
       const consoleErrors: string[] = []
       const pageErrors: string[] = []
       const onConsole = (m: { type: () => string; text: () => string }) => {
@@ -123,3 +143,4 @@ test.describe('2026-09-09 regression — pages render without crashing', () => {
     })
   }
 })
+}
