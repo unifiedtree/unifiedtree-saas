@@ -33,10 +33,14 @@ public class ExpenseService {
 
     private final ExpenseClaimRepository claimRepository;
     private final ExpenseItemRepository itemRepository;
+    private final com.hrms.expense.repository.ExpensePolicyRepository policyRepository;
 
-    public ExpenseService(ExpenseClaimRepository claimRepository, ExpenseItemRepository itemRepository) {
+    public ExpenseService(ExpenseClaimRepository claimRepository,
+                          ExpenseItemRepository itemRepository,
+                          com.hrms.expense.repository.ExpensePolicyRepository policyRepository) {
         this.claimRepository = claimRepository;
         this.itemRepository = itemRepository;
+        this.policyRepository = policyRepository;
     }
 
     /**
@@ -53,6 +57,8 @@ public class ExpenseService {
                 .map(ExpenseItemRequest::amount)
                 .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        enforceCategoryCaps(companyId, request.items());
 
         ExpenseClaim claim = new ExpenseClaim();
         claim.setTenantId(tenantId);
@@ -158,6 +164,64 @@ public class ExpenseService {
         claim = claimRepository.save(claim);
         log.info("Expense claim {} marked reimbursed", claimId);
         return toResponse(claim, itemRepository.findByClaimIdOrderByExpenseDateAsc(claimId));
+    }
+
+    /**
+     * Enforce each category's {@code maxAmountPerClaim} cap.
+     *
+     * <p>2026-09-09: expense policies were entirely decorative. HR could set a
+     * ₹5,000 travel cap and a ₹500,000 travel claim would still submit and
+     * approve clean — the policy row was written, read back and rendered, but
+     * no code path ever consulted it. That is worse than having no policy
+     * screen at all, because it reads as a control that is being enforced.
+     *
+     * <p>The cap is applied to the claim's SUBTOTAL per category, not to each
+     * line, so the limit cannot be sidestepped by splitting one dinner across
+     * twenty ₹4,999 rows. Where several active policies cover the same
+     * category the tightest cap wins. A policy with no cap set (null) does not
+     * constrain the amount.
+     *
+     * <p>{@code requiresReceipt} is deliberately NOT enforced here yet: there
+     * is still no receipt-upload control in the product, so every claim in
+     * production has receipt_url NULL. Turning that flag on today would block
+     * every expense submission in every workspace with no way for an employee
+     * to comply. It gets enforced in the same change that ships the upload.
+     */
+    private void enforceCategoryCaps(UUID companyId, List<ExpenseItemRequest> items) {
+        if (companyId == null) return;
+
+        List<com.hrms.expense.entity.ExpensePolicy> policies =
+                policyRepository.findByCompanyIdAndActiveTrueOrderByName(companyId);
+        if (policies.isEmpty()) return;
+
+        // Tightest cap per category — several active policies may overlap.
+        java.util.Map<com.hrms.expense.enums.ExpenseCategory, BigDecimal> capByCategory =
+                new java.util.HashMap<>();
+        for (com.hrms.expense.entity.ExpensePolicy p : policies) {
+            if (p.getCategory() == null || p.getMaxAmountPerClaim() == null) continue;
+            capByCategory.merge(p.getCategory(), p.getMaxAmountPerClaim(), (a, b) -> a.min(b));
+        }
+        if (capByCategory.isEmpty()) return;
+
+        java.util.Map<com.hrms.expense.enums.ExpenseCategory, BigDecimal> subtotalByCategory =
+                new java.util.HashMap<>();
+        for (ExpenseItemRequest item : items) {
+            if (item.category() == null || item.amount() == null) continue;
+            subtotalByCategory.merge(item.category(), item.amount(), BigDecimal::add);
+        }
+
+        for (var entry : subtotalByCategory.entrySet()) {
+            BigDecimal cap = capByCategory.get(entry.getKey());
+            if (cap == null) continue;
+            if (entry.getValue().compareTo(cap) > 0) {
+                throw new BusinessRuleException(
+                        entry.getKey() + " expenses in this claim total "
+                                + entry.getValue().toPlainString()
+                                + ", which exceeds your company's limit of "
+                                + cap.toPlainString() + " per claim.",
+                        "EXPENSE_POLICY_CAP_EXCEEDED");
+            }
+        }
     }
 
     // ── mapping ──────────────────────────────────────────────────────────────

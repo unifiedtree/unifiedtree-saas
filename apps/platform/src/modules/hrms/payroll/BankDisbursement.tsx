@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Banknote, Users, Wallet, ListChecks, Landmark, Download } from 'lucide-react'
+import { Banknote, Users, Wallet, ListChecks, Landmark, Download, Plus, Trash2, CheckCircle2, XCircle, Building2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import {
@@ -13,12 +13,26 @@ import { useCompanies } from '../api/useOrg'
 import {
   useRuns, useRunEmployees, MONTHS, inr, type RunStatus,
 } from '../api/usePayrollRuns'
+import {
+  useBankProfiles, useCreateBankProfile, useDeleteBankProfile,
+  useDisbursementBatches, useBuildBatch, useDownloadBatchFile,
+  useMarkBatchPaid, useCancelBatch,
+  BANK_FORMATS, IFSC_PATTERN,
+  type BankFormat, type BatchStatus,
+} from '../api/useDisbursement'
 
 // Map payroll run status → client status-pill tone.
 const STATUS_TONE: Record<RunStatus, PillTone> = {
   DRAFT: 'gray',
   PROCESSING: 'info',
   LOCKED: 'purple',
+  PAID: 'ok',
+  CANCELLED: 'red',
+}
+
+const BATCH_TONE: Record<BatchStatus, PillTone> = {
+  DRAFT: 'gray',
+  POSTED: 'info',
   PAID: 'ok',
   CANCELLED: 'red',
 }
@@ -45,6 +59,13 @@ const fmtPeriod = (start?: string, end?: string) => {
 export const BankDisbursement: React.FC = () => {
   const { toast } = useToast()
   const canExport = usePermission('payroll.runs.read')
+  // Backend permissions on DisbursementBatchController / BankProfileController.
+  // Granted to FINANCE_LEAD/OWNER/SUPER_ADMIN by default (V093/V094).
+  const canReadBatches = usePermission('hrms.disbursement.read')
+  const canBuildBatch  = usePermission('hrms.disbursement.build')
+  const canPostBatch   = usePermission('hrms.disbursement.post')
+  const canReadProfile = usePermission('hrms.bank_profile.read')
+  const canManageProfile = usePermission('hrms.bank_profile.manage')
 
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState('')
@@ -96,6 +117,150 @@ export const BankDisbursement: React.FC = () => {
 
   const hasRun = !!selectedRun
   const showEmpty = hasRun && !rowsLoading && rows.length === 0
+
+  // ── Bank profiles + batches for the selected (company, run) ───────────────
+  const effectiveCompanyId = companyId || selectedRun?.companyId || ''
+  const { data: profiles = [] } = useBankProfiles(
+    effectiveCompanyId || undefined,
+    { enabled: canReadProfile && !!effectiveCompanyId },
+  )
+  const { data: batches = [] } = useDisbursementBatches(
+    runId ? { runId } : {},
+    { enabled: canReadBatches && !!runId },
+  )
+  // The pre-existing (DRAFT/POSTED/PAID) batch for this run, if any — the
+  // server enforces one live batch per (run, profile); we display the most
+  // recent that is not CANCELLED so operators see the state their button
+  // clicks will act on.
+  const activeBatch = useMemo(
+    () => batches.find((b) => b.status !== 'CANCELLED') ?? null,
+    [batches],
+  )
+
+  // ── Batch mutations ────────────────────────────────────────────────────────
+  const buildBatch = useBuildBatch()
+  const downloadBatch = useDownloadBatchFile()
+  const markPaid = useMarkBatchPaid()
+  const cancelBatch = useCancelBatch()
+  const createProfile = useCreateBankProfile()
+  const deleteProfile = useDeleteBankProfile()
+
+  const [showProfileForm, setShowProfileForm] = useState(false)
+  const [profileName, setProfileName]         = useState('')
+  const [bankFormat, setBankFormat]           = useState<BankFormat>('GENERIC_CSV')
+  const [corporateId, setCorporateId]         = useState('')
+  const [debitAccountNo, setDebitAccountNo]   = useState('')
+  const [ifsc, setIfsc]                       = useState('')
+  const [profileIsDefault, setProfileIsDefault] = useState(false)
+
+  const [selectedProfileId, setSelectedProfileId] = useState('')
+  useEffect(() => {
+    if (profiles.length === 0) { if (selectedProfileId) setSelectedProfileId(''); return }
+    if (!profiles.some((p) => p.id === selectedProfileId)) {
+      setSelectedProfileId(profiles.find((p) => p.isDefault && p.isActive)?.id ?? profiles[0].id)
+    }
+  }, [profiles, selectedProfileId])
+
+  const onCreateProfile = async () => {
+    if (!effectiveCompanyId) { toast('Pick a company first', 'error'); return }
+    if (!profileName.trim()) { toast('Profile name is required', 'error'); return }
+    if (!debitAccountNo.trim()) { toast('Debit account number is required', 'error'); return }
+    if (!IFSC_PATTERN.test(ifsc.trim().toUpperCase())) {
+      // Fail early with the same message shape the server would return, so the
+      // operator doesn't wait a round-trip to learn the code is malformed.
+      toast('IFSC must look like ABCD0XXXXXX (11 chars, 5th is zero)', 'error'); return
+    }
+    try {
+      await createProfile.mutateAsync({
+        companyId: effectiveCompanyId,
+        profileName: profileName.trim(),
+        bankFormat,
+        corporateId: corporateId.trim() || undefined,
+        debitAccountNo: debitAccountNo.trim(),
+        ifsc: ifsc.trim().toUpperCase(),
+        isDefault: profileIsDefault,
+      })
+      toast('Bank profile added', 'success')
+      setShowProfileForm(false)
+      setProfileName(''); setCorporateId(''); setDebitAccountNo(''); setIfsc('')
+      setProfileIsDefault(false); setBankFormat('GENERIC_CSV')
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Failed to create bank profile', 'error')
+    }
+  }
+
+  const onDeleteProfile = async (id: string, name: string) => {
+    if (!window.confirm(`Delete bank profile "${name}"? Existing batches keep their reference; new batches can no longer use it.`)) return
+    try {
+      await deleteProfile.mutateAsync(id)
+      toast('Bank profile deleted', 'success')
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Failed to delete bank profile', 'error')
+    }
+  }
+
+  const onBuild = async () => {
+    if (!runId) { toast('Pick a payroll run first', 'error'); return }
+    if (!selectedProfileId) { toast('Pick a bank profile', 'error'); return }
+    if (selectedRun?.status !== 'LOCKED') {
+      // The server accepts LOCKED only; catch it here so the user sees a
+      // sensible message rather than a raw BusinessRuleException.
+      toast('Only a LOCKED payroll run can be disbursed. Lock the run first.', 'error'); return
+    }
+    try {
+      await buildBatch.mutateAsync({ runId, bankProfileId: selectedProfileId })
+      toast('Disbursement batch built', 'success')
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Failed to build batch', 'error')
+    }
+  }
+
+  const onDownloadBatchFile = async () => {
+    if (!activeBatch) return
+    const filename = selectedRun
+      ? `bank-file-${MONTHS[selectedRun.periodMonth - 1]}-${selectedRun.periodYear}.csv`
+      : undefined
+    try {
+      await downloadBatch.mutateAsync({ id: activeBatch.id, filename })
+      // Note: server flips DRAFT->POSTED as a side-effect, which is why the
+      // mutation invalidates the batches query — the pill will refresh.
+      toast('Bank file downloaded — batch is now POSTED', 'success')
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Failed to download bank file', 'error')
+    }
+  }
+
+  const onMarkPaid = async () => {
+    if (!activeBatch) return
+    if (activeBatch.status !== 'POSTED') {
+      toast('Download the bank file first — mark-paid needs a POSTED batch.', 'error'); return
+    }
+    const utr = window.prompt('Bank UTR / payment reference (required):')
+    // Cancel returns null; empty string is the same as no reference and would
+    // fail the server-side @NotBlank, so treat both as abort.
+    if (utr === null) return
+    if (!utr.trim()) { toast('UTR is required to mark paid', 'error'); return }
+    try {
+      await markPaid.mutateAsync({ id: activeBatch.id, paymentReference: utr.trim() })
+      toast('Marked paid — payroll run is now PAID', 'success')
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Failed to mark paid', 'error')
+    }
+  }
+
+  const onCancelBatch = async () => {
+    if (!activeBatch) return
+    if (activeBatch.status === 'PAID' || activeBatch.status === 'CANCELLED') {
+      toast(`Cannot cancel a ${activeBatch.status} batch`, 'error'); return
+    }
+    if (!window.confirm(`Cancel this disbursement batch (${activeBatch.batchReference})? The payroll run stays LOCKED and you can build a fresh batch afterwards.`)) return
+    try {
+      await cancelBatch.mutateAsync(activeBatch.id)
+      toast('Batch cancelled', 'success')
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Failed to cancel batch', 'error')
+    }
+  }
 
   const handleExport = () => {
     if (!selectedRun || rows.length === 0) return
@@ -180,8 +345,204 @@ export const BankDisbursement: React.FC = () => {
         </div>
       )}
 
+      {/* ── Bank profiles (setup step; hidden until a company is picked) ── */}
+      {canReadProfile && effectiveCompanyId && (
+        <div className="ut-card mb-5 p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-text-primary">
+                <Building2 size={15} className="mr-1.5 inline-block -translate-y-px text-text-secondary" />
+                Bank profiles
+              </p>
+              <p className="mt-0.5 text-xs text-text-tertiary">
+                Debit accounts used to generate the bank's NEFT/RTGS file. At least one profile is required to build a disbursement batch.
+              </p>
+            </div>
+            {canManageProfile && (
+              <HrButton variant={showProfileForm ? 'ghost' : 'primary'} size="sm" onClick={() => setShowProfileForm((s) => !s)}>
+                <Plus size={14} /> {showProfileForm ? 'Close' : 'Add profile'}
+              </HrButton>
+            )}
+          </div>
+
+          {showProfileForm && canManageProfile && (
+            <div className="mb-4 rounded-xl border border-border-default bg-white p-4">
+              <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Profile name *</label>
+                  <input value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="e.g. HDFC Payroll Salary A/C" className="ut-input" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Bank format *</label>
+                  <select value={bankFormat} onChange={(e) => setBankFormat(e.target.value as BankFormat)} className="ut-select">
+                    {BANK_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Debit account no *</label>
+                  <input value={debitAccountNo} onChange={(e) => setDebitAccountNo(e.target.value)} className="ut-input" maxLength={60} />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">IFSC *</label>
+                  <input
+                    value={ifsc}
+                    onChange={(e) => setIfsc(e.target.value.toUpperCase())}
+                    className="ut-input font-mono uppercase"
+                    maxLength={11}
+                    placeholder="HDFC0001234"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Corporate ID</label>
+                  <input value={corporateId} onChange={(e) => setCorporateId(e.target.value)} className="ut-input" maxLength={60} placeholder="Optional (bank portal login id)" />
+                </div>
+                <div className="flex items-end">
+                  <label className="flex items-center gap-2 text-sm text-text-secondary">
+                    <input type="checkbox" checked={profileIsDefault} onChange={(e) => setProfileIsDefault(e.target.checked)} className="h-4 w-4 rounded border-border-default text-[#059669] focus:ring-[#059669]" />
+                    Make default for this company
+                  </label>
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end border-t border-border-default pt-3">
+                <HrButton size="sm" onClick={onCreateProfile} disabled={createProfile.isPending}>
+                  {createProfile.isPending ? 'Saving…' : 'Save profile'}
+                </HrButton>
+              </div>
+            </div>
+          )}
+
+          {profiles.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border-default px-3 py-4 text-center text-xs text-text-tertiary">
+              No bank profiles for this company yet.
+            </p>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-border-default">
+              <table className="hr-table hr-table--compact">
+                <thead>
+                  <tr>
+                    <th>Profile</th>
+                    <th className="hidden sm:table-cell">Format</th>
+                    <th>Account · IFSC</th>
+                    <th className="hidden md:table-cell">Default</th>
+                    {canManageProfile && <th className="text-right">Action</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {profiles.map((p) => (
+                    <tr key={p.id}>
+                      <td className="font-medium text-text-primary">
+                        {p.profileName}
+                        {!p.isActive && <span className="ml-2 text-xs text-text-tertiary">(inactive)</span>}
+                      </td>
+                      <td className="hidden sm:table-cell text-text-secondary">
+                        {BANK_FORMATS.find((f) => f.value === p.bankFormat)?.label ?? p.bankFormat}
+                      </td>
+                      <td className="font-mono text-xs text-text-secondary">
+                        …{p.debitAccountNo.slice(-4)} · {p.ifsc}
+                      </td>
+                      <td className="hidden md:table-cell">
+                        {p.isDefault && <HrStatusPill tone="ok">Default</HrStatusPill>}
+                      </td>
+                      {canManageProfile && (
+                        <td>
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => onDeleteProfile(p.id, p.profileName)}
+                              className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-red-50 hover:text-red-600"
+                              aria-label={`Delete ${p.profileName}`}
+                              disabled={deleteProfile.isPending}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {hasRun && (
         <>
+          {/* ── Disbursement batch controls (Build / Post / Mark paid) ── */}
+          {(canReadBatches || canBuildBatch || canPostBatch) && (
+            <div className="ut-card mb-5 p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-text-primary">
+                    <Banknote size={15} className="mr-1.5 inline-block -translate-y-px text-text-secondary" />
+                    Disbursement batch
+                  </p>
+                  <p className="mt-0.5 text-xs text-text-tertiary">
+                    {activeBatch
+                      ? <>Batch <span className="font-mono">{activeBatch.batchReference}</span> · {activeBatch.beneficiaryCount} beneficiaries · {inr(activeBatch.totalAmount)}</>
+                      : selectedRun?.status === 'LOCKED'
+                        ? 'No batch built yet — pick a bank profile and click Build.'
+                        : `Payroll run is ${selectedRun?.status}. Only LOCKED runs can be disbursed.`}
+                  </p>
+                </div>
+                {activeBatch && <HrStatusPill tone={BATCH_TONE[activeBatch.status]}>{activeBatch.status}</HrStatusPill>}
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3">
+                {!activeBatch && canBuildBatch && (
+                  <>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Bank profile</label>
+                      <select
+                        value={selectedProfileId}
+                        onChange={(e) => setSelectedProfileId(e.target.value)}
+                        disabled={profiles.length === 0}
+                        className="min-w-[220px] rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20 disabled:opacity-50"
+                      >
+                        {profiles.length === 0 && <option value="">No profiles — add one above</option>}
+                        {profiles.filter((p) => p.isActive).map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.profileName} · …{p.debitAccountNo.slice(-4)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <HrButton
+                      onClick={onBuild}
+                      disabled={buildBatch.isPending || !selectedProfileId || selectedRun?.status !== 'LOCKED'}
+                    >
+                      <Plus size={15} /> {buildBatch.isPending ? 'Building…' : 'Build batch'}
+                    </HrButton>
+                  </>
+                )}
+
+                {activeBatch && canBuildBatch && (activeBatch.status === 'DRAFT' || activeBatch.status === 'POSTED') && (
+                  <HrButton onClick={onDownloadBatchFile} disabled={downloadBatch.isPending}>
+                    <Download size={15} /> {downloadBatch.isPending ? 'Downloading…' : (activeBatch.status === 'DRAFT' ? 'Download bank file (posts batch)' : 'Re-download bank file')}
+                  </HrButton>
+                )}
+
+                {activeBatch && canPostBatch && activeBatch.status === 'POSTED' && (
+                  <HrButton variant="primary" onClick={onMarkPaid} disabled={markPaid.isPending}>
+                    <CheckCircle2 size={15} /> {markPaid.isPending ? 'Marking…' : 'Mark paid (UTR)'}
+                  </HrButton>
+                )}
+
+                {activeBatch && canPostBatch && (activeBatch.status === 'DRAFT' || activeBatch.status === 'POSTED') && (
+                  <HrButton variant="ghost" onClick={onCancelBatch} disabled={cancelBatch.isPending}>
+                    <XCircle size={15} /> Cancel batch
+                  </HrButton>
+                )}
+              </div>
+
+              {activeBatch?.paymentReference && (
+                <p className="mt-3 border-t border-border-default pt-3 text-xs text-text-secondary">
+                  Paid on {activeBatch.paidAt ? format(parseISO(activeBatch.paidAt), 'd MMM yyyy, h:mm a') : '—'} · UTR <span className="font-mono">{activeBatch.paymentReference}</span>
+                </p>
+              )}
+            </div>
+          )}
+
           {/* ── KPI cards ──────────────────────────────────────────── */}
           <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <HrStatCard
