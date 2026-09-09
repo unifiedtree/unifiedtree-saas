@@ -75,8 +75,27 @@ public class PolicyController {
     @PreAuthorize("hasAuthority('hrms.policy.read')")
     public ResponseEntity<PageResponse<PolicyResponse>> listPolicies(
             @RequestParam(required = false) com.hrms.policy.enums.PolicyStatus status,
-            @PageableDefault(size = 50) Pageable pageable) {
+            @PageableDefault(size = 50) Pageable pageable,
+            @AuthenticationPrincipal Jwt jwt) {
+        // Non-ACTIVE statuses are author-only. hrms.policy.read is held by
+        // EVERY role including EMPLOYEE (they must read the handbook), so
+        // gating the new status param on read alone would have let any
+        // employee pull DRAFT text that was never published and ARCHIVED text
+        // that was deliberately withdrawn. Caught by a four-role probe against
+        // prod immediately after shipping the param — the filter itself is
+        // correct, its audience was not.
+        if (status != null && status != com.hrms.policy.enums.PolicyStatus.ACTIVE
+                && !hasPermission(jwt, "hrms.policy.write")) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Only policy authors can list draft or archived policies.");
+        }
         return ResponseEntity.ok(policyService.listPolicies(status, pageable));
+    }
+
+    private static boolean hasPermission(Jwt jwt, String code) {
+        if (jwt == null) return false;
+        java.util.List<String> perms = jwt.getClaimAsStringList("permissions");
+        return perms != null && perms.contains(code);
     }
 
     @Operation(summary = "Restore an archived HR policy")
