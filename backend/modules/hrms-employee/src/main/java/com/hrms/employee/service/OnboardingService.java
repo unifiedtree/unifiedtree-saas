@@ -30,16 +30,39 @@ public class OnboardingService {
     private final OnboardingTaskRepository taskRepo;
     private final OnboardingInstanceRepository instanceRepo;
     private final OnboardingInstanceTaskRepository instanceTaskRepo;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public OnboardingService(
             OnboardingTemplateRepository templateRepo,
             OnboardingTaskRepository taskRepo,
             OnboardingInstanceRepository instanceRepo,
-            OnboardingInstanceTaskRepository instanceTaskRepo) {
+            OnboardingInstanceTaskRepository instanceTaskRepo,
+            org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.templateRepo = templateRepo;
         this.taskRepo = taskRepo;
         this.instanceRepo = instanceRepo;
         this.instanceTaskRepo = instanceTaskRepo;
+        this.jdbc = jdbc;
+    }
+
+    /**
+     * The employee's recorded date of joining, or null when there is no row or
+     * no date on file. RLS scopes the read to the current tenant, so this
+     * cannot reach across workspaces. Never throws: a missing DOJ simply means
+     * the onboarding tasks get no due dates, which is the pre-existing
+     * behaviour rather than a reason to fail the whole run.
+     */
+    private LocalDate lookupDateOfJoining(UUID employeeId) {
+        if (employeeId == null) return null;
+        try {
+            return jdbc.query(
+                    "SELECT date_of_joining FROM hrms.employees WHERE id = ?",
+                    rs -> rs.next() ? rs.getObject(1, LocalDate.class) : null,
+                    employeeId);
+        } catch (RuntimeException e) {
+            log.warn("Could not read date_of_joining for employee {}: {}", employeeId, e.getMessage());
+            return null;
+        }
     }
 
     // ── Template management ───────────────────────────────────────────────
@@ -114,6 +137,16 @@ public class OnboardingService {
     @Transactional
     public OnboardingInstance createInstanceForEmployee(UUID employeeId, UUID templateId, LocalDate joiningDate) {
         OnboardingTemplate template = getTemplate(templateId);
+
+        // 2026-09-09: when the caller omits joiningDate, fall back to the
+        // employee's recorded date of joining rather than leaving every task
+        // without a due date. Task due dates are the whole point of the
+        // dueOffsetDays column on the template, and HR should not have to
+        // retype a date already stored on the employee record. Still null
+        // (no DOJ on file) leaves due dates unset, exactly as before.
+        if (joiningDate == null) {
+            joiningDate = lookupDateOfJoining(employeeId);
+        }
 
         OnboardingInstance instance = new OnboardingInstance();
         instance.setTenantId(TenantContext.getTenantId());

@@ -161,13 +161,25 @@ export function useInstances(status?: string) {
   })
 }
 
+/**
+ * Start an onboarding run for a new hire.
+ *
+ * 2026-09-09: this hook existed but no component imported it, so there was no
+ * way anywhere in the product to start onboarding — the Instances page even
+ * told the user instances appear "when a new hire is assigned an onboarding
+ * template" while offering no control to assign one. Now wired to the "Start
+ * Onboarding" button on that page, and invalidating the list so the new run
+ * shows up immediately instead of after a manual refresh.
+ */
 export function useCreateInstance() {
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: CreateInstanceRequest) =>
       apiJson<OnboardingInstance>('/v1/onboarding/instances', {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'onboarding', 'instances'] }),
   })
 }
 

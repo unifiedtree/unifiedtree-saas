@@ -1,5 +1,8 @@
 package com.hrms.api.learning;
 
+import com.hrms.learning.dto.EmployeeSkillRequest;
+import com.hrms.learning.dto.EmployeeSkillResponse;
+import com.hrms.learning.service.SkillService;
 import com.unifiedtree.security.tenant.TenantContext;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -28,9 +31,11 @@ import java.util.UUID;
 public class LearningController {
 
     private final LearningService service;
+    private final SkillService skillService;
 
-    public LearningController(LearningService service) {
+    public LearningController(LearningService service, SkillService skillService) {
         this.service = service;
+        this.skillService = skillService;
     }
 
     // ── Programs ─────────────────────────────────────────────────────────────
@@ -89,6 +94,30 @@ public class LearningController {
         return service.enroll(TenantContext.getTenantId(), id, req, actorId(jwt));
     }
 
+    /**
+     * Self-enrolment — the "Enroll" button on the Programs tab.
+     *
+     * <p>2026-09-09: the SPA has always POSTed here, but no such mapping
+     * existed — every click 404'd. The only enrol route was
+     * {@code POST /programs/{id}/enrollments}, which takes an explicit
+     * employeeId and is gated on {@code hrms.learning.write} — a permission
+     * plain employees do not hold, so they could never enrol at all.
+     *
+     * <p>The employee id comes from the token, never the request body, so this
+     * cannot be used to enrol somebody else. HR enrolling others keeps using
+     * the {@code /enrollments} + {@code /enrollments/bulk} routes.
+     */
+    @PostMapping("/programs/{id}/enroll")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('hrms.learning.enroll.self')")
+    public LearningService.EnrollmentDto enrollSelf(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID empId = selfEmployeeId(jwt);
+        return service.enroll(TenantContext.getTenantId(), id,
+                new LearningService.EnrollRequest(empId), actorId(jwt));
+    }
+
     @PostMapping("/programs/{id}/enrollments/bulk")
     @PreAuthorize("hasAuthority('hrms.learning.write')")
     public LearningService.BulkEnrollResult bulkEnroll(
@@ -140,9 +169,72 @@ public class LearningController {
         return service.myEnrollments(TenantContext.getTenantId(), empId);
     }
 
+    // ── Skills & certifications ──────────────────────────────────────────────
+    //
+    // 2026-09-09: the SPA's entire "Skill Matrix" tab called three endpoints
+    // that had NO mapping anywhere in the backend — GET /skills/{employeeId},
+    // GET /my-skills and POST /skills. SkillService (hrms-learning module) has
+    // implemented all of it since Wave 6; it simply was never exposed over
+    // HTTP. Every read 404'd and every "Save Skill" click 404'd.
+    //
+    // Reading SOMEONE ELSE'S skills is gated on the new, narrower
+    // hrms.learning.skill.read (V116) rather than hrms.learning.read, because
+    // the latter is held by every EMPLOYEE so they can browse the program
+    // catalogue — reusing it here would have let any employee read every
+    // colleague's proficiency and certification record. Employees read their
+    // own via /skills/me. Admins can widen it per role in Roles & Permissions.
+
+    /** Employee self-service — own skills. Declared before /skills/{employeeId}
+     *  so the literal "me" never reaches the UUID path-variable converter. */
+    @GetMapping("/skills/me")
+    @PreAuthorize("hasAuthority('hrms.learning.enroll.self')")
+    public List<EmployeeSkillResponse> mySkills(@AuthenticationPrincipal Jwt jwt) {
+        UUID empId = employeeId(jwt);
+        if (empId == null) return List.of();
+        return skillService.getSkills(empId);
+    }
+
+    @GetMapping("/skills/{employeeId}")
+    @PreAuthorize("hasAuthority('hrms.learning.skill.read')")
+    public List<EmployeeSkillResponse> employeeSkills(@PathVariable UUID employeeId) {
+        return skillService.getSkills(employeeId);
+    }
+
+    @PostMapping("/skills")
+    @PreAuthorize("hasAuthority('hrms.learning.write')")
+    public EmployeeSkillResponse upsertSkill(@Valid @RequestBody EmployeeSkillRequest req) {
+        return skillService.upsertSkill(req);
+    }
+
     private static UUID actorId(Jwt jwt) {
         if (jwt == null) return null;
         try { return UUID.fromString(jwt.getSubject()); } catch (Exception e) { return null; }
+    }
+
+    /**
+     * Strict variant of {@link #employeeId(Jwt)} for WRITES.
+     *
+     * <p>{@code employeeId()} falls back to the JWT subject (a user id) when
+     * the employee_id claim is absent, which is harmless for a read that then
+     * matches nothing — but on an INSERT it would persist a user id in
+     * employee_id and produce an enrollment nobody can see or drop. Writes
+     * therefore demand the real claim and 400 otherwise.
+     */
+    private static UUID selfEmployeeId(Jwt jwt) {
+        String claim = jwt == null ? null : jwt.getClaimAsString("employee_id");
+        if (claim == null || claim.isBlank()) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "Your login is not linked to an employee record, so you cannot enrol yourself. "
+                            + "Ask HR to enrol you in this program.",
+                    "NO_EMPLOYEE_RECORD");
+        }
+        try {
+            return UUID.fromString(claim.trim());
+        } catch (IllegalArgumentException e) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "Your session is malformed. Sign out and sign in again.",
+                    "NO_EMPLOYEE_RECORD");
+        }
     }
 
     private static UUID employeeId(Jwt jwt) {

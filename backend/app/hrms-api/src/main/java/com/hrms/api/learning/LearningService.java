@@ -67,8 +67,15 @@ public class LearningService {
             String title, String description, String category, String trainer,
             String startDate, String endDate, Integer capacity, String status) {}
 
+    /**
+     * {@code programTitle} added 2026-09-09: the "My Training" tab renders one
+     * row per enrollment and had nothing but the literal word "Program" in the
+     * title column, because the DTO never carried the program name. All three
+     * enrollment queries now LEFT JOIN training_programs for it.
+     */
     public record EnrollmentDto(
-            UUID id, UUID programId, UUID employeeId, String employeeName,
+            UUID id, UUID programId, String programTitle,
+            UUID employeeId, String employeeName,
             String status, BigDecimal score, String completedAt,
             String createdAt, String updatedAt) {}
 
@@ -211,9 +218,11 @@ public class LearningService {
         bindTenant(tenantId);
         return jdbc.query("""
                 SELECT e.*,
-                       TRIM(emp.first_name || ' ' || COALESCE(emp.last_name,'')) AS employee_name
+                       TRIM(emp.first_name || ' ' || COALESCE(emp.last_name,'')) AS employee_name,
+                       p.title AS program_title
                   FROM learning_mgmt.training_enrollments e
                   LEFT JOIN hrms.employees emp ON emp.id = e.employee_id AND emp.tenant_id = e.tenant_id
+                  LEFT JOIN learning_mgmt.training_programs p ON p.id = e.program_id
                  WHERE e.program_id = ?
                  ORDER BY employee_name
                 """, (rs, i) -> toEnrollmentDto(rs), programId);
@@ -224,9 +233,11 @@ public class LearningService {
         bindTenant(tenantId);
         return jdbc.query("""
                 SELECT e.*,
-                       TRIM(emp.first_name || ' ' || COALESCE(emp.last_name,'')) AS employee_name
+                       TRIM(emp.first_name || ' ' || COALESCE(emp.last_name,'')) AS employee_name,
+                       p.title AS program_title
                   FROM learning_mgmt.training_enrollments e
                   LEFT JOIN hrms.employees emp ON emp.id = e.employee_id AND emp.tenant_id = e.tenant_id
+                  LEFT JOIN learning_mgmt.training_programs p ON p.id = e.program_id
                  WHERE e.employee_id = ?
                  ORDER BY e.created_at DESC
                 """, (rs, i) -> toEnrollmentDto(rs), employeeId);
@@ -448,9 +459,11 @@ public class LearningService {
     private EnrollmentDto getEnrollment(UUID id) {
         List<EnrollmentDto> rows = jdbc.query("""
                 SELECT e.*,
-                       TRIM(emp.first_name || ' ' || COALESCE(emp.last_name,'')) AS employee_name
+                       TRIM(emp.first_name || ' ' || COALESCE(emp.last_name,'')) AS employee_name,
+                       p.title AS program_title
                   FROM learning_mgmt.training_enrollments e
                   LEFT JOIN hrms.employees emp ON emp.id = e.employee_id AND emp.tenant_id = e.tenant_id
+                  LEFT JOIN learning_mgmt.training_programs p ON p.id = e.program_id
                  WHERE e.id = ?
                 """, (rs, i) -> toEnrollmentDto(rs), id);
         if (rows.isEmpty()) throw new BusinessRuleException("Enrollment not found", "ENROLLMENT_NOT_FOUND");
@@ -504,6 +517,7 @@ public class LearningService {
         return new EnrollmentDto(
                 rs.getObject("id", UUID.class),
                 rs.getObject("program_id", UUID.class),
+                rs.getString("program_title"),
                 rs.getObject("employee_id", UUID.class),
                 rs.getString("employee_name"),
                 rs.getString("status"),

@@ -11,7 +11,7 @@ import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useTrainingPrograms, useCreateProgram, useChangeProgramStatus, useEnroll,
   useMyEnrollments, useEmployeeSkills, useUpsertSkill,
-  PROGRAM_STATUSES,
+  ALLOWED_TRANSITIONS,
   type ProgramStatus, type EnrollmentStatus,
 } from './api/useLearning'
 
@@ -30,23 +30,40 @@ export const Learning: React.FC = () => {
   const canRead = usePermission('hrms.learning.read')
   const canWrite = usePermission('hrms.learning.write')
   const canEnroll = usePermission('hrms.learning.enroll.self')
-  const [tab, setTab] = useState<Tab>(canRead ? 'programs' : 'my')
+  // Reading colleagues' proficiency + certifications is its own permission
+  // (V116). hrms.learning.read is held by every employee so they can browse
+  // the catalogue — gating the matrix on it would expose the whole company's
+  // skill records to everyone. Admins widen this per role in Settings.
+  const canViewSkills = usePermission('hrms.learning.skill.read')
 
   const tabs: { key: Tab; label: string }[] = [
     ...(canRead ? [{ key: 'programs' as Tab, label: 'Programs' }] : []),
     ...(canEnroll ? [{ key: 'my' as Tab, label: 'My Training' }] : []),
-    ...(canRead ? [{ key: 'skills' as Tab, label: 'Skill Matrix' }] : []),
+    ...(canViewSkills ? [{ key: 'skills' as Tab, label: 'Skill Matrix' }] : []),
   ]
+
+  // Land on the first tab this role actually has. The old default hard-coded
+  // 'programs' or 'my', so a role granted only the skill matrix opened the
+  // page on a tab that was not in the list and saw an empty body.
+  const [tab, setTab] = useState<Tab | null>(null)
+  const activeTab = tab && tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key
 
   return (
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Learning & Development" title="Learning Center" subtitle="Run training programs, track enrollments, and map team skills" />
 
-      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
+      <HrTabs tabs={tabs} active={activeTab ?? ''} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'programs' && canRead && <HrTabPanel tabKey="programs"><ProgramsTab canWrite={canWrite} canEnroll={canEnroll} /></HrTabPanel>}
-      {tab === 'my' && canEnroll && <HrTabPanel tabKey="my"><MyTrainingTab /></HrTabPanel>}
-      {tab === 'skills' && canRead && <HrTabPanel tabKey="skills"><SkillMatrixTab canWrite={canWrite} /></HrTabPanel>}
+      {tabs.length === 0 && (
+        <div className="ut-card p-10 text-center">
+          <p className="text-sm font-semibold text-text-secondary">No access to Learning</p>
+          <p className="mt-1 text-xs text-text-tertiary">Ask your administrator to grant a Learning permission.</p>
+        </div>
+      )}
+
+      {activeTab === 'programs' && canRead && <HrTabPanel tabKey="programs"><ProgramsTab canWrite={canWrite} canEnroll={canEnroll} /></HrTabPanel>}
+      {activeTab === 'my' && canEnroll && <HrTabPanel tabKey="my"><MyTrainingTab /></HrTabPanel>}
+      {activeTab === 'skills' && canViewSkills && <HrTabPanel tabKey="skills"><SkillMatrixTab canWrite={canWrite} /></HrTabPanel>}
     </div>
   )
 }
@@ -214,7 +231,7 @@ function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: bo
                         className="ut-select ut-select-sm w-auto"
                         aria-label="Change program status"
                       >
-                        {PROGRAM_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        {ALLOWED_TRANSITIONS[p.status].map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     ) : (
                       <HrStatusPill tone={PROGRAM_TONE[p.status]}>{p.status}</HrStatusPill>
