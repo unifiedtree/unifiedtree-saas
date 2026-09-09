@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import {
-  Plus, Archive, Check, FileText, CheckCircle2, Clock, Users, ChevronDown, ChevronUp,
+  Plus, Archive, ArchiveRestore, Check, FileText, CheckCircle2, Clock, Users, ChevronDown, ChevronUp,
   Pencil, Trash2, Timer,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -15,7 +15,7 @@ import {
 import { useCompanies } from './api/useOrg'
 import {
   usePolicies, useMyAcknowledgements, useAcknowledgePolicy, usePolicyAcknowledgements,
-  useCreatePolicy, useUpdatePolicy, useArchivePolicy,
+  useCreatePolicy, useUpdatePolicy, useArchivePolicy, useUnarchivePolicy,
   type Policy, type PolicyStatus,
 } from './api/usePolicy'
 import {
@@ -24,8 +24,30 @@ import {
 } from './api/useShiftPolicies'
 import { LeaveTypes } from './leave/LeaveTypes'
 
+// DRAFT was missing because the SPA's PolicyStatus type predated it, and the
+// ARCHIVED entry was unreachable dead code until the Manage tab gained a status
+// filter below — the admin table only ever fetched ACTIVE, so no row could
+// render any tone but 'ok'. Both are live now.
 const STATUS_TONE: Record<PolicyStatus, PillTone> = {
-  ACTIVE: 'ok', ARCHIVED: 'gray',
+  DRAFT: 'warn', ACTIVE: 'ok', ARCHIVED: 'gray',
+}
+
+// The three states com.hrms.policy.enums.PolicyStatus actually has, in
+// lifecycle order. No "All" entry: the list endpoint takes a single status and
+// maps null → ACTIVE (PolicyService.listPolicies), so an "All" button could
+// only re-show the Active rows under a label that promises everything —
+// exactly the kind of quiet lie that hid the archived policies in the first
+// place. One state at a time, honestly labelled.
+const MANAGE_FILTERS: { value: PolicyStatus; label: string }[] = [
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'ARCHIVED', label: 'Archived' },
+]
+
+const EMPTY_COPY: Record<PolicyStatus, string> = {
+  ACTIVE: 'No active policies yet — publish one above.',
+  DRAFT: 'No draft policies.',
+  ARCHIVED: 'Nothing archived. Archived policies land here and can be restored.',
 }
 
 // Single source of truth for the Rules & Policies tabs — labels, keys, and the
@@ -80,7 +102,7 @@ export const Policies: React.FC = () => {
         {activeTab === 'shifts' && <ShiftRulesTab />}
         {activeTab === 'leaves' && <LeaveRulesTab />}
         {activeTab === 'documents' && canRead && <PoliciesTab canAcknowledge={canAcknowledge} />}
-        {activeTab === 'manage' && canWrite && <ManageTab />}
+        {activeTab === 'manage' && canWrite && <ManageTab canWrite={canWrite} />}
       </HrTabPanel>
     </div>
   )
@@ -441,12 +463,20 @@ function LeaveRulesTab() {
 
 function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
   const { toast } = useToast()
-  const { data, isLoading } = usePolicies(0)
+  // ACTIVE is pinned explicitly rather than left to the server default. It is
+  // the same request, but it pins this screen to its own cache entry: the
+  // Manage tab can now fetch ARCHIVED, and a shared key would let an admin's
+  // archived list be rendered here as policies to acknowledge.
+  const { data, isLoading } = usePolicies(0, 'ACTIVE')
   const { data: myAcks = [] } = useMyAcknowledgements()
   const acknowledge = useAcknowledgePolicy()
   const [openId, setOpenId] = useState<string | null>(null)
 
   const policies = data?.content ?? []
+  // Derived per render from the query — never mirrored into state. The server
+  // list is scoped to each policy's CURRENT version, so an id can legitimately
+  // drop out after an admin bumps a version, and this Set has to be able to
+  // shrink for the Acknowledge button to come back. See useMyAcknowledgements.
   const ackSet = useMemo(() => new Set(myAcks), [myAcks])
 
   const stats = useMemo(() => {
@@ -513,6 +543,14 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
                       {p.content?.trim() || 'No content provided for this policy.'}
                     </p>
                     {canAcknowledge && (
+                      // `acked` is read straight off the server's version-scoped
+                      // list on every render, so when an admin bumps this
+                      // policy's version the id leaves that list and the
+                      // Acknowledge button replaces this label — which is the
+                      // point, since the employee has not agreed to the new
+                      // text. Do not memoise, freeze or optimistically pin this
+                      // to true: the acknowledgement is per version, not per
+                      // policy, and the re-ack path is the whole feature.
                       <div className="mt-4 flex justify-end">
                         {acked ? (
                           <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#15803D]">
@@ -551,16 +589,22 @@ const emptyDraft = (): DraftPolicy => ({
   title: '', category: '', version: '', effectiveDate: new Date().toISOString().slice(0, 10), content: '',
 })
 
-function ManageTab() {
+function ManageTab({ canWrite }: { canWrite: boolean }) {
   const { toast } = useToast()
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState('')
   const activeCompany = companyId || companies[0]?.id || ''
 
-  const { data, isLoading } = usePolicies(0)
+  // Which lifecycle state the table is showing. Defaults to ACTIVE, which is
+  // what this table always showed — the difference is that ARCHIVED is now
+  // reachable instead of being a state you could only enter, never leave.
+  const [statusFilter, setStatusFilter] = useState<PolicyStatus>('ACTIVE')
+
+  const { data, isLoading } = usePolicies(0, statusFilter)
   const create = useCreatePolicy()
   const update = useUpdatePolicy()
   const archive = useArchivePolicy()
+  const unarchive = useUnarchivePolicy()
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<DraftPolicy>(emptyDraft())
@@ -598,6 +642,11 @@ function ManageTab() {
         if (!activeCompany) { toast('No company available', 'error'); return }
         await create.mutateAsync({ companyId: activeCompany, ...body })
         toast('Policy published', 'success')
+        // A create always lands as ACTIVE (PolicyService.createPolicy defaults
+        // the status when the request omits it), so snap the filter back —
+        // otherwise publishing from the Archived or Draft view reports success
+        // against a table the new row cannot appear in.
+        setStatusFilter('ACTIVE')
       }
       reset()
     } catch (e) {
@@ -605,12 +654,46 @@ function ManageTab() {
     }
   }
 
-  const onArchive = async (id: string) => {
+  /**
+   * Archiving USED TO BE a one-click irreversible destruction: no confirm, and
+   * because this table only ever fetched ACTIVE the row vanished the instant
+   * the icon was hit, with no unarchive endpoint and no way to list archived
+   * policies. A single misclick removed a published policy from the product
+   * and recovery meant editing the database by hand.
+   *
+   * The confirm names the policy — a generic "Are you sure?" is dismissed on
+   * autopilot and would not have caught the misclick — and states where the
+   * row goes, so the undo is discoverable BEFORE the click rather than
+   * discovered as missing afterwards.
+   */
+  const onArchive = async (p: Policy) => {
+    if (!window.confirm(
+      `Archive "${p.title}"?\n\n`
+      + 'Employees will stop seeing it in Documents and can no longer acknowledge it. '
+      + 'You can bring it back at any time from the Archived filter on this tab.',
+    )) return
     try {
-      await archive.mutateAsync(id)
-      toast('Policy archived', 'success')
+      await archive.mutateAsync(p.id)
+      toast(`"${p.title}" archived — restore it from the Archived filter`, 'success')
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed to archive', 'error')
+    }
+  }
+
+  /**
+   * ARCHIVED → ACTIVE. No confirm here on purpose: restoring is the
+   * non-destructive direction and is itself undone by one Archive click, so
+   * a second dialog would only train people to click through dialogs.
+   */
+  const onRestore = async (p: Policy) => {
+    try {
+      await unarchive.mutateAsync(p.id)
+      // The row leaves this list on refetch (it is ACTIVE now, and the table is
+      // filtered to ARCHIVED), so the toast has to say where it went.
+      toast(`"${p.title}" restored — it is active for employees again`, 'success')
+    } catch (e) {
+      // 400 POLICY_NOT_ARCHIVED when another admin already restored it.
+      toast((e as Error)?.message ?? 'Failed to restore policy', 'error')
     }
   }
 
@@ -657,6 +740,39 @@ function ManageTab() {
         </div>
       </div>
 
+      {/* The only route to an archived policy. Without it the table was pinned
+          to the server's ACTIVE default, so archiving was a trapdoor. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1 rounded-lg border border-border-default bg-white p-0.5">
+          {MANAGE_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              // Only the expanded acknowledgement row is reset — `editingId` is
+              // deliberately left alone so switching filters mid-edit cannot
+              // silently discard what the admin was typing.
+              onClick={() => { setStatusFilter(f.value); setDetailId(null) }}
+              className={
+                statusFilter === f.value
+                  ? 'rounded-md bg-[#ECFDF5] px-3 py-1 text-xs font-semibold text-[#047857]'
+                  : 'rounded-md px-3 py-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary'
+              }
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {statusFilter === 'ARCHIVED' && (
+          <p className="text-xs text-text-tertiary">
+            Archived policies are hidden from employees. Restore one to publish it again.
+          </p>
+        )}
+        {statusFilter === 'DRAFT' && (
+          <p className="text-xs text-text-tertiary">
+            Drafts are not visible to employees until they are published.
+          </p>
+        )}
+      </div>
+
       <TableCard>
         <table className="hr-table [&_tbody_td]:!py-2.5">
           <thead>
@@ -673,7 +789,7 @@ function ManageTab() {
             {isLoading ? (
               [...Array(3)].map((_, i) => <tr key={i}><td colSpan={6} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
             ) : policies.length === 0 ? (
-              <tr><td colSpan={6} className="py-14 text-center text-sm text-text-tertiary">No policies published yet.</td></tr>
+              <tr><td colSpan={6} className="py-14 text-center text-sm text-text-tertiary">{EMPTY_COPY[statusFilter]}</td></tr>
             ) : policies.map((p) => (
               <React.Fragment key={p.id}>
                 <tr>
@@ -687,13 +803,24 @@ function ManageTab() {
                   </td>
                   <td><HrStatusPill tone={STATUS_TONE[p.status]}>{p.status}</HrStatusPill></td>
                   <td>
+                    {/* Every action here is a write the backend guards with
+                        hrms.policy.write (PolicyController PUT /policies/{id},
+                        POST /archive, POST /unarchive), so all three are gated
+                        on the same authority rather than on the tab alone. */}
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => startEdit(p)} aria-label={`Edit policy ${p.title}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]">
-                        <Pencil size={14} />
-                      </button>
-                      {p.status === 'ACTIVE' && (
-                        <button onClick={() => onArchive(p.id)} aria-label={`Archive policy ${p.title}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]">
+                      {canWrite && (
+                        <button onClick={() => startEdit(p)} aria-label={`Edit policy ${p.title}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]">
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      {canWrite && p.status === 'ACTIVE' && (
+                        <button onClick={() => onArchive(p)} disabled={archive.isPending} aria-label={`Archive policy ${p.title}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C] disabled:opacity-50">
                           <Archive size={14} />
+                        </button>
+                      )}
+                      {canWrite && p.status === 'ARCHIVED' && (
+                        <button onClick={() => onRestore(p)} disabled={unarchive.isPending} aria-label={`Restore policy ${p.title}`} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#ECFDF5] hover:text-[#047857] disabled:opacity-50">
+                          <ArchiveRestore size={14} />
                         </button>
                       )}
                     </div>
