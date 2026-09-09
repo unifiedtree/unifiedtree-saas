@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { Mail } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { forgotPassword } from '@/modules/hrms/employees/api/useInvitation'
-import { currentSubdomain } from '@/core/api/client'
 
 export const ForgotPassword: React.FC = () => {
   const [email, setEmail]     = useState('')
@@ -15,8 +14,10 @@ export const ForgotPassword: React.FC = () => {
     e.preventDefault()
     setLoading(true); setError('')
     try {
-      const subdomain = currentSubdomain()
-      await forgotPassword(email, subdomain || undefined)
+      // Tenant rides on the X-Tenant-Subdomain header apiJson already sets.
+      // Passing the subdomain string in the body used to 400 the request
+      // (backend field was UUID) — see forgotPassword() in useInvitation.ts.
+      await forgotPassword(email)
       setSent(true)
     } catch {
       // Still show success — don't leak email existence

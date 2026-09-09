@@ -364,9 +364,29 @@ public class SaasService {
             String currency) {
 
         UUID accountId = accountIdOrNull != null ? accountIdOrNull : UUID.randomUUID();
-        String passwordHash = passwordHashOrNull != null && !passwordHashOrNull.isBlank()
-                ? passwordHashOrNull
-                : "free-signup-no-password-available";  // placeholder for signed-in adds
+        // 2026-09-09 fix. Signed-in callers arrive with passwordHashOrNull == null
+        // (FreeSignupController skips the password for them), and this used to
+        // write the literal placeholder into the NEW workspace's
+        // auth.user_credentials row. That row is what /canonical-auth/login
+        // checks, so the owner could never log into the workspace they had just
+        // created by password — INVALID_CREDENTIALS every time, on every
+        // signed-in free-signup (prod: `src` 2026-09-09, `xyz` 2026-08-27).
+        // createWorkspaceForAccount() already does the right thing by passing
+        // account.passwordHash(); mirror it here. The placeholder stays ONLY for
+        // accounts that genuinely have no password (Google-only sign-in) — it can
+        // never match, which is correct: they enter via Google or set one through
+        // Reset Password.
+        String passwordHash;
+        if (passwordHashOrNull != null && !passwordHashOrNull.isBlank()) {
+            passwordHash = passwordHashOrNull;
+        } else if (accountIdOrNull != null) {
+            String existing = loadAccountForWorkspace(accountIdOrNull).passwordHash();
+            passwordHash = (existing != null && !existing.isBlank())
+                    ? existing
+                    : "free-signup-no-password-available";
+        } else {
+            passwordHash = "free-signup-no-password-available";
+        }
 
         SignupRequest signup = new SignupRequest(
                 companyName,

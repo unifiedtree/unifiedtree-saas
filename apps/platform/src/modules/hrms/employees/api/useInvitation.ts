@@ -34,10 +34,22 @@ export async function acceptInvite(token: string, password: string): Promise<Acc
   })
 }
 
-export async function forgotPassword(email: string, tenantId?: string): Promise<void> {
+/**
+ * Request a password-reset email. Tenant is NOT sent in the body: apiJson's
+ * authHeaders() already sends X-Tenant-Subdomain from the current host, and
+ * the backend falls back to resolving the tenant from the email when there
+ * is no header (mobile / root domain).
+ *
+ * 2026-09-09: this used to take a second `tenantId` arg and the only caller
+ * passed the SUBDOMAIN STRING into it. The backend field was typed UUID, so
+ * Jackson 400'd the request before the controller ran — no token, no email,
+ * and the page still showed "sent". Removing the parameter makes the mistake
+ * impossible at the call site.
+ */
+export async function forgotPassword(email: string): Promise<void> {
   await apiJson('/v1/auth/forgot-password', {
     method: 'POST',
-    body: JSON.stringify({ email, tenantId }),
+    body: JSON.stringify({ email }),
   })
 }
 

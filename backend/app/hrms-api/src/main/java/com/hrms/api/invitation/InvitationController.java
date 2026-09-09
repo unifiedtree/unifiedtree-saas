@@ -55,9 +55,28 @@ public class InvitationController {
             @RequestBody ForgotPasswordRequest req) {
         // Tenant context from X-Tenant-Subdomain or X-Tenant-ID header (set by TenantContextFilter)
         UUID tenantId = TenantContext.getTenantId();
-        if (tenantId == null && req.tenantId() != null) tenantId = req.tenantId();
+        // 2026-09-09: the SPA's /forgot-password page sent the SUBDOMAIN string
+        // ("src") in this field, which was typed UUID. Jackson rejected the body
+        // with 400 before this method ran — no reset token, no email, no log
+        // line, and the page still said "sent" (anti-enumeration by design).
+        // Every Reset Password click from a workspace login page was a silent
+        // black hole (seen twice in prod on 2026-09-09 08:38 / 08:41).
+        // The record is now String and parsed leniently: a real UUID is used,
+        // anything else is ignored and the header / email-resolution path
+        // (requestPasswordReset -> resolveLoginTenant) does the work. Old SPA
+        // bundles still cached in browsers stop 400ing too.
+        if (tenantId == null) tenantId = parseUuidOrNull(req.tenantId());
         invitationService.requestPasswordReset(req.email(), tenantId);
         return ResponseEntity.ok().build();
+    }
+
+    private static UUID parseUuidOrNull(String s) {
+        if (s == null || s.isBlank()) return null;
+        try {
+            return UUID.fromString(s.trim());
+        } catch (IllegalArgumentException notAUuid) {
+            return null;
+        }
     }
 
     /** Public — set a new password using the token from the reset email. */
@@ -97,7 +116,8 @@ public class InvitationController {
 
     public record AcceptInviteRequest(String token, String password) {}
 
-    public record ForgotPasswordRequest(String email, UUID tenantId) {}
+    /** tenantId is a String on purpose — see forgotPassword(): a non-UUID value must not 400 the request. */
+    public record ForgotPasswordRequest(String email, String tenantId) {}
 
     public record ResetPasswordRequest(String token, String password) {}
 }
