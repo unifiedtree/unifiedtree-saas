@@ -127,11 +127,47 @@ public class AdvanceController {
     //     renders for status==='APPROVED', so it was unreachable — advances
     //     could be approved but never disbursed, and since disburse seeds the
     //     salary-recovery schedule, recovery never started either.
+    //  3. 2026-09-09: was tenant-wide for anyone holding hrms.advance.approve,
+    //     a permission DEPT_MANAGER holds — so a department manager could read
+    //     every salary advance in the company, including other departments' and
+    //     executives'. Same class of hole the Expense approvals queue had.
+    //
+    //     hrms.advance.disburse is the tenant-wide marker: it is the finance/HR
+    //     tier (FINANCE_LEAD, HR_MANAGER, OWNER, SUPER_ADMIN) and they must see
+    //     everything to pay advances out. DEPT_MANAGER holds approve WITHOUT
+    //     disburse, so they get only advances routed to them. That is exactly
+    //     the client's standing rule: dept manager cannot see, HR can.
     @PreAuthorize("hasAnyAuthority('hrms.advance.approve','hrms.advance.disburse')")
     public ResponseEntity<PageResponse<AdvanceResponse>> pendingApprovals(
-            @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(advanceService.getByStatuses(
-                java.util.List.of(AdvanceStatus.REQUESTED, AdvanceStatus.APPROVED), pageable)));
+            @PageableDefault(size = 20) Pageable pageable,
+            @AuthenticationPrincipal Jwt jwt) {
+        var statuses = java.util.List.of(AdvanceStatus.REQUESTED, AdvanceStatus.APPROVED);
+        if (seesAllAdvances(jwt)) {
+            return ResponseEntity.ok(enrichPage(advanceService.getByStatuses(statuses, pageable)));
+        }
+        UUID approver = extractEmployeeId(jwt);
+        if (approver == null) {
+            // No employee identity to scope by — show nothing rather than
+            // everything. Failing open here would reinstate the leak.
+            return ResponseEntity.ok(enrichPage(
+                    advanceService.getPendingForApprover(NO_APPROVER, statuses, pageable)));
+        }
+        return ResponseEntity.ok(enrichPage(
+                advanceService.getPendingForApprover(approver, statuses, pageable)));
+    }
+
+    /** Sentinel that matches no row, so an unidentifiable caller sees an empty queue. */
+    private static final UUID NO_APPROVER = new UUID(0L, 0L);
+
+    /**
+     * Finance/HR tier — the roles that must see every advance in order to pay
+     * them out. Deliberately the SAME predicate the decide() guard uses, so
+     * what a caller can act on always equals what their queue shows them;
+     * letting the two drift produces either approvers who see requests they
+     * cannot action, or worse, ones they can action but never see.
+     */
+    private boolean seesAllAdvances(Jwt jwt) {
+        return callerHasPermission(jwt, "hrms.advance.disburse");
     }
 
     @Operation(summary = "Approve or reject a salary advance request")
@@ -149,6 +185,17 @@ public class AdvanceController {
         if (approver != null && approver.equals(existing.employeeId())) {
             throw new org.springframework.security.access.AccessDeniedException(
                     "You cannot approve your own advance request.");
+        }
+        // 2026-09-09: object-level guard. Until now the ONLY check here was the
+        // self-approval one above, so holding hrms.advance.approve was enough to
+        // decide ANY advance id in the tenant — a department manager could
+        // approve an executive's advance by guessing or scraping the id.
+        // Scoping the queue without scoping the write only hides the target; it
+        // does not protect it. Mirrors seesAllAdvances() exactly so what you can
+        // act on equals what your queue shows you.
+        if (!seesAllAdvances(jwt) && !java.util.Objects.equals(existing.approverId(), approver)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "This advance request is not routed to you for approval.");
         }
         return ResponseEntity.ok(enrichOne(advanceService.decide(id, approver, decision)));
     }

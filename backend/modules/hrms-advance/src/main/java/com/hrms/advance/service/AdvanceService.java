@@ -78,6 +78,14 @@ public class AdvanceService {
         return toPage(advanceRepository.findByStatusOrderByCreatedAtDesc(status, pageable));
     }
 
+    /** Approvals queue scoped to the advances routed to this approver. */
+    @Transactional(readOnly = true)
+    public PageResponse<AdvanceResponse> getPendingForApprover(
+            UUID approverId, java.util.Collection<AdvanceStatus> statuses, Pageable pageable) {
+        return toPage(advanceRepository
+                .findByStatusInAndApproverIdOrderByCreatedAtDesc(statuses, approverId, pageable));
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<AdvanceResponse> getByStatuses(java.util.Collection<AdvanceStatus> statuses, Pageable pageable) {
         return toPage(advanceRepository.findByStatusInOrderByCreatedAtDesc(statuses, pageable));
