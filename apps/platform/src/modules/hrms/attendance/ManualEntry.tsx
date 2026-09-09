@@ -7,7 +7,7 @@ import { HrPageHeader, HrButton } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies } from '../api/useOrg'
 import { useEmployeeDirectory, type WorkforceEmployee } from '../api/useWorkforce'
-import { useManualEntry } from '../api/useAttendance'
+import { useManualEntry, useTeamDashboard } from '../api/useAttendance'
 import { useDebounce } from '@/shared/hooks/useDebounce'
 
 // Manual Entry = admin / HR punches on behalf of an employee (missed check-in,
@@ -31,6 +31,25 @@ function fullName(e: WorkforceEmployee): string {
   return [e.firstName, e.middleName, e.lastName].filter(Boolean).join(' ') || e.email
 }
 
+/**
+ * The picker needs an id, a code and a display name and nothing else. Both
+ * sources — the full directory and the team roster — are normalised to this so
+ * the dropdown does not care which permission the caller got in on.
+ */
+interface PickerEmployee {
+  id: string
+  code?: string
+  name: string
+  /**
+   * Only the directory carries this. The team roster's own `status` field is
+   * today's ATTENDANCE state (PRESENT/ABSENT), a different thing entirely —
+   * mapping it here would make the "this employee has exited" warning fire on
+   * anyone who happened to be absent. Left undefined on the fallback path, so
+   * the warning simply does not render rather than rendering wrongly.
+   */
+  employmentStatus?: WorkforceEmployee['employmentStatus']
+}
+
 // Minimum data required for the employee picker — only fetch a lean directory
 // page and let the dropdown filter client-side after typing narrows the list.
 const PICKER_PAGE_SIZE = 100
@@ -49,33 +68,72 @@ export const ManualEntry: React.FC = () => {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
 
+  // Declared before the picker queries because the team-roster fallback keys
+  // off the selected date.
+  const [employeeId, setEmployeeId] = useState<string>(prefillEmployeeId)
+  const [date, setDate] = useState<string>(prefillDate)
+  const [checkIn, setCheckIn] = useState<string>('09:00')
+  const [checkOut, setCheckOut] = useState<string>('18:00')
+  const [reason, setReason] = useState<string>('')
+
   const { data: page, isLoading: dirLoading, isError: dirError } = useEmployeeDirectory({
     companyId,
     search: debouncedSearch || undefined,
     pageSize: PICKER_PAGE_SIZE,
   })
-  const employees = page?.content ?? []
+
+  // 2026-09-09: the directory 403 used to be a dead end — the page simply told
+  // DEPT_MANAGER to go away and come back via a Muster Roll deep link. That is
+  // an explanation, not a fix: the role this page EXISTS for still could not
+  // start a manual entry from the page itself.
+  //
+  // The team dashboard is the honest source for them. It returns
+  // StaffStatusResponse rows carrying employeeId / employeeCode / fullName /
+  // departmentName, and it is gated on attendance.team.read — the same
+  // authority the route guard already admits, and one DEPT_MANAGER holds. So
+  // the fallback grants no visibility the role did not already have; it just
+  // stops throwing away data the user can legitimately see.
+  //
+  // Only fetched when the directory actually failed, so HR/admin keep the
+  // richer server-side search and pay nothing for this path.
+  const useTeamFallback = dirError
+  const { data: teamDash, isLoading: teamLoading } = useTeamDashboard(
+    date || undefined, undefined, useTeamFallback,
+  )
+
+  const employees: PickerEmployee[] = useMemo(() => {
+    if (!useTeamFallback) {
+      return (page?.content ?? []).map((e) => ({
+        id: e.id,
+        code: e.employeeCode,
+        name: fullName(e),
+        employmentStatus: e.employmentStatus,
+      }))
+    }
+    // Team roster is unpaginated and unsearched server-side, so filter here.
+    const q = debouncedSearch.trim().toLowerCase()
+    return (teamDash?.staffStatuses ?? [])
+      .map((s) => ({ id: s.employeeId, code: s.employeeCode, name: s.fullName }))
+      .filter((e) => !q || e.name.toLowerCase().includes(q) || (e.code ?? '').toLowerCase().includes(q))
+  }, [useTeamFallback, page, teamDash, debouncedSearch])
 
   // 2026-09-08 audit. Two permission mismatches on this page:
   //  * The directory is hrms.employee.read, which V112 deliberately removed
   //    from DEPT_MANAGER (the PII-leak fix) — yet DEPT_MANAGER is exactly the
   //    role that holds attendance.regularization.approve, i.e. the role this
   //    page exists for. The 403 was swallowed into an empty picker that read as
-  //    "no employees match". Their working path is Muster Roll → row action →
-  //    here with ?employeeId= pre-filled (submit only needs the id), so when
-  //    the directory 403s we say so and point at that path instead of hiding a
-  //    dead search box.
+  //    "no employees match". Superseded 2026-09-09 by the team-roster fallback
+  //    above, which makes the picker actually work for that role; the muster
+  //    roll deep-link is now only the last resort when the roster is empty too.
   //  * The route guard admits attendance.team.read, but POST /manual-entry
   //    needs attendance.regularization.approve. ADMIN/MANAGER workspace roles
   //    hold team.read alone, filled the form, and got a generic "Failed to
   //    save". Gate Save on the real permission and say why.
   const canSaveEntry = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
 
-  const [employeeId, setEmployeeId] = useState<string>(prefillEmployeeId)
-  const [date, setDate] = useState<string>(prefillDate)
-  const [checkIn, setCheckIn] = useState<string>('09:00')
-  const [checkOut, setCheckOut] = useState<string>('18:00')
-  const [reason, setReason] = useState<string>('')
+  // Whichever source is actually feeding the picker is the one whose loading
+  // state the dropdown must reflect.
+  const pickerLoading = useTeamFallback ? teamLoading : dirLoading
 
   // Keep the picker in sync if the row-click deep-link changes after mount
   // (rare — usually only mount-time, but guards against a stale form).
@@ -154,11 +212,11 @@ export const ManualEntry: React.FC = () => {
           {selected && (
             <p className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
               <UserPlus size={14} className="text-[var(--text-tertiary)]" />
-              {fullName(selected)}
-              <span className="text-xs text-[var(--text-tertiary)]">· {selected.employeeCode}</span>
+              {selected.name}
+              {selected.code && <span className="text-xs text-[var(--text-tertiary)]">· {selected.code}</span>}
             </p>
           )}
-          {dirError ? (
+          {dirError && employees.length === 0 && !teamLoading ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
               {employeeId ? (
                 <>
@@ -167,8 +225,9 @@ export const ManualEntry: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <span className="font-semibold">Your role can't browse the employee directory.</span>{' '}
-                  Open the{' '}
+                  <span className="font-semibold">No employees available to select.</span>{' '}
+                  Your role can't browse the full directory and no one appears on your team roster
+                  for this date. Open the{' '}
                   <button
                     type="button"
                     className="font-semibold underline underline-offset-2"
@@ -182,6 +241,15 @@ export const ManualEntry: React.FC = () => {
             </div>
           ) : (
             <>
+              {dirError && (
+                // Team-roster fallback is in play. Say so plainly rather than
+                // letting the user wonder why a colleague they know exists is
+                // missing from a box that looks like a full directory search.
+                <p className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-[var(--text-secondary)]">
+                  Showing your team roster for {date || 'today'} — your role can't browse the full
+                  employee directory.
+                </p>
+              )}
               <input
                 type="text"
                 value={search}
@@ -195,13 +263,13 @@ export const ManualEntry: React.FC = () => {
                 size={6}
                 className="w-full rounded-lg border border-[var(--border-default)] bg-white px-2 py-1.5 text-sm text-[var(--text-primary)] focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20"
               >
-                {dirLoading && <option>Loading…</option>}
-                {!dirLoading && employees.length === 0 && (
+                {pickerLoading && <option>Loading…</option>}
+                {!pickerLoading && employees.length === 0 && (
                   <option disabled>No employees match — try a different search</option>
                 )}
                 {employees.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {fullName(e)} · {e.employeeCode}
+                    {e.name}{e.code ? ` · ${e.code}` : ''}
                   </option>
                 ))}
               </select>
