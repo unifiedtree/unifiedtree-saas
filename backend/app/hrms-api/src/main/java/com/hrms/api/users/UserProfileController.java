@@ -99,14 +99,31 @@ public class UserProfileController {
         UUID   employeeId   = (UUID)   u.get("employee_id");
         Map<String, Object> prefs = parsePrefs(u.get("notification_preferences"));
 
-        String firstName = null, lastName = null;
+        String firstName = null, lastName = null, companyName = null;
+        UUID companyId = null;
         if (employeeId != null) {
-            Map<String, Object> e = firstRow(
-                    "SELECT first_name, last_name FROM hrms.employees WHERE id = ? AND tenant_id = ?",
-                    employeeId, tenantId);
+            // 2026-09-10: company_id added to this lookup. GET /v1/hrms/companies
+            // requires org.company.read, which a plain EMPLOYEE does not hold, so
+            // the SPA had no way to learn the caller's own company — and every
+            // ESS surface that needs a companyId query param silently broke.
+            // Worst case: the Leave apply form could not load leave types
+            // (/v1/leave/types?companyId=... is isAuthenticated() and works
+            // fine, the SPA just never had an id to pass), so an employee could
+            // not request leave at all from the web.
+            // The company NAME comes along for the ride so the SPA can render a
+            // one-entry company selector without calling the admin-only list.
+            Map<String, Object> e = firstRow("""
+                    SELECT e.first_name, e.last_name, e.company_id, c.name AS company_name
+                      FROM hrms.employees e
+                      LEFT JOIN hrms.companies c
+                             ON c.id = e.company_id AND c.tenant_id = e.tenant_id
+                     WHERE e.id = ? AND e.tenant_id = ?
+                    """, employeeId, tenantId);
             if (e != null) {
-                firstName = (String) e.get("first_name");
-                lastName  = (String) e.get("last_name");
+                firstName   = (String) e.get("first_name");
+                lastName    = (String) e.get("last_name");
+                companyId   = (UUID)   e.get("company_id");
+                companyName = (String) e.get("company_name");
             }
         }
 
@@ -122,7 +139,7 @@ public class UserProfileController {
                 userId, tenantId, email,
                 blankToNull(firstName), blankToNull(lastName),
                 fullName, displayName,
-                employeeId, avatarUrl,
+                employeeId, companyId, blankToNull(companyName), avatarUrl,
                 blankToNull(phone),
                 prefs);
     }
@@ -292,6 +309,13 @@ public class UserProfileController {
             String  fullName,
             String  displayName,
             UUID    employeeId,
+            /** The caller's own company — see me(). Lets ESS screens pass a
+             *  companyId without needing org.company.read. Null for a
+             *  principal with no employee record (platform admins). */
+            UUID    companyId,
+            /** Display name of {@link #companyId}, so the SPA can render a
+             *  one-entry company selector without the admin-only list call. */
+            String  companyName,
             String  avatarUrl,
             String  phone,
             Map<String, Object> notificationPreferences

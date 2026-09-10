@@ -28,6 +28,25 @@ export interface CurrentUser {
   /** Public avatar URL (R2/CDN). Missing/null = show initials. */
   avatarUrl?: string | null
   phone?: string | null
+  /** This user's own employee row, when they have one. */
+  employeeId?: string | null
+  /**
+   * The caller's OWN company.
+   *
+   * 2026-09-10: added because GET /v1/hrms/companies requires org.company.read,
+   * which a plain EMPLOYEE does not hold — so the SPA had no way to learn the
+   * signed-in employee's company, and every ESS screen that needs a companyId
+   * query param silently broke. The worst case was Leave: the apply form could
+   * not load leave types (that endpoint is isAuthenticated() and works fine,
+   * the SPA just never had an id to pass), so an employee could not request
+   * leave at all from the web.
+   *
+   * Null for a principal with no employee record (platform admins) — those
+   * users have org.company.read anyway and go through useCompanies().
+   */
+  companyId?: string | null
+  /** Display name of {@link companyId}. */
+  companyName?: string | null
   /** In-app notification preferences (leave-request / payroll / mentions …).
    *  Kept as a free-form record so the backend can add flags without us
    *  cutting a matching FE release. */

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiJson } from '@/core/api/client'
+import { apiJson, HttpError } from '@/core/api/client'
+import { CURRENT_USER_KEY, type CurrentUser } from '@/shared/hooks/useCurrentUser'
 
 export interface Company {
   id: string
@@ -72,10 +73,48 @@ export interface Designation {
 
 // ── Companies ─────────────────────────────────────────────────────────────────
 
+/**
+ * Companies in this tenant.
+ *
+ * 2026-09-10: GET /v1/hrms/companies requires `org.company.read`, which a plain
+ * EMPLOYEE (and any custom role without it) does not hold — it 403s. Roughly
+ * twenty screens do `const activeCompany = companies[0]` and then pass
+ * `activeCompany?.id ?? ''` into a downstream query, so for those users the
+ * companyId was always empty and the dependent call either never fired or came
+ * back with nothing. That is silent: no error toast, just a permanently empty
+ * page. The Leave apply form was the worst case — no leave types loaded, so an
+ * employee could not request leave at all from the web.
+ *
+ * On 403 we fall back to a single-entry list built from the caller's OWN
+ * employee row (`GET /v1/users/me` → companyId/companyName), which every
+ * authenticated user can read. That is exactly what an employee needs: they
+ * belong to one company and have no business enumerating the others. Any other
+ * error still propagates so real outages stay visible.
+ */
 export function useCompanies() {
+  const qc = useQueryClient()
   return useQuery({
     queryKey: ['hrms', 'companies'],
-    queryFn: () => apiJson<Company[]>('/v1/hrms/companies'),
+    queryFn: async () => {
+      try {
+        return await apiJson<Company[]>('/v1/hrms/companies')
+      } catch (err) {
+        if (!(err instanceof HttpError) || err.status !== 403) throw err
+        // fetchQuery (not a plain apiJson) so this shares the cache entry with
+        // useCurrentUser instead of firing a second /users/me on every screen.
+        const me = await qc.fetchQuery<CurrentUser>({
+          queryKey: CURRENT_USER_KEY,
+          queryFn: () => apiJson<CurrentUser>('/v1/users/me'),
+          staleTime: 60_000,
+        })
+        if (!me?.companyId) throw err
+        return [{
+          id: me.companyId,
+          name: me.companyName ?? 'My company',
+          active: true,
+        } as Company]
+      }
+    },
   })
 }
 

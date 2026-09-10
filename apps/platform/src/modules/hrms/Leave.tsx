@@ -16,6 +16,7 @@ import {
 import { usePendingWfhApprovals, useWfhDecision } from './api/useWfh'
 import { useCompanies } from './api/useOrg'
 import { useWeekendDays } from './api/useSettings'
+import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { LeaveTypes } from './leave/LeaveTypes'
 import { HolidayCalendar } from './leave/HolidayCalendar'
 import { HrPageHeader, HrStatusPill, HrTabs, HrTabPanel, type PillTone } from '@/shared/components/hr'
@@ -109,15 +110,20 @@ function MyLeavesTab() {
 function ApplyTab() {
   const { toast } = useToast()
   const { data: companies = [] } = useCompanies()
-  const activeCompany = companies[0]
-  const { data: leaveTypes = [], isLoading: typesLoading } = useLeaveTypes(activeCompany?.id ?? '')
+  // useCompanies() self-heals the employee 403 (see its docblock); the extra
+  // `me.companyId` leg keeps this form working even if that list is still
+  // in flight, because without a company id there are no leave types to pick
+  // and the whole form is unusable.
+  const { data: me } = useCurrentUser()
+  const activeCompanyId = companies[0]?.id ?? me?.companyId ?? ''
+  const { data: leaveTypes = [], isLoading: typesLoading } = useLeaveTypes(activeCompanyId)
   const { data: myLeaves } = useMyLeaves(0)
   const { data: balances = [] } = useMyBalances(new Date().getFullYear())
   // 2026-09-10: was useHrConfig, which 403s for plain EMPLOYEE and DEPT_MANAGER
   // — the primary audience of this form. The failure was silent, so on a
   // 6-day or Fri+Sat workweek the day-count preview lied. useWeekendDays hits
   // the authenticated-only weekend-days subset endpoint added the same day.
-  const { data: hrConfig } = useWeekendDays(activeCompany?.id)
+  const { data: hrConfig } = useWeekendDays(activeCompanyId || undefined)
   const applyLeave = useApplyLeave()
 
   // Weekend/off-days come from the tenant's HR configuration
@@ -248,7 +254,7 @@ function ApplyTab() {
         endDate: effectiveEndDate,
         duration: form.duration,
         reason: form.reason,
-        companyId: activeCompany?.id,
+        companyId: activeCompanyId || undefined,
       })
       toast('Leave request submitted', 'success')
       setForm({ leaveTypeId: '', startDate: '', endDate: '', duration: 'FULL_DAY', reason: '' })
