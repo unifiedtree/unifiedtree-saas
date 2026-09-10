@@ -59,7 +59,7 @@ export interface DiversityRow {
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
-export function useHeadcountReport(companyId: string | null, asOf?: string) {
+export function useHeadcountReport(companyId: string | null, asOf?: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['hrms', 'reports', 'headcount', companyId, asOf ?? 'today'],
     queryFn: () => {
@@ -67,19 +67,19 @@ export function useHeadcountReport(companyId: string | null, asOf?: string) {
       if (asOf) params.set('asOf', asOf)
       return apiJson<HeadcountRow[]>(`/v1/reports/headcount?${params}`)
     },
-    enabled: !!companyId,
+    enabled: !!companyId && (opts?.enabled ?? true),
     staleTime: 60_000,
   })
 }
 
-export function useAttritionReport(companyId: string | null, from: string, to: string) {
+export function useAttritionReport(companyId: string | null, from: string, to: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['hrms', 'reports', 'attrition', companyId, from, to],
     queryFn: () => {
       const params = new URLSearchParams({ companyId: companyId!, from, to })
       return apiJson<AttritionRow[]>(`/v1/reports/attrition?${params}`)
     },
-    enabled: !!companyId && !!from && !!to,
+    enabled: !!companyId && !!from && !!to && (opts?.enabled ?? true),
     staleTime: 60_000,
   })
 }
@@ -120,14 +120,14 @@ export function useLateMarksReport(companyId: string | null, from: string, to: s
   })
 }
 
-export function useDiversityReport(companyId: string | null) {
+export function useDiversityReport(companyId: string | null, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['hrms', 'reports', 'diversity', companyId],
     queryFn: () => {
       const params = new URLSearchParams({ companyId: companyId! })
       return apiJson<DiversityRow[]>(`/v1/reports/diversity?${params}`)
     },
-    enabled: !!companyId,
+    enabled: !!companyId && (opts?.enabled ?? true),
     staleTime: 60_000,
   })
 }

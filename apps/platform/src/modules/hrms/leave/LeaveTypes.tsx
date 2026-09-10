@@ -276,15 +276,27 @@ function TypeRow({ type, onEdit, onDeactivate }: { type: LeaveTypeResponse; onEd
 interface LeaveTypesProps {
   crumb?: string
   subtitle?: string
+  /**
+   * 2026-09-10: added so a multi-company host page (Policies → Leave Rules) can
+   * scope this widget to its own selection. When omitted, we still self-resolve
+   * to the first company for standalone use (the /hrms/leave-types page).
+   *
+   * Previously hardcoded to companies[0]?.id, so in a multi-company tenant the
+   * Policies embed silently read and wrote only the first company's leave
+   * types, with no control to switch and no indication which company was in
+   * effect.
+   */
+  companyId?: string
 }
 
 export function LeaveTypes({
   crumb = 'Leave Management',
   subtitle = 'Configure leave types available to employees in this company',
+  companyId: companyIdProp,
 }: LeaveTypesProps = {}) {
   const { toast } = useToast()
   const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id ?? ''
+  const companyId = companyIdProp ?? companies[0]?.id ?? ''
   const { data: types = [], isLoading } = useLeaveTypes(companyId)
   const create = useCreateLeaveType()
   const deactivate = useDeactivateLeaveType()

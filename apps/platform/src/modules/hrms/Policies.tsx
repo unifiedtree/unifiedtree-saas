@@ -62,10 +62,18 @@ const EMPTY_COPY: Record<PolicyStatus, string> = {
 // 'documents' stays ungated at the tab level (its body is guarded by
 // hrms.policy.read) so every employee keeps the read + acknowledge screen they
 // have today.
+// 2026-09-10: 'documents' used to have NO `requires`, so useVisibleTabs
+// always kept it in the list, but the body was guarded by
+// hrms.policy.read. A user holding ONLY hrms.policy.acknowledge.self
+// (a custom RBAC configuration) or ONLY write-not-read landed on the
+// default tab and saw a completely blank panel — no empty state, no
+// error, nothing. Gating the tab on the same permission the body checks
+// removes it entirely for those users; the body-side guard stays as a
+// belt-and-braces defence.
 const ALL_TABS = [
   { key: 'shifts',    label: 'Shift Rules', requires: P.ATTENDANCE_REGULARIZATION_APPROVE },
   { key: 'leaves',    label: 'Leave Rules', requires: P.LEAVE_TYPE_WRITE },
-  { key: 'documents', label: 'Documents' },
+  { key: 'documents', label: 'Documents',   requires: 'hrms.policy.read' },
   { key: 'manage',    label: 'Manage',      requires: 'hrms.policy.write' },
 ] as const
 
@@ -97,6 +105,17 @@ export const Policies: React.FC = () => {
         active={activeTab}
         onChange={(k) => setTab(k as Tab)}
       />
+
+      {/* Every tab now has a `requires`, so an unlucky role could land here
+          with nothing visible. Say so honestly instead of an empty page. */}
+      {visibleTabs.length === 0 && (
+        <div className="ut-card mt-5 p-10 text-center">
+          <p className="text-sm font-semibold text-text-secondary">No policies access for this role</p>
+          <p className="mt-1 text-xs text-text-tertiary">
+            Ask an administrator to grant a Policies permission from Settings → Roles & Permissions.
+          </p>
+        </div>
+      )}
 
       <HrTabPanel tabKey={activeTab}>
         {activeTab === 'shifts' && <ShiftRulesTab />}
@@ -440,6 +459,16 @@ function ShiftRulesTab() {
  * Two forms writing the same fields would drift within a release.
  */
 function LeaveRulesTab() {
+  // 2026-09-10: Shift Rules and Manage both render a company <select> when
+  // there are multiple companies. Leave Rules didn't, so LeaveTypes silently
+  // read and wrote only the FIRST company's leave types — with no control to
+  // switch and no indication which company was in effect. Mirror the pattern
+  // used by the other tabs here rather than in the shared LeaveTypes widget,
+  // so the /hrms/leave-types standalone page is untouched.
+  const { data: companies = [] } = useCompanies()
+  const [companyId, setCompanyId] = useState('')
+  const activeCompanyId = companyId || companies[0]?.id || ''
+
   return (
     <div className="space-y-5">
       <div className="flex items-start gap-2.5 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-3">
@@ -450,9 +479,24 @@ function LeaveRulesTab() {
           (on/off plus a maximum number of days) recorded against the leave type.
         </p>
       </div>
+      {companies.length > 1 && (
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-text-secondary">Company</label>
+          <select
+            value={activeCompanyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            className="rounded-lg border border-border-default bg-white px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#059669]/30"
+          >
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <LeaveTypes
         crumb="Rules & Policies"
         subtitle="Entitlement, paid status and carry-forward allowance per leave type"
+        companyId={activeCompanyId}
       />
     </div>
   )

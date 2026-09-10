@@ -15,6 +15,7 @@ import {
 } from '@/modules/hrms/api/useReports'
 import { useEmployeeDirectory } from '@/modules/hrms/api/useWorkforce'
 import { useCompanies } from '@/modules/hrms/api/useOrg'
+import { usePermission, P } from '@unifiedtree/sdk'
 import {
   HrPageHeader,
   HrStatCard,
@@ -60,9 +61,18 @@ export const WorkforceAnalytics: React.FC = () => {
   const asOf = to
 
   // ── Data hooks (all gated on a real companyId) ──────────────────────────────
-  const headcount = useHeadcountReport(activeCompanyId || null, asOf)
-  const diversity = useDiversityReport(activeCompanyId || null)
-  const attrition = useAttritionReport(activeCompanyId || null, from, to)
+  // 2026-09-10: the route admits anyOf[headcount, attrition, diversity], but
+  // all three hooks fired unconditionally, so a role granted only one of them
+  // (e.g. FINANCE_LEAD, per V026) got a 403 on the other two — and since the
+  // hooks' `.error` is never read, those cards rendered as empty data rather
+  // than as "you can't see this". Gate each fetch on the specific permission
+  // the endpoint enforces; the tiles below already handle empty gracefully.
+  const canReadHeadcount = usePermission(P.HRMS_REPORT_HEADCOUNT)
+  const canReadDiversity = usePermission(P.HRMS_REPORT_DIVERSITY)
+  const canReadAttrition = usePermission(P.HRMS_REPORT_ATTRITION)
+  const headcount = useHeadcountReport(activeCompanyId || null, asOf, { enabled: canReadHeadcount })
+  const diversity = useDiversityReport(activeCompanyId || null, { enabled: canReadDiversity })
+  const attrition = useAttritionReport(activeCompanyId || null, from, to, { enabled: canReadAttrition })
   const directory = useEmployeeDirectory(
     { companyId: activeCompanyId, page: 0, pageSize: 1 },
     { enabled: !!activeCompanyId },
