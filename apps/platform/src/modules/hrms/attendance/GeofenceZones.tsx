@@ -15,7 +15,12 @@ import {
 // behaviour. Write actions are gated on org.geofence.write — the same authority
 // the backend enforces (@PreAuthorize) on POST/PUT/DELETE.
 
-const COLOR_PRESETS = ['#059669', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899']
+// Must stay identical to the mobile Geofence Zones palette
+// (Attendance_App/app/geofence-zones.tsx). The first swatch used to be
+// #059669 here and #0F6E56 there, so a zone created on a phone rendered a
+// green the web picker could not select — it showed as "no swatch chosen"
+// and picking any colour to save silently restyled the zone.
+const COLOR_PRESETS = ['#0F6E56', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899']
 const PUNCH_METHODS = ['FACE_RECOGNITION', 'GPS', 'MANUAL'] as const
 
 interface ZoneFormState {
@@ -227,6 +232,13 @@ function ZoneFormModal({
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
+            {/* The app tells you where to go when the list is empty; the web
+                just showed a dropdown with one useless option. */}
+            {departments.length === 0 && (
+              <p className="mt-1 text-xs text-text-tertiary">
+                No departments available — add one from Departments first.
+              </p>
+            )}
           </div>
 
           <div>

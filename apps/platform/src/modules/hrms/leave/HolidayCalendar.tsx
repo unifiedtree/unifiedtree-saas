@@ -38,7 +38,10 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
   const { toast } = useToast()
   const create = useCreateHoliday()
   const [form, setForm] = useState({
-    holidayDate: '',
+    // Pre-filled to 1 Jan of the year being viewed, as the app does. Starting
+    // empty invited an out-of-year date that then vanished from the list the
+    // moment it was saved.
+    holidayDate: `${year}-01-01`,
     holidayName: '',
     holidayType: 'NATIONAL' as HolidayType,
     description: '',
@@ -155,7 +158,10 @@ export function HolidayCalendar({ canEdit }: HolidayCalendarProps = {}) {
   const canEditFromPerm = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
   const editable = canEdit ?? canEditFromPerm
 
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - 1 + i)
+  // The mobile Holiday Calendar navigates years with unbounded +/- chevrons.
+  // A fixed 5-slot window here meant HR could not open an older year to check
+  // what was declared, nor plan further than three years out.
+  const years = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i)
   const sorted = [...holidays].sort((a, b) => a.holidayDate.localeCompare(b.holidayDate))
 
   const handleDelete = async (id: string, name: string) => {
