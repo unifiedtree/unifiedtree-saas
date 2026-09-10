@@ -66,6 +66,9 @@ function MyClaimsTab() {
   const { data, isLoading, isError, refetch } = useMyClaims(0, 200)
   const claims = data?.content ?? []
   const total = data?.totalElements ?? claims.length
+  // Which row's detail panel is open. One at a time — the detail fetches per
+  // claim, so expanding every row at once would be a needless N fan-out.
+  const [expandedMyId, setExpandedMyId] = useState<string | null>(null)
 
   const stats = useMemo(() => {
     const pending = claims.filter((c) => c.status === 'SUBMITTED').length
@@ -110,12 +113,39 @@ function MyClaimsTab() {
             ) : claims.length === 0 ? (
               <tr><td colSpan={4} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No expense claims yet</p><p className="mt-1 text-xs text-text-tertiary">Use “Submit Claim” to file your first reimbursement.</p></td></tr>
             ) : claims.map((c) => (
-              <tr key={c.id}>
-                <td className="font-medium text-text-primary">{c.title}</td>
-                <td className="font-semibold text-text-primary">{inr(c.totalAmount)}</td>
-                <td><HrStatusPill tone={STATUS_TONE[c.status]}>{c.status}</HrStatusPill></td>
-                <td className="hidden sm:table-cell text-text-secondary">{c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—'}</td>
-              </tr>
+              <React.Fragment key={c.id}>
+                <tr>
+                  <td className="font-medium text-text-primary">
+                    {/* 2026-09-10: rows used to have no drill-in, so an
+                        employee whose claim was REJECTED could see the red
+                        pill but never read the approver's comment or their
+                        own line items. GET /v1/expense/claims/{id} is gated
+                        on hrms.expense.claim.self, which every claimant
+                        holds by construction (they submitted the claim), so
+                        the expander is safe to render on any of their rows. */}
+                    <button
+                      type="button"
+                      onClick={() => setExpandedMyId(expandedMyId === c.id ? null : c.id)}
+                      aria-expanded={expandedMyId === c.id}
+                      aria-label={`${expandedMyId === c.id ? 'Hide' : 'Show'} details for ${c.title}`}
+                      className="inline-flex items-center gap-1.5 text-left font-medium text-[#047857] hover:text-[#064E3B]"
+                    >
+                      {expandedMyId === c.id ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
+                      {c.title}
+                    </button>
+                  </td>
+                  <td className="font-semibold text-text-primary">{inr(c.totalAmount)}</td>
+                  <td><HrStatusPill tone={STATUS_TONE[c.status]}>{c.status}</HrStatusPill></td>
+                  <td className="hidden sm:table-cell text-text-secondary">{c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—'}</td>
+                </tr>
+                {expandedMyId === c.id && (
+                  <tr>
+                    <td colSpan={4} className="bg-bg-base/40 p-0">
+                      <ClaimDetailPanel claimId={c.id} />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -168,11 +198,16 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
   const [notes, setNotes] = useState('')
   const [items, setItems] = useState<DraftItem[]>([emptyItem()])
 
-  // Same companyId the submit payload below sends, so the cap we show is the
-  // cap the server will actually evaluate the claim against. (Both use
-  // companies[0] — if that ever becomes the employee's own company, change
-  // both together or the hint silently starts describing a different company.)
-  const claimCompanyId = companies[0]?.id
+  // 2026-09-10: was hardcoded to companies[0]?.id, which in a multi-company
+  // tenant booked every claim to whichever company sorted first — and worse,
+  // ExpenseController.submit falls back to the employee's own companyId when
+  // companyId is omitted, so the SPA was actively overriding a correct
+  // default with a wrong value. Multi-company tenants get a picker; single
+  // -company tenants pass undefined and let the server pick.
+  const [companyId, setCompanyId] = useState('')
+  const claimCompanyId = companies.length > 1
+    ? (companyId || undefined)  // let user pick; undefined => server uses employee's company
+    : undefined                  // let server derive from employee — no override
   // Gated: GET /v1/expense/policies requires hrms.expense.policy.read, which
   // the seeded EMPLOYEE role does NOT hold. Firing it regardless would 403 on
   // every visit for exactly the people who submit the most claims, so we skip
@@ -244,6 +279,20 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
     <div className="max-w-2xl space-y-5">
       <div className="ut-card p-5">
         <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Submit Claim</h3>
+        {/* Multi-company tenants get an explicit picker. Single-company
+            tenants don't need one — the server falls back to the employee's
+            own company when companyId is omitted. */}
+        {companies.length > 1 && (
+          <div className="mb-4">
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Company</label>
+            <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} className="ut-select">
+              <option value="">My company (default)</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Claim Title *</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Client visit — Mumbai" className="ut-input" />
       </div>
