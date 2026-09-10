@@ -21,7 +21,9 @@ import {
 // green the web picker could not select — it showed as "no swatch chosen"
 // and picking any colour to save silently restyled the zone.
 const COLOR_PRESETS = ['#0F6E56', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899']
-const PUNCH_METHODS = ['FACE_RECOGNITION', 'GPS', 'MANUAL'] as const
+// Zones are still CREATED with FACE_RECOGNITION (see the form default) — the
+// column is NOT NULL — but the value is no longer offered as a choice, because
+// nothing reads it. The old three-option list lived here.
 
 interface ZoneFormState {
   name: string
@@ -241,25 +243,32 @@ function ZoneFormModal({
             )}
           </div>
 
+          {/* 2026-09-10: this was three clickable chips (FACE_RECOGNITION /
+              GPS / MANUAL) that appeared to configure how people punch in.
+              They did not. `punch_method` is written to geo_fence_zones and
+              then read by nothing — a repo-wide search finds it only in the
+              entity and the two DTOs, never in the check-in path. Setting a
+              zone to MANUAL changed no behaviour whatsoever, while strongly
+              implying face verification could be switched off.
+              The mobile screen shows this as read-only with an explanation;
+              matching that is both honest and the parity the client asked for.
+              If per-zone punch policy is wanted for real, it needs enforcing
+              in AttendanceService first — then this can become editable. */}
           <div>
-            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Punch Method</label>
+            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Punch Verification</label>
             <div className="flex flex-wrap gap-2">
-              {PUNCH_METHODS.map((m) => (
-                <button
+              {(['GPS location', 'Face recognition'] as const).map((m) => (
+                <span
                   key={m}
-                  type="button"
-                  onClick={() => set('punchMethod', m)}
-                  className={clsx(
-                    'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
-                    form.punchMethod === m
-                      ? 'border-primary bg-primary-light text-primary'
-                      : 'border-border-default bg-surface text-text-secondary hover:text-text-primary'
-                  )}
+                  className="rounded-full border border-border-default bg-bg-base px-3 py-1.5 text-xs font-medium text-text-secondary"
                 >
-                  {m.replace('_', ' ')}
-                </button>
+                  {m}
+                </span>
               ))}
             </div>
+            <p className="mt-1.5 text-xs text-text-tertiary">
+              Both are always required — employees must be inside the zone and pass a face check to punch.
+            </p>
           </div>
 
           <div>
@@ -391,12 +400,13 @@ export const GeofenceZones: React.FC = () => {
                   <Radius size={14} className="text-text-tertiary flex-shrink-0" />
                   <span>{z.radiusMeters}m radius</span>
                 </div>
-                {z.punchMethod && (
-                  <div className="flex items-center gap-2">
-                    <MapPin size={14} className="text-text-tertiary flex-shrink-0" />
-                    <span>{z.punchMethod.replace('_', ' ')}</span>
-                  </div>
-                )}
+                {/* punch_method is stored but never consulted at check-in (see
+                    the form above), so a card reading "MANUAL" claimed a policy
+                    the system does not apply. Every zone requires GPS + face. */}
+                <div className="flex items-center gap-2">
+                  <MapPin size={14} className="text-text-tertiary flex-shrink-0" />
+                  <span>GPS + face</span>
+                </div>
                 {z.departmentId && (
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Dept</span>
