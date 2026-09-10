@@ -188,21 +188,39 @@ interface CompanySelectorProps {
 }
 
 export function CompanySelector({ value, onChange }: CompanySelectorProps) {
-  const { data: companies = [], isLoading } = useCompanies()
+  const { data: companies = [], isLoading, error } = useCompanies()
+
+  // 2026-09-10: /v1/hrms/companies is gated on org.company.read. All eight
+  // seeded roles that pass the report route guards also hold that, but a
+  // CUSTOM role built with only report permissions passes the route guard
+  // and then 403s on this list. The dropdown used to swallow the error and
+  // sit on "Select a company" forever with no explanation — the same
+  // "I clicked and nothing happened" pattern. Now the error is surfaced.
+  const isForbidden = error != null && /403|forbidden|access/i.test((error as Error).message)
 
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="min-w-[180px] rounded-xl border border-border-default bg-white px-3 py-2.5 text-sm text-text-primary transition-all focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20"
-      disabled={isLoading}
-    >
-      <option value="">Select company…</option>
-      {companies.map((c) => (
-        <option key={c.id} value={c.id}>
-          {c.name}
+    <div className="min-w-[180px]">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-border-default bg-white px-3 py-2.5 text-sm text-text-primary transition-all focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20 disabled:bg-bg-base disabled:text-text-tertiary"
+        disabled={isLoading || isForbidden}
+        title={isForbidden ? 'Your role cannot browse companies — ask an administrator to grant org.company.read' : undefined}
+      >
+        <option value="">
+          {isForbidden ? 'Cannot browse companies' : 'Select company…'}
         </option>
-      ))}
-    </select>
+        {companies.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      {isForbidden && (
+        <p className="mt-1 text-xs text-red-700">
+          Your role can generate reports but cannot browse the company list. Ask an administrator to grant the org.company.read permission.
+        </p>
+      )}
+    </div>
   )
 }
