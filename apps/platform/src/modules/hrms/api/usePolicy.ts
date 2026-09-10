@@ -62,12 +62,16 @@ export interface Page<T> {
  * re-show the Active rows under a label promising more than it delivers.
  * Callers pick one state.
  */
+/** Page size for the Policies table — exported so the "Showing 1-N of X"
+ *  label cannot drift from the value the query actually asks for. */
+export const POLICIES_PAGE_SIZE = 50
+
 export function usePolicies(page = 0, status?: PolicyStatus) {
   return useQuery({
     queryKey: ['hrms', 'policy', 'list', page, status ?? 'ACTIVE'],
     queryFn: () =>
       apiJson<Page<Policy>>(
-        `/v1/policy/policies?page=${page}&size=50${status ? `&status=${status}` : ''}`,
+        `/v1/policy/policies?page=${page}&size=${POLICIES_PAGE_SIZE}${status ? `&status=${status}` : ''}`,
       ),
     staleTime: 30_000,
   })

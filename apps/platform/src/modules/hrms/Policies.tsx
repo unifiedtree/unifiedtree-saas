@@ -16,8 +16,10 @@ import { useCompanies } from './api/useOrg'
 import {
   usePolicies, useMyAcknowledgements, useAcknowledgePolicy, usePolicyAcknowledgements,
   useCreatePolicy, useUpdatePolicy, useArchivePolicy, useUnarchivePolicy,
+  POLICIES_PAGE_SIZE,
   type Policy, type PolicyStatus,
 } from './api/usePolicy'
+import { HrPagination, hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import {
   useShiftPolicies, useCreateShiftPolicy, useUpdateShiftPolicy, useDeleteShiftPolicy,
   type ShiftPolicy, type ShiftPolicyPayload, type ShiftType,
@@ -511,12 +513,20 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
   // the same request, but it pins this screen to its own cache entry: the
   // Manage tab can now fetch ARCHIVED, and a shared key would let an admin's
   // archived list be rendered here as policies to acknowledge.
-  const { data, isLoading } = usePolicies(0, 'ACTIVE')
+  //
+  // 2026-09-10: page state — was hard-coded to 0 so policy 51+ was invisible.
+  const [page, setPage] = useState(0)
+  const { data, isLoading } = usePolicies(page, 'ACTIVE')
   const { data: myAcks = [] } = useMyAcknowledgements()
   const acknowledge = useAcknowledgePolicy()
   const [openId, setOpenId] = useState<string | null>(null)
 
   const policies = data?.content ?? []
+  const totalElements = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
+  // 2026-09-10: step back if a mutation shrinks the list below the current
+  // page so the table doesn't render empty at "page 4 of 3".
+  useClampedPage(page, totalPages, setPage)
   // Derived per render from the query — never mirrored into state. The server
   // list is scoped to each policy's CURRENT version, so an id can legitimately
   // drop out after an admin bumps a version, and this Set has to be able to
@@ -542,9 +552,12 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3">
-        <HrStatCard icon={<FileText size={18} />} color="blue" value={stats.total} label="Active Policies" loading={isLoading} />
-        <HrStatCard icon={<CheckCircle2 size={18} />} color="green" value={stats.acknowledged} label="Acknowledged" loading={isLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending" loading={isLoading} />
+        {/* Total is the SERVER count (totalElements), not policies.length —
+            the loaded page is at most POLICIES_PAGE_SIZE, so on a large
+            tenant the tile used to under-report every acknowledgement stat. */}
+        <HrStatCard icon={<FileText size={18} />} color="blue" value={totalElements} label="Active Policies" loading={isLoading} />
+        <HrStatCard icon={<CheckCircle2 size={18} />} color="green" value={stats.acknowledged} label="Acknowledged (this page)" loading={isLoading} />
+        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending (this page)" loading={isLoading} />
       </div>
 
       {isLoading ? (
@@ -614,6 +627,19 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
           })}
         </div>
       )}
+
+      {/* Pagination — rendered below the accordion because this tab doesn't use
+          TableCard.footer. HrPagination returns null on a single page, so the
+          bar only appears when it matters. */}
+      {!isLoading && totalPages > 1 && (
+        <HrPagination
+          page={page}
+          pageSize={POLICIES_PAGE_SIZE}
+          totalElements={totalElements}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
+      )}
     </div>
   )
 }
@@ -644,7 +670,12 @@ function ManageTab({ canWrite }: { canWrite: boolean }) {
   // reachable instead of being a state you could only enter, never leave.
   const [statusFilter, setStatusFilter] = useState<PolicyStatus>('ACTIVE')
 
-  const { data, isLoading } = usePolicies(0, statusFilter)
+  // 2026-09-10: was hard-coded to page 0, so policy 51+ was invisible in the
+  // admin table too. Reset to 0 when the status filter changes or the caller
+  // lands on an out-of-range page after switching lists.
+  const [page, setPage] = useState(0)
+  React.useEffect(() => { setPage(0) }, [statusFilter])
+  const { data, isLoading } = usePolicies(page, statusFilter)
   const create = useCreatePolicy()
   const update = useUpdatePolicy()
   const archive = useArchivePolicy()
@@ -655,6 +686,9 @@ function ManageTab({ canWrite }: { canWrite: boolean }) {
   const [detailId, setDetailId] = useState<string | null>(null)
 
   const policies = data?.content ?? []
+  const totalElements = data?.totalElements ?? 0
+  const totalPages = data?.totalPages ?? 1
+  useClampedPage(page, totalPages, setPage)
 
   const startEdit = (p: Policy) => {
     setEditingId(p.id)
@@ -817,7 +851,9 @@ function ManageTab({ canWrite }: { canWrite: boolean }) {
         )}
       </div>
 
-      <TableCard>
+      <TableCard footer={hrPaginationFooter({
+        page, pageSize: POLICIES_PAGE_SIZE, totalElements, totalPages, onPageChange: setPage,
+      })}>
         <table className="hr-table [&_tbody_td]:!py-2.5">
           <thead>
             <tr>
