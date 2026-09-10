@@ -231,6 +231,18 @@ function ApplyTab() {
     reasonMissing ||
     reasonTooShort
 
+  // First blocking condition, in the order the user fills the form. Overlap
+  // and exceeds-balance are excluded — each already renders its own banner.
+  const disabledReason: string | null =
+    !form.leaveTypeId ? 'Select a leave type to continue.'
+    : !form.startDate ? 'Pick a start date.'
+    : startInPast ? 'Start date cannot be in the past.'
+    : !effectiveEndDate ? 'Pick an end date.'
+    : endBeforeStart ? 'End date must be on or after the start date.'
+    : reasonMissing ? 'A reason is required.'
+    : reasonTooShort ? `Reason needs at least 10 characters (${reasonTrimmedLen}/10).`
+    : null
+
   const handleSubmit = async () => {
     if (!form.leaveTypeId || !form.startDate || !effectiveEndDate) {
       toast('Leave type and dates are required', 'error')
@@ -395,7 +407,14 @@ function ApplyTab() {
       )}
       </div>
 
-      <div className="mt-5 flex justify-end border-t border-border-default pt-4">
+      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border-default pt-4">
+        {/* Submit is now disabled for a past start date and for end-before-
+            start (it used to stay live and only toast on click). A disabled
+            button with no explanation is its own dead end, so say which
+            condition is blocking — the mobile screen carries the same single
+            hint line. Conditions that already render their own red banner
+            above (overlap, exceeds balance) are deliberately not repeated. */}
+        <p className="text-xs text-text-tertiary">{disabledReason ?? ''}</p>
         <button
           onClick={handleSubmit}
           disabled={submitDisabled}

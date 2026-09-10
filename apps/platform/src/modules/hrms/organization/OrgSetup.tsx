@@ -536,6 +536,16 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
   const setHead = useSetDepartmentHead()
   const setAppearance = useSetDepartmentAppearance()
   const updateDeptDetails = useUpdateDepartmentDetails()
+
+  // Department-head picker filter — see the Field below.
+  const [headQuery, setHeadQuery] = React.useState('')
+  const headCandidates = React.useMemo(() => {
+    const q = headQuery.trim().toLowerCase()
+    if (!q) return employees
+    return employees.filter((e) =>
+      [e.firstName, e.lastName, e.employeeCode, e.email]
+        .filter(Boolean).join(' ').toLowerCase().includes(q))
+  }, [employees, headQuery])
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Department | null>(null)
   const emptyDeptForm = { name: '', code: '', description: '', departmentHeadEmployeeId: '', colorHex: DEFAULT_DEPT_COLOR, iconKey: DEFAULT_DEPT_ICON }
@@ -817,14 +827,34 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
             <Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Brief description (optional)" />
           </Field>
           <Field label="Department Head">
+            {/* The mobile screen searches staff by name / email / code. Here it
+                was a flat dropdown of up to 200 employees, which is unusable
+                past a couple of dozen people — hence the filter box. Matching
+                on code and email too, because that is how the app finds them
+                and two people can share a first name. */}
+            {employees.length > 8 && (
+              <input
+                value={headQuery}
+                onChange={(e) => setHeadQuery(e.target.value)}
+                placeholder="Search name, code or email…"
+                className="mb-2 w-full rounded-xl border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              />
+            )}
             <HrSelect
               value={form.departmentHeadEmployeeId}
               onChange={(v) => set('departmentHeadEmployeeId', v)}
               options={[
                 { value: '', label: 'None' },
-                ...employees.map((emp) => ({ value: emp.id, label: [emp.firstName, emp.lastName].filter(Boolean).join(' ') })),
+                ...headCandidates.map((emp) => ({
+                  value: emp.id,
+                  label: [[emp.firstName, emp.lastName].filter(Boolean).join(' '), emp.employeeCode]
+                    .filter(Boolean).join(' · '),
+                })),
               ]}
             />
+            {headQuery.trim() && headCandidates.length === 0 && (
+              <p className="mt-1 text-xs text-text-tertiary">No staff match “{headQuery.trim()}”.</p>
+            )}
           </Field>
           <Field label="Colour">
             <div className="flex flex-wrap gap-2">
@@ -866,6 +896,32 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
               ))}
             </div>
           </Field>
+
+          {/* Live preview + the explanation of what the colour is FOR. Both
+              come from the mobile Departments screen; the web offered a colour
+              and an icon with no indication of where either would show up. */}
+          <div className="rounded-xl border border-border-default bg-bg-base p-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Preview</p>
+            <div className="flex items-center gap-3">
+              <span className="h-9 w-1.5 rounded-full" style={{ backgroundColor: form.colorHex }} />
+              <span
+                className="flex h-9 w-9 items-center justify-center rounded-lg"
+                style={{ backgroundColor: `${form.colorHex}20`, color: form.colorHex }}
+              >
+                {(() => {
+                  const Icon = (DEPT_ICONS.find((i) => i.key === form.iconKey) ?? DEPT_ICONS[0]).Icon
+                  return <Icon size={18} />
+                })()}
+              </span>
+              <span className="truncate text-sm font-medium text-text-primary">
+                {form.name.trim() || 'Department Name'}
+              </span>
+            </div>
+            <p className="mt-2.5 text-xs text-text-tertiary">
+              Department colours appear as left-border stripes across the Staff Directory and Attendance Logs.
+            </p>
+          </div>
+
           <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
             <button onClick={() => setOpen(false)} className={BTN_CANCEL}>Cancel</button>
             <Can code={P.HRMS_DEPARTMENT_WRITE}>
