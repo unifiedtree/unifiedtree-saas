@@ -186,8 +186,12 @@ export function HolidayCalendar({ canEdit }: HolidayCalendarProps = {}) {
                 {years.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
+            {/* 2026-09-10: was clickable while companyId was empty, but the
+                drawer sits behind `{showAdd && companyId && editable}`, so
+                the button visibly depressed with no drawer, no toast and no
+                disabled state. Disable it explicitly. */}
             {editable && (
-              <HrButton size="sm" onClick={() => setShowAdd(true)}>
+              <HrButton size="sm" onClick={() => setShowAdd(true)} disabled={!companyId}>
                 <Plus size={14} />
                 Add Holiday
               </HrButton>

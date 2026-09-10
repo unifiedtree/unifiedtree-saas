@@ -348,7 +348,12 @@ export function LeaveTypes({
                 Seed defaults
               </HrButton>
             )}
-            <HrButton onClick={() => setShowAdd(true)}>
+            {/* 2026-09-10: was clickable while companyId was empty, but the
+                drawer body is `{showAdd && companyId && …}`, so the button
+                visibly depressed and no drawer opened — no toast, no disabled
+                state — while companies were loading or the query returned
+                []. Disable it explicitly. */}
+            <HrButton onClick={() => setShowAdd(true)} disabled={!companyId}>
               <Plus size={13} />
               Add Type
             </HrButton>
