@@ -211,6 +211,17 @@ public class WorkforceEmployeeService {
         UUID resolvedBranchId = req.branchId() != null
                 ? req.branchId()
                 : deriveBranchFromGeofence(req.geoFenceZoneId());
+        // Anil Branch.docx (2026-09-10): the Directory still showed "—" under
+        // Branch for most people, with a Branch filter above it that could
+        // never match them. The zone-derivation above only fires when HR picks
+        // a Punch Zone, and that field is explicitly optional ("leave
+        // unselected to allow company-wide punch-in") — so the common path set
+        // no branch at all. The Add Employee wizard deliberately has no Branch
+        // field, because it mirrors the mobile Add Staff form field for field.
+        // When the company has exactly ONE active branch there is no ambiguity
+        // about where a new hire sits, so default to it. Multi-branch tenants
+        // are left null rather than guessed at; HR sets it on the profile.
+        if (resolvedBranchId == null) resolvedBranchId = soleActiveBranchOf(req.companyId());
         e.setBranchId(resolvedBranchId);
         // Weekly off days CSV (ISO 1=Mon..7=Sun). Default Sat+Sun when unset.
         e.setWeeklyOffDays((req.weeklyOffDays() == null || req.weeklyOffDays().isBlank())
@@ -617,6 +628,24 @@ public class WorkforceEmployeeService {
             return v == null ? null : (UUID) v;
         } catch (Exception ex) {
             log.warn("branch-derive from geofence {} failed: {}", zoneId, ex.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * The company's only active branch, or null when it has none or more than
+     * one. RLS on org.branches scopes this to the caller's tenant. Never throws
+     * — a failure here must not block onboarding over a display field.
+     */
+    private UUID soleActiveBranchOf(UUID companyId) {
+        if (companyId == null) return null;
+        try {
+            List<Map<String, Object>> rows = jdbc.queryForList(
+                    "SELECT id FROM org.branches WHERE company_id = ? AND is_active = TRUE LIMIT 2",
+                    companyId);
+            return rows.size() == 1 ? (UUID) rows.get(0).get("id") : null;
+        } catch (Exception ex) {
+            log.warn("sole-branch lookup failed for company {}: {}", companyId, ex.getMessage());
             return null;
         }
     }

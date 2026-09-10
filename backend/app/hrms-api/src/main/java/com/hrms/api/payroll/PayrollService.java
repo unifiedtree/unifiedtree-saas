@@ -447,6 +447,19 @@ public class PayrollService {
         BigDecimal net = BigDecimal.ZERO, employerTotal = BigDecimal.ZERO;
 
         if (!engineEarnings.isEmpty()) {
+            // Gross needs no settings and no engine, so establish it first. If
+            // the statutory pass below fails we still show a real gross and a
+            // net equal to it, rather than falling back to the ₹0 this whole
+            // change exists to fix.
+            gross = engineEarnings.stream()
+                    .map(PayrollEngine.EarningLine::monthlyAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            net = gross;
+            earnings = engineEarnings.stream()
+                    .map(el -> new StructureLineDto(null, el.component().code(), el.component().name(),
+                            el.component().category(), el.monthlyAmount()))
+                    .toList();
+
             // Never let a preview calculation take down the structure screen —
             // it is strictly additive to what this endpoint used to return.
             try {
@@ -459,7 +472,13 @@ public class PayrollService {
                         .map(PayrollEngine.EarningLine::monthlyAmount)
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-                SettingsDto s = getSettingsInline(TenantContext.getTenantId());
+                // A tenant that has never opened Payroll Settings has no row,
+                // and getSettingsInline throws on an empty result — which the
+                // catch below would turn straight back into ₹0. Create the
+                // defaults row first (idempotent), same as the settings screen.
+                UUID tid = TenantContext.getTenantId();
+                ensureSettingsRow(tid);
+                SettingsDto s = getSettingsInline(tid);
                 boolean ptEnabled = Boolean.TRUE.equals(s.ptEnabled());
                 String ptState = (String) r.get("pt_state") != null
                         ? (String) r.get("pt_state") : s.ptStateCode();
