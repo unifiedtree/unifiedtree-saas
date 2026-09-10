@@ -31,7 +31,13 @@ export const Performance: React.FC = () => {
   const tabs: { key: Tab; label: string }[] = [
     ...(canSelf ? [{ key: 'goals' as Tab, label: 'My Goals' }] : []),
     ...(canSelf ? [{ key: 'reviews' as Tab, label: 'My Reviews' }] : []),
-    ...(canWrite ? [{ key: 'cycles' as Tab, label: 'Cycles' }] : []),
+    // 2026-09-10: gated on read + write. The tab body loads
+    // GET /v1/performance/cycles which requires hrms.performance.read; every
+    // seeded role pairs the two, but a custom role built with write-only in
+    // Settings saw the tab, the list 403'd, and the page read "No review
+    // cycles defined yet" while Create Cycle still worked — the classic
+    // "I clicked and nothing happened".
+    ...(canWrite && canRead ? [{ key: 'cycles' as Tab, label: 'Cycles' }] : []),
     ...(canRead ? [{ key: 'admin' as Tab, label: 'Reviews' }] : []),
   ]
 
@@ -45,7 +51,7 @@ export const Performance: React.FC = () => {
 
       {tab === 'goals' && canSelf && <HrTabPanel tabKey="goals"><MyGoalsTab /></HrTabPanel>}
       {tab === 'reviews' && canSelf && <HrTabPanel tabKey="reviews"><MyReviewsTab /></HrTabPanel>}
-      {tab === 'cycles' && canWrite && <HrTabPanel tabKey="cycles"><CyclesTab /></HrTabPanel>}
+      {tab === 'cycles' && canWrite && canRead && <HrTabPanel tabKey="cycles"><CyclesTab /></HrTabPanel>}
       {tab === 'admin' && canRead && <HrTabPanel tabKey="admin"><AdminReviewsTab canWrite={canWrite} /></HrTabPanel>}
     </div>
   )
