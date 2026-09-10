@@ -10,7 +10,7 @@ import { useToast } from '@/shared/hooks/useToast'
 import {
   useCompanies, useCreateCompany, useUpdateCompany, useArchiveCompany,
   useBranches, useCreateBranch, useArchiveBranch,
-  useDepartments, useCreateDepartment, useRenameDepartment, useArchiveDepartment, useSetDepartmentHead,
+  useDepartments, useCreateDepartment, useRenameDepartment, useArchiveDepartment, useSetDepartmentHead, useSetDepartmentAppearance,
   useDesignations, useCreateDesignation, useUpdateDesignation, useArchiveDesignation,
   useGrades, useCreateGrade, useUpdateGrade, useDeleteGrade,
   useEmploymentTypes, useCreateEmploymentType, useUpdateEmploymentType, useDeleteEmploymentType,
@@ -61,24 +61,18 @@ const DEPT_ICONS = [
 ] as const
 const DEFAULT_DEPT_ICON = 'team'
 
-function readDeptColor(id: string): string {
-  if (typeof window === 'undefined') return DEFAULT_DEPT_COLOR
-  try { return window.localStorage.getItem(`dept_color_${id}`) || DEFAULT_DEPT_COLOR } catch { return DEFAULT_DEPT_COLOR }
+/**
+ * 2026-09-10: colour + icon moved to the server (V118 + useSetDepartmentAppearance).
+ * Was localStorage — per-browser, so the admin who created the department saw
+ * the colour and every other user / device / private-window saw the default.
+ * Reads now come off the Department row (nullable → default palette). Writes
+ * go through useSetDepartmentAppearance.
+ */
+function readDeptColor(d: { colorHex?: string | null } | undefined | null): string {
+  return d?.colorHex || DEFAULT_DEPT_COLOR
 }
-function writeDeptColor(id: string, hex: string) {
-  if (typeof window === 'undefined') return
-  try { window.localStorage.setItem(`dept_color_${id}`, hex) } catch { /* quota / disabled — ignore */ }
-}
-function writeDeptIcon(id: string, key: string) {
-  if (typeof window === 'undefined') return
-  try { window.localStorage.setItem(`dept_icon_${id}`, key) } catch { /* ignore */ }
-}
-// Counterpart to writeDeptIcon — needed so the Edit drawer opens on the icon
-// that was picked at create time instead of silently resetting everyone to
-// "team" the first time a department is renamed.
-function readDeptIcon(id: string): string {
-  if (typeof window === 'undefined') return DEFAULT_DEPT_ICON
-  try { return window.localStorage.getItem(`dept_icon_${id}`) || DEFAULT_DEPT_ICON } catch { return DEFAULT_DEPT_ICON }
+function readDeptIcon(d: { iconKey?: string | null } | undefined | null): string {
+  return d?.iconKey || DEFAULT_DEPT_ICON
 }
 
 // ── Shift type ───────────────────────────────────────────────────────────────
@@ -539,17 +533,15 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
   const renameDept = useRenameDepartment()
   const archiveDept = useArchiveDepartment()
   const setHead = useSetDepartmentHead()
+  const setAppearance = useSetDepartmentAppearance()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Department | null>(null)
   const emptyDeptForm = { name: '', code: '', description: '', departmentHeadEmployeeId: '', colorHex: DEFAULT_DEPT_COLOR, iconKey: DEFAULT_DEPT_ICON }
   const [form, setForm] = useState(emptyDeptForm)
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
-  // Colour/icon are per-device presets in localStorage, not server state, so a
-  // colour-only save changes nothing react-query can invalidate and the table
-  // would keep painting the old dot until an unrelated refetch. The counter's
-  // value is never read — bumping it is purely the re-render that makes the
-  // cells call readDeptColor again.
-  const [, setPresetTick] = useState(0)
+  // 2026-09-10: colour + icon are server-persisted now (V118) so the appearance
+  // hook's onSuccess re-fetches the departments list and the table repaints
+  // on its own. No more setPresetTick force-render.
 
   const openAdd = () => { setEditing(null); setForm(emptyDeptForm); setOpen(true) }
   const openEdit = (d: Department) => {
@@ -559,8 +551,8 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
       code: d.code ?? '',
       description: d.description ?? '',
       departmentHeadEmployeeId: d.departmentHeadEmployeeId ?? '',
-      colorHex: readDeptColor(d.id),
-      iconKey: readDeptIcon(d.id),
+      colorHex: readDeptColor(d),
+      iconKey: readDeptIcon(d),
     })
     setOpen(true)
   }
@@ -585,18 +577,18 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
     }
 
     try {
-      const created = await createDept.mutateAsync({
+      await createDept.mutateAsync({
         companyId: activeCompany.id,
         name: trimmed,
         code: form.code || undefined,
         description: form.description || undefined,
         departmentHeadEmployeeId: form.departmentHeadEmployeeId || undefined,
+        // 2026-09-10: sent in the create payload so the colour + icon land in
+        // one round-trip, and are stored server-side (V118) rather than in
+        // this browser's localStorage.
+        colorHex: form.colorHex,
+        iconKey:  form.iconKey,
       })
-      // Persist device-local preset choices keyed by the new dept id.
-      if (created?.id) {
-        writeDeptColor(created.id, form.colorHex)
-        writeDeptIcon(created.id, form.iconKey)
-      }
       toast('Department created', 'success')
       setOpen(false)
       setForm(emptyDeptForm)
@@ -611,8 +603,13 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
           const list = refreshed.data ?? []
           const match = list.find((d) => d.name.trim().toLowerCase() === norm)
           if (match) {
-            writeDeptColor(match.id, form.colorHex)
-            writeDeptIcon(match.id, form.iconKey)
+            // 201-lost recovery: the row exists but the create response was
+            // dropped, so we never sent the appearance in the payload. Set it
+            // now with the PATCH — bounded by canReadTemplates on the caller
+            // side (this whole path needs department.write).
+            try {
+              await setAppearance.mutateAsync({ id: match.id, colorHex: form.colorHex, iconKey: form.iconKey })
+            } catch { /* row exists at defaults, user can edit later */ }
             toast('Department created', 'success')
             setOpen(false)
             setForm(emptyDeptForm)
@@ -659,9 +656,19 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
       if (nextHead !== (editing.departmentHeadEmployeeId || undefined)) {
         await setHead.mutateAsync({ id: editing.id, employeeId: nextHead })
       }
-      writeDeptColor(editing.id, form.colorHex)
-      writeDeptIcon(editing.id, form.iconKey)
-      setPresetTick((t) => t + 1)
+      // 2026-09-10: appearance patch. Sends both fields; the server treats
+      // null as "leave alone" so if the admin didn't touch the picker the
+      // current value stays. Kept as its own request rather than folded into
+      // rename because there is no full-update endpoint for departments.
+      const colorChanged = form.colorHex !== readDeptColor(editing)
+      const iconChanged  = form.iconKey  !== readDeptIcon(editing)
+      if (colorChanged || iconChanged) {
+        await setAppearance.mutateAsync({
+          id: editing.id,
+          colorHex: colorChanged ? form.colorHex : undefined,
+          iconKey:  iconChanged  ? form.iconKey  : undefined,
+        })
+      }
       toast('Department updated', 'success')
       setOpen(false)
       setEditing(null)
@@ -707,7 +714,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
         <div className="flex items-center gap-2">
           <span
             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-            style={{ backgroundColor: readDeptColor(d.id) }}
+            style={{ backgroundColor: readDeptColor(d) }}
             aria-hidden
           />
           <span className="font-semibold text-text-primary text-sm">{d.name}</span>

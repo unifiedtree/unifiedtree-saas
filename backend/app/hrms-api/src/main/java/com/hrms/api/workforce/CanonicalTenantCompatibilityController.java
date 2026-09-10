@@ -102,6 +102,8 @@ public class CanonicalTenantCompatibilityController {
                 request.parentDepartmentId(),
                 null,
                 request.description(),
+                null,           // colorHex — mobile UI has no picker
+                null,           // iconKey  — mobile UI has no picker
                 List.of()));
         return toDepartment(created, request.colorHex(), request.iconKey());
     }

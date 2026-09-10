@@ -70,7 +70,27 @@ public class DepartmentService {
         d.setParentDepartmentId(req.parentDepartmentId());
         d.setDepartmentHeadEmployeeId(req.departmentHeadEmployeeId());
         d.setDescription(req.description());
+        // 2026-09-10: persist the colour + icon the admin picked instead of
+        // storing them per-browser (see V118). Nullable, so a caller that omits
+        // them keeps the current row's value on revive and starts with NULL on
+        // a fresh insert (SPA falls back to a default palette).
+        if (req.colorHex() != null) d.setColorHex(req.colorHex());
+        if (req.iconKey()  != null) d.setIconKey(req.iconKey());
         d.setActive(true);
+        return toResponse(repository.save(d));
+    }
+
+    /**
+     * Update the cosmetic settings on an existing department. Kept separate
+     * from rename() and setHead() because those are their own PATCH endpoints
+     * already, and this one takes both fields together so a save can't blank
+     * one by omission. Null means "leave alone".
+     */
+    public DepartmentResponse updateAppearance(UUID id, String colorHex, String iconKey) {
+        Department d = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Department " + id + " not found"));
+        if (colorHex != null) d.setColorHex(colorHex);
+        if (iconKey  != null) d.setIconKey(iconKey);
         return toResponse(repository.save(d));
     }
 
@@ -103,6 +123,7 @@ public class DepartmentService {
         return new DepartmentResponse(
                 d.getId(), d.getCompanyId(), d.getName(), d.getCode(),
                 d.getParentDepartmentId(), d.getDepartmentHeadEmployeeId(),
-                d.getDescription(), d.getEmployeeCountCached(), d.isActive());
+                d.getDescription(), d.getColorHex(), d.getIconKey(),
+                d.getEmployeeCountCached(), d.isActive());
     }
 }

@@ -162,11 +162,17 @@ function MyAttendanceCalendar({
         const info = byDate.get(key)
         const status = info?.status ?? 'NOT_MARKED'
         return (
+          // 2026-09-10: the cell used to advertise hover:scale-105 +
+          // hover:shadow-md, which reads as "click me", but had cursor-default,
+          // no onClick, no key handler and no role — users clicked a day and
+          // nothing happened. Removed the interactive hover so the affordance
+          // matches the behaviour. If we wire day-detail later, put back the
+          // hover along with an actual handler.
           <div
             key={key}
             title={`${key} — ${status}`}
             className={clsx(
-              'aspect-square rounded-xl flex items-center justify-center text-sm font-bold cursor-default transition-all hover:scale-105 hover:shadow-md',
+              'aspect-square rounded-xl flex items-center justify-center text-sm font-bold',
               statusBg[status] ?? 'bg-bg-base text-text-secondary border border-border-default'
             )}
           >

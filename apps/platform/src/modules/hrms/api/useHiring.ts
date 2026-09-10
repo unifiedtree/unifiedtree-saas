@@ -57,7 +57,7 @@ export const inr = (n?: number | null) =>
 
 // ── Requisitions ─────────────────────────────────────────────────────────────
 
-export function useRequisitions(page = 0, companyId?: string) {
+export function useRequisitions(page = 0, companyId?: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['hrms', 'hiring', 'requisitions', page, companyId ?? 'all'],
     queryFn: () => {
@@ -65,6 +65,9 @@ export function useRequisitions(page = 0, companyId?: string) {
       if (companyId) params.set('companyId', companyId)
       return apiJson<Page<JobRequisition>>(`/v1/hiring/requisitions?${params.toString()}`)
     },
+    // Callers without hrms.hiring.read should pass { enabled: false } so this
+    // does not 403 on every render (e.g. the hiring KPI on the main dashboard).
+    enabled: opts?.enabled ?? true,
     staleTime: 30_000,
   })
 }

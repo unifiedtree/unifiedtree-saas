@@ -32,6 +32,18 @@ public class Department extends BaseEntity {
     @Column(name = "department_head_employee_id")
     private UUID departmentHeadEmployeeId;
 
+    /**
+     * 2026-09-10: added so the colour + icon an admin picks in the Add
+     * Department drawer are a real org setting, not a per-browser
+     * localStorage key. Both nullable so pre-existing rows keep the SPA's
+     * default until edited.
+     */
+    @Column(name = "color_hex", length = 9)
+    private String colorHex;
+
+    @Column(name = "icon_key", length = 40)
+    private String iconKey;
+
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 

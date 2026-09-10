@@ -198,6 +198,17 @@ public class WorkforceController {
         return departments.rename(id, name);
     }
 
+    /** 2026-09-10: appearance edit. Replaces the SPA's per-browser localStorage
+     *  keys ('dept_color_<id>', 'dept_icon_<id>') with a real tenant setting. */
+    @PatchMapping("/departments/{id}/appearance")
+    @PreAuthorize("hasAuthority('hrms.department.write')")
+    public DepartmentResponse setDepartmentAppearance(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String colorHex,
+            @RequestParam(required = false) String iconKey) {
+        return departments.updateAppearance(id, colorHex, iconKey);
+    }
+
     @PatchMapping("/departments/{id}/head")
     @PreAuthorize("hasAuthority('hrms.department.write')")
     public DepartmentResponse setDepartmentHead(@PathVariable UUID id,

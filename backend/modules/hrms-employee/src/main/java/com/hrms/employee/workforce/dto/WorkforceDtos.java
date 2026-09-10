@@ -139,6 +139,12 @@ public final class WorkforceDtos {
             UUID parentDepartmentId,
             UUID departmentHeadEmployeeId,
             String description,
+            // 2026-09-10: added so the colour + icon an admin picks are real
+            // org settings that every viewer sees, not a per-browser
+            // localStorage key. Both nullable — the SPA falls back to its own
+            // default palette when the row was created before this landed.
+            String colorHex,
+            String iconKey,
             Integer employeeCount,
             boolean active
     ) { }
@@ -150,6 +156,8 @@ public final class WorkforceDtos {
             UUID parentDepartmentId,
             UUID departmentHeadEmployeeId,
             String description,
+            @Size(max = 9)  String colorHex,
+            @Size(max = 40) String iconKey,
             List<UUID> branchIds
     ) { }
 

@@ -46,6 +46,14 @@ export interface Department {
   parentDepartmentId?: string
   departmentHeadEmployeeId?: string
   description?: string
+  /**
+   * 2026-09-10: colour + icon are now server-persisted (V118). Nullable so
+   * pre-existing rows fall back to the SPA's default palette until edited.
+   * Previously stored in localStorage — per-browser, so the admin who created
+   * the department saw the colour and every other user saw the default.
+   */
+  colorHex?: string | null
+  iconKey?: string | null
   employeeCount?: number
   active: boolean
 }
@@ -151,8 +159,26 @@ export function useDepartments(companyId: string) {
 export function useCreateDepartment() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: { companyId: string; name: string; code?: string; description?: string; parentDepartmentId?: string; departmentHeadEmployeeId?: string }) =>
+    mutationFn: (data: { companyId: string; name: string; code?: string; description?: string; parentDepartmentId?: string; departmentHeadEmployeeId?: string; colorHex?: string; iconKey?: string }) =>
       apiJson<Department>('/v1/hrms/departments', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'departments'] }),
+  })
+}
+
+/**
+ * 2026-09-10: appearance (colour + icon) is a real tenant setting now — see
+ * V118. Was localStorage per-browser. The endpoint accepts each field
+ * independently; null/undefined means "leave alone".
+ */
+export function useSetDepartmentAppearance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, colorHex, iconKey }: { id: string; colorHex?: string; iconKey?: string }) => {
+      const params = new URLSearchParams()
+      if (colorHex) params.set('colorHex', colorHex)
+      if (iconKey)  params.set('iconKey', iconKey)
+      return apiJson<Department>(`/v1/hrms/departments/${id}/appearance?${params.toString()}`, { method: 'PATCH' })
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'departments'] }),
   })
 }

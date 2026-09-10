@@ -15,6 +15,7 @@ import { apiBlob } from '@/core/api/client'
 import { toast } from 'sonner'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import { useCompanies } from './api/useOrg'
+import { useRequisitions } from './api/useHiring'
 import { useLeaveOverview } from './api/useLeave'
 import { useMonthlyStats, useTeamDashboard, useAttendanceTrend } from './api/useAttendance'
 import { useActivityFeed, activityLabel, activityActor } from './api/useActivity'
@@ -471,19 +472,31 @@ export const HrmsDashboard: React.FC = () => {
       />,
     )
   }
-  // Hiring Summary — hidden entirely until a real analytics endpoint lands
-  // and feeds `hiringSummary` a value. The previous "value='—' sub='coming
-  // soon'" placeholder shipped a permanently-empty tile on every login; a
-  // truthful dashboard is one that omits tiles it cannot populate.
-  const hiringSummary = null as { openPositions: number; inFinalRound: number } | null
+  // Hiring Summary — 2026-09-10: no dedicated hiring-analytics endpoint has
+  // landed, but /v1/hiring/requisitions carries the two numbers this tile
+  // needs (openings + candidateCount, per status). Sum up to the first page
+  // of OPEN requisitions rather than showing the permanently-empty tile the
+  // dashboard shipped with. First page (size=20) is enough for the KPI —
+  // clicking through opens the full list.
+  //
+  // Query is disabled until canSeeHiringTiles because a plain employee has no
+  // hrms.hiring.read and would 403 on this every render.
+  const { data: reqPage } = useRequisitions(0, undefined, { enabled: canSeeHiringTiles })
+  const hiringSummary = React.useMemo(() => {
+    if (!canSeeHiringTiles || !reqPage) return null
+    const openReqs = reqPage.content.filter((r) => r.status === 'OPEN')
+    const openPositions = openReqs.reduce((sum, r) => sum + (r.openings ?? 0), 0)
+    const inPipeline = openReqs.reduce((sum, r) => sum + (r.candidateCount ?? 0), 0)
+    return { openPositions, inPipeline }
+  }, [canSeeHiringTiles, reqPage])
   if (canSeeHiringTiles && hiringSummary != null) {
     kpiTiles.push(
       <KpiTile
         key="hiring"
         icon={<Rocket size={19} />} iconBg="var(--accent-bg)" iconFg="var(--accent-fg)"
-        label="Hiring Summary"
+        label="Open Positions"
         value={hiringSummary.openPositions}
-        sub={`${hiringSummary.inFinalRound} in final round`}
+        sub={`${hiringSummary.inPipeline} candidate${hiringSummary.inPipeline === 1 ? '' : 's'} in pipeline`}
         onClick={() => navigate('/hrms/hiring')}
       />,
     )
