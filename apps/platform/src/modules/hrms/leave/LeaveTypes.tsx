@@ -68,7 +68,14 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
     isCarryForwardAllowed: editType?.isCarryForwardAllowed ?? false,
     maxCarryForwardDays: editType?.maxCarryForwardDays ?? 0,
     isPaidLeave: editType?.isPaidLeave ?? true,
-    description: '',
+    // 2026-09-10: these two used to be `description: ''` and absent entirely.
+    // The PUT is a full replace on the server, so every edit saved from the
+    // web wiped the type's description and its minimum-notice rule — including
+    // on types created in the mobile app, which does collect Min Notice Days.
+    // Both are now returned by the API and round-tripped here.
+    minNoticeDays: editType?.minNoticeDays ?? 0,
+    applicableGender: editType?.applicableGender ?? undefined,
+    description: editType?.description ?? '',
   })
 
   const set = (key: string, value: unknown) => setForm((p) => ({ ...p, [key]: value }))
@@ -137,6 +144,10 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
                 <option value="BEREAVEMENT">Bereavement</option>
                 <option value="UNPAID">Unpaid</option>
                 <option value="STUDY">Study</option>
+                {/* The mobile Leave Policies screen offers SABBATICAL; without
+                    it here, opening such a type on the web showed a select with
+                    no matching option and saving reassigned it to Casual. */}
+                <option value="SABBATICAL">Sabbatical</option>
               </select>
             </div>
           </div>
@@ -160,6 +171,21 @@ function TypeDrawer({ companyId, editType, onClose }: TypeDrawerProps) {
                 onChange={(e) => set('maxConsecutiveDays', Number(e.target.value))}
                 className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
               />
+            </div>
+            {/* Present on the mobile Leave Policies screen ("Min Notice Days")
+                and stored on the server, but never collected here — so the web
+                could not set it and, because the PUT is a full replace, every
+                web edit reset it to 0. */}
+            <div>
+              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Min Notice Days</label>
+              <input
+                type="number"
+                min={0}
+                value={form.minNoticeDays}
+                onChange={(e) => set('minNoticeDays', Number(e.target.value))}
+                className="w-full bg-white border border-border/60 rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
+              />
+              <p className="mt-1 text-xs text-text-tertiary">How far in advance this leave must be requested. 0 = no notice required.</p>
             </div>
           </div>
           <div className="flex items-center gap-6">

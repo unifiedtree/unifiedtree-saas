@@ -807,11 +807,14 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
           <Field label="Department Name *"><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Engineering" /></Field>
           {/* 2026-09-10: these two were disabled in edit mode because nothing
               could persist them. PATCH /departments/{id}/details now can. */}
-          <Field label="Code">
-            <Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. ENG" />
+          <Field label="Department Code">
+            {/* Uppercased as you type, matching the mobile Departments screen
+                (autoCapitalize="characters") — the server stores codes
+                uppercase, so lowercase input silently changed on save. */}
+            <Input value={form.code} onChange={(e) => set('code', e.target.value.toUpperCase())} placeholder="e.g. ENG (optional)" />
           </Field>
           <Field label="Description">
-            <Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional" />
+            <Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Brief description (optional)" />
           </Field>
           <Field label="Department Head">
             <HrSelect

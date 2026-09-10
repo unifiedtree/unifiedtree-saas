@@ -45,7 +45,13 @@ public class LeaveTypeMapperImpl implements LeaveTypeMapper {
         maxCarryForwardDays = leaveType.getMaxCarryForwardDays() != null ? leaveType.getMaxCarryForwardDays() : 0;
         isActive = leaveType.isActive();
 
-        LeaveTypeResponse leaveTypeResponse = new LeaveTypeResponse( id, name, code, category, annualEntitlement, maxConsecutiveDays, isPaidLeave, isCarryForwardAllowed, maxCarryForwardDays, isActive );
+        // See LeaveTypeResponse: without these three on the wire, the web edit
+        // drawer could not round-trip them and every save wiped them.
+        int minNoticeDays = leaveType.getMinNoticeDays();
+        String applicableGender = leaveType.getApplicableGender();
+        String description = leaveType.getDescription();
+
+        LeaveTypeResponse leaveTypeResponse = new LeaveTypeResponse( id, name, code, category, annualEntitlement, maxConsecutiveDays, isPaidLeave, isCarryForwardAllowed, maxCarryForwardDays, isActive, minNoticeDays, applicableGender, description );
 
         return leaveTypeResponse;
     }

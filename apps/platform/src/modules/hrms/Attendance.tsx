@@ -354,17 +354,17 @@ function MyCorrectionsPanel() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
                   <div>
-                    <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Requested In</label>
+                    <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Requested Check-In</label>
                     <input type="time" value={form.requestedCheckInAt} onChange={(e) => setForm(p => ({ ...p, requestedCheckInAt: e.target.value }))} className="ut-input" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Requested Out</label>
+                    <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Requested Check-Out</label>
                     <input type="time" value={form.requestedCheckOutAt} onChange={(e) => setForm(p => ({ ...p, requestedCheckOutAt: e.target.value }))} className="ut-input" />
                   </div>
                 </div>
                 <div>
                   <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Reason *</label>
-                  <textarea rows={3} value={form.reason} onChange={(e) => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="Brief reason" className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all resize-y" />
+                  <textarea rows={3} value={form.reason} onChange={(e) => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="Explain the correction needed..." className="w-full bg-white border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all resize-y" />
                 </div>
                 <div className="flex justify-end gap-3 border-t border-border-default pt-4">
                   <button onClick={() => setOpen(false)} className="px-4 py-2 text-text-secondary font-semibold text-sm hover:text-text-primary transition-colors">Cancel</button>

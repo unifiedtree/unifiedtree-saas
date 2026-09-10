@@ -17,6 +17,14 @@ export interface LeaveTypeResponse {
   isCarryForwardAllowed: boolean
   maxCarryForwardDays: number
   isActive: boolean
+  // 2026-09-10: these three are stored server-side and settable via the API,
+  // but were missing from this response type, so the edit drawer could not
+  // read them back. Since PUT /leave/types/{id} is a full replace, every save
+  // from the web wiped them — including the Min Notice Days that the mobile
+  // Leave Policies screen collects.
+  minNoticeDays?: number
+  applicableGender?: string | null
+  description?: string | null
 }
 
 export interface LeaveBalanceResponse {

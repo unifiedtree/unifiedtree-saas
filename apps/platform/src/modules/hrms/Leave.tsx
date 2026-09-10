@@ -151,7 +151,16 @@ function ApplyTab() {
   // Half-day auto-force: keep endDate == startDate whenever half-day is selected.
   const effectiveEndDate = isHalfDay ? form.startDate : form.endDate
 
-  const todayIso = new Date().toISOString().slice(0, 10)
+  // LOCAL today, not UTC. toISOString() is UTC, so in IST (UTC+5:30) every
+  // request made before 05:30 local resolved to *yesterday* — the `min` on the
+  // date input and the past-date guard both let a backdated leave through, and
+  // the mobile app (which uses a local getLocalToday()) disagreed with the web
+  // for those five and a half hours every morning.
+  const todayIso = React.useMemo(() => {
+    const d = new Date()
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  }, [])
 
   // Compute effective days: half-day counts as 0.5, else count business days
   // (non-weekend) inclusive. Weekend day-numbers are pulled from the tenant's
@@ -204,6 +213,12 @@ function ApplyTab() {
   const reasonMissing = reasonTrimmedLen === 0
   const REASON_MAX = 500
 
+  // The mobile screen blocks these two in its disabled expression; the web
+  // only toasted about them at click time, so Submit looked live on a form
+  // that could not succeed.
+  const startInPast = !!form.startDate && form.startDate < todayIso
+  const endBeforeStart = !!form.startDate && !!effectiveEndDate && effectiveEndDate < form.startDate
+
   const submitDisabled =
     applyLeave.isPending ||
     hasOverlap ||
@@ -211,6 +226,8 @@ function ApplyTab() {
     !form.leaveTypeId ||
     !form.startDate ||
     !effectiveEndDate ||
+    startInPast ||
+    endBeforeStart ||
     reasonMissing ||
     reasonTooShort
 
@@ -267,6 +284,22 @@ function ApplyTab() {
     <div className="ut-card max-w-lg p-5">
       <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Apply for Leave</h3>
       <div className="space-y-4">
+
+      {/* Available-balance strip. The mobile Apply Leave screen opens with this
+          and the web had nothing — balances were fetched only to power the
+          `exceedsBalance` guard, so an employee had to leave the form to find
+          out how many days they had left. */}
+      {balances.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {balances.slice(0, 3).map((b) => (
+            <div key={b.id} className="rounded-xl border border-border-default bg-bg-base px-3 py-2 text-center">
+              <p className="text-lg font-bold text-text-primary">{b.available}</p>
+              <p className="truncate text-[11px] text-text-secondary" title={b.leaveTypeName}>{b.leaveTypeName}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div>
         <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Leave Type *</label>
         {typesLoading ? (
@@ -278,9 +311,17 @@ function ApplyTab() {
             className="ut-select"
           >
             <option value="">Select leave type</option>
-            {leaveTypes.filter((t) => t.isActive).map((t) => (
-              <option key={t.id} value={t.id}>{t.name} ({t.annualEntitlement} days/year)</option>
-            ))}
+            {/* Show REMAINING days, as the mobile picker does. The annual
+                entitlement is the wrong number to decide against — someone
+                with 12 days/year and 1 left was being shown "12". */}
+            {leaveTypes.filter((t) => t.isActive).map((t) => {
+              const bal = balances.find((b) => b.leaveTypeId === t.id)
+              return (
+                <option key={t.id} value={t.id}>
+                  {t.name}{bal ? ` (${bal.available} available)` : ` (${t.annualEntitlement} days/year)`}
+                </option>
+              )
+            })}
           </select>
         )}
       </div>
