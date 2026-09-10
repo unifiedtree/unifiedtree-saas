@@ -95,7 +95,9 @@ public class LeaveService {
         if (employeeId == null) return null;
         try {
             return jdbcTemplate.queryForObject(
-                    "SELECT first_name || ' ' || last_name FROM hrms.employees WHERE id = ? AND tenant_id = ? LIMIT 1",
+                    // COALESCE: `x || NULL` is NULL in Postgres, so a missing last_name
+                    // returned a null display name to every caller of this lookup.
+                    "SELECT TRIM(first_name || ' ' || COALESCE(last_name, '')) FROM hrms.employees WHERE id = ? AND tenant_id = ? LIMIT 1",
                     String.class, employeeId, tenantId);
         } catch (EmptyResultDataAccessException e) {
             return null;

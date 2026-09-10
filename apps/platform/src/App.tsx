@@ -1,7 +1,8 @@
 import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { P, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { RouteGuard } from '@/routes/RouteGuard'
+import { RouteErrorBoundary } from '@/shared/components/RouteErrorBoundary'
 import { RequirePermission } from '@/core/permissions/RequirePermission'
 import { PlatformShell } from '@/layouts/PlatformShell'
 import { LoginPage } from '@/core/auth/LoginPage'
@@ -125,7 +126,19 @@ function ComingSoonRoute({ moduleKey }: { moduleKey: string }) {
 }
 
 export default function App() {
+  // 2026-09-10: wrap every route in an error boundary KEYED BY PATH.
+  //
+  // Before this, a render-phase throw anywhere unmounted the entire React
+  // tree — the Attendance Analytics page crashed on a null employee_name and
+  // the whole app went blank, staying blank through browser back and forward
+  // because the root was gone. Only a hard reload recovered it, and nothing
+  // on screen told the user that.
+  //
+  // Keying on pathname means navigating away remounts a fresh boundary, so a
+  // broken page never sticks: the user leaves it and the app is healthy again.
+  const location = useLocation()
   return (
+    <RouteErrorBoundary key={location.pathname} routeLabel={location.pathname}>
     <Routes>
       {/* Public */}
       <Route path="/login"            element={<LoginPage />} />
@@ -752,5 +765,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </RouteErrorBoundary>
   )
 }

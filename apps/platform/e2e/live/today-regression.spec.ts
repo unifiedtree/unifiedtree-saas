@@ -55,6 +55,12 @@ const ROUTES: { path: string; label: string }[] = [
   { path: '/hrms/organization',             label: 'Org Setup (dept rename, designation fix)' },
   { path: '/hrms/attendance',               label: 'Attendance (corrections gating)' },
   { path: '/hrms/muster-roll',              label: 'Muster Roll (export + dept filter)' },
+  // 2026-09-10: this route was MISSING from the sweep, which is why 96/96
+  // was green while it crashed in production on a null employee_name.
+  { path: '/hrms/att-analytics',            label: 'Attendance Analytics (Time tab)' },
+  { path: '/hrms/workforce-analytics',      label: 'Workforce Analytics' },
+  { path: '/hrms/leave',                    label: 'Leave (weekend-day preview)' },
+  { path: '/hrms/performance',              label: 'Performance (Cycles gating)' },
   { path: '/hrms/attendance/manual-entry',  label: 'Manual Entry (team-roster fallback)' },
   { path: '/hrms/shifts-ot',                label: 'Shifts & Overtime (new CRUD)' },
   { path: '/hrms/employees',                label: 'Employees (form gating)' },
@@ -121,7 +127,13 @@ test.describe(`2026-09-09 regression [${role}] — pages render without crashing
         expect(bodyText.trim().length, 'page rendered no text — likely a crashed render').toBeGreaterThan(40)
 
         // Explicit crash states this app can show.
-        await expect(page.getByText(/something went wrong|unexpected error|application error/i))
+        //
+        // "This page hit an error" is RouteErrorBoundary's fallback, added
+        // 2026-09-10. It matters that this assertion exists: the boundary
+        // renders real copy, so a crashed page now passes the bodyText length
+        // check above. Without this line the sweep would go blind to exactly
+        // the failure it was written to catch.
+        await expect(page.getByText(/something went wrong|unexpected error|application error|this page hit an error/i))
           .toHaveCount(0)
 
         // A render-phase throw is the failure tsc cannot see. Ignore network

@@ -86,7 +86,10 @@ public class ReportService {
         String sql = """
                 SELECT
                     e.employee_code,
-                    e.first_name || ' ' || e.last_name                  AS employee_name,
+                    -- COALESCE is load-bearing: in Postgres `x || NULL` is NULL,
+                    -- so an employee with no last_name produced employee_name = null,
+                    -- which crashed HrAvatar (name.split) and blanked the whole SPA.
+                    TRIM(e.first_name || ' ' || COALESCE(e.last_name, ''))  AS employee_name,
                     d.name                                               AS department,
                     COUNT(ar.id)                                         AS present_days,
                     COALESCE(SUM(CASE WHEN ar.attendance_status = 'LATE' THEN 1 ELSE 0 END), 0) AS late_days,
@@ -112,7 +115,10 @@ public class ReportService {
         String sql = """
                 SELECT
                     e.employee_code,
-                    e.first_name || ' ' || e.last_name                  AS employee_name,
+                    -- COALESCE is load-bearing: in Postgres `x || NULL` is NULL,
+                    -- so an employee with no last_name produced employee_name = null,
+                    -- which crashed HrAvatar (name.split) and blanked the whole SPA.
+                    TRIM(e.first_name || ' ' || COALESCE(e.last_name, ''))  AS employee_name,
                     d.name                                               AS department,
                     lt.name                                              AS leave_type,
                     lb.total_entitlement,
@@ -139,7 +145,10 @@ public class ReportService {
         String sql = """
                 SELECT
                     e.employee_code,
-                    e.first_name || ' ' || e.last_name                  AS employee_name,
+                    -- COALESCE is load-bearing: in Postgres `x || NULL` is NULL,
+                    -- so an employee with no last_name produced employee_name = null,
+                    -- which crashed HrAvatar (name.split) and blanked the whole SPA.
+                    TRIM(e.first_name || ' ' || COALESCE(e.last_name, ''))  AS employee_name,
                     d.name                                               AS department,
                     ar.attendance_date,
                     ar.late_by_minutes,

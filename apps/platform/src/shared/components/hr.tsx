@@ -162,8 +162,19 @@ export function TableCard({
 
 // ── Row avatar (colored initials + name/sub) ─────────────────────────────────
 const AV_COLORS = ['#0F6E56', '#2563EB', '#D97706', '#DB2777', '#0D9488', '#7C3AED', '#0891B2', '#059669']
-export function HrAvatar({ name, sub, seed = 0 }: { name: string; sub?: string; seed?: number }) {
-  const initials = name.split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?'
+export function HrAvatar({ name, sub, seed = 0 }: { name?: string | null; sub?: string; seed?: number }) {
+  // 2026-09-10: `name` was typed `string` and dereferenced directly with
+  // name.split(' '). A report row whose employee_name came back NULL (Postgres
+  // `x || NULL` is NULL — an employee with no last_name) therefore threw
+  // "Cannot read properties of null (reading 'split')" INSIDE render, which
+  // unmounts the entire React tree: the Attendance Analytics page went blank
+  // and stayed blank through back/forward until a hard reload.
+  //
+  // A shared primitive used by ~20 tables must never be able to do that, no
+  // matter what the server sends. The type now admits null and the value is
+  // coerced before use.
+  const safeName = (name ?? '').trim()
+  const initials = safeName.split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?'
   const bg = AV_COLORS[Math.abs(seed) % AV_COLORS.length]
   return (
     <div className="flex items-center gap-3">
@@ -171,7 +182,9 @@ export function HrAvatar({ name, sub, seed = 0 }: { name: string; sub?: string; 
         {initials}
       </div>
       <div className="min-w-0">
-        <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{name}</p>
+        {/* Falls back to an em dash rather than rendering an empty row, so a
+            missing name reads as absent data instead of a broken layout. */}
+        <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{safeName || '—'}</p>
         {sub && <p className="truncate text-xs font-medium text-[var(--text-tertiary)]">{sub}</p>}
       </div>
     </div>
