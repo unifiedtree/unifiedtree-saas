@@ -138,6 +138,61 @@ function Sel({ error, children, ...props }: React.SelectHTMLAttributes<HTMLSelec
   )
 }
 
+/**
+ * Tappable single-select chips — the input style the MOBILE Add Staff wizard
+ * uses for every enum choice (Department, Punch Zone, Shift, Gender,
+ * Employment Type, Salary Frequency).
+ *
+ * 2026-09-10: the web form had the same FIELDS and the same VALIDATION regexes
+ * as mobile (PAN, Aadhaar, UAN, ESI, IFSC, account number all match rule for
+ * rule) but rendered every one of those choices as a <select> dropdown. Two
+ * clients asking for the same data in visibly different ways is what the
+ * client kept reporting as "the forms don't match".
+ *
+ * `clearable` mirrors the mobile behaviour where tapping the selected chip
+ * again deselects it — used by the optional fields (Punch Zone, Shift) whose
+ * empty state is meaningful ("company-wide punch-in", "default 9:30 rule").
+ */
+function ChipGroup<T extends string>({
+  options, value, onChange, clearable = false, columns = false,
+}: {
+  options: { value: T; label: string }[]
+  value: T | ''
+  onChange: (v: T | '') => void
+  clearable?: boolean
+  /** Stack vertically — matches mobile's Shift list, where each row shows times. */
+  columns?: boolean
+}) {
+  return (
+    <div className={clsx('flex gap-1.5', columns ? 'flex-col items-start' : 'flex-wrap')}>
+      {options.map((o) => {
+        const on = value === o.value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(on && clearable ? '' : o.value)}
+            className={clsx(
+              'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors text-left',
+              on
+                ? 'bg-primary text-white border-primary'
+                : 'bg-white text-text-secondary border-border/60 hover:text-text-primary',
+            )}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Helper line under a field — mirrors mobile's `helpText` style. */
+function Hint({ children }: { children: React.ReactNode }) {
+  return <p className="mt-1 text-xs text-text-secondary">{children}</p>
+}
+
 interface EmployeeFormProps {
   employee?: WorkforceEmployee
   onClose: () => void
@@ -1056,24 +1111,26 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 )}
               </Field>
 
+              {/* Chips, matching the mobile wizard's Department picker. */}
               <Field label="Department" required error={errors.departmentId}>
-                <div className="flex items-center gap-2">
-                  <Sel
-                    error={!!errors.departmentId}
+                {departments.length === 0 ? (
+                  <p className="text-xs text-text-secondary">
+                    {canCreateDepartment
+                      ? 'No departments yet — use Add to create one.'
+                      : 'No departments yet — ask an administrator to add one.'}
+                  </p>
+                ) : (
+                  <ChipGroup
                     value={departmentId}
-                    onChange={(e) => { setDepartmentId(e.target.value); setErrors(p => ({ ...p, departmentId: '' })) }}
-                  >
-                    <option value="">
-                      {departments.length === 0
-                        ? (canCreateDepartment
-                            ? 'No departments yet — click Add to create one'
-                            : 'No departments yet — ask an administrator to add one')
-                        : 'Select department'}
-                    </option>
-                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </Sel>
-                  {canCreateDepartment && <AddNewButton onClick={() => setShowAddDept(true)} label="+ Add" />}
-                </div>
+                    onChange={(v) => { setDepartmentId(v); setErrors(p => ({ ...p, departmentId: '' })) }}
+                    options={departments.map((d) => ({ value: d.id, label: d.name }))}
+                  />
+                )}
+                {canCreateDepartment && (
+                  <div className="mt-2">
+                    <AddNewButton onClick={() => setShowAddDept(true)} label="+ Add" />
+                  </div>
+                )}
               </Field>
 
               <Field label="Employee Code" required error={errors.employeeCode}>
@@ -1097,14 +1154,21 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </Field>
               </div>
 
+              {/* Chips, matching the mobile wizard. Mobile offers Male / Female
+                  / Other; PREFER_NOT_TO_SAY is web-only and kept so existing
+                  records that carry it can still round-trip through an edit. */}
               <Field label="Gender">
-                <Sel value={form.gender} onChange={(e) => set('gender', e.target.value)}>
-                  <option value="">Select</option>
-                  <option value="MALE">Male</option>
-                  <option value="FEMALE">Female</option>
-                  <option value="OTHER">Other</option>
-                  <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
-                </Sel>
+                <ChipGroup
+                  clearable
+                  value={form.gender as string}
+                  onChange={(v) => set('gender', v)}
+                  options={[
+                    { value: 'MALE', label: 'Male' },
+                    { value: 'FEMALE', label: 'Female' },
+                    { value: 'OTHER', label: 'Other' },
+                    { value: 'PREFER_NOT_TO_SAY', label: 'Prefer not to say' },
+                  ]}
+                />
               </Field>
 
               {/* Read-only reporting-line preview, mirroring the mobile form's
@@ -1129,21 +1193,27 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                 </Field>
               )}
 
-              <Field label="Geofence Zone (Punch)">
-                <div className="flex items-center gap-2">
-                  <Sel value={form.geoFenceZoneId} onChange={(e) => set('geoFenceZoneId', e.target.value)}>
-                    <option value="">
-                      {geofenceZones.length === 0 ? 'No zones yet — click Add to create one' : 'No specific zone'}
-                    </option>
-                    {geofenceZones.filter((z) => z.active).map((z) => (
-                      <option key={z.id} value={z.id}>{z.name}</option>
-                    ))}
-                  </Sel>
-                  {canCreateZone && <AddNewButton onClick={() => setShowAddZone(true)} label="+ Add" />}
-                </div>
-                <p className="mt-1 text-xs text-text-secondary">
-                  Optional — when set, the employee can only punch in from inside this zone.
-                </p>
+              {/* Mobile calls this "Punch Location (Zone)" and renders it as
+                  clearable chips with the same helper copy. Matched here. */}
+              <Field label="Punch Location (Zone)">
+                {geofenceZones.filter((z) => z.active).length === 0 ? (
+                  <p className="text-xs text-text-secondary">
+                    {canCreateZone ? 'No zones yet — use Add to create one.' : 'No zones configured.'}
+                  </p>
+                ) : (
+                  <ChipGroup
+                    clearable
+                    value={form.geoFenceZoneId}
+                    onChange={(v) => set('geoFenceZoneId', v)}
+                    options={geofenceZones.filter((z) => z.active).map((z) => ({ value: z.id, label: z.name }))}
+                  />
+                )}
+                {canCreateZone && (
+                  <div className="mt-2">
+                    <AddNewButton onClick={() => setShowAddZone(true)} label="+ Add" />
+                  </div>
+                )}
+                <Hint>Optional — leave unselected to allow company-wide punch-in.</Hint>
               </Field>
 
               {/* Assigning a shift POSTs /v1/shifts/employee/{id}, which is
@@ -1155,21 +1225,30 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   not be assigned" — with the hire silently left on the 09:30
                   default. Hide the control rather than advertise an action the
                   role cannot complete (2026-09-09 audit). */}
+              {/* Mobile calls this "Shift Timing" and lists each shift as a
+                  clearable chip showing its window ("General · 09:00 – 17:00"),
+                  stacked vertically. Matched, including the helper copy. */}
               {canAssignShift && (
-              <Field label="Shift">
+              <Field label="Shift Timing">
                 {/* No .filter(active): /v1/shifts only returns active policies —
                     a soft-deleted one simply stops appearing in the list. */}
-                <Sel value={form.shiftId} onChange={(e) => set('shiftId', e.target.value)}>
-                  <option value="">
-                    {shifts.length === 0 ? 'No shifts configured — set up in Organization' : 'Default (9:30 AM)'}
-                  </option>
-                  {shifts.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                      {s.startTime && s.endTime ? ` (${s.startTime.slice(0, 5)}–${s.endTime.slice(0, 5)})` : ''}
-                    </option>
-                  ))}
-                </Sel>
+                {shifts.length === 0 ? (
+                  <p className="text-xs text-text-secondary">No shifts configured — set up in Organization.</p>
+                ) : (
+                  <ChipGroup
+                    clearable
+                    columns
+                    value={form.shiftId}
+                    onChange={(v) => set('shiftId', v)}
+                    options={shifts.map((s) => ({
+                      value: s.id,
+                      label: s.startTime && s.endTime
+                        ? `${s.name} · ${s.startTime.slice(0, 5)} – ${s.endTime.slice(0, 5)}`
+                        : s.name,
+                    }))}
+                  />
+                )}
+                <Hint>Sets when this employee counts as late. Optional — defaults to the 9:30 AM rule.</Hint>
               </Field>
               )}
 
@@ -1197,7 +1276,7 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     )
                   })}
                 </div>
-                <p className="mt-1 text-xs text-text-secondary">Defaults to Sat + Sun. Tap to toggle.</p>
+                <Hint>Tap the days this employee is OFF (default Sat + Sun).</Hint>
               </Field>
             </>
           )}
@@ -1206,11 +1285,15 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
                 <Field label="Salary Frequency" required error={errors.salaryFrequency}>
-                  <Sel error={!!errors.salaryFrequency} value={form.salaryFrequency} onChange={(e) => set('salaryFrequency', e.target.value)}>
-                    <option value="MONTHLY">Monthly</option>
-                    <option value="WEEKLY">Weekly</option>
-                    <option value="DAILY">Daily</option>
-                  </Sel>
+                  <ChipGroup
+                    value={form.salaryFrequency}
+                    onChange={(v) => set('salaryFrequency', v)}
+                    options={[
+                      { value: 'MONTHLY', label: 'Monthly' },
+                      { value: 'WEEKLY', label: 'Weekly' },
+                      { value: 'DAILY', label: 'Daily' },
+                    ]}
+                  />
                 </Field>
                 <Field label="Monthly Salary (₹)">
                   <Input
@@ -1227,22 +1310,22 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                     the API field is a fixed enum, so a custom/lookup code (or a UUID
                     fallback) would 400 at deserialization. Mobile parity: hardcode
                     the 4 canonical types when no org lookup exists. */}
-                {employmentTypes.filter((t) => t.active && t.code && (EMPLOYMENT_TYPE_ENUM as readonly string[]).includes(t.code)).length > 0 ? (
-                  <Sel value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)}>
-                    {employmentTypes
-                      .filter((t) => t.active && t.code && (EMPLOYMENT_TYPE_ENUM as readonly string[]).includes(t.code))
-                      .map((t) => (
-                        <option key={t.id} value={t.code!}>{t.name}</option>
-                      ))}
-                  </Sel>
-                ) : (
-                  <Sel value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)}>
-                    <option value="FULL_TIME">Full Time</option>
-                    <option value="PART_TIME">Part Time</option>
-                    <option value="CONTRACT">Contract</option>
-                    <option value="INTERN">Intern</option>
-                  </Sel>
-                )}
+                <ChipGroup
+                  value={form.employmentType}
+                  onChange={(v) => set('employmentType', v)}
+                  options={
+                    employmentTypes.filter((t) => t.active && t.code && (EMPLOYMENT_TYPE_ENUM as readonly string[]).includes(t.code)).length > 0
+                      ? employmentTypes
+                          .filter((t) => t.active && t.code && (EMPLOYMENT_TYPE_ENUM as readonly string[]).includes(t.code))
+                          .map((t) => ({ value: t.code!, label: t.name }))
+                      : [
+                          { value: 'FULL_TIME', label: 'Full Time' },
+                          { value: 'PART_TIME', label: 'Part Time' },
+                          { value: 'CONTRACT',  label: 'Contract' },
+                          { value: 'INTERN',    label: 'Intern' },
+                        ]
+                  }
+                />
               </Field>
 
               <Field label="PAN Number" error={errors.panNumber}>
@@ -1339,6 +1422,24 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onClose, o
                   Send invitation email to <strong>{form.email || 'the employee'}</strong>
                 </label>
               )}
+
+              {/* The two notes the mobile Review step ends with, matched here so
+                  an HR user sees the same explanation on both clients — what the
+                  invite does, and exactly which fields are mandatory. */}
+              {canInvite && sendInvitation && (
+                <p className="flex items-start gap-2 px-1 text-xs text-text-secondary">
+                  <Send size={12} className="mt-0.5 flex-shrink-0 text-primary" />
+                  <span>
+                    An invitation email will be queued to{' '}
+                    <strong>{form.email || 'the employee'}</strong> with a secure link
+                    (expires in 24h) so the employee sets their own password.
+                  </span>
+                </p>
+              )}
+              <p className="px-1 text-xs text-text-tertiary">
+                Required: First Name, Email, Phone, Designation, Employee Code, Department,
+                Date of Joining and Salary Frequency. Use the step pills above if anything is missing.
+              </p>
 
               <button
                 onClick={handleSubmit}
