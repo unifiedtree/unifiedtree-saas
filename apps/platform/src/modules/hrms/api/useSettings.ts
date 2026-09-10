@@ -82,6 +82,26 @@ export function useHrConfig(companyId: string | undefined) {
   })
 }
 
+/**
+ * Public-read subset of the HR config — the weekend day array only.
+ *
+ * 2026-09-10: the leave apply form used to fetch the full /hr-configuration
+ * for weekendDays, which 403s for plain EMPLOYEE and DEPT_MANAGER (the
+ * primary audience). The failure was silent (fell back to Sat+Sun), so on
+ * any 6-day or Fri+Sat workweek the "N days requested / exceeds balance"
+ * preview was computed on the wrong calendar. The new endpoint
+ * (GET /v1/settings/hr-configuration/weekend-days) is authenticated-only and
+ * returns just the days array.
+ */
+export function useWeekendDays(companyId: string | undefined) {
+  return useQuery({
+    queryKey: ['hrms', 'settings', 'weekend-days', companyId],
+    queryFn: () => apiJson<{ weekendDays?: number[] }>(`/v1/settings/hr-configuration/weekend-days?companyId=${companyId}`),
+    enabled: !!companyId,
+    staleTime: 5 * 60_000,   // rarely changes
+  })
+}
+
 export function useUpdateHrConfig() {
   const qc = useQueryClient()
   return useMutation({

@@ -35,6 +35,31 @@ public class SettingsController {
         return hrConfig.getOrDefault(companyId);
     }
 
+    /**
+     * Public-read subset: the weekend day array only.
+     *
+     * <p>2026-09-10: the Leave apply form needs to compute the number of
+     * business days a request will consume, and the tenant may run a 6-day or
+     * Fri+Sat workweek — so the SPA used to fetch /hr-configuration for the
+     * weekend list. That endpoint is HR/admin/settings.read only, so every
+     * plain employee (and every DEPT_MANAGER) 403'd on every render and the
+     * client silently fell back to Sat+Sun. On a Fri+Sat workweek the "you
+     * are requesting N days / exceeds your balance" preview shown to the
+     * applicant was computed on the wrong weekend.
+     *
+     * <p>This endpoint returns ONLY the weekend day array — no seat counters,
+     * no employee-code sequence, no other HR config. That is safe to expose
+     * to any authenticated caller because it is the calendar rule the applicant
+     * has to see anyway before they submit. Two-week weekend override lists
+     * would need a separate call.
+     */
+    @GetMapping("/hr-configuration/weekend-days")
+    @PreAuthorize("isAuthenticated()")
+    public java.util.Map<String, Object> getWeekendDays(@RequestParam UUID companyId) {
+        HrConfigResponse full = hrConfig.getOrDefault(companyId);
+        return java.util.Map.of("weekendDays", full.weekendDays());
+    }
+
     @PutMapping("/hr-configuration")
     @PreAuthorize("hasAuthority('settings.hrconfig.write')")
     public HrConfigResponse updateHrConfig(@RequestParam UUID companyId,

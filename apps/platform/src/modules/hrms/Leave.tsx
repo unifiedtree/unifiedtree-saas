@@ -15,7 +15,7 @@ import {
 } from './api/useLeave'
 import { usePendingWfhApprovals, useWfhDecision } from './api/useWfh'
 import { useCompanies } from './api/useOrg'
-import { useHrConfig } from './api/useSettings'
+import { useWeekendDays } from './api/useSettings'
 import { LeaveTypes } from './leave/LeaveTypes'
 import { HolidayCalendar } from './leave/HolidayCalendar'
 import { HrPageHeader, HrStatusPill, HrTabs, HrTabPanel, type PillTone } from '@/shared/components/hr'
@@ -113,7 +113,11 @@ function ApplyTab() {
   const { data: leaveTypes = [], isLoading: typesLoading } = useLeaveTypes(activeCompany?.id ?? '')
   const { data: myLeaves } = useMyLeaves(0)
   const { data: balances = [] } = useMyBalances(new Date().getFullYear())
-  const { data: hrConfig } = useHrConfig(activeCompany?.id)
+  // 2026-09-10: was useHrConfig, which 403s for plain EMPLOYEE and DEPT_MANAGER
+  // — the primary audience of this form. The failure was silent, so on a
+  // 6-day or Fri+Sat workweek the day-count preview lied. useWeekendDays hits
+  // the authenticated-only weekend-days subset endpoint added the same day.
+  const { data: hrConfig } = useWeekendDays(activeCompany?.id)
   const applyLeave = useApplyLeave()
 
   // Weekend/off-days come from the tenant's HR configuration

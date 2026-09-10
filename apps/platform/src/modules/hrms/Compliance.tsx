@@ -29,26 +29,38 @@ const fmtDate = (d?: string) => (d ? format(new Date(d), 'd MMM yyyy') : '—')
 type Tab = 'calendar' | 'filings' | 'posh'
 
 export const Compliance: React.FC = () => {
+  const canRead = usePermission('hrms.compliance.read')
   const canWrite = usePermission('hrms.compliance.write')
   const canPosh = usePermission('hrms.compliance.posh')
-  const [tab, setTab] = useState<Tab>('calendar')
 
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState('')
   const activeCompany = companyId || companies[0]?.id || ''
 
+  // 2026-09-10: gate the Calendar and Filings tabs on hrms.compliance.read
+  // (the permission their data endpoints enforce). The route admits anyOf
+  // [compliance.read, compliance.write, compliance.posh], so a POSH-only
+  // principal used to land on the default 'calendar' tab, whose GET
+  // /v1/compliance/items 403s, and see a permanently empty calendar instead
+  // of the POSH tab they do have access to.
+  //
+  // canWrite is treated as an implicit read too — you cannot write to
+  // something you cannot see, and every seeded role pairs the two.
+  const canSeeCalendarOrFilings = canRead || canWrite
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'calendar', label: 'Compliance Calendar' },
-    { key: 'filings', label: 'Statutory Filings' },
-    { key: 'posh', label: 'POSH' },
+    ...(canSeeCalendarOrFilings ? [{ key: 'calendar' as Tab, label: 'Compliance Calendar' }] : []),
+    ...(canSeeCalendarOrFilings ? [{ key: 'filings'  as Tab, label: 'Statutory Filings' }] : []),
+    ...(canPosh                 ? [{ key: 'posh'     as Tab, label: 'POSH' }] : []),
   ]
+  const [tab, setTab] = useState<Tab | null>(null)
+  const activeTab = tab && tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key
 
   return (
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Compliance" title="Statutory Compliance" subtitle="Compliance calendar, statutory filings, and the POSH register" />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
+        <HrTabs tabs={tabs} active={activeTab ?? ''} onChange={(k) => setTab(k as Tab)} />
         {companies.length > 1 && (
           <div className="mt-1 w-56">
             <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm">
@@ -58,9 +70,16 @@ export const Compliance: React.FC = () => {
         )}
       </div>
 
-      {tab === 'calendar' && <HrTabPanel tabKey="calendar"><CalendarTab companyId={activeCompany} canWrite={canWrite} /></HrTabPanel>}
-      {tab === 'filings' && <HrTabPanel tabKey="filings"><FilingsTab companyId={activeCompany} canWrite={canWrite} /></HrTabPanel>}
-      {tab === 'posh' && <HrTabPanel tabKey="posh">{canPosh ? <PoshTab companyId={activeCompany} /> : <PoshDenied />}</HrTabPanel>}
+      {tabs.length === 0 && (
+        <div className="ut-card p-10 text-center">
+          <p className="text-sm font-semibold text-text-secondary">No compliance access for this role</p>
+          <p className="mt-1 text-xs text-text-tertiary">Ask an administrator to grant a Compliance permission.</p>
+        </div>
+      )}
+
+      {activeTab === 'calendar' && <HrTabPanel tabKey="calendar"><CalendarTab companyId={activeCompany} canWrite={canWrite} /></HrTabPanel>}
+      {activeTab === 'filings' && <HrTabPanel tabKey="filings"><FilingsTab companyId={activeCompany} canWrite={canWrite} /></HrTabPanel>}
+      {activeTab === 'posh' && <HrTabPanel tabKey="posh">{canPosh ? <PoshTab companyId={activeCompany} /> : <PoshDenied />}</HrTabPanel>}
     </div>
   )
 }
@@ -76,7 +95,16 @@ function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boo
   const { data, isLoading } = useComplianceItems(companyId || undefined, page)
   const create = useCreateComplianceItem()
   const markDone = useMarkComplianceDone()
-  const { data: dir } = useEmployeeDirectory({ companyId, pageSize: 100 }, { enabled: !!companyId })
+  // 2026-09-10: gate the directory fetch on the permission it enforces
+  // (hrms.employee.read). A custom role holding compliance.write alone
+  // reached this page, and the Owner <select> silently showed only
+  // "Unassigned" because the 403 fell through to `employees = []`. Now the
+  // fetch is skipped and the dropdown says why.
+  const canReadEmployees = usePermission('hrms.employee.read')
+  const { data: dir } = useEmployeeDirectory(
+    { companyId, pageSize: 100 },
+    { enabled: !!companyId && canReadEmployees },
+  )
   const employees = dir?.content ?? []
   const items = data?.content ?? []
   const total = data?.totalElements ?? 0
@@ -163,8 +191,16 @@ function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boo
           </div>
           <div className="w-44">
             <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Owner</label>
-            <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className="ut-select ut-select-sm">
-              <option value="">Unassigned</option>
+            <select
+              value={ownerId}
+              onChange={(e) => setOwnerId(e.target.value)}
+              className="ut-select ut-select-sm"
+              disabled={!canReadEmployees}
+              title={canReadEmployees ? undefined : 'Your role cannot browse the employee directory'}
+            >
+              <option value="">
+                {canReadEmployees ? 'Unassigned' : 'Cannot browse employees'}
+              </option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>{[e.firstName, e.lastName].filter(Boolean).join(' ')}{e.employeeCode ? ` (${e.employeeCode})` : ''}</option>
               ))}
