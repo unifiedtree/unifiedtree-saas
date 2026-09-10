@@ -9,7 +9,7 @@ import { useRoles } from '@/shared/hooks/useRoles'
 import { usePermission, Can, P } from '@unifiedtree/sdk'
 import { CardSkeleton, Skeleton, EmptyState } from '@unifiedtree/ui-kit'
 import {
-  useMyLeaves, useMyBalances, useLeaveTypes, usePendingApprovals,
+  useMyLeaves, useMyBalances, useLeaveTypes, usePendingApprovals, useApprovalsHistory,
   useApplyLeave, useLeaveDecision, useCancelLeave,
   type LeaveApprovalStatus, type LeaveDuration,
 } from './api/useLeave'
@@ -443,6 +443,75 @@ interface MergedApproval {
   createdAt?: string
 }
 
+// ── Approval History ──────────────────────────────────────────────────────────
+
+/**
+ * Everything this approver has already decided.
+ *
+ * Anil (2026-09-10): "leaves history after submitting the request not
+ * displaying". The cause was that the product had no history surface at all —
+ * an admin's only leave tabs were Approvals / Leave Types / Holidays, so the
+ * instant a request was approved it left the pending queue and was gone. The
+ * backend route existed and was never called.
+ */
+function ApprovalHistoryTab() {
+  const [page, setPage] = useState(0)
+  const { data, isLoading, error, refetch } = useApprovalsHistory(page)
+  const rows = data?.content ?? []
+  const total = data?.totalElements ?? 0
+
+  return (
+    <div className="space-y-3">
+      {isLoading ? (
+        <CardSkeleton />
+      ) : error ? (
+        <EmptyState variant="error" title="Failed to load history" description={(error as Error).message} primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
+      ) : rows.length === 0 ? (
+        <div className="text-center py-16">
+          <FileText size={32} className="mx-auto mb-3 text-text-tertiary" />
+          <p className="text-text-secondary text-sm">No decisions yet</p>
+          <p className="text-text-tertiary text-xs mt-1">Leaves you approve or reject appear here.</p>
+        </div>
+      ) : (
+        rows.map((l) => {
+          const sc = STATUS_STYLE[l.status] ?? STATUS_STYLE['PENDING']
+          return (
+            <div key={l.id} className="ut-card ut-card-sm flex items-center gap-4 px-4 py-3">
+              <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', sc.bg)}>
+                <sc.icon size={16} className={sc.color} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-text-primary font-medium text-sm truncate">
+                    {l.employeeName ?? 'Employee'}
+                    {l.employeeCode ? ` · ${l.employeeCode}` : ''}
+                  </p>
+                  <HrStatusPill tone={sc.tone}>{sc.label}</HrStatusPill>
+                </div>
+                <p className="text-text-secondary text-xs mt-0.5">
+                  {l.leaveTypeName ?? 'Leave'}
+                  {' · '}{format(new Date(l.startDate), 'd MMM')} – {format(new Date(l.endDate), 'd MMM yyyy')}
+                  {' · '}{l.totalDays} day{l.totalDays !== 1 ? 's' : ''}
+                  {l.departmentName ? ` · ${l.departmentName}` : ''}
+                </p>
+                {l.reason && <p className="text-text-tertiary text-xs truncate mt-0.5">"{l.reason}"</p>}
+              </div>
+            </div>
+          )
+        })
+      )}
+
+      {total > 20 && (
+        <div className="flex justify-center gap-3 pt-2">
+          <button onClick={() => setPage((p) => p - 1)} disabled={page === 0} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Prev</button>
+          <span className="text-xs text-text-secondary py-1.5">Page {page + 1}</span>
+          <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * 20 >= total} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Next</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ApprovalsTab() {
   const { toast } = useToast()
   const [page, setPage] = useState(0)
@@ -665,6 +734,9 @@ const ALL_TABS = [
   { key: 'apply',     label: 'Apply' },
   { key: 'balances',  label: 'Balances' },
   { key: 'approvals', label: 'Approvals',   requires: P.HRMS_LEAVE_APPROVE_L1 },
+  // Sits next to Approvals and shares its gate: a decided leave used to vanish
+  // from the product entirely once it left the pending queue.
+  { key: 'history',   label: 'History',     requires: P.HRMS_LEAVE_APPROVE_L1 },
   { key: 'types',     label: 'Leave Types' },
   { key: 'holidays',  label: 'Holidays' },
 ] as const
@@ -749,6 +821,7 @@ export const Leave: React.FC = () => {
       {tab === 'apply' && <HrTabPanel tabKey="apply"><ApplyTab /></HrTabPanel>}
       {tab === 'balances' && <HrTabPanel tabKey="balances"><BalancesTab /></HrTabPanel>}
       {tab === 'approvals' && <HrTabPanel tabKey="approvals"><ApprovalsTab /></HrTabPanel>}
+      {tab === 'history' && <HrTabPanel tabKey="history"><ApprovalHistoryTab /></HrTabPanel>}
       {tab === 'types' && <HrTabPanel tabKey="types"><LeaveTypes /></HrTabPanel>}
       {tab === 'holidays' && <HrTabPanel tabKey="holidays"><HolidayCalendar canEdit={canEditHolidays} /></HrTabPanel>}
     </div>

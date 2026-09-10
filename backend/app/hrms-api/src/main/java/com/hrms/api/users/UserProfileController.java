@@ -110,20 +110,31 @@ public class UserProfileController {
             // (/v1/leave/types?companyId=... is isAuthenticated() and works
             // fine, the SPA just never had an id to pass), so an employee could
             // not request leave at all from the web.
-            // The company NAME comes along for the ride so the SPA can render a
-            // one-entry company selector without calling the admin-only list.
-            Map<String, Object> e = firstRow("""
-                    SELECT e.first_name, e.last_name, e.company_id, c.name AS company_name
-                      FROM hrms.employees e
-                      LEFT JOIN hrms.companies c
-                             ON c.id = e.company_id AND c.tenant_id = e.tenant_id
-                     WHERE e.id = ? AND e.tenant_id = ?
-                    """, employeeId, tenantId);
+            Map<String, Object> e = firstRow(
+                    "SELECT first_name, last_name, company_id FROM hrms.employees WHERE id = ? AND tenant_id = ?",
+                    employeeId, tenantId);
             if (e != null) {
-                firstName   = (String) e.get("first_name");
-                lastName    = (String) e.get("last_name");
-                companyId   = (UUID)   e.get("company_id");
-                companyName = (String) e.get("company_name");
+                firstName = (String) e.get("first_name");
+                lastName  = (String) e.get("last_name");
+                companyId = (UUID)   e.get("company_id");
+            }
+        }
+
+        // The company NAME is a nice-to-have: it lets the SPA label a one-entry
+        // company selector. It is deliberately a SEPARATE, swallowed query
+        // rather than a join on the employee lookup above — a first attempt
+        // joined it in, got the schema wrong (org.companies, not hrms.*), and
+        // 500'd /users/me, which the SPA calls on every single page. Nothing
+        // cosmetic is worth putting that endpoint at risk, so a failure here
+        // costs a label and nothing else.
+        if (companyId != null) {
+            try {
+                Map<String, Object> c = firstRow(
+                        "SELECT name FROM org.companies WHERE id = ? AND tenant_id = ?",
+                        companyId, tenantId);
+                if (c != null) companyName = (String) c.get("name");
+            } catch (Exception ex) {
+                log.warn("company-name lookup failed for company {}: {}", companyId, ex.getMessage());
             }
         }
 

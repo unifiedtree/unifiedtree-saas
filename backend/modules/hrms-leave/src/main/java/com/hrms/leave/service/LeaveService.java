@@ -607,6 +607,13 @@ public class LeaveService {
         return PageResponse.from(page, this::toResponseWithTypeName);
     }
 
+    /** Tenant-wide decided history for admin/HR — mirrors {@link #getAllPending}. */
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestResponse> getAllDecided(Pageable pageable) {
+        Page<LeaveRequest> page = leaveRequestRepository.findAllDecided(pageable);
+        return PageResponse.from(page, this::toResponseWithTypeName);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<LeaveRequestResponse> getDecidedApprovalsForManager(UUID managerId, Pageable pageable) {
         log.debug("Fetching decided approvals history for manager={}", managerId);

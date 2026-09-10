@@ -42,7 +42,9 @@ export interface SalaryComponent {
 }
 
 export interface StructureLine {
-  componentId: string
+  /** Null on server-computed statutory lines (PF/ESI/PT), which have no
+   *  employee_structure_components row behind them. */
+  componentId: string | null
   componentCode: string
   componentName: string
   category: ComponentCategory
@@ -60,7 +62,25 @@ export interface EmployeeSalaryStructure {
   effectiveFrom: string
   isCurrent: boolean
   revisionNote?: string | null
+  /** Raw configured components. Empty for most employees — see below. */
   lines: StructureLine[]
+
+  // ── Server-computed full-month summary (added 2026-09-10) ─────────────────
+  // Every screen used to sum `lines` itself and got ₹0, because a freshly
+  // onboarded employee has no component rows and statutory deductions are
+  // never structure rows at all — the payroll engine generates them. These
+  // fields run that same engine over a full month with no LOP, so the
+  // structure screen previews what a full-attendance month actually pays.
+  // Optional so the UI degrades gracefully against an older backend rev.
+  earnings?: StructureLine[]
+  deductions?: StructureLine[]
+  employerContributions?: StructureLine[]
+  grossMonthly?: number
+  totalDeductions?: number
+  netMonthly?: number
+  employerContribMonthly?: number
+  /** True when the breakup was derived from CTC (no components configured). */
+  derivedFromCtc?: boolean
 }
 
 export interface PtSlab {

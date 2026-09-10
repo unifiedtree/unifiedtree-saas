@@ -116,6 +116,22 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
     Page<LeaveRequest> findDecidedForManager(@Param("managerEmpId") UUID managerEmpId, Pageable pageable);
 
     /**
+     * Tenant-wide decided history — the counterpart of {@link #findAllPending}
+     * for HR/admin. RLS scopes it to the tenant.
+     *
+     * 2026-09-10: added because {@link #findDecidedForManager} is personal-scope,
+     * so an admin who is not anybody's reporting manager saw an EMPTY history.
+     * Combined with the fact that the SPA never rendered a history tab at all,
+     * approving a leave made it disappear from every screen in the product —
+     * reported by the client as "leaves history after submitting the request
+     * not displaying".
+     */
+    @Query(value = "SELECT lr.* FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING' ORDER BY lr.updated_at DESC",
+        countQuery = "SELECT COUNT(*) FROM leave_mgmt.leave_requests lr WHERE lr.status <> 'PENDING'",
+        nativeQuery = true)
+    Page<LeaveRequest> findAllDecided(Pageable pageable);
+
+    /**
      * Overlap detection for the apply-leave path. Returns every leave request
      * for {@code employeeId} that is still "live" (PENDING, PENDING_L2, or
      * APPROVED) and whose date range intersects the proposed range

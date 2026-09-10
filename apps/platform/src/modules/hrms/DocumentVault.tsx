@@ -65,6 +65,8 @@ export const DocumentVault: React.FC = () => {
 
 function DocumentTable({
   documents, isLoading, showOwner, canWrite, onDelete, footer,
+  emptyTitle = 'No documents found',
+  emptyHint = 'Documents stored in the vault will appear here.',
 }: {
   documents: EmployeeDocument[]
   isLoading: boolean
@@ -73,6 +75,11 @@ function DocumentTable({
   onDelete?: (id: string) => void
   /** Pager built by the owning tab — see hrPaginationFooter. */
   footer?: React.ReactNode
+  /** Empty-state copy. Defaults are deliberately generic; each tab overrides
+   *  them, because "No documents found" told the reader nothing about what
+   *  the tab was for or who was supposed to fill it. */
+  emptyTitle?: string
+  emptyHint?: string
 }) {
   const cols = 4 + (showOwner ? 1 : 0) + (canWrite ? 1 : 0)
   return (
@@ -92,7 +99,7 @@ function DocumentTable({
           {isLoading ? (
             [...Array(4)].map((_, i) => <tr key={i}><td colSpan={cols} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
           ) : documents.length === 0 ? (
-            <tr><td colSpan={cols} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No documents found</p><p className="mt-1 text-xs text-text-tertiary">Documents stored in the vault will appear here.</p></td></tr>
+            <tr><td colSpan={cols} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">{emptyTitle}</p><p className="mx-auto mt-1 max-w-md text-xs text-text-tertiary">{emptyHint}</p></td></tr>
           ) : documents.map((d, i) => {
             const badge = expiryBadge(d.expiryDate)
             return (
@@ -164,6 +171,15 @@ function MyDocumentsTab() {
 
   return (
     <div className="space-y-5">
+      {/* The tab used to open with three zeroes and "No documents found",
+          which prompted a literal "what is My Documents for?" from a client.
+          It is a read-only personal copy of the paperwork HR holds on you —
+          say that up front rather than making the reader guess. */}
+      <p className="text-sm text-text-secondary">
+        Your personal copy of the paperwork HR holds for you — offer letter, contract,
+        ID proofs, certificates and tax documents. HR uploads them; you can view and
+        download them here at any time.
+      </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <HrStatCard icon={<FileText size={18} />} color="blue" value={total} label="Total Documents" loading={isLoading} />
         <HrStatCard icon={<ShieldAlert size={18} />} color="orange" value={stats.expiring} label="Expiring Soon" sub={pageScoped} loading={isLoading} />
@@ -172,6 +188,8 @@ function MyDocumentsTab() {
       <DocumentTable
         documents={documents}
         isLoading={isLoading}
+        emptyTitle="Nothing shared with you yet"
+        emptyHint="When HR uploads a document to your file — offer letter, contract, ID proof, certificate or tax form — it appears here. Ask HR if you are expecting something."
         footer={hrPaginationFooter({
           page, pageSize: DOCUMENT_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
         })}
@@ -245,6 +263,10 @@ function AllDocumentsTab() {
           showOwner
           canWrite={canWrite}
           onDelete={canWrite ? onDelete : undefined}
+          emptyTitle="This employee has no documents yet"
+          emptyHint={canWrite
+            ? 'Use the Upload tab to add their offer letter, contract, ID proofs or certificates. Whatever you store here is visible to them under My Documents.'
+            : 'Nothing has been uploaded to their file yet.'}
           footer={hrPaginationFooter({
             page, pageSize: DOCUMENT_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
           })}

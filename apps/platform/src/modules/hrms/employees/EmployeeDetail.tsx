@@ -1234,7 +1234,12 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
     // this, saving a revision zeroed every line and the employee was paid ₹0.
     // (Clear a field to drop that component; that's the explicit-removal path.)
     const prefill: Record<string, string> = {}
-    for (const l of structure?.lines ?? []) prefill[l.componentId] = String(l.monthlyAmount)
+    // `lines` is the raw configured set, so componentId is always present here.
+    // The null case belongs to the server-computed statutory lines (PF/ESI/PT),
+    // which have no employee_structure_components row and are never revisable.
+    for (const l of structure?.lines ?? []) {
+      if (l.componentId) prefill[l.componentId] = String(l.monthlyAmount)
+    }
     setLines(prefill)
     setOpen(true)
   }
@@ -1265,19 +1270,41 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
         <EmptyState variant="first-run" title="No salary structure" description="Define this employee's salary structure to enable payroll." />
       ) : (
         <>
+          {/* 2026-09-10: this tab showed CTC / Monthly / Tax regime / PF status
+              and a single flat, uncategorised component list — no gross, no
+              deductions, no net. The server now returns a full-month breakdown
+              computed by the payroll engine, so show the same four money cards
+              the Salary Structure page does. */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Annual CTC</p><p className="text-lg font-bold text-text-primary">{inr(structure.ctcAnnual)}</p></div>
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Monthly</p><p className="text-lg font-bold text-text-primary">{inr(structure.ctcMonthly)}</p></div>
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Tax regime</p><p className="text-lg font-bold text-text-primary">{structure.taxRegime}</p></div>
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">PF status</p><p className="text-sm font-bold text-text-primary">{structure.pfApplicable ? structure.pfStatus : 'N/A'}</p></div>
+            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Annual CTC</p><p className="text-lg font-bold text-text-primary">{inr(structure.ctcAnnual)}</p><p className="text-xs text-text-tertiary">{inr(structure.ctcMonthly)} / month</p></div>
+            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Gross / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.grossMonthly ?? structure.ctcMonthly)}</p></div>
+            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Deductions / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.totalDeductions ?? 0)}</p></div>
+            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Net pay / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.netMonthly ?? structure.ctcMonthly)}</p></div>
           </div>
-          {structure.lines.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
+            <span>Tax regime: <span className="font-semibold text-text-primary">{structure.taxRegime}</span></span>
+            <span>PF: <span className="font-semibold text-text-primary">{structure.pfApplicable ? structure.pfStatus : 'N/A'}</span></span>
+          </div>
+          {structure.derivedFromCtc && (
+            <p className="text-xs text-text-tertiary">
+              No salary components configured — this breakup is derived from CTC as a
+              single Basic component, the same fallback payroll applies. Use “Revise
+              structure” below to define your own.
+            </p>
+          )}
+          {(structure.earnings ?? structure.lines).length > 0 && (
             <TableCard>
               <table className="hr-table">
-                <thead><tr><th>Component</th><th>Monthly</th><th>Annual</th></tr></thead>
+                <thead><tr><th>Component</th><th>Type</th><th>Monthly</th><th>Annual</th></tr></thead>
                 <tbody>
-                  {structure.lines.map(l => (
-                    <tr key={l.componentId}><td className="text-text-primary">{l.componentName}</td><td>{inr(l.monthlyAmount)}</td><td className="text-text-secondary">{inr(l.monthlyAmount * 12)}</td></tr>
+                  {[...(structure.earnings ?? structure.lines), ...(structure.deductions ?? [])].map(l => (
+                    // componentId is null on server-computed statutory lines.
+                    <tr key={l.componentCode}>
+                      <td className="text-text-primary">{l.componentName}</td>
+                      <td className="text-text-secondary">{l.category.replace('_', ' ')}</td>
+                      <td>{inr(l.monthlyAmount)}</td>
+                      <td className="text-text-secondary">{inr(l.monthlyAmount * 12)}</td>
+                    </tr>
                   ))}
                 </tbody>
               </table>

@@ -107,6 +107,30 @@ export function usePendingApprovals(page = 0) {
   })
 }
 
+/**
+ * Leaves this approver has already decided — approved, rejected or cancelled.
+ *
+ * The endpoint has existed since the approval flow was built but nothing in the
+ * SPA ever called it, so an approved leave dropped out of the pending queue and
+ * was not visible anywhere in the product afterwards. Reported by the client as
+ * "leaves history after submitting the request not displaying".
+ *
+ * Scope follows the caller: tenant-wide for HR/admin, personal for a manager.
+ * No polling — history only changes as a side effect of a decision made on the
+ * Approvals tab, and useLeaveDecision already invalidates ['hrms','leave',
+ * 'approvals'], which this key sits under.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- exported hook
+export function useApprovalsHistory(page = 0) {
+  return useQuery({
+    queryKey: ['hrms', 'leave', 'approvals', 'history', page],
+    queryFn: () =>
+      apiJson<{ content: LeaveRequestResponse[]; totalElements: number; totalPages?: number }>(
+        `/v1/leave/approvals/history?page=${page}&size=20`),
+    staleTime: 30_000,
+  })
+}
+
 export function useApplyLeave() {
   const qc = useQueryClient()
   return useMutation({

@@ -71,18 +71,38 @@ export const SalaryStructureAdmin: React.FC = () => {
   const structure = structureQ.data ?? null
   const activeComponents = (componentsQ.data ?? []).filter((c) => c.isActive).length
 
+  // 2026-09-10: this block used to sum `structure.lines` client-side and showed
+  // ₹0 gross / ₹0 deductions / ₹0 net for essentially every employee — a
+  // freshly onboarded person has no component rows, and statutory deductions
+  // (PF/ESI/PT) are never structure rows at all, the payroll engine generates
+  // them at run time. The payroll run screen showed real gross and net for the
+  // same person, which is the contradiction the client reported.
+  //
+  // The server now runs the real engine over a full month and returns the
+  // breakdown. We prefer those fields and keep the old local math purely as a
+  // fallback for a backend rev that predates them.
   const { earnings, deductions, employer, grossMonthly, totalDeductions, netMonthly } = useMemo(() => {
     const lines = structure?.lines ?? []
+    const sum = (rows: StructureLine[]) => rows.reduce((t, r) => t + (r.monthlyAmount || 0), 0)
+    if (structure?.earnings) {
+      const ded = structure.deductions ?? []
+      return {
+        earnings: structure.earnings,
+        deductions: ded,
+        employer: structure.employerContributions ?? [],
+        grossMonthly: structure.grossMonthly ?? sum(structure.earnings),
+        totalDeductions: structure.totalDeductions ?? sum(ded),
+        netMonthly: structure.netMonthly ?? (sum(structure.earnings) - sum(ded)),
+      }
+    }
     const earn = lines.filter((l) => EARNING_CATS.includes(l.category))
     const ded = lines.filter((l) => l.category === 'DEDUCTION')
-    const emp = lines.filter((l) => l.category === 'EMPLOYER_CONTRIBUTION')
-    const sum = (rows: StructureLine[]) => rows.reduce((t, r) => t + (r.monthlyAmount || 0), 0)
     const gross = sum(earn)
     const dedTotal = sum(ded)
     return {
       earnings: earn,
       deductions: ded,
-      employer: emp,
+      employer: lines.filter((l) => l.category === 'EMPLOYER_CONTRIBUTION'),
       grossMonthly: gross,
       totalDeductions: dedTotal,
       netMonthly: gross - dedTotal,
@@ -345,6 +365,16 @@ export const SalaryStructureAdmin: React.FC = () => {
                 {structure.revisionNote && (
                   <span className="text-text-tertiary">· {structure.revisionNote}</span>
                 )}
+              </div>
+
+              {/* Be explicit about where the numbers came from. When nobody has
+                  configured components, payroll pays the whole CTC as BASIC and
+                  we preview exactly that — but the admin should know it is a
+                  derived breakup, not one somebody set up. */}
+              <div className="text-xs text-text-tertiary">
+                {structure.derivedFromCtc
+                  ? 'No salary components configured — this breakup is derived from CTC as a single Basic component, the same fallback payroll applies. Use “Revise structure” on the employee’s profile to define your own.'
+                  : 'Full-month figures. An actual payroll run pro-rates earnings by paid days, so a month with LOP will pay less.'}
               </div>
 
               <div className="grid gap-6 lg:grid-cols-2">

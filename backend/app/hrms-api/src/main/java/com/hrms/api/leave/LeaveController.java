@@ -227,14 +227,23 @@ public class LeaveController {
         return ResponseEntity.ok(enrichPage(page));
     }
 
-    @Operation(summary = "Get past leave decisions (approved/rejected/cancelled) for the current manager")
+    @Operation(summary = "Past leave decisions (approved/rejected/cancelled) — tenant-wide for HR/admin, personal scope for a manager")
     @GetMapping("/approvals/history")
     @PreAuthorize("@perm.check('hrms.leave.approve.l1')")
     public ResponseEntity<PageResponse<LeaveRequestResponse>> approvalsHistory(
             @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(
-                leaveService.getDecidedApprovalsForManager(extractEmployeeId(jwt), pageable)));
+        // Same admin/HR broadening as pendingApprovals above, and for the same
+        // reason: this was personal-scope only, so an admin who is nobody's
+        // reporting manager got an empty history and every decided leave in the
+        // tenant became invisible the moment it left the pending queue.
+        boolean adminOrHr = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "hrms.leave.approve.l2".equals(a.getAuthority()));
+        PageResponse<LeaveRequestResponse> page = adminOrHr
+                ? leaveService.getAllDecided(pageable)
+                : leaveService.getDecidedApprovalsForManager(extractEmployeeId(jwt), pageable);
+        return ResponseEntity.ok(enrichPage(page));
     }
 
     @Operation(summary = "L1 manager approval — approve escalates to HR, reject closes")
