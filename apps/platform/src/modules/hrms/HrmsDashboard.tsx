@@ -347,7 +347,10 @@ export const HrmsDashboard: React.FC = () => {
   const clock = useLiveClock()
 
   const quickActions = [
-    ...(canWriteEmployee ? [{ label: 'Add Employee', icon: UserPlus, path: '/hrms/employees' }] : []),
+    // 2026-09-10: ?add=1 opens the Add Employee drawer directly, so this quick
+    // action is one click instead of two ("Add Employee" → then Add Employee
+    // again). See Employees.tsx which reads the query param and strips it.
+    ...(canWriteEmployee ? [{ label: 'Add Employee', icon: UserPlus, path: '/hrms/employees?add=1' }] : []),
     ...(canRunPayroll ? [{ label: 'Run Payroll', icon: Banknote, path: '/hrms/payroll-dashboard' }] : []),
     { label: 'Attendance', icon: Clock, path: '/hrms/attendance' },
     { label: 'Add Time-Off', icon: CalendarDays, path: '/hrms/leave' },

@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useCallback, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Upload, Users, UserCheck, UserX, Clock, ChevronLeft, ChevronRight, Building2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useToast } from '@/shared/hooks/useToast'
@@ -66,6 +66,20 @@ export const Employees: React.FC = () => {
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(0)
   const [showForm, setShowForm] = useState(false)
+
+  // 2026-09-10: deep-link support so the dashboard's "Add Employee" quick
+  // action lands directly on this form instead of the bare directory (which
+  // then required a second click). Navigate here with ?add=1 and this opens
+  // the drawer, then strips the query param so a refresh does not reopen it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('add') === '1') {
+      setShowForm(true)
+      const next = new URLSearchParams(searchParams)
+      next.delete('add')
+      setSearchParams(next, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const debouncedSearch = useDebounce(search, 350)
 
