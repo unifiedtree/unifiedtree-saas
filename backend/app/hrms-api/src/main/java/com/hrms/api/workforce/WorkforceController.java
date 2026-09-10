@@ -209,6 +209,19 @@ public class WorkforceController {
         return departments.updateAppearance(id, colorHex, iconKey);
     }
 
+    /** 2026-09-10: code and description were settable at create time and then
+     *  frozen — there was no route to change either, so a typo in a department
+     *  code could only be fixed by archiving and recreating the department,
+     *  which orphans every employee assigned to it. Null = leave unchanged. */
+    @PatchMapping("/departments/{id}/details")
+    @PreAuthorize("hasAuthority('hrms.department.write')")
+    public DepartmentResponse updateDepartmentDetails(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String description) {
+        return departments.updateDetails(id, code, description);
+    }
+
     @PatchMapping("/departments/{id}/head")
     @PreAuthorize("hasAuthority('hrms.department.write')")
     public DepartmentResponse setDepartmentHead(@PathVariable UUID id,

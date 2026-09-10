@@ -11,6 +11,7 @@ import {
   useCompanies, useCreateCompany, useUpdateCompany, useArchiveCompany,
   useBranches, useCreateBranch, useArchiveBranch,
   useDepartments, useCreateDepartment, useRenameDepartment, useArchiveDepartment, useSetDepartmentHead, useSetDepartmentAppearance,
+  useUpdateDepartmentDetails,
   useDesignations, useCreateDesignation, useUpdateDesignation, useArchiveDesignation,
   useGrades, useCreateGrade, useUpdateGrade, useDeleteGrade,
   useEmploymentTypes, useCreateEmploymentType, useUpdateEmploymentType, useDeleteEmploymentType,
@@ -534,6 +535,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
   const archiveDept = useArchiveDepartment()
   const setHead = useSetDepartmentHead()
   const setAppearance = useSetDepartmentAppearance()
+  const updateDeptDetails = useUpdateDepartmentDetails()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Department | null>(null)
   const emptyDeptForm = { name: '', code: '', description: '', departmentHeadEmployeeId: '', colorHex: DEFAULT_DEPT_COLOR, iconKey: DEFAULT_DEPT_ICON }
@@ -622,13 +624,18 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
   }
 
   // Edit path. Deliberately narrow: the backend exposes NO full-update endpoint
-  // for a department — WorkforceController only has
-  //   PATCH /v1/hrms/departments/{id}/name?name=…   (hrms.department.write)
-  //   PATCH /v1/hrms/departments/{id}/head?employeeId=…  (hrms.department.write)
-  // so name and head are the only server-side fields that can change here. Code
-  // and description are rendered read-only in edit mode rather than collected
-  // into a payload nothing would persist — a save that silently drops half the
-  // form is worse than a field the user can see is locked.
+  // for a department — WorkforceController has one PATCH per concern:
+  //   /name?name=…                      (hrms.department.write)
+  //   /head?employeeId=…                (hrms.department.write)
+  //   /appearance?colorHex=&iconKey=    (hrms.department.write)
+  //   /details?code=&description=       (hrms.department.write)
+  // Each is skipped below when its field is untouched, so editing the head
+  // doesn't rewrite the name.
+  //
+  // 2026-09-10: code and description used to be rendered read-only here,
+  // because no route could persist them — a typo in a department code was
+  // permanent short of archiving the department and recreating it, which
+  // orphans every employee assigned to it. /details closes that.
   const handleUpdate = async () => {
     if (!editing) return
     const trimmed = form.name.trim()
@@ -655,6 +662,17 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
       const nextHead = form.departmentHeadEmployeeId || undefined
       if (nextHead !== (editing.departmentHeadEmployeeId || undefined)) {
         await setHead.mutateAsync({ id: editing.id, employeeId: nextHead })
+      }
+      // Compare against '' rather than undefined so clearing a field counts as
+      // a change and is actually sent (the hook forwards '' to mean "clear").
+      const codeChanged = form.code.trim() !== (editing.code ?? '')
+      const descChanged = form.description.trim() !== (editing.description ?? '')
+      if (codeChanged || descChanged) {
+        await updateDeptDetails.mutateAsync({
+          id: editing.id,
+          code: codeChanged ? form.code.trim() : undefined,
+          description: descChanged ? form.description.trim() : undefined,
+        })
       }
       // 2026-09-10: appearance patch. Sends both fields; the server treats
       // null as "leave alone" so if the admin didn't touch the picker the
@@ -685,7 +703,7 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
 
   // An edit can fire two PATCHes (name, head), so the button has to stay
   // disabled while either is in flight — not just the create mutation.
-  const isDeptPending = createDept.isPending || renameDept.isPending || setHead.isPending
+  const isDeptPending = createDept.isPending || renameDept.isPending || setHead.isPending || updateDeptDetails.isPending
 
   const handleArchive = async (dept: { id: string; name: string }) => {
     const ok = await confirm({
@@ -787,21 +805,14 @@ function DepartmentsTab({ activeCompany }: CompanyProp) {
       <SlideModal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Department' : 'Add Department'}>
         <div className="space-y-4">
           <Field label="Department Name *"><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Engineering" /></Field>
+          {/* 2026-09-10: these two were disabled in edit mode because nothing
+              could persist them. PATCH /departments/{id}/details now can. */}
           <Field label="Code">
-            <Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. ENG" disabled={!!editing} />
+            <Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. ENG" />
           </Field>
           <Field label="Description">
-            <Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional" disabled={!!editing} />
+            <Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional" />
           </Field>
-          {editing && (
-            // Honest read-only rather than inputs whose edits get dropped: the
-            // department API only exposes rename + set-head, so code and
-            // description are fixed once the department exists.
-            <p className="-mt-2 text-xs text-text-tertiary">
-              Code and description are set when the department is created and can't be changed here.
-              Rename and department head can.
-            </p>
-          )}
           <Field label="Department Head">
             <HrSelect
               value={form.departmentHeadEmployeeId}

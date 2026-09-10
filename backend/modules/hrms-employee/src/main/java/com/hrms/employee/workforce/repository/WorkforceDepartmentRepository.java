@@ -13,6 +13,8 @@ public interface WorkforceDepartmentRepository extends JpaRepository<Department,
     List<Department> findAllByCompanyIdAndActiveTrueOrderByNameAsc(UUID companyId);
     Optional<Department> findByCompanyIdAndNameIgnoreCase(UUID companyId, String name);
     boolean existsByCompanyIdAndNameIgnoreCase(UUID companyId, String name);
+    /** Uniqueness guard for the department-code edit — see DepartmentService.updateDetails. */
+    boolean existsByCompanyIdAndCodeIgnoreCase(UUID companyId, String code);
 
     /**
      * Departments where this employee is the current head. Used by the

@@ -231,6 +231,29 @@ export function useRenameDepartment() {
   })
 }
 
+/**
+ * Edit a department's code and/or description.
+ *
+ * 2026-09-10: both were settable when creating a department and then frozen —
+ * no route existed, so fixing a typo in a code meant archiving the department
+ * and recreating it, which orphans every employee assigned to it.
+ * Omit a field to leave it unchanged; pass '' to clear it.
+ */
+export function useUpdateDepartmentDetails() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, code, description }: { id: string; code?: string; description?: string }) => {
+      const params = new URLSearchParams()
+      // Deliberately `!== undefined`, not a truthiness check: '' is the
+      // explicit "clear this field" signal and must still be sent.
+      if (code !== undefined) params.set('code', code)
+      if (description !== undefined) params.set('description', description)
+      return apiJson<Department>(`/v1/hrms/departments/${id}/details?${params.toString()}`, { method: 'PATCH' })
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'departments'] }),
+  })
+}
+
 export function useSetDepartmentHead() {
   const qc = useQueryClient()
   return useMutation({

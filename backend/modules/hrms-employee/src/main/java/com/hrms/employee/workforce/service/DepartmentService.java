@@ -105,6 +105,36 @@ public class DepartmentService {
         return toResponse(repository.save(d));
     }
 
+    /**
+     * Edit a department's code and/or description.
+     *
+     * Both are settable at create time and neither could be changed afterwards
+     * — there was no route for them at all, so a typo in a department code was
+     * permanent short of archiving and recreating the department (which orphans
+     * every employee pointing at it).
+     *
+     * Null means "leave unchanged" so callers can send only what they touched.
+     * Blank clears the field, which matters for description; code is uppercased
+     * and uniqueness-checked within the company, same as create.
+     */
+    public DepartmentResponse updateDetails(UUID id, String code, String description) {
+        Department d = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Department " + id + " not found"));
+        if (code != null) {
+            String next = code.isBlank() ? null : code.trim().toUpperCase();
+            if (next != null && !next.equalsIgnoreCase(d.getCode())
+                    && repository.existsByCompanyIdAndCodeIgnoreCase(d.getCompanyId(), next)) {
+                throw new BusinessRuleException(
+                        "Department code '" + next + "' is already used", "DUPLICATE_DEPARTMENT_CODE");
+            }
+            d.setCode(next);
+        }
+        if (description != null) {
+            d.setDescription(description.isBlank() ? null : description.trim());
+        }
+        return toResponse(repository.save(d));
+    }
+
     public DepartmentResponse setHead(UUID id, UUID employeeId) {
         Department d = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Department " + id + " not found"));
