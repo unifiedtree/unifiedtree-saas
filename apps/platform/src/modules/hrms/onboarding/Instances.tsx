@@ -29,9 +29,17 @@ export const Instances: React.FC = () => {
   const { toast } = useToast()
   const [status, setStatus] = useState('')
   const canStart = usePermission('hrms.onboarding.instance.write')
+  // 2026-09-10: two lookups on this page 403 for roles that can legitimately
+  // reach it (DEPT_MANAGER, EMPLOYEE). Firing them anyway rendered "—" and
+  // "Unknown employee" that looked like real data. Both are now gated.
+  //
+  //   GET /v1/onboarding/templates    -> hrms.onboarding.template.read
+  //   GET /v1/hrms/employees/by-ids   -> hrms.employee.read (or an HR role)
+  const canReadTemplates = usePermission('hrms.onboarding.template.read')
+  const canReadEmployees = usePermission('hrms.employee.read')
 
   const { data: instances = [], isLoading, error, refetch } = useInstances(status || undefined)
-  const { data: templates = [] } = useTemplates()
+  const { data: templates = [] } = useTemplates(undefined, { enabled: canReadTemplates })
 
   // ── Start onboarding ────────────────────────────────────────────────────
   const [showStart, setShowStart] = useState(false)
@@ -79,7 +87,7 @@ export const Instances: React.FC = () => {
     () => instances.map((row) => row.employeeId).filter((id): id is string => !!id),
     [instances],
   )
-  const { data: instanceEmployees } = useEmployeesByIds(instanceEmployeeIds)
+  const { data: instanceEmployees } = useEmployeesByIds(instanceEmployeeIds, { enabled: canReadEmployees })
 
   const templateName = useMemo(() => {
     const map = new Map<string, string>()
@@ -223,8 +231,20 @@ export const Instances: React.FC = () => {
                 const { done, total, pct } = progressOf(row)
                 return (
                   <tr key={row.id} onClick={() => navigate(`/hrms/onboarding/instances/${row.id}`)} className="cursor-pointer">
-                    <td><HrAvatar name={employeeName.get(row.employeeId) || 'Unknown employee'} seed={i} /></td>
-                    <td className="hidden sm:table-cell text-text-secondary">{templateName.get(row.templateId) || '—'}</td>
+                    {/* Honest empty when the lookup is gated off: a hyphen with
+                        title="Your role cannot read this" is clearly-absent
+                        rather than "Unknown employee", which reads like real
+                        data corruption. */}
+                    <td>
+                      {canReadEmployees
+                        ? <HrAvatar name={employeeName.get(row.employeeId) || `Employee ${row.employeeId.slice(0, 6)}`} seed={i} />
+                        : <span className="text-text-tertiary" title="Your role cannot read employee names">—</span>}
+                    </td>
+                    <td className="hidden sm:table-cell text-text-secondary">
+                      {canReadTemplates
+                        ? (templateName.get(row.templateId) || '—')
+                        : <span className="text-text-tertiary" title="Your role cannot read template names">—</span>}
+                    </td>
                     <td><HrStatusPill tone={row.status === 'COMPLETED' ? 'ok' : 'info'}>{row.status}</HrStatusPill></td>
                     <td>
                       <div className="flex min-w-[140px] items-center gap-2">

@@ -74,11 +74,19 @@ const instanceTasksKey = (instanceId: string) => ['hrms', 'onboarding', 'instanc
 
 // ── Template hooks ─────────────────────────────────────────────────────────────
 
-export function useTemplates(companyId?: string) {
+export function useTemplates(companyId?: string, opts?: { enabled?: boolean }) {
   const params = companyId ? `?companyId=${companyId}` : ''
   return useQuery({
-    queryKey: templatesKey(),
+    // Include companyId in the key or a filter change won't refetch.
+    queryKey: [...templatesKey(), companyId ?? 'all'],
     queryFn: () => apiJson<OnboardingTemplate[]>(`/v1/onboarding/templates${params}`),
+    // GET /v1/onboarding/templates is @perm.check('hrms.onboarding.template.read')
+    // — which DEPT_MANAGER and EMPLOYEE do NOT hold, even though they can
+    // reach pages that reference this hook. Firing it anyway produced a
+    // silent 403 that the SPA rendered as "template = —" on every row of
+    // the Instances table, indistinguishable from real data. Callers must
+    // pass `enabled: usePermission('hrms.onboarding.template.read')`.
+    enabled: opts?.enabled ?? true,
   })
 }
 
@@ -221,7 +229,12 @@ export function useCompleteTask(instanceId: string) {
         method: 'POST',
         body: JSON.stringify({ notes } satisfies CompleteTaskRequest),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: instanceTasksKey(instanceId) }),
+    // 2026-09-10: was invalidating only the task list, so the header status
+    // pill + progress bar stayed stale after each click, and — worse — when
+    // the LAST task completed the backend flipped the instance to COMPLETED
+    // and the header still read "In progress" until a manual refresh.
+    // Widen the prefix so the instance query and the instance list refetch too.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'onboarding'] }),
   })
 }
 
@@ -233,6 +246,11 @@ export function useSkipTask(instanceId: string) {
         method: 'POST',
         body: JSON.stringify({ notes } satisfies CompleteTaskRequest),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: instanceTasksKey(instanceId) }),
+    // 2026-09-10: was invalidating only the task list, so the header status
+    // pill + progress bar stayed stale after each click, and — worse — when
+    // the LAST task completed the backend flipped the instance to COMPLETED
+    // and the header still read "In progress" until a manual refresh.
+    // Widen the prefix so the instance query and the instance list refetch too.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'onboarding'] }),
   })
 }

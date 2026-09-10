@@ -94,15 +94,29 @@ function TaskCard({
                 className="w-full rounded-lg border border-border-default bg-bg-base px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-default/40 resize-none"
               />
             )}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              {/* 2026-09-10: the primary button used to reveal the textarea on
+                  first click and submit only on the second — "I clicked Complete
+                  and nothing happened" from the user's side. Notes are optional,
+                  so make Complete actually submit; the textarea is a secondary
+                  affordance for anyone who wants to add a note first. */}
               <HrButton
                 size="sm"
                 disabled={complete.isPending}
-                onClick={() => (notesOpen ? handleComplete() : setNotesOpen(true))}
+                onClick={handleComplete}
               >
                 <CheckCircle2 size={12} />
-                {notesOpen ? 'Confirm complete' : 'Complete'}
+                {complete.isPending ? 'Completing…' : 'Complete'}
               </HrButton>
+              {!notesOpen && (
+                <HrButton
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setNotesOpen(true)}
+                >
+                  Add note
+                </HrButton>
+              )}
               {!task.required && (
                 <HrButton
                   size="sm"
@@ -119,7 +133,7 @@ function TaskCard({
                   variant="ghost"
                   onClick={() => { setNotesOpen(false); setNotes('') }}
                 >
-                  Cancel
+                  Cancel note
                 </HrButton>
               )}
             </div>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, GripVertical, Pencil } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Pencil, ListChecks } from 'lucide-react'
 import { Drawer, Button, CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
@@ -213,7 +213,13 @@ function TaskRow({
   const del = useDeleteTemplateTask(templateId)
   return (
     <div className="flex items-start gap-3 rounded-xl border border-border-default bg-bg-surface px-4 py-3">
-      <GripVertical size={16} className="mt-0.5 flex-shrink-0 text-text-tertiary" />
+      {/* 2026-09-10: this used to render a GripVertical icon with no draggable,
+          no drag handlers, no dnd library and no sortable container — and the
+          backend has no reorder endpoint anyway (sequenceNo is set at task
+          creation only). The affordance promised drag-to-reorder that could
+          never work. Replaced with a static list marker until a real reorder
+          route exists. */}
+      <ListChecks size={16} className="mt-0.5 flex-shrink-0 text-text-tertiary" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm font-medium text-text-primary">{task.title}</p>
