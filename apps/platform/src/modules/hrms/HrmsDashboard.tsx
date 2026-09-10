@@ -20,6 +20,10 @@ import { useMonthlyStats, useTeamDashboard, useAttendanceTrend } from './api/use
 import { useActivityFeed, activityLabel, activityActor } from './api/useActivity'
 import { useHeadcountReport } from './api/useReports'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
+// Local zustand mirror — activeModules lives here, not on the SDK's AuthTenant.
+// ModuleGate reads from the same store; using the same source keeps the tile
+// and the gate in agreement.
+import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { useRoles } from '@/shared/hooks/useRoles'
 import { UpcomingProbations } from './probation/UpcomingProbations'
 import { UpcomingMilestones } from './milestones/UpcomingMilestones'
@@ -198,7 +202,15 @@ export const HrmsDashboard: React.FC = () => {
   const canSeeProbation  = usePermission(P.HRMS_PROBATION_REMINDERS_READ)
   // Quick-action "Run Payroll" — hide the affordance when the caller cannot
   // read the payroll runs page, otherwise the button 403s on click.
-  const canRunPayroll    = usePermission(P.PAYROLL_RUNS_READ)
+  //
+  // 2026-09-10: also gate on module entitlement. /hrms/payroll-dashboard is
+  // wrapped in ModuleGate moduleKey="payroll", which renders the "module not
+  // activated" screen unless tenant.activeModules includes 'payroll'.
+  // SUPER_ADMIN is seeded every permission (V017 fan-out), so on an HR-only
+  // workspace — the standard sold configuration — the admin used to see this
+  // tile and dead-end on that wall.
+  const hasPayrollModule = useLocalAuthStore((s) => s.tenant?.activeModules?.includes('payroll') ?? false)
+  const canRunPayroll    = usePermission(P.PAYROLL_RUNS_READ) && hasPayrollModule
   // Quick-action "View Reports" — any of the HRMS report perms is enough to
   // land on /hrms/reports without a 403 (the page picks whichever tab the
   // caller can open).
