@@ -6,6 +6,11 @@ import { EmptyState, Skeleton } from '@unifiedtree/ui-kit'
 import { HrPageHeader, HrStatusPill, HrButton } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies, useDepartments, useBranches } from '../api/useOrg'
+// Lazy: Leaflet plus its CSS is ~158 kB, and this is the only screen that
+// uses it. Statically imported it landed in the main bundle that every user
+// downloads, including employees who can never open Geofence Zones.
+const LocationMapPicker = React.lazy(() =>
+  import('./LocationMapPicker').then((m) => ({ default: m.LocationMapPicker })))
 import {
   useGeofenceZones, useCreateGeofenceZone, useUpdateGeofenceZone, useDeleteGeofenceZone,
   type GeoFenceZone, type GeoFenceZonePayload,
@@ -81,17 +86,25 @@ function ZoneFormModal({
   const { data: branches = [] } = useBranches(companyId)
 
   const [form, setForm] = useState<ZoneFormState>(emptyForm())
+  // Bumped when the coordinates change from outside the map — opening an
+  // existing zone, or "use my current location" — so the viewport follows.
+  // Deliberately NOT bumped on a map click: re-centring under the cursor
+  // mid-drag is disorienting.
+  const [recenterKey, setRecenterKey] = useState(0)
+
   // Re-seed the form whenever the modal opens for a different zone.
   const seedKey = (open ? 'open' : 'closed') + ':' + (editing?.id ?? 'new')
   const [seededKey, setSeededKey] = useState('')
   if (open && seededKey !== seedKey) {
     setForm(editing ? formFromZone(editing) : emptyForm())
     setSeededKey(seedKey)
+    setRecenterKey((k) => k + 1)
   }
   if (!open && seededKey !== '') setSeededKey('')
 
   const set = (k: keyof ZoneFormState, v: string) => setForm((p) => ({ ...p, [k]: v }))
   const isPending = createZone.isPending || updateZone.isPending
+
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) { toast('Geolocation is not available in this browser', 'error'); return }
@@ -99,6 +112,7 @@ function ZoneFormModal({
       (pos) => {
         set('latitude', pos.coords.latitude.toFixed(6))
         set('longitude', pos.coords.longitude.toFixed(6))
+        setRecenterKey((k) => k + 1)
       },
       () => toast('Could not get current location', 'error'),
       { enableHighAccuracy: true, timeout: 8000 },
@@ -162,6 +176,28 @@ function ZoneFormModal({
               className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary transition-colors"
             />
           </div>
+
+          {/* 2026-09-13: the app has had a drag-a-pin picker since it shipped;
+              the web offered two numeric boxes, so setting up a site meant
+              copying coordinates out of Google Maps and trusting you had not
+              transposed a digit. A wrong centre is invisible — the zone never
+              matches, nobody at that site can punch in, and nothing says why.
+              Two-way bound: typing moves the pin, moving the pin rewrites the
+              fields. */}
+          <React.Suspense fallback={<div className="h-[260px] animate-pulse rounded-xl border border-border-default bg-bg-base" />}>
+          <LocationMapPicker
+            lat={Number(form.latitude)}
+            lng={Number(form.longitude)}
+            radiusMeters={Number(form.radiusMeters)}
+            recenterKey={recenterKey}
+            onChange={(la, ln) => {
+              // 6dp ≈ 0.1 m, well past what a geofence needs, and keeps the
+              // text boxes readable instead of showing 15 decimal places.
+              set('latitude', la.toFixed(6))
+              set('longitude', ln.toFixed(6))
+            }}
+          />
+          </React.Suspense>
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-5">
             <div>
