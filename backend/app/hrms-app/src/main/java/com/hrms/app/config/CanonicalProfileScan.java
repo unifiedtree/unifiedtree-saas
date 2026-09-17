@@ -127,6 +127,14 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         // EXPIRED, and EXPIRED is a 402 in SubscriptionAccessGuard's decision
         // table. Enable this only alongside reintroducing a mandate-less
         // trial, and audit the leftover rows first.
+        // Partition maintenance (PartitionMaintenanceJob). This scan is an
+        // ALLOW-LIST: a package that is not named here simply does not load in
+        // production, silently. The job keeps the monthly partitions of
+        // attendance.records / attendance.event_logs / audit.events ahead of
+        // the clock — leaving it unscanned would put us straight back to
+        // September 2026, when writes had been landing in the DEFAULT
+        // partition for two weeks with nothing to say so.
+        "com.hrms.api.platform",
         "com.hrms.api.modulereq",
         "com.hrms.api.access",
         "com.hrms.api.probation",
