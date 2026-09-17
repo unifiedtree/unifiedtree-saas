@@ -860,6 +860,16 @@ function ShellNotificationBell({
   const markAsRead = useNotificationStore((s) => s.markAsRead)
   const markAllAsRead = useNotificationStore((s) => s.markAllAsRead)
   const unreadCount = useNotificationStore((s) => s.unreadCount())
+  const fetchList = useNotificationStore((s) => s.fetch)
+
+  // The background poll only refreshes the unread COUNT (see
+  // NotificationProvider) — the 50-row list is fetched lazily when the panel
+  // opens. Previously the provider pulled 50 rows per user per minute on
+  // every route for a badge that only needed a number; at 5,000 users that
+  // was ~83 req/s on this endpoint alone.
+  React.useEffect(() => {
+    if (open) void fetchList()
+  }, [open, fetchList])
 
   // Cap the popup at 8 to keep the surface tight — the panel's own footer
   // links to a fuller view once we have one.

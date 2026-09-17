@@ -33,7 +33,16 @@ public class BrevoMailService implements MailService {
     private static final Logger log = LoggerFactory.getLogger(BrevoMailService.class);
     private static final String BREVO_API = "https://api.brevo.com/v3/smtp/email";
 
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    // 2026-09-17: was HttpClient.newHttpClient() with no connect timeout,
+    // and every send below omitted .timeout(...). A hung TCP connection to
+    // api.brevo.com then pins a Tomcat thread FOREVER (JDK HttpClient has no
+    // default read timeout). Every path that lands here — welcome emails,
+    // module-request notifications on an UNAUTHENTICATED endpoint, probation
+    // reminders in a per-tenant transaction — became an available way to
+    // exhaust the request-serving pool.
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(5))
+            .build();
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Value("${BREVO_API_KEY:}")
@@ -74,6 +83,9 @@ public class BrevoMailService implements MailService {
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .header("api-key", apiKey)
+                // 10s per request — Brevo p99 is well under a second; if a
+                // send is still hanging after 10s it will not complete.
+                .timeout(java.time.Duration.ofSeconds(10))
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
 

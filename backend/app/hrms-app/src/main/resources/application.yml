@@ -10,11 +10,28 @@ spring:
     username: ${DB_USERNAME:unifiedtree}
     password: ${DB_PASSWORD:unifiedtree}
     hikari:
-      maximum-pool-size: ${DB_POOL_SIZE:20}
+      # 2026-09-17: pool sizing.
+      # Cloud SQL max_connections=100. Currently Cloud Run min=1 max=10, so
+      # pool=10 × max-instances=10 = 100 potential connections — already at
+      # the ceiling with no headroom for the proxy, migrations or admin
+      # tooling. RAISING the pool without ALSO raising Cloud SQL's
+      # max_connections flag AND capping Cloud Run --max-instances would put
+      # us over the ceiling and every instance would fail with "too many
+      # connections". Kept at 10 pending a Cloud SQL sizing decision.
+      # Follow-up: raise Cloud SQL max_connections to 500 (flag), then pool
+      # can move to ~15 with room for autoscaling.
+      maximum-pool-size: ${DB_POOL_SIZE:10}
       minimum-idle: 5
-      connection-timeout: 20000
+      # 20s connection-timeout used to pin a request thread for 20s under
+      # overload while nothing got served. Fail fast so Cloud Run's queue
+      # backpressure kicks in; a 5xx tells the load balancer to route elsewhere.
+      connection-timeout: ${DB_CONN_TIMEOUT:5000}
       idle-timeout: 300000
       max-lifetime: 1200000
+      # Log any checkout held >30s — connection leaks in @Transactional
+      # methods that make external HTTP calls (Brevo, Razorpay) are the top
+      # cause of pool exhaustion at scale. See BrevoMailService / RazorpayClient.
+      leak-detection-threshold: 30000
 
   jpa:
     hibernate:

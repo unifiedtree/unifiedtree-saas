@@ -22,7 +22,12 @@ public class LetterEmailService {
     private static final Logger log = LoggerFactory.getLogger(LetterEmailService.class);
     private static final String BREVO_API = "https://api.brevo.com/v3/smtp/email";
 
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    // 2026-09-17: connect + per-request timeouts. LetterGenerationService.sendLetter
+    // is @Transactional and calls this synchronously, so a hung send used to
+    // pin BOTH a Tomcat thread and a Hikari connection open forever.
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(5))
+            .build();
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Value("${BREVO_API_KEY:}")
@@ -66,6 +71,7 @@ public class LetterEmailService {
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
                     .header("api-key", apiKey)
+                    .timeout(java.time.Duration.ofSeconds(10))
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
 

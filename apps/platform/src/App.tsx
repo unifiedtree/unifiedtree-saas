@@ -8,86 +8,97 @@ import { PlatformShell } from '@/layouts/PlatformShell'
 import { LoginPage } from '@/core/auth/LoginPage'
 // The Keka-style HRMS analytics board (client redesign 2026-08-11) replaces the
 // old pages/Dashboard welcome screen as the module home.
-import { HrmsDashboard as Dashboard } from '@/modules/hrms/HrmsDashboard'
-import { Settings } from '@/pages/Settings'
-import { Profile } from '@/pages/Profile'
-import { AuditLogs } from '@/pages/AuditLogs'
-import { Users } from '@/pages/Users'
-import { Roles } from '@/pages/Roles'
-import { Modules } from '@/pages/Modules'
-import { Plan } from '@/pages/Plan'
+
 import { PendingApproval } from '@/pages/PendingApproval'
 import { NoAccess } from '@/pages/NoAccess'
 import { AcceptInvite } from '@/pages/AcceptInvite'
 import { ForgotPassword } from '@/pages/ForgotPassword'
 import { ResetPassword } from '@/pages/ResetPassword'
-import { Templates } from '@/modules/hrms/onboarding/Templates'
-import { TemplateDetail } from '@/modules/hrms/onboarding/TemplateDetail'
-import { Instances } from '@/modules/hrms/onboarding/Instances'
-import { InstanceDetail } from '@/modules/hrms/onboarding/InstanceDetail'
+
 import { ModuleGate } from '@/shared/components/ModuleGate'
 import { ModulePreview } from '@/shared/components/ModulePreview'
 import { ComingSoon } from '@/shared/components/ComingSoon'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 // Canonical admin-roles SSOT — do NOT redeclare locally. See useRoles.ts.
 import { ADMIN_ROLES } from '@/shared/hooks/useRoles'
-import { Employees } from '@/modules/hrms/Employees'
-import { Attendance } from '@/modules/hrms/Attendance'
-import { GeofenceZones } from '@/modules/hrms/attendance/GeofenceZones'
-import { Leave } from '@/modules/hrms/Leave'
-import { Payroll } from '@/modules/hrms/Payroll'
-import { OrgSetup } from '@/modules/hrms/organization/OrgSetup'
-import { EmployeeDetail } from '@/modules/hrms/employees/EmployeeDetail'
-import { EssDashboard } from '@/modules/hrms/ess/EssDashboard'
-import { ShiftChangeRequest } from '@/modules/hrms/shifts/ShiftChangeRequest'
-import { TeamDashboard } from '@/modules/hrms/team/TeamDashboard'
-import { ReportsIndex } from '@/modules/hrms/reports/ReportsIndex'
-import { ProbationSettings } from '@/modules/hrms/probation/ProbationSettings'
-import { Expense } from '@/modules/hrms/Expense'
-import { Advance } from '@/modules/hrms/Advance'
-import { FullAndFinal } from '@/modules/hrms/FullAndFinal'
-import { Hiring } from '@/modules/hrms/Hiring'
-import { Performance } from '@/modules/hrms/Performance'
-import { WorkforceAnalytics } from '@/modules/hrms/analytics/WorkforceAnalytics'
-import { AttendanceAnalytics } from '@/modules/hrms/analytics/AttendanceAnalytics'
-import { PayrollDashboard } from '@/modules/hrms/payroll/PayrollDashboard'
-import { SalaryStructureAdmin } from '@/modules/hrms/payroll/SalaryStructureAdmin'
-import { MusterRoll } from '@/modules/hrms/attendance/MusterRoll'
-import { ManualEntry } from '@/modules/hrms/attendance/ManualEntry'
-import { WorkTimeSettings } from '@/modules/hrms/organization/WorkTimeSettings'
-import { BankDisbursement } from '@/modules/hrms/payroll/BankDisbursement'
-import { DocumentVault } from '@/modules/hrms/DocumentVault'
-import { Learning } from '@/modules/hrms/Learning'
-import { Compliance } from '@/modules/hrms/Compliance'
-import { Policies } from '@/modules/hrms/Policies'
-import { Pli } from '@/modules/hrms/Pli'
-import { Integrations } from '@/modules/hrms/Integrations'
-import { NotificationTemplates } from '@/modules/hrms/NotificationTemplates'
-import { ShiftsAndOt } from '@/modules/hrms/attendance/ShiftsAndOt'
+
 import { ModuleComingSoon } from '@/shared/components/ModuleComingSoon'
-import { PayrollSettings } from '@/modules/hrms/payroll/PayrollSettings'
-import { SalaryComponents } from '@/modules/hrms/payroll/SalaryComponents'
-import { MySalaryStructure } from '@/modules/hrms/payroll/MySalaryStructure'
-import { PayrollRuns } from '@/modules/hrms/payroll/PayrollRuns'
-import { PayrollRunDetail } from '@/modules/hrms/payroll/PayrollRunDetail'
-import { EmployeePayslips } from '@/modules/hrms/payroll/EmployeePayslips'
-import { LetterTemplates } from '@/modules/hrms/letters/LetterTemplates'
-import { LetterTemplateEditor } from '@/modules/hrms/letters/LetterTemplateEditor'
-import { GeneratedLetters } from '@/modules/hrms/letters/GeneratedLetters'
-import { GeneratedLetterDetail } from '@/modules/hrms/letters/GeneratedLetterDetail'
-import { Distributions } from '@/modules/hrms/letters/Distributions'
-import { DistributionDetail } from '@/modules/hrms/letters/DistributionDetail'
-import { HeadcountReport } from '@/modules/hrms/reports/HeadcountReport'
-import { AttritionReport } from '@/modules/hrms/reports/AttritionReport'
-import { AttendanceSummaryReport } from '@/modules/hrms/reports/AttendanceSummaryReport'
-import { LeaveBalanceReport } from '@/modules/hrms/reports/LeaveBalanceReport'
-import { LateMarksReport } from '@/modules/hrms/reports/LateMarksReport'
-import { DiversityReport } from '@/modules/hrms/reports/DiversityReport'
-import { EmployeeImport } from '@/modules/hrms/employees/EmployeeImport'
-import { ApplyWfh } from '@/modules/hrms/wfh/ApplyWfh'
-// import { ModuleWorkspace } from '@/pages/ModuleWorkspace'  // route disabled — see /module-workspace redirect below
+
+//   // route disabled — see /module-workspace redirect below
 
 // Priority order: highest privilege wins when resolving landing page
+
+// 2026-09-17: route-level code splitting. Every module/page component below is
+// lazy-loaded so an EMPLOYEE who only ever opens /me does not download the whole
+// admin surface (payroll, reports, letters with @tiptap, bulk import, roles,
+// audit-log viewer). The Routes tree is wrapped in <React.Suspense> so a lazy
+// chunk fetching in flight shows a spinner instead of the last route flashing.
+const Dashboard = React.lazy(() => import('@/modules/hrms/HrmsDashboard').then(m => ({ default: m.HrmsDashboard })))
+const Settings = React.lazy(() => import('@/pages/Settings').then(m => ({ default: m.Settings })))
+const Profile = React.lazy(() => import('@/pages/Profile').then(m => ({ default: m.Profile })))
+const AuditLogs = React.lazy(() => import('@/pages/AuditLogs').then(m => ({ default: m.AuditLogs })))
+const Users = React.lazy(() => import('@/pages/Users').then(m => ({ default: m.Users })))
+const Roles = React.lazy(() => import('@/pages/Roles').then(m => ({ default: m.Roles })))
+const Modules = React.lazy(() => import('@/pages/Modules').then(m => ({ default: m.Modules })))
+const Plan = React.lazy(() => import('@/pages/Plan').then(m => ({ default: m.Plan })))
+const Templates = React.lazy(() => import('@/modules/hrms/onboarding/Templates').then(m => ({ default: m.Templates })))
+const TemplateDetail = React.lazy(() => import('@/modules/hrms/onboarding/TemplateDetail').then(m => ({ default: m.TemplateDetail })))
+const Instances = React.lazy(() => import('@/modules/hrms/onboarding/Instances').then(m => ({ default: m.Instances })))
+const InstanceDetail = React.lazy(() => import('@/modules/hrms/onboarding/InstanceDetail').then(m => ({ default: m.InstanceDetail })))
+const Employees = React.lazy(() => import('@/modules/hrms/Employees').then(m => ({ default: m.Employees })))
+const Attendance = React.lazy(() => import('@/modules/hrms/Attendance').then(m => ({ default: m.Attendance })))
+const GeofenceZones = React.lazy(() => import('@/modules/hrms/attendance/GeofenceZones').then(m => ({ default: m.GeofenceZones })))
+const Leave = React.lazy(() => import('@/modules/hrms/Leave').then(m => ({ default: m.Leave })))
+const Payroll = React.lazy(() => import('@/modules/hrms/Payroll').then(m => ({ default: m.Payroll })))
+const OrgSetup = React.lazy(() => import('@/modules/hrms/organization/OrgSetup').then(m => ({ default: m.OrgSetup })))
+const EmployeeDetail = React.lazy(() => import('@/modules/hrms/employees/EmployeeDetail').then(m => ({ default: m.EmployeeDetail })))
+const EssDashboard = React.lazy(() => import('@/modules/hrms/ess/EssDashboard').then(m => ({ default: m.EssDashboard })))
+const ShiftChangeRequest = React.lazy(() => import('@/modules/hrms/shifts/ShiftChangeRequest').then(m => ({ default: m.ShiftChangeRequest })))
+const TeamDashboard = React.lazy(() => import('@/modules/hrms/team/TeamDashboard').then(m => ({ default: m.TeamDashboard })))
+const ReportsIndex = React.lazy(() => import('@/modules/hrms/reports/ReportsIndex').then(m => ({ default: m.ReportsIndex })))
+const ProbationSettings = React.lazy(() => import('@/modules/hrms/probation/ProbationSettings').then(m => ({ default: m.ProbationSettings })))
+const Expense = React.lazy(() => import('@/modules/hrms/Expense').then(m => ({ default: m.Expense })))
+const Advance = React.lazy(() => import('@/modules/hrms/Advance').then(m => ({ default: m.Advance })))
+const FullAndFinal = React.lazy(() => import('@/modules/hrms/FullAndFinal').then(m => ({ default: m.FullAndFinal })))
+const Hiring = React.lazy(() => import('@/modules/hrms/Hiring').then(m => ({ default: m.Hiring })))
+const Performance = React.lazy(() => import('@/modules/hrms/Performance').then(m => ({ default: m.Performance })))
+const WorkforceAnalytics = React.lazy(() => import('@/modules/hrms/analytics/WorkforceAnalytics').then(m => ({ default: m.WorkforceAnalytics })))
+const AttendanceAnalytics = React.lazy(() => import('@/modules/hrms/analytics/AttendanceAnalytics').then(m => ({ default: m.AttendanceAnalytics })))
+const PayrollDashboard = React.lazy(() => import('@/modules/hrms/payroll/PayrollDashboard').then(m => ({ default: m.PayrollDashboard })))
+const SalaryStructureAdmin = React.lazy(() => import('@/modules/hrms/payroll/SalaryStructureAdmin').then(m => ({ default: m.SalaryStructureAdmin })))
+const MusterRoll = React.lazy(() => import('@/modules/hrms/attendance/MusterRoll').then(m => ({ default: m.MusterRoll })))
+const ManualEntry = React.lazy(() => import('@/modules/hrms/attendance/ManualEntry').then(m => ({ default: m.ManualEntry })))
+const WorkTimeSettings = React.lazy(() => import('@/modules/hrms/organization/WorkTimeSettings').then(m => ({ default: m.WorkTimeSettings })))
+const BankDisbursement = React.lazy(() => import('@/modules/hrms/payroll/BankDisbursement').then(m => ({ default: m.BankDisbursement })))
+const DocumentVault = React.lazy(() => import('@/modules/hrms/DocumentVault').then(m => ({ default: m.DocumentVault })))
+const Learning = React.lazy(() => import('@/modules/hrms/Learning').then(m => ({ default: m.Learning })))
+const Compliance = React.lazy(() => import('@/modules/hrms/Compliance').then(m => ({ default: m.Compliance })))
+const Policies = React.lazy(() => import('@/modules/hrms/Policies').then(m => ({ default: m.Policies })))
+const Pli = React.lazy(() => import('@/modules/hrms/Pli').then(m => ({ default: m.Pli })))
+const Integrations = React.lazy(() => import('@/modules/hrms/Integrations').then(m => ({ default: m.Integrations })))
+const NotificationTemplates = React.lazy(() => import('@/modules/hrms/NotificationTemplates').then(m => ({ default: m.NotificationTemplates })))
+const ShiftsAndOt = React.lazy(() => import('@/modules/hrms/attendance/ShiftsAndOt').then(m => ({ default: m.ShiftsAndOt })))
+const PayrollSettings = React.lazy(() => import('@/modules/hrms/payroll/PayrollSettings').then(m => ({ default: m.PayrollSettings })))
+const SalaryComponents = React.lazy(() => import('@/modules/hrms/payroll/SalaryComponents').then(m => ({ default: m.SalaryComponents })))
+const MySalaryStructure = React.lazy(() => import('@/modules/hrms/payroll/MySalaryStructure').then(m => ({ default: m.MySalaryStructure })))
+const PayrollRuns = React.lazy(() => import('@/modules/hrms/payroll/PayrollRuns').then(m => ({ default: m.PayrollRuns })))
+const PayrollRunDetail = React.lazy(() => import('@/modules/hrms/payroll/PayrollRunDetail').then(m => ({ default: m.PayrollRunDetail })))
+const EmployeePayslips = React.lazy(() => import('@/modules/hrms/payroll/EmployeePayslips').then(m => ({ default: m.EmployeePayslips })))
+const LetterTemplates = React.lazy(() => import('@/modules/hrms/letters/LetterTemplates').then(m => ({ default: m.LetterTemplates })))
+const LetterTemplateEditor = React.lazy(() => import('@/modules/hrms/letters/LetterTemplateEditor').then(m => ({ default: m.LetterTemplateEditor })))
+const GeneratedLetters = React.lazy(() => import('@/modules/hrms/letters/GeneratedLetters').then(m => ({ default: m.GeneratedLetters })))
+const GeneratedLetterDetail = React.lazy(() => import('@/modules/hrms/letters/GeneratedLetterDetail').then(m => ({ default: m.GeneratedLetterDetail })))
+const Distributions = React.lazy(() => import('@/modules/hrms/letters/Distributions').then(m => ({ default: m.Distributions })))
+const DistributionDetail = React.lazy(() => import('@/modules/hrms/letters/DistributionDetail').then(m => ({ default: m.DistributionDetail })))
+const HeadcountReport = React.lazy(() => import('@/modules/hrms/reports/HeadcountReport').then(m => ({ default: m.HeadcountReport })))
+const AttritionReport = React.lazy(() => import('@/modules/hrms/reports/AttritionReport').then(m => ({ default: m.AttritionReport })))
+const AttendanceSummaryReport = React.lazy(() => import('@/modules/hrms/reports/AttendanceSummaryReport').then(m => ({ default: m.AttendanceSummaryReport })))
+const LeaveBalanceReport = React.lazy(() => import('@/modules/hrms/reports/LeaveBalanceReport').then(m => ({ default: m.LeaveBalanceReport })))
+const LateMarksReport = React.lazy(() => import('@/modules/hrms/reports/LateMarksReport').then(m => ({ default: m.LateMarksReport })))
+const DiversityReport = React.lazy(() => import('@/modules/hrms/reports/DiversityReport').then(m => ({ default: m.DiversityReport })))
+const EmployeeImport = React.lazy(() => import('@/modules/hrms/employees/EmployeeImport').then(m => ({ default: m.EmployeeImport })))
+const ApplyWfh = React.lazy(() => import('@/modules/hrms/wfh/ApplyWfh').then(m => ({ default: m.ApplyWfh })))
+const ModuleWorkspace = React.lazy(() => import('@/pages/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })))
 const ROLE_PRIORITY = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER', 'EMPLOYEE'] as const
 
 function RoleAwareLanding() {
@@ -139,6 +150,14 @@ export default function App() {
   const location = useLocation()
   return (
     <RouteErrorBoundary key={location.pathname} routeLabel={location.pathname}>
+    <React.Suspense
+      fallback={
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          minHeight: 200, color: '#64748b', fontSize: 14,
+        }}>Loading…</div>
+      }
+    >
     <Routes>
       {/* Public */}
       <Route path="/login"            element={<LoginPage />} />
@@ -765,6 +784,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </React.Suspense>
     </RouteErrorBoundary>
   )
 }

@@ -1,4 +1,4 @@
-package com.hrms.api.platform;
+package com.hrms.api.platform.partition;
 
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;

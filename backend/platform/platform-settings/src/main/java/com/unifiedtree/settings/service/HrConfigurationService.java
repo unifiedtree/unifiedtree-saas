@@ -91,25 +91,21 @@ public class HrConfigurationService {
                 padding);
     }
 
-    /**
-     * Atomically issue the next employee code for this company: read the
-     * current next_number, format the code, then increment the counter.
-     * Runs in a REQUIRED transaction so the caller (employee-create) can roll
-     * back the whole employee insert if anything downstream fails.
-     */
-    @Transactional(propagation = Propagation.REQUIRED)
-    public String issueNextEmployeeCode(UUID companyId) {
-        HrConfiguration cfg = repository.findByCompanyId(companyId).orElseGet(() -> {
-            HrConfiguration fresh = new HrConfiguration();
-            fresh.setCompanyId(companyId);
-            return repository.save(fresh);
-        });
-        long issued = cfg.getEmployeeCodeNextNumber();
-        String code = formatCode(cfg.getEmployeeCodePrefix(), issued, cfg.getEmployeeCodePadding());
-        cfg.setEmployeeCodeNextNumber(issued + 1);
-        repository.save(cfg);
-        return code;
-    }
+    // 2026-09-17: `issueNextEmployeeCode` used to live here — a JPA
+    // read-modify-write on hr_configuration with no advisory lock. If two
+    // admins created employees at the same moment they both read
+    // employee_code_next_number = N, both saved N+1, and both employees ended
+    // up with the same code EMP-00N; the uq_employee_tenant_code constraint
+    // then caught the *insert* but the counter was silently corrupted for
+    // every future employee in that company.
+    //
+    // Removed rather than fixed because a grep showed no callers — every
+    // employee-create path already goes through
+    // {@code WorkforceEmployeeService.generateEmployeeCode}, which uses a
+    // single `UPDATE ... RETURNING employee_code_next_number - 1` and an
+    // `INSERT ... ON CONFLICT (tenant_id, company_id) DO NOTHING` seed.
+    // Concurrent onboarding of the same company then serialises safely at
+    // the row-lock level rather than forking the counter.
 
     static String formatCode(String prefix, long number, int padding) {
         return prefix + "-" + String.format(Locale.ROOT, "%0" + padding + "d", number);
