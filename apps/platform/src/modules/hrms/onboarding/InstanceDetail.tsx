@@ -9,6 +9,13 @@ import type { OnboardingInstanceTask } from './api/useOnboarding'
 import { HrPageHeader, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
 import { clsx } from 'clsx'
 
+// Instance-level status vocabulary, kept in step with Instances.tsx.
+const INSTANCE_STATUS: Record<string, { label: string; tone: PillTone }> = {
+  IN_PROGRESS: { label: 'In Progress', tone: 'warn' },
+  COMPLETED:   { label: 'Completed',   tone: 'ok' },
+  ON_HOLD:     { label: 'On Hold',     tone: 'red' },
+}
+
 // ── Task card ──────────────────────────────────────────────────────────────────
 
 function TaskCard({
@@ -196,8 +203,11 @@ export const InstanceDetail: React.FC = () => {
               </>
             }
             actions={
-              <HrStatusPill tone={instance.status === 'COMPLETED' ? 'ok' : 'info'}>
-                {instance.status}
+              /* Same vocabulary as the onboarding dashboard: a raw enum
+                 ("ON_HOLD") in the header while the list says "On Hold" reads
+                 like two different states. */
+              <HrStatusPill tone={INSTANCE_STATUS[instance.status]?.tone ?? 'gray'}>
+                {INSTANCE_STATUS[instance.status]?.label ?? instance.status}
               </HrStatusPill>
             }
           />

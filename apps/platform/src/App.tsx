@@ -15,6 +15,12 @@ import { AcceptInvite } from '@/pages/AcceptInvite'
 import { ForgotPassword } from '@/pages/ForgotPassword'
 import { ResetPassword } from '@/pages/ResetPassword'
 
+// import { Templates } from '@/modules/hrms/onboarding/Templates'
+// import { TemplateDetail } from '@/modules/hrms/onboarding/TemplateDetail'
+// import { Instances } from '@/modules/hrms/onboarding/Instances'
+// import { InstanceDetail } from '@/modules/hrms/onboarding/InstanceDetail'
+import { OnboardingForm } from '@/modules/hrms/onboarding/OnboardingForm'
+
 import { ModuleGate } from '@/shared/components/ModuleGate'
 import { ModulePreview } from '@/shared/components/ModulePreview'
 import { ComingSoon } from '@/shared/components/ComingSoon'
@@ -548,6 +554,15 @@ export default function App() {
           element={
             <RouteGuard anyOf={[P.HRMS_ONBOARDING_INSTANCE_READ, P.HRMS_ONBOARDING_TASK_COMPLETE]}>
               <ModuleGate moduleKey="hrms"><Instances /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        {/* Must precede :instanceId — otherwise "new" matches as an id. */}
+        <Route
+          path="/hrms/onboarding/instances/new"
+          element={
+            <RouteGuard anyOf={[P.HRMS_ONBOARDING_INSTANCE_WRITE]}>
+              <ModuleGate moduleKey="hrms"><OnboardingForm /></ModuleGate>
             </RouteGuard>
           }
         />

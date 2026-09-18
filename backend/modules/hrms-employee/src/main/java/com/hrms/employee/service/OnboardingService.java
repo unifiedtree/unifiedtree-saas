@@ -226,12 +226,48 @@ public class OnboardingService {
         long pending = instanceTaskRepo.countPendingByInstanceId(instanceId);
         if (pending == 0) {
             instanceRepo.findById(instanceId).ifPresent(instance -> {
+                // An ON_HOLD run stays on hold even when its last task is
+                // ticked off: HR paused it deliberately, and flipping it to
+                // COMPLETED here would silently discard that decision.
+                if (!"IN_PROGRESS".equals(instance.getStatus())) return;
                 instance.setStatus("COMPLETED");
                 instance.setCompletedAt(Instant.now());
                 instanceRepo.save(instance);
                 log.info("Onboarding instance {} completed", instanceId);
             });
         }
+    }
+
+    /** The states an instance may hold. IN_PROGRESS and COMPLETED are driven by
+     *  task progress; ON_HOLD is HR pausing a run by hand (a start date that
+     *  slipped, paperwork stuck at the candidate's end) and can only be set
+     *  through {@link #setInstanceStatus}. Stored as a plain VARCHAR(20) with
+     *  no CHECK constraint, so this set is the only thing keeping the column
+     *  honest — validate before writing. */
+    private static final java.util.Set<String> INSTANCE_STATUSES =
+            java.util.Set.of("IN_PROGRESS", "ON_HOLD", "COMPLETED");
+
+    @Transactional
+    public OnboardingInstance setInstanceStatus(UUID instanceId, String status) {
+        if (status == null || !INSTANCE_STATUSES.contains(status)) {
+            throw new BusinessRuleException(
+                    "Unknown onboarding status '" + status + "'. Expected one of " + INSTANCE_STATUSES);
+        }
+        OnboardingInstance instance = instanceRepo.findById(instanceId)
+                .orElseThrow(() -> new ResourceNotFoundException("OnboardingInstance", instanceId));
+
+        String previous = instance.getStatus();
+        instance.setStatus(status);
+        // completed_at has to track the status, not just accumulate: reopening a
+        // finished run must clear it, or the dashboard shows a completion date
+        // for something still in progress.
+        instance.setCompletedAt("COMPLETED".equals(status) ? Instant.now() : null);
+        instanceRepo.save(instance);
+        // Init lazy tasks inside the tx so the controller can serialize the
+        // returned entity (open-in-view is disabled in the canonical profiles).
+        instance.getInstanceTasks().size();
+        log.info("Onboarding instance {} status {} -> {}", instanceId, previous, status);
+        return instance;
     }
 
     // ── Queries ───────────────────────────────────────────────────────────

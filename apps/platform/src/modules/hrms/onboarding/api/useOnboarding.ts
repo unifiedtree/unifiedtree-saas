@@ -28,11 +28,17 @@ export interface OnboardingTask {
   required: boolean
 }
 
+export type OnboardingInstanceStatus = 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD'
+
 export interface OnboardingInstance {
   id: string
   employeeId: string
   templateId: string
-  status: 'IN_PROGRESS' | 'COMPLETED' | string
+  /** IN_PROGRESS and COMPLETED are driven by task progress; ON_HOLD is set by
+   *  hand through PATCH /instances/{id}/status. The column is a plain VARCHAR
+   *  server-side, so `string` stays in the union to keep an unknown value from
+   *  breaking the type — the UI renders it verbatim rather than mislabelling. */
+  status: OnboardingInstanceStatus | string
   startedAt: string
   completedAt: string | null
   instanceTasks: OnboardingInstanceTask[]
@@ -188,6 +194,30 @@ export function useCreateInstance() {
         body: JSON.stringify(body),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'onboarding', 'instances'] }),
+  })
+}
+
+/**
+ * Pause / resume / close out an onboarding run.
+ *
+ * Backs the On Hold state on the onboarding dashboard. Task completion moves a
+ * run IN_PROGRESS -> COMPLETED on its own; this is the only way to reach
+ * ON_HOLD, or to reopen a run that was closed early. Requires
+ * hrms.onboarding.instance.write (HR/admin) — a new hire holds
+ * onboarding.task.complete only and cannot park their own onboarding.
+ */
+export function useUpdateInstanceStatus() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ instanceId, status }: { instanceId: string; status: OnboardingInstanceStatus }) =>
+      apiJson<OnboardingInstance>(`/v1/onboarding/instances/${instanceId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }),
+    // Same wide prefix as useCompleteTask: the list, the single instance and
+    // the employee-keyed lookup all show the status, and a stale pill after a
+    // hold/resume reads as the action having failed.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'onboarding'] }),
   })
 }
 

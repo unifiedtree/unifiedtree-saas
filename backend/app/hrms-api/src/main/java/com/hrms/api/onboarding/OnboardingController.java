@@ -126,6 +126,16 @@ public class OnboardingController {
         return ResponseEntity.status(HttpStatus.CREATED).body(instance);
     }
 
+    @PatchMapping("/instances/{instanceId}/status")
+    @Operation(summary = "Put an onboarding run on hold, resume it, or close it out")
+    @PreAuthorize("@perm.check('hrms.onboarding.instance.write')")
+    public OnboardingInstance setInstanceStatus(@PathVariable UUID instanceId,
+                                                @Valid @RequestBody UpdateInstanceStatusRequest req) {
+        // instance.write only — an employee who can tick off their own tasks
+        // must not be able to park their own onboarding.
+        return onboardingService.setInstanceStatus(instanceId, req.status());
+    }
+
     @GetMapping("/instances/employee/{employeeId}")
     @Operation(summary = "Get the latest onboarding instance for an employee (any status)")
     @PreAuthorize("@perm.check('hrms.onboarding.instance.read')")
@@ -207,4 +217,6 @@ public class OnboardingController {
             LocalDate joiningDate) {}
 
     public record CompleteTaskRequest(String notes) {}
+
+    public record UpdateInstanceStatusRequest(@NotBlank String status) {}
 }
