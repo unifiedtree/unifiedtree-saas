@@ -117,12 +117,12 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'recruit', label: 'Recruitment & Onboarding', icon: <UserCheck size={18} />, module: 'hrms',
     children: [
-      { label: 'Hiring Pipeline', path: '/hrms/hiring', icon: <UserCheck size={15} />, visibleForRoles: R_HR },
-      { label: 'Onboarding & Assets', path: '/hrms/onboarding/instances', icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
+      { label: 'Hiring Pipeline', path: '/hrms/hiring', icon: <UserCheck size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.hiring.offer.read'] },
+      { label: 'Onboarding & Assets', path: '/hrms/onboarding/instances', icon: <ClipboardList size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.onboarding.asset.read'] },
       { label: 'Letter Templates', path: '/hrms/letters/templates', icon: <FileText size={15} />, visibleForRoles: R_HR },
       { label: 'Generated Letters', path: '/hrms/letters/generated', icon: <FileText size={15} />, visibleForRoles: R_HR },
       { label: 'Letter Distributions', path: '/hrms/letters/distributions', icon: <FileText size={15} />, visibleForRoles: R_HR },
-      { label: 'Employee Vault', path: '/hrms/documents', icon: <FileText size={15} />, visibleForRoles: R_HR },
+      { label: 'Employee Vault', path: '/hrms/documents', icon: <FileText size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.letters.template.read'] },
     ],
   },
   {
@@ -159,7 +159,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     key: 'performance', label: 'Performance & Learning', icon: <Target size={18} />, module: 'hrms',
     children: [
       { label: 'Performance Center', path: '/hrms/performance', icon: <Target size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_ESS, ...R_HR] },
-      { label: 'Learning & Skills', path: '/hrms/learning', icon: <Award size={15} />, visibleForRoles: R_HR },
+      { label: 'Learning & Skills', path: '/hrms/learning', icon: <Award size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.learning.skill.read'] },
     ],
   },
   {
@@ -169,7 +169,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     // duplicate-key React warning in the desktop rail. Trimmed to the two
     // distinct destinations that actually exist.
     children: [
-      { label: 'Statutory Compliance', path: '/hrms/compliance', icon: <ShieldAlert size={15} />, visibleForRoles: R_ADMIN },
+      { label: 'Statutory Compliance', path: '/hrms/compliance', icon: <ShieldAlert size={15} />, visibleForRoles: R_ADMIN, visibleWithAnyPermission: ['hrms.compliance.inspector.read'] },
       { label: 'Muster Roll', path: '/hrms/muster-roll', icon: <FileText size={15} />, visibleForRoles: R_HR },
     ],
   },
@@ -183,7 +183,10 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'exit', label: 'Employee Exit', icon: <LogOut size={18} />, module: 'hrms',
     children: [
-      { label: 'Resignation & Exit', path: '/hrms/fnf', icon: <LogOut size={15} />, visibleForRoles: R_HR },
+      // Two leaves, two routes. Both used to point at /hrms/fnf, and the shell
+      // dedupes by path, so "Resignation & Exit" never rendered: HR had no
+      // list of who is serving notice — only each profile's Exit tab.
+      { label: 'Resignation & Exit', path: '/hrms/exit', icon: <LogOut size={15} />, visibleForRoles: R_HR },
       { label: 'Full & Final Settlement', path: '/hrms/fnf', icon: <Wallet size={15} />, visibleForRoles: R_FIN_RUPEE },
     ],
   },

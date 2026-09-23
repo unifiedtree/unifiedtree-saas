@@ -201,14 +201,27 @@ public class EmployeeShiftService {
 
     @Transactional(readOnly = true)
     public EmployeeShiftResponse getCurrentShift(UUID employeeId) {
-        EmployeeShiftAssignment a = assignmentRepo
-                .findFirstByEmployeeIdAndEffectiveToIsNullOrderByEffectiveFromDesc(employeeId)
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        // "In force today", not "open": assignShift closes the old row the day
+        // before a future-dated change starts, so the only OPEN row can be one
+        // that has not begun yet. Reporting that as current made the profile,
+        // roster and change-request baseline jump to the new shift the moment
+        // HR scheduled it — the schedule SQL, which is date-aware, disagreed.
+        EmployeeShiftAssignment inForce = assignmentRepo.findEffectiveOn(employeeId, today)
+                .stream().findFirst().orElse(null);
+        EmployeeShiftAssignment upcoming = assignmentRepo
+                .findFirstByEmployeeIdAndEffectiveFromAfterOrderByEffectiveFromAsc(employeeId, today)
                 .orElse(null);
-        if (a == null) {
-            return new EmployeeShiftResponse(employeeId, null, null, null, null, null, 0, null);
+        ShiftPolicy upcomingPolicy = upcoming == null ? null
+                : policyRepo.findById(upcoming.getShiftPolicyId()).orElse(null);
+        if (inForce == null) {
+            return new EmployeeShiftResponse(employeeId, null, null, null, null, null, 0, null, null,
+                    upcoming == null ? null : upcoming.getShiftPolicyId(),
+                    upcomingPolicy == null ? null : upcomingPolicy.getName(),
+                    upcoming == null ? null : upcoming.getEffectiveFrom());
         }
-        ShiftPolicy policy = policyRepo.findById(a.getShiftPolicyId()).orElse(null);
-        return toEmployeeResponse(employeeId, a, policy);
+        ShiftPolicy policy = policyRepo.findById(inForce.getShiftPolicyId()).orElse(null);
+        return toEmployeeResponse(employeeId, inForce, policy, upcoming, upcomingPolicy);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -278,12 +291,22 @@ public class EmployeeShiftService {
     }
 
     private static EmployeeShiftResponse toEmployeeResponse(UUID employeeId, EmployeeShiftAssignment a, ShiftPolicy p) {
+        return toEmployeeResponse(employeeId, a, p, null, null);
+    }
+
+    private static EmployeeShiftResponse toEmployeeResponse(UUID employeeId, EmployeeShiftAssignment a, ShiftPolicy p,
+                                                            EmployeeShiftAssignment upcoming, ShiftPolicy upcomingPolicy) {
+        UUID upcomingId = upcoming == null ? null : upcoming.getShiftPolicyId();
+        String upcomingName = upcomingPolicy == null ? null : upcomingPolicy.getName();
+        LocalDate upcomingFrom = upcoming == null ? null : upcoming.getEffectiveFrom();
         if (p == null) {
-            return new EmployeeShiftResponse(employeeId, a.getShiftPolicyId(), null, null, null, null, 0, a.getEffectiveFrom());
+            return new EmployeeShiftResponse(employeeId, a.getShiftPolicyId(), null, null, null, null, 0,
+                    a.getEffectiveFrom(), a.getEffectiveTo(), upcomingId, upcomingName, upcomingFrom);
         }
         return new EmployeeShiftResponse(
                 employeeId, p.getId(), p.getName(), p.getShiftType(),
-                p.getStartTime(), p.getEndTime(), p.getGracePeriodMinutes(), a.getEffectiveFrom());
+                p.getStartTime(), p.getEndTime(), p.getGracePeriodMinutes(),
+                a.getEffectiveFrom(), a.getEffectiveTo(), upcomingId, upcomingName, upcomingFrom);
     }
 
     private static LocalTime nullsafe(LocalTime t) {

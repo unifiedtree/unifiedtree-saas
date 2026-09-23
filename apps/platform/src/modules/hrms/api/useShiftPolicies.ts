@@ -135,6 +135,13 @@ export interface EmployeeShift {
   endTime?: string | null
   gracePeriodMinutes?: number | null
   effectiveFrom?: string | null
+  /** Set when the in-force assignment already has an end date (a later change is scheduled). */
+  effectiveTo?: string | null
+  // A future-dated reassignment, if HR has scheduled one. The policy fields
+  // above describe the shift in force TODAY; these describe what it becomes.
+  upcomingShiftPolicyId?: string | null
+  upcomingShiftName?: string | null
+  upcomingEffectiveFrom?: string | null
 }
 
 export function useEmployeeShift(

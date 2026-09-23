@@ -73,7 +73,13 @@ public final class ShiftDtos {
             UUID shiftPolicyId,
             LocalDate effectiveFrom) {}
 
-    /** The employee's current shift (null policy fields when unassigned). */
+    /**
+     * The employee's shift in force today plus any scheduled change. Policy
+     * fields are null when nothing is in force today; the {@code upcoming*}
+     * fields are null when no future-dated assignment exists. From
+     * {@code assignShift} the policy fields describe the assignment just made
+     * (which may itself start in the future).
+     */
     public record EmployeeShiftResponse(
             UUID employeeId,
             UUID shiftPolicyId,
@@ -82,7 +88,11 @@ public final class ShiftDtos {
             LocalTime startTime,
             LocalTime endTime,
             int gracePeriodMinutes,
-            LocalDate effectiveFrom) {}
+            LocalDate effectiveFrom,
+            LocalDate effectiveTo,
+            UUID upcomingShiftPolicyId,
+            String upcomingShiftName,
+            LocalDate upcomingEffectiveFrom) {}
 
     // ── Shift-change requests (employee → HR approve) ────────────────────────
 

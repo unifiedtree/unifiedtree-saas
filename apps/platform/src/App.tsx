@@ -55,7 +55,6 @@ const Employees = React.lazy(() => import('@/modules/hrms/Employees').then(m => 
 const Attendance = React.lazy(() => import('@/modules/hrms/Attendance').then(m => ({ default: m.Attendance })))
 const GeofenceZones = React.lazy(() => import('@/modules/hrms/attendance/GeofenceZones').then(m => ({ default: m.GeofenceZones })))
 const Leave = React.lazy(() => import('@/modules/hrms/Leave').then(m => ({ default: m.Leave })))
-const Payroll = React.lazy(() => import('@/modules/hrms/Payroll').then(m => ({ default: m.Payroll })))
 const OrgSetup = React.lazy(() => import('@/modules/hrms/organization/OrgSetup').then(m => ({ default: m.OrgSetup })))
 const Companies = React.lazy(() => import('@/modules/hrms/organization/Companies').then(m => ({ default: m.Companies })))
 const EmployeeDetail = React.lazy(() => import('@/modules/hrms/employees/EmployeeDetail').then(m => ({ default: m.EmployeeDetail })))
@@ -67,6 +66,7 @@ const ProbationSettings = React.lazy(() => import('@/modules/hrms/probation/Prob
 const Expense = React.lazy(() => import('@/modules/hrms/Expense').then(m => ({ default: m.Expense })))
 const Advance = React.lazy(() => import('@/modules/hrms/Advance').then(m => ({ default: m.Advance })))
 const FullAndFinal = React.lazy(() => import('@/modules/hrms/FullAndFinal').then(m => ({ default: m.FullAndFinal })))
+const ExitCenter = React.lazy(() => import('@/modules/hrms/exit/ExitCenter').then(m => ({ default: m.ExitCenter })))
 const Hiring = React.lazy(() => import('@/modules/hrms/Hiring').then(m => ({ default: m.Hiring })))
 const Performance = React.lazy(() => import('@/modules/hrms/Performance').then(m => ({ default: m.Performance })))
 const WorkforceAnalytics = React.lazy(() => import('@/modules/hrms/analytics/WorkforceAnalytics').then(m => ({ default: m.WorkforceAnalytics })))
@@ -143,6 +143,8 @@ function ComingSoonRoute({ moduleKey }: { moduleKey: string }) {
   )
 }
 
+const InspectorView = React.lazy(() => import('@/modules/hrms/compliance/InspectorView'))
+
 export default function App() {
   // 2026-09-10: wrap every route in an error boundary KEYED BY PATH.
   //
@@ -167,6 +169,7 @@ export default function App() {
     >
     <Routes>
       {/* Public */}
+      <Route path="/inspection" element={<InspectorView />} />
       <Route path="/login"            element={<LoginPage />} />
       <Route path="/pending-approval" element={<PendingApproval />} />
       <Route path="/no-access"        element={<NoAccess />} />
@@ -371,6 +374,14 @@ export default function App() {
           }
         />
         <Route
+          path="/hrms/exit"
+          element={
+            <RouteGuard anyOf={['hrms.employee.read', 'hrms.employee.write']}>
+              <ModuleGate moduleKey="hrms"><ExitCenter /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
           path="/hrms/fnf"
           element={
             <RouteGuard anyOf={['hrms.fnf.read', 'hrms.fnf.process', 'hrms.fnf.approve']}>
@@ -381,7 +392,7 @@ export default function App() {
         <Route
           path="/hrms/hiring"
           element={
-            <RouteGuard anyOf={['hrms.hiring.read', 'hrms.hiring.write', 'hrms.hiring.candidate.write']}>
+            <RouteGuard anyOf={['hrms.hiring.read', 'hrms.hiring.write', 'hrms.hiring.candidate.write', 'hrms.hiring.offer.read']}>
               <ModuleGate moduleKey="hrms"><Hiring /></ModuleGate>
             </RouteGuard>
           }
@@ -473,7 +484,7 @@ export default function App() {
         <Route
           path="/hrms/documents"
           element={
-            <RouteGuard anyOf={['hrms.document.read.self', 'hrms.document.read', 'hrms.document.write']}>
+            <RouteGuard anyOf={['hrms.document.read.self', 'hrms.document.read', 'hrms.document.write', 'hrms.letters.template.read']}>
               <ModuleGate moduleKey="hrms"><DocumentVault /></ModuleGate>
             </RouteGuard>
           }
@@ -481,7 +492,7 @@ export default function App() {
         <Route
           path="/hrms/learning"
           element={
-            <RouteGuard anyOf={['hrms.learning.read', 'hrms.learning.write', 'hrms.learning.enroll.self']}>
+            <RouteGuard anyOf={['hrms.learning.read', 'hrms.learning.write', 'hrms.learning.enroll.self', 'hrms.learning.skill.read']}>
               <ModuleGate moduleKey="hrms"><Learning /></ModuleGate>
             </RouteGuard>
           }
@@ -489,7 +500,7 @@ export default function App() {
         <Route
           path="/hrms/compliance"
           element={
-            <RouteGuard anyOf={['hrms.compliance.read', 'hrms.compliance.write', 'hrms.compliance.posh']}>
+            <RouteGuard anyOf={['hrms.compliance.read', 'hrms.compliance.write', 'hrms.compliance.posh', 'hrms.compliance.inspector.read']}>
               <ModuleGate moduleKey="hrms"><Compliance /></ModuleGate>
             </RouteGuard>
           }
@@ -561,7 +572,7 @@ export default function App() {
         <Route
           path="/hrms/onboarding/instances"
           element={
-            <RouteGuard anyOf={[P.HRMS_ONBOARDING_INSTANCE_READ, P.HRMS_ONBOARDING_TASK_COMPLETE]}>
+            <RouteGuard anyOf={[P.HRMS_ONBOARDING_INSTANCE_READ, P.HRMS_ONBOARDING_TASK_COMPLETE, 'hrms.onboarding.asset.read']}>
               <ModuleGate moduleKey="hrms"><Instances /></ModuleGate>
             </RouteGuard>
           }
@@ -578,7 +589,7 @@ export default function App() {
         <Route
           path="/hrms/onboarding/instances/:instanceId"
           element={
-            <RouteGuard anyOf={[P.HRMS_ONBOARDING_INSTANCE_READ, P.HRMS_ONBOARDING_TASK_COMPLETE]}>
+            <RouteGuard anyOf={[P.HRMS_ONBOARDING_INSTANCE_READ, P.HRMS_ONBOARDING_TASK_COMPLETE, 'hrms.onboarding.asset.read']}>
               <ModuleGate moduleKey="hrms"><InstanceDetail /></ModuleGate>
             </RouteGuard>
           }
@@ -790,7 +801,7 @@ export default function App() {
             when it is not active. Both the canonical-key path and the legacy
             nav path are registered so clicking the sidebar item never lands on
             a blank/broken page. */}
-        <Route path="/payroll"            element={<ComingSoonRoute moduleKey="payroll" />} />
+        <Route path="/payroll" element={<Navigate to="/hrms/payroll-dashboard" replace />} />
         <Route path="/accounting"         element={<ComingSoonRoute moduleKey="accounting" />} />
         <Route path="/accounts/*"         element={<ComingSoonRoute moduleKey="accounting" />} />
         <Route path="/inventory"          element={<ComingSoonRoute moduleKey="inventory" />} />
