@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { Clock, Moon, Timer, Building2, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
 import { usePermission, P } from '@unifiedtree/sdk'
-import { HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrButton } from '@/shared/components/hr'
+import { HrPageHeader, HrStatCard, HrStatusPill, HrTabs, HrTabPanel, TableCard, HrAvatar, HrButton } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies } from './../api/useOrg'
 // attendance.shift_policies, not org.shifts. This screen used to read useOrg's
@@ -332,6 +332,32 @@ function ShiftFormModal({
 
 // ── Main page ───────────────────────────────────────────────────────────────────
 
+
+function ShiftRosterMock() {
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-bold text-text-primary">Shift Roster</h3>
+      <TableCard>
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-[var(--border-default)] bg-[var(--bg-base)] text-xs text-gray-500">
+            <tr><th className="p-4 font-medium">Employee</th><th className="p-4 font-medium">Mon (11)</th><th className="p-4 font-medium">Tue (12)</th><th className="p-4 font-medium">Wed (13)</th><th className="p-4 font-medium">Thu (14)</th><th className="p-4 font-medium">Fri (15)</th></tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-[var(--border-default)]">
+              <td className="p-4 font-semibold">John Smith</td>
+              <td className="p-4"><span className="badge bg-gray-100 text-gray-700 px-2 py-1 rounded">Morning</span></td>
+              <td className="p-4"><span className="badge bg-gray-100 text-gray-700 px-2 py-1 rounded">Morning</span></td>
+              <td className="p-4"><span className="badge bg-gray-100 text-gray-700 px-2 py-1 rounded">Morning</span></td>
+              <td className="p-4"><span className="badge bg-gray-100 text-gray-700 px-2 py-1 rounded">Morning</span></td>
+              <td className="p-4"><span className="badge bg-gray-100 text-gray-700 px-2 py-1 rounded">Morning</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </TableCard>
+    </div>
+  )
+}
+
 export const ShiftsAndOt: React.FC = () => {
   const { toast } = useToast()
   const { data: companies = [] } = useCompanies()
@@ -397,6 +423,13 @@ export const ShiftsAndOt: React.FC = () => {
   // Both /v1/shifts and the OT report are companyId-keyed, so with no company in
   // hand every query below is disabled and the page renders a *false* "nothing
   // defined". Say which it is instead of implying the tenant has no shifts.
+  
+  const [tab, setTab] = useState<'roster' | 'ot'>('roster')
+  const tabs = [
+    { key: 'roster', label: 'Shift Roster' },
+    { key: 'ot', label: 'Overtime Approvals' }
+  ]
+
   const noCompany = !activeCompany
 
   return (
@@ -447,6 +480,17 @@ export const ShiftsAndOt: React.FC = () => {
         <HrStatCard icon={<Timer size={18} />} color="orange" value={`${totalOtHours}h`} label="Overtime (This Month)" loading={otLoading} />
       </div>
 
+
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as any)} />
+
+      <div className="mt-6">
+        {tab === 'roster' && (
+          <HrTabPanel tabKey="roster">
+            <ShiftRosterMock />
+          </HrTabPanel>
+        )}
+        {tab === 'ot' && (
+          <HrTabPanel tabKey="ot">
       {/* Shift schedules */}
       <div>
         <h3 className="mb-2 text-sm font-bold text-text-primary">Shift Schedules</h3>
@@ -540,6 +584,11 @@ export const ShiftsAndOt: React.FC = () => {
             </tbody>
           </table>
         </TableCard>
+      </div>
+
+
+          </HrTabPanel>
+        )}
       </div>
 
       {/* Rendered only for roles the API will accept a write from. */}

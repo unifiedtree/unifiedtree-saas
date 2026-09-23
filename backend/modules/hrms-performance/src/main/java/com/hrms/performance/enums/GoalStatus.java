@@ -6,6 +6,7 @@ package com.hrms.performance.enums;
  */
 public enum GoalStatus {
     ACTIVE,
+    AT_RISK,
     COMPLETED,
     DROPPED
 }

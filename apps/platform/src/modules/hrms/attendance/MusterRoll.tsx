@@ -14,6 +14,7 @@ import {
   HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrButton, HrAvatar,
   type PillTone,
 } from '@/shared/components/hr'
+import { DataTable } from '@/shared/components/DataTable'
 import { useToast } from '@/shared/hooks/useToast'
 import { apiBlob } from '@/core/api/client'
 import { useCompanies, useDepartments } from '../api/useOrg'
@@ -444,105 +445,43 @@ export const MusterRoll: React.FC = () => {
           </div>
         }
       >
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Employee</th>
-              <th>Department</th>
-              <th>Status</th>
-              <th>Check In</th>
-              <th>Check Out</th>
-              <th>Location</th>
-              <th className="text-right">Punches</th>
-              <th className="text-right"><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {dashLoading ? (
-              [...Array(6)].map((_, i) => (
-                <tr key={i}>
-                  <td>
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-bg-base" />
-                      <div className="space-y-1.5">
-                        <div className="h-3 w-32 animate-pulse rounded bg-bg-base" />
-                        <div className="h-2.5 w-20 animate-pulse rounded bg-bg-base" />
-                      </div>
-                    </div>
-                  </td>
-                  {[...Array(7)].map((__, j) => (
-                    <td key={j}><div className="h-3 w-16 animate-pulse rounded bg-bg-base" /></td>
-                  ))}
-                </tr>
-              ))
-            ) : dashError ? (
-              <tr>
-                <td colSpan={8}>
-                  <div className="flex flex-col items-center gap-3 py-12 text-center">
-                    <p className="text-sm font-medium text-text-secondary">Couldn’t load the muster roll for this day.</p>
-                    <HrButton variant="ghost" size="sm" onClick={() => refetchDash()}>
-                      <RefreshCw size={14} /> Retry
-                    </HrButton>
-                  </div>
-                </td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={8}>
-                  <div className="flex flex-col items-center gap-2 py-12 text-center">
-                    <CalendarDays size={28} className="text-text-tertiary" />
-                    <p className="text-sm font-medium text-text-secondary">
-                      {totalStaff === 0 ? 'No attendance records for this day.' : 'No staff match your search.'}
-                    </p>
-                    <p className="text-xs text-text-tertiary">
-                      {totalStaff === 0 ? 'Pick another date or department.' : 'Try a different name or code.'}
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              filtered.map((s, idx) => {
-                const meta = statusMeta(s.status)
-                const punches = punchByEmp.get(s.employeeId) ?? 0
-                return (
-                  <tr key={s.employeeId}>
-                    <td>
-                      <HrAvatar
-                        name={fullName(s)}
-                        sub={[s.employeeCode, s.jobTitle].filter(Boolean).join(' · ') || undefined}
-                        seed={idx}
-                      />
-                    </td>
-                    <td className="text-text-secondary">{s.departmentName ?? '—'}</td>
-                    <td><HrStatusPill tone={meta.tone}>{meta.label}</HrStatusPill></td>
-                    <td className="font-medium text-text-primary">{fmtTime(s.checkInAt)}</td>
-                    <td className="font-medium text-text-primary">{fmtTime(s.checkOutAt)}</td>
-                    <td className="text-text-secondary">{s.locationName ?? '—'}</td>
-                    <td className="text-right tabular-nums text-text-secondary">
-                      {punches > 0 ? punches : '—'}
-                    </td>
-                    <td className="text-right">
-                      {/* Quick jump into Manual Entry for this employee+date.
-                          Deep-links via query string so the form arrives
-                          pre-populated with the row's context. */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          navigate(`/hrms/attendance/manual-entry?employeeId=${encodeURIComponent(s.employeeId)}&date=${encodeURIComponent(date)}`)
-                        }
-                        title="Manual attendance entry for this employee"
-                        aria-label={`Manual attendance entry for ${fullName(s)}`}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-bg-base hover:text-[#047857]"
-                      >
-                        <ClipboardEdit size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
+        {dashError ? (
+          <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <p className="text-sm font-medium text-text-secondary">Couldn't load the muster roll for this day.</p>
+            <HrButton variant="ghost" size="sm" onClick={() => refetchDash()}>
+              <RefreshCw size={14} /> Retry
+            </HrButton>
+          </div>
+        ) : (
+          <DataTable
+            columns={[
+              { key: 'employee', header: 'Employee', render: (s) => <HrAvatar name={fullName(s)} sub={[s.employeeCode, s.jobTitle].filter(Boolean).join(' · ') || undefined} /> },
+              { key: 'department', header: 'Department', render: (s) => <span className="text-text-secondary">{s.departmentName ?? '—'}</span> },
+              { key: 'status', header: 'Status', render: (s) => { const m = statusMeta(s.status); return <HrStatusPill tone={m.tone}>{m.label}</HrStatusPill> } },
+              { key: 'in', header: 'Check In', render: (s) => <span className="font-medium text-text-primary">{fmtTime(s.checkInAt)}</span> },
+              { key: 'out', header: 'Check Out', render: (s) => <span className="font-medium text-text-primary">{fmtTime(s.checkOutAt)}</span> },
+              { key: 'location', header: 'Location', render: (s) => <span className="text-text-secondary">{s.locationName ?? '—'}</span> },
+              { key: 'punches', header: 'Punches', render: (s) => { const p = punchByEmp.get(s.employeeId) ?? 0; return <div className="text-right tabular-nums text-text-secondary">{p > 0 ? p : '—'}</div> } },
+              { key: 'actions', header: '', render: (s) => (
+                <div className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/hrms/attendance/manual-entry?employeeId=${encodeURIComponent(s.employeeId)}&date=${encodeURIComponent(date)}`)}
+                    title="Manual attendance entry for this employee"
+                    aria-label={`Manual attendance entry for ${fullName(s)}`}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-bg-base hover:text-[#047857]"
+                  >
+                    <ClipboardEdit size={14} />
+                  </button>
+                </div>
+              ) }
+            ]}
+            data={filtered}
+            keyField="employeeId"
+            loading={dashLoading}
+            emptyMessage={totalStaff === 0 ? 'No attendance records for this day.' : 'No staff match your search.'}
+          />
+        )}
       </TableCard>
 
       {/* Quick legend / WFH + leave callouts derived from counts */}

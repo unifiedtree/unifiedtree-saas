@@ -117,6 +117,12 @@ public class FnfController {
         return ResponseEntity.ok(enrichOne(fnfService.pay(id)));
     }
 
+    @PostMapping("/settlements/{id}/cancel")
+    @PreAuthorize("@perm.check('hrms.fnf.process')")
+    public ResponseEntity<FnfSettlementResponse> cancel(@PathVariable UUID id) {
+        return ResponseEntity.ok(enrichOne(fnfService.cancel(id)));
+    }
+
     // ─── Employee identity enrichment ────────────────────────────────────────
     // The fnf module has no dependency on hrms-employee, so the leaver's name /
     // code are resolved here (the API layer) and folded into the response so

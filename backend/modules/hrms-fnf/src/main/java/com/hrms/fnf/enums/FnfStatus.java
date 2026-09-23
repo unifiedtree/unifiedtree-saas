@@ -8,5 +8,6 @@ public enum FnfStatus {
     INITIATED,
     PROCESSED,
     APPROVED,
-    PAID
+    PAID,
+    CANCELLED
 }

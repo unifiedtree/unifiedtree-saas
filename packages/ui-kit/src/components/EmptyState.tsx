@@ -70,14 +70,14 @@ export function EmptyState({
         className,
       )}
     >
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-subtle)]">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-default)]">
         {icon ?? defaults.icon}
       </div>
       <div className="max-w-sm">
-        <p className="text-base font-semibold text-[var(--text-primary)]">
+        <p className="text-[15px] font-bold tracking-tight text-[var(--text-primary)]">
           {title ?? defaults.title}
         </p>
-        <p className="mt-1 text-sm text-[var(--text-tertiary)]">
+        <p className="mt-1.5 text-[13.5px] text-[var(--text-secondary)]">
           {description ?? defaults.description}
         </p>
       </div>

@@ -1,0 +1,123 @@
+{
+  "projectId": "99ea22a9-3bb8-4c00-aa2a-6cd258e859bd",
+  "shape": "package",
+  "pkg": "@unifiedtree/design-sync-entry",
+  "globalName": "UnifiedTree",
+  "entry": ".design-sync/ds-package/src/index.ts",
+  "buildCmd": "node .design-sync/build-ds.mjs",
+  "srcDir": "src",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": "dist/styles.css",
+  "tokensPkg": "@unifiedtree/design-system",
+  "tokensGlob": "src/tokens.css",
+  "overrides": {
+    "DataTable": {
+      "cardMode": "column"
+    },
+    "HrStatCard": {
+      "cardMode": "column"
+    },
+    "TableCard": {
+      "cardMode": "column"
+    },
+    "FilterBar": {
+      "cardMode": "column"
+    },
+    "HrPageHeader": {
+      "cardMode": "column"
+    },
+    "PageHeader": {
+      "cardMode": "column"
+    },
+    "HrPagination": {
+      "cardMode": "column"
+    },
+    "TableSkeleton": {
+      "cardMode": "column"
+    },
+    "StatsSkeleton": {
+      "cardMode": "column"
+    },
+    "HrTabs": {
+      "cardMode": "column"
+    },
+    "Tabs": {
+      "cardMode": "column"
+    },
+    "EmptyState": {
+      "cardMode": "column"
+    },
+    "Modal": {
+      "cardMode": "single",
+      "viewport": "960x640"
+    },
+    "Drawer": {
+      "cardMode": "single",
+      "viewport": "960x640"
+    },
+    "HrDrawer": {
+      "cardMode": "single",
+      "viewport": "960x640"
+    },
+    "HrSelect": {
+      "cardMode": "column"
+    },
+    "TabsList": {
+      "cardMode": "column"
+    },
+    "TabsTrigger": {
+      "cardMode": "column"
+    },
+    "TabsContent": {
+      "cardMode": "column"
+    }
+  },
+  "componentSrcMap": {
+    "Avatar": "../../packages/ui-kit/src/primitives/Atoms.tsx",
+    "Badge": "../../packages/ui-kit/src/primitives/Atoms.tsx",
+    "Card": "../../packages/ui-kit/src/primitives/Atoms.tsx",
+    "CardContent": "../../packages/ui-kit/src/primitives/Atoms.tsx",
+    "CardDescription": "../../packages/ui-kit/src/primitives/Atoms.tsx",
+    "CardFooter": "../../packages/ui-kit/src/primitives/Atoms.tsx",
+    "CardHeader": "../../packages/ui-kit/src/primitives/Atoms.tsx",
+    "CardTitle": "../../packages/ui-kit/src/primitives/Atoms.tsx",
+    "Separator": "../../packages/ui-kit/src/primitives/Atoms.tsx",
+    "Button": "../../packages/ui-kit/src/primitives/Button.tsx",
+    "Field": "../../packages/ui-kit/src/primitives/Field.tsx",
+    "Input": "../../packages/ui-kit/src/primitives/Field.tsx",
+    "Label": "../../packages/ui-kit/src/primitives/Field.tsx",
+    "Drawer": "../../packages/ui-kit/src/components/Overlay.tsx",
+    "Modal": "../../packages/ui-kit/src/components/Overlay.tsx",
+    "PageHeader": "../../packages/ui-kit/src/components/PageHeader.tsx",
+    "Skeleton": "../../packages/ui-kit/src/components/Skeleton.tsx",
+    "CardSkeleton": "../../packages/ui-kit/src/components/Skeleton.tsx",
+    "StatsSkeleton": "../../packages/ui-kit/src/components/Skeleton.tsx",
+    "TableSkeleton": "../../packages/ui-kit/src/components/Skeleton.tsx",
+    "Tabs": "../../packages/ui-kit/src/components/Tabs.tsx",
+    "TabsContent": "../../packages/ui-kit/src/components/Tabs.tsx",
+    "TabsList": "../../packages/ui-kit/src/components/Tabs.tsx",
+    "TabsTrigger": "../../packages/ui-kit/src/components/Tabs.tsx",
+    "Toaster": null,
+    "HrStatCard": "../../apps/platform/src/shared/components/hr.tsx",
+    "HrStatusPill": "../../apps/platform/src/shared/components/hr.tsx",
+    "HrPageHeader": "../../apps/platform/src/shared/components/hr.tsx",
+    "HrButton": "../../apps/platform/src/shared/components/hr.tsx",
+    "TableCard": "../../apps/platform/src/shared/components/hr.tsx",
+    "FilterBar": "../../apps/platform/src/shared/components/hr.tsx",
+    "HrAvatar": "../../apps/platform/src/shared/components/hr.tsx",
+    "HrTabs": "../../apps/platform/src/shared/components/hr.tsx",
+    "HrTabPanel": "../../apps/platform/src/shared/components/hr.tsx",
+    "HrSelect": "../../apps/platform/src/shared/components/hr.tsx",
+    "HrDrawer": "../../apps/platform/src/shared/components/hr.tsx",
+    "DataTable": "../../apps/platform/src/shared/components/DataTable.tsx",
+    "EmptyState": "../../apps/platform/src/shared/components/EmptyState.tsx",
+    "StatCard": "../../apps/platform/src/shared/components/StatCard.tsx",
+    "HrPagination": "../../apps/platform/src/shared/components/HrPagination.tsx",
+    "SkeletonCard": "../../apps/platform/src/shared/components/SkeletonCard.tsx",
+    "SkeletonCardGrid": "../../apps/platform/src/shared/components/SkeletonCard.tsx",
+    "SkeletonRow": "../../apps/platform/src/shared/components/SkeletonCard.tsx",
+    "SkeletonBlock": "../../apps/platform/src/shared/components/SkeletonCard.tsx",
+    "ConfirmDialogProvider": "../../apps/platform/src/shared/components/ConfirmDialog.tsx"
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}

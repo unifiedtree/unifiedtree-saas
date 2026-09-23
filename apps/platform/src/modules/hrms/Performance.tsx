@@ -1,58 +1,62 @@
 import React, { useMemo, useState } from 'react'
-import { Plus, Target, Star, CalendarRange, Check, TrendingUp, CheckCircle2 } from 'lucide-react'
+import { Plus, Target, Star, Check, TrendingUp, CheckCircle2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
+import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
-import { useCompanies } from './api/useOrg'
-import { useEmployeeDirectory } from './api/useWorkforce'
 import {
-  useReviewCycles, useCreateCycle, useActivateCycle,
-  useMyReviews, useReviews, useCreateReview, useSubmitReview,
+  useMyReviews, useSubmitReview,
   useMyGoals, useCreateGoal, useUpdateGoalProgress,
-  type CycleStatus, type ReviewStatus, type GoalStatus, type PerformanceReview,
+  type ReviewStatus, type GoalStatus, type PerformanceReview,
 } from './api/usePerformance'
 
-const CYCLE_TONE: Record<CycleStatus, PillTone> = { DRAFT: 'gray', ACTIVE: 'ok', CLOSED: 'info' }
-const REVIEW_TONE: Record<ReviewStatus, PillTone> = { PENDING: 'warn', SUBMITTED: 'ok', ACKNOWLEDGED: 'teal' }
-const GOAL_TONE: Record<GoalStatus, PillTone> = { ACTIVE: 'info', COMPLETED: 'ok', DROPPED: 'gray' }
+import { AdminKpis } from './performance/AdminKpis'
+import { AdminCycles } from './performance/AdminCycles'
+import { AdminReviews } from './performance/AdminReviews'
+import { PerformanceError } from './performance/PerformanceEmployeePicker'
+const REVIEW_TONE: Record<ReviewStatus, PillTone> = { PENDING: 'warn', IN_PROGRESS: 'info', MISSED: 'red', SUBMITTED: 'ok', ACKNOWLEDGED: 'teal' }
+const GOAL_TONE: Record<GoalStatus, PillTone> = { ACTIVE: 'info', AT_RISK: 'warn', COMPLETED: 'ok', DROPPED: 'gray' }
 
 const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
-type Tab = 'goals' | 'reviews' | 'cycles' | 'admin'
+type Tab = 'goals' | 'reviews' | 'cycles' | 'admin' | 'kpis' | 'emp-performance' | 'appraisals' | 'kpi-tracking'
 
 export const Performance: React.FC = () => {
   const canSelf = usePermission('hrms.performance.review.self')
   const canRead = usePermission('hrms.performance.read')
-  const canWrite = usePermission('hrms.performance.write')
 
   const tabs: { key: Tab; label: string }[] = [
-    ...(canSelf ? [{ key: 'goals' as Tab, label: 'My Goals' }] : []),
-    ...(canSelf ? [{ key: 'reviews' as Tab, label: 'My Reviews' }] : []),
-    // 2026-09-10: gated on read + write. The tab body loads
-    // GET /v1/performance/cycles which requires hrms.performance.read; every
-    // seeded role pairs the two, but a custom role built with write-only in
-    // Settings saw the tab, the list 403'd, and the page read "No review
-    // cycles defined yet" while Create Cycle still worked — the classic
-    // "I clicked and nothing happened".
-    ...(canWrite && canRead ? [{ key: 'cycles' as Tab, label: 'Cycles' }] : []),
-    ...(canRead ? [{ key: 'admin' as Tab, label: 'Reviews' }] : []),
+    ...(canRead ? [
+      { key: 'emp-performance' as Tab, label: 'Employee Performance' },
+      { key: 'appraisals' as Tab, label: 'Appraisals & 360 Feedback' },
+      { key: 'kpi-tracking' as Tab, label: 'KPI Tracking' },
+      { key: 'cycles' as Tab, label: 'Review cycles' },
+      { key: 'kpis' as Tab, label: 'Goals & KPIs' },
+      { key: 'admin' as Tab, label: 'Employee reviews' }
+    ] : []),
+    ...(canSelf ? [{ key: 'goals' as Tab, label: 'My Goals' }, { key: 'reviews' as Tab, label: 'My Reviews' }] : []),
   ]
 
-  const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? 'goals')
+  const [tab, setTab] = useState<Tab>(canRead ? 'cycles' : tabs[0]?.key ?? 'goals')
 
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
+    <div className="mx-auto max-w-[1440px] p-4 sm:p-6">
       <HrPageHeader crumb="Performance Management" title="Performance Center" subtitle="Track goals, run review cycles, and manage performance reviews" />
 
+      {tabs.length === 0 && <p className="ut-card p-5 text-sm text-text-secondary">Your role does not have performance access.</p>}
       <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
       {tab === 'goals' && canSelf && <HrTabPanel tabKey="goals"><MyGoalsTab /></HrTabPanel>}
       {tab === 'reviews' && canSelf && <HrTabPanel tabKey="reviews"><MyReviewsTab /></HrTabPanel>}
-      {tab === 'cycles' && canWrite && canRead && <HrTabPanel tabKey="cycles"><CyclesTab /></HrTabPanel>}
-      {tab === 'admin' && canRead && <HrTabPanel tabKey="admin"><AdminReviewsTab canWrite={canWrite} /></HrTabPanel>}
+      {tab === 'cycles' && canRead && <HrTabPanel tabKey="cycles"><AdminCycles /></HrTabPanel>}
+      {tab === 'kpis' && canRead && <HrTabPanel tabKey="kpis"><AdminKpis /></HrTabPanel>}
+      {tab === 'admin' && canRead && <HrTabPanel tabKey="admin"><AdminReviews /></HrTabPanel>}
+      {tab === 'emp-performance' && canRead && <HrTabPanel tabKey="emp-performance"><EmpPerformanceStatic /></HrTabPanel>}
+      {tab === 'appraisals' && canRead && <HrTabPanel tabKey="appraisals"><AppraisalsStatic /></HrTabPanel>}
+      {tab === 'kpi-tracking' && canRead && <HrTabPanel tabKey="kpi-tracking"><KpiTrackingStatic /></HrTabPanel>}
     </div>
   )
 }
@@ -61,7 +65,7 @@ export const Performance: React.FC = () => {
 
 function MyGoalsTab() {
   const { toast } = useToast()
-  const { data: goals = [], isLoading } = useMyGoals()
+  const { data: goals = [], isLoading, isError, error, refetch } = useMyGoals()
   const create = useCreateGoal()
   const updateProgress = useUpdateGoalProgress()
 
@@ -79,6 +83,7 @@ function MyGoalsTab() {
 
   const onCreate = async () => {
     if (!title.trim()) { toast('Give the goal a title', 'error'); return }
+    if (weight && (!Number.isInteger(Number(weight)) || Number(weight) < 0 || Number(weight) > 100)) { toast('Weight must be a whole number between 0 and 100', 'error'); return }
     try {
       await create.mutateAsync({
         title: title.trim(),
@@ -127,7 +132,7 @@ function MyGoalsTab() {
       </div>
 
       <div className="space-y-3">
-        {isLoading ? (
+        {isError ? <PerformanceError error={error} retry={() => refetch()} /> : isLoading ? (
           [...Array(3)].map((_, i) => <div key={i} className="ut-card ut-card-sm h-20 animate-pulse" />)
         ) : goals.length === 0 ? (
           <div className="ut-card py-14 text-center">
@@ -149,17 +154,18 @@ function MyGoalsTab() {
                   <HrStatusPill tone={GOAL_TONE[g.status]}>{g.status}</HrStatusPill>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              {g.targetValue != null ? <div className="rounded-md bg-[#E6F4F1] p-3 text-sm"><p className="font-semibold text-[#0A5240]">{g.currentValue ?? 0} / {g.targetValue} {g.unit} · {g.progress}%</p><p className="mt-1 text-xs text-text-secondary">Your performance administrator records measured KPI updates.</p></div> : <div className="flex items-center gap-3">
                 <input
                   type="range" min={0} max={100} value={value}
+                  disabled={g.status === 'DROPPED'}
                   onChange={(e) => setDrafts((p) => ({ ...p, [g.id]: parseInt(e.target.value, 10) }))}
                   className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-bg-base accent-[#059669]"
                 />
                 <span className="w-10 text-right text-sm font-semibold text-text-primary">{value}%</span>
-                <HrButton size="sm" variant={dirty ? 'primary' : 'ghost'} onClick={() => onSaveProgress(g.id, value)} disabled={!dirty || updateProgress.isPending}>
+                <HrButton size="sm" variant={dirty ? 'primary' : 'ghost'} onClick={() => onSaveProgress(g.id, value)} disabled={!dirty || updateProgress.isPending || g.status === 'DROPPED'}>
                   <Check size={14} /> Save
                 </HrButton>
-              </div>
+              </div>}
             </div>
           )
         })}
@@ -171,28 +177,30 @@ function MyGoalsTab() {
 // ── My Reviews ───────────────────────────────────────────────────────────────
 
 function MyReviewsTab() {
-  const { data: reviews = [], isLoading } = useMyReviews()
+  const { data: reviews = [], isLoading, isError, error, refetch } = useMyReviews()
+  const currentUser = useCurrentUser()
 
   return (
     <div className="space-y-3">
-      {isLoading ? (
+      {isError ? <PerformanceError error={error} retry={() => refetch()} /> : isLoading ? (
         [...Array(3)].map((_, i) => <div key={i} className="ut-card h-24 animate-pulse" />)
       ) : reviews.length === 0 ? (
         <div className="ut-card py-14 text-center">
           <p className="text-sm font-semibold text-text-secondary">No reviews assigned</p>
           <p className="mt-1 text-xs text-text-tertiary">Your performance reviews will appear here once a cycle is opened.</p>
         </div>
-      ) : reviews.map((r) => <MyReviewCard key={r.id} review={r} />)}
+      ) : reviews.map((r) => <MyReviewCard key={r.id} review={r} employeeId={currentUser.data?.employeeId ?? undefined} />)}
     </div>
   )
 }
 
-function MyReviewCard({ review }: { review: PerformanceReview }) {
+function MyReviewCard({ review, employeeId }: { review: PerformanceReview; employeeId?: string }) {
   const { toast } = useToast()
   const submit = useSubmitReview()
   const [rating, setRating] = useState('')
   const [strengths, setStrengths] = useState('')
   const [improvements, setImprovements] = useState('')
+  const canSubmit = !!employeeId && (review.reviewerId || review.employeeId) === employeeId
 
   const onSubmit = async () => {
     const value = parseFloat(rating)
@@ -214,16 +222,17 @@ function MyReviewCard({ review }: { review: PerformanceReview }) {
     <div className="ut-card p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Review</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">{review.cycleName || 'Performance review'}</p>
           <p className="font-semibold text-text-primary">
-            {review.reviewerName ? `Reviewer: ${review.reviewerName}` : 'Self review'}
+            {review.employeeName || 'Employee review'}{review.employeeCode ? ` (${review.employeeCode})` : ''}
           </p>
+          <p className="mt-1 text-sm text-text-secondary">{review.reviewerName ? `Reviewer: ${review.reviewerName}` : 'Self review'}</p>
           <p className="mt-0.5 text-xs text-text-tertiary">Opened {format(new Date(review.createdAt), 'd MMM yyyy')}</p>
         </div>
         <HrStatusPill tone={REVIEW_TONE[review.status]}>{review.status}</HrStatusPill>
       </div>
 
-      {review.status === 'PENDING' ? (
+      {review.status === 'PENDING' && canSubmit ? (
         <div className="space-y-3 border-t border-border-default pt-3">
           <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-3">
             <div>
@@ -247,6 +256,7 @@ function MyReviewCard({ review }: { review: PerformanceReview }) {
         </div>
       ) : (
         <div className="space-y-2 border-t border-border-default pt-3 text-sm">
+          {review.status === 'PENDING' && <p className="text-text-secondary">Awaiting the assigned reviewer's feedback.</p>}
           {review.overallRating != null && (
             <p className="flex items-center gap-1.5 font-semibold text-text-primary">
               <Star size={15} className="text-[#059669]" /> {review.overallRating} / 5
@@ -260,189 +270,123 @@ function MyReviewCard({ review }: { review: PerformanceReview }) {
   )
 }
 
-// ── Cycles (admin) ───────────────────────────────────────────────────────────
 
-function CyclesTab() {
-  const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  const { data: cycles = [], isLoading } = useReviewCycles()
-  const create = useCreateCycle()
-  const activate = useActivateCycle()
+// ── Static Components (Phase 5) ───────────────────────────────────────────────
 
-  const [name, setName] = useState('')
-  const [periodStart, setPeriodStart] = useState('')
-  const [periodEnd, setPeriodEnd] = useState('')
-
-  const onCreate = async () => {
-    if (!name.trim()) { toast('Cycle name is required', 'error'); return }
-    try {
-      await create.mutateAsync({
-        companyId: companies[0]?.id,
-        name: name.trim(),
-        periodStart: periodStart || undefined,
-        periodEnd: periodEnd || undefined,
-      })
-      toast('Review cycle created', 'success')
-      setName(''); setPeriodStart(''); setPeriodEnd('')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to create cycle', 'error')
-    }
-  }
-
-  const onActivate = async (id: string) => {
-    try {
-      await activate.mutateAsync(id)
-      toast('Cycle activated', 'success')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed', 'error')
-    }
-  }
-
+function EmpPerformanceStatic() {
   return (
-    <div className="space-y-4">
-      <div className="ut-card flex flex-wrap items-end gap-2 p-4">
-        <div className="flex-1 min-w-[180px]">
-          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Cycle name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. H1 2026 Appraisal" className="ut-input" />
+    <div className="ut-card">
+      <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
+        <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
+          <span className="text-text-tertiary">🔍</span>
+          <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
         </div>
-        <div>
-          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Period start</label>
-          <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="ut-input" />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Period end</label>
-          <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="ut-input" />
-        </div>
-        <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Create Cycle</HrButton>
+        <HrButton variant="ghost" size="sm">Filter</HrButton>
       </div>
-
-      <TableCard>
+      <div className="overflow-x-auto">
         <table className="hr-table">
-          <thead>
+          <thead className="bg-bg-subtle">
             <tr>
-              <th>Cycle</th>
-              <th>Period</th>
-              <th>Status</th>
-              <th className="text-right">Action</th>
+              <th>Employee</th>
+              <th>Department</th>
+              <th>Overall Rating</th>
+              <th>Score</th>
+              <th>Last Review</th>
+              <th className="text-center w-16">Action</th>
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
-              [...Array(3)].map((_, i) => <tr key={i}><td colSpan={4} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : cycles.length === 0 ? (
-              <tr><td colSpan={4} className="py-14 text-center text-sm text-text-tertiary">No review cycles defined yet.</td></tr>
-            ) : cycles.map((c) => (
-              <tr key={c.id}>
-                <td className="font-semibold text-text-primary">
-                  <span className="inline-flex items-center gap-2"><CalendarRange size={15} className="text-text-tertiary" />{c.name}</span>
-                </td>
-                <td className="text-text-secondary">
-                  {c.periodStart ? format(new Date(c.periodStart), 'd MMM yyyy') : '—'}
-                  {' – '}
-                  {c.periodEnd ? format(new Date(c.periodEnd), 'd MMM yyyy') : '—'}
-                </td>
-                <td><HrStatusPill tone={CYCLE_TONE[c.status]}>{c.status}</HrStatusPill></td>
-                <td>
-                  <div className="flex items-center justify-end">
-                    {c.status === 'DRAFT' && (
-                      <HrButton size="sm" onClick={() => onActivate(c.id)} disabled={activate.isPending}><Check size={14} /> Activate</HrButton>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+            <tr>
+              <td>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">JS</div>
+                  <span className="font-semibold text-text-primary">John Smith</span>
+                </div>
+              </td>
+              <td className="text-text-secondary">Engineering</td>
+              <td><HrStatusPill tone="ok">Exceeds Expectations</HrStatusPill></td>
+              <td className="font-medium text-text-primary">4.8 / 5.0</td>
+              <td className="text-text-secondary">Q1 2026</td>
+              <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">👁</button></td>
+            </tr>
+            <tr>
+              <td>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">PM</div>
+                  <span className="font-semibold text-text-primary">Priya Mehta</span>
+                </div>
+              </td>
+              <td className="text-text-secondary">Marketing</td>
+              <td><HrStatusPill tone="info">Meets Expectations</HrStatusPill></td>
+              <td className="font-medium text-text-primary">3.9 / 5.0</td>
+              <td className="text-text-secondary">Q1 2026</td>
+              <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">👁</button></td>
+            </tr>
           </tbody>
         </table>
-      </TableCard>
+      </div>
     </div>
   )
 }
 
-// ── Reviews (admin) ──────────────────────────────────────────────────────────
-
-function AdminReviewsTab({ canWrite }: { canWrite: boolean }) {
-  const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  const { data: cycles = [] } = useReviewCycles()
-  const [cycleId, setCycleId] = useState('')
-  const activeCycle = cycleId || cycles[0]?.id || ''
-  const { data: page, isLoading } = useReviews(activeCycle || undefined, 0, !!activeCycle)
-  const reviews = page?.content ?? []
-
-  const { data: empPage } = useEmployeeDirectory({ companyId: companies[0]?.id, pageSize: 200 }, { enabled: canWrite && !!companies[0]?.id })
-  const employees = empPage?.content ?? []
-  const create = useCreateReview()
-  const [employeeId, setEmployeeId] = useState('')
-
-  const onCreate = async () => {
-    if (!activeCycle) { toast('Select a review cycle first', 'error'); return }
-    if (!employeeId) { toast('Select an employee', 'error'); return }
-    try {
-      await create.mutateAsync({ cycleId: activeCycle, employeeId })
-      toast('Review created', 'success')
-      setEmployeeId('')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to create review', 'error')
-    }
-  }
-
+function AppraisalsStatic() {
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Review cycle</label>
-          <select value={activeCycle} onChange={(e) => setCycleId(e.target.value)} className="ut-select ut-select-sm w-auto min-w-[220px]">
-            {cycles.length === 0 && <option value="">No cycles</option>}
-            {cycles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+    <div className="ut-card">
+      <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
+        <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
+          <span className="text-text-tertiary">🔍</span>
+          <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
+        </div>
+        <div className="flex gap-2">
+          <HrButton variant="ghost" size="sm">Filter</HrButton>
+          <HrButton size="sm">Initiate Cycle</HrButton>
         </div>
       </div>
-
-      {canWrite && (
-        <div className="ut-card flex flex-wrap items-end gap-2 p-4">
-          <div className="flex-1 min-w-[200px]">
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Add review for employee</label>
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
-              <option value="">Select employee…</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>{`${e.firstName} ${e.lastName ?? ''}`.trim()} ({e.employeeCode})</option>
-              ))}
-            </select>
-          </div>
-          <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Add Review</HrButton>
-        </div>
-      )}
-
-      <TableCard>
+      <div className="overflow-x-auto">
         <table className="hr-table">
-          <thead>
+          <thead className="bg-bg-subtle">
             <tr>
               <th>Employee</th>
-              <th>Reviewer</th>
-              <th>Rating</th>
+              <th>Review Type</th>
+              <th>Reviewers</th>
+              <th>Completion</th>
               <th>Status</th>
+              <th className="text-center w-16">Action</th>
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
-              [...Array(3)].map((_, i) => <tr key={i}><td colSpan={4} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : reviews.length === 0 ? (
-              <tr><td colSpan={4} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No reviews in this cycle</p><p className="mt-1 text-xs text-text-tertiary">Add a review above to get started.</p></td></tr>
-            ) : reviews.map((r, i) => (
-              <tr key={r.id}>
-                <td><HrAvatar name={r.employeeName || 'Employee'} sub={r.employeeCode} seed={i} /></td>
-                <td className="text-text-secondary">{r.reviewerName || '—'}</td>
-                <td className="font-semibold tabular-nums text-text-primary">
-                  {r.overallRating != null ? (
-                    <span className="inline-flex items-center gap-1"><Star size={14} className="text-[#059669]" />{r.overallRating}</span>
-                  ) : '—'}
-                </td>
-                <td><HrStatusPill tone={REVIEW_TONE[r.status]}>{r.status}</HrStatusPill></td>
-              </tr>
-            ))}
+            <tr>
+              <td>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">DL</div>
+                  <span className="font-semibold text-text-primary">David Lee</span>
+                </div>
+              </td>
+              <td className="text-text-secondary">Annual 360 Review</td>
+              <td className="text-text-secondary">Manager & Peers</td>
+              <td>
+                <div className="flex items-center gap-2 text-sm text-text-secondary">
+                  <div className="h-1.5 w-12 overflow-hidden rounded-full bg-border-default">
+                    <div className="h-full w-4/5 bg-[#059669]"></div>
+                  </div>
+                  4/5 Received
+                </div>
+              </td>
+              <td><HrStatusPill tone="warn">In Progress</HrStatusPill></td>
+              <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">🔔</button></td>
+            </tr>
           </tbody>
         </table>
-      </TableCard>
+      </div>
+    </div>
+  )
+}
+
+function KpiTrackingStatic() {
+  return (
+    <div className="ut-card p-6 text-center">
+      <p className="text-sm font-semibold text-text-secondary">KPI Tracking (Static)</p>
+      <p className="mt-1 text-xs text-text-tertiary">This module is currently UI-only.</p>
     </div>
   )
 }

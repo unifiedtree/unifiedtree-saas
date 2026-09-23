@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 
+/** Default rows per page for the my-leaves list. Was the literal 20
+ *  inlined in the query string; named so the pager label can never
+ *  disagree with what was actually requested. */
+const LEAVE_PAGE_SIZE = 20
+
 // Mirrors backend ApprovalStatus enum. PENDING_L2 = approved at L1, awaiting HR
 // (L2). ESCALATED was a phantom value the backend never returns and was removed.
 export type LeaveApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'PENDING_L2'
@@ -66,11 +71,11 @@ export interface LeaveOverviewResponse {
   pendingApprovals: number
 }
 
-export function useMyLeaves(page = 0) {
+export function useMyLeaves(page = 0, pageSize = LEAVE_PAGE_SIZE) {
   return useQuery({
-    queryKey: ['hrms', 'leave', 'my', page],
+    queryKey: ['hrms', 'leave', 'my', page, pageSize],
     queryFn: () =>
-      apiJson<{ content: LeaveRequestResponse[]; totalElements: number }>(`/v1/leave/my?page=${page}&size=20`),
+      apiJson<{ content: LeaveRequestResponse[]; totalElements: number }>(`/v1/leave/my?page=${page}&size=${pageSize}`),
     staleTime: 30_000,
   })
 }

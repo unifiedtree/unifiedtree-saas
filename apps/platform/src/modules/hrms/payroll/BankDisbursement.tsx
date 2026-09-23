@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { DisbursementHistory } from './DisbursementHistory'
+import { Link } from 'react-router-dom'
 import { Banknote, Users, Wallet, ListChecks, Landmark, Download, Plus, Pencil, Power, Trash2, CheckCircle2, XCircle, Building2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
@@ -15,7 +17,7 @@ import {
 } from '../api/usePayrollRuns'
 import {
   useBankProfiles, useCreateBankProfile, useUpdateBankProfile, useDeleteBankProfile,
-  useDisbursementBatches, useBuildBatch, useDownloadBatchFile,
+  useDisbursementBatches, useDisbursementBatch, useBuildBatch, useDownloadBatchFile,
   useMarkBatchPaid, useCancelBatch,
   BANK_FORMATS, IFSC_PATTERN,
   type BankFormat, type BatchStatus, type BankProfile,
@@ -89,22 +91,14 @@ export const BankDisbursement: React.FC = () => {
 
   const selectedRun = useMemo(() => runs.find((r) => r.id === runId) ?? null, [runs, runId])
 
-  const { data: rows = [], isLoading: rowsLoading } = useRunEmployees(runId)
+  const { data: rows = [], isLoading: rowsLoading, isError: rowsError, refetch: refetchRows } = useRunEmployees(runId)
 
-  const totals = useMemo(() => {
+  const payrollTotals = useMemo(() => {
     const total = rows.reduce((s, r) => s + (r.netPay ?? 0), 0)
     const count = rows.length
     const avg = count > 0 ? total / count : 0
     return { total, count, avg }
   }, [rows])
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter(
-      (r) => r.employeeName.toLowerCase().includes(q) || r.employeeCode.toLowerCase().includes(q),
-    )
-  }, [rows, query])
 
   const bandData = useMemo(
     () =>
@@ -116,7 +110,6 @@ export const BankDisbursement: React.FC = () => {
   )
 
   const hasRun = !!selectedRun
-  const showEmpty = hasRun && !rowsLoading && rows.length === 0
 
   // ── Bank profiles + batches for the selected (company, run) ───────────────
   const effectiveCompanyId = companyId || selectedRun?.companyId || ''
@@ -124,18 +117,32 @@ export const BankDisbursement: React.FC = () => {
     effectiveCompanyId || undefined,
     { enabled: canReadProfile && !!effectiveCompanyId },
   )
-  const { data: batches = [] } = useDisbursementBatches(
+  const { data: batches = [], isLoading: batchesLoading, isError: batchesError, refetch: refetchBatches } = useDisbursementBatches(
     runId ? { runId } : {},
     { enabled: canReadBatches && !!runId },
   )
   // The pre-existing (DRAFT/POSTED/PAID) batch for this run, if any — the
-  // server enforces one live batch per (run, profile); we display the most
+  // server enforces one live batch per run; we display the most
   // recent that is not CANCELLED so operators see the state their button
   // clicks will act on.
   const activeBatch = useMemo(
     () => batches.find((b) => b.status !== 'CANCELLED') ?? null,
     [batches],
   )
+  const { data: batchDetail, isLoading: detailLoading, isError: detailError, refetch: refetchDetail } = useDisbursementBatch(activeBatch?.id)
+  const hasExcludedEmployees = !!batchDetail?.lines.some(line => line.status !== 'READY')
+  const totals = activeBatch ? { total: activeBatch.totalAmount, count: activeBatch.beneficiaryCount, avg: activeBatch.beneficiaryCount ? activeBatch.totalAmount / activeBatch.beneficiaryCount : 0 } : payrollTotals
+  const tableLoading = activeBatch ? detailLoading : rowsLoading
+  const tableError = activeBatch ? detailError : rowsError
+  const displayRows = useMemo(() => activeBatch ? (batchDetail?.lines ?? []).map(line => {
+    const payroll = rows.find(row => row.employeeId === line.employeeId)
+    return { employeeId: line.employeeId, employeeName: line.beneficiaryName, employeeCode: payroll?.employeeCode ?? '', paidDays: payroll?.paidDays, lopDays: payroll?.lopDays, netPay: line.amount, bankLast4: line.accountNoLast4, status: line.status, failureReason: line.failureReason }
+  }) : rows.map(row => ({ ...row, bankLast4: '', status: '', failureReason: null })), [activeBatch, batchDetail, rows])
+  const filtered = useMemo(() => {
+    const search = query.trim().toLowerCase()
+    return displayRows.filter(row => !search || row.employeeName.toLowerCase().includes(search) || row.employeeCode.toLowerCase().includes(search))
+  }, [displayRows, query])
+  const showEmpty = hasRun && !tableLoading && displayRows.length === 0
 
   // ── Batch mutations ────────────────────────────────────────────────────────
   const buildBatch = useBuildBatch()
@@ -163,9 +170,9 @@ export const BankDisbursement: React.FC = () => {
 
   const [selectedProfileId, setSelectedProfileId] = useState('')
   useEffect(() => {
-    if (profiles.length === 0) { if (selectedProfileId) setSelectedProfileId(''); return }
-    if (!profiles.some((p) => p.id === selectedProfileId)) {
-      setSelectedProfileId(profiles.find((p) => p.isDefault && p.isActive)?.id ?? profiles[0].id)
+    const usable = profiles.filter(profile => profile.isActive && profile.bankFormat === 'GENERIC_CSV')
+    if (!usable.some((p) => p.id === selectedProfileId)) {
+      setSelectedProfileId(usable.find((p) => p.isDefault)?.id ?? usable[0]?.id ?? '')
     }
   }, [profiles, selectedProfileId])
 
@@ -201,6 +208,7 @@ export const BankDisbursement: React.FC = () => {
   }
 
   const onSubmitProfile = async () => {
+    if (bankFormat !== 'GENERIC_CSV') { toast('Choose Generic CSV; other bank formats are not supported.', 'error'); return }
     // Shared validation: the create and update routes run the same server-side
     // checks (BankProfileService.validateIfsc / validateFormat), so validating
     // once here keeps the two paths from drifting apart.
@@ -373,7 +381,7 @@ export const BankDisbursement: React.FC = () => {
       <HrPageHeader
         crumb="Payroll"
         title="Bank Disbursement"
-        subtitle="Net-pay advice for the bank — pick a payroll run to review what gets credited."
+        subtitle="Review payroll amounts, bank readiness and recorded payments."
         actions={
           canExport && hasRun && rows.length > 0 ? (
             <HrButton variant="ghost" onClick={handleExport}>
@@ -470,7 +478,8 @@ export const BankDisbursement: React.FC = () => {
                 <div>
                   <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Bank format *</label>
                   <select value={bankFormat} onChange={(e) => setBankFormat(e.target.value as BankFormat)} className="ut-select">
-                    {BANK_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                    {bankFormat !== 'GENERIC_CSV' && <option value={bankFormat} disabled>{bankFormat} (unsupported)</option>}
+                    <option value="GENERIC_CSV">Generic CSV</option>
                   </select>
                 </div>
                 <div>
@@ -597,7 +606,7 @@ export const BankDisbursement: React.FC = () => {
                     Disbursement batch
                   </p>
                   <p className="mt-0.5 text-xs text-text-tertiary">
-                    {activeBatch
+                    {batchesError ? 'Batch state could not be loaded.' : batchesLoading ? 'Loading batch state...' : activeBatch
                       ? <>Batch <span className="font-mono">{activeBatch.batchReference}</span> · {activeBatch.beneficiaryCount} beneficiaries · {inr(activeBatch.totalAmount)}</>
                       : selectedRun?.status === 'LOCKED'
                         ? 'No batch built yet — pick a bank profile and click Build.'
@@ -608,18 +617,20 @@ export const BankDisbursement: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap items-end gap-3">
-                {!activeBatch && canBuildBatch && (
+                {batchesError && <div role="alert" className="text-sm"><p>Unable to load existing bank batches.</p><HrButton variant="ghost" onClick={() => refetchBatches()}>Try again</HrButton></div>}
+                {batchesLoading && <p role="status" className="text-sm text-text-secondary">Loading bank batches...</p>}
+                {!activeBatch && !batchesLoading && !batchesError && canBuildBatch && (
                   <>
                     <div className="flex flex-col gap-1">
                       <label className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">Bank profile</label>
                       <select
                         value={selectedProfileId}
                         onChange={(e) => setSelectedProfileId(e.target.value)}
-                        disabled={profiles.length === 0}
+                        disabled={!profiles.some(p => p.isActive && p.bankFormat === 'GENERIC_CSV')}
                         className="min-w-[220px] rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20 disabled:opacity-50"
                       >
-                        {profiles.length === 0 && <option value="">No profiles — add one above</option>}
-                        {profiles.filter((p) => p.isActive).map((p) => (
+                        {!profiles.some(p => p.isActive && p.bankFormat === 'GENERIC_CSV') && <option value="">Add an active Generic CSV profile</option>}
+                        {profiles.filter((p) => p.isActive && p.bankFormat === 'GENERIC_CSV').map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.profileName} · …{p.debitAccountNo.slice(-4)}
                           </option>
@@ -636,13 +647,17 @@ export const BankDisbursement: React.FC = () => {
                 )}
 
                 {activeBatch && canBuildBatch && (activeBatch.status === 'DRAFT' || activeBatch.status === 'POSTED') && (
-                  <HrButton onClick={onDownloadBatchFile} disabled={downloadBatch.isPending}>
+                  <HrButton onClick={onDownloadBatchFile} disabled={downloadBatch.isPending || activeBatch.beneficiaryCount === 0 || hasExcludedEmployees || detailLoading || detailError}>
                     <Download size={15} /> {downloadBatch.isPending ? 'Downloading…' : (activeBatch.status === 'DRAFT' ? 'Download bank file (posts batch)' : 'Re-download bank file')}
                   </HrButton>
                 )}
+                {activeBatch?.status === 'DRAFT' && canBuildBatch && <HrButton variant="ghost" disabled={buildBatch.isPending} onClick={async () => {
+                  try { await buildBatch.mutateAsync({ runId, bankProfileId: activeBatch.bankProfileId }); toast('Batch refreshed from current employee bank details', 'success') }
+                  catch (error) { toast((error as Error).message, 'error') }
+                }}>Rebuild batch</HrButton>}
 
                 {activeBatch && canPostBatch && activeBatch.status === 'POSTED' && (
-                  <HrButton variant="primary" onClick={onMarkPaid} disabled={markPaid.isPending}>
+                  <HrButton variant="primary" onClick={onMarkPaid} disabled={markPaid.isPending || hasExcludedEmployees || detailLoading || detailError}>
                     <CheckCircle2 size={15} /> {markPaid.isPending ? 'Marking…' : 'Mark paid (UTR)'}
                   </HrButton>
                 )}
@@ -653,6 +668,8 @@ export const BankDisbursement: React.FC = () => {
                   </HrButton>
                 )}
               </div>
+
+              {hasExcludedEmployees && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Some employees are excluded. Correct their bank details and rebuild the draft before downloading a bank file or recording payment. For an older posted batch, cancel it and build a corrected batch first.</p>}
 
               {activeBatch?.paymentReference && (
                 <p className="mt-3 border-t border-border-default pt-3 text-xs text-text-secondary">
@@ -668,7 +685,7 @@ export const BankDisbursement: React.FC = () => {
               icon={<Banknote size={18} />}
               color="green"
               value={inr(totals.total)}
-              label="Total Disbursement"
+              label={activeBatch ? (activeBatch.status === 'PAID' ? 'Payment recorded' : 'Batch total') : 'Payroll net total'}
               sub={selectedRun ? `${MONTHS[selectedRun.periodMonth - 1]} ${selectedRun.periodYear}` : undefined}
               loading={rowsLoading}
             />
@@ -676,15 +693,15 @@ export const BankDisbursement: React.FC = () => {
               icon={<Users size={18} />}
               color="blue"
               value={totals.count}
-              label="Employees"
-              sub="credited this run"
+              label={activeBatch ? 'Bank beneficiaries' : 'Employees in payroll'}
+              sub={activeBatch ? (activeBatch.status === 'PAID' ? 'payment recorded' : 'ready for payment') : 'payment not yet prepared'}
               loading={rowsLoading}
             />
             <HrStatCard
               icon={<Wallet size={18} />}
               color="teal"
               value={inr(totals.avg)}
-              label="Average Net Pay"
+              label={activeBatch ? 'Average batch amount' : 'Average net pay'}
               loading={rowsLoading}
             />
             <HrStatCard
@@ -727,18 +744,19 @@ export const BankDisbursement: React.FC = () => {
           <TableCard
             search={{ value: query, onChange: setQuery, placeholder: 'Search employee or code…' }}
             footer={
-              !rowsLoading && rows.length > 0 ? (
+              !tableLoading && !tableError && displayRows.length > 0 ? (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-text-secondary">
-                    {filtered.length} of {rows.length} employee{rows.length === 1 ? '' : 's'}
+                    {filtered.length} of {displayRows.length} employee{displayRows.length === 1 ? '' : 's'}
                   </span>
                   <span className="font-semibold text-text-primary">
-                    Total to credit: <span className="text-[#047857]">{inr(totals.total)}</span>
+                    {activeBatch ? 'Batch total' : 'Payroll total'}: <span className="text-[#047857]">{inr(totals.total)}</span>
                   </span>
                 </div>
               ) : undefined
             }
           >
+            {activeBatch && <p className="border-b border-border-default px-5 py-3 text-sm text-text-secondary">Bank batch details. Skipped employees are excluded from the batch amount; correct their bank details and rebuild a draft batch.</p>}
             <table className="hr-table">
               <thead>
                 <tr>
@@ -746,32 +764,33 @@ export const BankDisbursement: React.FC = () => {
                   <th className="hidden sm:table-cell">Code</th>
                   <th className="hidden md:table-cell">Paid Days</th>
                   <th className="hidden md:table-cell">LOP</th>
+                  {activeBatch && <><th>Bank account</th><th>Payment status</th></>}
                   <th className="text-right">Net Pay</th>
                 </tr>
               </thead>
               <tbody>
-                {rowsLoading ? (
+                {tableError ? <tr><td colSpan={activeBatch ? 7 : 5}><div role="alert" className="space-y-2 py-5 text-sm"><p>Unable to load {activeBatch ? 'bank batch details' : 'payroll employees'}.</p><HrButton variant="ghost" onClick={() => activeBatch ? refetchDetail() : refetchRows()}>Try again</HrButton></div></td></tr> : tableLoading ? (
                   [...Array(6)].map((_, i) => (
                     <tr key={i}>
-                      <td colSpan={5} className="py-3">
+                      <td colSpan={activeBatch ? 7 : 5} className="py-3">
                         <div className="h-5 w-full animate-pulse rounded bg-bg-base" />
                       </td>
                     </tr>
                   ))
                 ) : showEmpty ? (
                   <tr>
-                    <td colSpan={5} className="py-14 text-center">
-                      <p className="text-sm font-semibold text-text-secondary">No payslips in this run</p>
+                    <td colSpan={activeBatch ? 7 : 5} className="py-14 text-center">
+                      <p className="text-sm font-semibold text-text-secondary">{activeBatch ? 'No employees in this bank batch' : 'No payslips in this run'}</p>
                       <p className="mt-1 text-xs text-text-tertiary">
                         {selectedRun?.status === 'DRAFT'
                           ? 'Process the run to generate net-pay figures.'
-                          : 'No eligible employees were paid for this period.'}
+                          : 'No employee payment lines are available for this period.'}
                       </p>
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center">
+                    <td colSpan={activeBatch ? 7 : 5} className="py-12 text-center">
                       <p className="text-sm font-semibold text-text-secondary">No matches</p>
                       <p className="mt-1 text-xs text-text-tertiary">Try a different name or code.</p>
                     </td>
@@ -780,11 +799,13 @@ export const BankDisbursement: React.FC = () => {
                   filtered.map((r, i) => (
                     <tr key={r.employeeId}>
                       <td>
-                        <HrAvatar name={r.employeeName} sub={`${r.paidDays} paid · ${r.lopDays} LOP`} seed={i} />
+                        <Link to={`/hrms/employees/${r.employeeId}`}><HrAvatar name={r.employeeName} sub={r.employeeCode || 'View employee'} seed={i} /></Link>
+                        {r.failureReason && <p className="mt-1 max-w-xs text-xs text-red-700">{r.failureReason}</p>}
                       </td>
                       <td className="hidden sm:table-cell font-mono text-xs text-text-secondary">{r.employeeCode}</td>
-                      <td className="hidden md:table-cell text-text-secondary">{r.paidDays}</td>
-                      <td className="hidden md:table-cell text-text-secondary">{r.lopDays}</td>
+                      <td className="hidden md:table-cell text-text-secondary">{r.paidDays ?? '—'}</td>
+                      <td className="hidden md:table-cell text-text-secondary">{r.lopDays ?? '—'}</td>
+                      {activeBatch && <><td className="font-mono text-xs">{r.bankLast4 ? `•••• ${r.bankLast4}` : 'Not available'}</td><td><HrStatusPill tone={r.status.startsWith('SKIPPED') ? 'red' : activeBatch.status === 'PAID' ? 'ok' : 'info'}>{r.status.startsWith('SKIPPED') ? 'Skipped' : activeBatch.status === 'PAID' ? 'Payment recorded' : 'Ready'}</HrStatusPill></td></>}
                       <td className="text-right font-semibold text-text-primary tabular-nums">{inr(r.netPay)}</td>
                     </tr>
                   ))
@@ -794,6 +815,9 @@ export const BankDisbursement: React.FC = () => {
           </TableCard>
         </>
       )}
+
+      {canReadBatches && <DisbursementHistory key={companyId} companyId={companyId || undefined} />}
+
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
+import type { PageResponse } from './useWorkforce'
 
 export interface AttendanceDto {
   id: string
@@ -51,6 +52,32 @@ export interface StaffStatusResponse {
   locationName?: string
   latitude?: number
   longitude?: number
+  /**
+   * True when the employee checked out before their assigned shift's end time
+   * (IST wall-clock). False when there is no checkout, no shift assignment or
+   * no end_time.
+   *
+   * The API has always returned this — see the Java record
+   * `com.hrms.attendance.dto.StaffStatusResponse` — it was simply missing from
+   * this interface, so no web screen could read it and the Early Out drill-down
+   * had no way to filter. (Same omission as `earlyCheckout` on
+   * AttendanceSummaryCounts, fixed 2026-08.) Optional here rather than required
+   * so a cached/older response without the field still type-checks.
+   */
+  earlyCheckout?: boolean
+  /**
+   * OFFICE / WFH / FIELD — the record's attendance TYPE, a different axis from
+   * `status`. The dashboard's "Work From Home" tile counts by this field, never
+   * by status, so without it the WFH drill-down could not reproduce its own
+   * tile. Undefined when the employee has no record for the date.
+   */
+  attendanceType?: string
+  /**
+   * True when the employee has APPROVED leave covering the date. "On Leave" is
+   * counted from this, and "Absent" is "no punch AND not on leave" — neither is
+   * derivable from the punch alone because leave lives in another module.
+   */
+  onLeave?: boolean
 }
 
 export interface AttendanceSummaryCounts {
@@ -97,11 +124,54 @@ export interface AttendanceRecordResponse {
   attendanceStatus: string
   attendanceType?: string
   workingHours?: number
+  // ── Fields the Java DTO has always returned but this type never declared ──
+  // AttendanceRecordResponse (hrms-attendance/dto) projects all of the below.
+  // Declaring them is what lets the employee-profile attendance table show a
+  // late/overtime/regularised column without an `as unknown as { … }` cast —
+  // and a cast is exactly what stops the compiler noticing when the server
+  // drops a field. Same reasoning as the WorkforceEmployee widening (2026-09-09).
+  checkInMethod?: string
+  checkOutMethod?: string
+  regularized?: boolean
+  locationName?: string
+  checkInZoneName?: string
+  checkOutZoneName?: string
+  lateByMinutes?: number
+  overtimeMinutes?: number
+  manualEntry?: boolean
+}
+
+/** One day inside {@link WeeklySummaryResponse}. Mirrors WeeklyDayResponse. */
+export interface WeeklyDayResponse {
+  date: string
+  hours: number
+  /** ON_TIME | LATE | WEEKEND | HOLIDAY | ON_LEAVE | ABSENT | UPCOMING */
+  status: string
+  checkInTime?: string
+  checkOutTime?: string
+  lateByMinutes?: number
+}
+
+/**
+ * Mirrors WeeklySummaryResponse. Week-offs, holidays and approved leave are
+ * overlaid SERVER-side, so `days[].status` is authoritative — the UI must not
+ * try to recompute "was this a working day" from the raw records.
+ */
+export interface WeeklySummaryResponse {
+  totalHours: number
+  overtimeHours: number
+  presentDays: number
+  avgArrivalTime?: string
+  dailyTargetHours?: number
+  days: WeeklyDayResponse[]
 }
 
 export interface CorrectionRequestResponse {
   id: string
   employeeId: string
+  employeeName?: string
+  employeeCode?: string
+  departmentName?: string
   attendanceRecordId?: string
   requestedDate: string
   requestedCheckInAt?: string
@@ -257,12 +327,12 @@ export function useAttendanceLogs(date?: string, departmentId?: string, search?:
   })
 }
 
-export function useCorrectionApprovals(status = 'PENDING', opts?: { enabled?: boolean }) {
+export function useCorrectionApprovals(status = 'PENDING', opts?: { enabled?: boolean; page?: number; size?: number }) {
   return useQuery({
-    queryKey: ['hrms', 'attendance', 'corrections', 'approvals', status],
+    queryKey: ['hrms', 'attendance', 'corrections', 'approvals', status, opts?.page ?? 0, opts?.size ?? 20],
     queryFn: () =>
-      apiJson<{ content: CorrectionRequestResponse[]; totalElements: number }>(
-        `/v1/attendance/corrections/approvals?status=${status}`
+      apiJson<{ content: CorrectionRequestResponse[]; totalElements: number; totalPages: number }>(
+        `/v1/attendance/corrections/approvals?status=${status}&page=${opts?.page ?? 0}&size=${opts?.size ?? 20}`
       ),
     staleTime: 30_000,
     // Approval queue — poll so a correction raised from the app appears while
@@ -308,7 +378,7 @@ export function useCreateCorrection() {
   return useMutation({
     mutationFn: (data: { requestedDate: string; requestedCheckInAt?: string; requestedCheckOutAt?: string; reason: string; attachmentUrl?: string }) =>
       apiJson<CorrectionRequestResponse>('/v1/attendance/corrections', { method: 'POST', body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'attendance', 'corrections'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'attendance'] }),
   })
 }
 
@@ -320,7 +390,7 @@ export function useDecideCorrection() {
         method: 'POST',
         body: JSON.stringify({ status, comment }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'attendance', 'corrections'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'attendance'] }),
   })
 }
 
@@ -354,5 +424,62 @@ export function useManualEntry() {
       qc.invalidateQueries({ queryKey: ['hrms', 'attendance', 'logs'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'attendance', 'today'] })
     },
+  })
+}
+
+// ── One employee's attendance (manager/admin view) ────────────────────────────
+//
+// Both endpoints below carry a server-side object-scope guard on top of the
+// `attendance.team.read` authority: AttendanceController.assertCanReadEmployeeAttendance
+// allows self, the employee's direct manager, or HR/admin authorities, and
+// throws AccessDeniedException otherwise (B7 IDOR fix, audit 2026-08-15).
+// So a 403 here is a NORMAL, expected outcome for a manager opening a profile
+// outside their team — callers must render that as a permission state, not as
+// "no attendance records". Neither hook retries, because a 403 will never
+// succeed on retry and the profile should settle immediately.
+
+/**
+ * Paged attendance rows for ONE employee, newest first.
+ *
+ * The sort is explicit because the backend's repository method
+ * (findByEmployeeId) has no OrderBy and @PageableDefault supplies none — without
+ * `sort` the rows come back in physical table order, which looks like random
+ * dates to the user.
+ */
+export function useEmployeeAttendanceRecords(
+  employeeId: string | undefined,
+  page = 0,
+  pageSize = 31,
+  opts?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ['attendance', 'employee', employeeId, 'records', page, pageSize],
+    queryFn: () => apiJson<PageResponse<AttendanceRecordResponse>>(
+      `/v1/attendance/employee/${employeeId}/records?page=${page}&size=${pageSize}&sort=attendanceDate,desc`,
+    ),
+    enabled: (opts?.enabled ?? true) && !!employeeId,
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
+/**
+ * One employee's week. `weekStart` is snapped to that week's Monday server-side;
+ * omit it for the current week.
+ */
+export function useEmployeeWeeklySummary(
+  employeeId: string | undefined,
+  weekStart?: string,
+  opts?: { enabled?: boolean },
+) {
+  const qs = weekStart ? `?weekStart=${weekStart}` : ''
+  return useQuery({
+    queryKey: ['attendance', 'employee', employeeId, 'weekly-summary', weekStart ?? 'current'],
+    queryFn: () => apiJson<WeeklySummaryResponse>(
+      `/v1/attendance/employee/${employeeId}/weekly-summary${qs}`,
+    ),
+    enabled: (opts?.enabled ?? true) && !!employeeId,
+    staleTime: 60_000,
+    retry: false,
   })
 }

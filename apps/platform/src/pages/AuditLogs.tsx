@@ -1,13 +1,20 @@
 import React, { useState } from 'react'
-import { Download, X } from 'lucide-react'
+import { Download } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { Drawer, EmptyState, Skeleton } from '@unifiedtree/ui-kit'
 import { Can, P } from '@unifiedtree/sdk'
-import { HrPageHeader, HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { HrPageHeader, HrButton, HrStatusPill, TableCard, type PillTone, type FilterDef } from '@/shared/components/hr'
+import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
+import { useDebounce } from '@/shared/hooks/useDebounce'
 import { useAuditEvents } from '@/modules/hrms/api/useAudit'
 import type { AuditEventDto } from '@/modules/hrms/api/useAudit'
 
 const ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'ACCESS', 'PERMISSION_CHANGE']
+/* Resource types the trail records. Enumerated rather than free text because
+   the API matches on an exact value — a typo in a text box would silently
+   return an empty trail, which on an audit screen reads as "nothing happened". */
+const RESOURCES = ['EMPLOYEE', 'LEAVE_REQUEST', 'ATTENDANCE', 'PAYROLL_RUN', 'POLICY',
+  'DOCUMENT', 'EXPENSE_CLAIM', 'USER', 'ROLE', 'COMPANY', 'DEPARTMENT', 'SETTINGS']
 const PAGE_SIZE = 25
 
 function actionTone(action: string): PillTone {
@@ -22,22 +29,69 @@ export const AuditLogs: React.FC = () => {
   const [actionFilter, setActionFilter] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  /* actor / resource / resourceId have always been supported by
+     GET /v1/audit/events (see AuditFilters in useAudit.ts) but were never
+     exposed. On a trail this long, "who did this" and "what did they touch"
+     are the two questions an incident actually starts from. */
+  const [actor, setActor] = useState('')
+  const [resource, setResource] = useState('')
+  const [resourceId, setResourceId] = useState('')
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [selected, setSelected] = useState<AuditEventDto | null>(null)
+
+  /* Free-text filters are debounced so a request is not issued per keystroke.
+     The select and the two dates apply immediately — they change in one
+     discrete action, so there is nothing to wait for. */
+  const debouncedActor = useDebounce(actor, 350)
+  const debouncedResourceId = useDebounce(resourceId, 350)
 
   const filters = {
     ...(actionFilter ? { action: actionFilter } : {}),
+    // Date semantics preserved exactly: the API takes an instant, the input
+    // gives a yyyy-MM-dd, and the original converted with `new Date(x)`.
     ...(from ? { from: new Date(from).toISOString() } : {}),
     ...(to ? { to: new Date(to).toISOString() } : {}),
+    ...(debouncedActor ? { actor: debouncedActor } : {}),
+    ...(resource ? { resource } : {}),
+    ...(debouncedResourceId ? { resourceId: debouncedResourceId } : {}),
     page,
-    size: PAGE_SIZE,
+    size: pageSize,
   }
 
   const { data, isLoading, error, refetch } = useAuditEvents(filters)
   const events = data?.data ?? []
   const meta = data?.meta
-  const totalPages = meta ? Math.ceil(meta.total / PAGE_SIZE) : 0
-  const hasFilters = !!(actionFilter || from || to)
+  const totalPages = meta ? Math.ceil(meta.total / pageSize) : 0
+
+  const resetPage = () => setPage(0)
+  /* Every filter is its own useState slot, so FilterBar's default clear-all
+     (one onChange('') per active filter) is safe here — unlike the
+     URL-backed Attendance screen, where each write derived from the same
+     searchParams snapshot and the last one won. */
+  const auditFilters: FilterDef[] = [
+    { key: 'action', allLabel: 'All Actions', value: actionFilter,
+      options: ACTIONS.map((a) => ({ value: a, label: a })),
+      onChange: (v) => { setActionFilter(v); resetPage() } },
+    { key: 'resource', allLabel: 'All Resources', value: resource,
+      options: RESOURCES.map((r) => ({ value: r, label: r.replace(/_/g, ' ') })),
+      onChange: (v) => { setResource(v); resetPage() } },
+    { key: 'actor', type: 'text', allLabel: 'Actor email', value: actor,
+      onChange: (v) => { setActor(v); resetPage() } },
+    { key: 'resourceId', type: 'text', allLabel: 'Resource ID', value: resourceId,
+      onChange: (v) => { setResourceId(v); resetPage() } },
+    { key: 'from', type: 'date', allLabel: 'From date', value: from,
+      onChange: (v) => { setFrom(v); resetPage() } },
+    { key: 'to', type: 'date', allLabel: 'To date', value: to,
+      onChange: (v) => { setTo(v); resetPage() } },
+  ]
+
+  // Pull the view back into range when a filter shrinks the trail beneath it.
+  useClampedPage(page, totalPages || undefined, setPage)
+
+  // Drives the empty-state wording: "no events at all" and "none match your
+  // filters" are different problems and need different next steps.
+  const hasFilters = auditFilters.some((f) => f.value !== '')
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
@@ -65,32 +119,13 @@ export const AuditLogs: React.FC = () => {
         />
       ) : (
         <TableCard
-          actions={
-            <>
-              <select value={actionFilter} onChange={(e) => { setActionFilter(e.target.value); setPage(0) }} className="ut-select ut-select-sm w-auto">
-                <option value="">All Actions</option>
-                {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-              <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0) }} className="ut-input ut-input-sm w-auto" />
-              <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(0) }} className="ut-input ut-input-sm w-auto" />
-              {hasFilters && (
-                <button onClick={() => { setActionFilter(''); setFrom(''); setTo(''); setPage(0) }}
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#047857] hover:bg-[#ECFDF5]">
-                  <X size={14} /> Clear
-                </button>
-              )}
-            </>
-          }
-          footer={meta && meta.total > PAGE_SIZE ? (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-text-secondary">{meta.total.toLocaleString()} total events</p>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-40">Previous</button>
-                <span className="px-2 text-xs text-text-secondary">Page {page + 1} of {totalPages}</span>
-                <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary disabled:opacity-40">Next</button>
-              </div>
-            </div>
-          ) : undefined}
+          filters={auditFilters}
+          footer={meta
+            ? hrPaginationFooter({
+                page, pageSize, totalElements: meta.total, totalPages,
+                onPageChange: setPage, onPageSizeChange: setPageSize,
+              })
+            : undefined}
         >
           {isLoading ? (
             <div className="space-y-2 p-3">

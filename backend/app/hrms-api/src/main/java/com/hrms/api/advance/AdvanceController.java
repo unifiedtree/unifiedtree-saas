@@ -103,8 +103,10 @@ public class AdvanceController {
         AdvanceResponse adv = enrichOne(advanceService.getRequest(id));
         // Object-level authz (prevent intra-tenant IDOR): self-permission callers may
         // read ONLY their own request; the admin read permission may read any.
-        if (!callerHasPermission(jwt, "hrms.advance.read")
-                && !java.util.Objects.equals(adv.employeeId(), extractEmployeeId(jwt))) {
+        UUID employeeId = extractEmployeeId(jwt);
+        if (!seesAllAdvances(jwt)
+                && !Objects.equals(adv.employeeId(), employeeId)
+                && !(callerHasPermission(jwt, "hrms.advance.read") && Objects.equals(adv.approverId(), employeeId))) {
             throw new org.springframework.security.access.AccessDeniedException("Not permitted to view this advance request");
         }
         return ResponseEntity.ok(adv);
@@ -113,6 +115,19 @@ public class AdvanceController {
     private boolean callerHasPermission(Jwt jwt, String permission) {
         java.util.List<String> perms = jwt.getClaimAsStringList("permissions");
         return perms != null && perms.contains(permission);
+    }
+
+    @Operation(summary = "List salary advances across all statuses, scoped to the caller")
+    @GetMapping("/requests")
+    @PreAuthorize("hasAuthority('hrms.advance.read')")
+    public ResponseEntity<PageResponse<AdvanceResponse>> listRequests(
+            @RequestParam(required = false) AdvanceStatus status,
+            @PageableDefault(size = 20) Pageable pageable,
+            @AuthenticationPrincipal Jwt jwt) {
+        var statuses = status == null ? List.of(AdvanceStatus.values()) : List.of(status);
+        return ResponseEntity.ok(enrichPage(seesAllAdvances(jwt)
+                ? advanceService.getByStatuses(statuses, pageable)
+                : advanceService.getPendingForApprover(extractEmployeeId(jwt), statuses, pageable)));
     }
 
     // ─── Approvals (manager / HR) ────────────────────────────────────────────
@@ -205,6 +220,7 @@ public class AdvanceController {
     @Operation(summary = "Mark an approved advance as disbursed")
     @PostMapping("/requests/{id}/disburse")
     @PreAuthorize("@perm.check('hrms.advance.disburse')")
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<AdvanceResponse> disburse(@PathVariable UUID id,
                                                     @AuthenticationPrincipal Jwt jwt) {
         // B3 FIX (audit 2026-08-15): disburser must not equal the requester.
@@ -220,18 +236,10 @@ public class AdvanceController {
         // forever — payroll never had a PENDING installment to consume. Seed
         // it here starting the month AFTER disbursement (first payroll cycle
         // that runs post-disbursement will pick up installment #1).
-        try {
-            java.time.LocalDate startMonth = java.time.LocalDate.now().plusMonths(1);
-            advanceRecoveryService.initSchedule(
-                    com.hrms.core.tenant.TenantContext.getTenantId(),
-                    id, startMonth.getMonthValue(), startMonth.getYear());
-        } catch (RuntimeException e) {
-            // Do NOT fail the disburse response — the finance team already
-            // clicked the button, the advance is disbursed. Log loud so ops
-            // can seed manually via /v1/advance-recovery/{id}/init.
-            org.slf4j.LoggerFactory.getLogger(AdvanceController.class).error(
-                    "initSchedule failed for advance {} — MUST SEED MANUALLY: {}", id, e.getMessage());
-        }
+        java.time.LocalDate startMonth = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).plusMonths(1);
+        advanceRecoveryService.initSchedule(
+                com.hrms.core.tenant.TenantContext.getTenantId(),
+                id, startMonth.getMonthValue(), startMonth.getYear());
         return ResponseEntity.ok(enrichOne(result));
     }
 

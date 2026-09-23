@@ -6,6 +6,7 @@ import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.expense.dto.ExpenseClaimRequest;
 import com.hrms.expense.dto.ExpenseClaimResponse;
 import com.hrms.expense.dto.ExpenseDecisionRequest;
+import com.hrms.expense.dto.ExpenseDashboardStatsResponse;
 import com.hrms.expense.dto.ExpenseItemResponse;
 import com.hrms.expense.dto.ExpensePolicyRequest;
 import com.hrms.expense.dto.ExpensePolicyResponse;
@@ -50,6 +51,14 @@ public class ExpenseController {
         this.expenseService = expenseService;
         this.policyService = policyService;
         this.employeeRepository = employeeRepository;
+    }
+
+
+    @Operation(summary = "Get expense dashboard statistics")
+    @GetMapping("/dashboard-stats")
+    @PreAuthorize("hasAnyAuthority('hrms.expense.claim.read','hrms.expense.claim.approve','hrms.expense.reimbursement')")
+    public ResponseEntity<ExpenseDashboardStatsResponse> dashboardStats() {
+        return ResponseEntity.ok(expenseService.dashboardStats());
     }
 
     // ─── Employee self-service ───────────────────────────────────────────────

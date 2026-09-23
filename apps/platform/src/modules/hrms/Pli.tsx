@@ -11,14 +11,14 @@ import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useAllAwards, useMyIncentives, useCreateAward, usePliDecision, usePayAward,
-  inr, PLI_PAGE_SIZE, type PliStatus,
+  usePliTargets, useCreatePliTarget, inr, PLI_PAGE_SIZE, type PliStatus,
 } from './api/usePli'
 
 const STATUS_TONE: Record<PliStatus, PillTone> = {
   PROPOSED: 'warn', APPROVED: 'ok', PAID: 'teal', REJECTED: 'red',
 }
 
-type Tab = 'all' | 'my'
+type Tab = 'all' | 'my' | 'targets'
 
 export const Pli: React.FC = () => {
   const canReadAll = usePermission('hrms.pli.read')
@@ -27,6 +27,7 @@ export const Pli: React.FC = () => {
   const [tab, setTab] = useState<Tab>(canReadAll ? 'all' : 'my')
 
   const tabs: { key: Tab; label: string }[] = [
+    ...(canReadAll ? [{ key: 'targets' as Tab, label: 'Monthly Targets' }] : []),
     ...(canReadAll ? [{ key: 'all' as Tab, label: 'All Awards' }] : []),
     ...(canReadSelf ? [{ key: 'my' as Tab, label: 'My Incentives' }] : []),
   ]
@@ -37,6 +38,7 @@ export const Pli: React.FC = () => {
 
       <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
+      {tab === 'targets' && canReadAll && <HrTabPanel tabKey="targets"><PliTargetsTab canWrite={canWrite} /></HrTabPanel>}
       {tab === 'all' && canReadAll && <HrTabPanel tabKey="all"><AllAwardsTab canWrite={canWrite} /></HrTabPanel>}
       {tab === 'my' && canReadSelf && <HrTabPanel tabKey="my"><MyIncentivesTab /></HrTabPanel>}
     </div>
@@ -298,6 +300,53 @@ function MyIncentivesTab() {
             ))}
           </tbody>
         </table>
+      </TableCard>
+    </div>
+  )
+}
+
+// ── Static Components (Phase 5) ───────────────────────────────────────────────
+
+function PliTargetsTab({ canWrite }: { canWrite: boolean }) {
+  const { toast } = useToast()
+  const [page, setPage] = useState(0)
+  const { data, isLoading } = usePliTargets(page)
+  const create = useCreatePliTarget()
+  const targets = data?.content ?? []
+  const [title, setTitle] = useState('')
+  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7))
+  const [metric, setMetric] = useState('Gross Profit')
+  const [targetValue, setTargetValue] = useState('')
+  const [actualValue, setActualValue] = useState('')
+  const [payoutAmount, setPayoutAmount] = useState('')
+
+  const onCreate = async () => {
+    if (!title.trim()) { toast('Target title is required', 'error'); return }
+    const target = parseFloat(targetValue)
+    if (!(target > 0)) { toast('Enter a valid target value', 'error'); return }
+    try {
+      await create.mutateAsync({ title: title.trim(), period, metric: metric.trim() || 'Target', targetValue: target, actualValue: actualValue ? parseFloat(actualValue) : 0, payoutAmount: payoutAmount ? parseFloat(payoutAmount) : 0, status: 'ACTIVE' })
+      toast('PLI target created', 'success')
+      setTitle(''); setTargetValue(''); setActualValue(''); setPayoutAmount('')
+    } catch (e) { toast((e as Error)?.message ?? 'Failed to create target', 'error') }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="ut-card p-4 text-sm text-text-secondary flex items-center gap-2"><span className="text-text-tertiary">?</span>PLI targets below are stored in the backend and can be used while calculating incentive awards.</div>
+      {canWrite && <div className="ut-card flex flex-wrap items-end gap-2 p-4">
+        <div className="min-w-[180px] flex-1"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Team / target name</label><input value={title} onChange={(e) => setTitle(e.target.value)} className="ut-input ut-input-sm" placeholder="Assembly Line A" /></div>
+        <div className="w-36"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Period</label><input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="ut-input ut-input-sm" /></div>
+        <div className="w-40"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Metric</label><input value={metric} onChange={(e) => setMetric(e.target.value)} className="ut-input ut-input-sm" /></div>
+        <div className="w-32"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Target</label><input type="number" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="ut-input ut-input-sm" /></div>
+        <div className="w-32"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Actual</label><input type="number" value={actualValue} onChange={(e) => setActualValue(e.target.value)} className="ut-input ut-input-sm" /></div>
+        <div className="w-36"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Bonus pool</label><input type="number" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} className="ut-input ut-input-sm" /></div>
+        <HrButton size="sm" onClick={onCreate} disabled={create.isPending}><Plus size={14} /> Set Target</HrButton>
+      </div>}
+      <TableCard footer={hrPaginationFooter({ page, pageSize: PLI_PAGE_SIZE, totalElements: data?.totalElements ?? 0, totalPages: data?.totalPages ?? 1, onPageChange: setPage })}>
+        <table className="hr-table"><thead><tr><th>Department/Team</th><th>Metric</th><th>Period</th><th>Target</th><th>Actual</th><th>Achievement</th><th>Bonus Pool</th><th>Status</th></tr></thead><tbody>
+          {isLoading ? [...Array(3)].map((_, i) => <tr key={i}><td colSpan={8} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>) : targets.length === 0 ? <tr><td colSpan={8} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No PLI targets yet</p><p className="mt-1 text-xs text-text-tertiary">Create targets to track incentive eligibility.</p></td></tr> : targets.map((t) => { const pct = t.targetValue > 0 ? Math.round((t.actualValue / t.targetValue) * 100) : 0; return <tr key={t.id}><td className="font-semibold text-text-primary">{t.title}</td><td className="text-text-secondary">{t.metric}</td><td className="text-text-secondary">{t.period}</td><td className="text-text-secondary tabular-nums">{t.targetValue.toLocaleString('en-IN')}</td><td className={pct >= 100 ? 'font-semibold text-[#059669]' : 'font-semibold text-red-600'}>{t.actualValue.toLocaleString('en-IN')}</td><td><HrStatusPill tone={pct >= 100 ? 'ok' : pct >= 80 ? 'warn' : 'gray'}>{pct}%</HrStatusPill></td><td className="font-semibold text-text-primary">{inr(t.payoutAmount)}</td><td><HrStatusPill tone={t.status === 'ACTIVE' ? 'teal' : 'gray'}>{t.status}</HrStatusPill></td></tr> })}
+        </tbody></table>
       </TableCard>
     </div>
   )

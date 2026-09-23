@@ -37,6 +37,7 @@ function PermissionsDrawer({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [initialised, setInitialised] = useState(false)
   const setPerms = useSetRolePermissions(role.id)
+  const readOnly = role.systemRole
 
   React.useEffect(() => {
     if (permsLoaded && !initialised) {
@@ -74,6 +75,7 @@ function PermissionsDrawer({
   }
 
   const handleSave = () => {
+    if (readOnly) return
     setPerms.mutate(Array.from(selected), {
       onSuccess: () => {
         toast.success(`Permissions updated — ${selected.size} granted to ${role.displayName}`)
@@ -95,6 +97,7 @@ function PermissionsDrawer({
       title={`${role.displayName} — Permissions`}
     >
       <div className="space-y-4">
+        {readOnly && <p className="rounded-lg border border-border-default bg-bg-subtle p-3 text-sm text-text-secondary">System role permissions are fixed. Clone this role from the roles list to customize access for your company.</p>}
         {/* Summary bar */}
         {initialised && (
           <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-border-default px-3 py-2">
@@ -122,6 +125,7 @@ function PermissionsDrawer({
               <div key={module} className="rounded-lg border border-border-default overflow-hidden">
                 {/* Module header — click to toggle all */}
                 <button
+                  disabled={readOnly}
                   onClick={() => toggleModule(codes)}
                   className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors"
                 >
@@ -141,6 +145,7 @@ function PermissionsDrawer({
                         type="checkbox"
                         className="mt-0.5 flex-shrink-0 accent-[#059669] h-4 w-4"
                         checked={selected.has(p.code)}
+                        disabled={readOnly}
                         onChange={(e) => toggle(p.code, e.target.checked)}
                       />
                       <div className="min-w-0">
@@ -157,16 +162,16 @@ function PermissionsDrawer({
 
         <div className="flex justify-end gap-2 border-t border-border-default pt-4">
           <Button size="sm" variant="ghost" onClick={onClose}>
-            Cancel
+            {readOnly ? 'Done' : 'Cancel'}
           </Button>
-          <Button
+          {!readOnly && <Button
             size="sm"
             loading={setPerms.isPending}
             onClick={handleSave}
             disabled={!initialised || loadingPerms}
           >
             Save permissions
-          </Button>
+          </Button>}
         </div>
       </div>
     </Drawer>
@@ -511,8 +516,8 @@ export const Roles: React.FC = () => {
           <div className="flex items-center justify-end gap-1">
             <button
               type="button"
-              aria-label={`Edit permissions for ${row.displayName}`}
-              title="Edit permissions"
+              aria-label={`${row.systemRole ? 'View' : 'Edit'} permissions for ${row.displayName}`}
+              title={row.systemRole ? 'View permissions' : 'Edit permissions'}
               onClick={(e) => { e.stopPropagation(); setDrawerRole(row) }}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
             >

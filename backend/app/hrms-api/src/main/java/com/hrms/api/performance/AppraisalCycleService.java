@@ -120,7 +120,13 @@ public class AppraisalCycleService {
         // Reviewee set: explicit list, or "everyone active in the cycle's company"
         List<UUID> reviewees;
         if (req.revieweeIds() != null && !req.revieweeIds().isEmpty()) {
-            reviewees = req.revieweeIds();
+            reviewees = req.revieweeIds().stream().distinct().toList();
+            for (UUID revieweeId : reviewees) {
+                Integer found = jdbc.queryForObject("SELECT count(*) FROM hrms.employees WHERE tenant_id = ? AND company_id = ? AND id = ? AND is_active = TRUE",
+                        Integer.class, tenantId, companyId, revieweeId);
+                if (found == null || found == 0) throw new BusinessRuleException(
+                        "Choose active employees from the review cycle's company", "REVIEWEE_COMPANY_MISMATCH");
+            }
         } else {
             reviewees = jdbc.query("""
                     SELECT id FROM hrms.employees

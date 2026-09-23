@@ -1,315 +1,141 @@
-import React, { useMemo, useState } from 'react'
-import { Plus, Trash2, FileText, Check, Wallet, Clock, BadgeCheck, CircleDollarSign } from 'lucide-react'
-import { format } from 'date-fns'
-import { usePermission } from '@unifiedtree/sdk'
+﻿import { useState } from 'react'
+import { BadgeCheck, Clock, FileText, Plus, Trash2, Wallet } from 'lucide-react'
+import { P, usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
-import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
-} from '@/shared/components/hr'
-import { hrPaginationFooter } from '@/shared/components/HrPagination'
+import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
+import { HrAvatar, HrButton, HrDrawer, HrPageHeader, HrStatCard, HrStatusPill, HrTabPanel, HrTabs, TableCard, type PillTone } from '@/shared/components/hr'
+import { DataTable } from '@/shared/components/DataTable'
+import { HrPagination, useClampedPage } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
-import { useEmployeeDirectory } from './api/useWorkforce'
-import {
-  useFnfSettlements, useProcessSettlement, useApproveSettlement, usePaySettlement,
-  inr, FNF_PAGE_SIZE,
-  type FnfStatus, type FnfComponentType,
-} from './api/useFnf'
+import { useEmployeeDirectory, type WorkforceEmployee } from './api/useWorkforce'
+import { FNF_PAGE_SIZE, inr, useApproveSettlement, useCancelSettlement, useFnfSettlement, useFnfSettlements, usePaySettlement, useProcessSettlement, type FnfComponentType, type FnfSettlement, type FnfStatus } from './api/useFnf'
 
-const STATUS_TONE: Record<FnfStatus, PillTone> = {
-  INITIATED: 'gray', PROCESSED: 'warn', APPROVED: 'ok', PAID: 'teal',
+const tones: Record<FnfStatus, PillTone> = { INITIATED: 'gray', PROCESSED: 'warn', APPROVED: 'ok', PAID: 'teal', CANCELLED: 'gray' }
+const date = (value?: string) => value ? new Date(value.length === 10 ? value + 'T12:00:00' : value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not recorded'
+const label = (value: string) => value.toLowerCase().replaceAll('_', ' ')
+function Failure({ error, retry }: { error: unknown; retry?: () => void }) {
+  return <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"><p>{error instanceof Error ? error.message : 'Unable to load settlement information.'}</p>{retry && <HrButton size="sm" variant="ghost" className="mt-2" onClick={retry}>Try again</HrButton>}</div>
 }
 
-type Tab = 'settlements' | 'create'
-
-export const FullAndFinal: React.FC = () => {
+export function FullAndFinal() {
   const canRead = usePermission('hrms.fnf.read')
   const canProcess = usePermission('hrms.fnf.process')
-  const canApprove = usePermission('hrms.fnf.approve')
-  // V101 split hrms.fnf.pay out of approve (segregation of duties). The UI
-  // kept gating Pay on approve, so an approver-only role saw Pay and 403'd,
-  // and a finance role with pay-but-not-approve never got the Action column
-  // at all (2026-09-08 audit).
-  const canPay = usePermission('hrms.fnf.pay')
-  const [tab, setTab] = useState<Tab>(canRead ? 'settlements' : 'create')
-
-  const tabs: { key: Tab; label: string }[] = [
-    ...(canRead ? [{ key: 'settlements' as Tab, label: 'Settlements' }] : []),
-    ...(canProcess ? [{ key: 'create' as Tab, label: 'Create Settlement' }] : []),
-  ]
-
-  return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
-      <HrPageHeader crumb="Full & Final" title="Full & Final Settlement" subtitle="Process, approve, and pay out exit settlements" />
-
-      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
-
-      {tab === 'settlements' && canRead && <HrTabPanel tabKey="settlements"><SettlementsTab canApprove={canApprove} canPay={canPay} /></HrTabPanel>}
-      {tab === 'create' && canProcess && <HrTabPanel tabKey="create"><CreateTab onCreated={() => setTab(canRead ? 'settlements' : 'create')} /></HrTabPanel>}
-    </div>
-  )
+  const [tab, setTab] = useState(canRead ? 'settlements' : 'create')
+  const [selectedId, setSelectedId] = useState('')
+  const tabs = [...(canRead ? [{ key: 'settlements', label: 'Settlements' }] : []), ...(canProcess ? [{ key: 'create', label: 'Create settlement' }] : [])]
+  return <div className="mx-auto max-w-7xl space-y-5 p-6 sm:p-8">
+    <HrPageHeader crumb="Employee exit" title="Full & final settlements" subtitle="Review a leaver's earnings and deductions, approve their settlement, and record completed payment." />
+    {!tabs.length ? <p className="ut-card p-6 text-text-secondary">You do not have access to full & final settlements.</p> : <><HrTabs tabs={tabs} active={tab} onChange={setTab} />
+      {tab === 'settlements' && canRead && <HrTabPanel tabKey="settlements"><Settlements onOpen={setSelectedId} /></HrTabPanel>}
+      {tab === 'create' && canProcess && <HrTabPanel tabKey="create"><CreateSettlement onCreated={id => { if (canRead) { setTab('settlements'); setSelectedId(id) } }} /></HrTabPanel>}
+    </>}
+    {selectedId && canRead && <SettlementDrawer id={selectedId} onClose={() => setSelectedId('')} />}
+  </div>
 }
 
-// ── Settlements ────────────────────────────────────────────────────────────────
-
-function SettlementsTab({ canApprove, canPay }: { canApprove: boolean; canPay: boolean }) {
-  const { toast } = useToast()
-  const showActions = canApprove || canPay
-  // Was hard-coded to page 0 with no control, so once a tenant had processed
-  // more than FNF_PAGE_SIZE leavers the older settlements — including any still
-  // sitting at PROCESSED, waiting to be approved — dropped out of the product
-  // entirely.
+function Settlements({ onOpen }: { onOpen: (id: string) => void }) {
   const [page, setPage] = useState(0)
-  const { data, isLoading } = useFnfSettlements(page)
+  const query = useFnfSettlements(page)
+  useClampedPage(page, query.data?.totalPages, setPage)
+  const rows = query.data?.content ?? []
+  const paid = rows.filter(row => row.status === 'PAID').reduce((sum, row) => sum + row.netSettlement, 0)
+  if (query.isError) return <Failure error={query.error} retry={() => query.refetch()} />
+  return <div className="space-y-5"><div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <HrStatCard icon={<FileText size={18} />} color="blue" value={query.data?.totalElements ?? 0} label="Total settlements" loading={query.isLoading} />
+    <HrStatCard icon={<Clock size={18} />} color="orange" value={rows.filter(row => row.status === 'PROCESSED').length} label="Awaiting approval" sub="On this page" loading={query.isLoading} />
+    <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={rows.filter(row => row.status === 'APPROVED').length} label="Approved" sub="On this page" loading={query.isLoading} />
+    <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(paid)} label="Payment recorded" sub="On this page" loading={query.isLoading} />
+  </div><TableCard footer={<HrPagination page={page} pageSize={FNF_PAGE_SIZE} totalElements={query.data?.totalElements ?? 0} totalPages={query.data?.totalPages ?? 0} onPageChange={setPage} />}><DataTable<FnfSettlement> data={rows} keyField="id" loading={query.isLoading} emptyMessage="No settlements yet. Create a settlement after recording the employee's exit." columns={[
+    { key: 'employeeName', header: 'Employee', render: row => <HrAvatar name={row.employeeName || 'Employee record unavailable'} sub={row.employeeCode} /> },
+    { key: 'lastWorkingDay', header: 'Last working day', render: row => date(row.lastWorkingDay) },
+    { key: 'netSettlement', header: 'Net settlement', render: row => <span className="whitespace-nowrap font-semibold tabular-nums">{inr(row.netSettlement)}</span> },
+    { key: 'status', header: 'Status', render: row => <HrStatusPill tone={tones[row.status]}>{label(row.status)}</HrStatusPill> },
+    { key: 'actions', header: 'Details', render: row => <HrButton variant="ghost" size="sm" onClick={() => onOpen(row.id)}>Review settlement</HrButton> },
+  ]} /></TableCard></div>
+}
+
+function SettlementDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+  const query = useFnfSettlement(id)
   const approve = useApproveSettlement()
   const pay = usePaySettlement()
-  const settlements = data?.content ?? []
-  const total = data?.totalElements ?? 0
-  const totalPages = data?.totalPages ?? 1
-
-  const stats = useMemo(() => {
-    const processed = settlements.filter((s) => s.status === 'PROCESSED').length
-    const approved = settlements.filter((s) => s.status === 'APPROVED').length
-    const paid = settlements.filter((s) => s.status === 'PAID')
-      .reduce((sum, s) => sum + (s.netSettlement ?? 0), 0)
-    return { processed, approved, paid }
-  }, [settlements])
-
-  const onApprove = async (id: string) => {
-    try {
-      await approve.mutateAsync(id)
-      toast('Settlement approved', 'success')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to approve', 'error')
-    }
-  }
-
-  const onPay = async (id: string) => {
-    try {
-      await pay.mutateAsync(id)
-      toast('Settlement marked paid', 'success')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to pay', 'error')
-    }
-  }
-
-  // Awaiting Approval / Approved / Paid Out are reduced over the rows we hold,
-  // so they describe the current page only — /v1/fnf exposes no status
-  // aggregate to call instead. On a money screen a partial "Paid Out" that
-  // looks like a company total is actively misleading, so say which rows it
-  // covers. "Total Settlements" is the real tenant-wide count (totalElements);
-  // it used to show settlements.length, which never exceeded one page.
-  const pageScoped = totalPages > 1 ? 'On this page' : undefined
-
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<FileText size={18} />} color="blue" value={total} label="Total Settlements" loading={isLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.processed} label="Awaiting Approval" sub={pageScoped} loading={isLoading} />
-        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved" sub={pageScoped} loading={isLoading} />
-        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.paid)} label="Paid Out" sub={pageScoped} loading={isLoading} />
-      </div>
-
-      <TableCard
-        footer={hrPaginationFooter({
-          page, pageSize: FNF_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
-        })}
-      >
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Employee</th>
-              <th className="hidden sm:table-cell">Last Working Day</th>
-              <th>Net Settlement</th>
-              <th>Status</th>
-              {showActions && <th className="text-right">Action</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(4)].map((_, i) => <tr key={i}><td colSpan={showActions ? 5 : 4} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : settlements.length === 0 ? (
-              <tr><td colSpan={showActions ? 5 : 4} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No settlements yet</p><p className="mt-1 text-xs text-text-tertiary">Use “Create Settlement” to process a leaver's full &amp; final.</p></td></tr>
-            ) : settlements.map((s, i) => (
-              <tr key={s.id}>
-                <td><HrAvatar name={s.employeeName || 'Employee'} sub={s.employeeCode} seed={i} /></td>
-                <td className="hidden sm:table-cell text-text-secondary">{s.lastWorkingDay ? format(new Date(s.lastWorkingDay), 'd MMM yyyy') : '—'}</td>
-                <td className="font-semibold text-text-primary">{inr(s.netSettlement)}</td>
-                <td><HrStatusPill tone={STATUS_TONE[s.status]}>{s.status}</HrStatusPill></td>
-                {showActions && (
-                  <td>
-                    <div className="flex items-center justify-end gap-2">
-                      {s.status === 'PROCESSED' && canApprove && (
-                        <HrButton size="sm" onClick={() => onApprove(s.id)} disabled={approve.isPending}><Check size={14} /> Approve</HrButton>
-                      )}
-                      {/* Pay is gated on hrms.fnf.pay. The backend additionally
-                          refuses approver==payer (segregation of duties) with a
-                          clear message, which onPay surfaces via toast. */}
-                      {s.status === 'APPROVED' && canPay && (
-                        <HrButton size="sm" onClick={() => onPay(s.id)} disabled={pay.isPending}><CircleDollarSign size={14} /> Pay</HrButton>
-                      )}
-                      {((s.status === 'PROCESSED' && !canApprove) || (s.status === 'APPROVED' && !canPay)
-                        || s.status === 'PAID' || s.status === 'INITIATED') && (
-                        <span className="text-xs text-text-tertiary">—</span>
-                      )}
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
-    </div>
-  )
-}
-
-// ── Create Settlement ──────────────────────────────────────────────────────────
-
-interface DraftComponent {
-  label: string
-  type: FnfComponentType
-  amount: string
-}
-
-const emptyComponent = (type: FnfComponentType = 'EARNING'): DraftComponent => ({
-  label: '', type, amount: '',
-})
-
-function CreateTab({ onCreated }: { onCreated: () => void }) {
+  const cancel = useCancelSettlement()
+  const canApprove = usePermission('hrms.fnf.approve')
+  const canPay = usePermission('hrms.fnf.pay')
+  const canProcess = usePermission('hrms.fnf.process')
+  const current = useCurrentUser()
   const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id || ''
-  const { data: dir } = useEmployeeDirectory({ companyId, pageSize: 200 }, { enabled: !!companyId })
-  const employees = dir?.content ?? []
-  const process = useProcessSettlement()
-
-  const [employeeId, setEmployeeId] = useState('')
-  const [lastWorkingDay, setLastWorkingDay] = useState(new Date().toISOString().slice(0, 10))
-  const [notes, setNotes] = useState('')
-  const [components, setComponents] = useState<DraftComponent[]>([emptyComponent('EARNING'), emptyComponent('DEDUCTION')])
-
-  const totals = useMemo(() => {
-    const gross = components.filter((c) => c.type === 'EARNING').reduce((s, c) => s + (parseFloat(c.amount) || 0), 0)
-    const deductions = components.filter((c) => c.type === 'DEDUCTION').reduce((s, c) => s + (parseFloat(c.amount) || 0), 0)
-    return { gross, deductions, net: gross - deductions }
-  }, [components])
-
-  const setComponent = (i: number, patch: Partial<DraftComponent>) =>
-    setComponents((prev) => prev.map((c, idx) => (idx === i ? { ...c, ...patch } : c)))
-
-  const handleSubmit = async () => {
-    if (!employeeId) { toast('Select an employee', 'error'); return }
-    if (!lastWorkingDay) { toast('Set the last working day', 'error'); return }
-    const valid = components.filter((c) => c.label.trim() && parseFloat(c.amount) >= 0 && c.amount !== '')
-    if (valid.length === 0) { toast('Add at least one component with a label and amount', 'error'); return }
-    try {
-      await process.mutateAsync({
-        employeeId,
-        companyId: companyId || undefined,
-        lastWorkingDay,
-        notes: notes.trim() || undefined,
-        components: valid.map((c) => ({
-          label: c.label.trim(),
-          type: c.type,
-          amount: parseFloat(c.amount),
-        })),
-      })
-      toast('Settlement processed', 'success')
-      onCreated()
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to process settlement', 'error')
-    }
+  const [confirm, setConfirm] = useState<'approve' | 'pay' | 'cancel' | null>(null)
+  const settlement = query.data
+  const actor = current.data?.employeeId || current.data?.id
+  const ownSettlement = !!actor && actor === settlement?.employeeId
+  const approvedByMe = !!actor && actor === settlement?.approverId
+  const pending = approve.isPending || pay.isPending || cancel.isPending
+  const mutation = confirm === 'approve' ? approve : confirm === 'pay' ? pay : cancel
+  const choose = (action: 'approve' | 'pay' | 'cancel') => { approve.reset(); pay.reset(); cancel.reset(); setConfirm(action) }
+  const execute = async () => {
+    if (!confirm) return
+    try { await mutation.mutateAsync(id); toast(confirm === 'approve' ? 'Settlement approved' : confirm === 'pay' ? 'Completed payment recorded' : 'Settlement cancelled', 'success'); setConfirm(null) } catch { /* Show the backend reason beside the confirmation. */ }
   }
+  return <HrDrawer title="Settlement details" width="max-w-2xl" onClose={() => { if (!pending) onClose() }}><div className="space-y-5">
+    {query.isLoading ? <p role="status">Loading settlement...</p> : query.isError ? <Failure error={query.error} retry={() => query.refetch()} /> : settlement && <>
+      <div className="flex flex-wrap items-start justify-between gap-3"><HrAvatar name={settlement.employeeName || 'Employee record unavailable'} sub={settlement.employeeCode} /><HrStatusPill tone={tones[settlement.status]}>{label(settlement.status)}</HrStatusPill></div>
+      <p className="text-sm text-text-secondary">Last working day: <strong className="text-text-primary">{date(settlement.lastWorkingDay)}</strong></p>
+      <div className="grid grid-cols-3 gap-3 rounded-lg bg-[#E6F4F1] p-4">{[['Earnings', settlement.grossPayable], ['Deductions', settlement.totalDeductions], ['Net payable', settlement.netSettlement]].map(([name, amount]) => <div key={name}><p className="text-xs text-text-secondary">{name}</p><p className="mt-1 font-semibold tabular-nums text-[#0A5240]">{inr(Number(amount))}</p></div>)}</div>
+      <section><h3 className="mb-3 font-semibold">Settlement components</h3><div className="overflow-x-auto rounded-lg border border-border-default"><table className="hr-table"><thead><tr><th>Component</th><th>Type</th><th className="text-right">Amount</th></tr></thead><tbody>{settlement.components?.map((component, index) => <tr key={component.id || index}><td>{component.label}</td><td>{label(component.type)}</td><td className="text-right tabular-nums">{inr(component.amount)}</td></tr>)}</tbody></table></div></section>
+      {settlement.notes && <p className="whitespace-pre-wrap rounded-lg border border-border-default p-3 text-sm"><strong>Notes: </strong>{settlement.notes}</p>}
+      <dl className="grid grid-cols-2 gap-3 text-sm">{[['Processed', settlement.processedAt], ['Approved', settlement.approvedAt], ['Payment recorded', settlement.paidAt]].filter(([, value]) => value).map(([name, value]) => <div key={name}><dt className="text-xs text-text-secondary">{name}</dt><dd className="mt-1">{date(value)}</dd></div>)}</dl>
+      {current.isError && <Failure error={current.error} retry={() => current.refetch()} />}
+      {(ownSettlement || approvedByMe) && (settlement.status === 'PROCESSED' || settlement.status === 'APPROVED') && <p className="rounded-lg bg-bg-base p-3 text-sm text-text-secondary">{ownSettlement ? 'Another authorized colleague must approve and record payment for your own settlement.' : 'Another authorized colleague must record payment because you approved this settlement.'}</p>}
+      {confirm ? <section className="space-y-3 rounded-lg border border-[#0F6E56]/30 p-4"><h3 className="font-semibold">{confirm === 'approve' ? 'Approve this settlement?' : confirm === 'pay' ? 'Record completed payment?' : 'Cancel this settlement?'}</h3><p className="text-sm text-text-secondary">{confirm === 'approve' ? 'Confirm the earnings, deductions and employee details above. Included advance recovery is applied on approval.' : confirm === 'pay' ? `Record that ${inr(settlement.netSettlement)} has already been paid to the employee. This records payment; it does not send a bank transfer.` : 'Cancel this unapproved settlement to prepare a corrected one. Approved and paid settlements cannot be cancelled.'}</p><div className="flex flex-wrap gap-2"><HrButton disabled={pending || current.isLoading} onClick={execute}>{pending ? 'Saving...' : confirm === 'approve' ? 'Confirm approval' : confirm === 'pay' ? 'Confirm payment recorded' : 'Confirm cancellation'}</HrButton><HrButton variant="ghost" disabled={pending} onClick={() => setConfirm(null)}>Keep reviewing</HrButton></div>{mutation.isError && <Failure error={mutation.error} />}</section> : <div className="flex flex-wrap gap-2 border-t border-border-default pt-4">
+        {settlement.status === 'PROCESSED' && canApprove && <HrButton disabled={!actor || ownSettlement} onClick={() => choose('approve')}>Approve settlement</HrButton>}
+        {settlement.status === 'APPROVED' && canPay && <HrButton disabled={!actor || ownSettlement || approvedByMe} onClick={() => choose('pay')}>Record payment</HrButton>}
+        {(settlement.status === 'INITIATED' || settlement.status === 'PROCESSED') && canProcess && <HrButton variant="ghost" onClick={() => choose('cancel')}>Cancel settlement</HrButton>}
+      </div>}
+    </>}
+  </div></HrDrawer>
+}
 
-  return (
-    <div className="max-w-2xl space-y-5">
-      <div className="ut-card p-5">
-        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Settlement Details</h3>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-          <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee *</label>
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
-              <option value="">Select employee…</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {`${emp.firstName}${emp.lastName ? ' ' + emp.lastName : ''}${emp.employeeCode ? ' (' + emp.employeeCode + ')' : ''}`}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Last Working Day *</label>
-            <input type="date" value={lastWorkingDay} onChange={(e) => setLastWorkingDay(e.target.value)} className="ut-input" />
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {components.map((c, i) => (
-          <div key={i} className="ut-card p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Component {i + 1}</span>
-              {components.length > 1 && (
-                <button onClick={() => setComponents((p) => p.filter((_, idx) => idx !== i))} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" aria-label="Remove component">
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-              <div className="col-span-2 sm:col-span-1">
-                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Label</label>
-                <input value={c.label} onChange={(e) => setComponent(i, { label: e.target.value })} placeholder="e.g. Leave encashment" className="ut-input" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Type</label>
-                <select value={c.type} onChange={(e) => setComponent(i, { type: e.target.value as FnfComponentType })} className="ut-select">
-                  <option value="EARNING">Earning</option>
-                  <option value="DEDUCTION">Deduction</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Amount (₹)</label>
-                <input type="number" min={0} step="0.01" value={c.amount} onChange={(e) => setComponent(i, { amount: e.target.value })} className="ut-input" />
-              </div>
-            </div>
-          </div>
-        ))}
-        <div className="flex gap-4">
-          <button onClick={() => setComponents((p) => [...p, emptyComponent('EARNING')])} className="flex items-center gap-1.5 text-sm font-semibold text-[#047857] hover:text-[#064E3B]">
-            <Plus size={15} /> Add earning
-          </button>
-          <button onClick={() => setComponents((p) => [...p, emptyComponent('DEDUCTION')])} className="flex items-center gap-1.5 text-sm font-semibold text-[#047857] hover:text-[#064E3B]">
-            <Plus size={15} /> Add deduction
-          </button>
-        </div>
-      </div>
-
-      <div className="ut-card p-5">
-        <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Notes</label>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional context for the approver" className="w-full rounded-xl border border-border-default bg-white px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20" />
-      </div>
-
-      <div className="rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-5 py-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Gross Payable</p>
-            <p className="text-lg font-bold text-text-primary">{inr(totals.gross)}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Deductions</p>
-            <p className="text-lg font-bold text-[#B91C1C]">{inr(totals.deductions)}</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Net Settlement</p>
-            <p className="text-lg font-bold text-text-primary">{inr(totals.net)}</p>
-          </div>
-        </div>
-        <div className="mt-4 flex justify-end border-t border-[#A7F3D0] pt-4">
-          <HrButton onClick={handleSubmit} disabled={process.isPending}>
-            {process.isPending ? 'Processing…' : 'Process Settlement'}
-          </HrButton>
-        </div>
-      </div>
-    </div>
-  )
+type DraftComponent = { label: string; type: FnfComponentType; amount: string }
+function CreateSettlement({ onCreated }: { onCreated: (id: string) => void }) {
+  const companies = useCompanies()
+  const [companyId, setCompanyId] = useState('')
+  const [status, setStatus] = useState<'EXITED' | 'TERMINATED'>('EXITED')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
+  const canReadEmployee = usePermission(P.HRMS_EMPLOYEE_READ)
+  const employees = useEmployeeDirectory({ companyId: companyId || undefined, status, search: search.trim() || undefined, page, pageSize: 10 }, { enabled: canReadEmployee })
+  const [employee, setEmployee] = useState<WorkforceEmployee | null>(null)
+  const [components, setComponents] = useState<DraftComponent[]>([{ label: '', type: 'EARNING', amount: '' }])
+  const [notes, setNotes] = useState('')
+  const [error, setError] = useState('')
+  const [reviewing, setReviewing] = useState(false)
+  const process = useProcessSettlement()
+  const { toast } = useToast()
+  const gross = components.filter(item => item.type === 'EARNING').reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+  const deductions = components.filter(item => item.type === 'DEDUCTION').reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+  const patch = (index: number, value: Partial<DraftComponent>) => { setComponents(rows => rows.map((item, i) => i === index ? { ...item, ...value } : item)); setReviewing(false) }
+  const validate = () => {
+    if (!employee) return 'Choose the employee whose exit is recorded.'
+    if (!employee.lastWorkingDay) return 'Record the employee\'s last working day in their exit record before creating a settlement.'
+    if (!components.length || components.some(item => !item.label.trim() || !item.amount.trim() || !Number.isFinite(Number(item.amount)) || Number(item.amount) < 0)) return 'Complete every component with a label and a valid non-negative amount, or remove the incomplete row.'
+    if (deductions > gross) return 'Deductions cannot exceed earnings. Resolve any remaining recovery before settlement.'
+    return ''
+  }
+  const submit = async () => {
+    const message = validate(); setError(message); if (message || !employee?.lastWorkingDay) return
+    try { const result = await process.mutateAsync({ employeeId: employee.id, companyId: employee.companyId, lastWorkingDay: employee.lastWorkingDay, notes: notes.trim() || undefined, components: components.map(item => ({ label: item.label.trim(), type: item.type, amount: Number(item.amount) })) }); toast('Settlement processed and ready for approval', 'success'); onCreated(result.id); setReviewing(false); setEmployee(null); setComponents([{ label: '', type: 'EARNING', amount: '' }]); setNotes('') } catch { /* The server checks current debt and duplicate settlements. */ }
+  }
+  return <div className="max-w-4xl space-y-5">
+    <section className="ut-card space-y-4 p-5"><h2 className="font-semibold">Choose a separated employee</h2><p className="text-sm text-text-secondary">Record the employee's exit first. The settlement uses the last working day saved in their employee record.</p>
+      <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Company<select className="ut-select mt-1" value={companyId} onChange={event => { setCompanyId(event.target.value); setPage(0) }}><option value="">All companies</option>{companies.data?.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><label className="text-sm font-medium">Exit status<select className="ut-select mt-1" value={status} onChange={event => { setStatus(event.target.value as 'EXITED' | 'TERMINATED'); setPage(0) }}><option value="EXITED">Exited</option><option value="TERMINATED">Terminated</option></select></label></div>
+      {companies.isError && <Failure error={companies.error} retry={() => companies.refetch()} />}
+      <label className="block text-sm font-medium">Find employee<input type="search" className="ut-input mt-1" placeholder="Search name, code or email" value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} /></label>
+      {!canReadEmployee ? <p className="text-sm text-text-secondary">Employee directory access is required to choose a leaver.</p> : employees.isError ? <Failure error={employees.error} retry={() => employees.refetch()} /> : <><div className="max-h-64 overflow-y-auto rounded-lg border border-border-default" aria-busy={employees.isFetching}>{employees.isLoading ? <p role="status" className="p-3 text-sm">Loading employees...</p> : !employees.data?.content.length ? <p className="p-3 text-sm text-text-secondary">No separated employees match this selection.</p> : employees.data.content.map(item => <button type="button" key={item.id} aria-pressed={employee?.id === item.id} onClick={() => { setEmployee(item); setReviewing(false) }} className={`block w-full border-b border-border-default p-3 text-left last:border-0 hover:bg-[#E6F4F1] ${employee?.id === item.id ? 'bg-[#E6F4F1]' : ''}`}><span className="block text-sm font-semibold">{item.firstName} {item.lastName}</span><span className="text-xs text-text-secondary">{item.employeeCode} - Last working day {date(item.lastWorkingDay)}</span></button>)}</div><HrPagination page={page} pageSize={10} totalElements={employees.data?.totalElements ?? 0} totalPages={employees.data?.totalPages ?? 0} onPageChange={setPage} /></>}
+      {employee && <p className="rounded-lg bg-[#E6F4F1] p-3 text-sm text-[#0A5240]"><strong>Selected: {employee.firstName} {employee.lastName} ({employee.employeeCode})</strong><span className="mt-1 block">Last working day: {date(employee.lastWorkingDay)}</span></p>}
+    </section>
+    <section className="space-y-3"><h2 className="font-semibold">Earnings & deductions</h2><p className="text-sm text-text-secondary">Include salary dues, leave encashment and other agreed amounts. Outstanding advances require an Advance Recovery deduction matching the current balance.</p>{components.map((component, index) => <div key={index} className="ut-card space-y-3 p-4"><div className="flex justify-between"><h3 className="text-sm font-semibold">Component {index + 1}</h3>{components.length > 1 && <button type="button" aria-label={`Remove component ${index + 1}`} className="rounded p-1 text-text-secondary hover:bg-red-50 hover:text-red-700" onClick={() => { setComponents(rows => rows.filter((_, i) => i !== index)); setReviewing(false) }}><Trash2 size={15} /></button>}</div><div className="grid gap-3 sm:grid-cols-3"><label className="text-sm font-medium">Component label<input aria-label={`Component ${index + 1} label`} maxLength={200} className="ut-input mt-1" value={component.label} onChange={event => patch(index, { label: event.target.value })} placeholder="e.g. Salary dues" /></label><label className="text-sm font-medium">Type<select aria-label={`Component ${index + 1} type`} className="ut-select mt-1" value={component.type} onChange={event => patch(index, { type: event.target.value as FnfComponentType })}><option value="EARNING">Earning</option><option value="DEDUCTION">Deduction</option></select></label><label className="text-sm font-medium">Amount (INR)<input aria-label={`Component ${index + 1} amount`} type="number" min={0} step="0.01" className="ut-input mt-1" value={component.amount} onChange={event => patch(index, { amount: event.target.value })} /></label></div></div>)}<div className="flex flex-wrap gap-2"><HrButton variant="ghost" onClick={() => { setComponents(rows => [...rows, { label: '', type: 'EARNING', amount: '' }]); setReviewing(false) }}><Plus size={15} />Add earning</HrButton><HrButton variant="ghost" onClick={() => { setComponents(rows => [...rows, { label: '', type: 'DEDUCTION', amount: '' }]); setReviewing(false) }}><Plus size={15} />Add deduction</HrButton></div></section>
+    <label className="block text-sm font-medium">Settlement notes<textarea className="ut-input mt-1" rows={3} value={notes} onChange={event => { setNotes(event.target.value); setReviewing(false) }} placeholder="Context for the approver" /></label>
+    <div className="space-y-4 rounded-lg bg-[#E6F4F1] p-5"><div className="grid grid-cols-3 gap-3">{[['Earnings', gross], ['Deductions', deductions], ['Net payable', gross - deductions]].map(([name, value]) => <div key={name}><p className="text-xs text-text-secondary">{name}</p><p className="mt-1 text-lg font-semibold text-[#0A5240]">{inr(Number(value))}</p></div>)}</div>{reviewing ? <><p className="text-sm">Confirm these components and the selected employee's exit date. This creates a settlement awaiting approval.</p><div className="flex flex-wrap gap-2"><HrButton disabled={process.isPending} onClick={submit}>{process.isPending ? 'Processing...' : 'Confirm process settlement'}</HrButton><HrButton variant="ghost" disabled={process.isPending} onClick={() => setReviewing(false)}>Keep editing</HrButton></div></> : <HrButton onClick={() => { const message = validate(); setError(message); if (!message) { process.reset(); setReviewing(true) } }}>Review settlement</HrButton>}</div>
+    {error && <p role="alert" className="text-sm text-red-700">{error}</p>}{process.isError && <Failure error={process.error} />}
+  </div>
 }

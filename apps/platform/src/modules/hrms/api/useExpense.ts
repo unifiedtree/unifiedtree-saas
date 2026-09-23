@@ -5,7 +5,7 @@ import { apiJson } from '@/core/api/client'
 export type ExpenseCategory =
   | 'TRAVEL' | 'FOOD' | 'ACCOMMODATION' | 'COMMUNICATION' | 'OFFICE_SUPPLIES'
   | 'MEDICAL' | 'TRAINING' | 'ENTERTAINMENT' | 'OTHER'
-export type ExpenseStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'REIMBURSED'
+export type ExpenseStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'APPROVED_FOR_PAY' | 'REJECTED' | 'REIMBURSED'
 
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   'TRAVEL', 'FOOD', 'ACCOMMODATION', 'COMMUNICATION', 'OFFICE_SUPPLIES',
@@ -93,12 +93,12 @@ export function useExpenseClaim(id: string | undefined) {
  */
 export const EXPENSE_APPROVALS_PAGE_SIZE = 20
 
-export function usePendingExpenseApprovals(page = 0, enabled = true) {
+export function usePendingExpenseApprovals(page = 0, enabled = true, pageSize = EXPENSE_APPROVALS_PAGE_SIZE) {
   return useQuery({
     // `page` is part of the key: without it react-query would hand page 2 the
     // cached page-1 rows and the queue would never appear to advance.
-    queryKey: ['hrms', 'expense', 'approvals', page],
-    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/claims/approvals?page=${page}&size=${EXPENSE_APPROVALS_PAGE_SIZE}`),
+    queryKey: ['hrms', 'expense', 'approvals', page, pageSize],
+    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/claims/approvals?page=${page}&size=${pageSize}`),
     staleTime: 15_000,
     enabled,
   })
@@ -200,5 +200,24 @@ export function useDeletePolicy() {
   return useMutation({
     mutationFn: (id: string) => apiJson<void>(`/v1/expense/policies/${id}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'expense', 'policies'] }),
+  })
+}
+
+
+export interface ExpenseDashboardStats {
+  pendingApprovals: number
+  pendingApprovalAmount: number
+  toBeReimbursed: number
+  toBeReimbursedAmount: number
+  reimbursedThisMonth: number
+  reimbursedThisMonthAmount: number
+}
+
+export function useExpenseDashboardStats(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'expense', 'dashboard-stats'],
+    queryFn: () => apiJson<ExpenseDashboardStats>('/v1/expense/dashboard-stats'),
+    enabled,
+    staleTime: 30_000,
   })
 }

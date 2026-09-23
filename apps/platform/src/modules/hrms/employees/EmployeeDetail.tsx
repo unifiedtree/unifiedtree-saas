@@ -1,1368 +1,89 @@
+import { EmployeeShiftAction } from '../attendance/EmployeeShiftAction'
+import { attendanceDate } from '../attendance/date'
+import { OnboardingRecord } from '../onboarding/OnboardingRecord'
+/**
+ * Employee workspace — the page every employee reference lands on.
+ *
+ * Reached from the Workforce Directory, from ⌘K people search, and from any
+ * /hrms/employees/:id link. Milestone 5A turned it from eleven tabs of profile
+ * fields into an operational workspace: one place to read an employee's state
+ * and reach the work that concerns them.
+ *
+ * This file ORCHESTRATES. It owns the identity header, the lifecycle actions
+ * (confirm / extend probation / notice / exit) and the tab routing; each tab's
+ * content lives in ./workspace and belongs to its own domain. That split is the
+ * point — before 5A everything was here, and "here" was 1,672 lines.
+ *
+ * Tab state lives in the URL (?tab=), so a colleague can be sent straight to
+ * someone's attendance and a refresh keeps your place. Local state could do
+ * neither.
+ */
+
 import React, { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { apiJson } from '@/core/api/client'
-import type { GeneratedLetterDto } from '../letters/api/useLetters'
-import { useParams, useNavigate } from 'react-router-dom'
-import {
-  ArrowLeft, Edit3, UserCheck, AlertTriangle, LogOut,
-  Mail, Phone, Calendar, Briefcase, Building2, MapPin,
-  Plus, Trash2, Eye, EyeOff, Send, CheckCircle2,
-} from 'lucide-react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, Edit3, UserCheck, AlertTriangle, LogOut, Mail, Phone, Briefcase, Building2, Calendar, XCircle, FileText } from 'lucide-react'
 import { format } from 'date-fns'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import {
-  Tabs, TabsList, TabsTrigger, TabsContent,
-  Drawer, Button, Field, Input, EmptyState,
-  TableSkeleton, CardSkeleton,
-} from '@unifiedtree/ui-kit'
+import { CardSkeleton } from '@unifiedtree/ui-kit'
+import { EmptyState } from '@/shared/components/EmptyState'
+import { HrTabs, HrTabPanel, HrStatusPill } from '@/shared/components/hr'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
-import { HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
 import { toast } from 'sonner'
-import { useWorkforceEmployee, useUpdateWorkforceEmployee, useConfirmEmployee, useStartNotice, useExitEmployee, useCancelNotice } from '../api/useWorkforce'
+import {
+  useWorkforceEmployee, useConfirmEmployee, useStartNotice, useExitEmployee, useCancelNotice,
+} from '../api/useWorkforce'
 import { useExtendProbation } from '../api/useProbation'
-import {
-  useEmployeeStructure, useStructureHistory, useUpsertStructure, useSalaryComponents,
-} from '../api/usePayroll'
-import type { EmploymentType } from '../api/useWorkforce'
-import { useCompanies, useDepartments, useDesignations, useBranches, useGrades, useEmploymentTypes } from '../api/useOrg'
-import {
-  useEmployeeAddresses, useCreateAddress, useDeleteAddress,
-  useEmployeeIdentity, useSaveIdentity,
-  useBankAccounts, useAddBankAccount, useDeleteBankAccount,
-  useEmployeeEducation, useAddEducation, useDeleteEducation,
-  useEmployeeExperience, useAddExperience, useDeleteExperience,
-  useEmployeeDependents, useAddDependent, useDeleteDependent,
-  useEmergencyContacts, useAddEmergencyContact, useDeleteEmergencyContact,
-} from '../api/useEmployeeProfile'
-import type {
-  EmployeeAddress, EmployeeIdentityResponse, EmployeeBankAccountResponse,
-  EmployeeEducation, EmployeeExperience, EmployeeDependent, EmergencyContact,
-} from '../api/useEmployeeProfile'
+import { useCompanies, useDepartments, useDesignations, useBranches } from '../api/useOrg'
 import { EmployeeForm } from './EmployeeForm'
-import { sendInvite, resendInvite } from './api/useInvitation'
-import { resetFaceEnrollment } from './api/useFaceAdmin'
-
-// ── Zod schemas ───────────────────────────────────────────────────────────────
-
-const addressSchema = z.object({
-  addressType: z.enum(['PERMANENT', 'CURRENT', 'OFFICE']),
-  line1: z.string().optional(),
-  line2: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  country: z.string().optional(),
-  pincode: z.string().optional(),
-})
-
-// Empty string in a form input must not become a Zod validation failure — an
-// admin who cleared a field expects "no value", not "invalid pattern". The
-// unions accept "" as an explicit escape hatch before the format check runs.
-const PAN_RX     = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/
-const AADHAAR_RX = /^[0-9]{12}$/
-
-const identitySchema = z.object({
-  pan: z.union([z.literal(''), z.string().regex(PAN_RX, 'PAN must be 5 letters + 4 digits + 1 letter (e.g. ABCDE1234F)')]).optional(),
-  // 12-digit Aadhaar format check only — Verhoeff checksum deferred to backend.
-  aadhaar: z.union([z.literal(''), z.string().regex(AADHAAR_RX, 'Aadhaar must be exactly 12 digits')]).optional(),
-  uan: z.string().optional(),
-  esicNumber: z.string().optional(),
-  passportNumber: z.string().optional(),
-  passportExpiry: z.string().optional(),
-})
-
-const bankSchema = z.object({
-  accountNumber: z.string().min(1, 'Required'),
-  ifscCode: z.string().length(11, 'IFSC must be 11 characters'),
-  bankName: z.string().optional(),
-  branchName: z.string().optional(),
-  accountHolderName: z.string().min(1, 'Required'),
-  primary: z.boolean(),
-})
-
-const educationSchema = z.object({
-  degree: z.string().min(1, 'Required'),
-  fieldOfStudy: z.string().optional(),
-  institution: z.string().min(1, 'Required'),
-  startYear: z.coerce.number().optional(),
-  endYear: z.coerce.number().optional(),
-  gradeOrPercentage: z.string().optional(),
-  highest: z.boolean(),
-})
-
-const experienceSchema = z.object({
-  companyName: z.string().min(1, 'Required'),
-  designation: z.string().optional(),
-  startDate: z.string().min(1, 'Required'),
-  endDate: z.string().optional(),
-  current: z.boolean(),
-  description: z.string().optional(),
-  location: z.string().optional(),
-})
-
-const dependentSchema = z.object({
-  name: z.string().min(1, 'Required'),
-  relationship: z.string().min(1, 'Required'),
-  dateOfBirth: z.string().optional(),
-  gender: z.string().optional(),
-  nominee: z.boolean(),
-  nomineePercentage: z.coerce.number().min(0).max(100).optional(),
-})
-
-const emergencyContactSchema = z.object({
-  name: z.string().min(1, 'Required'),
-  relationship: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().optional(),
-  isPrimary: z.boolean(),
-})
-
-const workSchema = z.object({
-  departmentId:       z.string().optional(),
-  designationId:      z.string().optional(),
-  branchId:           z.string().optional(),
-  reportingManagerId: z.string().optional(),
-  employmentType:     z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT']).optional(),
-  // ctcAnnual accepts three shapes cleanly: undefined (field never touched),
-  // "" (admin cleared it — treat as undefined), and a positive number. The
-  // previous z.coerce.number().positive().optional() rejected "" because
-  // Number("") === 0 which fails .positive(), blocking the whole form save.
-  ctcAnnual: z.preprocess(
-    (v) => (v === '' || v == null ? undefined : v),
-    z.coerce.number().positive().optional(),
-  ),
-})
-
-type AddressForm   = z.infer<typeof addressSchema>
-type IdentityForm  = z.infer<typeof identitySchema>
-type BankForm      = z.infer<typeof bankSchema>
-type EducationForm = z.infer<typeof educationSchema>
-type ExperienceForm = z.infer<typeof experienceSchema>
-type DependentForm = z.infer<typeof dependentSchema>
-type ContactForm   = z.infer<typeof emergencyContactSchema>
-type WorkForm      = z.infer<typeof workSchema>
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const STATUS_STYLE: Record<string, { label: string; tone: 'success' | 'warning' | 'error' | 'info' | 'default' }> = {
-  ACTIVE:        { label: 'Active',        tone: 'success' },
-  PROBATION:     { label: 'Probation',     tone: 'warning' },
-  NOTICE_PERIOD: { label: 'Notice Period', tone: 'warning' },
-  SUSPENDED:     { label: 'Suspended',     tone: 'warning' },
-  EXITED:        { label: 'Exited',        tone: 'error'   },
-  TERMINATED:    { label: 'Terminated',    tone: 'error'   },
-}
-
-// Map ui-kit Badge tones to client HR status-pill tones
-const PILL_TONE: Record<string, PillTone> = {
-  success: 'ok',
-  warning: 'warn',
-  error:   'red',
-  info:    'info',
-  default: 'gray',
-}
-
-// ── PII helpers ───────────────────────────────────────────────────────────────
-
-function maskPan(pan: string) {
-  if (!pan || pan.length < 5) return pan
-  return pan.slice(0, 3) + '****' + pan.slice(-1)
-}
-function maskAadhaar(last4: string) {
-  return 'XXXX XXXX ' + last4
-}
-function maskPassport(passport: string) {
-  if (!passport || passport.length < 4) return passport
-  return '****' + passport.slice(-4)
-}
-
-// ── Small helpers ─────────────────────────────────────────────────────────────
-
-function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value?: string }) {
-  if (!value) return null
-  return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
-      <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-        <Icon size={13} className="text-text-secondary" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-text-secondary">{label}</p>
-        <p className="text-sm text-text-primary truncate">{value}</p>
-      </div>
-    </div>
-  )
-}
-
-function SectionCard({ title, action, className, children }: { title: string; action?: React.ReactNode; className?: string; children: React.ReactNode }) {
-  return (
-    <div className={className ? `ut-card p-4 ${className}` : 'ut-card p-4'}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{title}</h3>
-        {action}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function ActionModal({
-  title, description, confirm, onConfirm, onClose, isLoading, children,
-}: {
-  title: string; description: string; confirm: string; onConfirm: () => void;
-  onClose: () => void; isLoading: boolean; children?: React.ReactNode
-}) {
-  return (
-    <>
-      <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
-        <div className="ut-card ut-card-lg w-full max-w-md p-6">
-          <h3 className="text-text-primary font-semibold mb-1">{title}</h3>
-          <p className="text-text-secondary text-sm mb-4">{description}</p>
-          {children}
-          <div className="flex gap-3 mt-4">
-            <button onClick={onClose} className="flex-1 py-2.5 border border-border text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors">Cancel</button>
-            <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors">
-              {isLoading ? 'Processing…' : confirm}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  )
-}
-
-// ── Account card (invitation status) ──────────────────────────────────────────
-
-function AccountCard({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmployee>['data']> }) {
-  const canInvite = usePermission(P.HRMS_EMPLOYEE_INVITE)
-  const [busy, setBusy] = useState(false)
-  // Account state comes from hasAccount — NOT employmentStatus (an active
-  // employee may have no login yet, and an on-notice employee may have one).
-  const hasAccount = emp.hasAccount ?? false
-
-  const doSend = async (resend: boolean) => {
-    setBusy(true)
-    try {
-      if (resend) {
-        await resendInvite(emp.id)
-        toast.success('Invitation resent')
-      } else {
-        await sendInvite(emp.id)
-        toast.success(`Invitation sent to ${emp.email}`)
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send invitation')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <SectionCard title="Account">
-      {hasAccount ? (
-        <div className="flex items-center gap-2 py-2">
-          <CheckCircle2 size={16} className="text-emerald-500" />
-          <span className="text-sm font-medium text-emerald-600">Account active</span>
-        </div>
-      ) : (
-        <div className="space-y-3 py-1">
-          <p className="text-sm text-text-secondary">No login account yet. Send an invitation so this employee can set a password and log in.</p>
-          {canInvite && (
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" leftIcon={<Send size={13} />}
-                loading={busy} onClick={() => doSend(false)}>
-                Send invitation
-              </Button>
-              <Button size="sm" variant="secondary" leftIcon={<Send size={13} />}
-                loading={busy} onClick={() => doSend(true)}>
-                Resend
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-      <FaceResetRow employeeId={emp.id} employeeName={`${emp.firstName ?? ''} ${emp.lastName ?? ''}`.trim() || emp.email || 'this employee'} />
-    </SectionCard>
-  )
-}
+import {
+  ActionModal, InfoRow, PILL_TONE, STATUS_STYLE,
+} from './workspace/shared'
+import { EmployeeOverview } from './workspace/EmployeeOverview'
+import { EmployeePersonal } from './workspace/EmployeePersonal'
+import { EmployeeJob } from './workspace/EmployeeJob'
+import { EmployeeAttendance } from './workspace/EmployeeAttendance'
+import { EmployeePayroll } from './workspace/EmployeePayroll'
+import { EmployeeDocuments } from './workspace/EmployeeDocuments'
+import { EmployeeLetters } from './workspace/EmployeeLetters'
+import { EmployeePerformance } from './workspace/EmployeePerformance'
+import { EmployeeExit } from './workspace/EmployeeExit'
 
 /**
- * Admin action: wipe an employee's face enrollment + templates so they can
- * re-enroll on the mobile app. Use when the employee is locked out from too
- * many failed verifications, or when they've changed appearance enough that
- * the existing templates are giving false rejections.
+ * The workspace tabs.
+ *
+ * Deliberately NOT the eleven from the target sketch. Leave and Expenses are
+ * absent because no API returns either for anyone but the signed-in user —
+ * /v1/leave/my/balances and /v1/expense/my both read the employee id from the
+ * JWT, so a Leave tab here could only ever show the *viewer's* leave or scan
+ * the whole workspace and filter in the browser. A tab that cannot be filled
+ * honestly is worse than no tab: it teaches the reader that this employee has
+ * no leave. The Overview names both gaps in one line instead, and the milestone
+ * report carries the endpoints that would close them.
  */
-function FaceResetRow({ employeeId, employeeName }: { employeeId: string; employeeName: string }) {
-  // Backend is @PreAuthorize attendance.face.admin.reset (V034 grants it to
-  // SUPER_ADMIN + HR_MANAGER only). This row rendered for every viewer of the
-  // card, so COMPANY_ADMIN / DEPT_MANAGER clicked it and got a red 403
-  // (2026-09-08 audit). Hooks must run before the early return.
-  const canResetFace = usePermission('attendance.face.admin.reset')
-  const [confirming, setConfirming] = useState(false)
-  const [busy, setBusy] = useState(false)
-  if (!canResetFace) return null
-  const doReset = async () => {
-    setBusy(true)
-    try {
-      await resetFaceEnrollment(employeeId)
-      toast.success('Face enrollment reset — the employee can enroll again from the mobile app.')
-      setConfirming(false)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to reset face enrollment.')
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <div className="mt-3 pt-3 border-t border-border space-y-2">
-      <p className="text-xs text-text-secondary">
-        Reset Face Enrollment — clears stored face templates and unlocks any verification lockout for {employeeName}. They&rsquo;ll need to enroll again on the mobile app.
-      </p>
-      {confirming ? (
-        <div className="flex gap-2">
-          <Button size="sm" variant="danger" loading={busy} onClick={doReset}>Yes, reset</Button>
-          <Button size="sm" variant="secondary" onClick={() => setConfirming(false)} disabled={busy}>Cancel</Button>
-        </div>
-      ) : (
-        <Button size="sm" variant="secondary" onClick={() => setConfirming(true)}>
-          Reset face enrollment
-        </Button>
-      )}
-    </div>
-  )
-}
-
-// ── Tab: Overview ─────────────────────────────────────────────────────────────
-
-function OverviewTab({ emp, departments, designations, branches, companies }: {
-  emp: ReturnType<typeof useWorkforceEmployee>['data']
-  departments: ReturnType<typeof useDepartments>['data']
-  designations: ReturnType<typeof useDesignations>['data']
-  branches: ReturnType<typeof useBranches>['data']
-  companies: ReturnType<typeof useCompanies>['data']
-}) {
-  // PII/CTC read-gate: peers with the plain employee.read permission must not
-  // see co-workers' contact details or CTC on the Overview card. Salary reuses
-  // the same code the Salary tab is already gated on.
-  const canReadPii    = usePermission(P.HRMS_EMPLOYEE_PROFILE_READ)
-  const canReadSalary = usePermission(P.PAYROLL_STRUCTURE_READ)
-  if (!emp) return null
-  const department  = (departments  ?? []).find((d) => d.id === emp.departmentId)
-  const designation = (designations ?? []).find((d) => d.id === emp.designationId)
-  const branch      = (branches     ?? []).find((b) => b.id === emp.branchId)
-  const company     = (companies    ?? []).find((c) => c.id === emp.companyId)
-
-  return (
-    <div className="grid md:grid-cols-2 gap-4">
-      <AccountCard emp={emp} />
-      {canReadPii && (
-        <SectionCard title="Contact">
-          <InfoRow icon={Mail}     label="Work Email"  value={emp.email} />
-          <InfoRow icon={Phone}    label="Phone"       value={emp.phone} />
-          {emp.dateOfBirth && <InfoRow icon={Calendar} label="Date of Birth" value={format(new Date(emp.dateOfBirth), 'd MMM yyyy')} />}
-          {emp.gender && <InfoRow icon={Edit3} label="Gender" value={emp.gender.replace('_', ' ')} />}
-        </SectionCard>
-      )}
-      {/* When the Contact card renders, Employment lands alone on the second
-          row — span it so the grid doesn't strand it beside a dead cell. */}
-      <SectionCard title="Employment" className={canReadPii ? 'md:col-span-2' : undefined}>
-        {company     && <InfoRow icon={Building2} label="Company"      value={company.name} />}
-        {department  && <InfoRow icon={Briefcase} label="Department"   value={department.name} />}
-        {branch      && <InfoRow icon={MapPin}    label="Branch"       value={branch.name} />}
-        {designation && <InfoRow icon={Briefcase} label="Designation"  value={designation.title} />}
-        {emp.employmentType && <InfoRow icon={Briefcase} label="Type" value={emp.employmentType.replace('_', ' ')} />}
-        <InfoRow icon={Calendar} label="Joining Date"   value={emp.dateOfJoining  ? format(new Date(emp.dateOfJoining),  'd MMM yyyy') : undefined} />
-        <InfoRow icon={Calendar} label="Probation End"  value={emp.probationEndDate ? format(new Date(emp.probationEndDate), 'd MMM yyyy') : undefined} />
-        <InfoRow icon={Calendar} label="Last Working Day" value={emp.lastWorkingDay ? format(new Date(emp.lastWorkingDay), 'd MMM yyyy') : undefined} />
-        {canReadSalary && emp.ctcAnnual && (
-          <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
-            <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-              <span className="text-xs text-text-secondary">₹</span>
-            </div>
-            <div>
-              <p className="text-xs text-text-secondary">CTC (Annual)</p>
-              <p className="text-sm text-text-primary">₹{emp.ctcAnnual.toLocaleString('en-IN')}</p>
-            </div>
-          </div>
-        )}
-      </SectionCard>
-    </div>
-  )
-}
-
-// ── Tab: Contact ─────────────────────────────────────────────────────────────
-
-function ContactTab({ employeeId, emp }: { employeeId: string; emp: NonNullable<ReturnType<typeof useWorkforceEmployee>['data']> }) {
-  const [open, setOpen] = useState(false)
-  const { data = [], isLoading, error, refetch } = useEmployeeAddresses(employeeId)
-  const createMut = useCreateAddress(employeeId)
-  const deleteMut = useDeleteAddress(employeeId)
-
-  const { register, handleSubmit, reset, formState: { errors, isDirty, isValid } } = useForm<AddressForm>({
-    resolver: zodResolver(addressSchema),
-    defaultValues: { addressType: 'CURRENT' },
-  })
-
-  const onSubmit = async (values: AddressForm) => {
-    try {
-      await createMut.mutateAsync(values)
-      toast.success('Address saved')
-      reset()
-      setOpen(false)
-    } catch { toast.error('Failed to save address') }
-  }
-
-  if (isLoading) return <TableSkeleton rows={3} cols={4} />
-  if (error) return <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
-
-  return (
-    <>
-      {/* Contact details from employee record */}
-      <div className="ut-card grid sm:grid-cols-2 gap-3 mb-5 p-4">
-        <div>
-          <p className="text-xs text-text-secondary mb-0.5">Work Email</p>
-          <p className="text-sm text-text-primary">{emp.email}</p>
-        </div>
-        {emp.phone && (
-          <div>
-            <p className="text-xs text-text-secondary mb-0.5">Phone</p>
-            <p className="text-sm text-text-primary">{emp.phone}</p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Addresses</h4>
-        <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-          <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setOpen(true)}>Add Address</Button>
-        </Can>
-      </div>
-
-      {data.length === 0 ? (
-        <EmptyState variant="first-run" title="No addresses" description="Add a permanent, current, or office address." />
-      ) : (
-        <div className="space-y-2">
-          {data.map((addr) => (
-            <div key={addr.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
-              <div>
-                <div className="mb-1"><HrStatusPill tone="info">{addr.addressType}</HrStatusPill></div>
-                <p className="text-sm text-text-primary">
-                  {[addr.line1, addr.line2, addr.city, addr.state, addr.country, addr.pincode].filter(Boolean).join(', ')}
-                </p>
-              </div>
-              <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(addr.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </Can>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <Drawer open={open} onOpenChange={setOpen} title="Add Address">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label className="block text-[13px] font-semibold text-text-primary mb-1">Address Type</label>
-            <select {...register('addressType')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
-              <option value="CURRENT">Current</option>
-              <option value="PERMANENT">Permanent</option>
-              <option value="OFFICE">Office</option>
-            </select>
-          </div>
-          <Field label="Line 1" error={errors.line1?.message}><Input {...register('line1')} placeholder="Street address" /></Field>
-          <Field label="Line 2" error={errors.line2?.message}><Input {...register('line2')} placeholder="Apt, suite, etc." /></Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-            <Field label="City" error={errors.city?.message}><Input {...register('city')} /></Field>
-            <Field label="State" error={errors.state?.message}><Input {...register('state')} /></Field>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-            <Field label="Country" error={errors.country?.message}><Input {...register('country')} defaultValue="India" /></Field>
-            <Field label="Pincode" error={errors.pincode?.message}><Input {...register('pincode')} /></Field>
-          </div>
-          <Button type="submit" className="w-full" loading={createMut.isPending} disabled={!isDirty || !isValid}>Save Address</Button>
-        </form>
-      </Drawer>
-    </>
-  )
-}
-
-// ── Tab: Identity (PII) ───────────────────────────────────────────────────────
-
-function IdentityTab({ employeeId }: { employeeId: string }) {
-  const [showPan, setShowPan]           = useState(false)
-  const [showAadhaar, setShowAadhaar]   = useState(false)
-  const [showPassport, setShowPassport] = useState(false)
-
-  const { data: identity, isLoading, error, refetch } = useEmployeeIdentity(employeeId)
-  const saveMut = useSaveIdentity(employeeId)
-
-  const { register, handleSubmit, formState: { errors, isDirty, isValid } } = useForm<IdentityForm>({
-    resolver: zodResolver(identitySchema),
-    values: {
-      pan:            identity?.pan            ?? '',
-      aadhaar:        identity?.aadhaar        ?? '',
-      uan:            identity?.uan            ?? '',
-      esicNumber:     identity?.esicNumber     ?? '',
-      passportNumber: identity?.passportNumber ?? '',
-      passportExpiry: identity?.passportExpiry ?? '',
-    },
-  })
-
-  const onSubmit = async (values: IdentityForm) => {
-    try {
-      await saveMut.mutateAsync({
-        pan:            values.pan            || undefined,
-        aadhaar:        values.aadhaar        || undefined,
-        uan:            values.uan            || undefined,
-        esicNumber:     values.esicNumber     || undefined,
-        passportNumber: values.passportNumber || undefined,
-        passportExpiry: values.passportExpiry || undefined,
-      })
-      toast.success('Identity saved')
-    } catch { toast.error('Failed to save identity') }
-  }
-
-  if (isLoading) return <TableSkeleton rows={6} cols={2} />
-  if (error)     return <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="max-w-lg space-y-4">
-      {identity && (
-        <div className="ut-card space-y-3 p-4 mb-4">
-          <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Current Values</h4>
-          {identity.pan && (
-            <PiiField label="PAN" masked={maskPan(identity.pan)} full={identity.pan} show={showPan} onToggle={() => setShowPan((v) => !v)} />
-          )}
-          {identity.aadhaarLast4 && (
-            <PiiField label="Aadhaar" masked={maskAadhaar(identity.aadhaarLast4)} full={identity.aadhaar ?? maskAadhaar(identity.aadhaarLast4)} show={showAadhaar} onToggle={() => setShowAadhaar((v) => !v)} />
-          )}
-          {identity.passportNumber && (
-            <PiiField label="Passport" masked={maskPassport(identity.passportNumber)} full={identity.passportNumber} show={showPassport} onToggle={() => setShowPassport((v) => !v)} />
-          )}
-        </div>
-      )}
-
-      <Can code={P.HRMS_EMPLOYEE_IDENTITY_WRITE}>
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-            <Field label="PAN" error={errors.pan?.message}><Input {...register('pan')} placeholder="ABCDE1234F" /></Field>
-            <Field label="Aadhaar (12 digits)" error={errors.aadhaar?.message}><Input {...register('aadhaar')} placeholder="xxxxxxxxxxxx" /></Field>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-            <Field label="UAN" error={errors.uan?.message}><Input {...register('uan')} /></Field>
-            <Field label="ESIC Number" error={errors.esicNumber?.message}><Input {...register('esicNumber')} /></Field>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-            <Field label="Passport Number" error={errors.passportNumber?.message}><Input {...register('passportNumber')} /></Field>
-            <Field label="Passport Expiry" error={errors.passportExpiry?.message}><Input {...register('passportExpiry')} type="date" /></Field>
-          </div>
-          <Button type="submit" loading={saveMut.isPending} disabled={!isDirty || !isValid}>Save Identity</Button>
-        </div>
-      </Can>
-    </form>
-  )
-}
-
-function PiiField({ label, masked, full, show, onToggle }: { label: string; masked: string; full: string; show: boolean; onToggle: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <div>
-        <p className="text-xs text-text-secondary">{label}</p>
-        <p className="text-sm text-text-primary font-mono">{show ? full : masked}</p>
-      </div>
-      <button type="button" onClick={onToggle} className="p-1.5 text-text-secondary hover:text-text-primary transition-colors">
-        {show ? <EyeOff size={14} /> : <Eye size={14} />}
-      </button>
-    </div>
-  )
-}
-
-// ── Tab: Bank Accounts (PII) ──────────────────────────────────────────────────
-
-function BankTab({ employeeId }: { employeeId: string }) {
-  const [open, setOpen] = useState(false)
-  const { data = [], isLoading, error, refetch } = useBankAccounts(employeeId)
-  const addMut    = useAddBankAccount(employeeId)
-  const deleteMut = useDeleteBankAccount(employeeId)
-
-  const { register, handleSubmit, reset, formState: { errors, isDirty, isValid } } = useForm<BankForm>({
-    resolver: zodResolver(bankSchema),
-    defaultValues: { primary: false },
-  })
-
-  const onSubmit = async (values: BankForm) => {
-    try {
-      await addMut.mutateAsync(values)
-      toast.success('Bank account added')
-      reset()
-      setOpen(false)
-    } catch { toast.error('Failed to add bank account') }
-  }
-
-  if (isLoading) return <TableSkeleton rows={2} cols={4} />
-  if (error)     return <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
-
-  return (
-    <>
-      <Can code={P.HRMS_EMPLOYEE_BANK_WRITE}>
-        <div className="flex justify-end mb-3">
-          <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setOpen(true)}>Add Account</Button>
-        </div>
-      </Can>
-
-      {data.length === 0 ? (
-        <EmptyState variant="first-run" title="No bank accounts" description="Add a bank account for salary credit." />
-      ) : (
-        <div className="space-y-2">
-          {(data as EmployeeBankAccountResponse[]).map((acc) => (
-            <div key={acc.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
-              <div className="space-y-0.5">
-                <p className="text-sm font-medium text-text-primary">{acc.accountHolderName}</p>
-                <p className="text-xs text-text-secondary">{acc.bankName} {acc.branchName ? `· ${acc.branchName}` : ''}</p>
-                <p className="text-xs font-mono text-text-secondary">IFSC: {acc.ifscCode} · ****{acc.accountNumberLast4}</p>
-                <div className="flex gap-1.5 mt-1">
-                  {acc.primary   && <HrStatusPill tone="ok">Primary</HrStatusPill>}
-                  {acc.verified  && <HrStatusPill tone="info">Verified</HrStatusPill>}
-                </div>
-              </div>
-              <Can code={P.HRMS_EMPLOYEE_BANK_WRITE}>
-                <button onClick={() => deleteMut.mutate(acc.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </Can>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <Drawer open={open} onOpenChange={setOpen} title="Add Bank Account">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Field label="Account Number" required error={errors.accountNumber?.message}><Input {...register('accountNumber')} /></Field>
-          <Field label="IFSC Code" required error={errors.ifscCode?.message}><Input {...register('ifscCode')} placeholder="SBIN0001234" /></Field>
-          <Field label="Account Holder Name" required error={errors.accountHolderName?.message}><Input {...register('accountHolderName')} /></Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-            <Field label="Bank Name" error={errors.bankName?.message}><Input {...register('bankName')} /></Field>
-            <Field label="Branch" error={errors.branchName?.message}><Input {...register('branchName')} /></Field>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-            <input type="checkbox" {...register('primary')} className="rounded border-border bg-white" />
-            Set as primary account
-          </label>
-          <Button type="submit" className="w-full" loading={addMut.isPending} disabled={!isDirty || !isValid}>Add Account</Button>
-        </form>
-      </Drawer>
-    </>
-  )
-}
-
-// ── Tab: Education ────────────────────────────────────────────────────────────
-
-function EducationTab({ employeeId }: { employeeId: string }) {
-  const [open, setOpen] = useState(false)
-  const { data = [], isLoading, error, refetch } = useEmployeeEducation(employeeId)
-  const addMut    = useAddEducation(employeeId)
-  const deleteMut = useDeleteEducation(employeeId)
-
-  const { register, handleSubmit, reset, formState: { errors, isDirty, isValid } } = useForm<EducationForm>({
-    resolver: zodResolver(educationSchema),
-    defaultValues: { highest: false },
-  })
-
-  const onSubmit = async (values: EducationForm) => {
-    try {
-      await addMut.mutateAsync(values as Omit<EmployeeEducation, 'id' | 'employeeId'>)
-      toast.success('Education record added')
-      reset()
-      setOpen(false)
-    } catch { toast.error('Failed to add education record') }
-  }
-
-  if (isLoading) return <TableSkeleton rows={3} cols={3} />
-  if (error)     return <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
-
-  return (
-    <>
-      <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-        <div className="flex justify-end mb-3">
-          <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setOpen(true)}>Add Education</Button>
-        </div>
-      </Can>
-
-      {data.length === 0 ? (
-        <EmptyState variant="first-run" title="No education records" description="Add degrees and certifications." />
-      ) : (
-        <div className="space-y-2">
-          {(data as EmployeeEducation[]).map((edu) => (
-            <div key={edu.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-text-primary">{edu.degree}{edu.fieldOfStudy ? ` · ${edu.fieldOfStudy}` : ''}</p>
-                  {edu.highest && <HrStatusPill tone="purple">Highest</HrStatusPill>}
-                </div>
-                <p className="text-xs text-text-secondary">{edu.institution}</p>
-                {(edu.startYear || edu.endYear) && (
-                  <p className="text-xs text-text-secondary">{edu.startYear ?? '?'} – {edu.endYear ?? 'Present'}</p>
-                )}
-                {edu.gradeOrPercentage && <p className="text-xs text-text-secondary">Grade/% : {edu.gradeOrPercentage}</p>}
-              </div>
-              <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(edu.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </Can>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <Drawer open={open} onOpenChange={setOpen} title="Add Education">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Field label="Degree" required error={errors.degree?.message}><Input {...register('degree')} placeholder="B.Tech, MBA…" /></Field>
-          <Field label="Field of Study" error={errors.fieldOfStudy?.message}><Input {...register('fieldOfStudy')} /></Field>
-          <Field label="Institution" required error={errors.institution?.message}><Input {...register('institution')} /></Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-            <Field label="Start Year" error={errors.startYear?.message}><Input {...register('startYear')} type="number" placeholder="2018" /></Field>
-            <Field label="End Year" error={errors.endYear?.message}><Input {...register('endYear')} type="number" placeholder="2022" /></Field>
-          </div>
-          <Field label="Grade / Percentage" error={errors.gradeOrPercentage?.message}><Input {...register('gradeOrPercentage')} placeholder="8.5 CGPA / 85%" /></Field>
-          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-            <input type="checkbox" {...register('highest')} className="rounded border-border bg-white" />
-            Highest qualification
-          </label>
-          <Button type="submit" className="w-full" loading={addMut.isPending} disabled={!isDirty || !isValid}>Save</Button>
-        </form>
-      </Drawer>
-    </>
-  )
-}
-
-// ── Tab: Experience ───────────────────────────────────────────────────────────
-
-function ExperienceTab({ employeeId }: { employeeId: string }) {
-  const [open, setOpen] = useState(false)
-  const { data = [], isLoading, error, refetch } = useEmployeeExperience(employeeId)
-  const addMut    = useAddExperience(employeeId)
-  const deleteMut = useDeleteExperience(employeeId)
-
-  const { register, handleSubmit, reset, watch, formState: { errors, isDirty, isValid } } = useForm<ExperienceForm>({
-    resolver: zodResolver(experienceSchema),
-    defaultValues: { current: false },
-  })
-  const isCurrent = watch('current')
-
-  const onSubmit = async (values: ExperienceForm) => {
-    try {
-      await addMut.mutateAsync(values as Omit<EmployeeExperience, 'id' | 'employeeId'>)
-      toast.success('Experience record added')
-      reset()
-      setOpen(false)
-    } catch { toast.error('Failed to add experience record') }
-  }
-
-  if (isLoading) return <TableSkeleton rows={3} cols={3} />
-  if (error)     return <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
-
-  return (
-    <>
-      <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-        <div className="flex justify-end mb-3">
-          <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setOpen(true)}>Add Experience</Button>
-        </div>
-      </Can>
-
-      {data.length === 0 ? (
-        <EmptyState variant="first-run" title="No experience records" description="Add previous work experience." />
-      ) : (
-        <div className="space-y-2">
-          {(data as EmployeeExperience[]).map((exp) => (
-            <div key={exp.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-text-primary">{exp.companyName}</p>
-                  {exp.current && <HrStatusPill tone="ok">Current</HrStatusPill>}
-                </div>
-                {exp.designation && <p className="text-xs text-text-secondary">{exp.designation}</p>}
-                <p className="text-xs text-text-secondary">
-                  {exp.startDate} – {exp.current ? 'Present' : (exp.endDate ?? '?')}
-                  {exp.location ? ` · ${exp.location}` : ''}
-                </p>
-              </div>
-              <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(exp.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </Can>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <Drawer open={open} onOpenChange={setOpen} title="Add Experience">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Field label="Company Name" required error={errors.companyName?.message}><Input {...register('companyName')} /></Field>
-          <Field label="Designation / Role" error={errors.designation?.message}><Input {...register('designation')} /></Field>
-          {/* End Date hides while "currently working" — collapse to one column
-              so Start Date doesn't strand beside a dead cell. */}
-          <div className={isCurrent ? 'grid grid-cols-1 gap-y-5' : 'grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5'}>
-            <Field label="Start Date" required error={errors.startDate?.message}><Input {...register('startDate')} type="date" /></Field>
-            {!isCurrent && <Field label="End Date" error={errors.endDate?.message}><Input {...register('endDate')} type="date" /></Field>}
-          </div>
-          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-            <input type="checkbox" {...register('current')} className="rounded border-border bg-white" />
-            Currently working here
-          </label>
-          <Field label="Location" error={errors.location?.message}><Input {...register('location')} /></Field>
-          <Field label="Description" error={errors.description?.message}><Input {...register('description')} /></Field>
-          <Button type="submit" className="w-full" loading={addMut.isPending} disabled={!isDirty || !isValid}>Save</Button>
-        </form>
-      </Drawer>
-    </>
-  )
-}
-
-// ── Tab: Dependents ───────────────────────────────────────────────────────────
-
-function DependentsTab({ employeeId }: { employeeId: string }) {
-  const [open, setOpen] = useState(false)
-  const { data = [], isLoading, error, refetch } = useEmployeeDependents(employeeId)
-  const addMut    = useAddDependent(employeeId)
-  const deleteMut = useDeleteDependent(employeeId)
-
-  const { register, handleSubmit, reset, watch, formState: { errors, isDirty, isValid } } = useForm<DependentForm>({
-    resolver: zodResolver(dependentSchema),
-    defaultValues: { nominee: false },
-  })
-  const isNominee = watch('nominee')
-
-  const onSubmit = async (values: DependentForm) => {
-    try {
-      await addMut.mutateAsync(values as Omit<EmployeeDependent, 'id' | 'employeeId'>)
-      toast.success('Dependent added')
-      reset()
-      setOpen(false)
-    } catch { toast.error('Failed to add dependent') }
-  }
-
-  if (isLoading) return <TableSkeleton rows={3} cols={3} />
-  if (error)     return <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
-
-  return (
-    <>
-      <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-        <div className="flex justify-end mb-3">
-          <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setOpen(true)}>Add Dependent</Button>
-        </div>
-      </Can>
-
-      {data.length === 0 ? (
-        <EmptyState variant="first-run" title="No dependents" description="Add family members or dependents." />
-      ) : (
-        <div className="space-y-2">
-          {(data as EmployeeDependent[]).map((dep) => (
-            <div key={dep.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-text-primary">{dep.name}</p>
-                  {dep.nominee && <HrStatusPill tone="purple">Nominee {dep.nomineePercentage ? `${dep.nomineePercentage}%` : ''}</HrStatusPill>}
-                </div>
-                <p className="text-xs text-text-secondary">{dep.relationship}{dep.gender ? ` · ${dep.gender}` : ''}</p>
-                {dep.dateOfBirth && <p className="text-xs text-text-secondary">DOB: {dep.dateOfBirth}</p>}
-              </div>
-              <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(dep.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </Can>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <Drawer open={open} onOpenChange={setOpen} title="Add Dependent">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Field label="Name" required error={errors.name?.message}><Input {...register('name')} /></Field>
-          <Field label="Relationship" required error={errors.relationship?.message}><Input {...register('relationship')} placeholder="Spouse, Child, Parent…" /></Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-            <Field label="Date of Birth" error={errors.dateOfBirth?.message}><Input {...register('dateOfBirth')} type="date" /></Field>
-            <div>
-              <label className="block text-[13px] font-semibold text-text-primary mb-1">Gender</label>
-              <select {...register('gender')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
-                <option value="">Select</option>
-                <option value="MALE">Male</option>
-                <option value="FEMALE">Female</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-            <input type="checkbox" {...register('nominee')} className="rounded border-border bg-white" />
-            Mark as nominee
-          </label>
-          {isNominee && (
-            <Field label="Nominee %" error={errors.nomineePercentage?.message}><Input {...register('nomineePercentage')} type="number" min={0} max={100} /></Field>
-          )}
-          <Button type="submit" className="w-full" loading={addMut.isPending} disabled={!isDirty || !isValid}>Save</Button>
-        </form>
-      </Drawer>
-    </>
-  )
-}
-
-// ── Tab: Emergency Contacts ───────────────────────────────────────────────────
-
-function EmergencyTab({ employeeId }: { employeeId: string }) {
-  const [open, setOpen] = useState(false)
-  const { data = [], isLoading, error, refetch } = useEmergencyContacts(employeeId)
-  const addMut    = useAddEmergencyContact(employeeId)
-  const deleteMut = useDeleteEmergencyContact(employeeId)
-
-  const { register, handleSubmit, reset, formState: { errors, isDirty, isValid } } = useForm<ContactForm>({
-    resolver: zodResolver(emergencyContactSchema),
-    defaultValues: { isPrimary: false },
-  })
-
-  const onSubmit = async (values: ContactForm) => {
-    try {
-      await addMut.mutateAsync(values as Omit<EmergencyContact, 'id' | 'employeeId'>)
-      toast.success('Emergency contact added')
-      reset()
-      setOpen(false)
-    } catch { toast.error('Failed to add emergency contact') }
-  }
-
-  if (isLoading) return <TableSkeleton rows={2} cols={3} />
-  if (error)     return <EmptyState variant="error" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
-
-  return (
-    <>
-      <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-        <div className="flex justify-end mb-3">
-          <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setOpen(true)}>Add Contact</Button>
-        </div>
-      </Can>
-
-      {data.length === 0 ? (
-        <EmptyState variant="first-run" title="No emergency contacts" description="Add at least one emergency contact." />
-      ) : (
-        <div className="space-y-2">
-          {(data as EmergencyContact[]).map((c) => (
-            <div key={c.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-text-primary">{c.name}</p>
-                  {c.isPrimary && <HrStatusPill tone="ok">Primary</HrStatusPill>}
-                </div>
-                {c.relationship && <p className="text-xs text-text-secondary">{c.relationship}</p>}
-                <p className="text-xs text-text-secondary">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
-              </div>
-              <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
-                <button onClick={() => deleteMut.mutate(c.id)} className="p-1.5 text-text-secondary hover:text-red-600 transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </Can>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <Drawer open={open} onOpenChange={setOpen} title="Add Emergency Contact">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Field label="Name" required error={errors.name?.message}><Input {...register('name')} /></Field>
-          <Field label="Relationship" error={errors.relationship?.message}><Input {...register('relationship')} placeholder="Spouse, Parent, Sibling…" /></Field>
-          <Field label="Phone" error={errors.phone?.message}><Input {...register('phone')} type="tel" /></Field>
-          <Field label="Email" error={errors.email?.message}><Input {...register('email')} type="email" /></Field>
-          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-            <input type="checkbox" {...register('isPrimary')} className="rounded border-border bg-white" />
-            Primary contact
-          </label>
-          <Button type="submit" className="w-full" loading={addMut.isPending} disabled={!isDirty || !isValid}>Save</Button>
-        </form>
-      </Drawer>
-    </>
-  )
-}
-
-// ── Tab: Work ────────────────────────────────────────────────────────────────
-
-function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmployee>['data']> }) {
-  // Mirror OverviewTab: CTC is salary data, only reveal it to holders of the
-  // salary-read permission (same code the Salary tab is gated on).
-  const canReadSalary = usePermission(P.PAYROLL_STRUCTURE_READ)
-  const [open, setOpen] = useState(false)
-  const updateMut = useUpdateWorkforceEmployee()
-
-  const { data: departments  = [] } = useDepartments(emp.companyId)
-  const { data: designations = [] } = useDesignations(emp.companyId)
-  const { data: branches     = [] } = useBranches(emp.companyId)
-  const { data: empTypes     = [] } = useEmploymentTypes(emp.companyId)
-
-  const department  = departments.find((d) => d.id === emp.departmentId)
-  const designation = designations.find((d) => d.id === emp.designationId)
-  const branch      = branches.find((b) => b.id === emp.branchId)
-
-  const { register, handleSubmit, reset, formState: { errors, isDirty, isValid } } = useForm<WorkForm>({
-    resolver: zodResolver(workSchema),
-    values: {
-      departmentId:       emp.departmentId       ?? '',
-      designationId:      emp.designationId      ?? '',
-      branchId:           emp.branchId           ?? '',
-      reportingManagerId: emp.reportingManagerId ?? '',
-      employmentType:     emp.employmentType,
-      ctcAnnual:          emp.ctcAnnual,
-    },
-  })
-
-  const onSubmit = async (values: WorkForm) => {
-    try {
-      await updateMut.mutateAsync({
-        id: emp.id,
-        data: {
-          departmentId:       values.departmentId       || undefined,
-          designationId:      values.designationId      || undefined,
-          branchId:           values.branchId           || undefined,
-          reportingManagerId: values.reportingManagerId || undefined,
-          employmentType:     values.employmentType     as EmploymentType | undefined,
-          ctcAnnual:          values.ctcAnnual,
-        },
-      })
-      toast.success('Work details updated')
-      reset(values)
-      setOpen(false)
-    } catch { toast.error('Failed to update work details') }
-  }
-
-  return (
-    <>
-      {/* Read-only summary */}
-      <div className="space-y-3 mb-4">
-        <div className="ut-card grid sm:grid-cols-2 gap-3 p-4">
-          <InfoRow icon={Briefcase} label="Department"    value={department?.name} />
-          <InfoRow icon={Briefcase} label="Designation"   value={designation?.title} />
-          <InfoRow icon={MapPin}    label="Branch"        value={branch?.name} />
-          <InfoRow icon={Briefcase} label="Employment Type" value={emp.employmentType?.replace('_', ' ')} />
-          {canReadSalary && emp.ctcAnnual && (
-            <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0 col-span-2">
-              <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-                <span className="text-xs text-text-secondary">₹</span>
-              </div>
-              <div>
-                <p className="text-xs text-text-secondary">CTC (Annual)</p>
-                <p className="text-sm text-text-primary">₹{emp.ctcAnnual.toLocaleString('en-IN')}</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Date milestones — read-only, set via lifecycle mutations */}
-        <div className="ut-card grid sm:grid-cols-2 gap-3 p-4">
-          <InfoRow icon={Calendar} label="Joining Date"        value={emp.dateOfJoining      ? format(new Date(emp.dateOfJoining),      'd MMM yyyy') : undefined} />
-          <InfoRow icon={Calendar} label="Confirmation Date"   value={emp.confirmationDate   ? format(new Date(emp.confirmationDate),   'd MMM yyyy') : undefined} />
-          <InfoRow icon={Calendar} label="Probation End"       value={emp.probationEndDate   ? format(new Date(emp.probationEndDate),   'd MMM yyyy') : undefined} />
-          <InfoRow icon={Calendar} label="Last Working Day"    value={emp.lastWorkingDay     ? format(new Date(emp.lastWorkingDay),     'd MMM yyyy') : undefined} />
-        </div>
-      </div>
-
-      <Can code={P.HRMS_EMPLOYEE_WRITE}>
-        <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>Edit Work Details</Button>
-      </Can>
-
-      <Drawer open={open} onOpenChange={setOpen} title="Edit Work Details">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label className="block text-[13px] font-semibold text-text-primary mb-1">Department</label>
-            <select {...register('departmentId')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
-              <option value="">— None —</option>
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[13px] font-semibold text-text-primary mb-1">Designation</label>
-            <select {...register('designationId')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
-              <option value="">— None —</option>
-              {designations.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[13px] font-semibold text-text-primary mb-1">Branch</label>
-            <select {...register('branchId')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
-              <option value="">— None —</option>
-              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[13px] font-semibold text-text-primary mb-1">Employment Type</label>
-            <select {...register('employmentType')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
-              <option value="">— None —</option>
-              {/* Only real backend enum codes — a custom/lookup code would 400 on save. */}
-              {empTypes
-                .filter((t) => t.active && t.code && ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT'].includes(t.code))
-                .map((t) => <option key={t.id} value={t.code!}>{t.name}</option>)}
-            </select>
-          </div>
-          <Field label="Reporting Manager ID" error={errors.reportingManagerId?.message}>
-            <Input {...register('reportingManagerId')} placeholder="UUID of reporting manager" />
-          </Field>
-          <Field label="CTC Annual (₹)" error={errors.ctcAnnual?.message}>
-            <Input {...register('ctcAnnual')} type="number" placeholder="1200000" />
-          </Field>
-          <Button type="submit" className="w-full" loading={updateMut.isPending} disabled={!isDirty || !isValid}>Save Changes</Button>
-        </form>
-      </Drawer>
-    </>
-  )
-}
-
-// ── Tab: Documents ────────────────────────────────────────────────────────────
-// TODO[backend]: POST /v1/employees/{id}/profile/documents (multipart/form-data, S3-compatible storage) — file upload stays out of scope for Phase 1
-
-function DocumentsTab({ employeeId }: { employeeId: string }) {
-  const navigate = useNavigate()
-  const [page, setPage] = useState(0)
-
-  // Employee-scoped list: pass `employeeId` as a server-side filter instead of
-  // pulling the tenant-wide page and filtering client-side. The old approach
-  // silently dropped this employee's letters whenever they weren't in the
-  // most-recent 10 generated across the whole workspace, and it fetched other
-  // employees' letters into browser memory just to discard them — a soft
-  // privacy leak on any admin who could open devtools.
-  const { data, isLoading } = useQuery({
-    queryKey: ['hrms', 'letters', 'generated', 'employee', employeeId, page],
-    queryFn: () => apiJson<{ content: GeneratedLetterDto[]; totalElements: number; totalPages: number }>(
-      `/v1/letters/generated?employeeId=${encodeURIComponent(employeeId)}&page=${page}&size=10`
-    ),
-    // Defensive client-side filter: if the backend hasn't wired the employeeId
-    // param yet, at least we keep behaviour identical to before rather than
-    // rendering letters from other employees under this profile.
-    select: r => ({ ...r, content: r.content.filter(l => l.employeeId === employeeId) }),
-    staleTime: 30_000,
-    enabled: !!employeeId,
-  })
-
-  const letters = data?.content ?? []
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-text-primary">Generated Letters</h3>
-        <Can code={P.HRMS_LETTERS_GENERATE}>
-          <HrButton
-            size="sm"
-            onClick={() => navigate(`/hrms/letters/generated?employeeId=${employeeId}`)}
-          >
-            <Plus size={12} />
-            Generate letter
-          </HrButton>
-        </Can>
-      </div>
-
-      {isLoading ? (
-        <CardSkeleton />
-      ) : letters.length === 0 ? (
-        <EmptyState
-          variant="first-run"
-          title="No letters generated"
-          description="Generate an offer, appointment, or experience letter for this employee."
-        />
-      ) : (
-        <TableCard>
-          <table className="hr-table">
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Subject</th>
-                <th className="hidden md:table-cell">Date</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {letters.map(l => (
-                <tr key={l.id}>
-                  <td>
-                    <HrStatusPill tone="purple">{l.type}</HrStatusPill>
-                  </td>
-                  <td className="text-text-primary max-w-xs truncate">{l.subject}</td>
-                  <td className="hidden md:table-cell text-text-secondary text-xs">
-                    {format(new Date(l.createdAt), 'dd MMM yyyy')}
-                  </td>
-                  <td>
-                    <HrStatusPill tone={l.status === 'VOID' ? 'red' : l.status === 'SENT' ? 'info' : 'gray'}>{l.status}</HrStatusPill>
-                  </td>
-                  <td className="text-right">
-                    <button
-                      onClick={() => navigate(`/hrms/letters/generated/${l.id}`)}
-                      className="text-xs font-semibold text-[#047857] hover:text-[#059669] transition-colors"
-                    >
-                      View
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableCard>
-      )}
-    </div>
-  )
-}
-
-// ── Tab: Salary (payroll structure) ───────────────────────────────────────────
-
-function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: string }) {
-  const { data: structure, isLoading } = useEmployeeStructure(employeeId)
-  const { data: history = [] } = useStructureHistory(employeeId)
-  const { data: components = [] } = useSalaryComponents()
-  const upsert = useUpsertStructure()
-  const [open, setOpen] = useState(false)
-  const [ctc, setCtc] = useState('')
-  const [effFrom, setEffFrom] = useState(new Date().toISOString().split('T')[0])
-  const [taxRegime, setTaxRegime] = useState<'OLD' | 'NEW'>('NEW')
-  const [pfApplicable, setPfApplicable] = useState(true)
-  const [lines, setLines] = useState<Record<string, string>>({})
-
-  const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-  const ctcComponents = components.filter(c => c.category === 'EARNING')
-
-  const openEdit = () => {
-    setCtc(structure ? String(structure.ctcAnnual) : '')
-    setEffFrom(new Date().toISOString().split('T')[0])
-    setTaxRegime((structure?.taxRegime as 'OLD' | 'NEW') ?? 'NEW')
-    setPfApplicable(structure?.pfApplicable ?? true)
-    // Pre-fill the existing component amounts so "Revise" preserves them — without
-    // this, saving a revision zeroed every line and the employee was paid ₹0.
-    // (Clear a field to drop that component; that's the explicit-removal path.)
-    const prefill: Record<string, string> = {}
-    // `lines` is the raw configured set, so componentId is always present here.
-    // The null case belongs to the server-computed statutory lines (PF/ESI/PT),
-    // which have no employee_structure_components row and are never revisable.
-    for (const l of structure?.lines ?? []) {
-      if (l.componentId) prefill[l.componentId] = String(l.monthlyAmount)
-    }
-    setLines(prefill)
-    setOpen(true)
-  }
-
-  const save = () => {
-    if (!ctc || Number(ctc) <= 0) { toast.error('Enter a valid annual CTC'); return }
-    upsert.mutate({
-      employeeId, ctcAnnual: Number(ctc), effectiveFrom: effFrom, taxRegime, pfApplicable,
-      components: Object.entries(lines).filter(([, v]) => v).map(([componentId, v]) => ({ componentId, monthlyAmount: Number(v) })),
-    }, {
-      onSuccess: () => { toast.success('Salary structure saved'); setOpen(false) },
-      onError: (e) => toast.error((e as Error).message || 'Failed to save structure'),
-    })
-  }
-
-  if (isLoading) return <CardSkeleton />
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-text-primary">Current Salary Structure</h3>
-        <Can code={P.PAYROLL_STRUCTURE_MANAGE}>
-          <Button size="sm" onClick={openEdit}>{structure ? 'Revise structure' : 'Add structure'}</Button>
-        </Can>
-      </div>
-
-      {!structure ? (
-        <EmptyState variant="first-run" title="No salary structure" description="Define this employee's salary structure to enable payroll." />
-      ) : (
-        <>
-          {/* 2026-09-10: this tab showed CTC / Monthly / Tax regime / PF status
-              and a single flat, uncategorised component list — no gross, no
-              deductions, no net. The server now returns a full-month breakdown
-              computed by the payroll engine, so show the same four money cards
-              the Salary Structure page does. */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Annual CTC</p><p className="text-lg font-bold text-text-primary">{inr(structure.ctcAnnual)}</p><p className="text-xs text-text-tertiary">{inr(structure.ctcMonthly)} / month</p></div>
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Gross / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.grossMonthly ?? structure.ctcMonthly)}</p></div>
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Deductions / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.totalDeductions ?? 0)}</p></div>
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Net pay / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.netMonthly ?? structure.ctcMonthly)}</p></div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
-            <span>Tax regime: <span className="font-semibold text-text-primary">{structure.taxRegime}</span></span>
-            <span>PF: <span className="font-semibold text-text-primary">{structure.pfApplicable ? structure.pfStatus : 'N/A'}</span></span>
-          </div>
-          {structure.derivedFromCtc && (
-            <p className="text-xs text-text-tertiary">
-              No salary components configured — this breakup is derived from CTC as a
-              single Basic component, the same fallback payroll applies. Use “Revise
-              structure” below to define your own.
-            </p>
-          )}
-          {(structure.earnings ?? structure.lines).length > 0 && (
-            <TableCard>
-              <table className="hr-table">
-                <thead><tr><th>Component</th><th>Type</th><th>Monthly</th><th>Annual</th></tr></thead>
-                <tbody>
-                  {[...(structure.earnings ?? structure.lines), ...(structure.deductions ?? [])].map(l => (
-                    // componentId is null on server-computed statutory lines.
-                    <tr key={l.componentCode}>
-                      <td className="text-text-primary">{l.componentName}</td>
-                      <td className="text-text-secondary">{l.category.replace('_', ' ')}</td>
-                      <td>{inr(l.monthlyAmount)}</td>
-                      <td className="text-text-secondary">{inr(l.monthlyAmount * 12)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </TableCard>
-          )}
-        </>
-      )}
-
-      {history.length > 1 && (
-        <div>
-          <h3 className="text-sm font-bold text-text-primary mb-2">History</h3>
-          <TableCard>
-            <table className="hr-table">
-              <thead><tr><th>Effective</th><th>CTC</th><th>Status</th></tr></thead>
-              <tbody>
-                {history.map(h => (
-                  <tr key={h.id}><td>{format(new Date(h.effectiveFrom), 'd MMM yyyy')}</td><td>{inr(h.ctcAnnual)}</td><td>{h.isCurrent ? <HrStatusPill tone="ok">Current</HrStatusPill> : <HrStatusPill tone="gray">Past</HrStatusPill>}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </TableCard>
-        </div>
-      )}
-
-      {open && (
-        <Drawer open={open} onOpenChange={(o) => !o && setOpen(false)} title="Salary structure">
-          <div className="space-y-4">
-            <Field label="Annual CTC (₹)" required><Input type="number" value={ctc} onChange={(e) => setCtc(e.target.value)} /></Field>
-            <Field label="Effective from"><Input type="date" value={effFrom} onChange={(e) => setEffFrom(e.target.value)} /></Field>
-            <Field label="Tax regime">
-              <select value={taxRegime} onChange={(e) => setTaxRegime(e.target.value as 'OLD' | 'NEW')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm">
-                <option value="NEW">New regime</option><option value="OLD">Old regime</option>
-              </select>
-            </Field>
-            <label className="flex items-center gap-2 text-sm text-text-primary">
-              <input type="checkbox" checked={pfApplicable} onChange={(e) => setPfApplicable(e.target.checked)} className="h-4 w-4 rounded accent-[#059669]" /> PF applicable
-            </label>
-            {ctcComponents.length > 0 && (
-              <div className="space-y-2 pt-2 border-t border-border">
-                <p className="text-xs font-bold text-text-secondary uppercase tracking-wider">Monthly component amounts</p>
-                {ctcComponents.map(c => (
-                  <Field key={c.id} label={c.name}>
-                    <Input type="number" value={lines[c.id] ?? ''} onChange={(e) => setLines(p => ({ ...p, [c.id]: e.target.value }))} placeholder="0" />
-                  </Field>
-                ))}
-              </div>
-            )}
-            <Button className="w-full" loading={upsert.isPending} onClick={save}>Save structure</Button>
-          </div>
-        </Drawer>
-      )}
-    </div>
-  )
-}
-
-// ── Main Component ────────────────────────────────────────────────────────────
+const TAB_KEYS = [
+  'overview', 'personal', 'job', 'attendance',
+  'payroll', 'documents', 'letters', 'performance', 'exit',
+] as const
+type TabKey = typeof TAB_KEYS[number]
 
 export const EmployeeDetail: React.FC = () => {
+  // Tab lives in the URL so the section is linkable and survives a refresh.
+  //
+  // `replace`, deliberately: this is a detail page reached from the directory
+  // or from ⌘K search, and Back should return the user THERE. Pushing a history
+  // entry per tab would mean someone who glanced at four tabs has to press Back
+  // four times to get out, which reads as a broken button. The cost is that
+  // Back does not step between tabs — the right trade for a leaf page.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab') as TabKey | null
+  const activeTab: TabKey = tabParam && (TAB_KEYS as readonly string[]).includes(tabParam)
+    ? tabParam
+    : 'overview'
+  const setActiveTab = (key: string) => {
+    const next = new URLSearchParams(searchParams)
+    if (key === 'overview') next.delete('tab')
+    else next.set('tab', key)
+    setSearchParams(next, { replace: true })
+  }
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
@@ -1385,6 +106,15 @@ export const EmployeeDetail: React.FC = () => {
   // only hrms.employee.read (DEPT_MANAGER, viewer HR) sees an Overview-only
   // shell instead of full PII.
   const canReadPii      = usePermission(P.HRMS_EMPLOYEE_PROFILE_READ)
+  const canManageOnboardingRecord = usePermission(P.HRMS_EMPLOYEE_WRITE)
+  // Raw codes, matching what the backend endpoints actually declare. The SDK's
+  // HRMS_EMPLOYEE_DOCUMENT_READ constant ('hrms.employee.document.read') is not
+  // checked by any controller — DocumentController declares 'hrms.document.read'.
+  const canReadAttendance  = usePermission('attendance.team.read')
+  const canReadDocuments   = usePermission('hrms.document.read')
+  const canReadLetters     = usePermission(P.HRMS_LETTERS_READ)
+  const canReadPerformance = usePermission('hrms.performance.read')
+  const canReadSkills      = usePermission('hrms.learning.skill.read')
 
   const extendMutation = useExtendProbation()
   const [showEdit,     setShowEdit]     = useState(false)
@@ -1406,13 +136,7 @@ export const EmployeeDetail: React.FC = () => {
   if (empError) {
     return (
       <div className="p-6">
-        <EmptyState
-          variant="error"
-          title="Failed to load employee"
-          description={(empError as Error).message}
-          primaryAction={{ label: 'Retry', onClick: () => navigate(0) }}
-          secondaryAction={{ label: 'Back', onClick: () => navigate('/hrms/employees') }}
-        />
+        <EmptyState icon={XCircle} title="Failed to load employee" description={(empError as Error).message} action={{ label: 'Retry', onClick: () => navigate(0) }} />
       </div>
     )
   }
@@ -1420,18 +144,27 @@ export const EmployeeDetail: React.FC = () => {
   if (!emp) {
     return (
       <div className="p-6">
-        <EmptyState
-          variant="filtered"
-          title="Employee not found"
-          primaryAction={{ label: 'Back to employees', onClick: () => navigate('/hrms/employees') }}
-        />
+        <EmptyState icon={FileText} title="Employee not found" description="Check the details and try again." action={{ label: 'Back to employees', onClick: () => navigate('/hrms/employees') }} />
       </div>
     )
   }
 
   const fullName   = [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(' ')
-  const initials   = (emp.firstName[0] ?? '') + (emp.lastName?.[0] ?? emp.firstName[1] ?? '')
+  // `firstName` was dereferenced directly (`emp.firstName[0]`). The `?? ''`
+  // guarded only an out-of-range INDEX, not a null/undefined firstName — so an
+  // employee record with no first name threw inside render and took the whole
+  // profile page down via the error boundary. Same bug class, and same fix, as
+  // HrAvatar on 2026-09-10: optional-chain every access and fall back to '?'
+  // rather than trusting the server's shape.
+  const initials   = ((emp.firstName?.[0] ?? '') + (emp.lastName?.[0] ?? emp.firstName?.[1] ?? '')) || '?'
   const statusInfo = STATUS_STYLE[emp.employmentStatus ?? ''] ?? { label: emp.employmentStatus ?? '—', tone: 'default' as const }
+
+  const openSeparationAction = (action: 'notice' | 'exit') => {
+    setNoticeStart(emp.noticeStartDate || attendanceDate())
+    setLastDay(emp.lastWorkingDay || '')
+    setReason(emp.exitReason || '')
+    setModal(action)
+  }
 
   const handleConfirm = async () => {
     try {
@@ -1443,6 +176,7 @@ export const EmployeeDetail: React.FC = () => {
 
   const handleNotice = async () => {
     if (!lastDay) { toast.error('Last working day is required'); return }
+    if (!noticeStart || lastDay < noticeStart) { toast.error('Last working day must be on or after the notice start date'); return }
     try {
       await noticeMutation.mutateAsync({ id: emp.id, noticeStart, lastWorkingDay: lastDay, reason: reason || undefined })
       toast.success('Notice period started')
@@ -1480,11 +214,34 @@ export const EmployeeDetail: React.FC = () => {
     ? Math.ceil((new Date(emp.probationEndDate).getTime() - Date.now()) / 86_400_000)
     : null
 
+  // Tabs are hidden only when the caller could not read ANY of the section's
+  // content. This is presentation, not authorization: every section re-checks
+  // its own permission and every endpoint enforces its own, so revealing a tab
+  // by hand-editing ?tab= shows a permission state, not data.
+  const tabs = [
+    { key: 'overview', label: 'Overview' },
+    ...(canReadPii || canReadIdentity ? [{ key: 'personal', label: 'Personal' }] : []),
+    { key: 'job', label: 'Job' },
+    ...(canReadAttendance ? [{ key: 'attendance', label: 'Attendance' }] : []),
+    ...(canReadSalary || canReadBank ? [{ key: 'payroll', label: 'Payroll' }] : []),
+    ...(canReadDocuments ? [{ key: 'documents', label: 'Documents' }] : []),
+    ...(canReadLetters ? [{ key: 'letters', label: 'Letters' }] : []),
+    ...(canReadPerformance || canReadSkills ? [{ key: 'performance', label: 'Performance' }] : []),
+    { key: 'exit', label: 'Exit' },
+  ]
+
   return (
     <div className="space-y-5">
       {/* Back nav */}
-      <button onClick={() => navigate('/hrms/employees')} className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors">
-        <ArrowLeft size={15} /> Back to Employees
+      {/* Reached from the directory, from ⌘K search, or from a shared link.
+          Going "back to Employees" is right for the first and wrong for the
+          others, so step back through history when there IS history and fall
+          back to the directory only on a cold open. */}
+      <button
+        onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/hrms/employees'))}
+        className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+      >
+        <ArrowLeft size={15} /> Back
       </button>
 
       {/* Profile card */}
@@ -1505,6 +262,7 @@ export const EmployeeDetail: React.FC = () => {
                     <Can HRMS_EMPLOYEE_WRITE>; this one was missed. The route
                     only needs employee.read, so a read-only viewer filled the
                     whole edit wizard and got a 403 on Save (2026-09-08 audit). */}
+                <EmployeeShiftAction employeeId={emp.id} companyId={emp.companyId} name={fullName} />
                 <Can code={P.HRMS_EMPLOYEE_WRITE}>
                   <button
                     onClick={() => setShowEdit(true)}
@@ -1549,7 +307,7 @@ export const EmployeeDetail: React.FC = () => {
               </button>
             )}
             {emp.employmentStatus === 'ACTIVE' && (
-              <button onClick={() => setModal('notice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-medium transition-colors">
+              <button onClick={() => openSeparationAction('notice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-medium transition-colors">
                 <AlertTriangle size={13} /> Start Notice
               </button>
             )}
@@ -1559,7 +317,7 @@ export const EmployeeDetail: React.FC = () => {
               </button>
             )}
             {emp.employmentStatus === 'NOTICE_PERIOD' && (
-              <button onClick={() => setModal('exit')} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg text-xs font-medium transition-colors">
+              <button onClick={() => openSeparationAction('exit')} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg text-xs font-medium transition-colors">
                 <LogOut size={13} /> Mark Exited
               </button>
             )}
@@ -1595,7 +353,7 @@ export const EmployeeDetail: React.FC = () => {
               <button onClick={() => { setExtendDate(emp.probationEndDate ?? ''); setModal('extend') }} className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-bold transition-colors">
                 Extend
               </button>
-              <button onClick={() => setModal('notice')} className="px-3 py-1.5 rounded-lg bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition-colors">
+              <button onClick={() => openSeparationAction('notice')} className="px-3 py-1.5 rounded-lg bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition-colors">
                 Begin exit
               </button>
             </div>
@@ -1603,84 +361,44 @@ export const EmployeeDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Profile tabs */}
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          {canReadPii     && <TabsTrigger value="contact">Contact</TabsTrigger>}
-          <TabsTrigger value="work">Work</TabsTrigger>
-          {canReadIdentity && <TabsTrigger value="identity">Identity</TabsTrigger>}
-          {canReadBank     && <TabsTrigger value="bank">Bank</TabsTrigger>}
-          {canReadSalary   && <TabsTrigger value="salary">Salary</TabsTrigger>}
-          {canReadPii     && <TabsTrigger value="education">Education</TabsTrigger>}
-          {canReadPii     && <TabsTrigger value="experience">Experience</TabsTrigger>}
-          {canReadPii     && <TabsTrigger value="dependents">Dependents</TabsTrigger>}
-          {canReadPii     && <TabsTrigger value="emergency">Emergency</TabsTrigger>}
-          <TabsTrigger value="documents">Documents</TabsTrigger>
-        </TabsList>
-
-        <div className="mt-4">
-          <TabsContent value="overview">
-            <OverviewTab emp={emp} departments={departments} designations={designations} branches={branches} companies={companies} />
-          </TabsContent>
-
-          {canReadPii && (
-            <TabsContent value="contact">
-              <ContactTab employeeId={emp.id} emp={emp} />
-            </TabsContent>
-          )}
-
-          <TabsContent value="work">
-            <WorkTab emp={emp} />
-          </TabsContent>
-
-          {canReadIdentity && (
-            <TabsContent value="identity">
-              <IdentityTab employeeId={emp.id} />
-            </TabsContent>
-          )}
-
-          {canReadBank && (
-            <TabsContent value="bank">
-              <BankTab employeeId={emp.id} />
-            </TabsContent>
-          )}
-
-          {canReadSalary && (
-            <TabsContent value="salary">
-              <SalaryTab employeeId={emp.id} companyId={emp.companyId} />
-            </TabsContent>
-          )}
-
-          {canReadPii && (
-            <TabsContent value="education">
-              <EducationTab employeeId={emp.id} />
-            </TabsContent>
-          )}
-
-          {canReadPii && (
-            <TabsContent value="experience">
-              <ExperienceTab employeeId={emp.id} />
-            </TabsContent>
-          )}
-
-          {canReadPii && (
-            <TabsContent value="dependents">
-              <DependentsTab employeeId={emp.id} />
-            </TabsContent>
-          )}
-
-          {canReadPii && (
-            <TabsContent value="emergency">
-              <EmergencyTab employeeId={emp.id} />
-            </TabsContent>
-          )}
-
-          <TabsContent value="documents">
-            <DocumentsTab employeeId={id ?? ''} />
-          </TabsContent>
-        </div>
-      </Tabs>
+      {/* Workspace tabs */}
+      <HrTabs
+        active={activeTab}
+        onChange={setActiveTab}
+        tabs={tabs}
+      />
+      <div className="mt-4">
+        {activeTab === 'overview' && (
+          <HrTabPanel tabKey="overview">
+            <EmployeeOverview emp={emp} onOpenTab={setActiveTab} />
+            {canManageOnboardingRecord && <OnboardingRecord employeeId={emp.id} />}
+          </HrTabPanel>
+        )}
+        {activeTab === 'personal' && (
+          <HrTabPanel tabKey="personal"><EmployeePersonal emp={emp} /></HrTabPanel>
+        )}
+        {activeTab === 'job' && (
+          <HrTabPanel tabKey="job"><EmployeeJob emp={emp} /></HrTabPanel>
+        )}
+        {activeTab === 'attendance' && (
+          <HrTabPanel tabKey="attendance"><EmployeeAttendance employeeId={emp.id} /></HrTabPanel>
+        )}
+        {activeTab === 'payroll' && (
+          <HrTabPanel tabKey="payroll"><EmployeePayroll emp={emp} /></HrTabPanel>
+        )}
+        {activeTab === 'documents' && (
+          <HrTabPanel tabKey="documents"><EmployeeDocuments employeeId={emp.id} /></HrTabPanel>
+        )}
+        {activeTab === 'letters' && (
+          <HrTabPanel tabKey="letters"><EmployeeLetters employeeId={emp.id} /></HrTabPanel>
+        )}
+        {activeTab === 'performance' && (
+          <HrTabPanel tabKey="performance"><EmployeePerformance employeeId={emp.id} /></HrTabPanel>
+        )}
+        {activeTab === 'exit' && (
+          <HrTabPanel tabKey="exit"><EmployeeExit emp={emp} /></HrTabPanel>
+        )}
+      </div>
 
       {/* Lifecycle modals */}
       {modal === 'confirm' && (
@@ -1714,7 +432,7 @@ export const EmployeeDetail: React.FC = () => {
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Reason</label>
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary" />
+              <input maxLength={100} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary" />
             </div>
           </div>
         </ActionModal>
@@ -1729,7 +447,7 @@ export const EmployeeDetail: React.FC = () => {
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Exit Reason</label>
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary" />
+              <input maxLength={100} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary" />
             </div>
           </div>
         </ActionModal>

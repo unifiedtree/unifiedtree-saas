@@ -57,6 +57,11 @@ public class GoalService {
         if (!goal.getEmployeeId().equals(employeeId)) {
             throw new BusinessRuleException("You can only update your own goals", "PERFORMANCE_GOAL_FORBIDDEN");
         }
+        if (goal.getTargetValue() != null) {
+            throw new BusinessRuleException(
+                    "Measured KPI progress must be recorded as a current value by your performance administrator",
+                    "KPI_PROGRESS_VALUE_REQUIRED");
+        }
         int progress = Math.max(0, Math.min(100, request.progress()));
         goal.setProgress(progress);
         if (progress >= 100) {
@@ -72,6 +77,7 @@ public class GoalService {
     private GoalResponse toResponse(Goal g) {
         return new GoalResponse(
                 g.getId(), g.getEmployeeId(), g.getCycleId(), g.getTitle(),
-                g.getDescription(), g.getWeight(), g.getProgress(), g.getStatus(), g.getCreatedAt());
+                g.getDescription(), g.getWeight(), g.getProgress(), g.getStatus(), g.getCreatedAt(),
+                g.getTargetValue(), g.getCurrentValue(), g.getUnit());
     }
 }

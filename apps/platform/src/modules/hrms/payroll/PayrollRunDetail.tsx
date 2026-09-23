@@ -8,7 +8,7 @@ import { Can, P } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import { HrTabs, HrTabPanel } from '@/shared/components/hr'
 import {
-  useRun, useRunEmployees, useProcessRun, useLockRun, useRunPayslip, useRunSkipped, downloadPayslipPdf,
+  useRun, useRunEmployees, useProcessRun, useLockRun, useReopenRun, useRunPayslip, useRunSkipped, downloadPayslipPdf,
   MONTHS, statusTone, inr, inr2,
   type RunEmployee,
 } from '../api/usePayrollRuns'
@@ -22,8 +22,9 @@ const RUN_TABS = [
 
 const PayslipBody: React.FC<{ runId: string; empId: string }> = ({ runId, empId }) => {
   const { toast } = useToast()
-  const { data: slip, isLoading } = useRunPayslip(runId, empId)
-  if (isLoading || !slip) return <CardSkeleton />
+  const { data: slip, isLoading, isError, refetch } = useRunPayslip(runId, empId)
+  if (isLoading) return <CardSkeleton />
+  if (isError || !slip) return <div role="alert" className="space-y-3 text-sm"><p>Unable to load this payslip. It may no longer be available for this run.</p><Button variant="ghost" onClick={() => refetch()}>Try again</Button></div>
 
   const Section: React.FC<{ title: string; lines: { code: string; name: string; amount: number }[] }> = ({ title, lines }) => (
     <div className="mt-4">
@@ -84,18 +85,21 @@ export const PayrollRunDetail: React.FC = () => {
   const { id = '' } = useParams()
   const nav = useNavigate()
   const { toast } = useToast()
-  const { data: run, isLoading } = useRun(id)
-  const { data: emps = [], isLoading: empsLoading } = useRunEmployees(id)
+  const { data: run, isLoading, isError: runError, refetch: refetchRun } = useRun(id)
+  const { data: emps = [], isLoading: empsLoading, isError: empsError, refetch: refetchEmployees } = useRunEmployees(id)
   const process = useProcessRun(id)
   const lock = useLockRun(id)
+  const reopen = useReopenRun(id)
 
   const [tab, setTab] = useState<'overview' | 'employees'>('overview')
   const [slipEmp, setSlipEmp] = useState<string | null>(null)
-  const [confirm, setConfirm] = useState<null | 'process' | 'lock'>(null)
+  const [confirm, setConfirm] = useState<null | 'process' | 'lock' | 'reopen'>(null)
+  const [reopenReason, setReopenReason] = useState('')
   const [showSkipped, setShowSkipped] = useState(false)
-  const { data: skipped = [] } = useRunSkipped(id, showSkipped)
+  const { data: skipped = [], isLoading: skippedLoading, isError: skippedError, refetch: refetchSkipped } = useRunSkipped(id, showSkipped)
 
-  if (isLoading || !run) return <div className="max-w-6xl mx-auto p-6 sm:p-8"><CardSkeleton /></div>
+  if (isLoading) return <div className="max-w-6xl mx-auto p-6 sm:p-8"><CardSkeleton /></div>
+  if (runError || !run) return <div role="alert" className="max-w-6xl mx-auto space-y-4 p-6 sm:p-8"><h1 className="text-xl font-semibold">Payroll run unavailable</h1><p>This run could not be loaded. Check your access or try again.</p><div className="flex gap-2"><Button onClick={() => refetchRun()}>Try again</Button><Button variant="ghost" onClick={() => nav('/hrms/payroll/runs')}>Payroll runs</Button></div></div>
 
   const runAction = () => {
     if (confirm === 'process') {
@@ -108,12 +112,19 @@ export const PayrollRunDetail: React.FC = () => {
         onSuccess: () => { setConfirm(null); toast('Payroll locked', 'success') },
         onError: (e) => toast((e as Error).message, 'error'),
       })
+    } else if (confirm === 'reopen' && reopenReason.trim()) {
+      reopen.mutate(reopenReason.trim(), {
+        onSuccess: () => { setConfirm(null); setReopenReason(''); toast('Payroll reopened for corrections', 'success') },
+        onError: (e) => toast((e as Error).message, 'error'),
+      })
     }
   }
 
   const confirmCopy = confirm === 'lock'
-    ? { title: 'Lock this payroll run?', desc: 'Locking freezes the numbers and makes payslips available to employees. This cannot be undone.' }
-    : { title: 'Process payroll?', desc: 'This recalculates every employee payslip from current attendance, leave and salary structures.' }
+    ? { title: 'Lock this payroll run?', desc: 'Locking freezes the numbers and makes payslips available to employees. An authorized admin can reopen an unpaid run with a recorded reason.' }
+    : confirm === 'reopen'
+      ? { title: 'Reopen payroll for corrections?', desc: 'This returns the run to draft so it can be recalculated. Posted bank batches must be cancelled first. Paid runs cannot be reopened.' }
+      : { title: 'Process payroll?', desc: 'This recalculates every employee payslip from current attendance, leave and salary structures.' }
 
   const empColumns: Column<RunEmployee>[] = [
     { key: 'code', header: 'Code', cell: (r) => <span className="font-mono text-xs">{r.employeeCode}</span> },
@@ -161,9 +172,9 @@ export const PayrollRunDetail: React.FC = () => {
             </>
           )}
           {run.status === 'LOCKED' && (
-            <span className="flex items-center gap-1.5 text-sm text-[#047857] font-medium">
+            <><span className="flex items-center gap-1.5 text-sm text-[#047857] font-medium">
               <CheckCircle2 size={16} /> Finalized · locked {fmtDate(run.lockedAt)}
-            </span>
+            </span><Can code={P.PAYROLL_RUNS_LOCK}><Button variant="ghost" onClick={() => { setReopenReason(''); setConfirm('reopen') }}>Reopen for corrections</Button></Can></>
           )}
         </div>
       </div>
@@ -210,7 +221,7 @@ export const PayrollRunDetail: React.FC = () => {
       {tab === 'employees' && (
         <HrTabPanel tabKey="employees">
           <div className="ut-card overflow-hidden">
-            <DataTable
+            {empsError ? <div role="alert" className="space-y-3 p-5 text-sm"><p>Unable to load employees for this run.</p><Button variant="ghost" onClick={() => refetchEmployees()}>Try again</Button></div> : <DataTable
               columns={empColumns}
               data={emps}
               getRowKey={(r) => r.employeeId}
@@ -218,7 +229,7 @@ export const PayrollRunDetail: React.FC = () => {
               onRowClick={(r) => setSlipEmp(r.employeeId)}
               emptyTitle="No payslips yet"
               emptyDescription={run.status === 'DRAFT' ? 'Process the run to generate payslips.' : 'No eligible employees for this period.'}
-            />
+            />}
           </div>
         </HrTabPanel>
       )}
@@ -228,16 +239,17 @@ export const PayrollRunDetail: React.FC = () => {
       </Drawer>
 
       <Modal open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)} title={confirmCopy.title} description={confirmCopy.desc} size="sm">
+        {confirm === 'reopen' && <label className="mt-4 block text-sm font-medium">Reason for reopening<textarea value={reopenReason} onChange={e => setReopenReason(e.target.value)} maxLength={500} rows={3} className="mt-2 w-full rounded-lg border border-border-default p-3 text-sm" placeholder="Describe the payroll correction" /></label>}
         <div className="flex justify-end gap-2 mt-6">
           <Button variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button>
-          <Button loading={process.isPending || lock.isPending} onClick={runAction}>Confirm</Button>
+          <Button loading={process.isPending || lock.isPending || reopen.isPending} disabled={confirm === 'reopen' && !reopenReason.trim()} onClick={runAction}>Confirm</Button>
         </div>
       </Modal>
 
       <Modal open={showSkipped} onOpenChange={setShowSkipped} title="Skipped employees"
         description="Not paid in this run — no current salary structure assigned." size="sm">
         <div className="mt-2 max-h-80 divide-y divide-slate-100 overflow-auto">
-          {skipped.length === 0 ? (
+          {skippedLoading ? <p className="py-3 text-sm" role="status">Loading skipped employees...</p> : skippedError ? <div role="alert" className="space-y-2 py-3 text-sm"><p>Unable to load skipped employees.</p><Button variant="ghost" onClick={() => refetchSkipped()}>Try again</Button></div> : skipped.length === 0 ? (
             <p className="py-3 text-sm text-slate-400">No skipped employees.</p>
           ) : skipped.map((e) => (
             <div key={e.employeeId} className="flex items-center justify-between py-2 text-sm">

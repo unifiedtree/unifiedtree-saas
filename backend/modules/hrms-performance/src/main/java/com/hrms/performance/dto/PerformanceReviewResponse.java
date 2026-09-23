@@ -19,5 +19,6 @@ public record PerformanceReviewResponse(
         String strengths,
         String improvements,
         Instant submittedAt,
-        Instant createdAt
+        Instant createdAt,
+        String cycleName
 ) {}

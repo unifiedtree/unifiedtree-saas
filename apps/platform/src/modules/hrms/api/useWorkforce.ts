@@ -26,7 +26,9 @@ export interface WorkforceEmployee {
   dateOfJoining?: string
   probationEndDate?: string
   confirmationDate?: string
+  noticeStartDate?: string
   lastWorkingDay?: string
+  exitReason?: string
   ctcAnnual?: number
   // ── Fields the backend has always returned but this type never declared ──
   //
@@ -129,6 +131,11 @@ export interface CreateWorkforceEmployeePayload {
 }
 
 export interface UpdateWorkforceEmployeePayload {
+  employmentStatus?: EmploymentStatus
+  probationEndDate?: string
+  noticeStartDate?: string
+  lastWorkingDay?: string
+  exitReason?: string
   firstName?: string
   middleName?: string
   lastName?: string

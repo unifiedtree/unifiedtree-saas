@@ -3,8 +3,8 @@ import { apiJson } from '@/core/api/client'
 
 // Mirrors backend com.hrms.performance.enums
 export type CycleStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED'
-export type ReviewStatus = 'PENDING' | 'SUBMITTED' | 'ACKNOWLEDGED'
-export type GoalStatus = 'ACTIVE' | 'COMPLETED' | 'DROPPED'
+export type ReviewStatus = 'PENDING' | 'IN_PROGRESS' | 'MISSED' | 'SUBMITTED' | 'ACKNOWLEDGED'
+export type GoalStatus = 'ACTIVE' | 'AT_RISK' | 'COMPLETED' | 'DROPPED'
 
 export interface ReviewCycle {
   id: string
@@ -19,6 +19,7 @@ export interface ReviewCycle {
 export interface PerformanceReview {
   id: string
   cycleId: string
+  cycleName?: string
   employeeId: string
   employeeName?: string
   employeeCode?: string
@@ -42,6 +43,9 @@ export interface Goal {
   progress: number
   status: GoalStatus
   createdAt: string
+  targetValue?: number | null
+  currentValue?: number | null
+  unit?: string | null
 }
 
 export interface Page<T> {
@@ -229,5 +233,58 @@ export function usePerformanceDirectory(filters: PerformanceDirectoryFilters = {
     queryKey: ['hrms', 'performance', 'directory', departmentId ?? '', search ?? '', page, size],
     queryFn: () => apiJson<PerformanceDirectoryPage>(`/v1/performance/employees?${qs.toString()}`),
     staleTime: 30_000,
+  })
+}
+
+// ── KPIs / goals owned by ONE employee ───────────────────────────────────────
+//
+// GET /v1/performance/kpis already accepts `ownerId` (KpiController.list) and is
+// gated on hrms.performance.read — it simply had no caller in the SPA. This is
+// the only per-employee performance READ that exists: review history has no
+// employeeId filter on the admin route (only the JWT-bound /reviews/my), so the
+// employee profile deliberately shows goals + skills and says so, rather than
+// paging the whole org's reviews to find one person's.
+
+/** Mirrors KpiService.KpiRowDto. */
+export interface EmployeeKpiRow {
+  id: string
+  ownerId: string
+  ownerName?: string
+  ownerCode?: string
+  title: string
+  description?: string
+  category?: string
+  targetValue?: number
+  currentValue?: number
+  unit?: string
+  direction?: string
+  progressPct?: number
+  weight?: number
+  dueDate?: string
+  status?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/** Mirrors KpiService.PageDto — note `items`, NOT `content`. */
+export interface KpiPage {
+  items: EmployeeKpiRow[]
+  page: number
+  size: number
+  total: number
+}
+
+export function useEmployeeKpis(
+  employeeId: string | undefined,
+  opts?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ['performance', 'kpis', 'owner', employeeId],
+    queryFn: () => apiJson<KpiPage>(
+      `/v1/performance/kpis?ownerId=${employeeId}&page=0&size=50`,
+    ),
+    enabled: (opts?.enabled ?? true) && !!employeeId,
+    staleTime: 60_000,
+    retry: false,
   })
 }

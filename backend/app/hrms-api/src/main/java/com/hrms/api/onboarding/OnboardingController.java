@@ -3,6 +3,7 @@ package com.hrms.api.onboarding;
 import com.hrms.employee.entity.OnboardingInstance;
 import com.hrms.employee.entity.OnboardingInstanceTask;
 import com.hrms.employee.entity.OnboardingTask;
+import com.hrms.employee.entity.OnboardingAsset;
 import com.hrms.employee.entity.OnboardingTemplate;
 import com.hrms.employee.service.OnboardingService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,6 +33,35 @@ public class OnboardingController {
 
     public OnboardingController(OnboardingService onboardingService) {
         this.onboardingService = onboardingService;
+    }
+
+
+    @GetMapping("/assets")
+    @Operation(summary = "List onboarding and employee assets")
+    @PreAuthorize("hasAnyAuthority('hrms.onboarding.asset.read','hrms.onboarding.instance.read')")
+    public List<OnboardingAsset> listAssets(@RequestParam(required = false) UUID companyId) {
+        return onboardingService.listAssets(companyId);
+    }
+
+    @PostMapping("/assets")
+    @Operation(summary = "Create an asset record")
+    @PreAuthorize("hasAnyAuthority('hrms.onboarding.asset.write','hrms.onboarding.instance.write')")
+    public ResponseEntity<OnboardingAsset> createAsset(@Valid @RequestBody OnboardingAsset asset) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(onboardingService.createAsset(asset));
+    }
+
+    @PostMapping("/assets/{assetId}/assign")
+    @Operation(summary = "Assign an asset to an employee/onboarding run")
+    @PreAuthorize("hasAnyAuthority('hrms.onboarding.asset.write','hrms.onboarding.instance.write')")
+    public OnboardingAsset assignAsset(@PathVariable UUID assetId, @Valid @RequestBody AssignAssetRequest req) {
+        return onboardingService.assignAsset(assetId, req.employeeId(), req.onboardingInstanceId(), req.assignedAt());
+    }
+
+    @PostMapping("/assets/{assetId}/return")
+    @Operation(summary = "Mark an asset as returned")
+    @PreAuthorize("hasAnyAuthority('hrms.onboarding.asset.write','hrms.onboarding.instance.write')")
+    public OnboardingAsset returnAsset(@PathVariable UUID assetId, @RequestBody(required = false) ReturnAssetRequest req) {
+        return onboardingService.returnAsset(assetId, req == null ? null : req.notes());
     }
 
     // ── Templates ─────────────────────────────────────────────────────────
@@ -210,6 +240,10 @@ public class OnboardingController {
     }
 
     // ── Request records ───────────────────────────────────────────────────
+
+    public record AssignAssetRequest(@NotNull UUID employeeId, UUID onboardingInstanceId, LocalDate assignedAt) {}
+
+    public record ReturnAssetRequest(String notes) {}
 
     public record CreateInstanceRequest(
             @NotNull UUID employeeId,

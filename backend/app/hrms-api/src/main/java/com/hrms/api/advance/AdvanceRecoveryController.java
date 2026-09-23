@@ -24,26 +24,31 @@ import java.util.UUID;
 public class AdvanceRecoveryController {
 
     private final AdvanceRecoveryService service;
+    private final com.hrms.advance.service.AdvanceService advances;
 
-    public AdvanceRecoveryController(AdvanceRecoveryService service) {
+    public AdvanceRecoveryController(AdvanceRecoveryService service, com.hrms.advance.service.AdvanceService advances) {
         this.service = service;
+        this.advances = advances;
     }
 
     @GetMapping("/{id}/schedule")
     @PreAuthorize("hasAuthority('hrms.advance.read')")
-    public List<AdvanceRecoveryService.ScheduleRowDto> schedule(@PathVariable UUID id) {
+    public List<AdvanceRecoveryService.ScheduleRowDto> schedule(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        requireVisible(id, jwt);
         return service.listSchedule(TenantContext.getTenantId(), id);
     }
 
     @GetMapping("/{id}/ledger")
     @PreAuthorize("hasAuthority('hrms.advance.read')")
-    public List<AdvanceRecoveryService.LedgerRowDto> ledger(@PathVariable UUID id) {
+    public List<AdvanceRecoveryService.LedgerRowDto> ledger(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        requireVisible(id, jwt);
         return service.listLedger(TenantContext.getTenantId(), id);
     }
 
     @GetMapping("/{id}/summary")
     @PreAuthorize("hasAuthority('hrms.advance.read')")
-    public AdvanceRecoveryService.RecoverySummaryDto summary(@PathVariable UUID id) {
+    public AdvanceRecoveryService.RecoverySummaryDto summary(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        requireVisible(id, jwt);
         return service.summary(TenantContext.getTenantId(), id);
     }
 
@@ -53,6 +58,7 @@ public class AdvanceRecoveryController {
             @PathVariable UUID id,
             @Valid @RequestBody AdvanceRecoveryService.ForecloseRequest req,
             @AuthenticationPrincipal Jwt jwt) {
+        requireVisible(id, jwt);
         return service.foreclose(TenantContext.getTenantId(), id, req, actorId(jwt));
     }
 
@@ -62,6 +68,7 @@ public class AdvanceRecoveryController {
             @PathVariable UUID id,
             @Valid @RequestBody AdvanceRecoveryService.WriteOffRequest req,
             @AuthenticationPrincipal Jwt jwt) {
+        requireVisible(id, jwt);
         return service.writeOff(TenantContext.getTenantId(), id, req, actorId(jwt));
     }
 
@@ -71,7 +78,30 @@ public class AdvanceRecoveryController {
             @PathVariable UUID id,
             @Valid @RequestBody AdvanceRecoveryService.SkipMonthRequest req,
             @AuthenticationPrincipal Jwt jwt) {
+        var advance = advances.getRequest(id);
+        if (!canReadAll(jwt) && !java.util.Objects.equals(advance.approverId(), employeeId(jwt))) {
+            throw new org.springframework.security.access.AccessDeniedException("This advance is not routed to you for approval.");
+        }
         return service.skipMonth(TenantContext.getTenantId(), id, req, actorId(jwt));
+    }
+
+    private void requireVisible(UUID id, Jwt jwt) {
+        var advance = advances.getRequest(id);
+        UUID employeeId = employeeId(jwt);
+        if (!canReadAll(jwt) && !java.util.Objects.equals(advance.employeeId(), employeeId)
+                && !java.util.Objects.equals(advance.approverId(), employeeId)) {
+            throw new org.springframework.security.access.AccessDeniedException("Not permitted to view this advance.");
+        }
+    }
+
+    private static boolean canReadAll(Jwt jwt) {
+        var permissions = jwt.getClaimAsStringList("permissions");
+        return permissions != null && permissions.contains("hrms.advance.disburse");
+    }
+
+    private static UUID employeeId(Jwt jwt) {
+        String employee = jwt.getClaimAsString("employee_id");
+        return UUID.fromString(employee == null ? jwt.getSubject() : employee);
     }
 
     private static UUID actorId(Jwt jwt) {

@@ -8,7 +8,7 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
 import {
-  HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrAvatar,
+  HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel,
 } from '@/shared/components/hr'
 import { useTeamDashboard } from '../api/useAttendance'
 import { useAttendanceSummaryReport, useLateMarksReport } from '../api/useReports'
@@ -38,6 +38,54 @@ const STATUS_SLICES: { key: string; label: string; color: string }[] = [
   { key: 'notMarked',    label: 'Not Marked',  color: CHART.gray },
 ]
 
+
+function AttendanceCalendarTab() {
+  return (
+    <div className="ut-card p-5">
+      <div className="flex justify-between items-center mb-5">
+        <h3 className="m-0 text-base font-semibold">May 2026</h3>
+        <div className="flex gap-2">
+          <button className="px-3 py-1 bg-gray-100 rounded text-sm hover:bg-gray-200">Prev</button>
+          <button className="px-3 py-1 bg-gray-100 rounded text-sm hover:bg-gray-200">Next</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-2 text-center">
+        {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(d => (
+          <div key={d} className="font-semibold text-xs text-gray-500">{d}</div>
+        ))}
+        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
+          <div className="text-right text-sm font-semibold">1</div>
+          <div className="mt-auto text-[11px] bg-green-500 text-white rounded p-0.5">Present</div>
+        </div>
+        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
+          <div className="text-right text-sm font-semibold">2</div>
+          <div className="mt-auto text-[11px] bg-green-500 text-white rounded p-0.5">Present</div>
+        </div>
+        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
+          <div className="text-right text-sm font-semibold">3</div>
+          <div className="mt-auto text-[11px] bg-red-500 text-white rounded p-0.5">Absent</div>
+        </div>
+        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
+          <div className="text-right text-sm font-semibold">4</div>
+          <div className="mt-auto text-[11px] bg-orange-500 text-white rounded p-0.5">Half Day</div>
+        </div>
+        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
+          <div className="text-right text-sm font-semibold">5</div>
+          <div className="mt-auto text-[11px] bg-blue-500 text-white rounded p-0.5">WFH</div>
+        </div>
+        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
+          <div className="text-right text-sm font-semibold">6</div>
+          <div className="mt-auto text-[11px] text-gray-500 text-center">Weekend</div>
+        </div>
+        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
+          <div className="text-right text-sm font-semibold">7</div>
+          <div className="mt-auto text-[11px] text-gray-500 text-center">Weekend</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export const AttendanceAnalytics: React.FC = () => {
   const today = format(new Date(), 'yyyy-MM-dd')
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
@@ -55,6 +103,13 @@ export const AttendanceAnalytics: React.FC = () => {
     useAttendanceSummaryReport(companyId || null, monthStart, today)
   const { data: lateMarks = [], isLoading: lateLoading } =
     useLateMarksReport(companyId || null, monthStart, today)
+
+  
+  const [tab, setTab] = useState<'dash' | 'cal'>('dash')
+  const tabs = [
+    { key: 'dash', label: 'Dashboard Overview' },
+    { key: 'cal', label: 'Attendance Calendar' }
+  ]
 
   const counts = dashboard?.counts
 
@@ -108,7 +163,13 @@ export const AttendanceAnalytics: React.FC = () => {
         }
       />
 
-      {/* ── KPI cards (today, from team dashboard) ─────────────────────────────── */}
+
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as any)} />
+      
+      <div className="mt-6">
+        {tab === 'dash' && (
+          <HrTabPanel tabKey="dash">
+                  {/* ── KPI cards (today, from team dashboard) ─────────────────────────────── */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <HrStatCard
           icon={<CheckCircle2 size={18} />}
@@ -271,6 +332,15 @@ export const AttendanceAnalytics: React.FC = () => {
           </tbody>
         </table>
       </TableCard>
+          </HrTabPanel>
+        )}
+        {tab === 'cal' && (
+          <HrTabPanel tabKey="cal">
+            <AttendanceCalendarTab />
+          </HrTabPanel>
+        )}
+      </div>
+
     </div>
   )
 }

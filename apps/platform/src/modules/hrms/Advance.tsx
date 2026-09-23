@@ -1,44 +1,49 @@
 import React, { useMemo, useState } from 'react'
-import { Check, X, Wallet, Clock, BadgeCheck, HandCoins, Banknote } from 'lucide-react'
+import { Wallet, Clock, BadgeCheck, HandCoins } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
-import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
+import { AdvanceAdmin, AdvanceDecisionActions, AdvanceError } from './advance/AdvanceAdmin'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
+import { DataTable } from '@/shared/components/DataTable'
 import {
-  useMyAdvances, usePendingAdvanceApprovals, useRequestAdvance, useAdvanceDecision, useDisburseAdvance,
-  inr, type AdvanceStatus,
+  useMyAdvances, usePendingAdvanceApprovals, useRequestAdvance,
+  inr, type AdvanceStatus, type AdvanceRequest,
 } from './api/useAdvance'
 
 const STATUS_TONE: Record<AdvanceStatus, PillTone> = {
   REQUESTED: 'warn', APPROVED: 'ok', REJECTED: 'red', DISBURSED: 'teal', CLOSED: 'gray',
 }
 
-type Tab = 'my' | 'request' | 'approvals'
+type Tab = 'my' | 'request' | 'approvals' | 'company'
 
 export const Advance: React.FC = () => {
+  const canRead = usePermission('hrms.advance.read')
   const canRequest = usePermission('hrms.advance.request.self')
   const canApprove = usePermission('hrms.advance.approve')
   const canDisburse = usePermission('hrms.advance.disburse')
-  const [tab, setTab] = useState<Tab>('my')
+  const [tab, setTab] = useState<Tab>(canRead ? 'company' : canApprove || canDisburse ? 'approvals' : 'my')
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'my', label: 'My Advances' },
+    ...(canRead ? [{ key: 'company' as Tab, label: canDisburse ? 'Company Advances' : 'Assigned Advances' }] : []),
+    ...(canRequest ? [{ key: 'my' as Tab, label: 'My Advances' }] : []),
     ...(canRequest ? [{ key: 'request' as Tab, label: 'Request Advance' }] : []),
     ...(canApprove || canDisburse ? [{ key: 'approvals' as Tab, label: 'Approvals' }] : []),
   ]
 
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
+    <div className="mx-auto max-w-7xl p-6 sm:p-8">
       <HrPageHeader crumb="Advance Management" title="Salary Advances" subtitle="Request, approve, and disburse employee salary advances" />
 
       <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
-      {tab === 'my' && <HrTabPanel tabKey="my"><MyAdvancesTab /></HrTabPanel>}
+      {tab === 'company' && canRead && <HrTabPanel tabKey="company"><AdvanceAdmin companyWide={canDisburse} /></HrTabPanel>}
+      {tab === 'my' && canRequest && <HrTabPanel tabKey="my"><MyAdvancesTab /></HrTabPanel>}
       {tab === 'request' && canRequest && <HrTabPanel tabKey="request"><RequestTab onSubmitted={() => setTab('my')} /></HrTabPanel>}
-      {tab === 'approvals' && (canApprove || canDisburse) && <HrTabPanel tabKey="approvals"><ApprovalsTab canApprove={canApprove} canDisburse={canDisburse} /></HrTabPanel>}
+      {tab === 'approvals' && (canApprove || canDisburse) && <HrTabPanel tabKey="approvals"><ApprovalsTab /></HrTabPanel>}
     </div>
   )
 }
@@ -46,7 +51,9 @@ export const Advance: React.FC = () => {
 // ── My Advances ────────────────────────────────────────────────────────────────
 
 function MyAdvancesTab() {
-  const { data, isLoading, isError, refetch } = useMyAdvances(0, 200)
+  const [page, setPage] = useState(0)
+  const { data, isLoading, isError, refetch } = useMyAdvances(page, 20)
+  useClampedPage(page, data?.totalPages, setPage)
   const advances = data?.content ?? []
   const total = data?.totalElements ?? advances.length
 
@@ -72,38 +79,25 @@ function MyAdvancesTab() {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <HrStatCard icon={<HandCoins size={18} />} color="blue" value={total} label="Total Requests" loading={isLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending" loading={isLoading} />
-        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved" loading={isLoading} />
-        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.outstanding)} label="Outstanding" loading={isLoading} />
+        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending on this page" loading={isLoading} />
+        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved on this page" loading={isLoading} />
+        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.outstanding)} label="Outstanding on this page" loading={isLoading} />
       </div>
 
-      <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Amount</th>
-              <th>Monthly</th>
-              <th>Months</th>
-              <th>Status</th>
-              <th className="hidden sm:table-cell">Requested</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(4)].map((_, i) => <tr key={i}><td colSpan={5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : advances.length === 0 ? (
-              <tr><td colSpan={5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No advance requests yet</p><p className="mt-1 text-xs text-text-tertiary">Use “Request Advance” to raise your first request.</p></td></tr>
-            ) : advances.map((a) => (
-              <tr key={a.id}>
-                <td className="font-semibold text-text-primary">{inr(a.amount)}</td>
-                <td className="text-text-secondary">{inr(a.monthlyDeduction)}</td>
-                <td className="text-text-secondary">{a.repaymentMonths}</td>
-                <td><HrStatusPill tone={STATUS_TONE[a.status]}>{a.status}</HrStatusPill></td>
-                <td className="hidden sm:table-cell text-text-secondary">{a.createdAt ? format(new Date(a.createdAt), 'd MMM yyyy') : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <TableCard footer={data && hrPaginationFooter({ page, pageSize: 20, totalElements: data.totalElements, totalPages: data.totalPages, onPageChange: setPage })}>
+        <DataTable
+          columns={[
+            { key: 'amount', header: 'Amount', render: (a: any) => <span className="font-semibold text-text-primary">{inr(a.amount)}</span> },
+            { key: 'monthly', header: 'Monthly', render: (a: any) => <span className="text-text-secondary">{inr(a.monthlyDeduction)}</span> },
+            { key: 'months', header: 'Months', render: (a: any) => <span className="text-text-secondary">{a.repaymentMonths}</span> },
+            { key: 'status', header: 'Status', render: (a: any) => <HrStatusPill tone={STATUS_TONE[a.status as AdvanceStatus]}>{a.status}</HrStatusPill> },
+            { key: 'requested', header: 'Requested', render: (a: any) => <span className="text-text-secondary">{a.createdAt ? format(new Date(a.createdAt), 'd MMM yyyy') : '—'}</span> }
+          ]}
+          data={advances}
+          keyField="id"
+          loading={isLoading}
+          emptyMessage="No advance requests yet. Use 'Request Advance' to raise your first request."
+        />
       </TableCard>
     </div>
   )
@@ -124,7 +118,7 @@ function RequestTab({ onSubmitted }: { onSubmitted: () => void }) {
 
   const handleSubmit = async () => {
     if (amountNum <= 0) { toast('Enter an advance amount', 'error'); return }
-    if (monthsNum < 1) { toast('Repayment must be at least 1 month', 'error'); return }
+    if (!Number.isInteger(Number(months)) || monthsNum < 1 || monthsNum > 60) { toast('Repayment must be between 1 and 60 whole months', 'error'); return }
     try {
       await request.mutateAsync({
         amount: amountNum,
@@ -138,7 +132,7 @@ function RequestTab({ onSubmitted }: { onSubmitted: () => void }) {
     }
   }
 
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
+  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20'
 
   return (
     <div className="max-w-2xl">
@@ -176,92 +170,22 @@ function RequestTab({ onSubmitted }: { onSubmitted: () => void }) {
 
 // ── Approvals ──────────────────────────────────────────────────────────────
 
-function ApprovalsTab({ canApprove, canDisburse }: { canApprove: boolean; canDisburse: boolean }) {
-  const { toast } = useToast()
-  const confirm = useConfirmDialog()
-  const { data, isLoading, isError, refetch } = usePendingAdvanceApprovals(0)
-  const decide = useAdvanceDecision()
-  const disburse = useDisburseAdvance()
-  const advances = data?.content ?? []
-
-  const onDecide = async (id: string, approved: boolean) => {
-    let comment: string | undefined
-    if (!approved) {
-      // Cancel must abort the rejection, not fall through to it — see the
-      // matching fix in Expense.tsx / Compliance.tsx (2026-09-08 audit).
-      const answer = window.prompt('Reason for rejection (optional):')
-      if (answer === null) return
-      comment = answer
-    }
-    try {
-      await decide.mutateAsync({ id, approved, comment })
-      toast(approved ? 'Advance approved' : 'Advance rejected', 'success')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed', 'error')
-    }
-  }
-
-  const onDisburse = async (a: { id: string; amount: number; employeeName?: string }) => {
-    const who = a.employeeName || 'this employee'
-    const ok = await confirm({
-      title: `Disburse ${inr(a.amount)} to ${who}?`,
-      body: 'This records the advance as paid out and starts the salary-recovery schedule. This cannot be undone.',
-      confirmLabel: 'Disburse',
-      tone: 'danger',
-    })
-    if (!ok) return
-    try {
-      await disburse.mutateAsync(a.id)
-      toast('Advance disbursed', 'success')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed', 'error')
-    }
-  }
-
-  return (
-    <TableCard>
-      <table className="hr-table">
-        <thead>
-          <tr>
-            <th>Employee</th>
-            <th>Amount</th>
-            <th>Monthly</th>
-            <th>Status</th>
-            <th className="text-right">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {isLoading ? (
-            [...Array(3)].map((_, i) => <tr key={i}><td colSpan={5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-          ) : isError ? (
-            // There was no error branch: a 403 rendered as "Nothing awaiting
-            // approval" forever (2026-09-08 audit).
-            <tr><td colSpan={5} className="py-10 text-center"><p className="text-sm font-semibold text-red-700">Couldn&rsquo;t load the approvals queue</p><button type="button" onClick={() => refetch()} className="mt-2 text-xs font-medium text-[#047857] underline underline-offset-2">Try again</button></td></tr>
-          ) : advances.length === 0 ? (
-            <tr><td colSpan={5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">Nothing awaiting action</p><p className="mt-1 text-xs text-text-tertiary">Requested advances wait here for approval; approved ones wait here to be disbursed.</p></td></tr>
-          ) : advances.map((a, i) => (
-            <tr key={a.id}>
-              <td><HrAvatar name={a.employeeName || 'Employee'} sub={a.employeeCode} seed={i} /></td>
-              <td className="font-semibold text-text-primary">{inr(a.amount)}</td>
-              <td className="text-text-secondary">{inr(a.monthlyDeduction)}</td>
-              <td><HrStatusPill tone={STATUS_TONE[a.status]}>{a.status}</HrStatusPill></td>
-              <td>
-                <div className="flex items-center justify-end gap-2">
-                  {a.status === 'REQUESTED' && canApprove && (
-                    <>
-                      <HrButton size="sm" onClick={() => onDecide(a.id, true)} disabled={decide.isPending}><Check size={14} /> Approve</HrButton>
-                      <HrButton size="sm" variant="ghost" onClick={() => onDecide(a.id, false)} disabled={decide.isPending}><X size={14} /> Reject</HrButton>
-                    </>
-                  )}
-                  {a.status === 'APPROVED' && canDisburse && (
-                    <HrButton size="sm" onClick={() => onDisburse(a)} disabled={disburse.isPending} aria-label={`Disburse advance of ${inr(a.amount)} to ${a.employeeName || 'employee'}`}><Banknote size={14} /> Disburse</HrButton>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+function ApprovalsTab() {
+  const [page, setPage] = useState(0)
+  const query = usePendingAdvanceApprovals(page)
+  useClampedPage(page, query.data?.totalPages, setPage)
+  if (query.isError) return <AdvanceError message="Unable to load advances awaiting action." retry={() => query.refetch()} />
+  return <div className="space-y-4">
+    <p className="text-sm text-text-secondary">Requested advances wait for approval. Approved advances remain here until their payment is recorded.</p>
+    <TableCard footer={query.data && hrPaginationFooter({ page, pageSize: 20, totalElements: query.data.totalElements, totalPages: query.data.totalPages, onPageChange: setPage })}>
+      <DataTable<AdvanceRequest> columns={[
+        { key: 'employee', header: 'Employee', render: a => <HrAvatar name={a.employeeName || 'Employee'} sub={a.employeeCode} /> },
+        { key: 'amount', header: 'Amount', render: a => <span className="font-semibold">{inr(a.amount)}</span> },
+        { key: 'reason', header: 'Reason', render: a => <p className="max-w-xs whitespace-pre-wrap text-sm text-text-secondary">{a.reason || 'No reason provided'}</p> },
+        { key: 'monthly', header: 'Monthly', render: a => <span>{inr(a.monthlyDeduction)}</span> },
+        { key: 'status', header: 'Status', render: a => <HrStatusPill tone={STATUS_TONE[a.status]}>{a.status}</HrStatusPill> },
+        { key: 'action', header: 'Action', render: a => <AdvanceDecisionActions advance={a} /> },
+      ]} data={query.data?.content ?? []} keyField="id" loading={query.isPending} emptyMessage="No advances awaiting action." />
     </TableCard>
-  )
+  </div>
 }

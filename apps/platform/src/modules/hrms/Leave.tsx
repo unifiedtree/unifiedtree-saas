@@ -3,11 +3,13 @@ import { useSearchParams } from 'react-router-dom'
 import { Calendar, Plus, CheckCircle, XCircle, Clock, FileText, Check, X as XIcon } from 'lucide-react'
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
+import { HrPagination } from '@/shared/components/HrPagination'
 import { useToast } from '@/shared/hooks/useToast'
 import { useVisibleTabs } from '@/shared/hooks/useVisibleTabs'
 import { useRoles } from '@/shared/hooks/useRoles'
 import { usePermission, Can, P } from '@unifiedtree/sdk'
-import { CardSkeleton, Skeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { CardSkeleton, Skeleton } from '@unifiedtree/ui-kit'
+import { EmptyState } from '@/shared/components/EmptyState'
 import {
   useMyLeaves, useMyBalances, useLeaveTypes, usePendingApprovals, useApprovalsHistory,
   useApplyLeave, useLeaveDecision, useCancelLeave,
@@ -34,7 +36,10 @@ const STATUS_STYLE: Record<LeaveApprovalStatus, { label: string; color: string; 
 function MyLeavesTab() {
   const { toast } = useToast()
   const [page, setPage] = useState(0)
-  const { data, isLoading, error: leavesError, refetch: refetchLeaves } = useMyLeaves(page)
+  // Rows-per-page, seeded from the hook's own default so the initial
+  // request is unchanged.
+  const [pageSize, setPageSize] = useState(20)
+  const { data, isLoading, error: leavesError, refetch: refetchLeaves } = useMyLeaves(page, pageSize)
   const cancelLeave = useCancelLeave()
 
   const leaves = data?.content ?? []
@@ -54,7 +59,7 @@ function MyLeavesTab() {
       {isLoading ? (
         <CardSkeleton />
       ) : leavesError ? (
-        <EmptyState variant="error" title="Failed to load leaves" description={(leavesError as Error).message} primaryAction={{ label: 'Retry', onClick: () => refetchLeaves() }} />
+        <EmptyState icon={XCircle} title="Failed to load leaves" description={(leavesError as Error).message} action={{ label: 'Retry', onClick: () => refetchLeaves() }} />
       ) : leaves.length === 0 ? (
         <div className="text-center py-16">
           <FileText size={32} className="mx-auto mb-3 text-text-tertiary" />
@@ -94,13 +99,20 @@ function MyLeavesTab() {
         })
       )}
 
-      {total > 20 && (
-        <div className="flex justify-center gap-3 pt-2">
-          <button onClick={() => setPage((p) => p - 1)} disabled={page === 0} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Prev</button>
-          <span className="text-xs text-text-secondary py-1.5">Page {page + 1}</span>
-          <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * 20 >= total} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Next</button>
-        </div>
-      )}
+      {/* Shared pager. The hand-rolled one it replaces hardcoded the page size
+          as a literal 20 in TWO places (`total > 20` and `(page + 1) * 20`),
+          which stopped being true the moment rows-per-page became selectable.
+          /v1/leave/my returns only `totalElements`, so totalPages is derived. */}
+      <div className="pt-2">
+        <HrPagination
+          page={page}
+          pageSize={pageSize}
+          totalElements={total}
+          totalPages={Math.max(1, Math.ceil(total / pageSize))}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </div>
     </div>
   )
 }
@@ -439,7 +451,7 @@ function BalancesTab() {
       {isLoading ? (
         <CardSkeleton />
       ) : balError ? (
-        <EmptyState variant="error" title="Failed to load balances" primaryAction={{ label: 'Retry', onClick: () => refetchBal() }} />
+        <EmptyState icon={XCircle} title="Failed to load balances" description="An error occurred while loading leave balances." action={{ label: 'Retry', onClick: () => refetchBal() }} />
       ) : balances.length === 0 ? (
         <div className="text-center py-16">
           <Calendar size={32} className="mx-auto mb-3 text-text-tertiary" />
@@ -525,7 +537,7 @@ function ApprovalHistoryTab() {
       {isLoading ? (
         <CardSkeleton />
       ) : error ? (
-        <EmptyState variant="error" title="Failed to load history" description={(error as Error).message} primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
+        <EmptyState icon={XCircle} title="Failed to load history" description={(error as Error).message} action={{ label: 'Retry', onClick: () => refetch() }} />
       ) : rows.length === 0 ? (
         <div className="text-center py-16">
           <FileText size={32} className="mx-auto mb-3 text-text-tertiary" />
@@ -661,7 +673,7 @@ function ApprovalsTab() {
       {anyLoading ? (
         <CardSkeleton />
       ) : hardError ? (
-        <EmptyState variant="error" title="Failed to load approvals" primaryAction={{ label: 'Retry', onClick: () => { refetchApprovals(); refetchWfh() } }} />
+        <EmptyState icon={XCircle} title="Failed to load approvals" description="An error occurred while loading approvals." action={{ label: 'Retry', onClick: () => { refetchApprovals(); refetchWfh() } }} />
       ) : approvals.length === 0 ? (
         <div className="text-center py-16">
           <CheckCircle size={32} className="mx-auto mb-3 text-text-tertiary" />
@@ -792,16 +804,70 @@ function ApprovalsTab() {
 const ALL_TABS = [
   { key: 'my',        label: 'My Leaves' },
   { key: 'apply',     label: 'Apply' },
-  { key: 'balances',  label: 'Balances' },
-  { key: 'approvals', label: 'Approvals',   requires: P.HRMS_LEAVE_APPROVE_L1 },
+  { key: 'balances',  label: 'Balances & Comp-offs' },
+  { key: 'approvals', label: 'Applications & Approvals', requires: P.HRMS_LEAVE_APPROVE_L1 },
   // Sits next to Approvals and shares its gate: a decided leave used to vanish
   // from the product entirely once it left the pending queue.
   { key: 'history',   label: 'History',     requires: P.HRMS_LEAVE_APPROVE_L1 },
+  { key: 'calendar',  label: 'Leave Calendar' },
   { key: 'types',     label: 'Leave Types' },
   { key: 'holidays',  label: 'Holidays' },
 ] as const
 
 type TabKey = typeof ALL_TABS[number]['key']
+
+
+function LeaveCalendarTab() {
+  return (
+    <div className="ut-card p-5">
+      <div className="flex justify-between items-center mb-5">
+        <h3 className="m-0 text-base font-semibold">May 2026 - Who's Away?</h3>
+        <div className="flex gap-2">
+          <button className="px-3 py-1 bg-gray-100 rounded text-sm hover:bg-gray-200">Prev</button>
+          <button className="px-3 py-1 bg-gray-100 rounded text-sm hover:bg-gray-200">Next</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-2 text-center">
+        {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(d => (
+          <div key={d} className="font-semibold text-xs text-gray-500">{d}</div>
+        ))}
+        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
+          <div className="text-right text-sm font-semibold">18</div>
+        </div>
+        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
+          <div className="text-right text-sm font-semibold">19</div>
+        </div>
+        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
+          <div className="text-right text-sm font-semibold">20</div>
+          <div className="mt-auto text-left">
+            <div className="text-[11px] bg-red-50 text-red-700 rounded p-1 mt-1 font-medium"><div className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-800 text-[9px] mr-1">AS</div> A. Stone</div>
+          </div>
+        </div>
+        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
+          <div className="text-right text-sm font-semibold">21</div>
+          <div className="mt-auto text-left">
+            <div className="text-[11px] bg-red-50 text-red-700 rounded p-1 mt-1 font-medium"><div className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-800 text-[9px] mr-1">AS</div> A. Stone</div>
+            <div className="text-[11px] bg-cyan-50 text-cyan-700 rounded p-1 mt-1 font-medium"><div className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-cyan-100 text-cyan-800 text-[9px] mr-1">PM</div> P. Mehta</div>
+          </div>
+        </div>
+        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
+          <div className="text-right text-sm font-semibold">22</div>
+          <div className="mt-auto text-left">
+            <div className="text-[11px] bg-red-50 text-red-700 rounded p-1 mt-1 font-medium"><div className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-800 text-[9px] mr-1">AS</div> A. Stone</div>
+          </div>
+        </div>
+        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
+          <div className="text-right text-sm font-semibold">23</div>
+          <div className="mt-auto text-[11px] text-gray-500 text-center">Weekend</div>
+        </div>
+        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
+          <div className="text-right text-sm font-semibold">24</div>
+          <div className="mt-auto text-[11px] text-gray-500 text-center">Weekend</div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export const Leave: React.FC = () => {
   const { isAdmin } = useRoles()
@@ -882,6 +948,7 @@ export const Leave: React.FC = () => {
       {tab === 'balances' && <HrTabPanel tabKey="balances"><BalancesTab /></HrTabPanel>}
       {tab === 'approvals' && <HrTabPanel tabKey="approvals"><ApprovalsTab /></HrTabPanel>}
       {tab === 'history' && <HrTabPanel tabKey="history"><ApprovalHistoryTab /></HrTabPanel>}
+      {tab === 'calendar' && <HrTabPanel tabKey="calendar"><LeaveCalendarTab /></HrTabPanel>}
       {tab === 'types' && <HrTabPanel tabKey="types"><LeaveTypes /></HrTabPanel>}
       {tab === 'holidays' && <HrTabPanel tabKey="holidays"><HolidayCalendar canEdit={canEditHolidays} /></HrTabPanel>}
     </div>

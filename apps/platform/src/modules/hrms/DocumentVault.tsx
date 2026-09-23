@@ -34,7 +34,7 @@ function expiryBadge(expiryDate?: string): { tone: PillTone; label: string } | n
   return null
 }
 
-type Tab = 'my' | 'all' | 'upload'
+type Tab = 'my' | 'all' | 'upload' | 'letters'
 
 export const DocumentVault: React.FC = () => {
   const canReadSelf = usePermission('hrms.document.read.self')
@@ -46,6 +46,7 @@ export const DocumentVault: React.FC = () => {
     ...(canReadSelf ? [{ key: 'my' as Tab, label: 'My Documents' }] : []),
     ...(canRead ? [{ key: 'all' as Tab, label: 'All Documents' }] : []),
     ...(canWrite ? [{ key: 'upload' as Tab, label: 'Upload' }] : []),
+    ...(canRead ? [{ key: 'letters' as Tab, label: 'Letters & Contracts' }] : []),
   ]
 
   return (
@@ -57,6 +58,7 @@ export const DocumentVault: React.FC = () => {
       {tab === 'my' && canReadSelf && <HrTabPanel tabKey="my"><MyDocumentsTab /></HrTabPanel>}
       {tab === 'all' && canRead && <HrTabPanel tabKey="all"><AllDocumentsTab /></HrTabPanel>}
       {tab === 'upload' && canWrite && <HrTabPanel tabKey="upload"><UploadTab onUploaded={() => setTab(canRead ? 'all' : 'upload')} /></HrTabPanel>}
+      {tab === 'letters' && canRead && <HrTabPanel tabKey="letters"><LettersTabStatic /></HrTabPanel>}
     </div>
   )
 }
@@ -147,7 +149,8 @@ function MyDocumentsTab() {
   // Was hard-coded to page 0 with no control, so an employee with more than
   // DOCUMENT_PAGE_SIZE documents simply could not reach the rest of their vault.
   const [page, setPage] = useState(0)
-  const { data, isLoading } = useMyDocuments(page)
+  const [pageSize, setPageSize] = useState(DOCUMENT_PAGE_SIZE)
+  const { data, isLoading } = useMyDocuments(page, pageSize)
   const documents = data?.content ?? []
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
@@ -191,7 +194,8 @@ function MyDocumentsTab() {
         emptyTitle="Nothing shared with you yet"
         emptyHint="When HR uploads a document to your file — offer letter, contract, ID proof, certificate or tax form — it appears here. Ask HR if you are expecting something."
         footer={hrPaginationFooter({
-          page, pageSize: DOCUMENT_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+          page, pageSize, totalElements: total, totalPages, onPageChange: setPage,
+          onPageSizeChange: setPageSize,
         })}
       />
     </div>
@@ -212,7 +216,8 @@ function AllDocumentsTab() {
   // Was hard-coded to page 0 with no control, so anyone whose vault held more
   // than DOCUMENT_PAGE_SIZE documents appeared to be missing the rest.
   const [page, setPage] = useState(0)
-  const { data, isLoading } = useEmployeeDocuments(employeeId || undefined, page)
+  const [pageSize, setPageSize] = useState(DOCUMENT_PAGE_SIZE)
+  const { data, isLoading } = useEmployeeDocuments(employeeId || undefined, page, true, pageSize)
   const documents = data?.content ?? []
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
@@ -268,7 +273,8 @@ function AllDocumentsTab() {
             ? 'Use the Upload tab to add their offer letter, contract, ID proofs or certificates. Whatever you store here is visible to them under My Documents.'
             : 'Nothing has been uploaded to their file yet.'}
           footer={hrPaginationFooter({
-            page, pageSize: DOCUMENT_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+            page, pageSize, totalElements: total, totalPages, onPageChange: setPage,
+          onPageSizeChange: setPageSize,
           })}
         />
       ) : (
@@ -295,6 +301,7 @@ function UploadTab({ onUploaded }: { onUploaded: () => void }) {
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState<DocumentCategory>('CONTRACT')
   const [fileUrl, setFileUrl] = useState('')
+  const [file, setFile] = useState<File | null>(null)
   const [issuedDate, setIssuedDate] = useState('')
   const [expiryDate, setExpiryDate] = useState('')
   const [notes, setNotes] = useState('')
@@ -302,7 +309,10 @@ function UploadTab({ onUploaded }: { onUploaded: () => void }) {
   const handleSubmit = async () => {
     if (!employeeId) { toast('Select an employee', 'error'); return }
     if (!title.trim()) { toast('Give the document a title', 'error'); return }
-    if (!fileUrl.trim()) { toast('Provide a document URL', 'error'); return }
+    if (!file && !fileUrl.trim()) { toast('Choose a file or provide a document URL', 'error'); return }
+    if (file && file.size > 10 * 1024 * 1024) { toast('File must be at most 10 MB', 'error'); return }
+    if (!file && !/^https?:\/\//i.test(fileUrl.trim())) { toast('Enter a valid HTTP or HTTPS document URL', 'error'); return }
+    if (issuedDate && expiryDate && expiryDate < issuedDate) { toast('Expiry date cannot precede issue date', 'error'); return }
     try {
       await create.mutateAsync({
         employeeId,
@@ -310,6 +320,7 @@ function UploadTab({ onUploaded }: { onUploaded: () => void }) {
         title: title.trim(),
         category,
         fileUrl: fileUrl.trim(),
+        file: file ?? undefined,
         issuedDate: issuedDate || undefined,
         expiryDate: expiryDate || undefined,
         notes: notes.trim() || undefined,
@@ -326,7 +337,11 @@ function UploadTab({ onUploaded }: { onUploaded: () => void }) {
   return (
     <div className="max-w-2xl">
       <div className="ut-card p-5">
-        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Store Document</h3>
+        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Add employee document</h3>
+        <label className="mb-5 block text-sm font-medium">Upload file
+          <input type="file" accept="application/pdf,image/png,image/jpeg" className="ut-input mt-2" onChange={event => setFile(event.target.files?.[0] ?? null)} />
+          <span className="mt-1 block text-xs font-normal text-text-secondary">PDF, PNG or JPEG, up to 10 MB. Alternatively, use an existing document URL below.</span>
+        </label>
         <div className="grid grid-cols-2 gap-x-4 gap-y-5">
           <div className="col-span-2">
             <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee *</label>
@@ -350,7 +365,7 @@ function UploadTab({ onUploaded }: { onUploaded: () => void }) {
             </select>
           </div>
           <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Document URL *</label>
+            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Existing document URL (if no file)</label>
             <input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="https://…" className="ut-input" />
           </div>
           <div>
@@ -371,6 +386,48 @@ function UploadTab({ onUploaded }: { onUploaded: () => void }) {
           <HrButton onClick={handleSubmit} disabled={create.isPending}>
             <Plus size={15} /> {create.isPending ? 'Storing…' : 'Store Document'}
           </HrButton>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ── Letters & Contracts (Static) ─────────────────────────────────────────────
+
+function LettersTabStatic() {
+  return (
+    <div className="space-y-4">
+      <div className="ut-card">
+        <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
+          <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
+            <span className="text-text-tertiary">🔍</span>
+            <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="hr-table">
+            <thead className="bg-bg-subtle">
+              <tr>
+                <th>Letter Type</th>
+                <th>Template Name</th>
+                <th>Target Audience</th>
+                <th>Last Updated</th>
+                <th>Status</th>
+                <th className="text-center w-16">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="font-semibold text-text-primary">Offer Letter</td>
+                <td className="text-text-secondary">Standard Engineering Offer v2</td>
+                <td className="text-text-secondary">New Hires (Tech)</td>
+                <td className="text-text-secondary">Apr 01, 2026</td>
+                <td><HrStatusPill tone="green">Active</HrStatusPill></td>
+                <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">✎</button></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

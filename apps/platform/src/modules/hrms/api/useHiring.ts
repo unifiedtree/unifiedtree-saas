@@ -1,6 +1,40 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 
+export type OfferStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'DECLINED' | 'WITHDRAWN'
+export const OFFER_STATUSES: OfferStatus[] = ['DRAFT', 'SENT', 'ACCEPTED', 'DECLINED', 'WITHDRAWN']
+export interface HiringOfferPayload {
+  companyId: string
+  requisitionId?: string
+  candidateId?: string
+  candidateName: string
+  roleTitle: string
+  offeredCtc: number
+  joiningDate?: string
+  notes?: string
+}
+export interface HiringOffer extends HiringOfferPayload {
+  id: string
+  status: OfferStatus
+  sentAt?: string
+  respondedAt?: string
+  createdAt: string
+}
+export function useHiringOffers(page: number) {
+  return useQuery({ queryKey: ['hrms', 'hiring', 'offers', page],
+    queryFn: () => apiJson<Page<HiringOffer>>(`/v1/hiring/offers?page=${page}&size=20`) })
+}
+export function useCreateHiringOffer() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: (body: HiringOfferPayload) => apiJson<HiringOffer>('/v1/hiring/offers', { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }) })
+}
+export function useUpdateHiringOfferStatus() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: ({ id, status }: { id: string; status: OfferStatus }) => apiJson<HiringOffer>(`/v1/hiring/offers/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }) })
+}
+
 // Mirrors backend com.hrms.hiring.enums
 export type RequisitionStatus = 'OPEN' | 'ON_HOLD' | 'CLOSED'
 export type CandidateStage = 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED'

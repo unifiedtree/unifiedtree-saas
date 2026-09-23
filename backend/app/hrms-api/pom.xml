@@ -18,6 +18,11 @@
     <description>REST controllers for UnifiedTree HRMS and SaaS onboarding.</description>
 
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-core</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-auth</artifactId></dependency>
         <dependency><groupId>com.hrms</groupId><artifactId>hrms-tenant</artifactId></dependency>

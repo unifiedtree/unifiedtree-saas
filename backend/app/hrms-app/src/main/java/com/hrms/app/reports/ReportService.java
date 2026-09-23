@@ -33,7 +33,7 @@ public class ReportService {
                     d.name                          AS department,
                     COUNT(e.id)                     AS total,
                     SUM(CASE WHEN e.employment_status = 'ACTIVE'     THEN 1 ELSE 0 END) AS active,
-                    SUM(CASE WHEN e.employment_status = 'ON_NOTICE'  THEN 1 ELSE 0 END) AS on_notice,
+                    SUM(CASE WHEN e.employment_status = 'NOTICE_PERIOD'  THEN 1 ELSE 0 END) AS on_notice,
                     SUM(CASE WHEN e.employment_status = 'PROBATION'  THEN 1 ELSE 0 END) AS probation
                 FROM hrms.employees e
                 LEFT JOIN hrms.departments d ON d.id = e.department_id

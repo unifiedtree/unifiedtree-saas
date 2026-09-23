@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Camera, Loader2 } from 'lucide-react'
-import { HrPageHeader, HrButton } from '@/shared/components/hr'
+import { HrPageHeader, HrButton, HrStatusPill } from '@/shared/components/hr'
 import { SkeletonBlock } from '@/shared/components/SkeletonCard'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
 import {
@@ -180,14 +180,12 @@ export const Profile: React.FC = () => {
               onChange={(e) => onFilePicked(e.target.files?.[0])}
             />
 
-            {/* ── Avatar ────────────────────────────────────────────────── */}
-            <section>
-              <h3 className="mb-4 text-sm font-semibold text-text-primary">Profile photo</h3>
-              <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
-                <div className="relative">
-                  {/* 128px circular preview per spec. object-cover so a
-                      non-square upload centre-crops rather than stretches. */}
-                  <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-full border border-border-default bg-gradient-to-br from-[#059669] to-[#047857]">
+            {/* ── Profile Grid ────────────────────────────────────────────────── */}
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              {/* Left Col: Avatar & Info */}
+              <div className="md:col-span-1 rounded-2xl border border-border-default bg-bg-base p-6 text-center shadow-sm">
+                <div className="relative mx-auto mb-4 h-24 w-24">
+                  <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#059669] to-[#047857]">
                     {user.avatarUrl ? (
                       <img
                         src={user.avatarUrl}
@@ -201,25 +199,86 @@ export const Profile: React.FC = () => {
                   </div>
                   {upload.isPending && (
                     <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm">
-                      <Loader2 size={22} className="animate-spin text-white" />
+                      <Loader2 size={18} className="animate-spin text-white" />
                     </div>
                   )}
                 </div>
-                <div className="flex-1 space-y-2 text-center sm:text-left">
-                  <p className="text-sm font-semibold text-text-primary">{fullName}</p>
-                  <p className="text-xs text-text-secondary">
-                    JPG, PNG, WebP, HEIC or GIF, up to 5 MB. A square image reads best — non-square
-                    uploads are centre-cropped.
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
-                    <HrButton onClick={chooseFile} disabled={upload.isPending}>
-                      <Camera size={14} className="mr-1.5" />
-                      {upload.isPending ? 'Uploading…' : user.avatarUrl ? 'Change photo' : 'Add photo'}
-                    </HrButton>
+                <h3 className="text-lg font-bold text-text-primary">{fullName}</h3>
+                <p className="text-sm text-text-secondary mb-3">Senior Software Engineer</p>
+                
+                <HrStatusPill tone="ok">Active Employee</HrStatusPill>
+                
+                <div className="mt-5 border-t border-border-default pt-4 text-left text-sm text-text-secondary space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-text-tertiary">✉</span> {user.email}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-text-tertiary">📞</span> {user.phone || '+91 98765 43210'}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-text-tertiary">📍</span> Bangalore, India
+                  </div>
+                </div>
+
+                <div className="mt-5 flex justify-center">
+                  <HrButton size="sm" onClick={chooseFile} disabled={upload.isPending}>
+                    <Camera size={14} className="mr-1.5" />
+                    {upload.isPending ? 'Uploading…' : 'Change photo'}
+                  </HrButton>
+                </div>
+              </div>
+
+              {/* Right Col: Details */}
+              <div className="md:col-span-2 flex flex-col gap-6">
+                <div className="rounded-2xl border border-border-default bg-bg-base p-6 shadow-sm">
+                  <h3 className="mb-4 border-b border-border-default pb-3 text-sm font-semibold text-text-primary">
+                    Employment Information (Static)
+                  </h3>
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                    <div>
+                      <p className="text-xs text-text-tertiary mb-0.5">Employee ID</p>
+                      <p className="font-medium text-text-primary">EMP-2023-085</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-text-tertiary mb-0.5">Date of Joining</p>
+                      <p className="font-medium text-text-primary">Jan 15, 2023</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-text-tertiary mb-0.5">Department</p>
+                      <p className="font-medium text-text-primary">Engineering</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-text-tertiary mb-0.5">Reporting Manager</p>
+                      <p className="font-medium text-text-primary">Sarah Jenkins</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border-default bg-bg-base p-6 shadow-sm">
+                  <h3 className="mb-4 border-b border-border-default pb-3 text-sm font-semibold text-text-primary">
+                    Bank Details (Static)
+                  </h3>
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                    <div>
+                      <p className="text-xs text-text-tertiary mb-0.5">Bank Name</p>
+                      <p className="font-medium text-text-primary">HDFC Bank</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-text-tertiary mb-0.5">Account Number</p>
+                      <p className="font-medium text-text-primary">XXXX-XXXX-4567</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-text-tertiary mb-0.5">IFSC Code</p>
+                      <p className="font-medium text-text-primary">HDFC0001234</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-text-tertiary mb-0.5">PAN Number</p>
+                      <p className="font-medium text-text-primary">ABCDE1234F</p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </section>
+            </div>
 
             <div className="my-8 h-px bg-border-subtle" />
 

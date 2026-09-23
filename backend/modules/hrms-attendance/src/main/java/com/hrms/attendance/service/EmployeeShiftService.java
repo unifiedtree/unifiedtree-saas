@@ -166,14 +166,24 @@ public class EmployeeShiftService {
         ShiftPolicy policy = policyRepo.findById(req.shiftPolicyId())
                 .orElseThrow(() -> new ResourceNotFoundException("ShiftPolicy", req.shiftPolicyId()));
 
-        LocalDate from = req.effectiveFrom() != null ? req.effectiveFrom() : LocalDate.now();
+        if (!policy.isActive()) throw new BusinessRuleException("Choose an active shift", "SHIFT_INACTIVE");
+        LocalDate from = req.effectiveFrom() != null ? req.effectiveFrom() : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
 
         // Close any currently-open assignment(s) the day before the new one starts.
         List<EmployeeShiftAssignment> open = assignmentRepo.findByEmployeeIdAndEffectiveToIsNull(employeeId);
         for (EmployeeShiftAssignment a : open) {
+            if (from.isBefore(a.getEffectiveFrom())) {
+                throw new BusinessRuleException("New assignment cannot precede the current assignment", "SHIFT_DATE_INVALID");
+            }
             if (a.getShiftPolicyId().equals(policy.getId())) {
                 // Already on this shift — no-op, return the existing one.
                 return toEmployeeResponse(employeeId, a, policy);
+            }
+            if (from.equals(a.getEffectiveFrom())) {
+                // Daily assignments have one effective policy per day. Replacing
+                // today's choice must not create a period ending before it starts.
+                a.setShiftPolicyId(policy.getId());
+                return toEmployeeResponse(employeeId, assignmentRepo.save(a), policy);
             }
             a.setEffectiveTo(from.minusDays(1));
         }

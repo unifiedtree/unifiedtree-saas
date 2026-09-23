@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import {
   IndianRupee, Wallet, TrendingDown, PiggyBank, Users, Search,
-  ShieldCheck, FileText, Building2, History as HistoryIcon, X,
+  ShieldCheck, FileText, Building2, History as HistoryIcon, X, ArrowRight, Calculator, Download, Edit,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -10,8 +10,9 @@ import {
   LineChart, Line,
   XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
+import { DataTable } from '@/shared/components/DataTable'
 import {
-  HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrButton, HrAvatar,
+  HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrButton, HrAvatar, HrTabs, HrTabPanel,
   type PillTone,
 } from '@/shared/components/hr'
 import {
@@ -42,8 +43,70 @@ const PIE_COLORS = ['#2563EB', '#22C55E', '#F59E0B', '#8B5CF6', '#EF4444', '#06B
 
 const EARNING_CATS: ComponentCategory[] = ['EARNING', 'REIMBURSEMENT']
 
+
+function SalaryStructureOverviewMock() {
+  return (
+    <div className="space-y-4">
+      <TableCard>
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-[var(--border-default)] bg-[var(--bg-base)] text-xs text-gray-500">
+            <tr>
+              <th className="p-4 font-medium">Employee</th>
+              <th className="p-4 font-medium">Basic Pay</th>
+              <th className="p-4 font-medium">HRA</th>
+              <th className="p-4 font-medium">Special Allowance</th>
+              <th className="p-4 font-medium">Deductions</th>
+              <th className="p-4 font-medium">Net Payable</th>
+              <th className="p-4 font-medium text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-[var(--border-default)]">
+              <td className="p-4">
+                <div className="flex items-center gap-2">
+                  <HrAvatar name="Rajesh Kumar" sub="RK" seed={1} />
+                </div>
+              </td>
+              <td className="p-4">₹ 40,000</td>
+              <td className="p-4">₹ 20,000</td>
+              <td className="p-4">₹ 10,000</td>
+              <td className="p-4">₹ 2,400 (PF)</td>
+              <td className="p-4"><span className="font-bold text-green-600">₹ 67,600</span></td>
+              <td className="p-4 text-center">
+                <button className="text-gray-400 hover:text-gray-600"><Edit size={16} /></button>
+              </td>
+            </tr>
+            <tr className="border-b border-[var(--border-default)]">
+              <td className="p-4">
+                <div className="flex items-center gap-2">
+                  <HrAvatar name="Priya Mehta" sub="PM" seed={2} />
+                </div>
+              </td>
+              <td className="p-4">₹ 60,000</td>
+              <td className="p-4">₹ 30,000</td>
+              <td className="p-4">₹ 15,000</td>
+              <td className="p-4">₹ 3,600 (PF)</td>
+              <td className="p-4"><span className="font-bold text-green-600">₹ 1,01,400</span></td>
+              <td className="p-4 text-center">
+                <button className="text-gray-400 hover:text-gray-600"><Edit size={16} /></button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </TableCard>
+    </div>
+  )
+}
+
 export const SalaryStructureAdmin: React.FC = () => {
   const [companyId, setCompanyId] = useState<string>('')
+  
+  const [tab, setTab] = useState<'overview' | 'detail'>('overview')
+  const tabs = [
+    { key: 'overview', label: 'All Employees Overview' },
+    { key: 'detail', label: 'Employee Details' }
+  ]
+
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<WorkforceEmployee | null>(null)
 
@@ -128,83 +191,42 @@ export const SalaryStructureAdmin: React.FC = () => {
       }))
   }, [historyQ.data])
 
+  // Earnings. Bound to `earnings` — the DataTable migration left this helper
+  // rendering the EMPLOYEE DIRECTORY, so the panel headed "Earnings" listed
+  // staff while the computed earnings were discarded. Totals are not repeated
+  // here: the stat strip above already shows Gross / Deductions / Net.
   const renderEarningsTable = () => (
     <TableCard>
-      <table className="hr-table">
-        <thead>
-          <tr>
-            <th>Component</th>
-            <th className="hidden sm:table-cell">Type</th>
-            <th className="text-right">Monthly</th>
-            <th className="hidden sm:table-cell text-right">Annual</th>
-          </tr>
-        </thead>
-        <tbody>
-          {earnings.map((r) => (
-            <tr key={r.componentId}>
-              <td className="font-medium text-text-primary">{r.componentName}</td>
-              <td className="hidden sm:table-cell">
-                <HrStatusPill tone={categoryTone(r.category)}>{categoryLabel(r.category)}</HrStatusPill>
-              </td>
-              <td className="hr-mono text-right">{inr(r.monthlyAmount)}</td>
-              <td className="hidden sm:table-cell hr-mono text-right">{inr(r.monthlyAmount * 12)}</td>
-            </tr>
-          ))}
-          {earnings.length === 0 && (
-            <tr><td colSpan={4} className="py-6 text-center text-text-tertiary">No earning components</td></tr>
-          )}
-        </tbody>
-        {earnings.length > 0 && (
-          <tfoot>
-            <tr className="font-semibold">
-              <td className="text-text-primary">Gross earnings</td>
-              <td className="hidden sm:table-cell" />
-              <td className="hr-mono text-right text-text-primary">{inr(grossMonthly)}</td>
-              <td className="hidden sm:table-cell hr-mono text-right text-text-primary">{inr(grossMonthly * 12)}</td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
+      <DataTable
+        columns={[
+          { key: 'component', header: 'Component', render: (r: any) => <span className="font-medium text-text-primary">{r.componentName}</span> },
+          { key: 'type', header: 'Type', render: (r: any) => <HrStatusPill tone={categoryTone(r.category)}>{categoryLabel(r.category)}</HrStatusPill> },
+          { key: 'monthly', header: 'Monthly', render: (r: any) => <span className="hr-mono text-right">{inr(r.monthlyAmount)}</span> },
+          { key: 'annual', header: 'Annual', render: (r: any) => <span className="hr-mono text-right">{inr(r.monthlyAmount * 12)}</span> },
+        ]}
+        data={earnings}
+        keyField="componentId"
+        emptyMessage="No earning components"
+      />
     </TableCard>
   )
 
+  // Deductions. Bound to `deductions` — this helper was rendering EMPLOYER
+  // CONTRIBUTIONS, which are a different axis and are already shown in their
+  // own block below.
   const renderDeductionsTable = () => (
     <TableCard>
-      <table className="hr-table">
-        <thead>
-          <tr>
-            <th>Component</th>
-            <th className="hidden sm:table-cell">Type</th>
-            <th className="text-right">Monthly</th>
-            <th className="hidden sm:table-cell text-right">Annual</th>
-          </tr>
-        </thead>
-        <tbody>
-          {deductions.map((r) => (
-            <tr key={r.componentId}>
-              <td className="font-medium text-text-primary">{r.componentName}</td>
-              <td className="hidden sm:table-cell">
-                <HrStatusPill tone={categoryTone(r.category)}>{categoryLabel(r.category)}</HrStatusPill>
-              </td>
-              <td className="hr-mono text-right">{inr(r.monthlyAmount)}</td>
-              <td className="hidden sm:table-cell hr-mono text-right">{inr(r.monthlyAmount * 12)}</td>
-            </tr>
-          ))}
-          {deductions.length === 0 && (
-            <tr><td colSpan={4} className="py-6 text-center text-text-tertiary">No deductions</td></tr>
-          )}
-        </tbody>
-        {deductions.length > 0 && (
-          <tfoot>
-            <tr className="font-semibold">
-              <td className="text-text-primary">Total deductions</td>
-              <td className="hidden sm:table-cell" />
-              <td className="hr-mono text-right text-[#B91C1C]">{inr(totalDeductions)}</td>
-              <td className="hidden sm:table-cell hr-mono text-right text-[#B91C1C]">{inr(totalDeductions * 12)}</td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
+      <DataTable
+        columns={[
+          { key: 'component', header: 'Component', render: (r: any) => <span className="font-medium text-text-primary">{r.componentName}</span> },
+          { key: 'type', header: 'Type', render: (r: any) => <HrStatusPill tone={categoryTone(r.category)}>{categoryLabel(r.category)}</HrStatusPill> },
+          { key: 'monthly', header: 'Monthly', render: (r: any) => <span className="hr-mono text-right">{inr(r.monthlyAmount)}</span> },
+          { key: 'annual', header: 'Annual', render: (r: any) => <span className="hr-mono text-right">{inr(r.monthlyAmount * 12)}</span> },
+        ]}
+        data={deductions}
+        keyField="componentId"
+        emptyMessage="No deductions"
+      />
     </TableCard>
   )
 
@@ -216,7 +238,8 @@ export const SalaryStructureAdmin: React.FC = () => {
         subtitle="Review an employee's earnings, deductions and net pay breakdown."
         actions={
           <div className="flex items-center gap-2">
-            <Building2 size={15} className="text-text-tertiary" />
+            <HrButton variant="ghost"><Calculator size={15} className="mr-1" /> Bulk Revise CTC</HrButton>
+            <Building2 size={15} className="text-text-tertiary ml-2" />
             <select
               value={companyId}
               onChange={(e) => { setCompanyId(e.target.value); setSelected(null) }}
@@ -231,59 +254,59 @@ export const SalaryStructureAdmin: React.FC = () => {
         }
       />
 
+      
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as any)} />
+
+      <div className="mt-6">
+        {tab === 'overview' && (
+          <HrTabPanel tabKey="overview">
+            <SalaryStructureOverviewMock />
+          </HrTabPanel>
+        )}
+        {tab === 'detail' && (
+          <HrTabPanel tabKey="detail">
       {/* Employee selector */}
       {!selected && (
         <TableCard
           search={{ value: search, onChange: setSearch, placeholder: 'Search employees by name, code or email…' }}
         >
-          <table className="hr-table">
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th className="hidden sm:table-cell">Code</th>
-                <th className="hidden md:table-cell">Status</th>
-                <th className="text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!directoryEnabled && (
-                <tr>
-                  <td colSpan={4} className="py-10 text-center text-text-tertiary">
-                    <Search size={22} className="mx-auto mb-2 opacity-40" />
-                    Search for an employee or pick a company to begin.
-                  </td>
-                </tr>
-              )}
-              {directoryEnabled && dirQ.isLoading && (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}>
-                    <td colSpan={4}><div className="h-8 w-full animate-pulse rounded bg-bg-base" /></td>
-                  </tr>
-                ))
-              )}
-              {directoryEnabled && !dirQ.isLoading && employees.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="py-10 text-center text-text-tertiary">No employees match your search.</td>
-                </tr>
-              )}
-              {directoryEnabled && !dirQ.isLoading && employees.map((e, i) => (
-                <tr key={e.id}>
-                  <td>
-                    <HrAvatar name={fullName(e)} sub={e.email} seed={i} />
-                  </td>
-                  <td className="hidden sm:table-cell hr-mono">{e.employeeCode}</td>
-                  <td className="hidden md:table-cell">
-                    <HrStatusPill tone={e.employmentStatus === 'ACTIVE' ? 'ok' : 'gray'}>
-                      {(e.employmentStatus ?? 'UNKNOWN').replace(/_/g, ' ')}
-                    </HrStatusPill>
-                  </td>
-                  <td className="text-right">
-                    <HrButton size="sm" variant="ghost" onClick={() => setSelected(e)}>View structure</HrButton>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* The employee picker. This slot was bound to the STRUCTURE REVISION
+              HISTORY of whoever happened to be selected — which, on a screen
+              shown only when nobody is selected, meant an empty table and no
+              way to choose an employee at all. `setSelected` was unreachable,
+              so the page could not be used. */}
+          <DataTable
+            columns={[
+              { key: 'employee', header: 'Employee', render: (r: any) => (
+                <div className="flex items-center gap-3">
+                  {r.avatarUrl ? (
+                    <img src={r.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-xs font-medium text-indigo-700">
+                      {(r.firstName?.[0] ?? '')}{(r.lastName?.[0] ?? '')}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">{r.firstName} {r.lastName}</p>
+                    <p className="text-xs text-text-tertiary">{r.designationName ?? 'No designation'}</p>
+                  </div>
+                </div>
+              ) },
+              { key: 'code', header: 'Code', render: (r: any) => <span className="hr-mono text-text-secondary">{r.employeeCode}</span> },
+              { key: 'status', header: 'Status', render: (r: any) => <HrStatusPill tone={r.employmentStatus === 'ACTIVE' ? 'ok' : 'gray'}>{r.employmentStatus ?? '—'}</HrStatusPill> },
+              { key: 'action', header: 'Action', render: (r: any) => (
+                <div className="w-full text-right">
+                  <HrButton size="sm" variant="ghost" onClick={() => setSelected(r)}>
+                    Select <ArrowRight size={14} className="ml-1 inline-block" />
+                  </HrButton>
+                </div>
+              ) },
+            ]}
+            data={directoryEnabled ? (dirQ.data?.content ?? []) : []}
+            keyField="id"
+            loading={directoryEnabled && dirQ.isLoading}
+            emptyMessage={!directoryEnabled ? 'Search for an employee or pick a company to begin.' : 'No employees found.'}
+          />
         </TableCard>
       )}
 
@@ -511,6 +534,9 @@ export const SalaryStructureAdmin: React.FC = () => {
           )}
         </div>
       )}
+          </HrTabPanel>
+        )}
+      </div>
     </div>
   )
 }

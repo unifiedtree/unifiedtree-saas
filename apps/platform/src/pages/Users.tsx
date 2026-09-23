@@ -46,7 +46,8 @@ const UsersInner: React.FC = () => {
   const resend = useResendWorkspaceInvite()
   const [searchTerm, setSearchTerm] = useState('')
   const [inviteOpen, setInviteOpen] = useState(false)
-  const [manageUser, setManageUser] = useState<WorkspaceUser | null>(null)
+  const [manageUserId, setManageUserId] = useState<string | null>(null)
+  const manageUser = users.find(user => user.userId === manageUserId) ?? null
 
   const handleResend = (user: WorkspaceUser) => {
     resend.mutate(user.userId, {
@@ -141,7 +142,7 @@ const UsersInner: React.FC = () => {
                               )
                             })()}
                             <button
-                              onClick={() => setManageUser(user)}
+                              onClick={() => setManageUserId(user.userId)}
                               className="px-3 py-1.5 text-xs font-bold text-[#047857] hover:bg-[#ECFDF5] rounded-lg transition-colors"
                             >
                               Manage access
@@ -160,7 +161,7 @@ const UsersInner: React.FC = () => {
 
       {inviteOpen && <InviteWorkspaceUserModal open={inviteOpen} onClose={() => setInviteOpen(false)} />}
       {manageUser && (
-        <ManageAccessDrawer user={manageUser} open={!!manageUser} onClose={() => setManageUser(null)} />
+        <ManageAccessDrawer user={manageUser} open={!!manageUser} onClose={() => setManageUserId(null)} />
       )}
     </div>
   )

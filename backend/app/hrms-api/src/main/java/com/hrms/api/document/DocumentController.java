@@ -37,11 +37,14 @@ public class DocumentController {
 
     private final DocumentService documentService;
     private final EmployeeRepository employeeRepository;
+    private final com.unifiedtree.settings.branding.DocumentStorage storage;
 
     public DocumentController(DocumentService documentService,
-                              EmployeeRepository employeeRepository) {
+                              EmployeeRepository employeeRepository,
+                              com.unifiedtree.settings.branding.DocumentStorage storage) {
         this.documentService = documentService;
         this.employeeRepository = employeeRepository;
+        this.storage = storage;
     }
 
     // ─── Admin / HR upload ───────────────────────────────────────────────────
@@ -50,6 +53,9 @@ public class DocumentController {
     @PostMapping("/documents")
     @PreAuthorize("hasAuthority('hrms.document.write')")
     public ResponseEntity<DocumentResponse> create(@Valid @RequestBody DocumentRequest request) {
+        if (request.fileUrl() == null || !request.fileUrl().matches("(?i)^https?://[^\\s]+$")) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, "Provide an HTTP(S) document URL or use file upload");
+        }
         Employee employee = employeeRepository.findById(request.employeeId())
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + request.employeeId()));
         UUID companyId = request.companyId() != null ? request.companyId() : employee.getCompanyId();
@@ -65,7 +71,7 @@ public class DocumentController {
     public ResponseEntity<PageResponse<DocumentResponse>> myDocuments(
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(documentService.getEmployeeDocuments(extractEmployeeId(jwt), pageable));
+        return ResponseEntity.ok(enrichPage(documentService.getEmployeeDocuments(extractEmployeeId(jwt), pageable)));
     }
 
     // ─── HR / manager browse by employee ─────────────────────────────────────
@@ -104,7 +110,9 @@ public class DocumentController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasAuthority('hrms.document.write')")
     public void delete(@PathVariable UUID id) {
+        String file = documentService.getDocument(id).fileUrl();
         documentService.deleteDocument(id);
+        if (isOwnedStorageUrl(file)) storage.deleteQuietly(file.substring(5));
     }
 
     // ─── Owner identity enrichment ───────────────────────────────────────────
@@ -143,8 +151,19 @@ public class DocumentController {
         String employeeCode = employee != null ? employee.getEmployeeCode() : null;
         return new DocumentResponse(
                 r.id(), r.employeeId(), employeeName, employeeCode, r.companyId(),
-                r.title(), r.category(), r.fileUrl(),
+                r.title(), r.category(), resolveFileUrl(r.fileUrl()),
                 r.issuedDate(), r.expiryDate(), r.notes(), r.createdAt());
+    }
+
+    private boolean isOwnedStorageUrl(String url) {
+        return url != null && url.startsWith("r2://employee-documents/" + com.hrms.core.tenant.TenantContext.getTenantId() + "/")
+                && !url.contains("..") && !url.contains("\\");
+    }
+
+    private String resolveFileUrl(String url) {
+        if (url == null || !url.startsWith("r2://")) return url;
+        if (!isOwnedStorageUrl(url)) throw new org.springframework.security.access.AccessDeniedException("Document storage belongs to another workspace");
+        return storage.urlFor(url.substring(5));
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

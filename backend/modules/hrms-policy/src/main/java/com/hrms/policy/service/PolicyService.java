@@ -172,6 +172,9 @@ public class PolicyService {
     public void acknowledge(UUID policyId, UUID employeeId) {
         HrPolicy policy = policyRepository.findById(policyId)
                 .orElseThrow(() -> new ResourceNotFoundException("HrPolicy", policyId));
+        if (policy.getStatus() != PolicyStatus.ACTIVE) {
+            throw new BusinessRuleException("Only published, active policies can be acknowledged", "POLICY_NOT_ACTIVE");
+        }
         // B7 FIX (audit 2026-08-15): acks are now per-version, not
         // per-policy — bumping the policy version forces re-ack. Look up
         // whether an ack already exists for THIS version.

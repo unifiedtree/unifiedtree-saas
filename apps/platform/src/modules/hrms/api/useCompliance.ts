@@ -75,15 +75,15 @@ export const inr = (n?: number | null) =>
  */
 export const COMPLIANCE_PAGE_SIZE = 50
 
-export function useComplianceItems(companyId?: string, page = 0) {
+export function useComplianceItems(companyId?: string, page = 0, pageSize = COMPLIANCE_PAGE_SIZE) {
   return useQuery({
     // `companyId` AND `page` are both in the key: without the page react-query
     // would hand page 2 the cached page-1 rows and the table would never appear
     // to advance.
-    queryKey: ['hrms', 'compliance', 'items', companyId, page],
+    queryKey: ['hrms', 'compliance', 'items', companyId, page, pageSize],
     queryFn: () =>
       apiJson<Page<ComplianceItem>>(
-        `/v1/compliance/items?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=${COMPLIANCE_PAGE_SIZE}`,
+        `/v1/compliance/items?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=${pageSize}`,
       ),
     staleTime: 30_000,
   })
@@ -119,12 +119,12 @@ export function useMarkComplianceDone() {
 
 // ── Statutory filings ────────────────────────────────────────────────────────
 
-export function useStatutoryFilings(companyId?: string, page = 0) {
+export function useStatutoryFilings(companyId?: string, page = 0, pageSize = COMPLIANCE_PAGE_SIZE) {
   return useQuery({
-    queryKey: ['hrms', 'compliance', 'filings', companyId, page],
+    queryKey: ['hrms', 'compliance', 'filings', companyId, page, pageSize],
     queryFn: () =>
       apiJson<Page<StatutoryFiling>>(
-        `/v1/compliance/filings?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=${COMPLIANCE_PAGE_SIZE}`,
+        `/v1/compliance/filings?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=${pageSize}`,
       ),
     staleTime: 30_000,
   })
@@ -161,12 +161,12 @@ export function useFileFiling() {
 
 // ── POSH register (sensitive) ────────────────────────────────────────────────
 
-export function usePoshComplaints(companyId?: string, page = 0, enabled = true) {
+export function usePoshComplaints(companyId?: string, page = 0, enabled = true, pageSize = COMPLIANCE_PAGE_SIZE) {
   return useQuery({
-    queryKey: ['hrms', 'compliance', 'posh', companyId, page],
+    queryKey: ['hrms', 'compliance', 'posh', companyId, page, pageSize],
     queryFn: () =>
       apiJson<Page<PoshComplaint>>(
-        `/v1/compliance/posh?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=${COMPLIANCE_PAGE_SIZE}`,
+        `/v1/compliance/posh?${companyId ? `companyId=${companyId}&` : ''}page=${page}&size=${pageSize}`,
       ),
     staleTime: 15_000,
     enabled,

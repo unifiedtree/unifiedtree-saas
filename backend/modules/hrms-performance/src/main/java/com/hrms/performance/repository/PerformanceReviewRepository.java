@@ -14,6 +14,8 @@ public interface PerformanceReviewRepository extends JpaRepository<PerformanceRe
 
     List<PerformanceReview> findByEmployeeIdOrderByCreatedAtDesc(UUID employeeId);
 
+    List<PerformanceReview> findByEmployeeIdOrReviewerIdOrderByCreatedAtDesc(UUID employeeId, UUID reviewerId);
+
     Page<PerformanceReview> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     Page<PerformanceReview> findByCycleIdOrderByCreatedAtDesc(UUID cycleId, Pageable pageable);

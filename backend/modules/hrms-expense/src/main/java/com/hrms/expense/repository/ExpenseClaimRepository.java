@@ -6,8 +6,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.UUID;
+import java.math.BigDecimal;
+import java.time.Instant;
 
 @Repository
 public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID> {
@@ -23,4 +26,15 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
 
     /** Approver-scoped open queue (managers): only claims routed to this approver. */
     Page<ExpenseClaim> findByApproverIdAndStatusInOrderByCreatedAtDesc(UUID approverId, java.util.Collection<ExpenseStatus> statuses, Pageable pageable);
+
+    long countByStatus(ExpenseStatus status);
+
+    @Query("select coalesce(sum(c.totalAmount), 0) from ExpenseClaim c where c.status = :status")
+    BigDecimal sumAmountByStatus(ExpenseStatus status);
+
+    long countByStatusAndReimbursedAtBetween(ExpenseStatus status, Instant from, Instant to);
+
+    @Query("select coalesce(sum(c.totalAmount), 0) from ExpenseClaim c where c.status = :status and c.reimbursedAt >= :from and c.reimbursedAt < :to")
+    BigDecimal sumAmountByStatusAndReimbursedAtBetween(ExpenseStatus status, Instant from, Instant to);
 }
+

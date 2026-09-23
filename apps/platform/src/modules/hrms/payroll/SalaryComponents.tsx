@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
-import { EmptyState } from '@unifiedtree/ui-kit'
-import { Can, P } from '@unifiedtree/sdk'
+import { Plus, Pencil, Trash2, Wallet } from 'lucide-react'
+import { EmptyState } from '@/shared/components/EmptyState'
+import { Can, usePermission, P } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import { HrPageHeader, HrButton, HrStatusPill, HrTabs, HrTabPanel, HrDrawer, HrSelect, TableCard, type PillTone } from '@/shared/components/hr'
+import { DataTable } from '@/shared/components/DataTable'
 import {
   useSalaryComponents, useSeedDefaultComponents, useCreateComponent, useUpdateComponent, useDeleteComponent,
   type SalaryComponent, type ComponentCategory,
@@ -208,6 +209,7 @@ export const SalaryComponents: React.FC = () => {
   const [tab, setTab] = useState('all')
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<SalaryComponent | null>(null)
+  const canWrite = usePermission(P.PAYROLL_COMPONENTS_MANAGE)
 
   const filtered = useMemo(
     () => tab === 'all' ? data : data.filter(c => c.category === tab),
@@ -228,10 +230,10 @@ export const SalaryComponents: React.FC = () => {
 
       {!isLoading && data.length === 0 ? (
         <EmptyState
-          variant="first-run"
+          icon={Wallet}
           title="No salary components"
           description="Seed the standard Indian payroll components to get started."
-          primaryAction={{
+          action={{
             label: seed.isPending ? 'Seeding…' : 'Seed default components',
             onClick: () => seed.mutate(undefined, {
               onSuccess: (r) => toast(`Seeded ${r.componentCount} components`, 'success'),
@@ -244,40 +246,29 @@ export const SalaryComponents: React.FC = () => {
           <HrTabs tabs={TABS} active={tab} onChange={setTab} />
           <HrTabPanel tabKey={tab}>
             <TableCard>
-              <table className="hr-table">
-                <thead>
-                  <tr>
-                    <th>Code</th><th>Name</th><th>Category</th>
-                    <th className="hidden sm:table-cell">Statutory</th>
-                    <th className="hidden md:table-cell">Computation</th><th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    [...Array(4)].map((_, i) => <tr key={i}><td colSpan={6} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-                  ) : filtered.length === 0 ? (
-                    <tr><td colSpan={6} className="py-12 text-center text-sm text-text-tertiary">No components in this category</td></tr>
-                  ) : filtered.map((r) => (
-                    <tr key={r.id}>
-                      <td><span className="font-mono text-[12px] text-[var(--text-tertiary)]">{r.code}</span></td>
-                      <td className="font-semibold text-text-primary">{r.name}</td>
-                      <td><HrStatusPill tone={catTone[r.category]}>{r.category.replace('_', ' ')}</HrStatusPill></td>
-                      <td className="hidden sm:table-cell">{r.isStatutory ? <HrStatusPill tone="warn">Statutory</HrStatusPill> : <span className="text-text-tertiary">—</span>}</td>
-                      <td className="hidden md:table-cell text-text-secondary">{sentenceCase(r.computationType)}{r.percentValue ? ` (${r.percentValue}%)` : ''}</td>
-                      <td>
-                        <Can code={P.PAYROLL_COMPONENTS_MANAGE}>
-                          {!r.isSystem && (
-                            <div className="flex items-center justify-end gap-1">
-                              <button onClick={() => setEditing(r)} title="Edit" aria-label="Edit component" className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><Pencil size={15} /></button>
-                              <button onClick={() => del.mutate(r.id, { onSuccess: () => toast('Component deleted', 'success'), onError: (e) => toast((e as Error).message, 'error') })} title="Delete" aria-label="Delete component" className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-rose-600"><Trash2 size={15} /></button>
-                            </div>
-                          )}
-                        </Can>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <DataTable
+                columns={[
+                  { key: 'code', header: 'Code', render: (r) => <span className="font-mono text-[12px] text-[var(--text-tertiary)]">{r.code}</span> },
+                  { key: 'name', header: 'Name', render: (r) => <span className="font-semibold text-text-primary">{r.name}</span> },
+                  { key: 'category', header: 'Category', render: (r) => <HrStatusPill tone={catTone[r.category]}>{r.category.replace('_', ' ')}</HrStatusPill> },
+                  { key: 'statutory', header: 'Statutory', render: (r) => r.isStatutory ? <HrStatusPill tone="warn">Statutory</HrStatusPill> : <span className="text-text-tertiary">—</span> },
+                  { key: 'computation', header: 'Computation', render: (r) => <span className="text-text-secondary">{sentenceCase(r.computationType)}{r.percentValue ? ` (${r.percentValue}%)` : ''}</span> },
+                  ...(canWrite ? [{
+                    key: 'actions', header: '', render: (r: SalaryComponent) => (
+                      !r.isSystem ? (
+                        <div className="flex items-center justify-end gap-1 w-full">
+                          <button onClick={() => setEditing(r)} title="Edit" aria-label="Edit component" className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><Pencil size={15} /></button>
+                          <button onClick={() => del.mutate(r.id, { onSuccess: () => toast('Component deleted', 'success'), onError: (e) => toast((e as Error).message, 'error') })} title="Delete" aria-label="Delete component" className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-rose-600"><Trash2 size={15} /></button>
+                        </div>
+                      ) : <></>
+                    )
+                  }] : [])
+                ]}
+                data={filtered}
+                keyField="id"
+                loading={isLoading}
+                emptyMessage="No components in this category."
+              />
             </TableCard>
           </HrTabPanel>
         </>

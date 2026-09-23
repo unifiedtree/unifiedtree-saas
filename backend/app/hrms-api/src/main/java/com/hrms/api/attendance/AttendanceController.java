@@ -214,8 +214,8 @@ public class AttendanceController {
             @RequestParam(required = false) @Min(1) @Max(12) Integer month,
             @AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
-        int y = year  != null ? year  : LocalDate.now().getYear();
-        int m = month != null ? month : LocalDate.now().getMonthValue();
+        int y = year  != null ? year  : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).getYear();
+        int m = month != null ? month : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).getMonthValue();
         return ResponseEntity.ok(attendanceService.getMonthlyStats(employeeId, y, m));
     }
 
@@ -227,8 +227,8 @@ public class AttendanceController {
             @RequestParam(required = false) @Min(1) @Max(12) Integer month,
             @AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
-        int y = year  != null ? year  : LocalDate.now().getYear();
-        int m = month != null ? month : LocalDate.now().getMonthValue();
+        int y = year  != null ? year  : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).getYear();
+        int m = month != null ? month : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).getMonthValue();
         return ResponseEntity.ok(attendanceService.getMonthHistory(employeeId, y, m));
     }
 
@@ -251,7 +251,7 @@ public class AttendanceController {
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
         AttendanceContextResolver.Context ctx = contextResolver.resolve(employeeId);
         AttendanceDto todayRecord = attendanceService.getTodayRecord(employeeId).orElse(null);
-        LocalDate now = LocalDate.now();
+        LocalDate now = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
 
         int teamPresent = 0;
         if (isManagerOrAdmin(jwt)) {
@@ -284,7 +284,7 @@ public class AttendanceController {
             @RequestParam(required = false) LocalDate date,
             @RequestParam(required = false) UUID departmentId,
             @AuthenticationPrincipal Jwt jwt) {
-        LocalDate selectedDate = date != null ? date : LocalDate.now();
+        LocalDate selectedDate = date != null ? date : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         List<Employee> employees = scopedEmployees(jwt, departmentId);
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         List<AttendanceRecord> records = attendanceService.getRecordsForEmployeesOnDate(
@@ -297,14 +297,25 @@ public class AttendanceController {
         Map<UUID, LocalTime> shiftEndByEmployee =
                 attendanceService.getShiftEndTimesForEmployees(employeeIds, selectedDate);
 
+        // Approved leave is looked up ONCE and handed to both the roster rows
+        // and the tiles. It used to be fetched inside countSummary only, which
+        // is why the "On Leave" / "Absent" tiles had no per-row counterpart:
+        // clicking a tile filtered rows that never carried the fact the tile
+        // was counting. One lookup, one set, both consumers.
+        Set<UUID> onLeaveIds = employees.isEmpty()
+                ? Set.of()
+                : Set.copyOf(leaveRequestRepository.findEmployeeIdsOnApprovedLeave(
+                        employeeIds, selectedDate));
+
         List<StaffStatusResponse> staff = employees.stream()
                 .map(employee -> toStaffStatus(
-                        employee, byEmployee.get(employee.getId()), departmentNames, shiftEndByEmployee))
+                        employee, byEmployee.get(employee.getId()), departmentNames, shiftEndByEmployee,
+                        onLeaveIds.contains(employee.getId())))
                 .sorted(Comparator.comparing(StaffStatusResponse::fullName))
                 .toList();
 
         return ResponseEntity.ok(new TeamDashboardResponse(
-                selectedDate, countSummary(employees, records, shiftEndByEmployee, selectedDate), staff));
+                selectedDate, countSummary(employees, records, shiftEndByEmployee, onLeaveIds), staff));
     }
 
     /**
@@ -328,7 +339,7 @@ public class AttendanceController {
             @RequestParam(required = false) LocalDate to,
             @RequestParam(required = false) UUID departmentId,
             @AuthenticationPrincipal Jwt jwt) {
-        LocalDate end   = to != null ? to : LocalDate.now();
+        LocalDate end   = to != null ? to : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         LocalDate start = from != null ? from : end.minusDays(6);
         if (start.isAfter(end)) {
             LocalDate swap = start; start = end; end = swap;
@@ -391,7 +402,7 @@ public class AttendanceController {
                 .filter(r -> r.getAttendanceType() != null && r.getAttendanceType().name().equals("WFH"))
                 .count();
         long marked = dayRecords.stream().filter(r -> r.getCheckInAt() != null).count();
-        long present = Math.max(0, marked - late - halfDay - workFromHome);
+        long present = dayRecords.stream().filter(AttendanceController::isPresentBucket).count();
 
         Set<UUID> markedIds = dayRecords.stream()
                 .filter(r -> r.getCheckInAt() != null)
@@ -439,7 +450,7 @@ public class AttendanceController {
             @RequestParam(required = false) LocalDate date,
             @RequestParam(required = false) UUID departmentId,
             @AuthenticationPrincipal Jwt jwt) {
-        LocalDate selectedDate = date != null ? date : LocalDate.now();
+        LocalDate selectedDate = date != null ? date : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         List<Employee> employees = scopedEmployees(jwt, departmentId);
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         List<AttendanceRecord> records = employeeIds.isEmpty()
@@ -480,7 +491,7 @@ public class AttendanceController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) String search,
             @AuthenticationPrincipal Jwt jwt) {
-        LocalDate selectedDate = date != null ? date : LocalDate.now();
+        LocalDate selectedDate = date != null ? date : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         List<Employee> employees = scopedEmployees(jwt, departmentId);
         Map<UUID, Employee> employeeMap = employees.stream()
                 .collect(Collectors.toMap(Employee::getId, Function.identity()));
@@ -656,6 +667,8 @@ public class AttendanceController {
                         || "attendance.admin.read".equals(a)
                         || "ROLE_HR_MANAGER".equals(a)
                         || "ROLE_COMPANY_ADMIN".equals(a)
+                        || "ROLE_OWNER".equals(a)
+                        || "ROLE_ADMIN".equals(a)
                         || "ROLE_SUPER_ADMIN".equals(a)) return;
             }
         }
@@ -711,17 +724,19 @@ public class AttendanceController {
         return employees;
     }
 
-    private boolean isManagerOrAdmin(Jwt jwt) {
+    static boolean isManagerOrAdmin(Jwt jwt) {
         List<String> roles = jwt.getClaimAsStringList("roles");
         return roles != null && roles.stream()
                 .anyMatch(role -> role.equals("DEPT_MANAGER") || role.equals("HR_MANAGER")
+                        || role.equals("MANAGER") || role.equals("OWNER") || role.equals("ADMIN")
                         || role.equals("COMPANY_ADMIN") || role.equals("SUPER_ADMIN"));
     }
 
-    private boolean isAdmin(Jwt jwt) {
+    static boolean isAdmin(Jwt jwt) {
         List<String> roles = jwt.getClaimAsStringList("roles");
         return roles != null && roles.stream()
-                .anyMatch(role -> role.equals("HR_MANAGER") || role.equals("COMPANY_ADMIN") || role.equals("SUPER_ADMIN"));
+                .anyMatch(role -> role.equals("HR_MANAGER") || role.equals("COMPANY_ADMIN") || role.equals("SUPER_ADMIN")
+                        || role.equals("OWNER") || role.equals("ADMIN"));
     }
 
     private Map<UUID, String> departmentNames(List<Employee> employees) {
@@ -742,7 +757,8 @@ public class AttendanceController {
     private StaffStatusResponse toStaffStatus(Employee employee,
                                               AttendanceRecord record,
                                               Map<UUID, String> departmentNames,
-                                              Map<UUID, LocalTime> shiftEndByEmployee) {
+                                              Map<UUID, LocalTime> shiftEndByEmployee,
+                                              boolean onLeave) {
         return new StaffStatusResponse(
                 employee.getId(),
                 employee.getEmployeeCode(),
@@ -759,13 +775,24 @@ public class AttendanceController {
                 record != null ? record.getLocationName() : null,
                 record != null ? record.getCheckInLatitude() : null,
                 record != null ? record.getCheckInLongitude() : null,
-                isEarlyCheckout(record, shiftEndByEmployee));
+                isEarlyCheckout(record, shiftEndByEmployee),
+                record != null && record.getAttendanceType() != null
+                        ? record.getAttendanceType().name()
+                        : null,
+                onLeave);
+    }
+
+    // Count a set, not scalar subtraction: LATE and WFH can overlap.
+    static boolean isPresentBucket(AttendanceRecord record) {
+        String status = record.getAttendanceStatus() == null ? "" : record.getAttendanceStatus().name();
+        return record.getCheckInAt() != null && !status.equals("LATE") && !status.equals("HALF_DAY")
+                && (record.getAttendanceType() == null || !record.getAttendanceType().name().equals("WFH"));
     }
 
     private AttendanceSummaryCounts countSummary(List<Employee> employees,
                                                  List<AttendanceRecord> records,
                                                  Map<UUID, LocalTime> shiftEndByEmployee,
-                                                 LocalDate date) {
+                                                 Set<UUID> onLeaveIds) {
         long late = records.stream()
                 .filter(record -> record.getAttendanceStatus() != null && record.getAttendanceStatus().name().equals("LATE"))
                 .count();
@@ -776,17 +803,13 @@ public class AttendanceController {
                 .filter(record -> record.getAttendanceType() != null && record.getAttendanceType().name().equals("WFH"))
                 .count();
         long marked = records.stream().filter(record -> record.getCheckInAt() != null).count();
-        long present = Math.max(0, marked - late - halfDay - workFromHome);
+        long present = records.stream().filter(AttendanceController::isPresentBucket).count();
 
         // Who is legitimately out today. Only APPROVED leave counts — a pending
-        // request has not taken anyone out of the office. Restricted to the
-        // roster this dashboard is already scoped to, so a manager's tile never
-        // leaks org-wide numbers. Empty roster short-circuits: passing an empty
-        // IN (:ids) list is both pointless and invalid on some drivers.
-        Set<UUID> onLeaveIds = employees.isEmpty()
-                ? Set.of()
-                : Set.copyOf(leaveRequestRepository.findEmployeeIdsOnApprovedLeave(
-                        employees.stream().map(Employee::getId).toList(), date));
+        // request has not taken anyone out of the office. The set is resolved by
+        // the caller (one lookup, shared with the per-row roster) and is already
+        // restricted to the roster this dashboard is scoped to, so a manager's
+        // tile never leaks org-wide numbers.
         long onLeave = onLeaveIds.size();
 
         // An employee on approved leave who also punched in is counted by the

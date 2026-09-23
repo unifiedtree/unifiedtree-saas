@@ -134,7 +134,7 @@ public class SeatQuotaService {
         if (billed != null && billed > 0) return billed;
 
         Integer module = firstInt("""
-                SELECT max(seats) FROM platform.tenant_modules
+                SELECT max(NULLIF(to_jsonb(tm)->>'seats', '')::integer) FROM platform.tenant_modules tm
                  WHERE tenant_id = ? AND status = 'ACTIVE'
                 """, tenantId);
         if (module != null && module > 0) return module;
@@ -146,8 +146,8 @@ public class SeatQuotaService {
                     "SELECT plan_type FROM platform.tenants WHERE id = ?",
                     String.class, tenantId);
             if ("TRIAL".equalsIgnoreCase(planType)) return TRIAL_FALLBACK_CAP;
-        } catch (Exception ignored) {
-            // plan_type column may not exist on older schemas — fall through
+        } catch (org.springframework.dao.EmptyResultDataAccessException ignored) {
+            // An unknown workspace has no seats; database errors must propagate.
         }
         return 0;
     }
@@ -177,18 +177,11 @@ public class SeatQuotaService {
     }
 
     /**
-     * Nullable-int helper used only by {@link #seatCap(UUID)} where a missing
-     * subscriptions/tenant_modules row genuinely means "not configured yet"
-     * and we do want to fall through to the trial/zero rule. NEVER use this
-     * for the used-seat count — the enforcer relies on that query throwing
-     * so it can fail closed.
+     * Aggregate queries return null when no cap is configured. Do not swallow
+     * SQL errors: PostgreSQL aborts the caller's transaction after an error,
+     * and the quota enforcer must report that failure rather than keep querying.
      */
     private Integer firstInt(String sql, UUID tenantId) {
-        try {
-            return jdbc.queryForObject(sql, Integer.class, tenantId);
-        } catch (RuntimeException e) {
-            log.warn("seat-cap lookup failed for tenant {}: {}", tenantId, e.getMessage());
-            return null;
-        }
+        return jdbc.queryForObject(sql, Integer.class, tenantId);
     }
 }

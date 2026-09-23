@@ -3,8 +3,6 @@ package com.hrms.api.payroll;
 import com.hrms.core.crypto.FieldEncryptor;
 import com.hrms.core.exception.BusinessRuleException;
 import com.unifiedtree.security.tenant.TenantContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -35,8 +33,6 @@ import java.util.regex.Pattern;
  */
 @Service
 public class DisbursementBatchService {
-
-    private static final Logger log = LoggerFactory.getLogger(DisbursementBatchService.class);
 
     /** Employee bank IFSC — same shape check as BankProfileService. */
     private static final Pattern IFSC = Pattern.compile("^[A-Z]{4}0[A-Z0-9]{6}$");
@@ -145,9 +141,9 @@ public class DisbursementBatchService {
     // ── Writes ────────────────────────────────────────────────────────────────
 
     /**
-     * Build a DRAFT batch from a LOCKED payroll run. Idempotent per
-     * (run, bank_profile): a second call with the same pair either returns
-     * the existing DRAFT or 409s if the prior batch is POSTED/PAID.
+     * Build one full-run DRAFT batch. The same bank profile may rebuild its
+     * DRAFT; changing banks requires cancelling that batch first. Each batch
+     * contains the entire run, so two active profiles would pay it twice.
      */
     @Transactional
     public BatchDetailDto buildFromRun(UUID tenantId, BuildBatchRequest req, UUID actorId) {
@@ -156,7 +152,7 @@ public class DisbursementBatchService {
         // Validate run + bank profile + they belong to the same tenant/company
         Map<String, Object> run = jdbc.query("""
                 SELECT id, company_id, status, total_net, period_month, period_year
-                  FROM payroll.runs WHERE id = ?
+                  FROM payroll.runs WHERE id = ? FOR UPDATE
                 """, rs -> {
                     if (!rs.next()) return null;
                     return Map.of(
@@ -194,21 +190,20 @@ public class DisbursementBatchService {
                     "COMPANY_MISMATCH");
         }
 
-        // Reuse an existing DRAFT batch for the same (run, profile) if present.
-        // Fail loudly if a POSTED/PAID batch already exists (partial-UNIQUE
-        // index would raise too; this gives a friendlier message).
+        // The run lock serializes builds, posting, payment and cancellation.
+        // The database also enforces one non-cancelled batch per run.
         UUID existingId = jdbc.query("""
-                SELECT id, status FROM payroll.disbursement_batches
-                 WHERE run_id = ? AND bank_profile_id = ?
-                   AND status IN ('DRAFT','POSTED','PAID')
+                SELECT id, status, bank_profile_id FROM payroll.disbursement_batches
+                 WHERE run_id = ? AND status <> 'CANCELLED'
                 """, rs -> {
                     if (!rs.next()) return null;
                     String s = rs.getString("status");
-                    if (!"DRAFT".equals(s)) throw new BusinessRuleException(
-                        "An active batch (" + s + ") already exists for this run+bank profile",
+                    if (!"DRAFT".equals(s) || !req.bankProfileId().equals(rs.getObject("bank_profile_id", UUID.class)))
+                        throw new BusinessRuleException(
+                        "An active batch (" + s + ") already covers this payroll run. Cancel it before changing banks.",
                         "BATCH_ALREADY_EXISTS");
                     return rs.getObject("id", UUID.class);
-                }, req.runId(), req.bankProfileId());
+                }, req.runId());
 
         UUID batchId = existingId;
         if (batchId == null) {
@@ -321,10 +316,13 @@ public class DisbursementBatchService {
     @Transactional
     public BatchDto post(UUID tenantId, UUID batchId, UUID actorId) {
         bindTenant(tenantId);
-        BatchDto b = getBatch(batchId);
+        LockedBatch locked = lockBatchRun(batchId);
+        BatchDto b = locked.batch();
         if ("PAID".equals(b.status()) || "CANCELLED".equals(b.status())) {
             throw new BusinessRuleException("Cannot post a " + b.status() + " batch", "BATCH_LOCKED");
         }
+        requireLockedRun(locked.runStatus());
+        requireAllRecipientsReady(batchId);
         if (b.beneficiaryCount() == 0) {
             throw new BusinessRuleException(
                     "Batch has no beneficiaries — check for missing bank details",
@@ -348,7 +346,8 @@ public class DisbursementBatchService {
     @Transactional
     public BatchDto markPaid(UUID tenantId, UUID batchId, MarkPaidRequest req, UUID actorId) {
         bindTenant(tenantId);
-        BatchDto b = getBatch(batchId);
+        LockedBatch locked = lockBatchRun(batchId);
+        BatchDto b = locked.batch();
         // QA FIX (2026-08-11, finding wmih6ivbj/CRIT-0):
         //   Previous guard permitted DRAFT here — that bypassed post() entirely,
         //   meaning no NEFT file was ever generated but the payroll run still
@@ -366,21 +365,15 @@ public class DisbursementBatchService {
         // ARCHIVED / CANCELLED run would still be marked PAID (batch update
         // succeeds, run flip no-ops, permanent ledger split). Now: only a
         // LOCKED run can mark its batch PAID; anything else refuses loudly.
-        String currentRunStatus = jdbc.query(
-                "SELECT status FROM payroll.runs WHERE id = ?",
-                rs -> rs.next() ? rs.getString("status") : null,
-                b.runId());
+        String currentRunStatus = locked.runStatus();
         if ("PROCESSING".equals(currentRunStatus)) {
             throw new BusinessRuleException(
                     "Underlying payroll run is still PROCESSING — cannot mark the "
                     + "disbursement batch PAID until the run finishes and LOCKS.",
                     "RUN_STILL_PROCESSING");
         }
-        if (!"LOCKED".equals(currentRunStatus) && !"PAID".equals(currentRunStatus)) {
-            throw new BusinessRuleException(
-                    "Underlying payroll run is " + currentRunStatus + " — only LOCKED runs can be marked paid.",
-                    "RUN_NOT_LOCKED");
-        }
+        requireLockedRun(currentRunStatus);
+        requireAllRecipientsReady(batchId);
         jdbc.update("""
                 UPDATE payroll.disbursement_batches
                    SET status = 'PAID', paid_at = now(),
@@ -398,11 +391,9 @@ public class DisbursementBatchService {
                  WHERE id = ? AND status = 'LOCKED'
                 """, b.runId());
         if (flipped == 0) {
-            // Non-fatal but audit it — the batch is PAID even if the run wasn't
-            // in an eligible state to flip (already PAID / CANCELLED / not
-            // LOCKED). Log for reconciliation; don't roll back the batch.
-            log.warn("Batch {} marked PAID but run {} was not in LOCKED (was {}) — no run status change",
-                    batchId, b.runId(), currentRunStatus);
+            // Roll back the batch update as well; payment and run status must
+            // never disagree, including when another workflow changes a run.
+            throw new BusinessRuleException("Payroll run changed; refresh before recording payment", "RUN_NOT_LOCKED");
         }
 
         return getBatch(batchId);
@@ -411,7 +402,7 @@ public class DisbursementBatchService {
     @Transactional
     public BatchDto cancel(UUID tenantId, UUID batchId, UUID actorId) {
         bindTenant(tenantId);
-        BatchDto b = getBatch(batchId);
+        BatchDto b = lockBatchRun(batchId).batch();
         if ("PAID".equals(b.status())) {
             throw new BusinessRuleException("Cannot cancel a PAID batch — record a reversal instead",
                     "BATCH_ALREADY_PAID");
@@ -435,6 +426,10 @@ public class DisbursementBatchService {
     @Transactional
     public byte[] generateNeftFile(UUID tenantId, UUID batchId) {
         bindTenant(tenantId);
+        LockedBatch locked = lockBatchRun(batchId);
+        requireLockedRun(locked.runStatus());
+        if (!"POSTED".equals(locked.batch().status())) throw new BusinessRuleException(
+                "Only a posted, unpaid batch can generate a bank file", "BATCH_NOT_POSTED");
         BatchDetailDto detail = get(tenantId, batchId);
         String format = jdbc.queryForObject("""
                 SELECT bp.bank_format FROM payroll.bank_profiles bp
@@ -520,6 +515,31 @@ public class DisbursementBatchService {
                 (rs, i) -> toBatchDto(rs), batchId);
         if (rows.isEmpty()) throw new BusinessRuleException("Batch not found", "BATCH_NOT_FOUND");
         return rows.get(0);
+    }
+
+    private record LockedBatch(BatchDto batch, String runStatus) {}
+
+    private LockedBatch lockBatchRun(UUID batchId) {
+        BatchDto initial = getBatch(batchId);
+        String runStatus = jdbc.query("SELECT status FROM payroll.runs WHERE id = ? FOR UPDATE",
+                rs -> rs.next() ? rs.getString("status") : null, initial.runId());
+        if (runStatus == null) throw new BusinessRuleException("Payroll run not found", "RUN_NOT_FOUND");
+        // A concurrent payment/cancel may have completed while acquiring the
+        // run lock. Re-read the batch after waiting, before checking its state.
+        return new LockedBatch(getBatch(batchId), runStatus);
+    }
+
+    private static void requireLockedRun(String status) {
+        if (!"LOCKED".equals(status)) throw new BusinessRuleException(
+                "Underlying payroll run is " + status + "; only LOCKED runs can be disbursed.", "RUN_NOT_LOCKED");
+    }
+
+    private void requireAllRecipientsReady(UUID batchId) {
+        Integer excluded = jdbc.queryForObject("SELECT count(*) FROM payroll.disbursement_batch_lines WHERE batch_id = ? AND status <> 'READY'",
+                Integer.class, batchId);
+        if (excluded != null && excluded > 0) throw new BusinessRuleException(
+                "Batch excludes " + excluded + " employee(s). Correct their bank details and rebuild the draft before posting or recording payment.",
+                "BATCH_HAS_EXCLUDED_EMPLOYEES");
     }
 
     private BatchDto toBatchDto(java.sql.ResultSet rs) throws java.sql.SQLException {

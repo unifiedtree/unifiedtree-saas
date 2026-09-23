@@ -6,6 +6,7 @@ import { useToast } from '@/shared/hooks/useToast'
 import {
   HrPageHeader, HrButton, HrDrawer, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
+import { OffersTab } from './hiring/OffersTab'
 import { useCompanies } from './api/useOrg'
 import {
   useRequisitions, useRequisition, useCreateRequisition, useUpdateRequisition, useCloseRequisition,
@@ -24,17 +25,19 @@ const STAGE_TONE: Record<CandidateStage, PillTone> = {
 
 const fmtEnum = (c: string) => c.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase())
 
-type Tab = 'requisitions' | 'pipeline'
+type Tab = 'requisitions' | 'pipeline' | 'offers'
 
 export const Hiring: React.FC = () => {
   const canRead = usePermission('hrms.hiring.read')
   const canWrite = usePermission('hrms.hiring.write')
   const canCandidateWrite = usePermission('hrms.hiring.candidate.write')
+  const canOfferRead = usePermission('hrms.hiring.offer.read')
   const [tab, setTab] = useState<Tab>('requisitions')
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'requisitions', label: 'Requisitions' },
     ...(canRead ? [{ key: 'pipeline' as Tab, label: 'Pipeline' }] : []),
+    ...(canRead || canOfferRead ? [{ key: 'offers' as Tab, label: 'Offer Management' }] : []),
   ]
 
   return (
@@ -45,6 +48,7 @@ export const Hiring: React.FC = () => {
 
       {tab === 'requisitions' && <HrTabPanel tabKey="requisitions"><RequisitionsTab canWrite={canWrite} /></HrTabPanel>}
       {tab === 'pipeline' && canRead && <HrTabPanel tabKey="pipeline"><PipelineTab canCandidateWrite={canCandidateWrite} /></HrTabPanel>}
+      {tab === 'offers' && (canRead || canOfferRead) && <HrTabPanel tabKey="offers"><OffersTab /></HrTabPanel>}
     </div>
   )
 }

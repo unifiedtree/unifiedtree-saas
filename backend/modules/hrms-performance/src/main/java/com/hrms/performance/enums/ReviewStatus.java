@@ -6,6 +6,8 @@ package com.hrms.performance.enums;
  */
 public enum ReviewStatus {
     PENDING,
+    IN_PROGRESS,
+    MISSED,
     SUBMITTED,
     ACKNOWLEDGED
 }

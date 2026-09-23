@@ -197,6 +197,18 @@ export function useLockRun(id: string) {
   })
 }
 
+export function useReopenRun(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (reason: string) => apiJson<PayrollRun>(`/v1/payroll/runs/${id}/reopen`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEY })
+      qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'me', 'payslips'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'dashboard'] })
+    },
+  })
+}
+
 // ── PDF blob download (raw fetch — apiJson only parses JSON) ─────────────────
 
 async function downloadPdf(path: string, filename: string): Promise<void> {

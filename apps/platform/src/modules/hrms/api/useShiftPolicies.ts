@@ -113,3 +113,39 @@ export function useDeleteShiftPolicy() {
     onSuccess: (_res, vars) => qc.invalidateQueries({ queryKey: [...KEY, vars.companyId] }),
   })
 }
+
+// ── The shift ONE employee is assigned to ────────────────────────────────────
+//
+// GET /v1/shifts/employee/{employeeId} (ShiftController). Returns the policy
+// fields all-null rather than 404 when nobody has assigned a shift, so callers
+// check `shiftPolicyId` — not the response itself — to decide "unassigned".
+//
+// Caveat worth knowing: this endpoint is gated only on attendance.checkin.self
+// and carries NO object-scope guard, unlike the attendance reads next to it.
+// Tenant RLS is the only boundary. That is pre-existing backend behaviour; the
+// profile does not widen it, and the shift row it renders (name + timings) is
+// the same non-sensitive scheduling info the roster screens already show.
+
+export interface EmployeeShift {
+  employeeId: string
+  shiftPolicyId?: string | null
+  shiftName?: string | null
+  shiftType?: string | null
+  startTime?: string | null
+  endTime?: string | null
+  gracePeriodMinutes?: number | null
+  effectiveFrom?: string | null
+}
+
+export function useEmployeeShift(
+  employeeId: string | undefined,
+  opts?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ['shifts', 'employee', employeeId],
+    queryFn: () => apiJson<EmployeeShift>(`/v1/shifts/employee/${employeeId}`),
+    enabled: (opts?.enabled ?? true) && !!employeeId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+}

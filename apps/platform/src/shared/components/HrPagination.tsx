@@ -37,47 +37,89 @@ export interface HrPaginationProps {
   /** `PageResponse.totalPages`. */
   totalPages: number
   onPageChange: (page: number) => void
+  /**
+   * Opt into a rows-per-page control. Supply a handler and the pager renders
+   * the selector; omit it and the pager is exactly what it was before.
+   *
+   * Opt-in rather than always-on because `pageSize` is currently a hook
+   * constant on most screens — a screen must be able to *accept* a new size
+   * before it is offered one, otherwise the control would silently do nothing.
+   */
+  onPageSizeChange?: (size: number) => void
+  /** Sizes offered. Defaults to 10 / 25 / 50 / 100. */
+  pageSizeOptions?: number[]
 }
+
+const DEFAULT_PAGE_SIZES = [10, 25, 50, 100]
 
 export function HrPagination({
   page, pageSize, totalElements, totalPages, onPageChange,
+  onPageSizeChange, pageSizeOptions = DEFAULT_PAGE_SIZES,
 }: HrPaginationProps) {
   // Nothing to page through: render nothing at all rather than a row of
-  // permanently-disabled controls. Callers normally reach this through
-  // `hrPaginationFooter` (below), which also stops TableCard from drawing the
-  // empty bordered strip that a non-null footer prop would produce.
-  if (totalPages <= 1) return null
+  // permanently-disabled controls — UNLESS a rows-per-page control is offered,
+  // in which case the bar must stay so the user can enlarge the page and can
+  // get back from a size that collapsed the list to one page.
+  if (totalPages <= 1 && !onPageSizeChange) return null
 
-  const first = page * pageSize + 1
+  const first = totalElements === 0 ? 0 : page * pageSize + 1
   const last = Math.min((page + 1) * pageSize, totalElements)
 
   return (
-    <div className="flex items-center justify-between">
-      <p className="text-xs text-text-secondary">
-        Showing <span className="font-semibold text-text-primary">{first}–{last}</span> of{' '}
-        <span className="font-semibold text-text-primary">{totalElements}</span>
-      </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onPageChange(page - 1)}
-          disabled={page === 0}
-          aria-label="Previous page"
-          className="rounded-lg border border-border-default p-1.5 text-text-secondary transition-colors hover:text-text-primary disabled:opacity-40"
-        >
-          <ChevronLeft size={15} />
-        </button>
-        <span className="px-1 text-xs font-semibold text-text-primary">{page + 1} / {totalPages}</span>
-        <button
-          type="button"
-          onClick={() => onPageChange(page + 1)}
-          disabled={page >= totalPages - 1}
-          aria-label="Next page"
-          className="rounded-lg border border-border-default p-1.5 text-text-secondary transition-colors hover:text-text-primary disabled:opacity-40"
-        >
-          <ChevronRight size={15} />
-        </button>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-4">
+        <p className="text-xs text-text-secondary">
+          Showing <span className="font-semibold text-text-primary">{first}–{last}</span> of{' '}
+          <span className="font-semibold text-text-primary">{totalElements}</span>
+        </p>
+        {onPageSizeChange && (
+          <label className="flex items-center gap-1.5 text-xs text-text-secondary">
+            Rows
+            <select
+              value={pageSize}
+              aria-label="Rows per page"
+              data-testid="rows-per-page"
+              onChange={(e) => {
+                // Jump back to the first page: page 7 of a 10-row list does not
+                // exist once the size becomes 100, and asking the server for it
+                // returns an empty page that reads as "the data vanished".
+                onPageSizeChange(Number(e.target.value))
+                onPageChange(0)
+              }}
+              className="ut-select ut-select-sm w-auto min-w-[72px]"
+            >
+              {pageSizeOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </label>
+        )}
       </div>
+      {/* Nav cluster only when there is somewhere to go. With a rows-per-page
+          control the bar can now survive a single-page result, and a permanent
+          "1 / 1" between two dead arrows is exactly the dead control this
+          component was factored out to remove. */}
+      {totalPages > 1 && (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page === 0}
+            aria-label="Previous page"
+            className="rounded-lg border border-border-default p-1.5 text-text-secondary transition-colors hover:text-text-primary disabled:opacity-40"
+          >
+            <ChevronLeft size={15} />
+          </button>
+          <span className="px-1 text-xs font-semibold text-text-primary">{page + 1} / {totalPages}</span>
+          <button
+            type="button"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages - 1}
+            aria-label="Next page"
+            className="rounded-lg border border-border-default p-1.5 text-text-secondary transition-colors hover:text-text-primary disabled:opacity-40"
+          >
+            <ChevronRight size={15} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -91,7 +133,10 @@ export function HrPagination({
  * to happen before the element is created, not inside it.
  */
 export function hrPaginationFooter(props: HrPaginationProps): React.ReactNode {
-  return props.totalPages > 1 ? <HrPagination {...props} /> : undefined
+  // A rows-per-page control keeps the bar worth drawing even on a single page:
+  // the user may have just chosen "100" and needs a way back to "10".
+  const worthDrawing = props.totalPages > 1 || Boolean(props.onPageSizeChange)
+  return worthDrawing ? <HrPagination {...props} /> : undefined
 }
 
 /**

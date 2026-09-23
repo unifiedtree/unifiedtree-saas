@@ -3,6 +3,9 @@ package com.hrms.api.compliance;
 import com.hrms.compliance.dto.ComplianceItemRequest;
 import com.hrms.compliance.dto.ComplianceItemResponse;
 import com.hrms.compliance.dto.FileFilingRequest;
+import com.hrms.compliance.dto.InspectorSessionRequest;
+import com.hrms.compliance.dto.InspectorSessionResponse;
+import com.hrms.compliance.dto.ComplianceCalendarEventResponse;
 import com.hrms.compliance.dto.PoshComplaintRequest;
 import com.hrms.compliance.dto.PoshComplaintResponse;
 import com.hrms.compliance.dto.PoshStatusRequest;
@@ -53,6 +56,40 @@ public class ComplianceController {
         this.complianceService = complianceService;
         this.poshService = poshService;
         this.employeeRepository = employeeRepository;
+    }
+
+
+    @Operation(summary = "List compliance calendar events")
+    @GetMapping("/calendar-events")
+    @PreAuthorize("hasAuthority('hrms.compliance.read')")
+    public ResponseEntity<List<ComplianceCalendarEventResponse>> calendarEvents(@RequestParam(required = false) UUID companyId) {
+        return ResponseEntity.ok(complianceService.calendarEvents(companyId));
+    }
+
+    @Operation(summary = "List inspector access sessions")
+    @GetMapping("/inspector-sessions")
+    @PreAuthorize("hasAnyAuthority('hrms.compliance.inspector.read','hrms.compliance.read')")
+    public ResponseEntity<PageResponse<InspectorSessionResponse>> listInspectorSessions(
+            @RequestParam(required = false) UUID companyId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(complianceService.listInspectorSessions(companyId, pageable));
+    }
+
+    @Operation(summary = "Create an inspector access OTP/session")
+    @PostMapping({"/inspector-sessions", "/inspector-sessions/otp"})
+    @PreAuthorize("hasAnyAuthority('hrms.compliance.inspector.write','hrms.compliance.write')")
+    public ResponseEntity<InspectorSessionResponse> createInspectorSession(
+            @Valid @RequestBody InspectorSessionRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID companyId = resolveCompanyId(request.companyId(), jwt);
+        return ResponseEntity.status(HttpStatus.CREATED).body(complianceService.createInspectorSession(companyId, request));
+    }
+
+    @Operation(summary = "Revoke an inspector access session")
+    @PostMapping("/inspector-sessions/{id}/revoke")
+    @PreAuthorize("hasAnyAuthority('hrms.compliance.inspector.write','hrms.compliance.write')")
+    public ResponseEntity<InspectorSessionResponse> revokeInspectorSession(@PathVariable UUID id) {
+        return ResponseEntity.ok(complianceService.revokeInspectorSession(id));
     }
 
     // ─── Compliance calendar ─────────────────────────────────────────────────
@@ -162,7 +199,7 @@ public class ComplianceController {
                 : employeeRepository.findAllById(ownerIds).stream()
                         .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
         List<ComplianceItemResponse> enriched = page.content().stream()
-                .map(r -> enrich(r, ownerMap.get(r.ownerId())))
+                .map(r -> enrich(r, r.ownerId() == null ? null : ownerMap.get(r.ownerId())))
                 .toList();
         return new PageResponse<>(enriched, page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last());

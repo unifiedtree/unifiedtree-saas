@@ -141,6 +141,45 @@ public class AdvanceRecoveryService {
     // ── Payroll integration ───────────────────────────────────────────────────
 
     /**
+     * Keep a payroll recovery intact once finance has settled its remaining debt.
+     * The row locks are retained by processRun's transaction, so a concurrent
+     * settlement cannot slip between this check and the recovery rewind.
+     */
+    @Transactional
+    public void assertRunRecoveryCanReprocess(UUID tenantId, UUID runId) {
+        bindTenant(tenantId);
+        List<UUID> advances = jdbc.query("""
+                SELECT ar.id, ar.status
+                  FROM advance_mgmt.advance_requests ar
+                 WHERE EXISTS (
+                     SELECT 1 FROM advance_mgmt.advance_recovery_schedule s
+                      WHERE s.advance_request_id = ar.id
+                        AND s.payroll_run_id = ? AND s.status = 'RECOVERED')
+                 ORDER BY ar.id
+                 FOR UPDATE OF ar
+                """, (rs, i) -> {
+                    if (!"DISBURSED".equals(rs.getString("status"))) throw settledRun();
+                    return rs.getObject("id", UUID.class);
+                }, runId);
+        for (UUID advance : advances) {
+            // Older settlement code left requests DISBURSED even after cancelling
+            // their schedule. The ledger is the authoritative evidence in that case.
+            Boolean settled = jdbc.queryForObject("""
+                    SELECT EXISTS (SELECT 1 FROM advance_mgmt.advance_ledger_entries
+                     WHERE advance_request_id = ? AND entry_type IN ('FORECLOSE', 'WRITE_OFF'))
+                    """, Boolean.class, advance);
+            if (Boolean.TRUE.equals(settled)) throw settledRun();
+        }
+    }
+
+    private BusinessRuleException settledRun() {
+        return new BusinessRuleException(
+                "This payroll includes an advance that has been settled or written off. "
+                        + "Keep the original payroll and record a separate finance adjustment.",
+                "ADVANCE_RECOVERY_SETTLED");
+    }
+
+    /**
      * Called from {@code PayrollRunService.processRun} inside its own
      * {@code @Transactional}. For every DISBURSED advance with a PENDING
      * schedule row for the run's period-month, records a REPAYMENT ledger
@@ -167,6 +206,7 @@ public class AdvanceRecoveryService {
                  WHERE s.scheduled_month = ?
                    AND s.status = 'PENDING'
                    AND ar.status = 'DISBURSED'
+                 FOR UPDATE OF ar, s
                 """, (rs, i) -> {
                     UUID scheduleId = rs.getObject("id", UUID.class);
                     UUID advId      = rs.getObject("advance_request_id", UUID.class);
@@ -239,28 +279,16 @@ public class AdvanceRecoveryService {
     public RecoverySummaryDto foreclose(UUID tenantId, UUID advanceRequestId,
                                        ForecloseRequest req, UUID actorId) {
         bindTenant(tenantId);
-        BigDecimal outstanding = jdbc.queryForObject(
-                "SELECT outstanding_amount FROM advance_mgmt.advance_requests WHERE id = ?",
-                BigDecimal.class, advanceRequestId);
-        if (outstanding == null) throw new BusinessRuleException("Advance not found", "ADVANCE_NOT_FOUND");
+        BigDecimal outstanding = lockDisbursedBalance(advanceRequestId);
         if (outstanding.signum() == 0) throw new BusinessRuleException("Nothing to foreclose", "NO_OUTSTANDING");
 
         BigDecimal lump = req.lumpSumAmount();
-        if (lump.signum() <= 0) throw new BusinessRuleException(
-                "Lump sum must be positive", "INVALID_AMOUNT");
-        // Reject over-payment outright — a silent clamp writes a bogus amount
-        // to the ledger (client says ₹10 000, we settle ₹500). Caller must
-        // send exactly what's owed, not more.
-        if (lump.compareTo(outstanding) > 0) {
-            throw new BusinessRuleException(
-                    "Lump sum ₹" + lump + " exceeds outstanding ₹" + outstanding,
-                    "LUMP_EXCEEDS_OUTSTANDING");
-        }
+        validateFullSettlement(lump, outstanding);
         BigDecimal newBalance = outstanding.subtract(lump);
 
         jdbc.update("""
                 UPDATE advance_mgmt.advance_requests
-                   SET outstanding_amount = ?, updated_at = now(),
+                   SET outstanding_amount = ?, status = 'CLOSED', updated_at = now(),
                        version = version + 1
                  WHERE id = ?
                 """, newBalance, advanceRequestId);
@@ -295,16 +323,13 @@ public class AdvanceRecoveryService {
     public RecoverySummaryDto writeOff(UUID tenantId, UUID advanceRequestId,
                                       WriteOffRequest req, UUID actorId) {
         bindTenant(tenantId);
-        BigDecimal outstanding = jdbc.queryForObject(
-                "SELECT outstanding_amount FROM advance_mgmt.advance_requests WHERE id = ?",
-                BigDecimal.class, advanceRequestId);
-        if (outstanding == null) throw new BusinessRuleException("Advance not found", "ADVANCE_NOT_FOUND");
+        BigDecimal outstanding = lockDisbursedBalance(advanceRequestId);
         if (outstanding.signum() == 0) throw new BusinessRuleException(
                 "Nothing to write off", "NO_OUTSTANDING");
 
         jdbc.update("""
                 UPDATE advance_mgmt.advance_requests
-                   SET outstanding_amount = 0, updated_at = now(),
+                   SET outstanding_amount = 0, status = 'CLOSED', updated_at = now(),
                        version = version + 1
                  WHERE id = ?
                 """, advanceRequestId);
@@ -335,6 +360,7 @@ public class AdvanceRecoveryService {
     public RecoverySummaryDto skipMonth(UUID tenantId, UUID advanceRequestId,
                                        SkipMonthRequest req, UUID actorId) {
         bindTenant(tenantId);
+        BigDecimal outstanding = lockDisbursedBalance(advanceRequestId);
         // The target installment must exist and be PENDING.
         Integer installmentNo = req.installmentNo();
         String status = jdbc.query("""
@@ -368,8 +394,9 @@ public class AdvanceRecoveryService {
                  WHERE advance_request_id = ?
                 """, LocalDate.class, advanceRequestId);
         BigDecimal amt = jdbc.queryForObject("""
-                SELECT monthly_deduction FROM advance_mgmt.advance_requests WHERE id = ?
-                """, BigDecimal.class, advanceRequestId);
+                SELECT scheduled_amount FROM advance_mgmt.advance_recovery_schedule
+                 WHERE advance_request_id = ? AND installment_no = ?
+                """, BigDecimal.class, advanceRequestId, installmentNo);
 
         LocalDate nextMonth = (lastMonth == null ? LocalDate.now() : lastMonth).plusMonths(1);
         jdbc.update("""
@@ -380,6 +407,13 @@ public class AdvanceRecoveryService {
                 """,
                 tenantId, advanceRequestId, maxNo + 1,
                 java.sql.Date.valueOf(nextMonth), amt);
+
+        jdbc.update("""
+                INSERT INTO advance_mgmt.advance_ledger_entries
+                    (tenant_id, advance_request_id, entry_type, amount, balance_after, reference, notes, created_by)
+                VALUES (?, ?, 'SKIP_MONTH', 0, ?, ?, ?, ?)
+                """, tenantId, advanceRequestId, outstanding, "installment:" + installmentNo,
+                req.reason(), actorId == null ? null : actorId.toString());
 
         return summary(tenantId, advanceRequestId);
     }
@@ -393,6 +427,7 @@ public class AdvanceRecoveryService {
     public void initSchedule(UUID tenantId, UUID advanceRequestId,
                             int startMonth, int startYear) {
         bindTenant(tenantId);
+        lockDisbursedBalance(advanceRequestId);
         Integer existing = jdbc.queryForObject("""
                 SELECT count(*) FROM advance_mgmt.advance_recovery_schedule
                  WHERE advance_request_id = ?
@@ -440,7 +475,9 @@ public class AdvanceRecoveryService {
 
         // Emit N monthly rows starting at (startMonth, startYear).
         LocalDate m = LocalDate.of(startYear, startMonth, 1);
+        BigDecimal remaining = principal;
         for (int i = 1; i <= months; i++) {
+            BigDecimal installment = installmentAmount(remaining, perMonth, i == months);
             jdbc.update("""
                     INSERT INTO advance_mgmt.advance_recovery_schedule
                         (tenant_id, advance_request_id, installment_no,
@@ -448,7 +485,8 @@ public class AdvanceRecoveryService {
                     VALUES (?, ?, ?, ?, ?, 'PENDING')
                     """,
                     tenantId, advanceRequestId, i,
-                    java.sql.Date.valueOf(m), perMonth);
+                    java.sql.Date.valueOf(m), installment);
+            remaining = remaining.subtract(installment);
             m = m.plusMonths(1);
         }
         log.info("initSchedule: seeded {} installments for advance {} starting {}",
@@ -456,6 +494,28 @@ public class AdvanceRecoveryService {
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
+
+    static void validateFullSettlement(BigDecimal lump, BigDecimal outstanding) {
+        if (lump == null || lump.signum() <= 0 || lump.compareTo(outstanding) != 0) {
+            throw new BusinessRuleException("Closing an advance requires its full outstanding balance of " + outstanding,
+                    "FULL_SETTLEMENT_REQUIRED");
+        }
+    }
+
+    static BigDecimal installmentAmount(BigDecimal remaining, BigDecimal monthly, boolean last) {
+        return last ? remaining : monthly.min(remaining).max(BigDecimal.ZERO);
+    }
+
+    private BigDecimal lockDisbursedBalance(UUID advanceRequestId) {
+        return jdbc.query("SELECT status, outstanding_amount FROM advance_mgmt.advance_requests WHERE id = ? FOR UPDATE",
+                rs -> {
+                    if (!rs.next()) throw new BusinessRuleException("Advance not found", "ADVANCE_NOT_FOUND");
+                    if (!"DISBURSED".equals(rs.getString("status"))) {
+                        throw new BusinessRuleException("Recovery actions require a disbursed advance", "ADVANCE_NOT_DISBURSED");
+                    }
+                    return rs.getBigDecimal("outstanding_amount");
+                }, advanceRequestId);
+    }
 
     private static String ts(java.sql.Timestamp t) {
         return t == null ? null : t.toInstant().toString();

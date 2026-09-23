@@ -104,31 +104,44 @@ export const TeamDashboard: React.FC = () => {
             No team data available for today
           </div>
         ) : (
-          <div className="divide-y divide-border-default">
-            {staffStatuses.slice(0, 8).map((s, i) => {
-              const pill = statusPill(s.status)
-              return (
-                <div key={s.employeeId} className="flex items-center gap-3 px-5 py-3">
-                  <div className="min-w-0 flex-1">
-                    <HrAvatar
-                      name={s.fullName ?? '—'}
-                      sub={s.jobTitle ?? s.departmentName ?? ''}
-                      seed={i}
-                    />
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <HrStatusPill tone={pill.tone}>
-                      <span className="capitalize">{pill.label}</span>
-                    </HrStatusPill>
-                    {s.checkInAt && (
-                      <span className="text-xs text-text-tertiary">
-                        {format(new Date(s.checkInAt), 'h:mm a')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-border-default bg-bg-base text-xs text-text-secondary">
+                <tr>
+                  <th className="p-4 font-medium">Team Member</th>
+                  <th className="p-4 font-medium">Punch In</th>
+                  <th className="p-4 font-medium">Punch Out</th>
+                  <th className="p-4 font-medium">Role</th>
+                  <th className="p-4 font-medium">Today Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {staffStatuses.slice(0, 8).map((s, i) => {
+                  const pill = statusPill(s.status)
+                  return (
+                    <tr key={s.employeeId} className="border-b border-border-default/40">
+                      <td className="p-4">
+                        <HrAvatar
+                          name={s.fullName ?? '—'}
+                          sub=""
+                          seed={i}
+                        />
+                      </td>
+                      <td className="p-4 text-text-secondary">
+                        {s.checkInAt ? format(new Date(s.checkInAt), 'hh:mm a') : '--'}
+                      </td>
+                      <td className="p-4 text-text-secondary">--</td>
+                      <td className="p-4 text-text-secondary">{s.jobTitle ?? s.departmentName ?? '--'}</td>
+                      <td className="p-4">
+                        <HrStatusPill tone={pill.tone}>
+                          <span className="capitalize">{pill.label}</span>
+                        </HrStatusPill>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

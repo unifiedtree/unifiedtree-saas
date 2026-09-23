@@ -235,10 +235,15 @@ public class PayrollRunService {
     @Transactional
     public RunDto processRun(UUID tenantId, UUID runId, UUID processedBy) {
         bindTenant(tenantId);
+        // Match disbursement/reopen locking: two processors must not both rewind
+        // the same deductions, and a processor must observe any completed payment.
+        jdbc.query("SELECT id FROM payroll.runs WHERE id = ? FOR UPDATE",
+                rs -> rs.next() ? rs.getObject(1, UUID.class) : null, runId);
         RunRow run = loadRun(runId);
         if ("LOCKED".equals(run.status()) || "PAID".equals(run.status())) {
             throw new BusinessRuleException("Run is locked and cannot be re-processed", "RUN_LOCKED");
         }
+        advanceRecovery.assertRunRecoveryCanReprocess(tenantId, runId);
         YearMonth ym = YearMonth.of(run.periodYear(), run.periodMonth());
 
         Map<String, CompMeta> components = loadComponentsMeta();
@@ -453,6 +458,10 @@ public class PayrollRunService {
     @Transactional
     public RunDto reopenRun(UUID tenantId, UUID runId, String reason, UUID actorId) {
         bindTenant(tenantId);
+        // Share the disbursement lock before reading either state. A reopen
+        // that waits for payment must observe PAID, never overwrite it with DRAFT.
+        jdbc.query("SELECT id FROM payroll.runs WHERE id = ? FOR UPDATE",
+                rs -> rs.next() ? rs.getObject(1, UUID.class) : null, runId);
         RunRow run = loadRun(runId);
         if (!"LOCKED".equals(run.status())) {
             throw new BusinessRuleException(
@@ -482,6 +491,7 @@ public class PayrollRunService {
                     "Cannot reopen — run has POSTED/PAID disbursement batch. Cancel the batch first.",
                     "RUN_HAS_ACTIVE_BATCH");
         }
+        advanceRecovery.assertRunRecoveryCanReprocess(tenantId, runId);
         String actorTag = actorId == null ? "system" : actorId.toString();
         jdbc.update("""
                 UPDATE payroll.runs

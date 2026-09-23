@@ -3,14 +3,20 @@ package com.hrms.compliance.service;
 import com.hrms.compliance.dto.ComplianceItemRequest;
 import com.hrms.compliance.dto.ComplianceItemResponse;
 import com.hrms.compliance.dto.FileFilingRequest;
+import com.hrms.compliance.dto.InspectorSessionRequest;
+import com.hrms.compliance.dto.InspectorSessionResponse;
+import com.hrms.compliance.dto.ComplianceCalendarEventResponse;
 import com.hrms.compliance.dto.StatutoryFilingRequest;
 import com.hrms.compliance.dto.StatutoryFilingResponse;
 import com.hrms.compliance.entity.ComplianceItem;
 import com.hrms.compliance.entity.StatutoryFiling;
+import com.hrms.compliance.entity.InspectorSession;
 import com.hrms.compliance.enums.ComplianceStatus;
 import com.hrms.compliance.enums.FilingStatus;
+import com.hrms.compliance.enums.InspectorSessionStatus;
 import com.hrms.compliance.repository.ComplianceItemRepository;
 import com.hrms.compliance.repository.StatutoryFilingRepository;
+import com.hrms.compliance.repository.InspectorSessionRepository;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;
@@ -23,6 +29,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.Instant;
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,11 +46,76 @@ public class ComplianceService {
 
     private final ComplianceItemRepository itemRepository;
     private final StatutoryFilingRepository filingRepository;
+    private final InspectorSessionRepository inspectorSessionRepository;
+    private static final SecureRandom ACCESS_RANDOM = new SecureRandom();
 
     public ComplianceService(ComplianceItemRepository itemRepository,
-                             StatutoryFilingRepository filingRepository) {
+                             StatutoryFilingRepository filingRepository,
+                             InspectorSessionRepository inspectorSessionRepository) {
         this.itemRepository = itemRepository;
         this.filingRepository = filingRepository;
+        this.inspectorSessionRepository = inspectorSessionRepository;
+    }
+
+
+    @Transactional(readOnly = true)
+    public PageResponse<InspectorSessionResponse> listInspectorSessions(UUID companyId, Pageable pageable) {
+        Page<InspectorSession> page = companyId != null
+                ? inspectorSessionRepository.findByCompanyIdOrderByCreatedAtDesc(companyId, pageable)
+                : inspectorSessionRepository.findAllByOrderByCreatedAtDesc(pageable);
+        return new PageResponse<>(page.getContent().stream().map(this::toInspectorResponse).toList(),
+                page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.isLast());
+    }
+
+    @Transactional
+    public InspectorSessionResponse createInspectorSession(UUID companyId, InspectorSessionRequest request) {
+        InspectorSession session = new InspectorSession();
+        session.setTenantId(TenantContext.getTenantId());
+        session.setCompanyId(companyId);
+        session.setInspectorName(request.inspectorName());
+        session.setInspectorOrg(request.inspectorOrg());
+        session.setPurpose(request.purpose());
+        session.setAccessCode(generateAccessCode());
+        session.setExpiresAt(request.expiresAt() == null ? Instant.now().plusSeconds(86_400) : request.expiresAt());
+        session.setStatus(InspectorSessionStatus.ACTIVE);
+        session.setNotes(request.notes());
+        return toInspectorResponse(inspectorSessionRepository.save(session));
+    }
+
+    @Transactional
+    public InspectorSessionResponse revokeInspectorSession(UUID id) {
+        InspectorSession session = inspectorSessionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("InspectorSession", id));
+        session.setStatus(InspectorSessionStatus.REVOKED);
+        session.setRevokedAt(Instant.now());
+        return toInspectorResponse(inspectorSessionRepository.save(session));
+    }
+
+    @Transactional(readOnly = true)
+    public List<ComplianceCalendarEventResponse> calendarEvents(UUID companyId) {
+        Pageable first200 = org.springframework.data.domain.PageRequest.of(0, 200);
+        List<ComplianceCalendarEventResponse> itemEvents = (companyId == null
+                ? itemRepository.findAllByOrderByDueDateAsc(first200)
+                : itemRepository.findByCompanyIdOrderByDueDateAsc(companyId, first200)).getContent().stream()
+                .map(i -> new ComplianceCalendarEventResponse("item-" + i.getId(), i.getCompanyId(), i.getTitle(),
+                        "COMPLIANCE_ITEM", i.getDueDate(), toItemResponse(i).status().name(), i.getCategory(), null))
+                .toList();
+        List<ComplianceCalendarEventResponse> filingEvents = (companyId == null
+                ? filingRepository.findAllByOrderByDueDateDesc(first200)
+                : filingRepository.findByCompanyIdOrderByDueDateDesc(companyId, first200)).getContent().stream()
+                .map(f -> new ComplianceCalendarEventResponse("filing-" + f.getId(), f.getCompanyId(),
+                        f.getFilingType().name() + (f.getPeriod() == null ? " Filing" : " Filing - " + f.getPeriod()),
+                        "STATUTORY_FILING", f.getDueDate(), f.getStatus().name(), f.getFilingType().name(), null))
+                .toList();
+        java.util.ArrayList<ComplianceCalendarEventResponse> events = new java.util.ArrayList<>(itemEvents);
+        events.addAll(filingEvents);
+        events.sort(java.util.Comparator.comparing(ComplianceCalendarEventResponse::date));
+        return events;
+    }
+
+    private String generateAccessCode() {
+        int n = ACCESS_RANDOM.nextInt(900000) + 100000;
+        return String.valueOf(n);
     }
 
     // ── Compliance calendar ──────────────────────────────────────────────────
@@ -140,6 +213,16 @@ public class ComplianceService {
     }
 
     // ── mapping ──────────────────────────────────────────────────────────────
+
+    private InspectorSessionResponse toInspectorResponse(InspectorSession s) {
+        InspectorSessionStatus status = s.getStatus();
+        if (status == InspectorSessionStatus.ACTIVE && s.getExpiresAt() != null && s.getExpiresAt().isBefore(Instant.now())) {
+            status = InspectorSessionStatus.EXPIRED;
+        }
+        return new InspectorSessionResponse(s.getId(), s.getCompanyId(), s.getInspectorName(), s.getInspectorOrg(),
+                s.getPurpose(), s.getAccessCode(), status, s.getExpiresAt(), s.getLastAccessedAt(), s.getRevokedAt(),
+                s.getNotes(), s.getCreatedAt());
+    }
 
     private ComplianceItemResponse toItemResponse(ComplianceItem i) {
         // OVERDUE is derived: an open item whose due date has passed.

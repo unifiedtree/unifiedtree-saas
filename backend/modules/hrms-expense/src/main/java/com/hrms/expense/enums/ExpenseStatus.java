@@ -8,6 +8,7 @@ public enum ExpenseStatus {
     DRAFT,
     SUBMITTED,
     APPROVED,
+    APPROVED_FOR_PAY,
     REJECTED,
     REIMBURSED
 }

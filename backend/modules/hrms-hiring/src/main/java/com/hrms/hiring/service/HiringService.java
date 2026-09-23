@@ -9,12 +9,17 @@ import com.hrms.hiring.dto.CandidateResponse;
 import com.hrms.hiring.dto.CandidateStageRequest;
 import com.hrms.hiring.dto.JobRequisitionRequest;
 import com.hrms.hiring.dto.JobRequisitionResponse;
+import com.hrms.hiring.dto.HiringOfferRequest;
+import com.hrms.hiring.dto.HiringOfferResponse;
 import com.hrms.hiring.entity.Candidate;
 import com.hrms.hiring.entity.JobRequisition;
+import com.hrms.hiring.entity.HiringOffer;
 import com.hrms.hiring.enums.CandidateStage;
 import com.hrms.hiring.enums.RequisitionStatus;
+import com.hrms.hiring.enums.OfferStatus;
 import com.hrms.hiring.repository.CandidateRepository;
 import com.hrms.hiring.repository.JobRequisitionRepository;
+import com.hrms.hiring.repository.HiringOfferRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -32,10 +37,70 @@ public class HiringService {
 
     private final JobRequisitionRepository requisitionRepository;
     private final CandidateRepository candidateRepository;
+    private final HiringOfferRepository offerRepository;
 
-    public HiringService(JobRequisitionRepository requisitionRepository, CandidateRepository candidateRepository) {
+    public HiringService(JobRequisitionRepository requisitionRepository, CandidateRepository candidateRepository, HiringOfferRepository offerRepository) {
         this.requisitionRepository = requisitionRepository;
         this.candidateRepository = candidateRepository;
+        this.offerRepository = offerRepository;
+    }
+
+
+    @Transactional(readOnly = true)
+    public PageResponse<HiringOfferResponse> getOffers(UUID companyId, Pageable pageable) {
+        Page<HiringOffer> page = companyId != null
+                ? offerRepository.findByCompanyIdOrderByCreatedAtDesc(companyId, pageable)
+                : offerRepository.findAllByOrderByCreatedAtDesc(pageable);
+        return new PageResponse<>(page.getContent().stream().map(this::toOffer).toList(),
+                page.getNumber(), page.getSize(), page.getTotalElements(), page.getTotalPages(), page.isLast());
+    }
+
+    @Transactional
+    public HiringOfferResponse createOffer(UUID companyId, HiringOfferRequest request) {
+        UUID tenantId = TenantContext.getTenantId();
+        HiringOffer offer = new HiringOffer();
+        offer.setTenantId(tenantId);
+        offer.setCompanyId(companyId);
+        applyOffer(offer, request);
+        if (offer.getStatus() == OfferStatus.SENT && offer.getSentAt() == null) offer.setSentAt(java.time.Instant.now());
+        if (request.candidateId() != null) {
+            candidateRepository.findById(request.candidateId()).ifPresent(c -> {
+                if (c.getStage() == CandidateStage.INTERVIEW) c.setStage(CandidateStage.OFFER);
+            });
+        }
+        return toOffer(offerRepository.save(offer));
+    }
+
+    @Transactional
+    public HiringOfferResponse updateOfferStatus(UUID id, OfferStatus status) {
+        HiringOffer offer = offerRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("HiringOffer", id));
+        if (status == null) throw new BusinessRuleException("Offer status is required", "OFFER_STATUS_MISSING");
+        if (status == offer.getStatus()) return toOffer(offer);
+        boolean allowed = switch (offer.getStatus()) {
+            case DRAFT -> status == OfferStatus.SENT || status == OfferStatus.WITHDRAWN;
+            case SENT -> status == OfferStatus.ACCEPTED || status == OfferStatus.DECLINED || status == OfferStatus.WITHDRAWN;
+            default -> false;
+        };
+        if (!allowed) throw new BusinessRuleException("This offer cannot move to " + status, "OFFER_TRANSITION_INVALID");
+        offer.setStatus(status);
+        if (status == OfferStatus.SENT && offer.getSentAt() == null) offer.setSentAt(java.time.Instant.now());
+        if ((status == OfferStatus.ACCEPTED || status == OfferStatus.DECLINED) && offer.getRespondedAt() == null) offer.setRespondedAt(java.time.Instant.now());
+        if (status == OfferStatus.ACCEPTED && offer.getCandidateId() != null) {
+            candidateRepository.findById(offer.getCandidateId()).ifPresent(c -> c.setStage(CandidateStage.HIRED));
+        }
+        return toOffer(offerRepository.save(offer));
+    }
+
+    private void applyOffer(HiringOffer offer, HiringOfferRequest request) {
+        offer.setRequisitionId(request.requisitionId());
+        offer.setCandidateId(request.candidateId());
+        offer.setCandidateName(request.candidateName());
+        offer.setRoleTitle(request.roleTitle());
+        offer.setOfferedCtc(request.offeredCtc());
+        offer.setJoiningDate(request.joiningDate());
+        offer.setStatus(request.status() == null ? OfferStatus.DRAFT : request.status());
+        offer.setNotes(request.notes());
     }
 
     // ── Requisitions ─────────────────────────────────────────────────────────
@@ -263,6 +328,12 @@ public class HiringService {
                 r.getId(), r.getCompanyId(), r.getTitle(), r.getDepartmentId(),
                 openings, r.getStatus(), r.getEmploymentType(), r.getLocation(),
                 r.getDescription(), r.getHiringManagerId(), null, candidateCount, r.getCreatedAt());
+    }
+
+    private HiringOfferResponse toOffer(HiringOffer o) {
+        return new HiringOfferResponse(o.getId(), o.getCompanyId(), o.getRequisitionId(), o.getCandidateId(),
+                o.getCandidateName(), o.getRoleTitle(), o.getOfferedCtc(), o.getJoiningDate(),
+                o.getStatus(), o.getSentAt(), o.getRespondedAt(), o.getNotes(), o.getCreatedAt());
     }
 
     private CandidateResponse toCandidate(Candidate c) {

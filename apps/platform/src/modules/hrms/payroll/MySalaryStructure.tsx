@@ -1,7 +1,10 @@
 import React from 'react'
 import { format } from 'date-fns'
 import { IndianRupee, Wallet, ShieldCheck, TrendingDown, PiggyBank } from 'lucide-react'
-import { EmptyState, CardSkeleton } from '@unifiedtree/ui-kit'
+import { CardSkeleton } from '@unifiedtree/ui-kit'
+import { EmptyState } from '@/shared/components/EmptyState'
+import { DataTable } from '@/shared/components/DataTable'
+import { FileText } from 'lucide-react'
 import { HrPageHeader, HrStatCard, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import { useMySalaryStructure, type StructureLine } from '../api/usePayroll'
 
@@ -14,11 +17,10 @@ export const MySalaryStructure: React.FC = () => {
   const { data, isLoading, error } = useMySalaryStructure()
 
   if (isLoading) return <div className="p-8"><CardSkeleton /></div>
-  if (error) return <div className="p-8"><EmptyState variant="error" title="Couldn't load your salary" description="Please try again." /></div>
+  if (error) return <div className="p-8"><EmptyState icon={FileText} title="Couldn't load your salary" description="Please try again." /></div>
   if (!data) return (
     <div className="p-8">
-      <EmptyState variant="first-run" title="No salary structure"
-        description="Your salary structure has not been set up yet. Contact HR if you think this is a mistake." />
+      <EmptyState icon={FileText} title="No salary structure" description="Your salary structure has not been set up yet. Contact HR if you think this is a mistake." />
     </div>
   )
 

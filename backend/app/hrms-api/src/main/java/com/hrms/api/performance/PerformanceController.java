@@ -14,6 +14,7 @@ import com.hrms.performance.dto.ReviewSubmitRequest;
 import com.hrms.performance.service.GoalService;
 import com.hrms.performance.service.PerformanceReviewService;
 import com.hrms.performance.service.ReviewCycleService;
+import com.hrms.performance.repository.ReviewCycleRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -48,15 +49,18 @@ public class PerformanceController {
     private final PerformanceReviewService reviewService;
     private final GoalService goalService;
     private final EmployeeRepository employeeRepository;
+    private final ReviewCycleRepository cycleRepository;
 
     public PerformanceController(ReviewCycleService cycleService,
                                  PerformanceReviewService reviewService,
                                  GoalService goalService,
-                                 EmployeeRepository employeeRepository) {
+                                 EmployeeRepository employeeRepository,
+                                 ReviewCycleRepository cycleRepository) {
         this.cycleService = cycleService;
         this.reviewService = reviewService;
         this.goalService = goalService;
         this.employeeRepository = employeeRepository;
+        this.cycleRepository = cycleRepository;
     }
 
     // ─── Review cycles (admin) ───────────────────────────────────────────────
@@ -163,8 +167,9 @@ public class PerformanceController {
 
     private PageResponse<PerformanceReviewResponse> enrichPage(PageResponse<PerformanceReviewResponse> page) {
         Map<UUID, Employee> employeeMap = loadEmployees(page.content());
+        Map<UUID, String> cycleNames = loadCycleNames(page.content());
         List<PerformanceReviewResponse> enriched = page.content().stream()
-                .map(r -> enrich(r, employeeMap))
+                .map(r -> enrich(r, employeeMap, cycleNames))
                 .toList();
         return new PageResponse<>(enriched, page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last());
@@ -172,11 +177,21 @@ public class PerformanceController {
 
     private List<PerformanceReviewResponse> enrichList(List<PerformanceReviewResponse> reviews) {
         Map<UUID, Employee> employeeMap = loadEmployees(reviews);
-        return reviews.stream().map(r -> enrich(r, employeeMap)).toList();
+        Map<UUID, String> cycleNames = loadCycleNames(reviews);
+        return reviews.stream().map(r -> enrich(r, employeeMap, cycleNames)).toList();
     }
 
     private PerformanceReviewResponse enrichOne(PerformanceReviewResponse r) {
-        return enrich(r, loadEmployees(List.of(r)));
+        return enrich(r, loadEmployees(List.of(r)), loadCycleNames(List.of(r)));
+    }
+
+    private Map<UUID, String> loadCycleNames(List<PerformanceReviewResponse> reviews) {
+        Set<UUID> ids = reviews.stream().map(PerformanceReviewResponse::cycleId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        if (ids.isEmpty()) return Map.of();
+        return cycleRepository.findAllById(ids).stream().collect(Collectors.toMap(
+                com.hrms.performance.entity.ReviewCycle::getId,
+                com.hrms.performance.entity.ReviewCycle::getName));
     }
 
     private Map<UUID, Employee> loadEmployees(List<PerformanceReviewResponse> reviews) {
@@ -190,7 +205,7 @@ public class PerformanceController {
                 .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
     }
 
-    private PerformanceReviewResponse enrich(PerformanceReviewResponse r, Map<UUID, Employee> employeeMap) {
+    private PerformanceReviewResponse enrich(PerformanceReviewResponse r, Map<UUID, Employee> employeeMap, Map<UUID, String> cycleNames) {
         Employee employee = r.employeeId() != null ? employeeMap.get(r.employeeId()) : null;
         Employee reviewer = r.reviewerId() != null ? employeeMap.get(r.reviewerId()) : null;
         String employeeName = fullName(employee);
@@ -199,7 +214,7 @@ public class PerformanceController {
         return new PerformanceReviewResponse(
                 r.id(), r.cycleId(), r.employeeId(), employeeName, employeeCode,
                 r.reviewerId(), reviewerName, r.status(), r.overallRating(),
-                r.strengths(), r.improvements(), r.submittedAt(), r.createdAt());
+                r.strengths(), r.improvements(), r.submittedAt(), r.createdAt(), cycleNames.get(r.cycleId()));
     }
 
     private String fullName(Employee employee) {

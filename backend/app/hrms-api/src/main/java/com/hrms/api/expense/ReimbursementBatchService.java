@@ -24,13 +24,12 @@ import java.util.UUID;
  *
  * <p>Lifecycle: DRAFT (built from cutoff) → POSTED (claims flipped to
  * APPROVED_FOR_PAY, batch reference locked) → PAID (UTR entered; claims
- * flipped to REIMBURSED). CANCELLED terminates without touching claims,
- * BUT if the batch was POSTED first the claims stay in APPROVED_FOR_PAY —
- * caller must explicitly revert.
+ * flipped to REIMBURSED). Cancelling a posted batch releases its reserved
+ * claims back to APPROVED in the same transaction.
  *
  * <p>The reference guarantees a claim is inside AT MOST one non-CANCELLED
- * batch — enforced by the partial UNIQUE index on
- * {@code reimbursement_batch_items(claim_id)} + the app-level pre-check.
+ * batch: company-scoped transaction locks serialize builds and lifecycle
+ * changes; claim row locks also protect against individual reimbursements.
  */
 @Service
 public class ReimbursementBatchService {
@@ -49,18 +48,20 @@ public class ReimbursementBatchService {
             UUID id, UUID companyId, String batchReference, String cutoffDate,
             BigDecimal totalAmount, int claimCount, String status,
             String postedAt, String paidAt, String paymentReference, String notes,
-            String createdAt, String updatedAt) {}
+            String createdAt, String updatedAt, String currency) {}
 
     public record BatchItemDto(
             UUID id, UUID claimId, UUID employeeId, BigDecimal amount,
-            String claimTitle, String claimStatus) {}
+            String claimTitle, String claimStatus, String employeeName,
+            String employeeCode, String claimNotes, String currency) {}
 
     public record BatchDetailDto(BatchDto batch, List<BatchItemDto> items) {}
 
     public record BuildBatchRequest(
             @jakarta.validation.constraints.NotNull UUID companyId,
             @jakarta.validation.constraints.NotNull String cutoffDate,   // YYYY-MM-DD
-            String notes) {}
+            String notes,
+            @jakarta.validation.constraints.Pattern(regexp = "[A-Z]{3}") String currency) {}
 
     public record MarkPaidRequest(
             @jakarta.validation.constraints.NotBlank
@@ -73,7 +74,7 @@ public class ReimbursementBatchService {
     public List<BatchDto> list(UUID tenantId, UUID companyId, String status) {
         bindTenant(tenantId);
         StringBuilder sql = new StringBuilder(
-                "SELECT * FROM expense_mgmt.reimbursement_batches WHERE 1=1");
+                batchSelect() + " WHERE 1=1");
         List<Object> args = new ArrayList<>();
         if (companyId != null) { sql.append(" AND company_id = ?"); args.add(companyId); }
         if (status != null)    { sql.append(" AND status = ?");     args.add(status); }
@@ -86,9 +87,12 @@ public class ReimbursementBatchService {
         bindTenant(tenantId);
         BatchDto batch = getBatch(batchId);
         List<BatchItemDto> items = jdbc.query("""
-                SELECT bi.*, ec.title AS claim_title, ec.status AS claim_status
+                SELECT bi.*, ec.title AS claim_title, ec.status AS claim_status,
+                       TRIM(e.first_name || ' ' || COALESCE(e.last_name,'')) AS employee_name,
+                       e.employee_code, ec.notes AS claim_notes, ec.currency
                   FROM expense_mgmt.reimbursement_batch_items bi
-                  JOIN expense_mgmt.expense_claims ec ON ec.id = bi.claim_id
+                  JOIN expense_mgmt.expense_claims ec ON ec.id = bi.claim_id AND ec.tenant_id = bi.tenant_id
+                  LEFT JOIN hrms.employees e ON e.id = bi.employee_id AND e.tenant_id = bi.tenant_id
                  WHERE bi.batch_id = ?
                  ORDER BY bi.created_at ASC
                 """, (rs, i) -> new BatchItemDto(
@@ -97,7 +101,8 @@ public class ReimbursementBatchService {
                     rs.getObject("employee_id", UUID.class),
                     rs.getBigDecimal("amount"),
                     rs.getString("claim_title"),
-                    rs.getString("claim_status")), batchId);
+                    rs.getString("claim_status"), rs.getString("employee_name"), rs.getString("employee_code"),
+                    rs.getString("claim_notes"), rs.getString("currency")), batchId);
         return new BatchDetailDto(batch, items);
     }
 
@@ -113,6 +118,7 @@ public class ReimbursementBatchService {
     @Transactional
     public BatchDetailDto build(UUID tenantId, BuildBatchRequest req, UUID actorId) {
         bindTenant(tenantId);
+        lockCompany(tenantId, req.companyId());
         LocalDate cutoff = LocalDate.parse(req.cutoffDate());
 
         // Reuse an existing DRAFT batch for the same (company, cutoff) or make
@@ -139,27 +145,24 @@ public class ReimbursementBatchService {
                     actorId == null ? null : actorId.toString(),
                     actorId == null ? null : actorId.toString());
         } else {
+            String existingCurrency = getBatch(batchId).currency();
+            if (req.currency() != null && existingCurrency != null && !req.currency().equals(existingCurrency))
+                throw new BusinessRuleException("Post or cancel the existing " + existingCurrency + " draft for this cutoff before building another currency.", "BATCH_DRAFT_CURRENCY_MISMATCH");
             // Rebuild the item list from scratch.
             jdbc.update("DELETE FROM expense_mgmt.reimbursement_batch_items WHERE batch_id = ?", batchId);
         }
 
-        // QA FIX (2026-08-11, finding wmih6ivbj/HIGH-3): the plain
-        // UNIQUE(batch_id, claim_id) index doesn't prevent the same claim
-        // from landing in TWO different non-CANCELLED batches (a race between
-        // two Finance users doing simultaneous builds). Tighten by locking
-        // the eligible claim rows FOR UPDATE — a concurrent build that reads
-        // the same set will wait until this transaction commits, at which
-        // point its NOT EXISTS check will exclude the claims we just batched.
-        // (Real bulletproof fix is a partial UNIQUE via a trigger-maintained
-        // helper column — deferred; SELECT FOR UPDATE closes the window enough
-        // for realistic Finance workflows.)
+        // The company lock was acquired in a separate statement, so this
+        // READ COMMITTED snapshot sees any previous builder's membership.
+        // FOR UPDATE alone would not refresh NOT EXISTS after waiting.
         List<Object[]> eligible = jdbc.query("""
-                SELECT ec.id, ec.employee_id, ec.total_amount, ec.title
+                SELECT ec.id, ec.employee_id, ec.total_amount, ec.title, ec.currency
                   FROM expense_mgmt.expense_claims ec
                  WHERE ec.company_id = ?
                    AND ec.status = 'APPROVED'
                    AND ec.approved_at IS NOT NULL
-                   AND ec.approved_at <= ?
+                   AND ec.approved_at < ?
+                   AND (?::text IS NULL OR ec.currency = ?)
                    AND NOT EXISTS (
                        SELECT 1 FROM expense_mgmt.reimbursement_batch_items bi
                          JOIN expense_mgmt.reimbursement_batches b ON b.id = bi.batch_id
@@ -171,7 +174,7 @@ public class ReimbursementBatchService {
                     rs.getObject("id", UUID.class),
                     rs.getObject("employee_id", UUID.class),
                     rs.getBigDecimal("total_amount"),
-                    rs.getString("title")
+                    rs.getString("title"), rs.getString("currency")
                 },
                 req.companyId(),
                 // QA FIX (2026-08-13): java.sql.Date deliberately throws
@@ -180,7 +183,10 @@ public class ReimbursementBatchService {
                 // 500'ing. Convert via LocalDate → LocalDateTime → Timestamp,
                 // interpreting cutoff as end-of-day so claims approved on the
                 // cutoff date still make it in.
-                java.sql.Timestamp.valueOf(cutoff.plusDays(1).atStartOfDay()));
+                java.sql.Timestamp.valueOf(cutoff.plusDays(1).atStartOfDay()), req.currency(), req.currency());
+
+        if (eligible.stream().map(row -> row[4]).distinct().count() > 1)
+            throw new BusinessRuleException("Select a currency to build a separate batch for each currency.", "BATCH_MIXED_CURRENCY");
 
         BigDecimal total = BigDecimal.ZERO;
         for (Object[] row : eligible) {
@@ -211,7 +217,7 @@ public class ReimbursementBatchService {
     @Transactional
     public BatchDto post(UUID tenantId, UUID batchId, UUID actorId) {
         bindTenant(tenantId);
-        BatchDto b = getBatch(batchId);
+        BatchDto b = lockBatch(tenantId, batchId);
         if ("PAID".equals(b.status()) || "CANCELLED".equals(b.status())) {
             throw new BusinessRuleException("Cannot post a " + b.status() + " batch", "BATCH_LOCKED");
         }
@@ -220,6 +226,8 @@ public class ReimbursementBatchService {
                     "Batch has no eligible claims — nothing to post",
                     "BATCH_EMPTY");
         }
+        requireClaimState(b, "POSTED".equals(b.status()) ? "APPROVED_FOR_PAY" : "APPROVED");
+        if ("POSTED".equals(b.status())) return b;
         // Flip the linked claims.
         int flipped = jdbc.update("""
                 UPDATE expense_mgmt.expense_claims
@@ -248,23 +256,13 @@ public class ReimbursementBatchService {
     @Transactional
     public BatchDto markPaid(UUID tenantId, UUID batchId, MarkPaidRequest req, UUID actorId) {
         bindTenant(tenantId);
-        BatchDto b = getBatch(batchId);
+        BatchDto b = lockBatch(tenantId, batchId);
         if (!"POSTED".equals(b.status())) {
             throw new BusinessRuleException(
                     "Batch must be POSTED before mark-paid; current status " + b.status(),
                     "BATCH_NOT_POSTED");
         }
-        // Safety: every referenced claim MUST be in APPROVED_FOR_PAY.
-        Integer stray = jdbc.queryForObject("""
-                SELECT count(*) FROM expense_mgmt.reimbursement_batch_items bi
-                  JOIN expense_mgmt.expense_claims ec ON ec.id = bi.claim_id
-                 WHERE bi.batch_id = ? AND ec.status <> 'APPROVED_FOR_PAY'
-                """, Integer.class, batchId);
-        if (stray != null && stray > 0) {
-            throw new BusinessRuleException(
-                    stray + " claim(s) in this batch are not in APPROVED_FOR_PAY — refresh and try again",
-                    "BATCH_CLAIM_STATE_DRIFT");
-        }
+        requireClaimState(b, "APPROVED_FOR_PAY");
         jdbc.update("""
                 UPDATE expense_mgmt.expense_claims
                    SET status = 'REIMBURSED', reimbursed_at = now(),
@@ -284,14 +282,13 @@ public class ReimbursementBatchService {
     }
 
     /**
-     * Cancel a batch. If it was POSTED, the linked claims stay in
-     * APPROVED_FOR_PAY — call {@link #revertClaimsToApproved} to release them
-     * back into the pool.
+     * Cancel and release this batch's reserved claims atomically. Paid claims
+     * and claims reserved by another batch are never reverted.
      */
     @Transactional
     public BatchDto cancel(UUID tenantId, UUID batchId, UUID actorId) {
         bindTenant(tenantId);
-        BatchDto b = getBatch(batchId);
+        BatchDto b = lockBatch(tenantId, batchId);
         if ("PAID".equals(b.status())) {
             throw new BusinessRuleException(
                     "Cannot cancel a PAID batch — record a reversal instead",
@@ -303,37 +300,76 @@ public class ReimbursementBatchService {
                        updated_by = ?, version = version + 1
                  WHERE id = ?
                 """, actorId == null ? null : actorId.toString(), batchId);
+        releaseCancelledClaims(batchId);
         return getBatch(batchId);
     }
 
     /**
      * Companion to cancel — releases the APPROVED_FOR_PAY claims back to
-     * APPROVED so a new batch can pick them up. Split into a separate action
-     * so cancel and revert can be audited independently.
+     * APPROVED for older cancelled batches. Repeating this after the claim
+     * entered another active batch cannot change that batch's reservation.
      */
     @Transactional
     public int revertClaimsToApproved(UUID tenantId, UUID batchId, UUID actorId) {
         bindTenant(tenantId);
-        BatchDto b = getBatch(batchId);
+        BatchDto b = lockBatch(tenantId, batchId);
         if (!"CANCELLED".equals(b.status())) {
             throw new BusinessRuleException(
                     "Can only revert claims for a CANCELLED batch",
                     "BATCH_NOT_CANCELLED");
         }
+        return releaseCancelledClaims(batchId);
+    }
+
+    private int releaseCancelledClaims(UUID batchId) {
+        lockClaims(batchId);
         return jdbc.update("""
-                UPDATE expense_mgmt.expense_claims
+                UPDATE expense_mgmt.expense_claims ec
                    SET status = 'APPROVED', updated_at = now(),
                        version = version + 1
-                 WHERE status = 'APPROVED_FOR_PAY'
-                   AND id IN (SELECT claim_id FROM expense_mgmt.reimbursement_batch_items WHERE batch_id = ?)
+                 WHERE ec.status = 'APPROVED_FOR_PAY'
+                   AND ec.id IN (SELECT claim_id FROM expense_mgmt.reimbursement_batch_items WHERE batch_id = ?)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM expense_mgmt.reimbursement_batch_items other_item
+                       JOIN expense_mgmt.reimbursement_batches other_batch ON other_batch.id=other_item.batch_id AND other_batch.tenant_id=other_item.tenant_id
+                       WHERE other_item.claim_id=ec.id AND other_item.tenant_id=ec.tenant_id AND other_batch.status <> 'CANCELLED'
+                   )
                 """, batchId);
+    }
+
+    private void lockCompany(UUID tenantId, UUID companyId) {
+        jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?,0))",
+                (org.springframework.jdbc.core.ResultSetExtractor<Void>) rs -> null,
+                "reimbursement:" + tenantId + ":" + companyId);
+    }
+
+    private BatchDto lockBatch(UUID tenantId, UUID batchId) {
+        BatchDto previous = getBatch(batchId);
+        lockCompany(tenantId, previous.companyId());
+        return getBatch(batchId);
+    }
+
+    private List<String> lockClaims(UUID batchId) {
+        return jdbc.query("""
+                SELECT ec.status FROM expense_mgmt.expense_claims ec
+                 JOIN expense_mgmt.reimbursement_batch_items bi ON bi.claim_id=ec.id AND bi.tenant_id=ec.tenant_id
+                 WHERE bi.batch_id=? ORDER BY ec.id FOR UPDATE OF ec
+                """, (rs, i) -> rs.getString("status"), batchId);
+    }
+
+    private void requireClaimState(BatchDto batch, String expected) {
+        List<String> statuses = lockClaims(batch.id());
+        if (statuses.isEmpty() || statuses.size() != batch.claimCount() || statuses.stream().anyMatch(status -> !expected.equals(status)))
+            throw new BusinessRuleException("A claim in this batch has changed. Rebuild the draft or review the claim payment status.", "BATCH_CLAIM_STATE_DRIFT");
+        if (batch.currency() == null)
+            throw new BusinessRuleException("This batch contains different currencies. Cancel it and rebuild separate batches by currency.", "BATCH_MIXED_CURRENCY");
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private BatchDto getBatch(UUID batchId) {
         List<BatchDto> rows = jdbc.query(
-                "SELECT * FROM expense_mgmt.reimbursement_batches WHERE id = ?",
+                batchSelect() + " WHERE b.id = ?",
                 (rs, i) -> toBatchDto(rs), batchId);
         if (rows.isEmpty()) throw new BusinessRuleException("Batch not found", "BATCH_NOT_FOUND");
         return rows.get(0);
@@ -354,7 +390,17 @@ public class ReimbursementBatchService {
                 rs.getString("payment_reference"),
                 rs.getString("notes"),
                 ts(rs.getTimestamp("created_at")),
-                ts(rs.getTimestamp("updated_at")));
+                ts(rs.getTimestamp("updated_at")), rs.getString("currency"));
+    }
+
+    private String batchSelect() {
+        return """
+                SELECT b.*, (SELECT CASE WHEN count(DISTINCT ec.currency)=1 THEN min(ec.currency) END
+                  FROM expense_mgmt.reimbursement_batch_items bi
+                  JOIN expense_mgmt.expense_claims ec ON ec.id=bi.claim_id AND ec.tenant_id=bi.tenant_id
+                  WHERE bi.batch_id=b.id AND bi.tenant_id=b.tenant_id) AS currency
+                  FROM expense_mgmt.reimbursement_batches b
+                """;
     }
 
     private static String monthAbbr(LocalDate d) {

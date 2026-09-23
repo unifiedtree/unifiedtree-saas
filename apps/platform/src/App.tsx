@@ -57,6 +57,7 @@ const GeofenceZones = React.lazy(() => import('@/modules/hrms/attendance/Geofenc
 const Leave = React.lazy(() => import('@/modules/hrms/Leave').then(m => ({ default: m.Leave })))
 const Payroll = React.lazy(() => import('@/modules/hrms/Payroll').then(m => ({ default: m.Payroll })))
 const OrgSetup = React.lazy(() => import('@/modules/hrms/organization/OrgSetup').then(m => ({ default: m.OrgSetup })))
+const Companies = React.lazy(() => import('@/modules/hrms/organization/Companies').then(m => ({ default: m.Companies })))
 const EmployeeDetail = React.lazy(() => import('@/modules/hrms/employees/EmployeeDetail').then(m => ({ default: m.EmployeeDetail })))
 const EssDashboard = React.lazy(() => import('@/modules/hrms/ess/EssDashboard').then(m => ({ default: m.EssDashboard })))
 const ShiftChangeRequest = React.lazy(() => import('@/modules/hrms/shifts/ShiftChangeRequest').then(m => ({ default: m.ShiftChangeRequest })))
@@ -320,6 +321,14 @@ export default function App() {
           }
         />
         <Route
+          path="/hrms/companies"
+          element={
+            <RouteGuard anyOf={[P.HRMS_BRANCH_READ]}>
+              <ModuleGate moduleKey="hrms"><Companies /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
           path="/hrms/attendance"
           element={
             <RouteGuard anyOf={[P.HRMS_ESS_READ, P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_CHECKIN_SELF]}>
@@ -348,7 +357,7 @@ export default function App() {
         <Route
           path="/hrms/expenses"
           element={
-            <RouteGuard anyOf={['hrms.expense.claim.self', 'hrms.expense.claim.read', 'hrms.expense.claim.approve', 'hrms.expense.policy.read']}>
+            <RouteGuard anyOf={['hrms.expense.claim.self', 'hrms.expense.claim.read', 'hrms.expense.claim.approve', 'hrms.expense.policy.read', 'hrms.expense.reimbursement', 'hrms.reimb_batch.read']}>
               <ModuleGate moduleKey="hrms"><Expense /></ModuleGate>
             </RouteGuard>
           }

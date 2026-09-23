@@ -6,6 +6,8 @@ import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.pli.dto.PliAwardRequest;
 import com.hrms.pli.dto.PliAwardResponse;
 import com.hrms.pli.dto.PliDecisionRequest;
+import com.hrms.pli.dto.PliTargetRequest;
+import com.hrms.pli.dto.PliTargetResponse;
 import com.hrms.pli.service.PliService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -44,6 +46,38 @@ public class PliController {
                          EmployeeRepository employeeRepository) {
         this.pliService = pliService;
         this.employeeRepository = employeeRepository;
+    }
+
+    @Operation(summary = "List PLI targets")
+    @GetMapping("/targets")
+    @PreAuthorize("hasAnyAuthority('hrms.pli.target.read','hrms.pli.read')")
+    public ResponseEntity<PageResponse<PliTargetResponse>> listTargets(
+            @RequestParam(required = false) UUID companyId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(pliService.getTargets(companyId, pageable));
+    }
+
+    @Operation(summary = "Create a PLI target")
+    @PostMapping("/targets")
+    @PreAuthorize("hasAnyAuthority('hrms.pli.target.write','hrms.pli.write')")
+    public ResponseEntity<PliTargetResponse> createTarget(@Valid @RequestBody PliTargetRequest request,
+                                                          @AuthenticationPrincipal Jwt jwt) {
+        UUID companyId = request.companyId();
+        if (companyId == null) {
+            UUID employeeId = extractEmployeeId(jwt);
+            Employee employee = employeeRepository.findById(employeeId)
+                    .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
+            companyId = employee.getCompanyId();
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(pliService.createTarget(companyId, request));
+    }
+
+    @Operation(summary = "Update a PLI target")
+    @PutMapping("/targets/{id}")
+    @PreAuthorize("hasAnyAuthority('hrms.pli.target.write','hrms.pli.write')")
+    public ResponseEntity<PliTargetResponse> updateTarget(@PathVariable UUID id,
+                                                          @Valid @RequestBody PliTargetRequest request) {
+        return ResponseEntity.ok(pliService.updateTarget(id, request));
     }
 
     // ─── Administration (HR / Finance) ───────────────────────────────────────

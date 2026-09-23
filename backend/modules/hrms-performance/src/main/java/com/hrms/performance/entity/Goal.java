@@ -8,6 +8,7 @@ import lombok.Setter;
 import org.hibernate.annotations.Filter;
 
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Getter
 @Setter
@@ -39,6 +40,16 @@ public class Goal extends BaseEntity {
     // Completion percentage, 0 .. 100.
     @Column(name = "progress", nullable = false)
     private int progress = 0;
+
+    // Quantified KPIs share this table with personal percentage-based goals.
+    @Column(name = "target_value")
+    private BigDecimal targetValue;
+
+    @Column(name = "current_value")
+    private BigDecimal currentValue;
+
+    @Column(name = "unit", length = 24)
+    private String unit;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)

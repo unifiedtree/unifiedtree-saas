@@ -1,25 +1,32 @@
+import { attendanceDate } from './attendance/date'
+import { CorrectionApprovals } from './attendance/CorrectionApprovals'
 import React, { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Clock, CheckCircle } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Clock, CheckCircle, XCircle, FileText } from 'lucide-react'
 import { clsx } from 'clsx'
 import { eachDayOfInterval, endOfMonth, format, startOfMonth } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/shared/hooks/useToast'
 import { usePermission, Can, P } from '@unifiedtree/sdk'
-import { StatsSkeleton, Skeleton, EmptyState } from '@unifiedtree/ui-kit'
-import { HrStatCard, HrStatusPill, HrPageHeader, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone } from '@/shared/components/hr'
+import { StatsSkeleton, Skeleton } from '@unifiedtree/ui-kit'
+import { EmptyState } from '@/shared/components/EmptyState'
+import { DataTable } from '@/shared/components/DataTable'
+import { HrStatCard, HrStatusPill, HrPageHeader, TableCard, HrAvatar, HrTabs, HrTabPanel, HrDrawer, HrButton, type PillTone } from '@/shared/components/hr'
+import { useCompanies, useDepartments } from './api/useOrg'
 import {
   useMonthlyStats, useAttendanceHistory,
-  useTeamDashboard, useMyCorrections, useCorrectionApprovals,
-  useCreateCorrection, useDecideCorrection,
+  useTeamDashboard, useMyCorrections,
+  useCreateCorrection,
+  type StaffStatusResponse,
 } from './api/useAttendance'
 
 const TEAM_TONE: Record<string, PillTone> = {
   PRESENT: 'ok', ON_TIME: 'ok', LATE: 'warn', ABSENT: 'red', NOT_MARKED: 'gray',
-  ON_LEAVE: 'info', WFH: 'teal', HALF_DAY: 'late', HOLIDAY: 'purple', WEEKEND: 'gray',
+  ON_LEAVE: 'info', WFH: 'teal', WORK_FROM_HOME: 'teal', HALF_DAY: 'late',
+  EARLY_OUT: 'orange', HOLIDAY: 'purple', WEEKEND: 'gray',
 }
 
-type Tab = 'my' | 'team' | 'corrections'
+type Tab = 'my' | 'team' | 'corrections' | 'face'
 
 // Punching is mobile-only — the web app no longer renders a check-in/out widget
 // or uses navigator.geolocation. The underlying useCheckIn/useCheckOut hooks are
@@ -56,7 +63,7 @@ function MyAttendanceTab() {
           {statsLoading ? (
             <StatsSkeleton />
           ) : statsError ? (
-            <EmptyState variant="error" title="Failed to load stats" primaryAction={{ label: 'Retry', onClick: () => refetchStats() }} />
+            <EmptyState icon={XCircle} title="Error" description="Failed to load stats" action={{ label: 'Retry', onClick: () => refetchStats() }} />
           ) : stats ? (
             <div className="grid grid-cols-2 gap-3">
               <HrStatCard icon={<CheckCircle size={16} />} color="green"  value={stats.presentDays}            label="Present" />
@@ -81,7 +88,7 @@ function MyAttendanceTab() {
         {histLoading ? (
           <Skeleton className="h-64 w-full rounded-xl" />
         ) : histError ? (
-          <EmptyState variant="error" title="Failed to load history" primaryAction={{ label: 'Retry', onClick: () => refetchHist() }} />
+          <EmptyState icon={XCircle} title="Error" description="Failed to load history" action={{ label: 'Retry', onClick: () => refetchHist() }} />
         ) : (
           <MyAttendanceCalendar year={year} month={month} history={history} statusBg={STATUS_BG} />
         )}
@@ -186,65 +193,286 @@ function MyAttendanceCalendar({
 
 // ── Team Dashboard Tab ────────────────────────────────────────────────────────
 
-function TeamDashboardTab() {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
-  const [search, setSearch] = useState('')
-  const { data, isLoading, error: teamError, refetch: refetchTeam } = useTeamDashboard(date)
+/**
+ * Status filters the roster supports.
+ *
+ * These are the dashboard's TILE names, not row status values. Only LATE and
+ * HALF_DAY happen to coincide with a row's `status`; the rest are derived from
+ * punch state, attendanceType and approved leave — see `matchesStatus`.
+ */
+const TEAM_STATUS_FILTERS = [
+  'PRESENT', 'ABSENT', 'LATE', 'WORK_FROM_HOME', 'NOT_MARKED', 'EARLY_OUT', 'ON_LEAVE', 'HALF_DAY',
+] as const
+type TeamStatusFilter = (typeof TEAM_STATUS_FILTERS)[number]
 
-  const staff = (data?.staffStatuses ?? []).filter((s) => {
+const STATUS_LABEL: Record<string, string> = {
+  PRESENT: 'Present', ABSENT: 'Absent', LATE: 'Late', WORK_FROM_HOME: 'Work from home',
+  NOT_MARKED: 'Not marked', EARLY_OUT: 'Early out', ON_LEAVE: 'On leave', HALF_DAY: 'Half day',
+}
+
+/**
+ * Reproduce, per row, the buckets `AttendanceController.countSummary` counts.
+ *
+ * This used to be `s.status === f`, which was wrong for four of the six tiles
+ * and produced the worst possible failure: a tile saying "Present 30" that
+ * drilled into an empty table. The tiles were never counting `status` values —
+ * they count a mix of status, attendanceType and approved-leave state, with
+ * `present` defined by SUBTRACTION. The server's definitions, verbatim:
+ *
+ *   late    = status LATE                        onLeave  = approved leave that date
+ *   halfDay = status HALF_DAY                    notMarked = no check-in at all
+ *   wfh     = attendanceType WFH                 absent   = notMarked AND NOT on leave
+ *   present = (checked in) - late - halfDay - wfh
+ *
+ * So PRESENT is the residue of everyone who punched and is not already claimed
+ * by a more specific bucket — which is why a punctual employee (whose row
+ * status is ON_TIME, not PRESENT) belongs in it, and why matching the literal
+ * string 'PRESENT' found almost nobody.
+ *
+ * NOT_MARKED deliberately still includes people on leave: it is the raw
+ * "nobody punched" bucket, and ABSENT is the narrower unexplained one. That
+ * mirrors the server, where the two tiles are separate numbers.
+ *
+ * EARLY_OUT is a separate axis, not a bucket — an employee can be PRESENT and
+ * an Early Out at once, exactly as the server treats it.
+ */
+function matchesStatus(s: StaffStatusResponse, f: TeamStatusFilter): boolean {
+  const checkedIn = !!s.checkInAt
+  const isLate = s.status === 'LATE'
+  const isHalfDay = s.status === 'HALF_DAY'
+  const isWfh = s.attendanceType === 'WFH'
+
+  switch (f) {
+    case 'EARLY_OUT':      return s.earlyCheckout === true
+    case 'LATE':           return isLate
+    case 'HALF_DAY':       return isHalfDay
+    case 'WORK_FROM_HOME': return isWfh
+    case 'ON_LEAVE':       return s.onLeave === true
+    case 'NOT_MARKED':     return !checkedIn
+    case 'ABSENT':         return !checkedIn && s.onLeave !== true
+    case 'PRESENT':        return checkedIn && !isLate && !isHalfDay && !isWfh
+    default:               return false
+  }
+}
+
+function TeamDashboardTab() {
+  const navigate = useNavigate()
+
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<StaffStatusResponse | null>(null)
+
+  /* Drill-down + filter state lives in the URL: /hrms/attendance?tab=team&status=LATE
+     &department=<id>. Shareable, survives a refresh, and the browser back
+     button returns the user to the previous filter rather than to the previous
+     page — which is what "back" means to someone who just narrowed a list. */
+  const [searchParams, setSearchParams] = useSearchParams()
+  const rawDate = searchParams.get('date')
+  const parsedDate = rawDate ? new Date(`${rawDate}T00:00:00Z`) : null
+  const date = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) && parsedDate && !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === rawDate ? rawDate : attendanceDate()
+  const setDate = (value: string) => { const next = new URLSearchParams(searchParams); next.set('date', value); setSearchParams(next, { replace: true }) }
+  const raw = searchParams.get('status')
+  const statusFilter = (raw && (TEAM_STATUS_FILTERS as readonly string[]).includes(raw)
+    ? (raw as TeamStatusFilter)
+    : null)
+  const departmentFilter = searchParams.get('department') ?? ''
+
+  /* Department is a SERVER-side filter — useTeamDashboard has always accepted
+     a departmentId and this screen simply never passed one, so the roster was
+     always tenant-wide. Status, by contrast, is filtered client-side below,
+     and that is correct here: /v1/attendance/dashboard returns the COMPLETE
+     roster in one payload (no paging), so the client holds every row the
+     server would have matched. The same client-side approach on the
+     server-paginated employee directory would be wrong, which is why the
+     directory's filters go to the server instead. */
+  const { data, isLoading, error: teamError, refetch: refetchTeam } =
+    useTeamDashboard(date, departmentFilter || undefined)
+
+  /* Departments come from the active company. Only mounted for principals who
+     can read team attendance (this whole tab is), and useCompanies self-heals
+     the employee 403 — see its docblock. */
+  const { data: companies = [] } = useCompanies()
+  const activeCompanyId = companies[0]?.id ?? ''
+  const { data: departments = [] } = useDepartments(activeCompanyId)
+
+  const setParam = (key: 'status' | 'department', next: string | null) => {
+    const p = new URLSearchParams(searchParams)
+    if (next) p.set(key, next); else p.delete(key)
+    p.set('tab', 'team')
+    setSearchParams(p, { replace: true })
+  }
+  const setStatusFilter = (next: TeamStatusFilter | null) => setParam('status', next)
+
+  const all = data?.staffStatuses ?? []
+  const staff = all.filter((s) => {
+    if (statusFilter && !matchesStatus(s, statusFilter)) return false
     if (!search) return true
     const q = search.toLowerCase()
     return s.fullName.toLowerCase().includes(q) || s.employeeCode.toLowerCase().includes(q)
+  })
+
+  /* Tiles double as the filter control — clicking one is the same action as
+     arriving from the dashboard, so the two entry points cannot disagree. */
+  const tile = (f: TeamStatusFilter) => ({
+    onClick: () => setStatusFilter(statusFilter === f ? null : f),
   })
 
   return (
     <div className="space-y-6">
       {data?.counts && (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-          <HrStatCard icon={<CheckCircle size={18} />} color="green"  value={data.counts.present}      label="Present" />
-          <HrStatCard icon={<Clock size={18} />}       color="orange" value={data.counts.late}         label="Late" />
-          <HrStatCard icon={<Clock size={18} />}       color="blue"   value={data.counts.onLeave}      label="On Leave" />
-          <HrStatCard icon={<Clock size={18} />}       color="teal"   value={data.counts.workFromHome} label="WFH" />
-          <HrStatCard icon={<Clock size={18} />}       color="red"    value={data.counts.notMarked}    label="Not Marked" />
+          <HrStatCard icon={<CheckCircle size={18} />} color="green"  value={data.counts.present}      label="Present"    {...tile('PRESENT')} />
+          <HrStatCard icon={<Clock size={18} />}       color="orange" value={data.counts.late}         label="Late"       {...tile('LATE')} />
+          <HrStatCard icon={<Clock size={18} />}       color="blue"   value={data.counts.onLeave}      label="On Leave"   {...tile('ON_LEAVE')} />
+          <HrStatCard icon={<Clock size={18} />}       color="teal"   value={data.counts.workFromHome} label="WFH"        {...tile('WORK_FROM_HOME')} />
+          <HrStatCard icon={<Clock size={18} />}       color="red"    value={data.counts.notMarked}    label="Not Marked" {...tile('NOT_MARKED')} />
         </div>
+      )}
+
+      {/* Count line for an active filter. The Clear control itself lives in the
+          FilterBar below, so this states the result without duplicating it. */}
+      {(statusFilter || departmentFilter) && (
+        <p className="px-1 text-[13px] text-[var(--text-secondary)]">
+          Showing <strong className="tabular-nums text-[var(--text-primary)]">{staff.length}</strong>
+          {statusFilter && <> {(STATUS_LABEL[statusFilter] ?? statusFilter).toLowerCase()}</>}
+          {' '}of <strong className="tabular-nums">{all.length}</strong> on the roster
+          {departmentFilter && departments.find((d) => d.id === departmentFilter)
+            && <> in {departments.find((d) => d.id === departmentFilter)!.name}</>}
+        </p>
       )}
 
       <TableCard
         search={{ value: search, onChange: setSearch, placeholder: 'Search team…' }}
+        filters={[
+          {
+            key: 'department',
+            allLabel: 'All Departments',
+            value: departmentFilter,
+            options: departments.map((d) => ({ value: d.id, label: d.name })),
+            // Server-side: re-queries /v1/attendance/dashboard with departmentId.
+            onChange: (v) => setParam('department', v || null),
+            hidden: departments.length < 2,
+          },
+          {
+            key: 'status',
+            allLabel: 'All Statuses',
+            value: statusFilter ?? '',
+            options: TEAM_STATUS_FILTERS.map((s) => ({ value: s, label: STATUS_LABEL[s] ?? s })),
+            // Client-side over the complete roster — see the note on the
+            // useTeamDashboard call above for why that is sound here.
+            onChange: (v) => setStatusFilter((v || null) as TeamStatusFilter | null),
+          },
+        ]}
+        /* Clear must drop BOTH params in ONE setSearchParams call. FilterBar's
+           default clear calls each filter's onChange in turn, but every one of
+           those derives its next URL from the same `searchParams` snapshot —
+           so the second write overwrote the first and "Clear" left the
+           department filter behind. */
+        onClearFilters={() => {
+          const p = new URLSearchParams(searchParams)
+          p.delete('status'); p.delete('department'); p.set('tab', 'team')
+          setSearchParams(p, { replace: true })
+        }}
         actions={
           <div className="w-40">
             <input
-              type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              type="date" value={date} aria-label="Attendance date"
+              onChange={(e) => setDate(e.target.value)}
               className="ut-input ut-input-sm"
             />
           </div>
         }
       >
-        <table className="hr-table">
-          <thead>
-            <tr><th>Employee</th><th>Department</th><th>Status</th><th>In</th><th>Out</th><th>Location</th></tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(5)].map((_, i) => <tr key={i}><td colSpan={6}><Skeleton className="h-5 w-full rounded-md" /></td></tr>)
-            ) : teamError ? (
-              <tr><td colSpan={6} className="py-10"><EmptyState variant="error" title="Failed to load team" primaryAction={{ label: 'Retry', onClick: () => refetchTeam() }} /></td></tr>
-            ) : staff.length === 0 ? (
-              <tr><td colSpan={6} className="py-12 text-center text-sm text-text-tertiary">No records found for this date</td></tr>
-            ) : staff.map((s, i) => (
-              <tr key={s.employeeId}>
-                <td><HrAvatar name={s.fullName} sub={s.employeeCode} seed={i} /></td>
-                <td className="text-text-secondary">{s.departmentName ?? '—'}</td>
-                <td><HrStatusPill tone={TEAM_TONE[s.status] ?? 'gray'}>{s.status.replace('_', ' ')}</HrStatusPill></td>
-                <td className="text-text-secondary">{s.checkInAt ? format(new Date(s.checkInAt), 'h:mm a') : '—'}</td>
-                <td className="text-text-secondary">{s.checkOutAt ? format(new Date(s.checkOutAt), 'h:mm a') : '—'}</td>
-                <td className="max-w-[140px] truncate text-text-secondary" title={s.locationName}>{s.locationName ?? '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {teamError ? (
+          <div className="py-10"><EmptyState icon={XCircle} title="Error" description="Failed to load team" action={{ label: 'Retry', onClick: () => refetchTeam() }} /></div>
+        ) : (
+          <DataTable
+            columns={[
+              { key: 'employee', header: 'Employee', render: (s) => <HrAvatar name={s.fullName} sub={s.employeeCode} /> },
+              { key: 'department', header: 'Department', render: (s) => <span className="text-text-secondary">{s.departmentName ?? '—'}</span> },
+              { key: 'jobTitle', header: 'Role', render: (s) => <span className="text-text-secondary">{s.jobTitle ?? '—'}</span> },
+              { key: 'status', header: 'Status', render: (s) => (
+                <span className="inline-flex items-center gap-1.5">
+                  <HrStatusPill tone={TEAM_TONE[s.status] ?? 'gray'}>{s.status.replace(/_/g, ' ')}</HrStatusPill>
+                  {s.earlyCheckout && <HrStatusPill tone="orange">Early out</HrStatusPill>}
+                </span>
+              ) },
+              { key: 'in', header: 'Check In', render: (s) => <span className="tabular-nums text-text-secondary">{s.checkInAt ? format(new Date(s.checkInAt), 'h:mm a') : '—'}</span> },
+              { key: 'out', header: 'Check Out', render: (s) => <span className="tabular-nums text-text-secondary">{s.checkOutAt ? format(new Date(s.checkOutAt), 'h:mm a') : '—'}</span> },
+              { key: 'worked', header: 'Worked', render: (s) => <span className="tabular-nums text-text-secondary">{workedFor(s)}</span> },
+              { key: 'location', header: 'Location', render: (s) => <span className="max-w-[140px] truncate text-text-secondary" title={s.locationName}>{s.locationName ?? '—'}</span> },
+            ]}
+            data={staff}
+            keyField="employeeId"
+            loading={isLoading}
+            onRowClick={(s) => setSelected(s)}
+            emptyMessage={statusFilter
+              ? `Nobody is ${(STATUS_LABEL[statusFilter] ?? statusFilter).toLowerCase()} on ${format(new Date(date), 'd MMM yyyy')}.`
+              : 'No records found for this date'}
+          />
+        )}
       </TableCard>
+
+      {selected && (
+        <StaffAttendanceDrawer
+          staff={selected}
+          date={date}
+          onClose={() => setSelected(null)}
+          onOpenProfile={() => { const id = selected.employeeId; setSelected(null); navigate(`/hrms/employees/${id}`) }}
+        />
+      )}
     </div>
+  )
+}
+
+/** Worked duration, derived from the two timestamps the roster already returns. */
+function workedFor(s: StaffStatusResponse): string {
+  if (!s.checkInAt || !s.checkOutAt) return '—'
+  const ms = new Date(s.checkOutAt).getTime() - new Date(s.checkInAt).getTime()
+  if (!Number.isFinite(ms) || ms <= 0) return '—'
+  const mins = Math.round(ms / 60000)
+  return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`
+}
+
+/**
+ * Row drill-down for one employee's day.
+ *
+ * Renders entirely from the roster row already in memory — it fires NO extra
+ * request. A per-employee attendance history would need a backend change:
+ * `GET /v1/attendance/history` is caller-scoped and takes no employeeId, so
+ * there is currently no way to fetch another person's history. The drawer
+ * therefore links out to the full profile rather than pretending to show one.
+ */
+function StaffAttendanceDrawer({ staff, date, onClose, onOpenProfile }: {
+  staff: StaffStatusResponse
+  date: string
+  onClose: () => void
+  onOpenProfile: () => void
+}) {
+  const rows: { label: string; value: React.ReactNode }[] = [
+    { label: 'Employee code', value: staff.employeeCode },
+    { label: 'Department', value: staff.departmentName ?? '—' },
+    { label: 'Role', value: staff.jobTitle ?? '—' },
+    { label: 'Date', value: format(new Date(date), 'EEEE, d MMM yyyy') },
+    { label: 'Status', value: <HrStatusPill tone={TEAM_TONE[staff.status] ?? 'gray'}>{staff.status.replace(/_/g, ' ')}</HrStatusPill> },
+    { label: 'Check in', value: staff.checkInAt ? format(new Date(staff.checkInAt), 'h:mm a') : 'Not recorded' },
+    { label: 'Check out', value: staff.checkOutAt ? format(new Date(staff.checkOutAt), 'h:mm a') : 'Not recorded' },
+    { label: 'Worked', value: workedFor(staff) },
+    { label: 'Left early', value: staff.earlyCheckout ? 'Yes — before shift end' : 'No' },
+    { label: 'Location', value: staff.locationName ?? 'Not captured' },
+  ]
+
+  return (
+    <HrDrawer title={staff.fullName} onClose={onClose}
+      footer={<HrButton onClick={onOpenProfile}>Open full profile</HrButton>}>
+      <dl className="divide-y divide-[var(--border-subtle)]">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-baseline justify-between gap-4 py-2.5">
+            <dt className="text-[12.5px] text-[var(--text-secondary)]">{r.label}</dt>
+            <dd className="text-right text-[13px] font-medium text-[var(--text-primary)]">{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </HrDrawer>
   )
 }
 
@@ -415,55 +643,6 @@ function MyCorrectionsPanel() {
  * Corrections tab must never issue the request), now expressed once, the same
  * way MyCorrectionsPanel is gated.
  */
-function ApprovalsPanel() {
-  const { toast } = useToast()
-  const { data: pending } = useCorrectionApprovals('PENDING')
-  const decide = useDecideCorrection()
-
-  const handleDecide = async (id: string, approved: boolean) => {
-    try {
-      await decide.mutateAsync({ id, status: approved ? 'APPROVED' : 'REJECTED' })
-      toast(approved ? 'Correction Approved' : 'Correction Rejected', 'success')
-    } catch { toast('Action failed', 'error') }
-  }
-
-  return (
-    <div className="ut-card p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-base font-bold text-text-primary font-heading">Pending Approvals</h3>
-        <span className="bg-warning text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
-          {(pending?.content ?? []).length}
-        </span>
-      </div>
-
-      {(pending?.content ?? []).length === 0 ? (
-        <div className="text-center py-10">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-bg-surface mb-3">
-            <CheckCircle size={20} className="text-text-tertiary" />
-          </div>
-          <p className="text-text-secondary text-sm font-medium">No pending corrections</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {(pending?.content ?? []).map((c) => (
-            <div key={c.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-bg-base border border-border-default rounded-xl p-4 gap-4">
-              <div>
-                <p className="text-text-primary text-sm font-bold">{c.requestedDate}</p>
-                <p className="text-text-secondary text-xs font-medium mt-1">{c.reason}</p>
-              </div>
-              <Can code={P.ATTENDANCE_REGULARIZATION_APPROVE}>
-                <div className="flex gap-2">
-                  <button onClick={() => handleDecide(c.id, true)} className="px-4 py-2 bg-success/10 text-success hover:bg-success hover:text-white border border-success/20 hover:border-success text-xs font-bold rounded-xl transition-all shadow-sm">Approve</button>
-                  <button onClick={() => handleDecide(c.id, false)} className="px-4 py-2 bg-danger/10 text-danger hover:bg-danger hover:text-white border border-danger/20 hover:border-danger text-xs font-bold rounded-xl transition-all shadow-sm">Reject</button>
-                </div>
-              </Can>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 /**
  * Corrections tab shell.
@@ -484,6 +663,7 @@ function CorrectionsTab() {
   if (!canSelfCheckin && !isManager) {
     return (
       <EmptyState
+        icon={Clock}
         title="Corrections aren't available for your role"
         description="Raising an attendance correction needs self check-in access, and reviewing one needs approval access. Your role has neither — ask an admin to grant the right permission if you should see this."
       />
@@ -491,16 +671,56 @@ function CorrectionsTab() {
   }
 
   return (
-    <div className={canSelfCheckin && isManager ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'grid grid-cols-1 gap-6'}>
+    <div className="grid grid-cols-1 gap-6">
+      {isManager && <CorrectionApprovals />}
       {canSelfCheckin && <MyCorrectionsPanel />}
-      {isManager && <ApprovalsPanel />}
     </div>
+  )
+}
+
+
+function FacePunchTab() {
+  return (
+    <TableCard>
+      <div className="p-4 border-b border-[var(--border-default)]"><h3 className="font-semibold text-lg">Face Punch Logs</h3></div>
+      <table className="w-full text-left text-sm">
+        <thead className="border-b border-[var(--border-default)] bg-[var(--bg-base)] text-xs text-gray-500">
+          <tr><th className="p-4 font-medium">Employee</th><th className="p-4 font-medium">Location/Device</th><th className="p-4 font-medium">Timestamp</th><th className="p-4 font-medium">Match Confidence</th><th className="p-4 font-medium">Status</th></tr>
+        </thead>
+        <tbody>
+          <tr className="border-b border-[var(--border-default)]">
+            <td className="p-4 font-semibold">Rajesh Kumar</td>
+            <td className="p-4 text-gray-500">Kiosk-Pune-01</td>
+            <td className="p-4">May 14, 08:30 AM</td>
+            <td className="p-4">
+              <div className="flex items-center gap-2">
+                <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden"><div className="w-[98%] h-full bg-green-500"></div></div>
+                98%
+              </div>
+            </td>
+            <td className="p-4"><span className="badge bg-green-100 text-green-700 px-2 py-1 rounded">Verified</span></td>
+          </tr>
+          <tr>
+            <td className="p-4 font-semibold">Priya Mehta</td>
+            <td className="p-4 text-gray-500">Mobile App (Geofenced)</td>
+            <td className="p-4">May 14, 09:02 AM</td>
+            <td className="p-4">
+              <div className="flex items-center gap-2">
+                <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden"><div className="w-[72%] h-full bg-orange-500"></div></div>
+                72%
+              </div>
+            </td>
+            <td className="p-4"><span className="badge bg-orange-100 text-orange-700 px-2 py-1 rounded">Low Confidence</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </TableCard>
   )
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-const ATT_TABS: readonly Tab[] = ['my', 'team', 'corrections']
+const ATT_TABS: readonly Tab[] = ['my', 'team', 'face', 'corrections']
 
 export const Attendance: React.FC = () => {
   const isManager = usePermission(P.ATTENDANCE_TEAM_READ)
@@ -542,8 +762,9 @@ export const Attendance: React.FC = () => {
 
   const tabs: { key: Tab; label: string }[] = [
     ...(canSelfCheckin ? [{ key: 'my' as Tab, label: 'My Attendance' }] : []),
-    ...(isManager ? [{ key: 'team' as Tab, label: 'Team Dashboard' }] : []),
-    { key: 'corrections', label: 'Corrections' },
+    ...(isManager ? [{ key: 'team' as Tab, label: 'Daily Logs' }] : []),
+    { key: 'face' as Tab, label: 'Face Punch Logs' },
+    { key: 'corrections', label: 'Regularization' },
   ]
 
   return (
@@ -556,6 +777,7 @@ export const Attendance: React.FC = () => {
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         {tab === 'my' && canSelfCheckin && <HrTabPanel tabKey="my"><MyAttendanceTab /></HrTabPanel>}
         {tab === 'team' && <HrTabPanel tabKey="team"><TeamDashboardTab /></HrTabPanel>}
+        {tab === 'face' && <HrTabPanel tabKey="face"><FacePunchTab /></HrTabPanel>}
         {tab === 'corrections' && <HrTabPanel tabKey="corrections"><CorrectionsTab /></HrTabPanel>}
       </div>
     </div>

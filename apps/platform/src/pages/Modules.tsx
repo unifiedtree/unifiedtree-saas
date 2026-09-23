@@ -66,7 +66,8 @@ function planToTile(plan: ModulePlan, activeModules: string[]): Tile {
   }
 }
 
-const ADMIN_ROLES = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER']
+// Match the plan configurator's billing-admin roles.
+const ADMIN_ROLES = ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN']
 
 /**
  * Per-app icon identities — the Odoo move: every app instantly recognisable by
@@ -117,7 +118,7 @@ export const Modules: React.FC = () => {
 
   // Backend-driven merged view — same source as the marketing site's
   // /pricing and Navbar mega-menu (platform.module_plans, RETIRED-filtered).
-  const { data: plans = [], isLoading: plansLoading } = useModulePlans()
+  const { data: plans = [], isLoading: plansLoading, isError: plansError, isFetching: plansFetching, refetch: reloadPlans } = useModulePlans()
 
   const [query, setQuery] = useState('')
 
@@ -132,9 +133,15 @@ export const Modules: React.FC = () => {
   // pseudo-tile (client feedback: real modules only; Settings lives in the
   // shell header). DB sort_order preserved (matches /pricing; HR first).
   const tiles = useMemo<Tile[]>(() => {
-    const list = plans
+    const catalog = plans
       .filter(p => p.status !== 'RETIRED')
       .map(p => planToTile(p, activeModules))
+    // A public catalog outage must not lock people out of apps that the
+    // authenticated workspace response already confirms are enabled.
+    const list: Tile[] = catalog.length > 0 ? catalog : APPS
+      .filter(app => app.built && activeModules.includes(app.key))
+      .map((app, index) => ({ key: app.key, label: app.label, description: app.description,
+        icon: app.icon, status: 'active', home: app.home, sortOrder: index }))
     const q = query.trim().toLowerCase()
     const filtered = q
       ? list.filter(t => t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q))
@@ -208,15 +215,26 @@ export const Modules: React.FC = () => {
           </div>
         </div>
 
+        {plansError && <div role="alert" className="mx-auto mb-8 max-w-xl rounded-xl border border-white/25 bg-black/15 p-4 text-center text-sm text-white">
+          <p>We couldn't load the app catalog.</p>
+          <p className="mt-1 text-white/75">{activeModules.some(key => APPS.some(app => app.key === key && app.built)) ? 'Your enabled apps remain available below. Try again to load all apps.' : 'Try again to retrieve the available apps for your workspace.'}</p>
+          <button type="button" onClick={() => reloadPlans()} disabled={plansFetching} className="mt-3 rounded-lg border border-white/40 px-4 py-2 font-medium hover:bg-white/10 disabled:opacity-50">{plansFetching ? 'Retrying...' : 'Try again'}</button>
+        </div>}
+
         {/* App grid — Odoo-style icon tiles: coloured squircle, label beneath */}
-        {plansLoading && tiles.length === 0 ? (
-          <div className="mx-auto grid max-w-3xl grid-cols-3 gap-x-6 gap-y-10 sm:grid-cols-4 md:grid-cols-5">
+        {plansLoading && tiles.length === 0 && activeModules.length === 0 ? (
+          <div role="status" aria-label="Loading apps" className="mx-auto grid max-w-3xl grid-cols-3 gap-x-6 gap-y-10 sm:grid-cols-4 md:grid-cols-5">
             {Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="flex flex-col items-center gap-3">
                 <div className="h-20 w-20 animate-pulse rounded-2xl bg-white/10" />
                 <div className="h-3 w-16 animate-pulse rounded bg-white/10" />
               </div>
             ))}
+          </div>
+        ) : tiles.length === 0 ? (
+          <div role="status" className="mx-auto max-w-xl text-center text-sm text-white/80">
+            <p>{query.trim() ? 'No apps match your search.' : plansError ? 'The app catalog is currently unavailable.' : 'No apps are available for this workspace.'}</p>
+            {query.trim() && <button type="button" className="mt-3 rounded-lg border border-white/30 px-4 py-2 text-white hover:bg-white/10" onClick={() => setQuery('')}>Clear search</button>}
           </div>
         ) : (
           <div className="mx-auto grid max-w-3xl grid-cols-3 gap-x-6 gap-y-10 sm:grid-cols-4 md:grid-cols-5">
@@ -230,7 +248,7 @@ export const Modules: React.FC = () => {
                 <motion.button
                   key={tile.key}
                   onClick={() => enter(tile)}
-                  disabled={locked && !isAdmin}
+                  disabled={soon || (locked && !isAdmin)}
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.35, delay: Math.min(i, 12) * 0.035, ease: [0.16, 1, 0.3, 1] }}

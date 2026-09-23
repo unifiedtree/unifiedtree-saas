@@ -108,8 +108,15 @@ public class PolicyController {
     @Operation(summary = "Get a single HR policy")
     @GetMapping("/policies/{id}")
     @PreAuthorize("hasAuthority('hrms.policy.read')")
-    public ResponseEntity<PolicyResponse> getPolicy(@PathVariable UUID id) {
-        return ResponseEntity.ok(policyService.getPolicy(id));
+    public ResponseEntity<PolicyResponse> getPolicy(@PathVariable UUID id,
+                                                     @AuthenticationPrincipal Jwt jwt) {
+        PolicyResponse policy = policyService.getPolicy(id);
+        if (policy.status() != com.hrms.policy.enums.PolicyStatus.ACTIVE
+                && !hasPermission(jwt, "hrms.policy.write")) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Only policy authors can preview draft or archived policies.");
+        }
+        return ResponseEntity.ok(policy);
     }
 
     @Operation(summary = "Update an HR policy")

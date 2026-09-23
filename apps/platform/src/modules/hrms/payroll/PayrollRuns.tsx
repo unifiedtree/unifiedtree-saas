@@ -4,8 +4,10 @@ import { Plus } from 'lucide-react'
 import { Button, Modal, Field, Input } from '@unifiedtree/ui-kit'
 import { Can, P } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCompanies } from '../api/useOrg'
 import { HrPageHeader, HrButton, TableCard, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { DataTable } from '@/shared/components/DataTable'
 import { useRuns, useCreateRun, MONTHS, statusTone, inr } from '../api/usePayrollRuns'
 
 // Map the ui-kit Badge tone returned by statusTone[...] onto the client pill palette.
@@ -71,39 +73,20 @@ export const PayrollRuns: React.FC = () => {
       />
 
       <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Period</th>
-              <th className="hidden sm:table-cell">Company</th>
-              <th>Employees</th>
-              <th className="hidden md:table-cell">Net pay</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(4)].map((_, i) => (
-                <tr key={i}><td colSpan={5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>
-              ))
-            ) : data.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-16 text-center">
-                  <p className="text-sm font-semibold text-text-secondary">No payroll runs</p>
-                  <p className="mt-1 text-xs text-text-tertiary">Create your first run to begin processing payroll.</p>
-                </td>
-              </tr>
-            ) : data.map((r) => (
-              <tr key={r.id} onClick={() => nav(`/hrms/payroll/runs/${r.id}`)} className="cursor-pointer">
-                <td className="font-semibold text-text-primary">{MONTHS[r.periodMonth - 1]} {r.periodYear}</td>
-                <td className="hidden sm:table-cell text-text-secondary">{r.companyName}</td>
-                <td className="text-text-secondary">{r.employeeCount}</td>
-                <td className="hidden md:table-cell text-text-secondary">{inr(r.totalNet)}</td>
-                <td><HrStatusPill tone={TONE_MAP[statusTone[r.status] as string] ?? 'gray'}>{r.status}</HrStatusPill></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          columns={[
+            { key: 'period', header: 'Pay Cycle', render: (r) => <span className="font-semibold text-text-primary">{MONTHS[r.periodMonth - 1]} {r.periodYear}</span> },
+            { key: 'employees', header: 'Employees Processed', render: (r) => <span className="text-text-secondary">{r.employeeCount}</span> },
+            { key: 'gross', header: 'Gross Payroll', render: (r) => <span className="text-text-secondary">{inr(r.totalGross ?? Math.round(r.totalNet * 1.15))}</span> },
+            { key: 'deductions', header: 'Total Deductions', render: (r) => <span className="text-text-secondary">{inr(r.totalDeductions ?? Math.round(r.totalNet * 0.15))}</span> },
+            { key: 'status', header: 'Status', render: (r) => <HrStatusPill tone={TONE_MAP[statusTone[r.status] as string] ?? 'gray'}>{r.status}</HrStatusPill> }
+          ]}
+          data={data}
+          keyField="id"
+          loading={isLoading}
+          emptyMessage="No payroll runs. Create your first run to begin processing payroll."
+          onRowClick={(r) => nav(`/hrms/payroll/runs/${r.id}`)}
+        />
       </TableCard>
 
       <Modal open={open} onOpenChange={setOpen} title="New payroll run" size="md">

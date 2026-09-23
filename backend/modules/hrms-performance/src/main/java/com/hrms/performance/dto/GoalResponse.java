@@ -3,6 +3,7 @@ package com.hrms.performance.dto;
 import com.hrms.performance.enums.GoalStatus;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public record GoalResponse(
@@ -14,5 +15,8 @@ public record GoalResponse(
         int weight,
         int progress,
         GoalStatus status,
-        Instant createdAt
+        Instant createdAt,
+        BigDecimal targetValue,
+        BigDecimal currentValue,
+        String unit
 ) {}

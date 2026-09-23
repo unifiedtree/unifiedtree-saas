@@ -2,8 +2,9 @@ import React, { useState } from 'react'
 import { Plus, Tag, Loader2, Zap, Pencil, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useToast } from '@/shared/hooks/useToast'
-import { Can, P } from '@unifiedtree/sdk'
+import { Can, usePermission, P } from '@unifiedtree/sdk'
 import { TableSkeleton } from '@unifiedtree/ui-kit'
+import { DataTable } from '@/shared/components/DataTable'
 import { useLeaveTypes, useCreateLeaveType, useUpdateLeaveType, useDeactivateLeaveType, type LeaveTypeResponse } from '../api/useLeave'
 import { useCompanies } from '../api/useOrg'
 import { HrPageHeader, HrButton, HrStatusPill, TableCard } from '@/shared/components/hr'
@@ -324,6 +325,7 @@ export function LeaveTypes({
   const { data: companies = [] } = useCompanies()
   const companyId = companyIdProp ?? companies[0]?.id ?? ''
   const { data: types = [], isLoading } = useLeaveTypes(companyId)
+  const canWrite = usePermission(P.LEAVE_TYPE_WRITE)
   const create = useCreateLeaveType()
   const deactivate = useDeactivateLeaveType()
   const [showAdd, setShowAdd] = useState(false)
@@ -405,22 +407,44 @@ export function LeaveTypes({
         </div>
       ) : (
         <TableCard>
-          <table className="hr-table">
-            <thead>
-              <tr>
-                <th>Leave Type</th>
-                <th>Code</th>
-                <th>Category</th>
-                <th>Status</th>
-                <Can code={P.LEAVE_TYPE_WRITE}>
-                  <th className="text-right">Actions</th>
-                </Can>
-              </tr>
-            </thead>
-            <tbody>
-              {types.map((t) => <TypeRow key={t.id} type={t} onEdit={setEditing} onDeactivate={handleDeactivate} />)}
-            </tbody>
-          </table>
+          <DataTable
+            columns={[
+              { key: 'leaveType', header: 'Leave Type', render: (t) => (
+                <div className={clsx("flex items-center gap-3", !t.isActive && "opacity-60")}>
+                  <div className="w-9 h-9 rounded-lg bg-[#ECFDF5] flex items-center justify-center flex-shrink-0">
+                    <Tag size={15} className="text-[#047857]" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-text-primary">{t.name}</p>
+                    <p className="text-text-tertiary text-xs mt-0.5">
+                      {t.annualEntitlement} days/year
+                      {t.isPaidLeave ? ' · Paid' : ' · Unpaid'}
+                      {t.isCarryForwardAllowed ? ` · Carry fwd up to ${t.maxCarryForwardDays}d` : ''}
+                    </p>
+                  </div>
+                </div>
+              ) },
+              { key: 'code', header: 'Code', render: (t) => <span className={clsx("hr-mono text-text-secondary", !t.isActive && "opacity-60")}>{t.code}</span> },
+              { key: 'category', header: 'Category', render: (t) => <span className={clsx("text-xs text-text-secondary capitalize", !t.isActive && "opacity-60")}>{(t.category ?? '').toLowerCase()}</span> },
+              { key: 'status', header: 'Status', render: (t) => t.isActive ? <HrStatusPill tone="ok">Active</HrStatusPill> : <HrStatusPill tone="gray">Inactive</HrStatusPill> },
+              ...(canWrite ? [{
+                key: 'actions', header: '', render: (t: LeaveTypeResponse) => (
+                  <div className="inline-flex items-center gap-1 justify-end w-full">
+                    <button onClick={() => setEditing(t)} title="Edit" className="p-1.5 text-text-tertiary hover:text-[#047857] rounded-lg hover:bg-bg-base transition-colors">
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => handleDeactivate(t)} title="Deactivate" className="p-1.5 text-text-tertiary hover:text-[#EF4444] rounded-lg hover:bg-bg-base transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )
+              }] : [])
+            ]}
+            data={types}
+            keyField="id"
+            loading={isLoading}
+            emptyMessage="No leave types configured."
+          />
         </TableCard>
       )}
 

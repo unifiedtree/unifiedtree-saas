@@ -43,20 +43,20 @@ export interface Page<T> {
  */
 export const DOCUMENT_PAGE_SIZE = 20
 
-export function useMyDocuments(page = 0) {
+export function useMyDocuments(page = 0, pageSize = DOCUMENT_PAGE_SIZE) {
   return useQuery({
     // `page` is part of the key: without it react-query would hand page 2 the
     // cached page-1 rows and the table would never appear to advance.
-    queryKey: ['hrms', 'document', 'my', page],
-    queryFn: () => apiJson<Page<EmployeeDocument>>(`/v1/document/my?page=${page}&size=${DOCUMENT_PAGE_SIZE}`),
+    queryKey: ['hrms', 'document', 'my', page, pageSize],
+    queryFn: () => apiJson<Page<EmployeeDocument>>(`/v1/document/my?page=${page}&size=${pageSize}`),
     staleTime: 30_000,
   })
 }
 
-export function useEmployeeDocuments(employeeId: string | undefined, page = 0, enabled = true) {
+export function useEmployeeDocuments(employeeId: string | undefined, page = 0, enabled = true, pageSize = DOCUMENT_PAGE_SIZE) {
   return useQuery({
-    queryKey: ['hrms', 'document', 'employee', employeeId, page],
-    queryFn: () => apiJson<Page<EmployeeDocument>>(`/v1/document/employee/${employeeId}?page=${page}&size=${DOCUMENT_PAGE_SIZE}`),
+    queryKey: ['hrms', 'document', 'employee', employeeId, page, pageSize],
+    queryFn: () => apiJson<Page<EmployeeDocument>>(`/v1/document/employee/${employeeId}?page=${page}&size=${pageSize}`),
     enabled: !!employeeId && enabled,
     staleTime: 15_000,
   })
@@ -73,6 +73,7 @@ export function useDocument(id: string | undefined) {
 // ── Mutations ────────────────────────────────────────────────────────────────
 
 export interface CreateDocumentPayload {
+  file?: File
   employeeId: string
   companyId?: string
   title: string
@@ -86,8 +87,16 @@ export interface CreateDocumentPayload {
 export function useCreateDocument() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: CreateDocumentPayload) =>
-      apiJson<EmployeeDocument>('/v1/document/documents', { method: 'POST', body: JSON.stringify(data) }),
+    mutationFn: (data: CreateDocumentPayload) => {
+      if (data.file) {
+        const { file, fileUrl, companyId, ...metadata } = data
+        const body = new FormData()
+        body.append('file', file)
+        body.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+        return apiJson<EmployeeDocument>('/v1/document/upload', { method: 'POST', body })
+      }
+      return apiJson<EmployeeDocument>('/v1/document/documents', { method: 'POST', body: JSON.stringify(data) })
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'document'] }),
   })
 }

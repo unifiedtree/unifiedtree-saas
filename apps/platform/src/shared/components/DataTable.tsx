@@ -17,6 +17,9 @@ interface DataTableProps<T> {
   loading?: boolean
   emptyMessage?: string
   onRowClick?: (row: T) => void
+  footer?: React.ReactNode
+  expandedRowIds?: (string | number)[]
+  renderSubRow?: (row: T) => React.ReactNode
 }
 
 export function DataTable<T>({
@@ -26,6 +29,9 @@ export function DataTable<T>({
   loading,
   emptyMessage = 'No records found',
   onRowClick,
+  footer,
+  expandedRowIds = [],
+  renderSubRow,
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -55,16 +61,16 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="ut-card overflow-x-auto">
+    <div className="overflow-x-auto w-full rounded-[10px]">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-[#E2E8F0]">
+          <tr className="border-b border-gray-100 bg-gray-50/50">
             {columns.map((col) => (
               <th
                 key={String(col.key)}
                 className={clsx(
-                  'px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider',
-                  col.sortable && 'cursor-pointer hover:text-[#334155] select-none',
+                  'px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider',
+                  col.sortable && 'cursor-pointer hover:text-gray-900 select-none',
                   col.width
                 )}
                 onClick={() => col.sortable && handleSort(String(col.key))}
@@ -81,28 +87,37 @@ export function DataTable<T>({
         </thead>
         <tbody>
           {sorted.length === 0 ? (
-            <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-[#64748B] text-sm">{emptyMessage}</td></tr>
+            <tr><td colSpan={columns.length} className="px-6 py-16 text-center text-gray-500 text-sm font-medium">{emptyMessage}</td></tr>
           ) : (
             sorted.map((row) => (
-              <tr
-                key={String(row[keyField])}
-                className={clsx(
-                  'border-b border-[#E2E8F0]/40 last:border-0 transition-colors',
-                  onRowClick ? 'cursor-pointer hover:bg-[#F8FAFC]' : 'hover:bg-white/[0.01]'
+              <React.Fragment key={String(row[keyField])}>
+                <tr
+                  className={clsx(
+                    'border-b border-gray-100 last:border-0 transition-colors',
+                    onRowClick ? 'cursor-pointer hover:bg-gray-50/80' : 'hover:bg-gray-50/50'
+                  )}
+                  onClick={() => onRowClick?.(row)}
+                >
+                  {columns.map((col) => (
+                    <td key={String(col.key)} className="px-6 py-4 text-gray-700 font-medium">
+                      {col.render
+                        ? col.render(row)
+                        : String((row as Record<string, unknown>)[String(col.key)] ?? '—')}
+                    </td>
+                  ))}
+                </tr>
+                {renderSubRow && expandedRowIds.includes(String(row[keyField])) && (
+                  <tr>
+                    <td colSpan={columns.length} className="p-0 border-b border-gray-100">
+                      {renderSubRow(row)}
+                    </td>
+                  </tr>
                 )}
-                onClick={() => onRowClick?.(row)}
-              >
-                {columns.map((col) => (
-                  <td key={String(col.key)} className="px-4 py-3 text-[#334155]">
-                    {col.render
-                      ? col.render(row)
-                      : String((row as Record<string, unknown>)[String(col.key)] ?? '—')}
-                  </td>
-                ))}
-              </tr>
+              </React.Fragment>
             ))
           )}
         </tbody>
+        {footer}
       </table>
     </div>
   )

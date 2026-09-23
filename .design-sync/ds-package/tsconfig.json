@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@unifiedtree/ui-kit": ["../../packages/ui-kit/src/index.ts"],
+      "@unifiedtree/ui-kit/*": ["../../packages/ui-kit/src/*"],
+      "@unifiedtree/design-system": ["../../packages/design-system/src/index.ts"],
+      "@unifiedtree/design-system/*": ["../../packages/design-system/src/*"],
+      "@/*": ["../../apps/platform/src/*"]
+    }
+  },
+  "include": ["src"]
+}

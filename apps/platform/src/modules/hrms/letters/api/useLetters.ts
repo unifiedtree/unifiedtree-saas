@@ -27,6 +27,8 @@ export interface GeneratedLetterDto {
   companyId: string
   templateId: string
   employeeId: string
+  employeeName?: string
+  employeeCode?: string
   type: LetterType
   subject: string
   status: LetterStatus
@@ -97,12 +99,13 @@ export interface VoidLetterRequest {
 
 // ── Template hooks ────────────────────────────────────────────────────────────
 
-export function useLetterTemplates(page = 0) {
+export function useLetterTemplates(page = 0, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['hrms', 'letters', 'templates', page],
     queryFn: () =>
       apiJson<PageResponse<LetterTemplateDto>>(`/v1/letters/templates?page=${page}&size=20`),
     staleTime: 60_000,
+    enabled: opts?.enabled ?? true,
   })
 }
 

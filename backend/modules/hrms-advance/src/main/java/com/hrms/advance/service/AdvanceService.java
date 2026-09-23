@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,9 +30,11 @@ public class AdvanceService {
     private static final Logger log = LoggerFactory.getLogger(AdvanceService.class);
 
     private final AdvanceRequestRepository advanceRepository;
+    private final JdbcTemplate jdbc;
 
-    public AdvanceService(AdvanceRequestRepository advanceRepository) {
+    public AdvanceService(AdvanceRequestRepository advanceRepository, JdbcTemplate jdbc) {
         this.advanceRepository = advanceRepository;
+        this.jdbc = jdbc;
     }
 
     /**
@@ -127,14 +130,34 @@ public class AdvanceService {
     public AdvanceResponse disburse(UUID requestId) {
         AdvanceRequest advance = advanceRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("AdvanceRequest", requestId));
-        if (advance.getStatus() != AdvanceStatus.APPROVED) {
+        // Serialize with separation and full-and-final processing. Keep the
+        // shared employee -> advance lock order so settlement cannot finish
+        // immediately before a previously approved advance creates new debt.
+        UUID tenantId = TenantContext.getTenantId();
+        String employeeStatus = jdbc.queryForObject("""
+                SELECT employment_status FROM hrms.employees
+                 WHERE tenant_id = ? AND id = ? FOR UPDATE
+                """, String.class, tenantId, advance.getEmployeeId());
+        if ("EXITED".equals(employeeStatus) || "TERMINATED".equals(employeeStatus)) {
             throw new BusinessRuleException(
-                    "Only an approved advance can be disbursed (current status: " + advance.getStatus() + ")",
+                    "An advance cannot be disbursed after the employee has exited or been terminated.",
+                    "ADVANCE_EMPLOYEE_SEPARATED");
+        }
+        // The controller may already have loaded this entity. Read the locked
+        // database status rather than trusting a stale JPA first-level cache.
+        String advanceStatus = jdbc.queryForObject("""
+                SELECT status FROM advance_mgmt.advance_requests
+                 WHERE tenant_id = ? AND id = ? FOR UPDATE
+                """, String.class, tenantId, requestId);
+        if (!AdvanceStatus.APPROVED.name().equals(advanceStatus)) {
+            throw new BusinessRuleException(
+                    "Only an approved advance can be disbursed (current status: " + advanceStatus + ")",
                     "ADVANCE_NOT_APPROVED");
         }
         advance.setStatus(AdvanceStatus.DISBURSED);
         advance.setDisbursedAt(Instant.now());
-        advance = advanceRepository.save(advance);
+        // The same transaction seeds the recovery schedule through JDBC.
+        advance = advanceRepository.saveAndFlush(advance);
         log.info("Advance request {} marked disbursed", requestId);
         return toResponse(advance);
     }

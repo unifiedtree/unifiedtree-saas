@@ -93,9 +93,7 @@ function uploadFile<T>(
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
-// TODO[backend]: GET /v1/bulk-import/employees/template not implemented.
-// When available: returns an XLSX Blob pre-filled with tenant's branch/dept/designation codes.
-// The endpoint should accept no params (uses current tenant context from JWT/header).
+// Download the backend's XLSX column template using the current tenant identity.
 export function useDownloadTemplate() {
   const tenantId = useAuthStore.getState().tenant?.id
   return useMutation({
@@ -110,8 +108,7 @@ export function useDownloadTemplate() {
       })
       if (!response.ok) {
         throw new Error(
-          `Template download not yet available (${response.status}). ` +
-          `Ask your administrator for the column header list.`,
+          `Could not download the template (${response.status}). Please try again.`,
         )
       }
       const blob = await response.blob()

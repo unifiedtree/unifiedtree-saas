@@ -37,20 +37,20 @@ export const ComingSoon: React.FC<ComingSoonProps> = ({ module }) => {
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
-      <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl border border-primary-light bg-primary-light text-primary">
-        <Icon size={32} />
+      <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-[var(--bg-subtle)] border border-[var(--border-default)]">
+        <Icon size={32} className="text-[var(--text-tertiary)]" />
       </div>
 
-      <h2 className="mb-2 text-2xl font-bold text-text-primary-fixed">
+      <h2 className="mb-2 text-2xl font-bold tracking-tight text-[var(--text-primary)]">
         {meta.label} is part of your plan
       </h2>
 
-      <p className="mb-1 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+      <p className="mb-1 inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--accent-fg)] uppercase tracking-wider">
         <Clock size={14} />
         Launching soon
       </p>
 
-      <p className="mb-8 max-w-md leading-relaxed text-text-secondary-fixed">
+      <p className="mb-8 max-w-md leading-relaxed text-[var(--text-secondary)] text-[14.5px]">
         This module is launching soon. We are putting the finishing touches in
         place &mdash; you will be able to start using {meta.label} here once it
         goes live.
@@ -58,7 +58,7 @@ export const ComingSoon: React.FC<ComingSoonProps> = ({ module }) => {
 
       <Link
         to="/dashboard"
-        className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-medium text-text-secondary-fixed transition-colors hover:border-primary hover:text-primary"
+        className="btn-press inline-flex h-9.5 items-center justify-center gap-1.5 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] px-4 text-sm font-semibold text-[var(--text-primary)] shadow-xs hover:bg-[var(--bg-subtle)] hover:border-[var(--border-strong)] transition-all duration-150"
       >
         <ArrowLeft size={15} />
         Back to dashboard

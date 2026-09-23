@@ -1,0 +1,500 @@
+import { attendanceDate } from './attendance/date'
+import React from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Clock, CalendarDays, Building2, ArrowRight, Banknote, UserPlus, FileText, Download, Activity,
+  Users, UserCheck, UserMinus, AlertCircle, Home, HelpCircle, UserX,
+  Briefcase, ClipboardCheck, Receipt, Brain, Bot, Flame, Lightbulb
+} from 'lucide-react'
+import {
+  ResponsiveContainer, BarChart, Bar, AreaChart, Area, Legend,
+  XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell
+} from 'recharts'
+import { HrStatusPill, HrButton, HrAvatar } from '@/shared/components/hr'
+import { apiBlob } from '@/core/api/client'
+import { toast } from 'sonner'
+import { useEmployeeDirectory } from './api/useWorkforce'
+import { useCompanies } from './api/useOrg'
+import { useRequisitions } from './api/useHiring'
+import { useLeaveOverview } from './api/useLeave'
+import { useTeamDashboard, useAttendanceTrend, useCorrectionApprovals } from './api/useAttendance'
+import { useActivityFeed, activityLabel, activityActor } from './api/useActivity'
+import { useHeadcountReport } from './api/useReports'
+import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
+
+import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
+import { UpcomingProbations } from './probation/UpcomingProbations'
+import { UpcomingMilestones } from './milestones/UpcomingMilestones'
+
+function Card({ title, chip, className = '', children }: {
+  title?: string
+  chip?: React.ReactNode
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className={`ut-card p-5 ${className}`}>
+      {(title || chip) && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          {title && <h2 className="text-[15px] font-semibold tracking-tight text-[var(--text-primary)]">{title}</h2>}
+          {chip}
+        </div>
+      )}
+      {children}
+    </section>
+  )
+}
+
+export const CompanyAdminDashboard: React.FC = () => {
+  const navigate = useNavigate()
+  const { data: companies = [] } = useCompanies()
+  const activeCompany = companies[0]
+
+  const canApproveLeaves = usePermission(P.HRMS_LEAVE_APPROVE_L1)
+  const canReadEmployees = usePermission(P.HRMS_EMPLOYEE_READ)
+  const canReadHiring    = usePermission(P.HRMS_HIRING_READ)
+  const canSeeProbation  = usePermission(P.HRMS_PROBATION_REMINDERS_READ)
+
+  const hasPayrollModule = useLocalAuthStore((s) => s.tenant?.activeModules?.includes('payroll') ?? false)
+  const canRunPayroll    = usePermission(P.PAYROLL_RUNS_READ) && hasPayrollModule
+
+  const canExportHeadcount = usePermission(P.HRMS_REPORT_HEADCOUNT)
+  const canReportAttrition = usePermission(P.HRMS_REPORT_ATTRITION)
+  const canReportAttendance = usePermission(P.HRMS_REPORT_ATTENDANCE)
+  const canReportLeave = usePermission(P.HRMS_REPORT_LEAVE)
+  const canReportDiversity = usePermission(P.HRMS_REPORT_DIVERSITY)
+  const canViewReports = canExportHeadcount || canReportAttrition || canReportAttendance || canReportLeave || canReportDiversity
+
+  const canReadTeamAttendance = usePermission(P.ATTENDANCE_TEAM_READ)
+  const canReadAudit          = usePermission(P.AUDIT_READ)
+  const canApproveCorrections = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
+  const corrections = useCorrectionApprovals('PENDING', { enabled: canApproveCorrections, size: 1 })
+
+  const canWriteEmployee = usePermission(P.HRMS_EMPLOYEE_WRITE)
+  const canManageOrg     = usePermission(P.ORG_COMPANY_WRITE)
+
+  const canSeeWorkforceTiles = canReadEmployees
+  const canSeeHiringTiles = canReadHiring
+  const attendanceCardTitle = 'Attendance workspace'
+
+  const directoryQuery = useEmployeeDirectory(
+    { companyId: activeCompany?.id, pageSize: 5 },
+    { enabled: canReadEmployees && !!activeCompany?.id },
+  )
+  const leaveOverviewQuery = useLeaveOverview()
+  const now = new Date()
+  const todayIso = attendanceDate(now)
+  const teamDashboardQuery = useTeamDashboard(todayIso, undefined, canReadTeamAttendance)
+  const trendQuery = useAttendanceTrend(undefined, todayIso, undefined, canReadTeamAttendance)
+  const activityQuery = useActivityFeed(8, canReadAudit)
+
+  const headcountQuery = useHeadcountReport(
+    canSeeWorkforceTiles && canExportHeadcount ? (activeCompany?.id ?? null) : null,
+  )
+  const headcountRows = (headcountQuery.data ?? [])
+    .map((r) => ({
+      department: r.department ?? 'Unassigned',
+      active: Number(r.active ?? 0),
+    }))
+    .filter((r) => r.active > 0)
+
+  const directory        = directoryQuery.data
+  const leaveOverview    = leaveOverviewQuery.data
+
+  const totalEmployees   = directory?.totalElements ?? 0
+  const recentEmployees  = directory?.content ?? []
+  const pendingApprovals = leaveOverview?.pendingApprovals ?? 0
+
+  const firstName = useAuthStore((s) => s.user?.firstName)
+
+  const quickActions = [
+    ...(canWriteEmployee ? [{ label: 'Add Employee', icon: UserPlus, path: '/hrms/employees?add=1' }] : []),
+    ...(canRunPayroll ? [{ label: 'Run Payroll', icon: Banknote, path: '/hrms/payroll-dashboard' }] : []),
+    { label: 'Attendance', icon: Clock, path: '/hrms/attendance' },
+    { label: 'Add Time-Off', icon: CalendarDays, path: '/hrms/leave' },
+    ...(canManageOrg ? [{ label: 'Org Setup', icon: Building2, path: '/hrms/organization' }] : []),
+    ...(canViewReports ? [{ label: 'View Reports', icon: FileText, path: '/hrms/reports' }] : []),
+  ]
+
+  const greeting = (() => {
+    const h = now.getHours()
+    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  })()
+
+  const formattedDate = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  }).format(now)
+
+
+  const [downloading, setDownloading] = React.useState(false)
+  const downloadHeadcountCsv = async () => {
+    if (!activeCompany?.id || downloading) return
+    setDownloading(true)
+    try {
+      const blob = await apiBlob(
+        `/v1/reports/headcount/export.csv?companyId=${encodeURIComponent(activeCompany.id)}`,
+      )
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `headcount-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      const status = (err as Error & { status?: number }).status
+      toast.error('Could not generate the report', {
+        description: status === 403
+          ? "Your role doesn't include the headcount report."
+          : (err as Error)?.message || 'Please try again.',
+      })
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const { data: reqPage, isError: hiringError } = useRequisitions(0, undefined, { enabled: canSeeHiringTiles })
+  const oCounts = teamDashboardQuery.data?.counts
+  const rosterTotal = teamDashboardQuery.data?.staffStatuses.length ?? 0
+  const attendanceSlices = [
+    { name: 'Regular check-ins', status: 'PRESENT', value: oCounts?.present, fill: '#0F6E56' },
+    { name: 'Late arrivals', status: 'LATE', value: oCounts?.late, fill: '#D97706' },
+    { name: 'Absent', status: 'ABSENT', value: oCounts?.absent, fill: '#DC2626' },
+    { name: 'On leave', status: 'ON_LEAVE', value: oCounts?.onLeave, fill: '#6366F1' },
+    { name: 'Work from home', status: 'WORK_FROM_HOME', value: oCounts?.workFromHome, fill: '#0284C7' },
+    { name: 'Not marked', status: 'NOT_MARKED', value: oCounts?.notMarked, fill: '#64748B' },
+    { name: 'Half day', status: 'HALF_DAY', value: oCounts?.halfDay, fill: '#A16207' },
+    { name: 'Early departures', status: 'EARLY_OUT', value: oCounts?.earlyCheckout, fill: '#9333EA' },
+  ]
+  const trendRows = (trendQuery.data ?? []).map(row => ({
+    date: row.date.slice(5), 'Regular check-ins': row.present, Late: row.late, Absent: row.absent,
+  }))
+  const activityRows = activityQuery.data?.data ?? []
+  const openAttendance = (status: string) => navigate(`/hrms/attendance?tab=team&status=${status}&date=${todayIso}`)
+  const queryState = (loading: boolean, error: boolean, retry: () => unknown, empty: boolean, children: React.ReactNode) =>
+    loading ? <div className="dashboard-state" role="status">Loading...</div>
+      : error ? <div className="dashboard-state" role="alert"><p>Unable to load this section.</p><HrButton variant="ghost" onClick={() => retry()}>Try again</HrButton></div>
+      : empty ? <div className="dashboard-state">No records for this period.</div> : children
+
+  return <div className="company-dashboard mx-auto max-w-[1680px] space-y-7 p-4 sm:p-6 lg:p-8">
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div><p className="mb-1 text-xs font-semibold uppercase tracking-widest text-primary">Dashboard Overview</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-text-primary">{greeting}, {firstName || 'there'} 👋</h1>
+        <p className="mt-2 text-sm text-text-secondary">Your people, priorities and progress, in one place.</p></div>
+      <div className="flex flex-wrap items-center gap-3"><span className="rounded-md border border-border-default bg-white px-3 py-2 text-xs text-text-secondary">{formattedDate}</span>
+        {canExportHeadcount && <HrButton variant="ghost" disabled={downloading || !activeCompany?.id} onClick={downloadHeadcountCsv}><Download size={15} /> Export headcount</HrButton>}
+        {canWriteEmployee && <HrButton onClick={() => navigate('/hrms/employees?add=1')}><UserPlus size={15} /> Add employee</HrButton>}
+      </div>
+    </div>
+
+    {/* SECTION 1: OVERVIEW KPI WIDGETS */}
+    <section aria-label="Live overview">
+      <h2 className="dashboard-section-title flex items-center gap-2 text-[var(--primary)]"><Clock size={18} /> Live Overview</h2>
+      
+      {/* Top 4 KPI Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+        {canReadEmployees && (
+          <button className="flex flex-col justify-between overflow-hidden rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => navigate('/hrms/employees')}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[13px] font-medium text-[var(--text-secondary)]">Total Employees</p>
+                <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{totalEmployees}</div>
+                <p className="mt-2 text-[11px] font-medium text-[#059669] flex items-center gap-1"><Activity size={12} /> Active</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#2563EB]"><Users size={20} /></div>
+            </div>
+          </button>
+        )}
+        {canReadTeamAttendance && (
+          <button className="flex flex-col justify-between overflow-hidden rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('PRESENT')}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[13px] font-medium text-[var(--text-secondary)]">Present</p>
+                <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{oCounts?.present ?? 0}</div>
+                <p className="mt-2 text-[11px] font-medium text-[#059669] flex items-center gap-1"><ArrowRight size={12} className="-rotate-45" /> High Attendance</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ECFDF5] text-[#059669]"><UserCheck size={20} /></div>
+            </div>
+          </button>
+        )}
+        {canReadTeamAttendance && (
+          <button className="flex flex-col justify-between overflow-hidden rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('ON_LEAVE')}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[13px] font-medium text-[var(--text-secondary)]">On Leave</p>
+                <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{oCounts?.onLeave ?? 0}</div>
+                <p className="mt-2 text-[11px] font-medium text-[#D97706] flex items-center gap-1"><ArrowRight size={12} className="rotate-45" /> From yesterday</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF7ED] text-[#D97706]"><UserMinus size={20} /></div>
+            </div>
+          </button>
+        )}
+        {canReadTeamAttendance && (
+          <button className="flex flex-col justify-between overflow-hidden rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('LATE')}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[13px] font-medium text-[var(--text-secondary)]">Late Arrivals</p>
+                <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{oCounts?.late ?? 0}</div>
+                <p className="mt-2 text-[11px] font-medium text-[#DC2626] flex items-center gap-1">Needs attention</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FEF2F2] text-[#DC2626]"><AlertCircle size={20} /></div>
+            </div>
+          </button>
+        )}
+      </div>
+
+      {/* Bottom 4 KPI Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {canReadTeamAttendance && (
+          <button className="flex items-center justify-between rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('HALF_DAY')}>
+            <div>
+              <p className="text-[13px] font-medium text-[var(--text-secondary)]">Half Day</p>
+              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{oCounts?.halfDay ?? 0}</div>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3E8FF] text-[#9333EA]"><Lightbulb size={20} /></div>
+          </button>
+        )}
+        {canReadTeamAttendance && (
+          <button className="flex items-center justify-between rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('WORK_FROM_HOME')}>
+            <div>
+              <p className="text-[13px] font-medium text-[var(--text-secondary)]">Work From Home</p>
+              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{oCounts?.workFromHome ?? 0}</div>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#2563EB]"><Home size={20} /></div>
+          </button>
+        )}
+        {canReadTeamAttendance && (
+          <button className="flex items-center justify-between rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('NOT_MARKED')}>
+            <div>
+              <p className="text-[13px] font-medium text-[var(--text-secondary)]">Not Marked</p>
+              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{oCounts?.notMarked ?? 0}</div>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF7ED] text-[#EA580C]"><HelpCircle size={20} /></div>
+          </button>
+        )}
+        {canReadTeamAttendance && (
+          <button className="flex items-center justify-between rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('ABSENT')}>
+            <div>
+              <p className="text-[13px] font-medium text-[var(--text-secondary)]">Absence</p>
+              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{oCounts?.absent ?? 0}</div>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FEF2F2] text-[#DC2626]"><UserX size={20} /></div>
+          </button>
+        )}
+      </div>
+    </section>
+
+    {/* SECTION 2: ATTENDANCE ANALYTICS */}
+    {canReadTeamAttendance && <section aria-label="Attendance analytics"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="dashboard-section-title !mb-0 flex items-center gap-2 text-[#059669]"><Clock size={18} /> Attendance Analytics</h2><button onClick={() => navigate(`/hrms/attendance?tab=team&date=${todayIso}`)} className="text-xs font-semibold text-primary">View attendance &rarr;</button></div>
+      <div className="grid items-start gap-5 xl:grid-cols-[1.4fr_1fr]">
+        <Card title="Weekly Attendance Trend" chip={<span className="text-xs text-text-secondary">Last 7 days - IST</span>}>
+          {queryState(trendQuery.isPending, trendQuery.isError, trendQuery.refetch, !trendRows.length,
+            <div className="h-64" role="img" aria-label="Daily regular, late and absent employee counts"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trendRows} margin={{ top: 15, right: 12, bottom: 0, left: -20 }}>
+              <CartesianGrid stroke="#E2E8F0" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip /><Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 12 }} />
+              <Area dataKey="Regular check-ins" stroke="#0F6E56" fill="#E6F4F1" strokeWidth={2} /><Area dataKey="Late" stroke="#D97706" fill="transparent" strokeWidth={2} /><Area dataKey="Absent" stroke="#DC2626" fill="transparent" strokeWidth={2} />
+            </AreaChart></ResponsiveContainer></div>)}
+        </Card>
+        <Card title="Today's Attendance" chip={<span className="text-xs text-text-secondary">{rosterTotal} employees - IST</span>}>
+          {queryState(teamDashboardQuery.isPending, teamDashboardQuery.isError, teamDashboardQuery.refetch, !rosterTotal,
+            <><div className="grid grid-cols-2 gap-2">{attendanceSlices.map(stat => <button key={stat.status} onClick={() => openAttendance(stat.status)} className="flex items-center justify-between gap-2 rounded-md border border-border-default p-3 text-left hover:bg-bg-base">
+              <span className="flex items-center gap-2 text-xs text-text-secondary"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: stat.fill }} />{stat.name}</span><strong className="text-base tabular-nums">{stat.value}</strong>
+            </button>)}</div><p className="mt-3 text-[11px] text-text-secondary">Regular check-ins exclude late, WFH and half-day records. Other categories can overlap. Click a count to see who.</p></>)}
+        </Card>
+      </div>
+    </section>}
+
+    {/* SECTION 3: EMPLOYEE ANALYTICS */}
+    {canSeeWorkforceTiles && <section aria-label="Employee analytics"><h2 className="dashboard-section-title flex items-center gap-2 text-[#9333EA]"><Users size={18} /> Employee Analytics</h2><div className="grid gap-5 xl:grid-cols-3">
+      {canExportHeadcount && <Card title="Dept Distribution">{queryState(headcountQuery.isPending, headcountQuery.isError, headcountQuery.refetch, !headcountRows.length,
+        <div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={headcountRows} layout="vertical" margin={{ left: 0, right: 16 }}><CartesianGrid stroke="#E2E8F0" horizontal={false} /><XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} /><YAxis type="category" dataKey="department" width={100} tick={{ fontSize: 11 }} /><Tooltip /><Bar dataKey="active" name="Active employees" fill="#0F6E56" radius={[0, 3, 3, 0]} maxBarSize={22} /></BarChart></ResponsiveContainer></div>)}</Card>}
+      
+      <Card title="Top Performers (Mock)">
+        <div className="flex flex-col gap-4 mt-2">
+          {[
+            { initials: 'DL', name: 'David Lee', role: 'Engineering', score: '98%', bg: '#F3E8FF', color: '#9333EA' },
+            { initials: 'SN', name: 'Sarah Nair', role: 'Marketing', score: '96%', bg: '#ECFDF5', color: '#10B981' },
+            { initials: 'RJ', name: 'Rahul Joshi', role: 'Sales', score: '94%', bg: '#EFF6FF', color: '#3B82F6' },
+            { initials: 'VK', name: 'Vikram Kumar', role: 'Operations', score: '92%', bg: '#FFF7ED', color: '#F59E0B' }
+          ].map(p => (
+            <div key={p.name} className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: p.bg, color: p.color }}>{p.initials}</div>
+                <div>
+                  <div className="text-[13px] font-semibold text-gray-800">{p.name}</div>
+                  <div className="text-[11px] text-gray-500">{p.role}</div>
+                </div>
+              </div>
+              <div className="font-bold text-[#059669]">{p.score}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      
+      <Card title="Onboarding Tracker (Mock)">
+        <div className="flex flex-col gap-4 mt-2">
+          {[
+            { name: 'Anita R.', role: 'Product', progress: 80, color: '#3B82F6' },
+            { name: 'James W.', role: 'Design', progress: 55, color: '#F59E0B' },
+            { name: 'Pooja K.', role: 'Sales', progress: 100, color: '#10B981' }
+          ].map(o => (
+            <div key={o.name}>
+              <div className="flex justify-between text-[12px] mb-1">
+                <span><b>{o.name}</b> ({o.role})</span>
+                <span className="font-semibold">{o.progress}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                <div className="h-full rounded-full transition-all" style={{ width: `${o.progress}%`, backgroundColor: o.color }} />
+              </div>
+            </div>
+          ))}
+          <HrButton variant="ghost" className="mt-2 w-full justify-center">View All Onboardings</HrButton>
+        </div>
+      </Card>
+    </div></section>}
+
+    {/* SECTION 4 & 5: RECRUITMENT & PROJECTS */}
+    <div className="grid gap-5 xl:grid-cols-2">
+      <section aria-label="Recruitment & Pipeline">
+        <h2 className="dashboard-section-title flex items-center gap-2 text-[#D97706]"><Briefcase size={18} /> Recruitment & Pipeline</h2>
+        <Card>
+          <div className="flex gap-3 mb-6">
+            <div className="flex-1 rounded-xl border border-[var(--border-default)] bg-[var(--bg-base)] p-4 text-center">
+              <div className="text-2xl font-bold text-gray-800">24</div>
+              <div className="text-[11px] font-semibold uppercase text-gray-500">Open Jobs</div>
+            </div>
+            <div className="flex-1 rounded-xl border border-[var(--border-default)] bg-[var(--bg-base)] p-4 text-center">
+              <div className="text-2xl font-bold text-[#3B82F6]">186</div>
+              <div className="text-[11px] font-semibold uppercase text-gray-500">Applicants</div>
+            </div>
+            <div className="flex-1 rounded-xl border border-[var(--border-default)] bg-[var(--bg-base)] p-4 text-center">
+              <div className="text-2xl font-bold text-[#10B981]">12</div>
+              <div className="text-[11px] font-semibold uppercase text-gray-500">Interviews</div>
+            </div>
+          </div>
+          <h4 className="text-[13px] font-semibold mb-3">Hiring Progress (Mock)</h4>
+          <div className="h-32 flex flex-col justify-end gap-2">
+            {/* Mock Funnel UI */}
+            <div className="w-full bg-[#EFF6FF] rounded-md py-1.5 text-center text-[11px] font-bold text-[#2563EB]">Sourced (450)</div>
+            <div className="w-10/12 mx-auto bg-[#ECFDF5] rounded-md py-1.5 text-center text-[11px] font-bold text-[#059669]">Screened (186)</div>
+            <div className="w-8/12 mx-auto bg-[#FEF2F2] rounded-md py-1.5 text-center text-[11px] font-bold text-[#DC2626]">Interviewed (12)</div>
+            <div className="w-6/12 mx-auto bg-[#F3E8FF] rounded-md py-1.5 text-center text-[11px] font-bold text-[#9333EA]">Offered (3)</div>
+          </div>
+        </Card>
+      </section>
+
+      <section aria-label="Projects & Productivity">
+        <h2 className="dashboard-section-title flex items-center gap-2 text-[#2563EB]"><ClipboardCheck size={18} /> Projects & Productivity (Mock)</h2>
+        <Card className="h-[calc(100%-36px)] flex flex-col justify-center">
+          <div className="flex justify-between items-center h-full">
+            <div className="w-1/2 flex items-center justify-center">
+              {/* Mock Gauge */}
+              <div className="relative h-32 w-32 rounded-full border-[12px] border-gray-100 border-t-[#3B82F6] border-r-[#3B82F6] flex flex-col items-center justify-center">
+                <span className="text-2xl font-bold text-gray-800">85%</span>
+                <span className="text-[10px] uppercase font-bold text-gray-400">Efficiency</span>
+              </div>
+            </div>
+            <div className="w-1/2 flex flex-col gap-3">
+              <div className="flex items-center justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-base)] p-3">
+                <span className="text-[12px] font-semibold text-gray-700">Active Projects</span>
+                <span className="rounded-md bg-[#EFF6FF] px-2 py-0.5 text-[11px] font-bold text-[#2563EB]">42</span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-base)] p-3">
+                <span className="text-[12px] font-semibold text-gray-700">Tasks Completed</span>
+                <span className="rounded-md bg-[#ECFDF5] px-2 py-0.5 text-[11px] font-bold text-[#059669]">846</span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-base)] p-3">
+                <span className="text-[12px] font-semibold text-gray-700">Avg Velocity</span>
+                <span className="rounded-md bg-[#FFF7ED] px-2 py-0.5 text-[11px] font-bold text-[#D97706]">High</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </section>
+    </div>
+
+    {/* SECTION 6 & 7: PAYROLL & ACTIVITY FEED */}
+    <div className="grid gap-5 xl:grid-cols-[2fr_1fr]">
+      <section aria-label="Payroll & Finance">
+        <h2 className="dashboard-section-title flex items-center gap-2 text-[#DC2626]"><Receipt size={18} /> Payroll & Finance</h2>
+        <Card title="Monthly Payroll Expense vs Budget (Mock)">
+          <div className="h-64 mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={[
+                { name: 'Jan', expense: 4000, budget: 4200 },
+                { name: 'Feb', expense: 4100, budget: 4200 },
+                { name: 'Mar', expense: 4250, budget: 4400 },
+                { name: 'Apr', expense: 4300, budget: 4400 },
+                { name: 'May', expense: 4800, budget: 4600 }
+              ]} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip />
+                <Area type="monotone" dataKey="budget" stroke="#94A3B8" fill="#F1F5F9" strokeDasharray="4 4" />
+                <Area type="monotone" dataKey="expense" stroke="#DC2626" fill="#FEE2E2" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </section>
+
+      {canReadAudit && <section aria-label="Live activity feed">
+        <h2 className="dashboard-section-title flex items-center gap-2 text-[var(--primary)]"><Activity size={18} /> Live Activity Feed</h2>
+        <Card chip={<button className="text-xs font-semibold text-primary" onClick={() => navigate('/audit-logs')}>View all &rarr;</button>} className="h-[calc(100%-36px)] overflow-y-auto">
+        {queryState(activityQuery.isPending, activityQuery.isError, activityQuery.refetch, !activityRows.length,
+          <ul className="flex flex-col gap-4">
+            {activityRows.slice(0, 5).map((event, idx) => (
+              <li key={event.id} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <span className={`h-3 w-3 rounded-full ${['bg-[#10B981]', 'bg-[#3B82F6]', 'bg-[#F59E0B]', 'bg-[#8B5CF6]', 'bg-[#059669]'][idx % 5]}`} />
+                  {idx !== Math.min(5, activityRows.length) - 1 && <div className="h-full w-px bg-gray-200 mt-1" />}
+                </div>
+                <div className="pb-4">
+                  <p className="text-[13px] text-gray-800"><b>{activityActor(event)}</b> {activityLabel(event).toLowerCase()}.</p>
+                  <p className="mt-0.5 text-[11px] text-gray-400">{event.occurredAt ? new Date(event.occurredAt).toLocaleString('en-IN', { hour: 'numeric', minute: '2-digit' }) : ''}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card></section>}
+    </div>
+
+    {/* SECTION 7.5: UPCOMING MILESTONES */}
+    <section aria-label="Upcoming milestones"><h2 className="dashboard-section-title">Upcoming milestones</h2><UpcomingMilestones />{canSeeProbation && <UpcomingProbations />}</section>
+
+    {/* SECTION 8: AI INSIGHTS PANEL */}
+    <section aria-label="AI & Predictive Insights">
+      <h2 className="dashboard-section-title flex items-center gap-2 text-[#9333EA]"><Brain size={18} /> AI & Predictive Insights (Mock)</h2>
+      <div className="grid gap-5 xl:grid-cols-3 mb-8">
+        <div className="relative overflow-hidden rounded-2xl border-none p-5 text-white" style={{ background: 'linear-gradient(135deg, #1e1e2f, #2a2a4a)' }}>
+          <div className="absolute -right-5 -top-5 text-[100px] opacity-10"><Bot /></div>
+          <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-[#a78bfa]">Anomaly Detected</div>
+          <div className="mb-2 text-[16px] font-semibold leading-snug">Unusual spike in absenteeism in the Engineering Department.</div>
+          <p className="mb-4 text-[13px] text-[#cbd5e1]">12% of engineers are on sick leave today, which is 3x the standard deviation.</p>
+          <button className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-[13px] font-medium transition-colors hover:bg-white/20">View Analysis</button>
+        </div>
+        
+        <div className="relative overflow-hidden rounded-2xl border-none p-5 text-white" style={{ background: 'linear-gradient(135deg, #2d3748, #1a202c)' }}>
+          <div className="absolute -right-5 -top-5 text-[100px] opacity-10"><Flame /></div>
+          <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-[#fca5a5]">Burnout Risk Alert</div>
+          <div className="mb-2 text-[16px] font-semibold leading-snug">Sales team is showing high burnout markers based on OT.</div>
+          <p className="mb-4 text-[13px] text-[#cbd5e1]">Average of 18 hours of overtime recorded over the last 2 weeks.</p>
+          <button className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-[13px] font-medium transition-colors hover:bg-white/20">Send Wellness Survey</button>
+        </div>
+        
+        <div className="relative overflow-hidden rounded-2xl border-none p-5 text-white" style={{ background: 'linear-gradient(135deg, #276749, #1c4532)' }}>
+          <div className="absolute -right-5 -top-5 text-[100px] opacity-10"><Lightbulb /></div>
+          <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-[#6ee7b7]">Hiring Suggestion</div>
+          <div className="mb-2 text-[16px] font-semibold leading-snug">Open req for Senior Dev is taking 40% longer to fill.</div>
+          <p className="mb-4 text-[13px] text-[#cbd5e1]">Consider increasing the budget band or opening remote positions.</p>
+          <button className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-[13px] font-medium transition-colors hover:bg-white/20">Adjust Req</button>
+        </div>
+      </div>
+    </section>
+  </div>
+}

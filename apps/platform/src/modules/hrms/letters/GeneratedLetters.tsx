@@ -9,13 +9,10 @@ import { HrPageHeader, HrButton, HrStatusPill, TableCard, type PillTone } from '
 import {
   useGeneratedLetters,
   useMyLetters,
-  useLetterTemplates,
-  useGenerateLetter,
   downloadLetterPdf,
 } from './api/useLetters'
 import type { GeneratedLetterDto, LetterType, LetterStatus } from './api/useLetters'
-import { useCompanies } from '../api/useOrg'
-import { useEmployeeDirectory } from '../api/useWorkforce'
+import { GenerateLetterDrawer } from './GenerateLetterDrawer'
 
 const TYPE_TONE: Record<LetterType, PillTone> = {
   OFFER: 'info', APPOINTMENT: 'ok', RELIEVING: 'orange', EXPERIENCE: 'purple', SALARY_REVISION: 'green', CUSTOM: 'gray',
@@ -28,105 +25,6 @@ const STATUS_TONE: Record<LetterStatus, PillTone> = {
 }
 const STATUS_LABEL: Record<LetterStatus, string> = {
   GENERATED: 'Generated', SENT: 'Sent', VIEWED: 'Viewed', SIGNED: 'Signed', VOID: 'Void',
-}
-
-function GenerateLetterModal({
-  onClose,
-  initialEmployeeId = '',
-}: {
-  onClose: () => void
-  initialEmployeeId?: string
-}) {
-  const navigate = useNavigate()
-  const generate = useGenerateLetter()
-  const { data: templatesPage } = useLetterTemplates()
-  const templates = templatesPage?.content ?? []
-  const activeTemplates = templates.filter((t) => t.active)
-
-  const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id ?? ''
-  const { data: directory } = useEmployeeDirectory({ companyId, pageSize: 200 })
-  const employees = directory?.content ?? []
-
-  const [templateId, setTemplateId] = useState('')
-  const [employeeId, setEmployeeId] = useState(initialEmployeeId)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!templateId.trim() || !employeeId.trim()) return
-    try {
-      await generate.mutateAsync({ templateId: templateId.trim(), employeeId: employeeId.trim() })
-      toast.success('Letter generated')
-      onClose()
-    } catch {
-      toast.error('Failed to generate letter')
-    }
-  }
-
-  const selectCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none'
-
-  return (
-    <>
-      <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
-        <div className="ut-card ut-card-lg w-full max-w-md p-6">
-          <h3 className="mb-4 font-semibold text-text-primary">Generate Letter</h3>
-          {activeTemplates.length === 0 ? (
-            <div className="space-y-4">
-              <div className="py-6 text-center text-text-secondary">
-                <FileText size={32} className="mx-auto mb-3 opacity-40" />
-                <p className="text-sm">No active letter templates</p>
-                <p className="mt-1 text-xs text-text-tertiary">Create a template before generating letters</p>
-              </div>
-              <div className="flex gap-3">
-                <button type="button" onClick={() => navigate('/hrms/letters/templates/new')}
-                  className="flex-1 rounded-xl bg-[#059669] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#047857]">
-                  Create template
-                </button>
-                <button type="button" onClick={onClose}
-                  className="flex-1 rounded-xl border border-border-default py-2.5 text-sm text-text-secondary transition-colors hover:text-text-primary">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary">Template *</label>
-                <select required value={templateId} onChange={(e) => setTemplateId(e.target.value)} className={selectCls}>
-                  <option value="">Select a template</option>
-                  {activeTemplates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name} ({TYPE_LABEL[t.type] ?? t.type})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary">Employee *</label>
-                <select required value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={selectCls}>
-                  <option value="">Select an employee</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {[emp.firstName, emp.lastName].filter(Boolean).join(' ')} ({emp.employeeCode})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="submit" disabled={generate.isPending}
-                  className="flex-1 rounded-xl bg-[#059669] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#047857] disabled:opacity-50">
-                  {generate.isPending ? 'Generating…' : 'Generate'}
-                </button>
-                <button type="button" onClick={onClose}
-                  className="flex-1 rounded-xl border border-border-default py-2.5 text-sm text-text-secondary transition-colors hover:text-text-primary">
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      </div>
-    </>
-  )
 }
 
 export const GeneratedLetters: React.FC = () => {
@@ -220,7 +118,7 @@ export const GeneratedLetters: React.FC = () => {
                         <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#ECFDF5]">
                           <FileText size={13} className="text-[#059669]" />
                         </div>
-                        <span className="hr-mono" title={letter.employeeId}>{shortEmpId}</span>
+                        <div><p className="font-semibold text-text-primary">{letter.employeeName || letter.generationContext?.['employee.fullName'] || 'Employee record unavailable'}</p><p className="mt-0.5 text-xs text-text-secondary">{letter.employeeCode || letter.generationContext?.['employee.code'] || shortEmpId}</p></div>
                       </div>
                     </td>
                     <td className="hidden sm:table-cell"><HrStatusPill tone={TYPE_TONE[letter.type] ?? 'gray'}>{TYPE_LABEL[letter.type] ?? letter.type}</HrStatusPill></td>
@@ -235,7 +133,7 @@ export const GeneratedLetters: React.FC = () => {
                           </button>
                         )}
                         {letter.hasPdf && (
-                          <button onClick={() => downloadLetterPdf(letter.id, `letter-${letter.type.toLowerCase()}-${letter.id.slice(0, 8)}.pdf`)} title="Download PDF" className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-bg-base hover:text-text-primary">
+                          <button onClick={() => downloadLetterPdf(letter.id, `letter-${letter.type.toLowerCase()}-${letter.id.slice(0, 8)}.pdf`).catch(error => toast.error(error instanceof Error ? error.message : 'Unable to download PDF'))} title="Download PDF" className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-bg-base hover:text-text-primary">
                             <Download size={14} />
                           </button>
                         )}
@@ -250,7 +148,7 @@ export const GeneratedLetters: React.FC = () => {
       )}
 
       {generateOpen && (
-        <GenerateLetterModal onClose={closeGenerate} initialEmployeeId={employeeIdParam} />
+        <GenerateLetterDrawer onClose={closeGenerate} initialEmployeeId={employeeIdParam} />
       )}
     </div>
   )

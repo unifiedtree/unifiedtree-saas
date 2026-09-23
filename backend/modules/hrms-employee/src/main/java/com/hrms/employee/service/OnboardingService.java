@@ -7,10 +7,12 @@ import com.hrms.employee.entity.OnboardingInstance;
 import com.hrms.employee.entity.OnboardingInstanceTask;
 import com.hrms.employee.entity.OnboardingTask;
 import com.hrms.employee.entity.OnboardingTemplate;
+import com.hrms.employee.entity.OnboardingAsset;
 import com.hrms.employee.repository.OnboardingInstanceRepository;
 import com.hrms.employee.repository.OnboardingInstanceTaskRepository;
 import com.hrms.employee.repository.OnboardingTaskRepository;
 import com.hrms.employee.repository.OnboardingTemplateRepository;
+import com.hrms.employee.repository.OnboardingAssetRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,7 @@ public class OnboardingService {
     private final OnboardingTaskRepository taskRepo;
     private final OnboardingInstanceRepository instanceRepo;
     private final OnboardingInstanceTaskRepository instanceTaskRepo;
+    private final OnboardingAssetRepository assetRepository;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public OnboardingService(
@@ -37,11 +40,13 @@ public class OnboardingService {
             OnboardingTaskRepository taskRepo,
             OnboardingInstanceRepository instanceRepo,
             OnboardingInstanceTaskRepository instanceTaskRepo,
+            OnboardingAssetRepository assetRepository,
             org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.templateRepo = templateRepo;
         this.taskRepo = taskRepo;
         this.instanceRepo = instanceRepo;
         this.instanceTaskRepo = instanceTaskRepo;
+        this.assetRepository = assetRepository;
         this.jdbc = jdbc;
     }
 
@@ -66,6 +71,41 @@ public class OnboardingService {
     }
 
     // ── Template management ───────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<OnboardingAsset> listAssets(UUID companyId) {
+        return companyId == null ? assetRepository.findAllByOrderByCreatedAtDesc()
+                : assetRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
+    }
+
+    @Transactional
+    public OnboardingAsset createAsset(OnboardingAsset asset) {
+        asset.setTenantId(TenantContext.getTenantId());
+        if (asset.getStatus() == null || asset.getStatus().isBlank()) asset.setStatus("AVAILABLE");
+        return assetRepository.save(asset);
+    }
+
+    @Transactional
+    public OnboardingAsset assignAsset(UUID assetId, UUID employeeId, UUID onboardingInstanceId, LocalDate assignedAt) {
+        OnboardingAsset asset = assetRepository.findById(assetId)
+                .orElseThrow(() -> new IllegalArgumentException("Asset not found: " + assetId));
+        asset.setEmployeeId(employeeId);
+        asset.setOnboardingInstanceId(onboardingInstanceId);
+        asset.setAssignedAt(assignedAt == null ? LocalDate.now() : assignedAt);
+        asset.setReturnedAt(null);
+        asset.setStatus("ASSIGNED");
+        return assetRepository.save(asset);
+    }
+
+    @Transactional
+    public OnboardingAsset returnAsset(UUID assetId, String notes) {
+        OnboardingAsset asset = assetRepository.findById(assetId)
+                .orElseThrow(() -> new IllegalArgumentException("Asset not found: " + assetId));
+        asset.setStatus("RETURNED");
+        asset.setReturnedAt(LocalDate.now());
+        asset.setConditionNotes(notes);
+        return assetRepository.save(asset);
+    }
 
     @Transactional(readOnly = true)
     public List<OnboardingTemplate> listTemplates(UUID companyId) {

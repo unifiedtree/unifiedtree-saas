@@ -222,8 +222,9 @@ export const GeneratedLetterDetail: React.FC = () => {
         crumb="Recruitment & Onboarding"
         title={letter.subject}
         subtitle={
-          <span className="font-mono" title={letter.employeeId}>
-            Employee: {letter.employeeId}
+          <span>
+            {letter.employeeName || letter.generationContext?.['employee.fullName'] || 'Employee record unavailable'}
+            {(letter.employeeCode || letter.generationContext?.['employee.code']) && ` (${letter.employeeCode || letter.generationContext?.['employee.code']})`}
           </span>
         }
         actions={
@@ -233,7 +234,7 @@ export const GeneratedLetterDetail: React.FC = () => {
             {letter.hasPdf && (
               <HrButton
                 variant="ghost"
-                onClick={() => downloadLetterPdf(letter.id, `letter-${letter.type.toLowerCase()}-${letter.id.slice(0, 8)}.pdf`)}
+                onClick={() => downloadLetterPdf(letter.id, `letter-${letter.type.toLowerCase()}-${letter.id.slice(0, 8)}.pdf`).catch(error => toast.error(error instanceof Error ? error.message : 'Unable to download PDF'))}
               >
                 <Download size={14} /> Download PDF
               </HrButton>

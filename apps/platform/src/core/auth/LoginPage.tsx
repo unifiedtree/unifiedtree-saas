@@ -139,28 +139,16 @@ export const LoginPage: React.FC = () => {
   }
 
   const inputClass =
-    'w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] shadow-xs outline-none transition-[border-color,box-shadow] duration-150 focus:border-[var(--border-focus)] focus:ring-4 focus:ring-[var(--accent-solid)]/12'
+    'w-full rounded-[10px] border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 shadow-sm transition-all focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500'
 
-  const labelClass = 'block text-[13.5px] font-semibold text-[var(--text-primary)]'
+  const labelClass = 'block text-[13.5px] font-bold text-gray-700'
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
       {/* ── Radiant emerald field ─────────────────────────────────── */}
       <div
         aria-hidden
-        className="absolute inset-0"
-        style={{
-          backgroundColor: '#EDF9F3',
-          backgroundImage: [
-            // radiant glow rising from the lower-left, like low sun through leaves
-            'radial-gradient(60% 55% at 12% 92%, rgba(5, 150, 105, 0.22), transparent 68%)',
-            'radial-gradient(55% 50% at 90% 6%, rgba(16, 185, 129, 0.18), transparent 70%)',
-            'radial-gradient(70% 60% at 50% 50%, rgba(167, 243, 208, 0.28), transparent 75%)',
-            // the diagonal sheen Odoo's field has, redone in emerald
-            'linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.55) 38%, transparent 52%, rgba(255,255,255,0.35) 74%, transparent 88%)',
-            'linear-gradient(160deg, #E3F5EC 0%, #EDF9F3 45%, #DFF3E9 100%)',
-          ].join(', '),
-        }}
+        className="absolute inset-0 ut-ground"
       />
 
       {/* ── The card ──────────────────────────────────────────────── */}
@@ -168,10 +156,7 @@ export const LoginPage: React.FC = () => {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        /* Same .ut-card surface as every card inside the product, at the
-           large radius — the login box is the first card a user ever sees, so
-           it should be made of the same material as the rest. */
-        className="ut-card ut-card-lg relative w-full max-w-[400px] px-8 pb-7 pt-8"
+        className="relative w-full max-w-[420px] rounded-[24px] bg-white/95 px-8 pb-8 pt-10 shadow-2xl ring-1 ring-black/5 backdrop-blur-xl"
       >
         {/* Workspace logo — theirs when uploaded; otherwise an Odoo-style
             "Your logo" placeholder (the striped texture is a small inside-the-
@@ -196,7 +181,7 @@ export const LoginPage: React.FC = () => {
             </div>
           )}
         </div>
-        <div className="mb-6 h-px bg-[var(--border-default)]" />
+        <div className="mb-8 h-px bg-gray-100" />
 
         {workspaceStatus && workspaceStatus.status !== 'ACTIVE' && (
           <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3.5 py-3 text-sm font-medium text-[var(--status-warning-fg)]">
@@ -244,7 +229,7 @@ export const LoginPage: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--interactive-primary)] text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-[var(--interactive-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 active:scale-[0.99] disabled:opacity-70"
+              className="mt-6 flex h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-[15px] font-bold text-white shadow-sm transition-all duration-200 hover:bg-emerald-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70"
             >
               {loading ? 'Finding workspace…' : 'Continue'}
               {!loading && <ArrowRight size={17} />}
@@ -299,7 +284,7 @@ export const LoginPage: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="mt-1 flex h-11 w-full items-center justify-center rounded-lg bg-[var(--interactive-primary)] text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-[var(--interactive-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 active:scale-[0.99] disabled:opacity-70"
+              className="mt-6 flex h-[46px] w-full items-center justify-center rounded-xl bg-emerald-600 text-[15px] font-bold text-white shadow-sm transition-all duration-200 hover:bg-emerald-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70"
             >
               {loading ? 'Logging in…' : 'Log in'}
             </button>
@@ -315,17 +300,17 @@ export const LoginPage: React.FC = () => {
           </form>
         )}
 
-        <div className="mt-6 h-px bg-[var(--border-default)]" />
-        <p className="pt-4 text-center text-[13px] text-[var(--text-tertiary)]">
+        <div className="mt-8 h-px bg-gray-100" />
+        <p className="pt-5 text-center text-[13px] font-medium text-gray-500">
           Powered by{' '}
-          <a href="https://unifiedtree.com" className="font-semibold text-[var(--text-link)] hover:underline">
+          <a href="https://unifiedtree.com" className="font-bold text-emerald-600 hover:underline">
             UnifiedTree
           </a>
         </p>
 
         {/* Which workspace this sign-in belongs to — small, under the card frame */}
         {!needsWorkspace && (
-          <p className="pt-1.5 text-center text-[11.5px] text-[var(--text-tertiary)]">{workspaceLabel}</p>
+          <p className="pt-2 text-center text-[12px] font-medium text-gray-400">{workspaceLabel}</p>
         )}
       </motion.div>
     </main>

@@ -30,6 +30,7 @@ import java.io.IOException;
  * the "duplicate app" IllegalStateException.
  */
 @Configuration
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "unifiedtree.firebase.enabled", havingValue = "true", matchIfMissing = true)
 public class FirebaseAdminConfig {
 
     private static final Logger log = LoggerFactory.getLogger(FirebaseAdminConfig.class);

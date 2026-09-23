@@ -51,6 +51,7 @@ import java.util.UUID;
  * cross-workspace switching already use.
  */
 @RestController
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "unifiedtree.firebase.enabled", havingValue = "true", matchIfMissing = true)
 @RequestMapping("/v1/auth")
 public class FirebaseAuthController {
 

@@ -6,7 +6,7 @@ import {
 import { usePermission } from '@unifiedtree/sdk'
 import { TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import {
-  HrStatCard, HrStatusPill, HrPageHeader, HrButton, TableCard, HrAvatar, type PillTone,
+  HrStatCard, HrStatusPill, HrPageHeader, HrButton, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
 import { useInstances, useUpdateInstanceStatus } from './api/useOnboarding'
@@ -107,8 +107,11 @@ function formatJoiningDate(value?: string | null): string {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+type Tab = 'onboard' | 'assets'
+
 export const Instances: React.FC = () => {
   const navigate = useNavigate()
+  const [tab, setTab] = useState<Tab>('onboard')
   const { toast } = useToast()
   const [status, setStatus] = useState<'' | StatusKey>('')
   const [page, setPage] = useState(0)
@@ -204,16 +207,28 @@ export const Instances: React.FC = () => {
       {/* Header */}
       <HrPageHeader
         crumb="Recruitment & Onboarding"
-        title="Onboarding"
-        subtitle="Manage new hire onboarding and create employee records"
-        actions={
-          canStart ? (
-            <HrButton onClick={() => navigate('/hrms/onboarding/instances/new')}>
-              <Plus size={15} /> Start Onboarding
-            </HrButton>
-          ) : undefined
-        }
+        title="Onboarding & Assets"
+        subtitle="Manage new hire onboarding, create employee records, and track assets"
       />
+
+      <HrTabs
+        tabs={[
+          { key: 'onboard', label: 'New Employee Onboarding' },
+          { key: 'assets', label: 'Asset Allocation' },
+        ]}
+        active={tab}
+        onChange={(k) => setTab(k as Tab)}
+      />
+
+      <HrTabPanel tabKey="onboard">
+        <div className="space-y-6">
+          <div className="flex justify-end">
+            {canStart && (
+              <HrButton onClick={() => navigate('/hrms/onboarding/instances/new')}>
+                <Plus size={15} /> Start Onboarding
+              </HrButton>
+            )}
+          </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -389,6 +404,53 @@ export const Instances: React.FC = () => {
           </table>
         </TableCard>
       )}
+        </div>
+      </HrTabPanel>
+
+      <HrTabPanel tabKey="assets">
+        <AssetsTabStatic />
+      </HrTabPanel>
+    </div>
+  )
+}
+
+// ── Assets (Static) ─────────────────────────────────────────────────────────
+
+function AssetsTabStatic() {
+  return (
+    <div className="space-y-4">
+      <div className="ut-card">
+        <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
+          <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
+            <span className="text-text-tertiary">🔍</span>
+            <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="hr-table">
+            <thead className="bg-bg-subtle">
+              <tr>
+                <th>Asset ID</th>
+                <th>Category</th>
+                <th>Assigned To</th>
+                <th>Allocation Date</th>
+                <th>Condition</th>
+                <th className="text-center w-16">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="text-text-secondary">IT-LT-4029</td>
+                <td className="text-text-secondary">Laptop (MacBook Pro)</td>
+                <td className="font-semibold text-text-primary">John Smith</td>
+                <td className="text-text-secondary">Jan 15, 2025</td>
+                <td><HrStatusPill tone="green">Good</HrStatusPill></td>
+                <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">✎</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }

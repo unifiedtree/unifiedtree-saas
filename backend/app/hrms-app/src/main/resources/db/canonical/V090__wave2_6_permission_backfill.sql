@@ -87,11 +87,15 @@ ON CONFLICT (role_id, permission_code) DO NOTHING;
 -- ReimbursementBatchService.build (see the QA-FIX comment there). Recording
 -- the corrected intent here so future readers of pg_constraint don't get
 -- misled.
-COMMENT ON INDEX expense_mgmt.uq_reimb_batch_item IS
-    'App-level guarantee: a claim is in at most one non-CANCELLED batch. '
-    'THIS INDEX only prevents duplicate items within the SAME batch; the '
-    'cross-batch invariant is enforced by ReimbursementBatchService.build '
-    'via SELECT ... FOR UPDATE on eligible claims. See QA finding wmih6ivbj/HIGH-3.';
+-- Some clean installations create this optional reimbursement surface later.
+-- An informational comment must not prevent the application from booting.
+DO $$
+BEGIN
+    IF to_regclass('expense_mgmt.uq_reimb_batch_item') IS NOT NULL THEN
+        COMMENT ON INDEX expense_mgmt.uq_reimb_batch_item IS
+            'Prevents duplicate claims within one batch. Cross-batch exclusion is enforced by ReimbursementBatchService.build.';
+    END IF;
+END $$;
 
 -- ── Verification log ──────────────────────────────────────────────────────
 DO $$

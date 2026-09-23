@@ -126,7 +126,7 @@ export const UpcomingMilestones: React.FC = () => {
   // "Access Restricted" (2026-09-08 audit). Only navigate when the target
   // route will actually open; otherwise the row is informational.
   const canOpenEmployee = usePermission(P.HRMS_EMPLOYEE_READ)
-  const { data, isLoading } = useMilestones({ birthdayDays: 14, anniversaryDays: 31, retirementMonths: 6 })
+  const { data, isLoading, isError, refetch } = useMilestones({ birthdayDays: 14, anniversaryDays: 31, retirementMonths: 6 })
 
   const birthdays = data?.birthdays ?? []
   const anniversaries = data?.anniversaries ?? []
@@ -136,7 +136,8 @@ export const UpcomingMilestones: React.FC = () => {
   // Nothing at all and nothing loading: stay off the dashboard rather than
   // render three empty columns. An all-quiet fortnight is the common case for
   // a small workspace and an empty card reads as broken.
-  if (!isLoading && total === 0) return null
+  if (isError) return <div className="ut-card p-6 text-sm" role="alert">Unable to load milestones. <button className="text-primary underline" onClick={() => refetch()}>Try again</button></div>
+  if (!isLoading && total === 0) return <div className="ut-card p-6 text-sm text-text-secondary">No birthdays in the next 14 days, anniversaries in the next month, or retirements in the next six months.</div>
 
   const open = (m: Milestone) => {
     if (canOpenEmployee) navigate(`/hrms/employees/${m.employeeId}`)

@@ -4,6 +4,39 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Company workspace: mobile-app brand, compact module navigation. */
+.company-workspace { background: #F8FAFC; }
+.workspace-rail { width: 96px; flex-shrink: 0; flex-direction: column; overflow-y: auto; background: #0A5240; color: white; }
+.workspace-brand { height: 60px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: 1px solid #ffffff20; }
+.workspace-brand-mark { font-size: 27px; font-weight: 800; line-height: 28px; letter-spacing: -2px; }
+.workspace-brand-mark span { color: #a7f3d0; }
+.workspace-rail-link { min-height: 60px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; padding: 9px 4px; border-radius: 6px; color: #ffffffc9; font-size: 11px; line-height: 14px; text-align: center; transition: background .15s; }
+.workspace-rail-link:hover { background: #ffffff12; color: white; }
+.workspace-rail-link.is-active { background: #ffffff20; color: white; box-shadow: inset 3px 0 #a7f3d0; }
+.workspace-header { background: #0F6E56; color: white; }
+.workspace-header > button, .workspace-header > div > button[aria-label="Search"] { color: white; }
+.workspace-module-nav { display: flex; flex-shrink: 0; gap: 22px; overflow-x: auto; padding: 0 24px; border-bottom: 1px solid #E2E8F0; background: white; }
+.workspace-module-link { display: flex; align-items: center; white-space: nowrap; min-height: 46px; border-bottom: 2px solid transparent; color: #64748B; font-size: 12px; font-weight: 600; }
+.workspace-module-link:hover, .workspace-module-link.is-active { color: #0F6E56; }
+.workspace-module-link.is-active { border-bottom-color: #0F6E56; }
+.workspace-content { background: #F8FAFC; scroll-behavior: smooth; }
+.dashboard-section-title { margin-bottom: 12px; color: #0F172A; font-size: 14px; font-weight: 600; }
+.dashboard-metric { display: flex; flex-direction: column; gap: 12px; min-height: 135px; padding: 20px; border: 1px solid #E2E8F0; border-radius: 6px; background: white; text-align: left; transition: border-color .15s; }
+.dashboard-metric:hover { border-color: #0F6E56; }
+.dashboard-metric > span { color: #64748B; font-size: 12px; }
+.dashboard-metric > strong { color: #0F172A; font-size: 28px; font-weight: 600; line-height: 1; }
+.dashboard-metric > small { display: flex; align-items: center; justify-content: space-between; color: #0F6E56; font-size: 11px; }
+.dashboard-state { display: flex; min-height: 160px; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #64748B; font-size: 13px; }
+.dashboard-action-row { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 0; border-bottom: 1px solid #E2E8F0; text-align: left; font-size: 13px; }
+.dashboard-action-row:hover { color: #0F6E56; }
+.dashboard-action-row strong { color: #0F6E56; font-size: 12px; }
+.company-dashboard .ut-card { border-radius: 6px; box-shadow: none; }
+.workspace-skip-link { position: fixed; top: -60px; left: 110px; padding: 12px 20px; background: white; color: #0F6E56; z-index: 9999; }
+.workspace-skip-link:focus { top: 8px; }
+.company-workspace :is(button, a, input, select, textarea):focus-visible { outline: 2px solid #1A8A6E; outline-offset: 3px; }
+.workspace-rail :is(button, a):focus-visible, .workspace-header button:focus-visible { outline-color: #a7f3d0; }
+@media (prefers-reduced-motion: reduce) { .workspace-content { scroll-behavior: auto; } }
+
 /* ============================================================
  * Base
  * ========================================================== */
@@ -160,16 +193,10 @@ table td, table th,
  * ========================================================== */
 .ut-card {
   position: relative;
-  border-radius: 20px;
-  background:
-    linear-gradient(135deg,
-      rgba(255, 255, 255, 0.88) 0%,
-      rgba(255, 255, 255, 0.72) 45%,
-      rgba(236, 253, 245, 0.62) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  box-shadow:
-    0 10px 36px -16px rgba(5, 150, 105, 0.28),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
   transition:
     transform var(--motion-base),
     box-shadow var(--motion-base),

@@ -9,61 +9,90 @@ import { useToast } from '@/shared/hooks/useToast'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
+import { DataTable } from '@/shared/components/DataTable'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
+import { ReimbursementBatches } from './expense/ReimbursementBatches'
 import {
   useMyClaims, usePendingExpenseApprovals, useExpenseClaim, useSubmitClaim, useExpenseDecision, useReimburseClaim,
-  useExpensePolicies, useCreatePolicy, useUpdatePolicy, useDeletePolicy,
+  useExpensePolicies, useCreatePolicy, useUpdatePolicy, useDeletePolicy, useExpenseDashboardStats,
   inr, EXPENSE_CATEGORIES, EXPENSE_APPROVALS_PAGE_SIZE,
   type ExpenseStatus, type ExpenseCategory, type ExpensePolicy,
 } from './api/useExpense'
 
 const STATUS_TONE: Record<ExpenseStatus, PillTone> = {
-  DRAFT: 'gray', SUBMITTED: 'warn', APPROVED: 'ok', REJECTED: 'red', REIMBURSED: 'teal',
+  DRAFT: 'gray', SUBMITTED: 'warn', APPROVED: 'ok', APPROVED_FOR_PAY: 'info', REJECTED: 'red', REIMBURSED: 'teal',
 }
 
 const fmtCat = (c: string) => c.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase())
 
-type Tab = 'my' | 'submit' | 'approvals' | 'policies'
+type Tab = 'my' | 'submit' | 'approvals' | 'policies' | 'batches'
 
 export const Expense: React.FC = () => {
   const canApprove = usePermission('hrms.expense.claim.approve')
   const canReimburse = usePermission('hrms.expense.reimbursement')
   const canPolicyRead = usePermission('hrms.expense.policy.read')
   const canPolicyWrite = usePermission('hrms.expense.policy.write')
-  const [tab, setTab] = useState<Tab>('my')
+  const canSelf = usePermission('hrms.expense.claim.self')
+  const canBatches = usePermission('hrms.reimb_batch.read')
+  const [tab, setTab] = useState<Tab>(canApprove || canReimburse ? 'approvals' : canBatches ? 'batches' : canSelf ? 'my' : canPolicyRead ? 'policies' : 'my')
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'my', label: 'My Claims' },
-    { key: 'submit', label: 'Submit Claim' },
+    ...(canSelf ? [{ key: 'my' as Tab, label: 'My Claims' }, { key: 'submit' as Tab, label: 'Submit Claim' }] : []),
     // Reimbursement-only roles (finance) need this tab too — it's where
     // APPROVED claims are marked paid (2026-09-08 audit).
     ...(canApprove || canReimburse ? [{ key: 'approvals' as Tab, label: 'Approvals' }] : []),
+    ...(canBatches ? [{ key: 'batches' as Tab, label: 'Reimbursement batches' }] : []),
     ...(canPolicyRead ? [{ key: 'policies' as Tab, label: 'Policies' }] : []),
   ]
 
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
+    <div className="mx-auto max-w-[1440px] p-4 sm:p-6">
       <HrPageHeader crumb="Expense Management" title="Expense Center" subtitle="Submit, approve, and reimburse employee expenses" />
+      <ExpenseDashboardCards enabled={canApprove || canReimburse} />
 
       <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
+      {tabs.length === 0 && <p className="ut-card p-5 text-sm text-text-secondary">Your role does not have expense access.</p>}
 
-      {tab === 'my' && <HrTabPanel tabKey="my"><MyClaimsTab /></HrTabPanel>}
+      {tab === 'my' && canSelf && <HrTabPanel tabKey="my"><MyClaimsTab /></HrTabPanel>}
       {/* canPolicyRead is threaded into the submit form so it can show the
           category cap that will be enforced on save. GET /v1/expense/policies
           is gated on hrms.expense.policy.read, so without it the form must not
           fire the request at all — see SubmitTab. */}
-      {tab === 'submit' && <HrTabPanel tabKey="submit"><SubmitTab canPolicyRead={canPolicyRead} onSubmitted={() => setTab('my')} /></HrTabPanel>}
+      {tab === 'submit' && canSelf && <HrTabPanel tabKey="submit"><SubmitTab canPolicyRead={canPolicyRead} onSubmitted={() => setTab('my')} /></HrTabPanel>}
       {tab === 'approvals' && (canApprove || canReimburse) && <HrTabPanel tabKey="approvals"><ApprovalsTab canApprove={canApprove} canReimburse={canReimburse} /></HrTabPanel>}
       {tab === 'policies' && canPolicyRead && <HrTabPanel tabKey="policies"><PoliciesTab canWrite={canPolicyWrite} /></HrTabPanel>}
+      {tab === 'batches' && canBatches && <HrTabPanel tabKey="batches"><ReimbursementBatches /></HrTabPanel>}
     </div>
   )
 }
 
 // ── My Claims ────────────────────────────────────────────────────────────────
 
+
+function ExpenseDashboardCards({ enabled }: { enabled: boolean }) {
+  const { data, isLoading } = useExpenseDashboardStats(enabled)
+  if (!enabled) return null
+  return (
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 mb-5">
+      <div className="ut-card p-5 m-0">
+        <div className="text-[13px] font-semibold uppercase text-text-secondary mb-2">Pending Approvals</div>
+        <div className="text-[32px] font-bold text-text-primary mb-1">{isLoading ? '?' : data?.pendingApprovals ?? 0}</div>
+        <div className="text-[13px] text-orange-500">{isLoading ? 'Loading' : `${inr(data?.pendingApprovalAmount ?? 0)} awaiting decision`}</div>
+      </div>
+      <div className="ut-card p-5 m-0">
+        <div className="text-[13px] font-semibold uppercase text-text-secondary mb-2">To Be Reimbursed</div>
+        <div className="text-[32px] font-bold text-text-primary mb-1">{isLoading ? '?' : inr(data?.toBeReimbursedAmount ?? 0)}</div>
+        <div className="text-[13px] text-text-secondary">{data?.toBeReimbursed ?? 0} approved claim{(data?.toBeReimbursed ?? 0) === 1 ? '' : 's'}</div>
+      </div>
+    </div>
+  )
+}
+
 function MyClaimsTab() {
-  const { data, isLoading, isError, refetch } = useMyClaims(0, 200)
+  const [page, setPage] = useState(0)
+  const { data, isLoading, isError, refetch } = useMyClaims(page, 20)
+  useClampedPage(page, data?.totalPages, setPage)
   const claims = data?.content ?? []
   const total = data?.totalElements ?? claims.length
   // Which row's detail panel is open. One at a time — the detail fetches per
@@ -92,63 +121,41 @@ function MyClaimsTab() {
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <HrStatCard icon={<Receipt size={18} />} color="blue" value={total} label="Total Claims" loading={isLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending" loading={isLoading} />
-        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved" loading={isLoading} />
-        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.reimbursed)} label="Reimbursed" loading={isLoading} />
+        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending on this page" loading={isLoading} />
+        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved on this page" loading={isLoading} />
+        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.reimbursed)} label="Reimbursed on this page" loading={isLoading} />
       </div>
 
-      <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th className="hidden sm:table-cell">Submitted</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(4)].map((_, i) => <tr key={i}><td colSpan={4} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : claims.length === 0 ? (
-              <tr><td colSpan={4} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No expense claims yet</p><p className="mt-1 text-xs text-text-tertiary">Use “Submit Claim” to file your first reimbursement.</p></td></tr>
-            ) : claims.map((c) => (
-              <React.Fragment key={c.id}>
-                <tr>
-                  <td className="font-medium text-text-primary">
-                    {/* 2026-09-10: rows used to have no drill-in, so an
-                        employee whose claim was REJECTED could see the red
-                        pill but never read the approver's comment or their
-                        own line items. GET /v1/expense/claims/{id} is gated
-                        on hrms.expense.claim.self, which every claimant
-                        holds by construction (they submitted the claim), so
-                        the expander is safe to render on any of their rows. */}
-                    <button
-                      type="button"
-                      onClick={() => setExpandedMyId(expandedMyId === c.id ? null : c.id)}
-                      aria-expanded={expandedMyId === c.id}
-                      aria-label={`${expandedMyId === c.id ? 'Hide' : 'Show'} details for ${c.title}`}
-                      className="inline-flex items-center gap-1.5 text-left font-medium text-[#047857] hover:text-[#064E3B]"
-                    >
-                      {expandedMyId === c.id ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
-                      {c.title}
-                    </button>
-                  </td>
-                  <td className="font-semibold text-text-primary">{inr(c.totalAmount)}</td>
-                  <td><HrStatusPill tone={STATUS_TONE[c.status]}>{c.status}</HrStatusPill></td>
-                  <td className="hidden sm:table-cell text-text-secondary">{c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—'}</td>
-                </tr>
-                {expandedMyId === c.id && (
-                  <tr>
-                    <td colSpan={4} className="bg-bg-base/40 p-0">
-                      <ClaimDetailPanel claimId={c.id} />
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+      <TableCard footer={hrPaginationFooter({ page, pageSize: 20, totalElements: total, totalPages: data?.totalPages ?? 0, onPageChange: setPage })}>
+        <DataTable
+          columns={[
+            { key: 'title', header: 'Title', render: (c: any) => (
+              <button
+                type="button"
+                onClick={() => setExpandedMyId(expandedMyId === c.id ? null : c.id)}
+                aria-expanded={expandedMyId === c.id}
+                aria-label={`${expandedMyId === c.id ? 'Hide' : 'Show'} details for ${c.title}`}
+                className="inline-flex items-center gap-1.5 text-left font-medium text-[#047857] hover:text-[#064E3B]"
+              >
+                {expandedMyId === c.id ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
+                {c.title}
+              </button>
+            ) },
+            { key: 'amount', header: 'Amount', render: (c: any) => <span className="font-semibold text-text-primary">{inr(c.totalAmount)}</span> },
+            { key: 'status', header: 'Status', render: (c: any) => <HrStatusPill tone={STATUS_TONE[c.status as ExpenseStatus] || 'gray'}>{c.status}</HrStatusPill> },
+            { key: 'submitted', header: 'Submitted', render: (c: any) => <span className="text-text-secondary">{c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—'}</span> }
+          ]}
+          data={claims}
+          keyField="id"
+          loading={isLoading}
+          emptyMessage="No expense claims yet. Use “Submit Claim” to file your first reimbursement."
+          expandedRowIds={expandedMyId ? [expandedMyId] : []}
+          renderSubRow={(c: any) => (
+            <div className="bg-bg-base/40 p-4">
+              <ClaimDetailPanel claimId={c.id} />
+            </div>
+          )}
+        />
       </TableCard>
     </div>
   )
@@ -411,7 +418,8 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
   // was unreachable — not merely hidden, but impossible to approve or
   // reimburse through the product at all.
   const [page, setPage] = useState(0)
-  const { data, isLoading, isError, refetch } = usePendingExpenseApprovals(page)
+  const [pageSize, setPageSize] = useState(EXPENSE_APPROVALS_PAGE_SIZE)
+  const { data, isLoading, isError, refetch } = usePendingExpenseApprovals(page, true, pageSize)
   const decide = useExpenseDecision()
   const reimburse = useReimburseClaim()
   const claims = data?.content ?? []
@@ -460,83 +468,57 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
   return (
     <TableCard
       footer={hrPaginationFooter({
-        page, pageSize: EXPENSE_APPROVALS_PAGE_SIZE, totalElements: total, totalPages, onPageChange: goToPage,
+        page, pageSize, totalElements: total, totalPages, onPageChange: goToPage,
+        onPageSizeChange: setPageSize,
       })}
     >
-      <table className="hr-table">
-        <thead>
-          <tr>
-            <th>Employee</th>
-            <th>Claim</th>
-            <th>Amount</th>
-            <th>Status</th>
-            <th className="text-right">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {isLoading ? (
-            [...Array(3)].map((_, i) => <tr key={i}><td colSpan={5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-          ) : isError ? (
-            <tr><td colSpan={5} className="py-10 text-center"><p className="text-sm font-semibold text-red-700">Couldn&rsquo;t load the approvals queue</p><button type="button" onClick={() => refetch()} className="mt-2 text-xs font-medium text-[#047857] underline underline-offset-2">Try again</button></td></tr>
-          ) : claims.length === 0 ? (
-            <tr><td colSpan={5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">Nothing awaiting action</p><p className="mt-1 text-xs text-text-tertiary">Submitted claims wait here for approval; approved claims wait here to be reimbursed.</p></td></tr>
-          ) : claims.map((c, i) => (
-            <React.Fragment key={c.id}>
-              <tr>
-                <td><HrAvatar name={c.employeeName || 'Employee'} sub={c.employeeCode} seed={i} /></td>
-                <td className="text-text-primary">
-                  {/* The list payload has no line items at all: ExpenseService.toPage
-                      maps every row with toResponse(c, null). Approvers were
-                      authorising a bare total with no idea what it was made of.
-                      Expanding pulls the real breakdown from the per-claim
-                      endpoint. */}
-                  {canReadClaim ? (
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                      aria-expanded={expandedId === c.id}
-                      aria-label={`${expandedId === c.id ? 'Hide' : 'Show'} line items for ${c.title}`}
-                      className="inline-flex items-center gap-1.5 text-left font-medium text-[#047857] hover:text-[#064E3B]"
-                    >
-                      {expandedId === c.id ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
-                      {c.title}
-                    </button>
-                  ) : c.title}
-                </td>
-                <td className="font-semibold text-text-primary">{inr(c.totalAmount)}</td>
-                <td><HrStatusPill tone={STATUS_TONE[c.status]}>{c.status}</HrStatusPill></td>
-                <td>
-                  <div className="flex items-center justify-end gap-2">
-                    {/* The queue now carries SUBMITTED (to approve) and APPROVED
-                        (to reimburse). Before, approved claims vanished from every
-                        screen and the reimburse endpoint was unreachable — nobody
-                        was ever paid through the product (2026-09-08 audit). */}
-                    {c.status === 'SUBMITTED' && canApprove && (
-                      <>
-                        <HrButton size="sm" onClick={() => onDecide(c.id, true)} disabled={decide.isPending}><Check size={14} /> Approve</HrButton>
-                        <HrButton size="sm" variant="ghost" onClick={() => onDecide(c.id, false)} disabled={decide.isPending}><X size={14} /> Reject</HrButton>
-                      </>
-                    )}
-                    {c.status === 'APPROVED' && canReimburse && (
-                      <HrButton size="sm" onClick={() => onReimburse(c.id)} disabled={reimburse.isPending}><Wallet size={14} /> Mark Reimbursed</HrButton>
-                    )}
-                    {((c.status === 'SUBMITTED' && !canApprove) || (c.status === 'APPROVED' && !canReimburse)) && (
-                      <span className="text-xs text-text-tertiary">—</span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-              {expandedId === c.id && (
-                <tr>
-                  <td colSpan={5} className="bg-bg-base/40 p-0">
-                    <ClaimDetailPanel claimId={c.id} />
-                  </td>
-                </tr>
+      <DataTable
+        columns={[
+          { key: 'employee', header: 'Employee', render: (c: any) => <HrAvatar name={c.employeeName || 'Employee'} sub={c.employeeCode} seed={c.id} /> },
+          { key: 'claim', header: 'Claim', render: (c: any) => (
+            canReadClaim ? (
+              <button
+                type="button"
+                onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
+                aria-expanded={expandedId === c.id}
+                aria-label={`${expandedId === c.id ? 'Hide' : 'Show'} line items for ${c.title}`}
+                className="inline-flex items-center gap-1.5 text-left font-medium text-[#047857] hover:text-[#064E3B]"
+              >
+                {expandedId === c.id ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
+                {c.title}
+              </button>
+            ) : c.title
+          ) },
+          { key: 'amount', header: 'Amount', render: (c: any) => <span className="font-semibold text-text-primary">{inr(c.totalAmount)}</span> },
+          { key: 'status', header: 'Status', render: (c: any) => <HrStatusPill tone={STATUS_TONE[c.status as ExpenseStatus] || 'gray'}>{c.status}</HrStatusPill> },
+          { key: 'action', header: 'Action', render: (c: any) => (
+            <div className="flex items-center justify-end gap-2 w-full text-right">
+              {c.status === 'SUBMITTED' && canApprove && (
+                <>
+                  <HrButton size="sm" onClick={() => onDecide(c.id, true)} disabled={decide.isPending}><Check size={14} /> Approve</HrButton>
+                  <HrButton size="sm" variant="ghost" onClick={() => onDecide(c.id, false)} disabled={decide.isPending}><X size={14} /> Reject</HrButton>
+                </>
               )}
-            </React.Fragment>
-          ))}
-        </tbody>
-      </table>
+              {c.status === 'APPROVED' && canReimburse && (
+                <HrButton size="sm" onClick={() => onReimburse(c.id)} disabled={reimburse.isPending}><Wallet size={14} /> Mark Reimbursed</HrButton>
+              )}
+              {((c.status === 'SUBMITTED' && !canApprove) || (c.status === 'APPROVED' && !canReimburse)) && (
+                <span className="text-xs text-text-tertiary">—</span>
+              )}
+            </div>
+          ) }
+        ]}
+        data={claims}
+        keyField="id"
+        loading={isLoading}
+        emptyMessage={isError ? "Couldn't load the approvals queue. Try again" : "Nothing awaiting action. Submitted claims wait here for approval; approved claims wait here to be reimbursed."}
+        expandedRowIds={expandedId ? [expandedId] : []}
+        renderSubRow={(c: any) => (
+          <div className="bg-bg-base/40 p-4">
+            <ClaimDetailPanel claimId={c.id} />
+          </div>
+        )}
+      />
     </TableCard>
   )
 }
@@ -729,73 +711,53 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
       )}
 
       <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Policy</th>
-              <th>Category</th>
-              <th>Max / Claim</th>
-              <th>Receipt</th>
-              <th>Status</th>
-              {canWrite && <th></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(3)].map((_, i) => <tr key={i}><td colSpan={6} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : policies.length === 0 ? (
-              <tr><td colSpan={6} className="py-14 text-center text-sm text-text-tertiary">No expense policies defined yet.</td></tr>
-            ) : policies.map((p) => (
-              <tr key={p.id}>
-                <td className="font-medium text-text-primary">{p.name}</td>
-                <td><HrStatusPill tone="info">{fmtCat(p.category)}</HrStatusPill></td>
-                <td className="text-text-secondary">{p.maxAmountPerClaim != null ? inr(p.maxAmountPerClaim) : 'No cap'}</td>
-                <td className="text-text-secondary">{p.requiresReceipt ? 'Required' : 'Optional'}</td>
-                <td><HrStatusPill tone={p.active ? 'ok' : 'gray'}>{p.active ? 'Active' : 'Inactive'}</HrStatusPill></td>
-                {/* 2026-09-09: this cell used to hold ONE control, wrapped in
-                    {p.active && …}, so an inactive row had no actions at all
-                    and a policy's cap could never be corrected — HR had to
-                    deactivate and recreate, and the deactivate itself was
-                    one-way and had no confirm. Now: Edit on any row, Restore
-                    on inactive ones, and the deactivate asks first. */}
-                {canWrite && (
-                  <td>
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => onStartEdit(p)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-bg-base hover:text-text-primary"
-                        title="Edit policy"
-                        aria-label={`Edit ${p.name}`}
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      {p.active ? (
-                        <button
-                          onClick={() => onDeactivate(p)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
-                          title="Deactivate"
-                          aria-label={`Deactivate ${p.name}`}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => onRestore(p)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#ECFDF5] hover:text-[#047857]"
-                          title="Restore policy"
-                          aria-label={`Restore ${p.name}`}
-                          disabled={update.isPending}
-                        >
-                          <RotateCcw size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          columns={[
+            { key: 'policy', header: 'Policy', render: (p: any) => <span className="font-medium text-text-primary">{p.name}</span> },
+            { key: 'category', header: 'Category', render: (p: any) => <HrStatusPill tone="info">{fmtCat(p.category)}</HrStatusPill> },
+            { key: 'max', header: 'Max / Claim', render: (p: any) => <span className="text-text-secondary">{p.maxAmountPerClaim != null ? inr(p.maxAmountPerClaim) : 'No cap'}</span> },
+            { key: 'receipt', header: 'Receipt', render: (p: any) => <span className="text-text-secondary">{p.requiresReceipt ? 'Required' : 'Optional'}</span> },
+            { key: 'status', header: 'Status', render: (p: any) => <HrStatusPill tone={p.active ? 'ok' : 'gray'}>{p.active ? 'Active' : 'Inactive'}</HrStatusPill> },
+            ...(canWrite ? [{
+              key: 'action', header: '', render: (p: any) => (
+                <div className="flex items-center justify-end gap-1 w-full text-right">
+                  <button
+                    onClick={() => onStartEdit(p)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-bg-base hover:text-text-primary"
+                    title="Edit policy"
+                    aria-label={`${p.name}`}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  {p.active ? (
+                    <button
+                      onClick={() => onDeactivate(p)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
+                      title="Deactivate"
+                      aria-label={`${p.name}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onRestore(p)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[#ECFDF5] hover:text-[#047857]"
+                      title="Restore policy"
+                      aria-label={`${p.name}`}
+                      disabled={update.isPending}
+                    >
+                      <RotateCcw size={14} />
+                    </button>
+                  )}
+                </div>
+              )
+            }] : [])
+          ]}
+          data={policies}
+          keyField="id"
+          loading={isLoading}
+          emptyMessage="No expense policies defined yet."
+        />
       </TableCard>
     </div>
   )

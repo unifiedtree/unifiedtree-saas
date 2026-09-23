@@ -25,9 +25,15 @@ public record GeneratedLetterDto(
         UUID generatedBy,
         Map<String, String> generationContext,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String employeeName,
+        String employeeCode
 ) {
     public static GeneratedLetterDto from(GeneratedLetter g) {
+        return from(g, null, null);
+    }
+
+    public static GeneratedLetterDto from(GeneratedLetter g, String employeeName, String employeeCode) {
         return new GeneratedLetterDto(
                 g.getId(), g.getTenantId(), g.getCompanyId(),
                 g.getTemplateId(), g.getEmployeeId(),
@@ -39,7 +45,7 @@ public record GeneratedLetterDto(
                 g.getVoidedAt(), g.getVoidedReason(),
                 g.getGeneratedBy(),
                 g.getGenerationContext(),
-                g.getCreatedAt(), g.getUpdatedAt()
+                g.getCreatedAt(), g.getUpdatedAt(), employeeName, employeeCode
         );
     }
 }

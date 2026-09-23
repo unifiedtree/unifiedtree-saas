@@ -69,15 +69,20 @@ public class FnfService {
 
         // Guard 1: the employee must exist. A missing employee_id currently
         // 500s downstream on FK; surface a domain 404 instead.
-        String status = jdbc.query(
-                "SELECT employment_status FROM hrms.employees WHERE id = ?",
-                rs -> rs.next() ? rs.getString(1) : null,
-                request.employeeId());
-        if (status == null) {
+        ExitRecord employee = jdbc.query(
+                "SELECT employment_status,company_id,last_working_day FROM hrms.employees WHERE tenant_id=? AND id=? FOR UPDATE",
+                rs -> rs.next() ? new ExitRecord(rs.getString(1), rs.getObject(2, UUID.class), rs.getObject(3, java.time.LocalDate.class)) : null,
+                tenantId, request.employeeId());
+        if (employee == null) {
             throw new HrmsException(
                     "Employee not found with id: " + request.employeeId(),
                     HttpStatus.NOT_FOUND, "EMPLOYEE_NOT_FOUND");
         }
+        String status = employee.status();
+        if (!java.util.Objects.equals(companyId, employee.companyId()))
+            throw new BusinessRuleException("Settlement company must match the employee's company.", "FNF_COMPANY_MISMATCH");
+        if (employee.lastWorkingDay() != null && !employee.lastWorkingDay().equals(request.lastWorkingDay()))
+            throw new BusinessRuleException("Last working day must match the employee's recorded exit date.", "FNF_EXIT_DATE_MISMATCH");
         // Guard 2: only separated employees can be F&F'd. An ACTIVE record
         // has no exit and no meaningful last-working-day; run the exit
         // workflow first.
@@ -95,29 +100,18 @@ public class FnfService {
         // it is non-zero refuse to process the settlement until the caller
         // includes an equivalent ADVANCE_RECOVERY deduction (or explicitly
         // waives it in a separate write-off flow).
-        BigDecimal outstandingAdvance = jdbc.query("""
-                SELECT COALESCE(SUM(outstanding_amount), 0)
-                  FROM advance_mgmt.advance_requests
-                 WHERE employee_id = ? AND status = 'DISBURSED'
-                   AND COALESCE(outstanding_amount, 0) > 0
-                """, rs -> rs.next() ? rs.getBigDecimal(1) : BigDecimal.ZERO,
-                request.employeeId());
-        if (outstandingAdvance != null && outstandingAdvance.signum() > 0) {
-            BigDecimal advanceDeductions = request.components().stream()
-                    .filter(c -> c.type() == FnfComponentType.DEDUCTION
-                            && c.label() != null
-                            && c.label().toUpperCase().contains("ADVANCE"))
-                    .map(FnfComponentRequest::amount)
-                    .filter(java.util.Objects::nonNull)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            if (advanceDeductions.compareTo(outstandingAdvance) < 0) {
-                throw new BusinessRuleException(
-                        "Employee has ₹" + outstandingAdvance + " in outstanding advances. "
-                        + "Include an 'Advance Recovery' deduction of at least ₹" + outstandingAdvance
-                        + " in the settlement, or write off the advance first.",
-                        "FNF_OUTSTANDING_ADVANCE");
-            }
-        }
+        Integer duplicates = jdbc.queryForObject("""
+                SELECT count(*) FROM fnf_mgmt.fnf_settlements
+                 WHERE tenant_id=? AND employee_id=? AND status<>'CANCELLED'
+                   AND (status<>'PAID' OR last_working_day=?)
+                """, Integer.class, tenantId, request.employeeId(), request.lastWorkingDay());
+        if (duplicates != null && duplicates > 0)
+            throw new BusinessRuleException("A settlement already exists for this exit. Review it or cancel an unapproved settlement before making corrections.", "FNF_SETTLEMENT_EXISTS");
+        List<AdvanceBalance> advances = lockOutstandingAdvances(tenantId, request.employeeId());
+        BigDecimal advanceDeductions = request.components().stream()
+                .filter(c -> isAdvanceRecovery(c.type(), c.label()))
+                .map(FnfComponentRequest::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        requireExactAdvanceRecovery(advances, advanceDeductions);
 
         BigDecimal gross = request.components().stream()
                 .filter(c -> c.type() == FnfComponentType.EARNING)
@@ -189,8 +183,7 @@ public class FnfService {
 
     @Transactional
     public FnfSettlementResponse approve(UUID settlementId, UUID approverId) {
-        FnfSettlement settlement = settlementRepository.findById(settlementId)
-                .orElseThrow(() -> new ResourceNotFoundException("FnfSettlement", settlementId));
+        FnfSettlement settlement = lockSettlement(settlementId);
         if (settlement.getStatus() != FnfStatus.PROCESSED) {
             throw new BusinessRuleException(
                     "Only a processed settlement can be approved (current status: " + settlement.getStatus() + ")",
@@ -210,61 +203,53 @@ public class FnfService {
                     "Net settlement cannot be negative",
                     "INVALID_NET_SETTLEMENT");
         }
+        UUID tenantId = TenantContext.getTenantId();
+        List<FnfComponent> components = componentRepository.findBySettlementIdOrderByTypeAscLabelAsc(settlementId);
+        // Advance disbursement uses this same employee-before-advance order.
+        // No new debt can be disbursed while the exit recovery is being approved.
+        ExitRecord employee = jdbc.query("SELECT employment_status,company_id,last_working_day FROM hrms.employees WHERE tenant_id=? AND id=? FOR UPDATE",
+                rs -> rs.next() ? new ExitRecord(rs.getString(1), rs.getObject(2, UUID.class), rs.getObject(3, java.time.LocalDate.class)) : null,
+                tenantId, settlement.getEmployeeId());
+        if (employee == null) throw new ResourceNotFoundException("Employee", settlement.getEmployeeId());
+        if (!SEPARATED_STATUSES.contains(employee.status()))
+            throw new BusinessRuleException("The employee's exit changed. Only a separated employee can have an approved settlement.", "EMPLOYEE_NOT_SEPARATED");
+        if (!java.util.Objects.equals(employee.companyId(), settlement.getCompanyId()))
+            throw new BusinessRuleException("The employee's company changed. Cancel and recreate this unapproved settlement.", "FNF_COMPANY_MISMATCH");
+        if (employee.lastWorkingDay() != null && !employee.lastWorkingDay().equals(settlement.getLastWorkingDay()))
+            throw new BusinessRuleException("The recorded exit date changed. Cancel and recreate this unapproved settlement.", "FNF_EXIT_DATE_MISMATCH");
+        List<AdvanceBalance> advances = lockOutstandingAdvances(tenantId, settlement.getEmployeeId());
+        BigDecimal recovery = components.stream().filter(c -> isAdvanceRecovery(c.getType(), c.getLabel()))
+                .map(FnfComponent::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        requireExactAdvanceRecovery(advances, recovery);
+        // All balance, schedule, ledger and approval changes share this transaction.
+        // An absent pending schedule never means the outstanding debt is absent.
+        for (AdvanceBalance advance : advances) {
+            jdbc.update("""
+                    INSERT INTO advance_mgmt.advance_ledger_entries
+                        (tenant_id,advance_request_id,entry_type,amount,balance_after,reference,notes,created_by)
+                    VALUES (?,?,'FORECLOSE',?,0,?,'Recovered in approved full and final settlement',?)
+                    """, tenantId, advance.id(), advance.outstanding().negate(),
+                    "fnf-settlement:" + settlementId, approverId == null ? null : approverId.toString());
+            jdbc.update("""
+                    UPDATE advance_mgmt.advance_recovery_schedule SET status='CANCELLED',updated_at=now(),version=version+1
+                     WHERE tenant_id=? AND advance_request_id=? AND status='PENDING'
+                    """, tenantId, advance.id());
+            jdbc.update("""
+                    UPDATE advance_mgmt.advance_requests SET outstanding_amount=0,status='CLOSED',updated_at=now(),version=version+1
+                     WHERE tenant_id=? AND id=?
+                    """, tenantId, advance.id());
+        }
         settlement.setStatus(FnfStatus.APPROVED);
         settlement.setApproverId(approverId);
         settlement.setApprovedAt(Instant.now());
         settlement = settlementRepository.save(settlement);
         log.info("FnF settlement {} approved by approver={}", settlementId, approverId);
-
-        // B3 FIX (audit 2026-08-15): on APPROVED FnF, FORECLOSE remaining
-        // advance_recovery_schedule PENDING rows for this employee — the
-        // amount was already recovered lump-sum in the settlement's
-        // ADVANCE_RECOVERY deduction (validated at processSettlement time).
-        try {
-            int foreclosed = jdbc.update("""
-                    UPDATE advance_mgmt.advance_recovery_schedule
-                       SET status = 'CANCELLED', updated_at = now(),
-                           version = version + 1
-                     WHERE advance_request_id IN (
-                            SELECT id FROM advance_mgmt.advance_requests
-                             WHERE employee_id = ? AND status = 'DISBURSED')
-                       AND status = 'PENDING'
-                    """, settlement.getEmployeeId());
-            if (foreclosed > 0) {
-                jdbc.update("""
-                        INSERT INTO advance_mgmt.advance_ledger_entries
-                            (tenant_id, advance_request_id, entry_type,
-                             amount, balance_after, reference, notes)
-                        SELECT ar.tenant_id, ar.id, 'FORECLOSE',
-                               -COALESCE(ar.outstanding_amount, 0), 0,
-                               'fnf-settlement:' || ?,
-                               'Foreclosed on FnF approval'
-                          FROM advance_mgmt.advance_requests ar
-                         WHERE ar.employee_id = ? AND ar.status = 'DISBURSED'
-                           AND COALESCE(ar.outstanding_amount, 0) > 0
-                        """, settlementId.toString(), settlement.getEmployeeId());
-                jdbc.update("""
-                        UPDATE advance_mgmt.advance_requests
-                           SET outstanding_amount = 0, updated_at = now(),
-                               version = version + 1
-                         WHERE employee_id = ? AND status = 'DISBURSED'
-                           AND COALESCE(outstanding_amount, 0) > 0
-                        """, settlement.getEmployeeId());
-                log.info("FnF {} approval: foreclosed {} pending advance installments for employee {}",
-                        settlementId, foreclosed, settlement.getEmployeeId());
-            }
-        } catch (RuntimeException e) {
-            // Do not fail the approval — the settlement itself is fine.
-            log.error("FnF {} approval: foreclose failed for employee {} — MANUAL FORECLOSE REQUIRED: {}",
-                    settlementId, settlement.getEmployeeId(), e.getMessage());
-        }
         return toResponse(settlement, componentRepository.findBySettlementIdOrderByTypeAscLabelAsc(settlementId));
     }
 
     @Transactional
     public FnfSettlementResponse pay(UUID settlementId) {
-        FnfSettlement settlement = settlementRepository.findById(settlementId)
-                .orElseThrow(() -> new ResourceNotFoundException("FnfSettlement", settlementId));
+        FnfSettlement settlement = lockSettlement(settlementId);
         if (settlement.getStatus() != FnfStatus.APPROVED) {
             throw new BusinessRuleException(
                     "Only an approved settlement can be paid (current status: " + settlement.getStatus() + ")",
@@ -297,6 +282,51 @@ public class FnfService {
     }
 
     // ── mapping ──────────────────────────────────────────────────────────────
+
+    @Transactional
+    public FnfSettlementResponse cancel(UUID settlementId) {
+        FnfSettlement settlement = lockSettlement(settlementId);
+        if (settlement.getStatus() != FnfStatus.CANCELLED) {
+            if (settlement.getStatus() != FnfStatus.INITIATED && settlement.getStatus() != FnfStatus.PROCESSED)
+                throw new BusinessRuleException("Only an unapproved settlement can be cancelled. Approved recoveries and recorded payments must be preserved.", "FNF_CANNOT_CANCEL");
+            settlement.setStatus(FnfStatus.CANCELLED);
+            settlement = settlementRepository.save(settlement);
+        }
+        return toResponse(settlement, componentRepository.findBySettlementIdOrderByTypeAscLabelAsc(settlementId));
+    }
+
+    private FnfSettlement lockSettlement(UUID settlementId) {
+        String status = jdbc.query("SELECT status FROM fnf_mgmt.fnf_settlements WHERE tenant_id=? AND id=? FOR UPDATE",
+                rs -> rs.next() ? rs.getString(1) : null, TenantContext.getTenantId(), settlementId);
+        if (status == null) throw new ResourceNotFoundException("FnfSettlement", settlementId);
+        FnfSettlement settlement = settlementRepository.findById(settlementId)
+                .orElseThrow(() -> new ResourceNotFoundException("FnfSettlement", settlementId));
+        if (!status.equals(settlement.getStatus().name()))
+            throw new BusinessRuleException("This settlement changed. Refresh its details before continuing.", "FNF_STATE_CHANGED");
+        return settlement;
+    }
+
+    private record ExitRecord(String status, UUID companyId, java.time.LocalDate lastWorkingDay) {}
+    private record AdvanceBalance(UUID id, BigDecimal outstanding) {}
+
+    private List<AdvanceBalance> lockOutstandingAdvances(UUID tenantId, UUID employeeId) {
+        return jdbc.query("""
+                SELECT id,outstanding_amount FROM advance_mgmt.advance_requests
+                 WHERE tenant_id=? AND employee_id=? AND status='DISBURSED' AND outstanding_amount>0
+                 ORDER BY id FOR UPDATE
+                """, (rs,i) -> new AdvanceBalance(rs.getObject(1, UUID.class), rs.getBigDecimal(2)), tenantId, employeeId);
+    }
+
+    private boolean isAdvanceRecovery(FnfComponentType type, String label) {
+        return type == FnfComponentType.DEDUCTION && label != null && label.toUpperCase(java.util.Locale.ROOT).contains("ADVANCE");
+    }
+
+    private void requireExactAdvanceRecovery(List<AdvanceBalance> advances, BigDecimal recovery) {
+        BigDecimal outstanding = advances.stream().map(AdvanceBalance::outstanding).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (recovery.compareTo(outstanding) != 0)
+            throw new BusinessRuleException("The Advance Recovery deduction must equal the current outstanding balance of ₹" + outstanding
+                    + ". Cancel an unapproved settlement and recreate it if the balance changed.", "FNF_OUTSTANDING_ADVANCE");
+    }
 
     private PageResponse<FnfSettlementResponse> toPage(Page<FnfSettlement> page) {
         List<FnfSettlementResponse> content = page.getContent().stream()

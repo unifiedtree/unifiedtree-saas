@@ -4,6 +4,7 @@ import {
   Camera, Check, CheckCircle2, Copy, FileText, Laptop, Plus, Trash2, Upload, X,
 } from 'lucide-react'
 import clsx from 'clsx'
+import { addMonths, format, parseISO } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { EmptyState } from '@unifiedtree/ui-kit'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
@@ -12,45 +13,24 @@ import {
   useBranches, useCompanies, useDepartments, useDesignations, useEmploymentTypes,
 } from '../api/useOrg'
 import {
-  useCreateWorkforceEmployee, useEmployeeDirectory,
+  useCreateWorkforceEmployee, useEmployeeDirectory, useUpdateWorkforceEmployee, useWorkforceEmployee,
   type CreateWorkforceEmployeePayload, type WorkforceEmployee,
 } from '../api/useWorkforce'
 import { useNextEmployeeCode } from '../api/useSettings'
 import { useTemplates, useCreateInstance } from './api/useOnboarding'
 import { usePolicies } from '../api/usePolicy'
+import { saveOnboardingRecord } from './OnboardingRecord'
+import { useCreateDocument } from '../api/useDocument'
+import { apiJson } from '@/core/api/client'
+import type { EmployeeBankAccountResponse } from '../api/useEmployeeProfile'
+import { saveOnboardingPayroll } from './saveOnboardingPayroll'
 
 /**
- * Create Employee / Onboarding — the eight-step new-hire wizard reached from
- * "Start Onboarding" on the Onboarding Instances page.
- *
- * What is persisted (2026-09-18): the final step POSTs through
- * `useCreateWorkforceEmployee` — the same hook and the same endpoint
- * (POST /v1/hrms/employees) that employees/EmployeeForm uses — so a hire
- * created here is indistinguishable from one created there, and the backend
- * issues the employee code atomically. The Employee ID shown on steps 1–2 is
- * the non-consuming preview from GET /v1/settings/employee-code/preview; the
- * real code comes back on the create response and is what the success card
- * shows.
- *
- * What is collected but NOT posted, because CreateWorkforceEmployeePayload has
- * no field for it and the platform has no endpoint either:
- *
- *   - the profile photo and the uploaded document files — there IS a document
- *     vault, but every one of its endpoints is keyed to an existing employee
- *     id, so these can only be sent from the hire's profile after create;
- *   - the policy pack selection — acknowledgement is an employee action
- *     (POST /v1/hrms/policies/{id}/acknowledge), not something HR can do for
- *     a person who does not have a login yet;
- *   - the asset issues — there is no assets module server-side at all: no
- *     controller, DTO or table;
- *   - permanent address, probation and notice period, account type, gratuity
- *     and insurance choices, and the joining-day card/orientation fields —
- *     collected for the joining checklist, with nowhere on the employee DTO
- *     to put them.
- *
- * Those steps run on real, working local state so the flow is walkable and the
- * values are already shaped for the writes, and each says plainly on screen
- * that it is captured for the record rather than pretending to save.
+ * New-hire wizard: core employee creation, supplementary HR record, document
+ * uploads, then the selected onboarding checklist. Each follow-up write has
+ * explicit failure/retry handling so a partial save never creates a duplicate
+ * employee. Policy selection is a handover record, not employee acknowledgement.
+ * The attached photo is stored in Employee Documents alongside other hire documents.
  */
 
 // ── Steps ────────────────────────────────────────────────────────────────────
@@ -144,9 +124,7 @@ const INSURANCE_PLANS = [
 ]
 
 /**
- * Document checklist. `category` is the backend DocumentCategory each file
- * would be filed under once these can be posted to the document vault, so the
- * mapping does not have to be re-derived later.
+ * Map each checklist entry to its category in Employee Documents.
  */
 const DOCUMENT_ROWS = [
   { key: 'pan',         label: 'PAN Card',                       required: true,  category: 'ID_PROOF' },
@@ -347,7 +325,7 @@ function Stepper({ active, reached, onJump }: {
 type Errors = Record<string, string>
 
 type DocStatus = 'PENDING' | 'VERIFIED' | 'REJECTED'
-interface DocEntry { fileName: string; status: DocStatus }
+interface DocEntry { fileName: string; status: DocStatus; file?: File }
 
 interface AssetRow {
   id: string
@@ -390,12 +368,29 @@ export const OnboardingForm: React.FC = () => {
   const [reached, setReached] = useState(0)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<Errors>({})
-  const [photo, setPhoto] = useState<{ name: string; url: string } | null>(null)
+  const [photoUrl, setPhotoUrl] = useState('')
   const [docs, setDocs] = useState<Record<string, DocEntry>>({})
+  useEffect(() => {
+    const file = docs.photo?.file
+    if (!file) { setPhotoUrl(''); return }
+    const url = URL.createObjectURL(file)
+    setPhotoUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [docs.photo?.file])
   const [assets, setAssets] = useState<AssetRow[]>([])
   const [policyPack, setPolicyPack] = useState<Record<string, boolean>>({})
   const [checklist, setChecklist] = useState<Record<string, boolean>>({})
   const [created, setCreated] = useState<WorkforceEmployee | null>(null)
+  const [recordSaving, setRecordSaving] = useState(false)
+  const [recordError, setRecordError] = useState('')
+  const [recordSaved, setRecordSaved] = useState(false)
+  const uploadedDocuments = useRef(new Set<string>())
+  const uploadDocument = useCreateDocument()
+  const updateEmployee = useUpdateWorkforceEmployee()
+  const canConfigurePayroll = usePermission('payroll.structure.manage')
+  const [finishing, setFinishing] = useState(false)
+  const [managerSearch, setManagerSearch] = useState('')
+  const [managerPage, setManagerPage] = useState(0)
   // Outcome of the onboarding-instance write that follows the employee create.
   // Tracked separately so the success card can tell the truth about each.
   const [instanceStarted, setInstanceStarted] = useState(false)
@@ -418,15 +413,73 @@ export const OnboardingForm: React.FC = () => {
   const companyId = companies[0]?.id || ''
   const { data: departments = [] } = useDepartments(companyId)
   const { data: branches = [] } = useBranches(companyId || undefined)
-  const { data: designations = [] } = useDesignations(companyId, form.departmentId || undefined)
+  const designationQuery = useDesignations(companyId, form.departmentId || undefined)
+  const designations = designationQuery.data ?? []
   const { data: employmentTypes = [] } = useEmploymentTypes(companyId)
-  const { data: directory } = useEmployeeDirectory(
-    { companyId: companyId || undefined, pageSize: 200 },
+  const managerQuery = useEmployeeDirectory(
+    { companyId: companyId || undefined, search: managerSearch.trim() || undefined, page: managerPage, pageSize: 25 },
     { enabled: !!companyId },
   )
-  const managers = directory?.content ?? []
+  const { data: selectedManager } = useWorkforceEmployee(form.reportingManagerId || undefined)
+  const managers = managerQuery.data?.content ?? []
   const { data: policyPage } = usePolicies(0, 'ACTIVE')
   const policies = policyPage?.content ?? []
+  const saveSupplementary = async (employeeId: string) => {
+    setRecordSaving(true); setRecordError(''); setRecordSaved(false)
+    try {
+      const probationMonths = Number.parseInt(form.probation, 10)
+      if (probationMonths > 0 && form.dateOfJoining) {
+        await updateEmployee.mutateAsync({ id: employeeId, data: {
+          employmentStatus: 'PROBATION',
+          probationEndDate: format(addMonths(parseISO(form.dateOfJoining), probationMonths), 'yyyy-MM-dd'),
+        } })
+      } else if (form.probation === 'No probation') {
+        await updateEmployee.mutateAsync({ id: employeeId, data: { employmentStatus: 'ACTIVE' } })
+      }
+      // Payroll reads the encrypted primary account, not the legacy employee columns.
+      // Read back first so retrying a later failed step does not add duplicate accounts.
+      const accountNumber = stripWs(form.accountNumber)
+      const ifscCode = form.ifsc.trim().toUpperCase()
+      const bankPath = `/v1/employees/${employeeId}/profile/bank-accounts`
+      const accounts = await apiJson<EmployeeBankAccountResponse[]>(bankPath)
+      if (!accounts.some(account => account.primary && account.accountNumberLast4 === accountNumber.slice(-4) && account.ifscCode === ifscCode && account.accountHolderName === form.accountHolderName.trim())) {
+        await apiJson(bankPath, { method: 'POST', body: JSON.stringify({
+          accountNumber, ifscCode, primary: true, accountHolderName: form.accountHolderName.trim(),
+          bankName: form.bankName === 'OTHER' ? form.bankNameOther.trim() : form.bankName,
+        }) })
+      }
+      await saveOnboardingRecord(employeeId, {
+        details: {
+          permanentAddress: form.sameAsCurrent ? form.currentAddress.trim() : form.permanentAddress.trim(),
+          probation: form.probation, noticePeriod: form.noticePeriod, accountType: form.accountType,
+          pfEnrolled: form.pfEnrolled ? 'Yes' : 'No', esiEnrolled: form.esiEnrolled ? 'Yes' : 'No',
+          gratuityEligible: form.gratuityEligible ? 'Yes' : 'No', insurancePlan: form.insurancePlan,
+          orientationTime: form.orientationTime, assignedLaptop: assets.find(asset => asset.id === form.assignedLaptop)?.model || '',
+          idCardStatus: form.idCardStatus, accessCardStatus: form.accessCardStatus,
+        },
+        assets: assets.map(({ type, model, serial, issuedOn }) => ({ type, model, serial, issuedOn })),
+        selectedPolicies: policies.filter(p => policyPack[p.id]).map(p => p.title),
+        joiningChecklist: checklist,
+        documentChecklist: Object.fromEntries(Object.entries(docs).map(([key, doc]) => [key, { fileName: doc.fileName, status: doc.status }])),
+      })
+      if (canConfigurePayroll) await saveOnboardingPayroll({
+        employeeId, ctcAnnual: Number(form.ctcAnnual), effectiveFrom: form.dateOfJoining,
+        pfApplicable: form.pfEnrolled, basicSalary: Number(form.basicSalary || 0), hra: Number(form.hra || 0),
+        specialAllowance: Number(form.specialAllowance || 0), otherAllowance: Number(form.otherAllowance || 0),
+      })
+      for (const row of DOCUMENT_ROWS) {
+        const doc = docs[row.key]
+        if (!doc?.file) continue
+        const uploadKey = `${row.key}:${doc.file.name}:${doc.file.size}:${doc.file.lastModified}`
+        if (uploadedDocuments.current.has(uploadKey)) continue
+        await uploadDocument.mutateAsync({ employeeId, title: row.label, category: row.category, fileUrl: '', file: doc.file, notes: `Onboarding verification: ${doc.status}` })
+        uploadedDocuments.current.add(uploadKey)
+      }
+      setRecordSaved(true)
+    } catch (error) {
+      setRecordError(error instanceof Error ? error.message : 'Could not save onboarding details')
+    } finally { setRecordSaving(false) }
+  }
   const { data: codePreview } = useNextEmployeeCode(companyId || undefined)
   const createEmp = useCreateWorkforceEmployee()
 
@@ -548,9 +601,19 @@ export const OnboardingForm: React.FC = () => {
     (r) => r.required && docs[r.key]?.status !== 'VERIFIED',
   ).length
 
-  const attachDoc = (key: string, file: File) => {
-    if (file.size > 5 * 1024 * 1024) { toast('File must be 5MB or smaller', 'error'); return }
-    setDocs((d) => ({ ...d, [key]: { fileName: file.name, status: 'PENDING' } }))
+  const attachDoc = async (key: string, file: File) => {
+    if (!file.size || file.size > 5 * 1024 * 1024) { toast('Choose a non-empty file of 5MB or smaller', 'error'); return }
+    if (!/\.(pdf|png|jpe?g)$/i.test(file.name) || (file.type && !['application/pdf', 'image/png', 'image/jpeg'].includes(file.type))) {
+      toast('Choose a PDF, JPG or PNG file', 'error'); return
+    }
+    try {
+      const header = new Uint8Array(await file.slice(0, 8).arrayBuffer())
+      const pdf = [37, 80, 68, 70, 45].every((byte, i) => header[i] === byte)
+      const png = [137, 80, 78, 71, 13, 10, 26, 10].every((byte, i) => header[i] === byte)
+      const jpeg = [255, 216, 255].every((byte, i) => header[i] === byte)
+      if (!(pdf || png || jpeg) || (key === 'photo' && !(png || jpeg))) { toast('This file is not a supported PDF, PNG or JPG document', 'error'); return }
+      setDocs((d) => ({ ...d, [key]: { fileName: file.name, status: 'PENDING', file } }))
+    } catch { toast('Could not read the selected file. Please choose it again.', 'error') }
   }
 
   const setDocStatus = (key: string, status: DocStatus) =>
@@ -614,7 +677,6 @@ export const OnboardingForm: React.FC = () => {
     if (!form.dateOfJoining) e.dateOfJoining = 'Joining date is required'
     if (!form.employmentType) e.employmentType = 'Select an employment type'
     if (!form.probation) e.probation = 'Select a probation period'
-    if (!form.reportingManagerId) e.reportingManagerId = 'Select a reporting manager'
     if (!form.noticePeriod) e.noticePeriod = 'Select a notice period'
     return e
   }
@@ -624,6 +686,9 @@ export const OnboardingForm: React.FC = () => {
     const ctc = Number(form.ctcAnnual)
     if (!form.ctcAnnual.trim()) e.ctcAnnual = 'Annual CTC is required'
     else if (Number.isNaN(ctc) || ctc <= 0) e.ctcAnnual = 'Enter a valid amount'
+    if (['basicSalary', 'hra', 'specialAllowance', 'otherAllowance'].some(key => !Number.isFinite(Number(form[key as keyof FormState])) || Number(form[key as keyof FormState]) < 0) || totalGross <= 0) {
+      e.ctcAnnual = 'Enter valid non-negative salary amounts with a positive total'
+    }
     if (!form.accountHolderName.trim()) e.accountHolderName = 'Account holder name is required'
     const bank = form.bankName === 'OTHER' ? form.bankNameOther.trim() : form.bankName
     if (!bank) e.bankName = 'Bank name is required'
@@ -769,7 +834,6 @@ export const OnboardingForm: React.FC = () => {
       uanNumber: form.pfEnrolled && stripWs(form.uanNumber) ? stripWs(form.uanNumber) : undefined,
       esiNumber: form.esiEnrolled && stripWs(form.esiNumber) ? stripWs(form.esiNumber) : undefined,
       bankName: bankName || undefined,
-      bankBranchName: branch?.name || undefined,
       bankAccountNumber: stripWs(form.accountNumber) || undefined,
       bankIfsc: form.ifsc.trim().toUpperCase() || undefined,
       currentAddressLine: form.currentAddress.trim() || undefined,
@@ -780,7 +844,9 @@ export const OnboardingForm: React.FC = () => {
 
     try {
       const result = await createEmp.mutateAsync(payload)
+      setFinishing(true)
       setCreated(result)
+      await saveSupplementary(result.id)
 
       // ── Start the onboarding run ───────────────────────────────────────
       // Second write, deliberately NOT bundled into the first: the employee
@@ -805,8 +871,10 @@ export const OnboardingForm: React.FC = () => {
         setInstanceStarted(false)
         toast('Employee created', 'success')
       }
+      setFinishing(false)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err: unknown) {
+      setFinishing(false)
       const e = err as { message?: string; status?: number; payload?: { errorCode?: string } }
       const message = e?.message ?? 'Failed to create the employee'
       const errorCode = e?.payload?.errorCode ?? ''
@@ -878,14 +946,21 @@ export const OnboardingForm: React.FC = () => {
                   "Onboarding": the checklist is a second write that can be
                   skipped (no template) or fail on its own. */}
               <dd className="mt-1">
-                {instanceStarted
+                {finishing ? <HrStatusPill tone="info">Finishing setup</HrStatusPill> : instanceStarted
                   ? <HrStatusPill tone="info">Onboarding in progress</HrStatusPill>
                   : <HrStatusPill tone="gray">Employee only</HrStatusPill>}
               </dd>
             </div>
           </dl>
 
-          {!instanceStarted && (
+          <div className="mt-5 rounded-xl border border-border-default p-4 text-left text-sm" role="status">
+            {recordSaving ? 'Saving supplementary onboarding details...'
+              : recordError ? <><p role="alert">Employee created, but some onboarding details or files could not be saved: {recordError}. Keep this page open to retry pending uploads.</p><HrButton disabled={finishing} variant="ghost" className="mt-2" onClick={() => saveSupplementary(created.id)}>Retry pending saves</HrButton></>
+              : recordSaved ? 'Benefits, asset issues, selected policies and joining details are saved on the employee profile.' : null}
+          </div>
+          {!canConfigurePayroll && <p className="mt-3 text-sm text-text-secondary">The annual CTC and bank account are saved. A payroll administrator must configure the component breakup in the employee's Payroll tab.</p>}
+          {finishing && <p className="mt-4 text-sm" role="status">Saving the hire's setup and starting the selected checklist. Please keep this page open.</p>}
+          {!finishing && !instanceStarted && (
             <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-800">
               {instanceError
                 ? <>The employee was created, but the onboarding checklist could not be started: {instanceError} You can start it from the onboarding dashboard.</>
@@ -894,10 +969,10 @@ export const OnboardingForm: React.FC = () => {
           )}
 
           <div className="mt-6 flex flex-col gap-2.5">
-            <HrButton className="w-full" onClick={() => navigate(`/hrms/employees/${created.id}`)}>
+            <HrButton disabled={finishing || recordSaving} className="w-full" onClick={() => navigate(`/hrms/employees/${created.id}`)}>
               Go to Employee Profile
             </HrButton>
-            <HrButton variant="ghost" className="w-full" onClick={() => navigate('/hrms/onboarding/instances')}>
+            <HrButton disabled={finishing || recordSaving} variant="ghost" className="w-full" onClick={() => navigate('/hrms/onboarding/instances')}>
               Continue Onboarding
             </HrButton>
           </div>
@@ -964,13 +1039,13 @@ export const OnboardingForm: React.FC = () => {
             <div className="w-full shrink-0 lg:w-[300px]">
               <div className="flex items-center gap-4 rounded-2xl border border-border-default bg-[var(--bg-surface)] p-4">
                 <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-full border border-border-default bg-bg-subtle">
-                  {photo
-                    ? <img src={photo.url} alt="" className="h-full w-full object-cover" />
+                  {photoUrl
+                    ? <img src={photoUrl} alt="Attached employee photo" className="h-full w-full object-cover" />
                     : <Camera size={22} className="text-text-tertiary" />}
                 </div>
                 <div className="min-w-0">
                   <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-border-default bg-[var(--bg-surface)] px-3 py-1.5 text-[13px] font-semibold text-text-primary transition-colors hover:border-border-strong focus-within:ring-2 focus-within:ring-[var(--border-focus)]">
-                    <Upload size={14} /> Upload Photo
+                    <Upload size={14} /> Attach Photo
                     <input
                       type="file"
                       accept="image/png,image/jpeg"
@@ -979,18 +1054,15 @@ export const OnboardingForm: React.FC = () => {
                         const file = e.target.files?.[0]
                         if (!file) return
                         if (file.size > 2 * 1024 * 1024) { toast('Photo must be 2MB or smaller', 'error'); return }
-                        setPhoto((prev) => {
-                          if (prev) URL.revokeObjectURL(prev.url)
-                          return { name: file.name, url: URL.createObjectURL(file) }
-                        })
+                        void attachDoc('photo', file)
                       }}
                     />
                   </label>
-                  <p className="mt-1.5 text-[11px] text-text-tertiary">JPG, PNG (max 2MB)</p>
-                  {photo && (
+                  <p className="mt-1.5 text-[11px] text-text-tertiary">JPG, PNG (max 2MB). Saved in Employee Documents when this hire is created.</p>
+                  {photoUrl && (
                     <button
                       type="button"
-                      onClick={() => { URL.revokeObjectURL(photo.url); setPhoto(null) }}
+                      onClick={() => removeDoc('photo')}
                       className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-text-tertiary hover:text-text-primary"
                     >
                       <X size={11} /> Remove
@@ -1085,7 +1157,9 @@ export const OnboardingForm: React.FC = () => {
               </Field>
             </div>
 
-            {useDesignationFreeText ? (
+            {designationQuery.isPending ? <div role="status" className="py-3 text-sm text-text-secondary">Loading designations...</div>
+            : designationQuery.isError ? <div role="alert" className="text-sm text-red-700">Could not load designations. <HrButton variant="ghost" onClick={() => designationQuery.refetch()}>Try again</HrButton></div>
+            : useDesignationFreeText ? (
               <div id="field-designationText">
                 <Field label="Designation" required error={errors.designationText}
                   hint="No designation lookup for this department — entered as free text.">
@@ -1134,13 +1208,15 @@ export const OnboardingForm: React.FC = () => {
             <div id="field-reportingManagerId">
               <Field
                 label="Reporting Manager"
-                required
                 error={errors.reportingManagerId}
-                hint={managers.length === 0 ? 'No employees yet — the first hire has no manager to report to.' : undefined}
+                hint="Optional. Search across the company or assign a manager later."
               >
+                <Input aria-label="Search reporting managers" value={managerSearch} placeholder="Search name, email or employee code"
+                  onChange={e => { setManagerSearch(e.target.value); setManagerPage(0) }} className="mb-2" />
                 <Sel value={form.reportingManagerId} error={!!errors.reportingManagerId}
                   onChange={(e) => set('reportingManagerId', e.target.value)}>
-                  <option value="">Select manager…</option>
+                  <option value="">No manager assigned</option>
+                  {selectedManager && !managers.some(manager => manager.id === selectedManager.id) && <option value={selectedManager.id}>{[selectedManager.firstName, selectedManager.lastName].filter(Boolean).join(' ')} ({selectedManager.employeeCode})</option>}
                   {managers.map((m) => (
                     <option key={m.id} value={m.id}>
                       {[m.firstName, m.lastName].filter(Boolean).join(' ').trim()}
@@ -1148,6 +1224,14 @@ export const OnboardingForm: React.FC = () => {
                     </option>
                   ))}
                 </Sel>
+                {managerQuery.isError ? <p role="alert" className="mt-2 text-xs text-red-700">Could not load managers. <button type="button" className="underline" onClick={() => managerQuery.refetch()}>Try again</button></p>
+                  : managerQuery.isFetching ? <p role="status" className="mt-2 text-xs text-text-secondary">Loading managers...</p>
+                  : managers.length === 0 ? <p className="mt-2 text-xs text-text-secondary">No employees match this search.</p> : null}
+                {(managerQuery.data?.totalPages ?? 0) > 1 && <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                  <button type="button" disabled={managerPage === 0 || managerQuery.isFetching} className="text-primary disabled:opacity-40" onClick={() => setManagerPage(page => page - 1)}>Previous managers</button>
+                  <span>Page {managerPage + 1} of {managerQuery.data?.totalPages}</span>
+                  <button type="button" disabled={managerPage + 1 >= (managerQuery.data?.totalPages ?? 0) || managerQuery.isFetching} className="text-primary disabled:opacity-40" onClick={() => setManagerPage(page => page + 1)}>Next managers</button>
+                </div>}
               </Field>
             </div>
             <div id="field-noticePeriod">
@@ -1265,8 +1349,8 @@ export const OnboardingForm: React.FC = () => {
               </table>
             </div>
             <p className="border-t border-[var(--border-subtle)] px-5 py-3 text-[11px] text-text-tertiary">
-              PDF, JPG or PNG up to 5MB each. Files are held on this form — the document vault is keyed to an
-              existing employee, so upload them again from the hire's profile once the record is created.
+              PDF, JPG or PNG up to 5MB each. Attached files are uploaded to Employee Documents after
+              the employee is created. Keep this page open until saving finishes.
             </p>
           </section>
         </>
@@ -1325,7 +1409,7 @@ export const OnboardingForm: React.FC = () => {
                   </table>
                 </div>
                 <p className="mt-2 text-[11px] text-text-tertiary">
-                  Recorded as entered. Payroll runs compute their own figures from the salary structures module.
+                  {canConfigurePayroll ? 'These amounts become the employee salary structure. Payroll calculates attendance adjustments and deductions separately.' : 'Only annual CTC is saved with your access. A payroll administrator must configure the component breakup.'}
                 </p>
               </div>
             </div>
@@ -1540,7 +1624,7 @@ export const OnboardingForm: React.FC = () => {
       {step === 'assets' && (
         <Card
           title="Assets to Issue"
-          description="Recorded on this form for the joining checklist — the platform has no asset register yet, so nothing is issued in a system of record."
+          description="Record the assets handed to this employee. These details are saved with their onboarding record."
           actions={<HrButton size="sm" onClick={addAsset}><Plus size={14} /> Add Asset</HrButton>}
         >
           {assets.length === 0 ? (
@@ -1723,7 +1807,7 @@ export const OnboardingForm: React.FC = () => {
               {createEmp.isPending ? 'Creating…' : 'Create Employee'}
             </HrButton>
           ) : (
-            <HrButton onClick={handleNext}>Next</HrButton>
+            <HrButton onClick={handleNext} disabled={step === 'employment' && (designationQuery.isPending || designationQuery.isError)}>Next</HrButton>
           )}
         </div>
       </div>

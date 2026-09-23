@@ -4,6 +4,8 @@ import com.hrms.core.dto.PageResponse;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.employee.quota.SeatQuotaEnforcer;
+import com.hrms.employee.workforce.dto.EmployeeSearchDtos.EmployeeSearchHit;
+import com.hrms.employee.workforce.dto.EmployeeSearchDtos.EmployeeSearchResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateWorkforceEmployeeRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateWorkforceEmployeeRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.WorkforceEmployeeResponse;
@@ -21,6 +23,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +50,7 @@ public class WorkforceEmployeeService {
     private final WorkforceEmployeeRepository repository;
     private final WorkforceDepartmentRepository departmentRepository;
     private final JdbcTemplate jdbc;
+    private final NamedParameterJdbcTemplate namedJdbc;
     private final SeatQuotaEnforcer seatQuotaEnforcer;
 
     public WorkforceEmployeeService(WorkforceEmployeeRepository repository,
@@ -55,6 +60,7 @@ public class WorkforceEmployeeService {
         this.repository = repository;
         this.departmentRepository = departmentRepository;
         this.jdbc = jdbc;
+        this.namedJdbc = new NamedParameterJdbcTemplate(jdbc);
         this.seatQuotaEnforcer = seatQuotaEnforcer;
     }
 
@@ -81,16 +87,144 @@ public class WorkforceEmployeeService {
             if (f.branchId()     != null) ps.add(cb.equal(root.get("branchId"), f.branchId()));
             if (f.status()       != null) ps.add(cb.equal(root.get("employmentStatus"), f.status()));
             if (f.search() != null && !f.search().isBlank()) {
-                String needle = "%" + f.search().toLowerCase() + "%";
+                String needle = "%" + f.search().trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT) + "%";
+                var firstName = cb.trim(cb.coalesce(root.<String>get("firstName"), ""));
+                var middleName = cb.trim(cb.coalesce(root.<String>get("middleName"), ""));
+                var lastName = cb.trim(cb.coalesce(root.<String>get("lastName"), ""));
+                var firstAndLast = cb.concat(cb.concat(firstName, " "), lastName);
+                var fullName = cb.concat(cb.concat(cb.concat(firstName, " "), middleName), cb.concat(" ", lastName));
                 ps.add(cb.or(
                         cb.like(cb.lower(root.get("employeeCode")), needle),
                         cb.like(cb.lower(root.get("firstName")),    needle),
+                        cb.like(cb.lower(root.get("middleName")),   needle),
                         cb.like(cb.lower(root.get("lastName")),     needle),
-                        cb.like(cb.lower(root.get("email")),        needle)
+                        cb.like(cb.lower(root.get("email")),        needle),
+                        cb.like(cb.lower(firstAndLast), needle),
+                        cb.like(cb.lower(fullName), needle)
                 ));
             }
             return cb.and(ps.toArray(new Predicate[0]));
         };
+    }
+
+    // -- Entity search (GET /v1/search) -------------------------------------
+    //
+    // Milestone 4C. Same visibility rule as directory(): active rows only,
+    // tenant isolation by RLS (TenantAwareDataSource sets app.tenant_id on the
+    // leased connection, so this JDBC statement is fenced exactly like the JPA
+    // one above), and the permission gate lives on the controller, where it is
+    // the same hasAuthority('hrms.employee.read') the directory uses. There is
+    // no manager/department scope here because the directory has none: a
+    // DEPT_MANAGER with hrms.employee.read already sees the whole tenant on
+    // /v1/hrms/employees, and search must not be looser OR tighter than that.
+    //
+    // Why native SQL rather than a second Specification: the result has to be
+    // ranked (exact -> prefix -> substring) and joined to department/designation
+    // names, and doing that in one parameterised statement with a LIMIT is
+    // both the cheapest and the easiest to read in an EXPLAIN. The lookup
+    // tables are RLS-fenced too, so the LEFT JOINs cannot surface another
+    // tenant's names. pg_trgm / full-text were deliberately not introduced.
+
+    public static final int SEARCH_MIN_QUERY_CHARS = 2;
+    public static final int SEARCH_DEFAULT_LIMIT   = 8;
+    public static final int SEARCH_MAX_LIMIT       = 20;
+    /** Longer than any name/code/email column; anything past this is noise. */
+    private static final int SEARCH_MAX_QUERY_CHARS = 100;
+
+    private static final String SEARCH_SQL = """
+        SELECT e.id, e.first_name, e.last_name, e.employee_code, e.profile_photo_url,
+               d.name  AS department_name,
+               g.title AS job_title
+        FROM hrms.employees e
+        LEFT JOIN hrms.departments  d ON d.id = e.department_id
+        LEFT JOIN hrms.designations g ON g.id = e.designation_id
+        WHERE e.is_active = TRUE
+          AND (   lower(e.employee_code) LIKE :contains ESCAPE '\\'
+               OR lower(e.first_name)    LIKE :contains ESCAPE '\\'
+               OR lower(e.last_name)     LIKE :contains ESCAPE '\\'
+               OR lower(concat_ws(' ', e.first_name, e.last_name)) LIKE :contains ESCAPE '\\'
+               OR lower(e.email)         LIKE :contains ESCAPE '\\')
+        ORDER BY
+          CASE
+            WHEN lower(e.employee_code) = :exact
+              OR lower(e.first_name)    = :exact
+              OR lower(e.last_name)     = :exact
+              OR lower(concat_ws(' ', e.first_name, e.last_name)) = :exact
+              OR lower(e.email)         = :exact THEN 0
+            WHEN lower(e.employee_code) LIKE :prefix ESCAPE '\\'
+              OR lower(e.first_name)    LIKE :prefix ESCAPE '\\'
+              OR lower(e.last_name)     LIKE :prefix ESCAPE '\\'
+              OR lower(concat_ws(' ', e.first_name, e.last_name)) LIKE :prefix ESCAPE '\\'
+              OR lower(e.email)         LIKE :prefix ESCAPE '\\' THEN 1
+            ELSE 2
+          END,
+          e.employee_code, e.id
+        LIMIT :limit
+        """;
+
+    /**
+     * Typeahead over first name, last name, full name, employee code and work
+     * email. Case-insensitive; exact matches rank first, then prefix, then
+     * substring; ties break on employee code so the order is stable between
+     * keystrokes.
+     *
+     * @param rawQuery user text; must normalise to at least
+     *                 {@link #SEARCH_MIN_QUERY_CHARS} characters (the
+     *                 controller has already rejected shorter input with 400,
+     *                 this is the defence-in-depth check).
+     * @param requestedLimit clamped into [1, {@link #SEARCH_MAX_LIMIT}].
+     */
+    @Transactional(readOnly = true)
+    public EmployeeSearchResponse search(String rawQuery, int requestedLimit) {
+        String q = normalizeSearchQuery(rawQuery);
+        if (q.length() < SEARCH_MIN_QUERY_CHARS) {
+            throw new IllegalArgumentException(
+                    "search query must be at least " + SEARCH_MIN_QUERY_CHARS + " characters");
+        }
+        int limit = Math.max(1, Math.min(requestedLimit, SEARCH_MAX_LIMIT));
+        String escaped = escapeLike(q);
+
+        var params = new MapSqlParameterSource()
+                .addValue("exact",    q)
+                .addValue("prefix",   escaped + "%")
+                .addValue("contains", "%" + escaped + "%")
+                // Fetch one past the page so the client can say "narrow your
+                // search" without a second COUNT(*) round-trip.
+                .addValue("limit",    limit + 1);
+
+        List<EmployeeSearchHit> rows = namedJdbc.query(SEARCH_SQL, params, (rs, i) -> new EmployeeSearchHit(
+                rs.getObject("id", UUID.class),
+                displayName(rs.getString("first_name"), rs.getString("last_name")),
+                rs.getString("employee_code"),
+                rs.getString("department_name"),
+                rs.getString("job_title"),
+                rs.getString("profile_photo_url")));
+
+        boolean truncated = rows.size() > limit;
+        return new EmployeeSearchResponse(truncated ? rows.subList(0, limit) : rows, limit, truncated);
+    }
+
+    /** Trim, collapse runs of whitespace, lower-case, cap length. */
+    public static String normalizeSearchQuery(String raw) {
+        if (raw == null) return "";
+        String q = raw.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+        return q.length() > SEARCH_MAX_QUERY_CHARS ? q.substring(0, SEARCH_MAX_QUERY_CHARS) : q;
+    }
+
+    /**
+     * LIKE metacharacters typed by the user are matched literally. Without this
+     * "%" alone would match every employee and "_" would act as a wildcard: not
+     * a data leak (RLS still applies) but a bogus result set. The directory's
+     * own search has the same latent quirk; it is not changed here.
+     */
+    static String escapeLike(String s) {
+        return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    private static String displayName(String first, String last) {
+        String f = first == null ? "" : first.trim();
+        String l = last  == null ? "" : last.trim();
+        return (f + " " + l).trim();
     }
 
     // -- Lookup -------------------------------------------------------------
@@ -469,7 +603,7 @@ public class WorkforceEmployeeService {
                 e.getReportingManagerId(),
                 e.getEmploymentType(), e.getEmploymentStatus(),
                 e.getDateOfJoining(), e.getProbationEndDate(),
-                e.getConfirmationDate(), e.getLastWorkingDay(),
+                e.getConfirmationDate(), e.getNoticeStartDate(), e.getLastWorkingDay(), e.getExitReason(),
                 ctc,
                 e.getPfUan(), e.getEsiNumber(),
                 e.getBankBranchName(),
@@ -548,7 +682,7 @@ public class WorkforceEmployeeService {
                 e.getReportingManagerId(),
                 e.getEmploymentType(), e.getEmploymentStatus(),
                 e.getDateOfJoining(), e.getProbationEndDate(),
-                e.getConfirmationDate(), e.getLastWorkingDay(),
+                e.getConfirmationDate(), e.getNoticeStartDate(), e.getLastWorkingDay(), null /* exit reason is detail-only */,
                 null /* ctcAnnual — redacted in list responses */,
                 null /* uan */, null /* esi */,
                 null /* bankBranchName — PII-adjacent, redacted in list */,

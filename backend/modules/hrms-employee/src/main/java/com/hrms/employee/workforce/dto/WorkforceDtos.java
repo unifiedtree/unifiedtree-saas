@@ -213,7 +213,10 @@ public final class WorkforceDtos {
             LocalDate dateOfJoining,
             LocalDate probationEndDate,
             LocalDate confirmationDate,
+            LocalDate noticeStartDate,
             LocalDate lastWorkingDay,
+            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+            String exitReason,
             // QA-FIX (2026-08-13 reverify R2): ctcAnnual is blanked to null in the
             // list projection (via toListResponse) to prevent salary-scraping of the
             // whole workforce. Jackson NON_NULL omits the KEY entirely when value is

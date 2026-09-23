@@ -75,7 +75,7 @@ public class EmployeeController {
 
     @Operation(summary = "Create a new employee")
     @PostMapping
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<EmployeeResponse> create(@Valid @RequestBody CreateEmployeeRequest request,
                                                    @AuthenticationPrincipal Jwt jwt) {
         // Per-seat pricing is only real if somebody checks it. The seat-quota
@@ -90,7 +90,7 @@ public class EmployeeController {
 
     @Operation(summary = "Create staff member with login role and temporary password")
     @PostMapping("/staff")
-    @PreAuthorize("hasAnyRole('DEPT_MANAGER','HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DEPT_MANAGER','HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<EmployeeResponse> createStaff(
             @Valid @RequestBody StaffOnboardingRequest request,
             @AuthenticationPrincipal Jwt jwt) {
@@ -149,7 +149,7 @@ public class EmployeeController {
 
     @Operation(summary = "Get employee by ID")
     @GetMapping("/{employeeId}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER') or " +
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','DEPT_MANAGER') or " +
                   "(hasRole('EMPLOYEE') and #employeeId == @securityHelper.currentEmployeeId())")
     public ResponseEntity<EmployeeResponse> get(@PathVariable UUID employeeId,
                                                 @AuthenticationPrincipal Jwt jwt) {
@@ -189,6 +189,8 @@ public class EmployeeController {
                 if ("hrms.employees.read.all".equals(a)
                         || "ROLE_HR_MANAGER".equals(a)
                         || "ROLE_COMPANY_ADMIN".equals(a)
+                        || "ROLE_OWNER".equals(a)
+                        || "ROLE_ADMIN".equals(a)
                         || "ROLE_SUPER_ADMIN".equals(a)) {
                     return;
                 }
@@ -215,7 +217,7 @@ public class EmployeeController {
 
     @Operation(summary = "List employees by company (paginated)")
     @GetMapping("/company/{companyId}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<PageResponse<EmployeeSummaryResponse>> listByCompany(
             @PathVariable UUID companyId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -224,7 +226,7 @@ public class EmployeeController {
 
     @Operation(summary = "List employees by department")
     @GetMapping("/department/{departmentId}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
     public ResponseEntity<PageResponse<EmployeeSummaryResponse>> listByDepartment(
             @PathVariable UUID departmentId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -233,7 +235,7 @@ public class EmployeeController {
 
     @Operation(summary = "Update employee details")
     @PutMapping("/{employeeId}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<EmployeeResponse> update(
             @PathVariable UUID employeeId,
             @Valid @RequestBody UpdateEmployeeRequest request) {
@@ -242,7 +244,7 @@ public class EmployeeController {
 
     @Operation(summary = "Assign or clear the geofence zone an employee must punch in at")
     @PutMapping("/{employeeId}/punch-zone")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
     public ResponseEntity<EmployeeResponse> assignPunchZone(
             @PathVariable UUID employeeId,
             @RequestParam(required = false) UUID zoneId,
@@ -254,7 +256,7 @@ public class EmployeeController {
 
     @Operation(summary = "Set an employee's weekly off days (CSV of ISO day numbers 1=Mon..7=Sun)")
     @PutMapping("/{employeeId}/weekly-offs")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
     public ResponseEntity<EmployeeResponse> setWeeklyOffs(
             @PathVariable UUID employeeId,
             @RequestParam(required = false) String days,
@@ -410,7 +412,7 @@ public class EmployeeController {
 
     @Operation(summary = "Terminate or accept resignation of an employee")
     @PostMapping("/{employeeId}/terminate")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Void> terminate(
             @PathVariable UUID employeeId,
             @Valid @RequestBody TerminationRequest request) {
@@ -420,7 +422,7 @@ public class EmployeeController {
 
     @Operation(summary = "Add emergency contact for an employee")
     @PostMapping("/{employeeId}/emergency-contacts")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','EMPLOYEE')")
     public ResponseEntity<EmergencyContactResponse> addEmergencyContact(
             @PathVariable UUID employeeId,
             @Valid @RequestBody EmergencyContactRequest request,
@@ -432,7 +434,7 @@ public class EmployeeController {
 
     @Operation(summary = "Get emergency contacts for an employee")
     @GetMapping("/{employeeId}/emergency-contacts")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN') or " +
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN') or " +
                   "(hasRole('EMPLOYEE') and #employeeId == @securityHelper.currentEmployeeId())")
     public ResponseEntity<List<EmergencyContactResponse>> getEmergencyContacts(
             @PathVariable UUID employeeId,
@@ -456,6 +458,7 @@ public class EmployeeController {
         // single unrecognised role string does not crash the whole handler.
         return roles.stream()
                 .map(name -> {
+                    if ("OWNER".equals(name) || "ADMIN".equals(name)) return Role.COMPANY_ADMIN;
                     try {
                         return Role.valueOf(name);
                     } catch (IllegalArgumentException ex) {

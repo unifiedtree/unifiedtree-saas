@@ -1,3 +1,4 @@
+import { HrPagination } from '@/shared/components/HrPagination'
 import React, { useMemo, useState } from 'react'
 import {
   Plus, GraduationCap, Users, CheckCircle2, Award, BookOpen, Star,
@@ -38,7 +39,7 @@ const isOpenEnrollment = (s: EnrollmentStatus) => s === 'ENROLLED' || s === 'IN_
 
 const fmtDate = (d?: string) => (d ? format(new Date(d), 'd MMM yyyy') : '—')
 
-type Tab = 'programs' | 'my' | 'skills'
+type Tab = 'programs' | 'my' | 'skills' | 'certifications'
 
 export const Learning: React.FC = () => {
   const canRead = usePermission('hrms.learning.read')
@@ -54,6 +55,7 @@ export const Learning: React.FC = () => {
     ...(canRead ? [{ key: 'programs' as Tab, label: 'Programs' }] : []),
     ...(canEnroll ? [{ key: 'my' as Tab, label: 'My Training' }] : []),
     ...(canViewSkills ? [{ key: 'skills' as Tab, label: 'Skill Matrix' }] : []),
+    ...(canRead ? [{ key: 'certifications' as Tab, label: 'Certifications' }] : []),
   ]
 
   // Land on the first tab this role actually has. The old default hard-coded
@@ -78,6 +80,7 @@ export const Learning: React.FC = () => {
       {activeTab === 'programs' && canRead && <HrTabPanel tabKey="programs"><ProgramsTab canWrite={canWrite} canEnroll={canEnroll} /></HrTabPanel>}
       {activeTab === 'my' && canEnroll && <HrTabPanel tabKey="my"><MyTrainingTab /></HrTabPanel>}
       {activeTab === 'skills' && canViewSkills && <HrTabPanel tabKey="skills"><SkillMatrixTab canWrite={canWrite} /></HrTabPanel>}
+      {activeTab === 'certifications' && canRead && <HrTabPanel tabKey="certifications"><CertificationsStatic /></HrTabPanel>}
     </div>
   )
 }
@@ -87,7 +90,8 @@ export const Learning: React.FC = () => {
 function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: boolean }) {
   const { toast } = useToast()
   const { data: companies = [] } = useCompanies()
-  const { data, isLoading } = useTrainingPrograms(0)
+  const [page, setPage] = useState(0)
+  const { data, isLoading, isError, refetch } = useTrainingPrograms(page)
   const create = useCreateProgram()
   const changeStatus = useChangeProgramStatus()
   const enroll = useEnroll()
@@ -158,10 +162,10 @@ function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: bo
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<BookOpen size={18} />} color="blue" value={programs.length} label="Programs" loading={isLoading} />
-        <HrStatCard icon={<GraduationCap size={18} />} color="orange" value={stats.ongoing} label="Ongoing" loading={isLoading} />
-        <HrStatCard icon={<CheckCircle2 size={18} />} color="green" value={stats.completed} label="Completed" loading={isLoading} />
-        <HrStatCard icon={<Users size={18} />} color="teal" value={stats.seats} label="Enrollments" loading={isLoading} />
+        <HrStatCard icon={<BookOpen size={18} />} color="blue" value={data?.totalElements ?? 0} label="All programs" loading={isLoading} />
+        <HrStatCard icon={<GraduationCap size={18} />} color="orange" value={stats.ongoing} label="Ongoing on this page" loading={isLoading} />
+        <HrStatCard icon={<CheckCircle2 size={18} />} color="green" value={stats.completed} label="Completed on this page" loading={isLoading} />
+        <HrStatCard icon={<Users size={18} />} color="teal" value={stats.seats} label="Enrollments on this page" loading={isLoading} />
       </div>
 
       {canWrite && (
@@ -211,7 +215,8 @@ function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: bo
         </div>
       )}
 
-      <TableCard>
+      {isError && <div role="alert" className="ut-card p-4 text-sm">Training programs could not be loaded. <button className="text-primary underline" onClick={() => refetch()}>Try again</button></div>}
+      <TableCard footer={data ? <HrPagination page={page} pageSize={20} totalElements={data.totalElements} totalPages={data.totalPages} onPageChange={setPage} /> : undefined}>
         <table className="hr-table">
           <thead>
             <tr>
@@ -740,6 +745,19 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
 
   return (
     <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div className="md:col-span-2 ut-card p-5">
+          <h3 className="mb-4 text-center text-[15px] font-semibold text-text-primary">Engineering Skill Distribution (Static Preview)</h3>
+          <div className="flex h-[250px] items-center justify-center rounded-lg border border-border-default bg-bg-subtle text-sm text-text-tertiary">
+            [ Radar Chart Visualization Placeholder ]
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-[#059669] to-[#8B5CF6] p-6 text-center text-white shadow-sm">
+          <span className="mb-3 text-4xl opacity-90">💡</span>
+          <h2 className="mb-2 text-xl font-bold">Identify Skill Gaps</h2>
+          <p className="text-sm opacity-80">Use the matrix to plan your hiring requirements.</p>
+        </div>
+      </div>
       <div className="ut-card p-4">
         <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee</label>
         <select value={activeEmployee} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
@@ -828,6 +846,62 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
           </tbody>
         </table>
       </TableCard>
+    </div>
+  )
+}
+
+
+// ── Static Components (Phase 5) ───────────────────────────────────────────────
+
+function CertificationsStatic() {
+  return (
+    <div className="ut-card">
+      <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
+        <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
+          <span className="text-text-tertiary">🔍</span>
+          <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
+        </div>
+        <HrButton variant="ghost" size="sm">Filter</HrButton>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="hr-table">
+          <thead className="bg-bg-subtle">
+            <tr>
+              <th>Employee</th>
+              <th>Certification / Compliance</th>
+              <th>Status</th>
+              <th>Expiry Date</th>
+              <th className="text-center w-16">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">MK</div>
+                  <span className="font-semibold text-text-primary">Mohan Kumar</span>
+                </div>
+              </td>
+              <td className="text-text-secondary">ISO 27001 Security Awareness</td>
+              <td><HrStatusPill tone="ok">Valid</HrStatusPill></td>
+              <td className="text-text-secondary">Dec 31, 2026</td>
+              <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">🏅</button></td>
+            </tr>
+            <tr>
+              <td>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">PM</div>
+                  <span className="font-semibold text-text-primary">Priya Mehta</span>
+                </div>
+              </td>
+              <td className="text-text-secondary">Fire Safety Protocol</td>
+              <td><HrStatusPill tone="red">Expired</HrStatusPill></td>
+              <td className="text-text-secondary">April 10, 2026</td>
+              <td className="text-center"><button className="text-text-tertiary hover:text-red-500">⚠</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

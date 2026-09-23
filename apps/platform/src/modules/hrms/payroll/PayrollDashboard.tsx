@@ -1,12 +1,14 @@
 import React, { useMemo } from 'react'
 import { format } from 'date-fns'
-import { Wallet, Users, Banknote, FileWarning } from 'lucide-react'
+import { Plus, Users, Calculator, Wallet, CheckCircle, Clock, Banknote, FileWarning } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
 import {
-  HrPageHeader, HrStatCard, HrStatusPill, TableCard, type PillTone,
+  HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrButton, type PillTone,
 } from '@/shared/components/hr'
+import { DataTable } from '@/shared/components/DataTable'
 import { useRuns, inr, MONTHS, type PayrollRun, type RunStatus } from '../api/usePayrollRuns'
 // Client rule: rupee KPIs + cost-trend chart are admin/finance-only. HR (and
 // anyone lower) sees the redacted "—" placeholder instead of the actual money.
@@ -98,6 +100,13 @@ export const PayrollDashboard: React.FC = () => {
             : kpis
               ? `Live aggregates for ${kpis.currentPeriodLabel} across all your payroll runs`
               : 'Cost, headcount, and disbursal status across your payroll runs'
+        }
+        actions={
+          <div className="flex gap-2">
+            <HrButton>
+              <Plus size={16} /> Run Payroll Cycle
+            </HrButton>
+          </div>
         }
       />
 
@@ -226,44 +235,20 @@ export const PayrollDashboard: React.FC = () => {
           <h2 className="text-sm font-semibold text-text-primary">Recent Runs</h2>
         </div>
         <TableCard>
-          <table className="hr-table">
-            <thead>
-              <tr>
-                <th>Period</th>
-                <th className="hidden sm:table-cell">Company</th>
-                <th>Status</th>
-                <th className="text-right">Employees</th>
-                <th className="text-right">Net Pay</th>
-                <th className="hidden md:table-cell text-right">Processed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                [...Array(5)].map((_, i) => (
-                  <tr key={i}><td colSpan={6} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>
-                ))
-              ) : byPeriodDesc.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-14 text-center">
-                    <p className="text-sm font-semibold text-text-secondary">No payroll runs yet</p>
-                    <p className="mt-1 text-xs text-text-tertiary">Runs you create will appear here.</p>
-                  </td>
-                </tr>
-              ) : byPeriodDesc.slice(0, 10).map((r) => (
-                <tr key={r.id}>
-                  <td className="font-semibold text-text-primary">{periodLabel(r)}</td>
-                  <td className="hidden sm:table-cell text-text-secondary">{r.companyName}</td>
-                  <td><HrStatusPill tone={RUN_TONE[r.status]}>{r.status}</HrStatusPill></td>
-                  <td className="text-right text-text-secondary">{r.employeeCount}</td>
-                  {/* Net Pay is a rupee column — redact for non-admins. */}
-                  <td className="text-right font-semibold text-text-primary">{redactRupees ? '—' : inr(r.totalNet)}</td>
-                  <td className="hidden md:table-cell text-right text-text-secondary">
-                    {r.processedAt ? format(new Date(r.processedAt), 'd MMM yyyy') : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            columns={[
+              { key: 'period', header: 'Period', render: (r) => <span className="font-semibold text-text-primary">{periodLabel(r)}</span> },
+              { key: 'company', header: 'Company', render: (r) => <span className="text-text-secondary">{r.companyName}</span> },
+              { key: 'status', header: 'Status', render: (r) => <HrStatusPill tone={RUN_TONE[r.status]}>{r.status}</HrStatusPill> },
+              { key: 'employees', header: 'Employees', render: (r) => <div className="text-right text-text-secondary">{r.employeeCount}</div> },
+              { key: 'netPay', header: 'Net Pay', render: (r) => <div className="text-right font-semibold text-text-primary">{redactRupees ? '—' : inr(r.totalNet)}</div> },
+              { key: 'processed', header: 'Processed', render: (r) => <div className="text-right text-text-secondary">{r.processedAt ? format(new Date(r.processedAt), 'd MMM yyyy') : '—'}</div> }
+            ]}
+            data={byPeriodDesc.slice(0, 10)}
+            keyField="id"
+            loading={isLoading}
+            emptyMessage="No payroll runs yet. Runs you create will appear here."
+          />
         </TableCard>
       </div>
     </div>

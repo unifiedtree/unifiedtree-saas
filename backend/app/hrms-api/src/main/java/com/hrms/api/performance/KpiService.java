@@ -5,6 +5,8 @@ import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -96,9 +98,8 @@ public class KpiService {
     // ── Reads ─────────────────────────────────────────────────────────────────
 
     /**
-     * Paged directory of KPIs. When {@code managerId} is passed we scope to
-     * that manager's direct reports; when null (or when the caller has an
-     * admin role) we return all rows.
+     * Paged directory of KPIs within the authenticated caller's object scope.
+     * Owner and manager query parameters may only narrow that scope.
      */
     @Transactional
     public PageDto<KpiRowDto> list(UUID tenantId, UUID ownerId, UUID managerId,
@@ -108,14 +109,16 @@ public class KpiService {
         if (size <= 0) size = 25;
         if (size > MAX_PAGE_SIZE) size = MAX_PAGE_SIZE;
 
-        StringBuilder where = new StringBuilder(" WHERE 1=1");
+        StringBuilder where = new StringBuilder(" WHERE g.tenant_id = ?");
         List<Object> args = new ArrayList<>();
+        args.add(tenantId);
+        accessScope().appendGoalPredicate(where, args);
         if (ownerId != null) { where.append(" AND g.employee_id = ?"); args.add(ownerId); }
         if (managerId != null) {
             // Direct-reports-only scoping via one-hop join. Cheap + right for
             // the demo; upgrade to recursive CTE when the manager tree gets
             // deep enough that direct reports isn't sufficient scope.
-            where.append(" AND g.employee_id IN (SELECT id FROM hrms.employees WHERE reporting_manager_id = ? AND is_active)");
+            where.append(" AND g.employee_id IN (SELECT id FROM hrms.employees WHERE tenant_id = g.tenant_id AND reporting_manager_id = ? AND is_active)");
             args.add(managerId);
         }
         if (status != null)  { where.append(" AND g.status = ?"); args.add(status); }
@@ -150,25 +153,27 @@ public class KpiService {
     @Transactional
     public KpiRowDto get(UUID tenantId, UUID id) {
         bindTenant(tenantId);
+        StringBuilder predicate = new StringBuilder(" WHERE g.tenant_id = ? AND g.id = ?");
+        List<Object> args = new ArrayList<>(List.of(tenantId, id));
+        accessScope().appendGoalPredicate(predicate, args);
         return jdbc.query("""
                 SELECT g.*,
                        TRIM(e.first_name || ' ' || COALESCE(e.last_name,'')) AS owner_name,
-                       e.employee_code                                        AS owner_code
+                       e.employee_code AS owner_code
                   FROM performance_mgmt.goals g
                   LEFT JOIN hrms.employees e ON e.id = g.employee_id AND e.tenant_id = g.tenant_id
-                 WHERE g.id = ?
-                """, rs -> {
+                """ + predicate, rs -> {
                     if (!rs.next()) throw new BusinessRuleException("KPI not found", "KPI_NOT_FOUND");
                     return toKpiDto(rs);
-                }, id);
+                }, args.toArray());
     }
 
     @Transactional
     public List<ProgressUpdateDto> progressHistory(UUID tenantId, UUID kpiId) {
-        bindTenant(tenantId);
+        get(tenantId, kpiId); // Verify object scope before exposing its history.
         return jdbc.query("""
                 SELECT * FROM performance_mgmt.kpi_progress_updates
-                 WHERE goal_id = ? ORDER BY updated_at DESC
+                 WHERE tenant_id = ? AND goal_id = ? ORDER BY updated_at DESC
                 """, (rs, i) -> new ProgressUpdateDto(
                     rs.getObject("id", UUID.class),
                     rs.getBigDecimal("previous_value"),
@@ -176,7 +181,7 @@ public class KpiService {
                     rs.getBigDecimal("progress_pct"),
                     rs.getString("notes"),
                     rs.getObject("updated_by", UUID.class),
-                    ts(rs.getTimestamp("updated_at"))), kpiId);
+                    ts(rs.getTimestamp("updated_at"))), tenantId, kpiId);
     }
 
     // ── Writes ────────────────────────────────────────────────────────────────
@@ -184,6 +189,7 @@ public class KpiService {
     @Transactional
     public KpiRowDto create(UUID tenantId, CreateKpiRequest req, UUID actorId) {
         bindTenant(tenantId);
+        requireOwnerAccess(tenantId, req.ownerId());
         validateDirection(req.direction());
         BigDecimal pct = computeProgressPct(req.currentValue(), req.targetValue(), req.direction());
         // weight is NOT NULL with no DB default — omitting it used to 500.
@@ -202,7 +208,7 @@ public class KpiService {
                 tenantId, req.ownerId(), req.title(), req.description(), req.category(),
                 req.targetValue(), req.currentValue(), req.unit(), req.direction(),
                 weight, parseDate(req.dueDate()),
-                pct == null ? null : pct.intValue(),
+                pct == null ? 0 : pct.intValue(),
                 actorId == null ? null : actorId.toString(),
                 actorId == null ? null : actorId.toString());
 
@@ -224,7 +230,8 @@ public class KpiService {
     @Transactional
     public KpiRowDto update(UUID tenantId, UUID id, UpdateKpiRequest req, UUID actorId) {
         bindTenant(tenantId);
-        KpiRowDto existing = get(tenantId, id);   // 404 if missing
+        KpiRowDto existing = get(tenantId, id); // Missing or outside caller scope.
+        if (req.ownerId() != null) requireOwnerAccess(tenantId, req.ownerId());
         if (req.direction() != null) validateDirection(req.direction());
         if (req.status() != null && !ALLOWED_STATUSES.contains(req.status()))
             throw new BusinessRuleException("Unknown status: " + req.status(), "INVALID_STATUS");
@@ -256,7 +263,7 @@ public class KpiService {
 
     @Transactional
     public KpiRowDto updateProgress(UUID tenantId, UUID id, ProgressUpdateRequest req, UUID actorId) {
-        bindTenant(tenantId);
+        get(tenantId, id); // Authorize the owner before any write or history insertion.
         BigDecimal[] snap = jdbc.query("""
                 SELECT current_value, target_value, direction
                   FROM performance_mgmt.goals WHERE id = ?
@@ -298,7 +305,7 @@ public class KpiService {
     /** Soft delete — status='DROPPED' keeps history for audit; hard-DELETE not exposed. */
     @Transactional
     public void softDelete(UUID tenantId, UUID id, UUID actorId) {
-        bindTenant(tenantId);
+        get(tenantId, id); // Soft delete must obey the same object scope as reads.
         int rows = jdbc.update("""
                 UPDATE performance_mgmt.goals
                    SET status = 'DROPPED', updated_at = now(),
@@ -430,6 +437,25 @@ public class KpiService {
                     "Invalid date '" + s + "' — expected YYYY-MM-DD",
                     "INVALID_DATE");
         }
+    }
+
+    private KpiAccessScope accessScope() {
+        return KpiAccessScope.from(SecurityContextHolder.getContext().getAuthentication());
+    }
+
+    private void requireOwnerAccess(UUID tenantId, UUID ownerId) {
+        KpiAccessScope scope = accessScope();
+        if (ownerId == null) throw new AccessDeniedException("An employee owner is required");
+        StringBuilder sql = new StringBuilder("SELECT count(*) FROM hrms.employees WHERE tenant_id = ? AND id = ?");
+        List<Object> args = new ArrayList<>(List.of(tenantId, ownerId));
+        if (scope.kind() == KpiAccessScope.Kind.SELF) {
+            if (!ownerId.equals(scope.employeeId())) throw new AccessDeniedException("KPI owner is outside your access scope");
+        } else if (scope.kind() == KpiAccessScope.Kind.DIRECT_REPORTS) {
+            sql.append(" AND reporting_manager_id = ? AND is_active = TRUE");
+            args.add(scope.employeeId());
+        }
+        Integer found = jdbc.queryForObject(sql.toString(), Integer.class, args.toArray());
+        if (found == null || found == 0) throw new AccessDeniedException("KPI owner is outside your access scope");
     }
 
     private void bindTenant(UUID tenantId) {

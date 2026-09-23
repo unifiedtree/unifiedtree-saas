@@ -100,3 +100,56 @@ export function usePayAward() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'pli'] }),
   })
 }
+
+
+export interface PliTarget {
+  id: string
+  companyId: string
+  title: string
+  ownerType: string
+  ownerId?: string
+  period: string
+  metric: string
+  targetValue: number
+  actualValue: number
+  weightPercent: number
+  payoutAmount: number
+  status: string
+  notes?: string
+  createdAt: string
+}
+
+export interface PliTargetPayload {
+  companyId?: string
+  title: string
+  ownerType?: string
+  ownerId?: string
+  period: string
+  metric: string
+  targetValue: number
+  actualValue?: number
+  weightPercent?: number
+  payoutAmount?: number
+  status?: string
+  notes?: string
+}
+
+export function usePliTargets(page = 0, companyId?: string) {
+  return useQuery({
+    queryKey: ['hrms', 'pli', 'targets', page, companyId ?? 'all'],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), size: String(PLI_PAGE_SIZE) })
+      if (companyId) params.set('companyId', companyId)
+      return apiJson<Page<PliTarget>>(`/v1/pli/targets?${params.toString()}`)
+    },
+    staleTime: 30_000,
+  })
+}
+
+export function useCreatePliTarget() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: PliTargetPayload) => apiJson<PliTarget>('/v1/pli/targets', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'pli', 'targets'] }),
+  })
+}

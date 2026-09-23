@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { clsx } from 'clsx'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
@@ -24,7 +25,7 @@ const STAT_ICON: Record<StatColor, string> = {
 }
 
 export function HrStatCard({
-  icon, color = 'blue', value, label, trend, sub, loading,
+  icon, color = 'blue', value, label, trend, sub, loading, onClick,
 }: {
   icon: React.ReactNode
   color?: StatColor
@@ -33,30 +34,56 @@ export function HrStatCard({
   trend?: { dir: 'up' | 'down'; value: string }
   sub?: React.ReactNode
   loading?: boolean
+  /**
+   * Makes the tile a drill-down. When supplied the card renders as a <button>,
+   * gains the hover lift and a pointer cursor; without it the card is inert and
+   * visually flat on hover.
+   *
+   * The lift used to be unconditional, which is the thing globals.css warns
+   * about on `.ut-card-hover`: "a static stat tile that rises on hover promises
+   * an action it doesn't have". Every stat tile in the product was making that
+   * promise and only a handful could keep it.
+   */
+  onClick?: () => void
 }) {
+  const interactive = typeof onClick === 'function'
+  const Tag = (interactive ? 'button' : 'div') as 'button' | 'div'
   return (
-    <div className="ut-card ut-card-sm ut-card-hover group relative overflow-hidden p-5 transition-all duration-300">
-      <div className="flex items-start justify-between">
-        <div className={clsx('flex h-11 w-11 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:scale-105', STAT_ICON[color])}>
+    <Tag
+      {...(interactive ? { type: 'button' as const, onClick } : {})}
+      className={clsx(
+        'ut-card ut-card-sm group relative overflow-hidden p-6 transition-all duration-300 bg-white ring-1 ring-gray-200 shadow-sm rounded-2xl',
+        interactive
+          ? 'ut-card-hover w-full cursor-pointer text-left hover:ring-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-500'
+          : 'cursor-default',
+      )}
+    >
+      <div className="absolute top-0 right-0 p-6 opacity-5 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-12 group-hover:opacity-10 pointer-events-none">
+        {React.cloneElement(icon as React.ReactElement, { size: 120 })}
+      </div>
+      <div className="relative z-10 flex items-start justify-between">
+        <div className={clsx('flex h-12 w-12 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 shadow-sm', STAT_ICON[color])}>
           {icon}
         </div>
         {trend && (
           <span className={clsx(
-            'inline-flex items-center gap-0.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-tight',
+            'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-bold tracking-tight shadow-sm',
             trend.dir === 'up'
-              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
-              : 'bg-rose-50 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300',
+              ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+              : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
           )}>
             {trend.dir === 'up' ? '↑' : '↓'} {trend.value}
           </span>
         )}
       </div>
-      <p className="mt-4 text-[28px] font-bold leading-none tracking-tight tabular-nums text-[var(--text-primary)]">
-        {loading ? <span className="inline-block h-7 w-20 animate-pulse-subtle rounded-md bg-[var(--bg-subtle)]" /> : value}
-      </p>
-      <p className="mt-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{label}</p>
-      {sub && <p className="mt-1 text-xs font-medium text-[var(--text-secondary)]">{sub}</p>}
-    </div>
+      <div className="relative z-10 mt-5">
+        <p className="text-[12px] font-bold uppercase tracking-wider text-gray-500">{label}</p>
+        <p className="mt-1 text-[32px] font-black leading-none tracking-tight text-gray-900 tabular-nums">
+          {loading ? <span className="inline-block h-8 w-24 animate-pulse rounded-lg bg-gray-100" /> : value}
+        </p>
+        {sub && <p className="mt-2 text-[13px] font-medium text-gray-400">{sub}</p>}
+      </div>
+    </Tag>
   )
 }
 
@@ -87,21 +114,40 @@ export function HrStatusPill({ tone = 'gray', children }: { tone?: PillTone; chi
 
 // ── Page header (title + subtitle + actions) ─────────────────────────────────
 export function HrPageHeader({
-  title, subtitle, crumb, actions,
+  title, subtitle, crumb, actions, tabs, filters, className
 }: {
   title: string
   subtitle?: React.ReactNode
-  crumb?: string
+  crumb?: React.ReactNode
   actions?: React.ReactNode
+  tabs?: React.ReactNode
+  filters?: React.ReactNode
+  className?: string
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        {crumb && <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--accent-fg)]">{crumb}</p>}
-        <h1 className="text-[26px] font-bold leading-tight tracking-tight text-[var(--text-primary)]">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm font-medium text-[var(--text-secondary)]">{subtitle}</p>}
+    <div className={clsx(
+      "relative mb-8 overflow-hidden rounded-[20px] bg-white p-6 shadow-sm ring-1 ring-[var(--border-default)] dark:bg-[var(--bg-surface)] sm:p-8",
+      className
+    )}>
+      {/* Subtle brand background glows */}
+      <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-emerald-500/5 opacity-70 blur-3xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute -bottom-20 -left-20 h-48 w-48 rounded-full bg-emerald-500/5 opacity-70 blur-3xl" aria-hidden="true" />
+
+      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          {crumb && <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-[#0F6E56] dark:text-emerald-400">{crumb}</p>}
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-[var(--text-primary)] sm:text-3xl">{title}</h1>
+          {subtitle && <p className="mt-2 text-[14px] font-medium leading-relaxed text-[var(--text-secondary)] max-w-2xl">{subtitle}</p>}
+        </div>
+        {actions && <div className="mt-2 flex shrink-0 flex-wrap items-center gap-3 sm:ml-6 sm:mt-0">{actions}</div>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
+
+      {(tabs || filters) && (
+        <div className="relative mt-6 flex flex-col gap-4 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-between">
+          {tabs && <div className="-mb-6 -mt-2 sm:-mb-8 sm:-mt-2">{tabs}</div>}
+          {filters && <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">{filters}</div>}
+        </div>
+      )}
     </div>
   )
 }
@@ -114,9 +160,9 @@ export function HrButton({
     <button
       {...rest}
       className={clsx(
-        'btn-press inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
-        size === 'sm' ? 'h-8 px-3 text-xs' : 'h-9.5 px-4 text-sm',
-        variant === 'primary' && 'bg-[var(--interactive-primary)] text-white shadow-[0_4px_14px_0_rgba(15,110,86,0.35)] hover:bg-[var(--interactive-primary-hover)] hover:shadow-[0_6px_20px_0_rgba(15,110,86,0.45)]',
+        'btn-press inline-flex items-center justify-center gap-1.5 rounded-md font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+        size === 'sm' ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm',
+        variant === 'primary' && 'bg-[var(--interactive-primary)] text-white shadow-sm hover:bg-[var(--interactive-primary-hover)] hover:shadow-sm',
         variant === 'ghost' && 'border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs hover:bg-[var(--bg-subtle)] hover:border-[var(--border-strong)]',
         variant === 'danger' && 'bg-[var(--interactive-danger)] text-white shadow-sm hover:bg-[var(--interactive-danger-hover)]',
         className,
@@ -129,39 +175,190 @@ export function HrButton({
 
 // ── Table card: toolbar (search + actions) → scrollable table → footer ──
 export function TableCard({
-  search, actions, footer, children,
+  search, filters, onClearFilters, actions, footer, children,
 }: {
   search?: { value: string; onChange: (v: string) => void; placeholder?: string }
+  /**
+   * Filter controls for this list. Pass `FilterDef[]` and TableCard renders the
+   * standard bar; pass a node to render something custom.
+   *
+   * Added as its own slot rather than folding filters into `actions` because
+   * filters and actions answer different questions ("which rows?" vs "do what
+   * to them?") and belong on opposite sides of the toolbar. 42 screens had each
+   * hand-rolled a row of bare <select>s into `actions`, which is why no two
+   * looked or behaved alike.
+   */
+  filters?: FilterDef[] | React.ReactNode
+  /**
+   * Clear-all override, forwarded to FilterBar.
+   *
+   * Needed whenever two filters write to the SAME store — URL search params,
+   * say. FilterBar's default clear calls each `onChange('')` in turn, and if
+   * each derives its next value from one snapshot of that store, the last write
+   * wins and the others are silently lost. Screens in that situation clear
+   * everything in a single write here instead.
+   */
+  onClearFilters?: () => void
   actions?: React.ReactNode
   footer?: React.ReactNode
   children: React.ReactNode
 }) {
+  const filterNode = Array.isArray(filters)
+    ? <FilterBar filters={filters} onClearAll={onClearFilters} />
+    : filters
+  const hasToolbar = Boolean(search || filterNode || actions)
   return (
-    <div className="ut-card overflow-hidden">
-      {(search || actions) && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3.5">
-          {search && (
-            <div className="relative min-w-[240px] flex-1">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
-              <input
-                value={search.value}
-                onChange={(e) => search.onChange(e.target.value)}
-                placeholder={search.placeholder ?? 'Search records…'}
-                className="ut-input ut-input-sm pl-9.5"
-              />
-            </div>
-          )}
-          {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
+    <div className="ut-card overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
+      {hasToolbar && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-gray-100 bg-white/50 px-6 py-5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            {search && (
+              <div className="relative min-w-[240px] flex-1 sm:max-w-[320px]">
+                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={search.value}
+                  onChange={(e) => search.onChange(e.target.value)}
+                  placeholder={search.placeholder ?? 'Search records…'}
+                  className="w-full rounded-[10px] border border-gray-200 bg-gray-50/50 py-2 pl-10 pr-4 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all shadow-sm"
+                />
+              </div>
+            )}
+            {filterNode}
+          </div>
+          {actions && <div className="flex shrink-0 flex-wrap items-center gap-3">{actions}</div>}
         </div>
       )}
-      <div className="overflow-x-auto">{children}</div>
-      {footer && <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-3.5">{footer}</div>}
+      <div className="overflow-x-auto bg-white">{children}</div>
+      {footer && <div className="border-t border-gray-100 bg-gray-50/50 px-6 py-4">{footer}</div>}
+    </div>
+  )
+}
+
+/* ── FilterBar ──────────────────────────────────────────────────────────────
+ *
+ * One filter row for every list screen.
+ *
+ * Built on the NATIVE <select> styled by `.ut-select` rather than on the custom
+ * HrSelect listbox, deliberately: 42 screens already use native selects and
+ * only 2 use HrSelect, native gives correct keyboard and screen-reader
+ * behaviour for free, and `.ut-select` already restyles the trigger (the OS
+ * still owns the open list — see globals.css). HrSelect remains available where
+ * a screen genuinely needs rich options.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export interface FilterOption {
+  value: string
+  label: string
+}
+
+export interface FilterDef {
+  /** Stable key — also the React key and the test handle. */
+  key: string
+  /**
+   * For a select: the "all" option, e.g. "All Departments".
+   * For text/date: the placeholder and the accessible name, e.g. "Actor email".
+   */
+  allLabel: string
+  /** Current value; '' means unfiltered. */
+  value: string
+  /** Required for `type: 'select'` (the default); ignored otherwise. */
+  options?: FilterOption[]
+  onChange: (value: string) => void
+  /** Hide entirely — e.g. a branch filter on a single-branch tenant. */
+  hidden?: boolean
+  /** Accessible name when it differs from `allLabel`. */
+  ariaLabel?: string
+  /**
+   * Control shape. Defaults to 'select'.
+   *
+   * Added for the audit trail, whose six backend filters are not all
+   * enumerable: `actor` and `resourceId` are free text and `from`/`to` are
+   * dates. A select-only bar could not express them, and forking a
+   * screen-specific bar would have put the product straight back to the
+   * divergent filter rows this primitive exists to remove.
+   */
+  type?: 'select' | 'text' | 'date'
+  /** Width hint in px for text/date inputs. Selects size themselves. */
+  width?: number
+}
+
+export function FilterBar({ filters, onClearAll }: {
+  filters: FilterDef[]
+  /**
+   * Called by "Clear all". Omit and FilterBar clears each filter itself by
+   * calling every `onChange('')` — correct for the common case, so most callers
+   * pass nothing.
+   */
+  onClearAll?: () => void
+}) {
+  const visible = filters.filter((f) => !f.hidden)
+  const active = visible.filter((f) => f.value !== '')
+  if (visible.length === 0) return null
+
+  const clearAll = () => {
+    if (onClearAll) onClearAll()
+    else active.forEach((f) => f.onChange(''))
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {visible.map((f) => {
+        // An active filter is tinted whatever its shape, so it is obvious at a
+        // glance which constraints are narrowing the list — the commonest
+        // "why can't I see my data" support question on list screens.
+        const activeTint = f.value !== ''
+          && 'border-[var(--accent-border)] bg-[var(--accent-bg)] font-semibold text-[var(--accent-fg-strong)]'
+        // `key` is deliberately NOT part of this object: React requires it to be
+        // passed directly to JSX, and spreading it warns on every render.
+        const shared = {
+          value: f.value,
+          'aria-label': f.ariaLabel ?? f.allLabel,
+          'data-filter': f.key,
+          onChange: (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => f.onChange(e.target.value),
+        }
+
+        if (f.type === 'text' || f.type === 'date') {
+          return (
+            <input
+              key={f.key}
+              {...shared}
+              type={f.type === 'date' ? 'date' : 'text'}
+              placeholder={f.type === 'text' ? f.allLabel : undefined}
+              style={{ width: f.width ?? (f.type === 'date' ? 150 : 170) }}
+              className={clsx('ut-input ut-input-sm', activeTint)}
+            />
+          )
+        }
+
+        return (
+          <select
+            key={f.key}
+            {...shared}
+            className={clsx('ut-select ut-select-sm w-auto min-w-[140px] max-w-[200px]', activeTint)}
+          >
+            <option value="">{f.allLabel}</option>
+            {(f.options ?? []).map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        )
+      })}
+
+      {active.length > 0 && (
+        <button
+          type="button"
+          onClick={clearAll}
+          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+        >
+          <X size={13} /> Clear {active.length === 1 ? 'filter' : `${active.length} filters`}
+        </button>
+      )}
     </div>
   )
 }
 
 // ── Row avatar (colored initials + name/sub) ─────────────────────────────────
-const AV_COLORS = ['#0F6E56', '#2563EB', '#D97706', '#DB2777', '#0D9488', '#7C3AED', '#0891B2', '#059669']
+const AV_COLORS = ['#0F6E56', '#0A5240', '#237D67', '#397467']
 export function HrAvatar({ name, sub, seed = 0 }: { name?: string | null; sub?: string; seed?: number }) {
   // 2026-09-10: `name` was typed `string` and dereferenced directly with
   // name.split(' '). A report row whose employee_name came back NULL (Postgres
@@ -178,7 +375,7 @@ export function HrAvatar({ name, sub, seed = 0 }: { name?: string | null; sub?: 
   const bg = AV_COLORS[Math.abs(seed) % AV_COLORS.length]
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold text-white shadow-xs" style={{ background: bg }}>
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold text-white shadow-xs" style={{ background: bg }}>
         {initials}
       </div>
       <div className="min-w-0">
@@ -203,6 +400,19 @@ export function HrTabs({ tabs, active, onChange, className }: {
   const pillId = React.useId()
   const focusTab = (i: number) => requestAnimationFrame(() =>
     ref.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[i]?.focus())
+  // Scroll the selected tab into view whenever it changes.
+  //
+  // The tab strip is a horizontal scroller, which is the right mobile pattern,
+  // but it meant the active tab could sit off-screen: land on
+  // /hrms/employees/:id?tab=performance at 360px and the strip still showed
+  // "Overview | Personal | Job", with the actually-selected tab several
+  // hundred pixels to the right. `nearest` leaves an already-visible tab where
+  // it is, so this is inert on desktop.
+  React.useEffect(() => {
+    ref.current?.querySelector<HTMLElement>('[aria-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [active])
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     const i = tabs.findIndex((t) => t.key === active)
     if (i < 0) return
@@ -219,7 +429,7 @@ export function HrTabs({ tabs, active, onChange, className }: {
         ref={ref}
         role="tablist"
         onKeyDown={onKeyDown}
-        className="ut-card ut-card-sm inline-flex w-max items-center gap-1 p-1.5"
+        className="inline-flex w-max items-center gap-1 rounded-[14px] bg-gray-100/80 p-1.5 shadow-inner"
       >
         {tabs.map((t) => {
           const sel = t.key === active
@@ -233,15 +443,15 @@ export function HrTabs({ tabs, active, onChange, className }: {
               tabIndex={sel ? 0 : -1}
               onClick={() => onChange(t.key)}
               className={clsx(
-                'relative shrink-0 rounded-xl px-4 py-2 text-xs font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]',
-                sel ? 'text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+                'relative shrink-0 rounded-[10px] px-5 py-2 text-[13px] font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
+                sel ? 'text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700',
               )}
             >
               {sel && (
                 <motion.span
                   layoutId={`hrtab-pill-${pillId}`}
                   aria-hidden
-                  className="absolute inset-0 rounded-xl bg-[var(--interactive-primary)] shadow-[0_4px_14px_0_rgba(15,110,86,0.35)]"
+                  className="absolute inset-0 rounded-[10px] bg-white shadow-sm ring-1 ring-black/5"
                   transition={{ type: 'spring', stiffness: 420, damping: 34 }}
                 />
               )}
@@ -252,7 +462,7 @@ export function HrTabs({ tabs, active, onChange, className }: {
                     aria-hidden
                     className={clsx(
                       'rounded-full px-2 py-0.5 text-[10px] font-bold leading-none',
-                      sel ? 'bg-white/20 text-white' : 'bg-[var(--accent-bg)] text-[var(--accent-fg)]',
+                      sel ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200/50 text-gray-500',
                     )}
                   >
                     {t.badge}
@@ -409,7 +619,7 @@ export function HrSelect({
 
 // ── Right-hand slide-over drawer ─────────────────────────────────────────────
 export function HrDrawer({
-  title, onClose, footer, children, width = 'max-w-md',
+  title, onClose, footer, children, width = 'max-w-lg',
 }: {
   title: React.ReactNode
   onClose: () => void
@@ -418,9 +628,12 @@ export function HrDrawer({
   width?: string
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null)
+  const titleId = React.useId()
 
   React.useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     panelRef.current?.focus()
+    return () => previousFocus?.focus()
   }, [])
 
   React.useEffect(() => {
@@ -429,44 +642,54 @@ export function HrDrawer({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-modal-backdrop">
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="fixed inset-0 z-[1000]">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.18 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
         onClick={onClose}
         aria-hidden
-        className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
       />
       <motion.div
         ref={panelRef}
         tabIndex={-1}
-        initial={{ x: 56, opacity: 0 }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Tab') return
+          const elements = Array.from(panelRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') ?? []).filter(element => element.offsetParent !== null)
+          const first = elements[0], last = elements[elements.length - 1]
+          if (!first) { event.preventDefault(); return }
+          if (event.shiftKey && (document.activeElement === first || document.activeElement === panelRef.current)) { event.preventDefault(); last.focus() }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+        }}
+        initial={{ x: '100%', opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
+        exit={{ x: '100%', opacity: 0 }}
         transition={{ type: 'spring', stiffness: 400, damping: 36 }}
         className={clsx(
-          'absolute bottom-0 right-0 top-0 z-modal flex w-full flex-col border-l border-[var(--border-default)] bg-[var(--bg-surface)] shadow-[-32px_0_72px_-32px_rgba(15,110,86,0.35)] focus:outline-none',
+          'absolute bottom-0 right-0 top-0 flex w-full flex-col bg-white shadow-2xl focus:outline-none border-l border-gray-200/60',
           width,
         )}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4.5">
-          <h3 className="text-base font-bold text-[var(--text-primary)]">{title}</h3>
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-7 py-6">
+          <h3 id={titleId} className="text-xl font-bold text-gray-900">{title}</h3>
           <button
             onClick={onClose}
             aria-label="Close panel"
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-gray-400 bg-gray-50 transition-colors hover:bg-gray-100 hover:text-gray-700"
           >
-            <X size={17} />
+            <X size={18} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-6">{children}</div>
+        <div className="flex-1 overflow-y-auto p-7">{children}</div>
         {footer && (
-          <div className="flex shrink-0 justify-end gap-3 border-t border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50 p-5">
+          <div className="flex shrink-0 justify-end gap-3 border-t border-gray-100 bg-gray-50/80 px-7 py-5 backdrop-blur-md">
             {footer}
           </div>
         )}
       </motion.div>
-    </div>
+    </div>, document.body
   )
 }

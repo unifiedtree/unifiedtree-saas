@@ -8,6 +8,9 @@ import com.hrms.hiring.dto.CandidateResponse;
 import com.hrms.hiring.dto.CandidateStageRequest;
 import com.hrms.hiring.dto.JobRequisitionRequest;
 import com.hrms.hiring.dto.JobRequisitionResponse;
+import com.hrms.hiring.dto.HiringOfferRequest;
+import com.hrms.hiring.dto.HiringOfferResponse;
+import com.hrms.hiring.enums.OfferStatus;
 import com.hrms.hiring.service.HiringService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -46,6 +49,38 @@ public class HiringController {
                             EmployeeRepository employeeRepository) {
         this.hiringService = hiringService;
         this.employeeRepository = employeeRepository;
+    }
+
+    @Operation(summary = "List hiring offers")
+    @GetMapping("/offers")
+    @PreAuthorize("hasAnyAuthority('hrms.hiring.offer.read','hrms.hiring.read')")
+    public ResponseEntity<PageResponse<HiringOfferResponse>> listOffers(
+            @RequestParam(required = false) UUID companyId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(hiringService.getOffers(companyId, pageable));
+    }
+
+    @Operation(summary = "Create a hiring offer")
+    @PostMapping("/offers")
+    @PreAuthorize("hasAnyAuthority('hrms.hiring.offer.write','hrms.hiring.write')")
+    public ResponseEntity<HiringOfferResponse> createOffer(@Valid @RequestBody HiringOfferRequest request,
+                                                           @AuthenticationPrincipal Jwt jwt) {
+        UUID companyId = request.companyId();
+        if (companyId == null) {
+            UUID employeeId = extractEmployeeId(jwt);
+            Employee employee = employeeRepository.findById(employeeId)
+                    .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
+            companyId = employee.getCompanyId();
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(hiringService.createOffer(companyId, request));
+    }
+
+    @Operation(summary = "Update a hiring offer status")
+    @PostMapping("/offers/{id}/status")
+    @PreAuthorize("hasAnyAuthority('hrms.hiring.offer.write','hrms.hiring.write')")
+    public ResponseEntity<HiringOfferResponse> updateOfferStatus(@PathVariable UUID id,
+                                                                 @RequestBody OfferStatusRequest request) {
+        return ResponseEntity.ok(hiringService.updateOfferStatus(id, request.status()));
     }
 
     // ─── Requisitions ────────────────────────────────────────────────────────
@@ -167,6 +202,8 @@ public class HiringController {
                 r.status(), r.employmentType(), r.location(), r.description(),
                 r.hiringManagerId(), managerName, r.candidateCount(), r.createdAt());
     }
+
+    public record OfferStatusRequest(OfferStatus status) {}
 
     private UUID extractEmployeeId(Jwt jwt) {
         String empId = jwt.getClaimAsString("employee_id");

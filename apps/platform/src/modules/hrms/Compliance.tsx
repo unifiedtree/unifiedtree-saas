@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { Plus, Check, ShieldAlert, CalendarClock, FileCheck2, Lock, AlertTriangle, BadgeCheck } from 'lucide-react'
+import { Plus, Check, ShieldAlert, CalendarClock, FileCheck2, Lock, AlertTriangle, BadgeCheck, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
@@ -26,7 +26,7 @@ const POSH_TONE: Record<PoshStatus, PillTone> = {
 const today = () => new Date().toISOString().slice(0, 10)
 const fmtDate = (d?: string) => (d ? format(new Date(d), 'd MMM yyyy') : '—')
 
-type Tab = 'calendar' | 'filings' | 'posh'
+type Tab = 'calendar' | 'filings' | 'posh' | 'inspector'
 
 export const Compliance: React.FC = () => {
   const canRead = usePermission('hrms.compliance.read')
@@ -51,6 +51,7 @@ export const Compliance: React.FC = () => {
     ...(canSeeCalendarOrFilings ? [{ key: 'calendar' as Tab, label: 'Compliance Calendar' }] : []),
     ...(canSeeCalendarOrFilings ? [{ key: 'filings'  as Tab, label: 'Statutory Filings' }] : []),
     ...(canPosh                 ? [{ key: 'posh'     as Tab, label: 'POSH' }] : []),
+    ...(canSeeCalendarOrFilings ? [{ key: 'inspector' as Tab, label: 'Inspector View' }] : []),
   ]
   const [tab, setTab] = useState<Tab | null>(null)
   const activeTab = tab && tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key
@@ -80,6 +81,7 @@ export const Compliance: React.FC = () => {
       {activeTab === 'calendar' && <HrTabPanel tabKey="calendar"><CalendarTab companyId={activeCompany} canWrite={canWrite} /></HrTabPanel>}
       {activeTab === 'filings' && <HrTabPanel tabKey="filings"><FilingsTab companyId={activeCompany} canWrite={canWrite} /></HrTabPanel>}
       {activeTab === 'posh' && <HrTabPanel tabKey="posh">{canPosh ? <PoshTab companyId={activeCompany} /> : <PoshDenied />}</HrTabPanel>}
+      {activeTab === 'inspector' && <HrTabPanel tabKey="inspector"><InspectorTabStatic /></HrTabPanel>}
     </div>
   )
 }
@@ -92,7 +94,8 @@ function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boo
   // COMPLIANCE_PAGE_SIZE obligations could not see the rest of its calendar —
   // on a statutory screen, a due date you cannot see is a due date you miss.
   const [page, setPage] = useState(0)
-  const { data, isLoading } = useComplianceItems(companyId || undefined, page)
+  const [pageSize, setPageSize] = useState(COMPLIANCE_PAGE_SIZE)
+  const { data, isLoading } = useComplianceItems(companyId || undefined, page, pageSize)
   const create = useCreateComplianceItem()
   const markDone = useMarkComplianceDone()
   // 2026-09-10: gate the directory fetch on the permission it enforces
@@ -212,7 +215,8 @@ function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boo
 
       <TableCard
         footer={hrPaginationFooter({
-          page, pageSize: COMPLIANCE_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+          page, pageSize, totalElements: total, totalPages, onPageChange: setPage,
+          onPageSizeChange: setPageSize,
         })}
       >
         <table className="hr-table">
@@ -252,6 +256,13 @@ function CalendarTab({ companyId, canWrite }: { companyId: string; canWrite: boo
           </tbody>
         </table>
       </TableCard>
+
+      <div className="ut-card mt-5 p-10 text-center flex flex-col items-center justify-center min-h-[400px]">
+        <CalendarClock size={64} className="text-text-tertiary mb-5" />
+        <h3 className="mb-2 font-bold text-text-primary text-lg">Interactive Filing Calendar (Static)</h3>
+        <p className="text-text-secondary max-w-[500px] mb-5">A visual month-by-month calendar highlighting due dates for PF, ESI, PT, and TDS filings will be rendered here using an external calendar library (like FullCalendar.io).</p>
+        <HrButton variant="ghost"><RefreshCw size={14} /> Sync with Govt Deadlines</HrButton>
+      </div>
     </div>
   )
 }
@@ -265,7 +276,8 @@ function FilingsTab({ companyId, canWrite }: { companyId: string; canWrite: bool
   // / TDS history simply disappeared from the product — including anything
   // still DUE.
   const [page, setPage] = useState(0)
-  const { data, isLoading } = useStatutoryFilings(companyId || undefined, page)
+  const [pageSize, setPageSize] = useState(COMPLIANCE_PAGE_SIZE)
+  const { data, isLoading } = useStatutoryFilings(companyId || undefined, page, pageSize)
   const create = useCreateFiling()
   const file = useFileFiling()
   const filings = data?.content ?? []
@@ -343,7 +355,8 @@ function FilingsTab({ companyId, canWrite }: { companyId: string; canWrite: bool
 
       <TableCard
         footer={hrPaginationFooter({
-          page, pageSize: COMPLIANCE_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+          page, pageSize, totalElements: total, totalPages, onPageChange: setPage,
+          onPageSizeChange: setPageSize,
         })}
       >
         <table className="hr-table">
@@ -412,7 +425,8 @@ function PoshTab({ companyId }: { companyId: string }) {
   // file and an unreachable POSH case is a legal-register gap, so it is fixed
   // here alongside them.
   const [page, setPage] = useState(0)
-  const { data, isLoading } = usePoshComplaints(companyId || undefined, page)
+  const [pageSize, setPageSize] = useState(COMPLIANCE_PAGE_SIZE)
+  const { data, isLoading } = usePoshComplaints(companyId || undefined, page, true, pageSize)
   const create = useCreatePoshComplaint()
   const updateStatus = useUpdatePoshStatus()
   const complaints = data?.content ?? []
@@ -489,7 +503,8 @@ function PoshTab({ companyId }: { companyId: string }) {
 
       <TableCard
         footer={hrPaginationFooter({
-          page, pageSize: COMPLIANCE_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
+          page, pageSize, totalElements: total, totalPages, onPageChange: setPage,
+          onPageSizeChange: setPageSize,
         })}
       >
         <table className="hr-table">
@@ -541,6 +556,53 @@ function PoshTab({ companyId }: { companyId: string }) {
           </tbody>
         </table>
       </TableCard>
+    </div>
+  )
+}
+
+// ── Inspector View (Static) ─────────────────────────────────────────────────
+
+function InspectorTabStatic() {
+  return (
+    <div className="space-y-5">
+      <div className="ut-card p-4 text-sm text-text-secondary flex items-center gap-2">
+        <span className="text-text-tertiary">ℹ</span>
+        Generate temporary, secure, read-only links for external auditors to view Statutory Returns and Muster Rolls without compromising the core ERP.
+      </div>
+      <div className="ut-card">
+        <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
+          <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
+            <span className="text-text-tertiary">🔍</span>
+            <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
+          </div>
+          <div className="flex gap-2">
+            <HrButton variant="ghost" size="sm">Filter</HrButton>
+            <HrButton size="sm">Generate OTP Link</HrButton>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="hr-table">
+            <thead className="bg-bg-subtle">
+              <tr>
+                <th>Audit Session Name</th>
+                <th>Auditor Name</th>
+                <th>Validity Period</th>
+                <th>Link Status</th>
+                <th className="text-center w-16">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="font-semibold text-text-primary">Labor Dept Audit</td>
+                <td className="text-text-secondary">Mr. Sharma (Govt. Inspector)</td>
+                <td className="text-text-secondary">May 10 - May 12, 2026</td>
+                <td><HrStatusPill tone="red">Access Revoked</HrStatusPill></td>
+                <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">↺</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }

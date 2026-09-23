@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react'
-import { MapPin, Plus, Pencil, Trash2, X, Crosshair, Radius } from 'lucide-react'
+import { MapPin, Plus, Pencil, Trash2, X, Crosshair, Radius, XCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { usePermission, P } from '@unifiedtree/sdk'
-import { EmptyState, Skeleton } from '@unifiedtree/ui-kit'
+import { Skeleton } from '@unifiedtree/ui-kit'
+import { EmptyState } from '@/shared/components/EmptyState'
 import { HrPageHeader, HrStatusPill, HrButton } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies, useDepartments, useBranches } from '../api/useOrg'
@@ -408,12 +409,13 @@ export const GeofenceZones: React.FC = () => {
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="ut-card h-40 w-full animate-pulse" />)}
         </div>
       ) : error ? (
-        <EmptyState variant="error" title="Failed to load zones" primaryAction={{ label: 'Retry', onClick: () => refetch() }} />
+        <EmptyState icon={XCircle} title="Failed to load zones" description="An error occurred while loading geofence zones." action={{ label: 'Retry', onClick: () => refetch() }} />
       ) : zones.length === 0 ? (
         <EmptyState
+          icon={MapPin}
           title="No geofencing zones yet"
           description="Add a zone to start tracking attendance locations."
-          primaryAction={canWrite ? { label: 'Add Zone', onClick: openAdd } : undefined}
+          action={canWrite ? { label: 'Add Zone', onClick: openAdd } : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

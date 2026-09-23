@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiJson } from '@/core/api/client'
 
 // Mirrors backend com.hrms.fnf.enums
-export type FnfStatus = 'INITIATED' | 'PROCESSED' | 'APPROVED' | 'PAID'
+export type FnfStatus = 'INITIATED' | 'PROCESSED' | 'APPROVED' | 'PAID' | 'CANCELLED'
 export type FnfComponentType = 'EARNING' | 'DEDUCTION'
 
 export interface FnfComponent {
@@ -103,6 +103,14 @@ export function usePaySettlement() {
   return useMutation({
     mutationFn: (id: string) =>
       apiJson<FnfSettlement>(`/v1/fnf/settlements/${id}/pay`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'fnf'] }),
+  })
+}
+
+export function useCancelSettlement() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiJson<FnfSettlement>(`/v1/fnf/settlements/${id}/cancel`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'fnf'] }),
   })
 }

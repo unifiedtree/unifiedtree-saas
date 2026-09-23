@@ -116,8 +116,10 @@ public class LetterController {
     @GetMapping("/generated")
     @PreAuthorize("hasAuthority('hrms.letters.read')")
     public ResponseEntity<PageResponse<GeneratedLetterDto>> listGenerated(
+            @RequestParam(required = false) UUID employeeId,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(generationService.listGenerated(pageable));
+        return ResponseEntity.ok(employeeId == null ? generationService.listGenerated(pageable)
+                : generationService.getMyLetters(employeeId, pageable));
     }
 
     @Operation(summary = "Get a generated letter by ID")

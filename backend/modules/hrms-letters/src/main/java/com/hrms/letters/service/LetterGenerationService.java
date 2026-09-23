@@ -27,7 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class LetterGenerationService {
@@ -130,7 +132,7 @@ public class LetterGenerationService {
             sendLetterInternal(letter, toEmail, null, pdfBytes);
         }
 
-        return GeneratedLetterDto.from(letter);
+        return toDto(letter, employee);
     }
 
     @Transactional
@@ -146,7 +148,7 @@ public class LetterGenerationService {
         // B7 FIX (audit 2026-08-15): same restriction as sendImmediately.
         assertSendToAllowed(toEmail, employee);
         sendLetterInternal(letter, toEmail, req.ccEmail(), pdfBytes);
-        return GeneratedLetterDto.from(generatedRepo.save(letter));
+        return toDto(generatedRepo.save(letter), employee);
     }
 
     /**
@@ -186,7 +188,7 @@ public class LetterGenerationService {
         letter.setVoidedAt(Instant.now());
         letter.setVoidedReason(req.reason());
         log.info("Voided letter id={} reason={}", letterId, req.reason());
-        return GeneratedLetterDto.from(generatedRepo.save(letter));
+        return toDto(generatedRepo.save(letter));
     }
 
     @Transactional
@@ -200,18 +202,40 @@ public class LetterGenerationService {
     @Transactional(readOnly = true)
     public PageResponse<GeneratedLetterDto> listGenerated(Pageable pageable) {
         Page<GeneratedLetter> page = generatedRepo.findAllActive(pageable);
-        return PageResponse.from(page, GeneratedLetterDto::from);
+        return toPage(page);
     }
 
     @Transactional(readOnly = true)
     public GeneratedLetterDto getGenerated(UUID id) {
-        return GeneratedLetterDto.from(requireLetter(id));
+        return toDto(requireLetter(id));
     }
 
     @Transactional(readOnly = true)
     public PageResponse<GeneratedLetterDto> getMyLetters(UUID employeeId, Pageable pageable) {
         Page<GeneratedLetter> page = generatedRepo.findActiveByEmployeeId(employeeId, pageable);
-        return PageResponse.from(page, GeneratedLetterDto::from);
+        return toPage(page);
+    }
+
+    private PageResponse<GeneratedLetterDto> toPage(Page<GeneratedLetter> page) {
+        var ids = page.getContent().stream().map(GeneratedLetter::getEmployeeId)
+                .filter(Objects::nonNull).distinct().toList();
+        Map<UUID, Employee> employees = ids.isEmpty() ? Map.of()
+                : employeeRepo.findAllById(ids).stream()
+                        .collect(Collectors.toMap(Employee::getId, employee -> employee));
+        return PageResponse.from(page, letter -> toDto(letter, employees.get(letter.getEmployeeId())));
+    }
+
+    private GeneratedLetterDto toDto(GeneratedLetter letter) {
+        return toDto(letter, employeeRepo.findById(letter.getEmployeeId()).orElse(null));
+    }
+
+    private GeneratedLetterDto toDto(GeneratedLetter letter, Employee employee) {
+        if (employee == null || !Objects.equals(letter.getTenantId(), employee.getTenantId())) {
+            return GeneratedLetterDto.from(letter);
+        }
+        String name = java.util.stream.Stream.of(employee.getFirstName(), employee.getLastName())
+                .filter(value -> value != null && !value.isBlank()).collect(Collectors.joining(" "));
+        return GeneratedLetterDto.from(letter, name, employee.getEmployeeCode());
     }
 
     public byte[] getPdf(UUID letterId) {

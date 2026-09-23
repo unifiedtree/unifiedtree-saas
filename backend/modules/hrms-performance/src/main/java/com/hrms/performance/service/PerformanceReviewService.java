@@ -27,9 +27,11 @@ public class PerformanceReviewService {
     private static final Logger log = LoggerFactory.getLogger(PerformanceReviewService.class);
 
     private final PerformanceReviewRepository reviewRepository;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
-    public PerformanceReviewService(PerformanceReviewRepository reviewRepository) {
+    public PerformanceReviewService(PerformanceReviewRepository reviewRepository, org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.reviewRepository = reviewRepository;
+        this.jdbc = jdbc;
     }
 
     @Transactional
@@ -48,7 +50,7 @@ public class PerformanceReviewService {
 
     @Transactional(readOnly = true)
     public List<PerformanceReviewResponse> getMyReviews(UUID employeeId) {
-        return reviewRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId).stream()
+        return reviewRepository.findByEmployeeIdOrReviewerIdOrderByCreatedAtDesc(employeeId, employeeId).stream()
                 .map(this::toResponse).toList();
     }
 
@@ -64,10 +66,15 @@ public class PerformanceReviewService {
     public PerformanceReviewResponse submitReview(UUID reviewId, UUID employeeId, ReviewSubmitRequest request) {
         PerformanceReview review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new ResourceNotFoundException("PerformanceReview", reviewId));
-        if (!review.getEmployeeId().equals(employeeId)) {
+        UUID assignedReviewer = review.getReviewerId() != null ? review.getReviewerId() : review.getEmployeeId();
+        if (!assignedReviewer.equals(employeeId)) {
             throw new BusinessRuleException(
-                    "You can only submit your own performance review",
+                    "Only the assigned reviewer can submit this performance review",
                     "PERFORMANCE_REVIEW_FORBIDDEN");
+        }
+        if (request.overallRating() == null || request.overallRating().signum() < 0
+                || request.overallRating().compareTo(java.math.BigDecimal.valueOf(5)) > 0) {
+            throw new BusinessRuleException("Review rating must be between 0 and 5", "PERFORMANCE_RATING_INVALID");
         }
         if (review.getStatus() != ReviewStatus.PENDING) {
             throw new BusinessRuleException(
@@ -79,7 +86,9 @@ public class PerformanceReviewService {
         review.setImprovements(request.improvements());
         review.setStatus(ReviewStatus.SUBMITTED);
         review.setSubmittedAt(Instant.now());
-        review = reviewRepository.save(review);
+        review = reviewRepository.saveAndFlush(review);
+        jdbc.update("UPDATE performance_mgmt.appraisal_reviewer_assignments SET status = 'COMPLETED', updated_at = now(), version = version + 1 WHERE review_id = ? AND tenant_id = ?",
+                reviewId, TenantContext.getTenantId());
         log.info("Performance review {} submitted by employee={}", reviewId, employeeId);
         return toResponse(review);
     }
@@ -98,6 +107,6 @@ public class PerformanceReviewService {
         return new PerformanceReviewResponse(
                 r.getId(), r.getCycleId(), r.getEmployeeId(), null, null,
                 r.getReviewerId(), null, r.getStatus(), r.getOverallRating(),
-                r.getStrengths(), r.getImprovements(), r.getSubmittedAt(), r.getCreatedAt());
+                r.getStrengths(), r.getImprovements(), r.getSubmittedAt(), r.getCreatedAt(), null);
     }
 }

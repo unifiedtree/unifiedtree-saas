@@ -7,6 +7,7 @@ import com.hrms.core.tenant.TenantContext;
 import com.hrms.expense.dto.ExpenseClaimRequest;
 import com.hrms.expense.dto.ExpenseClaimResponse;
 import com.hrms.expense.dto.ExpenseDecisionRequest;
+import com.hrms.expense.dto.ExpenseDashboardStatsResponse;
 import com.hrms.expense.dto.ExpenseItemRequest;
 import com.hrms.expense.dto.ExpenseItemResponse;
 import com.hrms.expense.entity.ExpenseClaim;
@@ -23,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,6 +44,20 @@ public class ExpenseService {
         this.claimRepository = claimRepository;
         this.itemRepository = itemRepository;
         this.policyRepository = policyRepository;
+    }
+
+
+    @Transactional(readOnly = true)
+    public ExpenseDashboardStatsResponse dashboardStats() {
+        Instant from = LocalDate.now(ZoneOffset.UTC).withDayOfMonth(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant to = LocalDate.now(ZoneOffset.UTC).plusMonths(1).withDayOfMonth(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        return new ExpenseDashboardStatsResponse(
+                claimRepository.countByStatus(ExpenseStatus.SUBMITTED),
+                claimRepository.sumAmountByStatus(ExpenseStatus.SUBMITTED),
+                claimRepository.countByStatus(ExpenseStatus.APPROVED),
+                claimRepository.sumAmountByStatus(ExpenseStatus.APPROVED),
+                claimRepository.countByStatusAndReimbursedAtBetween(ExpenseStatus.REIMBURSED, from, to),
+                claimRepository.sumAmountByStatusAndReimbursedAtBetween(ExpenseStatus.REIMBURSED, from, to));
     }
 
     /**

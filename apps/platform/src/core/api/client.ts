@@ -164,7 +164,7 @@ async function jsonRequest<T>(path: string, init: RequestInit, alreadyRetried: b
       credentials: 'include',
       signal: init.signal ?? controller.signal,
       headers: {
-        'Content-Type': 'application/json',
+        ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         ...authHeaders(),
         ...(init.headers || {}),
       },
