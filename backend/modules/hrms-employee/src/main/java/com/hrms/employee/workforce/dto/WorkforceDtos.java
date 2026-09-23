@@ -124,9 +124,9 @@ public final class WorkforceDtos {
     ) { }
 
     public record UpdateGeofenceRequest(
-            @NotNull BigDecimal latitude,
-            @NotNull BigDecimal longitude,
-            @NotNull Integer radiusMeters,
+            @NotNull @jakarta.validation.constraints.DecimalMin("-90") @jakarta.validation.constraints.DecimalMax("90") BigDecimal latitude,
+            @NotNull @jakarta.validation.constraints.DecimalMin("-180") @jakarta.validation.constraints.DecimalMax("180") BigDecimal longitude,
+            @NotNull @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(100000) Integer radiusMeters,
             Boolean enforced
     ) { }
 

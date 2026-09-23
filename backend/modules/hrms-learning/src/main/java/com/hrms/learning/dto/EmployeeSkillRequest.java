@@ -10,9 +10,10 @@ import java.util.UUID;
 
 public record EmployeeSkillRequest(
         @NotNull UUID employeeId,
-        @NotBlank String skillName,
+        @NotBlank @jakarta.validation.constraints.Size(max = 120) String skillName,
         @Min(1) @Max(5) Integer proficiency,
         Boolean certified,
-        String certificationName,
-        LocalDate certifiedOn
+        @jakarta.validation.constraints.Size(max = 200) String certificationName,
+        LocalDate certifiedOn,
+        LocalDate expiresOn
 ) {}

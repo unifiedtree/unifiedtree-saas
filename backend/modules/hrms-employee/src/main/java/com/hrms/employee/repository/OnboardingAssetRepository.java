@@ -9,6 +9,9 @@ import java.util.UUID;
 
 @Repository
 public interface OnboardingAssetRepository extends JpaRepository<OnboardingAsset, UUID> {
+    @Override
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    java.util.Optional<OnboardingAsset> findById(UUID id);
     List<OnboardingAsset> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
     List<OnboardingAsset> findAllByOrderByCreatedAtDesc();
 }

@@ -19,9 +19,11 @@ public class SkillService {
     private static final Logger log = LoggerFactory.getLogger(SkillService.class);
 
     private final EmployeeSkillRepository skillRepository;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
-    public SkillService(EmployeeSkillRepository skillRepository) {
+    public SkillService(EmployeeSkillRepository skillRepository, org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.skillRepository = skillRepository;
+        this.jdbc = jdbc;
     }
 
     @Transactional(readOnly = true)
@@ -37,6 +39,11 @@ public class SkillService {
      */
     @Transactional
     public EmployeeSkillResponse upsertSkill(EmployeeSkillRequest request) {
+        Integer employeeCount = jdbc.queryForObject("SELECT count(*) FROM hrms.employees WHERE id = ? AND tenant_id = ?", Integer.class, request.employeeId(), TenantContext.getTenantId());
+        if (employeeCount == null || employeeCount == 0) throw new com.hrms.core.exception.BusinessRuleException("Employee not found in this workspace", "SKILL_EMPLOYEE_INVALID");
+        if (request.expiresOn() != null && request.certifiedOn() != null && request.expiresOn().isBefore(request.certifiedOn())) {
+            throw new com.hrms.core.exception.BusinessRuleException("Expiry cannot precede certification date", "CERTIFICATION_DATE_INVALID");
+        }
         EmployeeSkill skill = skillRepository
                 .findByEmployeeIdAndSkillNameIgnoreCase(request.employeeId(), request.skillName().trim())
                 .orElseGet(() -> {
@@ -52,6 +59,7 @@ public class SkillService {
         skill.setCertified(certified);
         skill.setCertificationName(certified ? request.certificationName() : null);
         skill.setCertifiedOn(certified ? request.certifiedOn() : null);
+        skill.setExpiresOn(certified ? request.expiresOn() : null);
         skill = skillRepository.save(skill);
 
         log.info("Skill upserted employee={} skill={} proficiency={} certified={}",
@@ -62,6 +70,6 @@ public class SkillService {
     private EmployeeSkillResponse toResponse(EmployeeSkill s) {
         return new EmployeeSkillResponse(
                 s.getId(), s.getEmployeeId(), s.getSkillName(), s.getProficiency(),
-                s.isCertified(), s.getCertificationName(), s.getCertifiedOn(), s.getCreatedAt());
+                s.isCertified(), s.getCertificationName(), s.getCertifiedOn(), s.getCreatedAt(), s.getExpiresOn());
     }
 }

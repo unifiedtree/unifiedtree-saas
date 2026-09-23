@@ -294,8 +294,8 @@ public class AttendanceController {
         Map<UUID, String> departmentNames = departmentNames(employees);
         // One bulk lookup for shift end_time; used by both the per-row
         // earlyCheckout flag and the aggregate countSummary tile.
-        Map<UUID, LocalTime> shiftEndByEmployee =
-                attendanceService.getShiftEndTimesForEmployees(employeeIds, selectedDate);
+        Map<UUID, java.time.Instant> shiftEndByEmployee =
+                attendanceService.getShiftEndInstantsForEmployees(employeeIds, selectedDate);
 
         // Approved leave is looked up ONCE and handed to both the roster rows
         // and the tiles. It used to be fetched inside countSummary only, which
@@ -679,49 +679,7 @@ public class AttendanceController {
     }
 
     private List<Employee> scopedEmployees(Jwt jwt, UUID departmentId) {
-        UUID currentEmployeeId = extractEmployeeId(jwt);
-        Employee current = employeeRepository.findById(currentEmployeeId)
-                .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + currentEmployeeId));
-
-        List<Employee> employees;
-        if (isAdmin(jwt)) {
-            // Admin + HR: organisation-wide, every active employee.
-            employees = employeeRepository.findActiveByCompany(current.getCompanyId());
-        } else {
-            // DEPT_MANAGER: everyone in the department(s) they head — not just
-            // direct reports whose reporting_manager_id points at them. A
-            // department head "owns" the whole department, so their dashboard
-            // shows every teammate in it. Fall back to legacy direct-report
-            // scope for managers who haven't been set as any dept's head yet.
-            List<UUID> ledDepartmentIds = departmentRepository
-                    .findByDepartmentHeadEmployeeId(currentEmployeeId).stream()
-                    .map(d -> d.getId())
-                    .toList();
-            if (!ledDepartmentIds.isEmpty()) {
-                List<Employee> companyEmployees =
-                        employeeRepository.findActiveByCompany(current.getCompanyId());
-                employees = companyEmployees.stream()
-                        .filter(e -> e.getDepartmentId() != null
-                                && ledDepartmentIds.contains(e.getDepartmentId()))
-                        .toList();
-            } else {
-                employees = employeeRepository.findByManagerId(currentEmployeeId);
-            }
-        }
-
-        // Exclude the caller from the team list — admins and managers don't
-        // punch on this app, so counting them produces phantom "Not Marked /
-        // Absent" tiles. (HR does punch, but they're rarely their own report.)
-        employees = employees.stream()
-                .filter(employee -> !employee.getId().equals(currentEmployeeId))
-                .toList();
-
-        if (departmentId != null) {
-            employees = employees.stream()
-                    .filter(employee -> departmentId.equals(employee.getDepartmentId()))
-                    .toList();
-        }
-        return employees;
+        return new TeamEmployeeScope(employeeRepository, departmentRepository).resolve(jwt, departmentId);
     }
 
     static boolean isManagerOrAdmin(Jwt jwt) {
@@ -757,7 +715,7 @@ public class AttendanceController {
     private StaffStatusResponse toStaffStatus(Employee employee,
                                               AttendanceRecord record,
                                               Map<UUID, String> departmentNames,
-                                              Map<UUID, LocalTime> shiftEndByEmployee,
+                                              Map<UUID, java.time.Instant> shiftEndByEmployee,
                                               boolean onLeave) {
         return new StaffStatusResponse(
                 employee.getId(),
@@ -791,7 +749,7 @@ public class AttendanceController {
 
     private AttendanceSummaryCounts countSummary(List<Employee> employees,
                                                  List<AttendanceRecord> records,
-                                                 Map<UUID, LocalTime> shiftEndByEmployee,
+                                                 Map<UUID, java.time.Instant> shiftEndByEmployee,
                                                  Set<UUID> onLeaveIds) {
         long late = records.stream()
                 .filter(record -> record.getAttendanceStatus() != null && record.getAttendanceStatus().name().equals("LATE"))
@@ -839,33 +797,12 @@ public class AttendanceController {
                 present, onLeave, late, halfDay, earlyCheckout, workFromHome, notMarked, absent);
     }
 
-    /**
-     * True when {@code record} has a non-null {@code check_out_at} whose IST
-     * wall-clock time is strictly before the employee's assigned shift
-     * {@code end_time}. Returns false when the record is null, the employee
-     * hasn't checked out, or we don't know their shift end (no active
-     * assignment on the date).
-     *
-     * <p>TODO night-shift wrap: shifts that span midnight (e.g. 22:00–06:00)
-     * are NOT correctly handled by the strict "before end_time" comparison
-     * because a 05:30 checkout looks "before 06:00" but is actually on-time,
-     * while a 21:00 checkout looks "not before 06:00" but is actually early.
-     * The same limitation already exists in AttendanceService.getShiftProfile
-     * (which only reads start_time + grace). Fixing this properly requires
-     * modelling shift wrap direction; accepted for the initial rollout since
-     * every current Unified tenant runs day shifts.
-     */
+    /** Compare absolute shift-end instants so overnight shifts use the following date. */
     private static boolean isEarlyCheckout(AttendanceRecord record,
-                                           Map<UUID, LocalTime> shiftEndByEmployee) {
-        if (record == null || record.getCheckOutAt() == null) {
-            return false;
-        }
-        LocalTime end = shiftEndByEmployee.get(record.getEmployeeId());
-        if (end == null) {
-            return false;
-        }
-        LocalTime actual = record.getCheckOutAt().atZone(ZoneId.of("Asia/Kolkata")).toLocalTime();
-        return actual.isBefore(end);
+                                           Map<UUID, java.time.Instant> shiftEndByEmployee) {
+        if (record == null || record.getCheckOutAt() == null) return false;
+        java.time.Instant end = shiftEndByEmployee.get(record.getEmployeeId());
+        return end != null && record.getCheckOutAt().isBefore(end);
     }
 
     private AttendanceLogResponse toLogResponse(AttendanceEventLog event,

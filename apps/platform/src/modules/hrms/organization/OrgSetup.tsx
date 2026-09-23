@@ -138,7 +138,7 @@ const BTN_DEL     = 'flex h-8 w-8 items-center justify-center rounded-lg text-[v
 
 // ── Companies Tab ─────────────────────────────────────────────────────────────
 
-function CompaniesTab() {
+export function CompaniesTab() {
   const { toast } = useToast()
   const confirm = useConfirmDialog()
   const { data: companies = [], isLoading, error, refetch } = useCompanies()
@@ -409,7 +409,7 @@ function EmployeeCodeFormatSection({ companyId }: { companyId: string }) {
 
 interface CompanyProp { activeCompany?: Company }
 
-function BranchesTab({ activeCompany }: CompanyProp) {
+export function BranchesTab({ activeCompany }: CompanyProp) {
   const { toast } = useToast()
   const confirm = useConfirmDialog()
   const { data: branches = [], isLoading, error, refetch } = useBranches(activeCompany?.id)

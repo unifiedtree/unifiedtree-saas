@@ -63,7 +63,7 @@ function DeleteCell({ id, name }: { id: string; name: string }) {
   )
 }
 
-export const LetterTemplates: React.FC = () => {
+export const LetterTemplates: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
 
@@ -74,7 +74,7 @@ export const LetterTemplates: React.FC = () => {
   const hasPagination = totalElements > 20
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
+    <div className={embedded ? "space-y-6" : "mx-auto max-w-5xl space-y-6 p-6 sm:p-8"}>
       <HrPageHeader
         crumb="Recruitment & Onboarding"
         title="Letter Templates"

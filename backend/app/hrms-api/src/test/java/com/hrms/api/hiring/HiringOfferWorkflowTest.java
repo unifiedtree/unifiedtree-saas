@@ -21,7 +21,7 @@ class HiringOfferWorkflowTest {
         HiringOffer offer = new HiringOffer();
         offer.setId(UUID.randomUUID());
         offer.setStatus(status);
-        when(offers.findById(offer.getId())).thenReturn(Optional.of(offer));
+        when(offers.findForUpdate(offer.getId())).thenReturn(Optional.of(offer));
         when(offers.save(offer)).thenReturn(offer);
         return offer;
     }
@@ -44,5 +44,30 @@ class HiringOfferWorkflowTest {
         HiringOffer offer = offer(OfferStatus.SENT);
         assertEquals(OfferStatus.ACCEPTED, service.updateOfferStatus(offer.getId(), OfferStatus.ACCEPTED).status());
         assertNotNull(offer.getRespondedAt());
+    }
+
+    private com.hrms.hiring.dto.HiringOfferRequest request(UUID companyId, OfferStatus status) {
+        return new com.hrms.hiring.dto.HiringOfferRequest(companyId, null, null, "Updated candidate", "Engineer",
+                java.math.BigDecimal.valueOf(600000), null, status, "Internal", "Approved terms");
+    }
+
+    @Test void draftCanBeEditedButIssuedTermsAreImmutable() {
+        HiringOffer draft = offer(OfferStatus.DRAFT);
+        draft.setCompanyId(UUID.randomUUID());
+        assertEquals("Approved terms", service.updateOffer(draft.getId(), request(draft.getCompanyId(), null)).offerTerms());
+        draft.setStatus(OfferStatus.SENT);
+        assertThrows(BusinessRuleException.class, () -> service.updateOffer(draft.getId(), request(draft.getCompanyId(), null)));
+    }
+
+    @Test void creatingTerminalOfferCannotBypassLifecycle() {
+        assertThrows(BusinessRuleException.class, () -> service.createOffer(UUID.randomUUID(), request(null, OfferStatus.ACCEPTED)));
+        verify(offers, never()).save(any());
+    }
+
+    @Test void draftCannotMoveBetweenCompanies() {
+        HiringOffer draft = offer(OfferStatus.DRAFT);
+        draft.setCompanyId(UUID.randomUUID());
+        assertThrows(BusinessRuleException.class, () -> service.updateOffer(draft.getId(), request(UUID.randomUUID(), null)));
+        verify(offers, never()).save(any());
     }
 }

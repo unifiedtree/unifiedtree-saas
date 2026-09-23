@@ -1,4 +1,5 @@
 import React from 'react'
+import { TeamSchedule } from './TeamSchedule'
 import { useNavigate } from 'react-router-dom'
 import { Users, Clock, Calendar, ArrowRight, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { format } from 'date-fns'
@@ -130,7 +131,7 @@ export const TeamDashboard: React.FC = () => {
                       <td className="p-4 text-text-secondary">
                         {s.checkInAt ? format(new Date(s.checkInAt), 'hh:mm a') : '--'}
                       </td>
-                      <td className="p-4 text-text-secondary">--</td>
+                      <td className="p-4 text-text-secondary">{s.checkOutAt ? format(new Date(s.checkOutAt), 'hh:mm a') : '--'}</td>
                       <td className="p-4 text-text-secondary">{s.jobTitle ?? s.departmentName ?? '--'}</td>
                       <td className="p-4">
                         <HrStatusPill tone={pill.tone}>
@@ -147,6 +148,7 @@ export const TeamDashboard: React.FC = () => {
       </div>
 
       {/* Pending leave approvals */}
+      <TeamSchedule />
       {pendingLeaves.length > 0 && (
         <div className="ut-card overflow-hidden">
           <div className="flex items-center justify-between border-b border-border-default px-5 py-4">

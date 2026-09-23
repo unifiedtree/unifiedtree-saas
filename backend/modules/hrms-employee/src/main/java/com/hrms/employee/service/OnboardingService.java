@@ -80,20 +80,55 @@ public class OnboardingService {
 
     @Transactional
     public OnboardingAsset createAsset(OnboardingAsset asset) {
-        asset.setTenantId(TenantContext.getTenantId());
-        if (asset.getStatus() == null || asset.getStatus().isBlank()) asset.setStatus("AVAILABLE");
-        return assetRepository.save(asset);
+        if (asset.getCompanyId() == null || asset.getAssetTag() == null || asset.getAssetTag().isBlank()
+                || asset.getAssetName() == null || asset.getAssetName().isBlank()
+                || asset.getAssetType() == null || asset.getAssetType().isBlank()) {
+            throw new BusinessRuleException("Company, tag, name and category are required", "ASSET_FIELDS_REQUIRED");
+        }
+        // Copy writable fields into a new entity. Clients cannot overwrite IDs,
+        // audit fields, tenant, assignment or lifecycle state through creation.
+        Integer companyMatches = jdbc.queryForObject("SELECT count(*) FROM org.companies WHERE id = ? AND tenant_id = ?",
+                Integer.class, asset.getCompanyId(), TenantContext.getTenantId());
+        if (companyMatches == null || companyMatches == 0) throw new BusinessRuleException("Company not found in this workspace", "ASSET_COMPANY_INVALID");
+        if (asset.getAssetTag().length() > 80 || asset.getAssetType().length() > 80 || asset.getAssetName().length() > 200
+                || (asset.getSerialNo() != null && asset.getSerialNo().length() > 120)) {
+            throw new BusinessRuleException("Asset fields exceed the allowed length", "ASSET_FIELDS_TOO_LONG");
+        }
+        OnboardingAsset created = new OnboardingAsset();
+        created.setTenantId(TenantContext.getTenantId());
+        created.setCompanyId(asset.getCompanyId());
+        created.setAssetTag(asset.getAssetTag().trim());
+        created.setAssetName(asset.getAssetName().trim());
+        created.setAssetType(asset.getAssetType().trim());
+        created.setSerialNo(asset.getSerialNo());
+        created.setConditionNotes(asset.getConditionNotes());
+        created.setStatus("AVAILABLE");
+        return assetRepository.save(created);
     }
 
     @Transactional
     public OnboardingAsset assignAsset(UUID assetId, UUID employeeId, UUID onboardingInstanceId, LocalDate assignedAt) {
         OnboardingAsset asset = assetRepository.findById(assetId)
                 .orElseThrow(() -> new IllegalArgumentException("Asset not found: " + assetId));
+        if ("ASSIGNED".equals(asset.getStatus())) {
+            throw new BusinessRuleException("Record the current employee's return before reassigning this asset", "ASSET_ALREADY_ASSIGNED");
+        }
+        Integer matches = jdbc.queryForObject("SELECT count(*) FROM hrms.employees WHERE id = ? AND company_id = ? AND tenant_id = ?",
+                Integer.class, employeeId, asset.getCompanyId(), TenantContext.getTenantId());
+        if (matches == null || matches == 0) throw new BusinessRuleException("Choose an employee in this asset's company", "ASSET_EMPLOYEE_INVALID");
+        if (assignedAt != null && assignedAt.isAfter(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")))) throw new BusinessRuleException("Assignment date cannot be in the future", "ASSET_DATE_INVALID");
+        if (onboardingInstanceId != null) {
+            OnboardingInstance instance = instanceRepo.findById(onboardingInstanceId)
+                    .orElseThrow(() -> new ResourceNotFoundException("OnboardingInstance", onboardingInstanceId));
+            if (!employeeId.equals(instance.getEmployeeId())) throw new BusinessRuleException("Onboarding instance belongs to another employee", "ASSET_INSTANCE_INVALID");
+        }
         asset.setEmployeeId(employeeId);
         asset.setOnboardingInstanceId(onboardingInstanceId);
-        asset.setAssignedAt(assignedAt == null ? LocalDate.now() : assignedAt);
+        asset.setAssignedAt(assignedAt == null ? LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")) : assignedAt);
         asset.setReturnedAt(null);
         asset.setStatus("ASSIGNED");
+        jdbc.update("INSERT INTO hrms.asset_allocations(tenant_id,asset_id,employee_id,assigned_at) VALUES(?,?,?,?)",
+                TenantContext.getTenantId(), assetId, employeeId, asset.getAssignedAt());
         return assetRepository.save(asset);
     }
 
@@ -101,10 +136,23 @@ public class OnboardingService {
     public OnboardingAsset returnAsset(UUID assetId, String notes) {
         OnboardingAsset asset = assetRepository.findById(assetId)
                 .orElseThrow(() -> new IllegalArgumentException("Asset not found: " + assetId));
+        if (!"ASSIGNED".equals(asset.getStatus())) throw new BusinessRuleException("Only assigned assets can be returned", "ASSET_NOT_ASSIGNED");
         asset.setStatus("RETURNED");
-        asset.setReturnedAt(LocalDate.now());
+        asset.setReturnedAt(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
         asset.setConditionNotes(notes);
+        jdbc.update("UPDATE hrms.asset_allocations SET returned_at=?,return_notes=? WHERE tenant_id=? AND asset_id=? AND returned_at IS NULL",
+                asset.getReturnedAt(), notes, TenantContext.getTenantId(), assetId);
         return assetRepository.save(asset);
+    }
+
+    @Transactional(readOnly = true)
+    public List<java.util.Map<String,Object>> assetHistory(UUID assetId) {
+        return jdbc.queryForList("""
+                SELECT a.id,a.employee_id AS "employeeId",concat_ws(' ',e.first_name,e.last_name) AS "employeeName",
+                  a.assigned_at AS "assignedAt",a.returned_at AS "returnedAt",a.return_notes AS notes
+                FROM hrms.asset_allocations a JOIN hrms.employees e ON e.id=a.employee_id AND e.tenant_id=a.tenant_id
+                WHERE a.tenant_id=? AND a.asset_id=? ORDER BY a.created_at DESC,a.id
+                """,TenantContext.getTenantId(),assetId);
     }
 
     @Transactional(readOnly = true)

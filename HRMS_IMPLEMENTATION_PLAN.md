@@ -1,3 +1,19 @@
+# Current continuation plan - 2026-09-23
+
+The implementation and verification record in HRMS_IMPLEMENTATION_STATUS.md and the current addendum in HRMS_FUNCTIONALITY_AUDIT.md supersede the historical plan below.
+
+1. Preserve the existing shell, module gates, permissions, tenant RLS and domain services.
+2. Replace every identified runtime reference mock with existing APIs where possible; add versioned persistence only for genuine gaps. Core replacements and V130-V139 are implemented.
+3. Offer draft editing/PDF generation and inspector CSV export are implemented and verified; offer email submission and session-scoped PDF sharing are now implemented; real provider delivery remains unverified. Verify writes through authenticated APIs and browser actions, including persisted reload, rejected invalid transitions, employee/team scope and tenant boundaries. Focused results are recorded in the status file.
+4. Continue explicit outstanding integration work: external provider adapters/delivery, inspector OTP/muster export and overtime earnings posting. These are separate from the completed local CRUD and review flows and must not be represented as available today.
+5. Complete the nine-role/custom-role acceptance matrix, mobile layout checks, larger-data pagination/load checks and deployment environment verification before calling the entire HRMS production ready.
+
+No additional user approval is needed for authorized local fixes. Missing external-provider configuration cannot be replaced by fake successful responses.
+
+---
+
+## Historical plan
+
 # HRMS IMPLEMENTATION PLAN
 
 **Status:** Validated pre-implementation plan. **No application source code was modified to produce this.**

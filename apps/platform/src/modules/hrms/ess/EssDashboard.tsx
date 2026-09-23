@@ -1,3 +1,5 @@
+import { AttendanceHistory } from './AttendanceHistory'
+import { TimeEntries } from './TimeEntries'
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, ClipboardList, CheckCircle, Clock, Home, Repeat } from 'lucide-react'
@@ -190,43 +192,8 @@ export const EssDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* My Attendance Table Mock */}
-      <div className="ut-card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border-default px-5 py-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-text-primary">Attendance History</h2>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border-default bg-bg-base text-xs text-text-secondary">
-              <tr>
-                <th className="p-4 font-medium">Date</th>
-                <th className="p-4 font-medium">Punch In</th>
-                <th className="p-4 font-medium">Punch Out</th>
-                <th className="p-4 font-medium">Total Hours</th>
-                <th className="p-4 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-border-default/40">
-                <td className="p-4">May 14, 2026</td>
-                <td className="p-4">09:02 AM</td>
-                <td className="p-4">06:15 PM</td>
-                <td className="p-4">9h 13m</td>
-                <td className="p-4"><HrStatusPill tone="ok">Present</HrStatusPill></td>
-              </tr>
-              <tr className="border-b border-border-default/40">
-                <td className="p-4">May 13, 2026</td>
-                <td className="p-4">--</td>
-                <td className="p-4">--</td>
-                <td className="p-4">--</td>
-                <td className="p-4"><HrStatusPill tone="warn">Sick Leave</HrStatusPill></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <AttendanceHistory />
+      <TimeEntries />
 
     </div>
   )

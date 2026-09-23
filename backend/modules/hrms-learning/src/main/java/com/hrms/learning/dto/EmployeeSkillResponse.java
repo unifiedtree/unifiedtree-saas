@@ -12,5 +12,6 @@ public record EmployeeSkillResponse(
         boolean certified,
         String certificationName,
         LocalDate certifiedOn,
-        Instant createdAt
+        Instant createdAt,
+        LocalDate expiresOn
 ) {}

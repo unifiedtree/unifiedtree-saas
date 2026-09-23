@@ -49,7 +49,7 @@ public class SmtpMailService implements MailService {
     public void send(EmailMessage msg) {
         try {
             MimeMessage mime = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mime, false, "UTF-8");
+            MimeMessageHelper helper = new MimeMessageHelper(mime, msg.attachments() != null && !msg.attachments().isEmpty(), "UTF-8");
             helper.setFrom(fromEmail, fromName);
             helper.setTo(msg.to());
             helper.setSubject(msg.subject());
@@ -64,6 +64,11 @@ public class SmtpMailService implements MailService {
                 helper.setCc(msg.cc().toArray(new String[0]));
             }
 
+            if (msg.attachments() != null) {
+                for (var attachment : msg.attachments()) {
+                    helper.addAttachment(attachment.filename(), new org.springframework.core.io.ByteArrayResource(attachment.bytes()), attachment.contentType());
+                }
+            }
             mailSender.send(mime);
             log.info("SMTP email sent to {}: {}", msg.to(), msg.subject());
         } catch (MessagingException | java.io.UnsupportedEncodingException e) {

@@ -32,19 +32,21 @@ export const Hiring: React.FC = () => {
   const canWrite = usePermission('hrms.hiring.write')
   const canCandidateWrite = usePermission('hrms.hiring.candidate.write')
   const canOfferRead = usePermission('hrms.hiring.offer.read')
-  const [tab, setTab] = useState<Tab>('requisitions')
+  const [selectedTab, setTab] = useState<Tab | null>(null)
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'requisitions', label: 'Requisitions' },
+    ...(canRead ? [{ key: 'requisitions' as Tab, label: 'Requisitions' }] : []),
     ...(canRead ? [{ key: 'pipeline' as Tab, label: 'Pipeline' }] : []),
     ...(canRead || canOfferRead ? [{ key: 'offers' as Tab, label: 'Offer Management' }] : []),
   ]
+
+  const tab = selectedTab && tabs.some(t => t.key === selectedTab) ? selectedTab : tabs[0]?.key
 
   return (
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
       <HrPageHeader crumb="Recruitment" title="Hiring Center" subtitle="Open requisitions and move candidates through the pipeline" />
 
-      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
+      <HrTabs tabs={tabs} active={tab ?? ''} onChange={(k) => setTab(k as Tab)} />
 
       {tab === 'requisitions' && <HrTabPanel tabKey="requisitions"><RequisitionsTab canWrite={canWrite} /></HrTabPanel>}
       {tab === 'pipeline' && canRead && <HrTabPanel tabKey="pipeline"><PipelineTab canCandidateWrite={canCandidateWrite} /></HrTabPanel>}

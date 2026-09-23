@@ -37,4 +37,6 @@ public class EmployeeSkill extends BaseEntity {
 
     @Column(name = "certified_on")
     private LocalDate certifiedOn;
+    @Column(name = "expires_on")
+    private LocalDate expiresOn;
 }

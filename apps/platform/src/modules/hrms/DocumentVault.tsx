@@ -1,3 +1,4 @@
+import { LetterTemplates } from './letters/LetterTemplates'
 import React, { useMemo, useState } from 'react'
 import { Plus, Trash2, FileText, FolderOpen, ShieldAlert, ExternalLink } from 'lucide-react'
 import { format } from 'date-fns'
@@ -37,16 +38,17 @@ function expiryBadge(expiryDate?: string): { tone: PillTone; label: string } | n
 type Tab = 'my' | 'all' | 'upload' | 'letters'
 
 export const DocumentVault: React.FC = () => {
+  const canReadTemplates = usePermission('hrms.letters.template.read')
   const canReadSelf = usePermission('hrms.document.read.self')
   const canRead = usePermission('hrms.document.read')
   const canWrite = usePermission('hrms.document.write')
-  const [tab, setTab] = useState<Tab>(canReadSelf ? 'my' : canRead ? 'all' : 'upload')
+  const [tab, setTab] = useState<Tab>(canReadSelf ? 'my' : canRead ? 'all' : canWrite ? 'upload' : 'letters')
 
   const tabs: { key: Tab; label: string }[] = [
     ...(canReadSelf ? [{ key: 'my' as Tab, label: 'My Documents' }] : []),
     ...(canRead ? [{ key: 'all' as Tab, label: 'All Documents' }] : []),
     ...(canWrite ? [{ key: 'upload' as Tab, label: 'Upload' }] : []),
-    ...(canRead ? [{ key: 'letters' as Tab, label: 'Letters & Contracts' }] : []),
+    ...(canReadTemplates ? [{ key: 'letters' as Tab, label: 'Letters & Contracts' }] : []),
   ]
 
   return (
@@ -58,7 +60,7 @@ export const DocumentVault: React.FC = () => {
       {tab === 'my' && canReadSelf && <HrTabPanel tabKey="my"><MyDocumentsTab /></HrTabPanel>}
       {tab === 'all' && canRead && <HrTabPanel tabKey="all"><AllDocumentsTab /></HrTabPanel>}
       {tab === 'upload' && canWrite && <HrTabPanel tabKey="upload"><UploadTab onUploaded={() => setTab(canRead ? 'all' : 'upload')} /></HrTabPanel>}
-      {tab === 'letters' && canRead && <HrTabPanel tabKey="letters"><LettersTabStatic /></HrTabPanel>}
+      {tab === 'letters' && canReadTemplates && <HrTabPanel tabKey="letters"><LetterTemplates embedded /></HrTabPanel>}
     </div>
   )
 }
@@ -386,48 +388,6 @@ function UploadTab({ onUploaded }: { onUploaded: () => void }) {
           <HrButton onClick={handleSubmit} disabled={create.isPending}>
             <Plus size={15} /> {create.isPending ? 'Storing…' : 'Store Document'}
           </HrButton>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-
-// ── Letters & Contracts (Static) ─────────────────────────────────────────────
-
-function LettersTabStatic() {
-  return (
-    <div className="space-y-4">
-      <div className="ut-card">
-        <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
-          <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
-            <span className="text-text-tertiary">🔍</span>
-            <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="hr-table">
-            <thead className="bg-bg-subtle">
-              <tr>
-                <th>Letter Type</th>
-                <th>Template Name</th>
-                <th>Target Audience</th>
-                <th>Last Updated</th>
-                <th>Status</th>
-                <th className="text-center w-16">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="font-semibold text-text-primary">Offer Letter</td>
-                <td className="text-text-secondary">Standard Engineering Offer v2</td>
-                <td className="text-text-secondary">New Hires (Tech)</td>
-                <td className="text-text-secondary">Apr 01, 2026</td>
-                <td><HrStatusPill tone="green">Active</HrStatusPill></td>
-                <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">✎</button></td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
     </div>

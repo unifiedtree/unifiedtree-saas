@@ -18,5 +18,6 @@ public record HiringOfferRequest(
         @NotNull @DecimalMin("0.00") BigDecimal offeredCtc,
         LocalDate joiningDate,
         OfferStatus status,
-        String notes
+        @Size(max = 10000) String notes,
+        @Size(max = 20000) String offerTerms
 ) {}

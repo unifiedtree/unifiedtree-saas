@@ -73,6 +73,13 @@ export const Employees: React.FC = () => {
   // the drawer, then strips the query param so a refresh does not reopen it.
   const [searchParams, setSearchParams] = useSearchParams()
   useEffect(() => {
+    const requested = searchParams.get('status')
+    if (requested && STATUSES.some(s => s.value === requested)) {
+      setStatus(requested)
+      setPage(0)
+    }
+  }, [searchParams])
+  useEffect(() => {
     if (searchParams.get('add') === '1') {
       setShowForm(true)
       const next = new URLSearchParams(searchParams)

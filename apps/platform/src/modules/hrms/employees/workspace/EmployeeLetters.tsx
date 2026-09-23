@@ -8,6 +8,7 @@
  */
 
 import React, { useState } from 'react'
+import { HrPagination } from '@/shared/components/HrPagination'
 import { Info } from 'lucide-react'
 import { SectionState } from './shared'
 import type { GeneratedLetterDto } from '../../letters/api/useLetters'
@@ -23,31 +24,16 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 
 // ── Tab: Documents ────────────────────────────────────────────────────────────
-// TODO[backend]: POST /v1/employees/{id}/profile/documents (multipart/form-data, S3-compatible storage) — file upload stays out of scope for Phase 1
-
 const LETTERS_PAGE_SIZE = 10
 
 function GeneratedLettersList({ employeeId }: { employeeId: string }) {
   const navigate = useNavigate()
-
-  // `employeeId` is sent, but LetterController.listGenerated(Pageable) declares
-  // no such parameter — VERIFIED 2026-09-22 — so the SERVER ignores it and
-  // returns the workspace's most recent letters. The client-side filter below
-  // is therefore the only thing keeping another employee's letters off this
-  // profile, and it is load-bearing, not defensive. The param stays so the page
-  // starts working correctly the moment the backend honours it.
-  //
-  // There is deliberately NO pager. Paging here would walk the whole
-  // workspace's letters hoping to find more of this employee's — the fan-out
-  // this milestone forbids — and each page would be filtered down to a
-  // near-empty table. One bounded request, plus a banner that admits the list
-  // may be short, beats a pager that appears to work and does not.
-  const { data, isLoading } = useQuery({
-    queryKey: ['hrms', 'letters', 'generated', 'employee', employeeId],
+  const [page, setPage] = useState(0)
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['hrms', 'letters', 'generated', 'employee', employeeId, page],
     queryFn: () => apiJson<{ content: GeneratedLetterDto[]; totalElements: number; totalPages: number }>(
-      `/v1/letters/generated?employeeId=${encodeURIComponent(employeeId)}&page=0&size=${LETTERS_PAGE_SIZE}`
+      `/v1/letters/generated?employeeId=${encodeURIComponent(employeeId)}&page=${page}&size=${LETTERS_PAGE_SIZE}`
     ),
-    select: r => ({ ...r, content: r.content.filter(l => l.employeeId === employeeId) }),
     staleTime: 30_000,
     enabled: !!employeeId,
   })
@@ -69,7 +55,7 @@ function GeneratedLettersList({ employeeId }: { employeeId: string }) {
         </Can>
       </div>
 
-      {isLoading ? (
+      {error ? <div role="alert"><p>{error.message}</p><HrButton onClick={() => refetch()}>Retry</HrButton></div> : isLoading ? (
         <CardSkeleton />
       ) : letters.length === 0 ? (
         <EmptyState icon={FileText} title="No letters generated" description="Generate an offer, appointment, or experience letter for this employee." />
@@ -94,28 +80,14 @@ function GeneratedLettersList({ employeeId }: { employeeId: string }) {
           emptyMessage="No letters generated"
         />
       )}
+      <HrPagination page={page} pageSize={LETTERS_PAGE_SIZE} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} onPageChange={setPage} />
     </div>
   )
 }
 
 // ── Section wrapper ──────────────────────────────────────────────────────────
 
-/**
- * Letters generated for this employee.
- *
- * KNOWN INCOMPLETENESS, surfaced rather than hidden: GET /v1/letters/generated
- * takes a Pageable and nothing else — LetterController.listGenerated has no
- * employeeId parameter, so the `?employeeId=` this page sends is ignored by the
- * server and the list below is one page of the workspace's most recent letters
- * filtered in the browser. Letters genuinely belonging to this employee are
- * therefore never wrong, but they CAN be missing if newer letters were generated
- * for other people. The banner says so, because a silently short list reads as
- * "no letters were ever issued".
- *
- * The fix is a backend filter, not a bigger client-side sweep: paging the whole
- * workspace to assemble one employee's letters is exactly the fan-out this
- * milestone forbids.
- */
+/** Persisted letters filtered and paginated by employee on the server. */
 export function EmployeeLetters({ employeeId }: { employeeId: string }) {
   const canRead = usePermission(P.HRMS_LETTERS_READ)
 
@@ -131,16 +103,6 @@ export function EmployeeLetters({ employeeId }: { employeeId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="ut-card p-4 flex gap-3">
-        <Info size={15} className="text-text-tertiary shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-text-primary">This list may be incomplete</p>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Letters can’t yet be queried per employee, so only recently generated letters are
-            matched here. Open Letters → Generated for the full history.
-          </p>
-        </div>
-      </div>
       <GeneratedLettersList employeeId={employeeId} />
     </div>
   )

@@ -1,3 +1,4 @@
+import { SalaryOverview } from './SalaryOverview'
 import React, { useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import {
@@ -43,60 +44,6 @@ const PIE_COLORS = ['#2563EB', '#22C55E', '#F59E0B', '#8B5CF6', '#EF4444', '#06B
 
 const EARNING_CATS: ComponentCategory[] = ['EARNING', 'REIMBURSEMENT']
 
-
-function SalaryStructureOverviewMock() {
-  return (
-    <div className="space-y-4">
-      <TableCard>
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-[var(--border-default)] bg-[var(--bg-base)] text-xs text-gray-500">
-            <tr>
-              <th className="p-4 font-medium">Employee</th>
-              <th className="p-4 font-medium">Basic Pay</th>
-              <th className="p-4 font-medium">HRA</th>
-              <th className="p-4 font-medium">Special Allowance</th>
-              <th className="p-4 font-medium">Deductions</th>
-              <th className="p-4 font-medium">Net Payable</th>
-              <th className="p-4 font-medium text-center">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b border-[var(--border-default)]">
-              <td className="p-4">
-                <div className="flex items-center gap-2">
-                  <HrAvatar name="Rajesh Kumar" sub="RK" seed={1} />
-                </div>
-              </td>
-              <td className="p-4">₹ 40,000</td>
-              <td className="p-4">₹ 20,000</td>
-              <td className="p-4">₹ 10,000</td>
-              <td className="p-4">₹ 2,400 (PF)</td>
-              <td className="p-4"><span className="font-bold text-green-600">₹ 67,600</span></td>
-              <td className="p-4 text-center">
-                <button className="text-gray-400 hover:text-gray-600"><Edit size={16} /></button>
-              </td>
-            </tr>
-            <tr className="border-b border-[var(--border-default)]">
-              <td className="p-4">
-                <div className="flex items-center gap-2">
-                  <HrAvatar name="Priya Mehta" sub="PM" seed={2} />
-                </div>
-              </td>
-              <td className="p-4">₹ 60,000</td>
-              <td className="p-4">₹ 30,000</td>
-              <td className="p-4">₹ 15,000</td>
-              <td className="p-4">₹ 3,600 (PF)</td>
-              <td className="p-4"><span className="font-bold text-green-600">₹ 1,01,400</span></td>
-              <td className="p-4 text-center">
-                <button className="text-gray-400 hover:text-gray-600"><Edit size={16} /></button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </TableCard>
-    </div>
-  )
-}
 
 export const SalaryStructureAdmin: React.FC = () => {
   const [companyId, setCompanyId] = useState<string>('')
@@ -260,7 +207,7 @@ export const SalaryStructureAdmin: React.FC = () => {
       <div className="mt-6">
         {tab === 'overview' && (
           <HrTabPanel tabKey="overview">
-            <SalaryStructureOverviewMock />
+            <SalaryOverview key={companyId} companyId={companyId} onSelect={employee => { setSelected(employee); setTab('detail') }} />
           </HrTabPanel>
         )}
         {tab === 'detail' && (

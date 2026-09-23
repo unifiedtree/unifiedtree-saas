@@ -102,6 +102,10 @@ public class R2Storage {
     }
 
     public boolean isConfigured() { return configured; }
+    public byte[] read(String key) {
+        require();
+        return s3.getObjectAsBytes(software.amazon.awssdk.services.s3.model.GetObjectRequest.builder().bucket(bucket).key(key).build()).asByteArray();
+    }
 
     /** Upload {@code bytes} at {@code key}. Content-type is what browsers use to render, so pass the sniffed one. */
     public void put(String key, byte[] bytes, String contentType) {

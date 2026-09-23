@@ -31,11 +31,11 @@ try {
       await expect(page.getByRole('status', { name: 'Loading apps' })).toHaveCount(0)
     }
     if (route === '/dashboard') {
-      await expect.poll(async () => {
-        const values = await page.locator('.dashboard-metric strong').allTextContents()
-        return values.length > 0 && values.every(value => value !== '...')
-      }, { timeout: 30000, message: 'Dashboard metrics must settle before acceptance' }).toBe(true)
-      await expect(page.getByText('Loading hiring activity.', { exact: true })).toHaveCount(0, { timeout: 30000 })
+      const overview = page.getByRole('region', { name: 'Live overview' })
+      await expect(overview).toBeVisible({ timeout: 30000 })
+      await expect(overview).toHaveAttribute('aria-busy', 'false', { timeout: 30000 })
+      await expect(overview).not.toContainText('Unavailable')
+      await expect(overview).not.toContainText('Loading...')
       await page.mouse.move(0, 0)
     }
     const text = await page.locator('body').innerText()

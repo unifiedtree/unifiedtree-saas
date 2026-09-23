@@ -12,8 +12,13 @@ public record EmailMessage(
     String subject,
     String htmlBody,
     String textBody,    // nullable — plain-text fallback
-    List<String> cc     // nullable or empty
+    List<String> cc,    // nullable or empty
+    List<Attachment> attachments
 ) {
+    public record Attachment(String filename, String contentType, byte[] bytes) {}
+    public EmailMessage(String to, String toName, String subject, String htmlBody, String textBody, List<String> cc) {
+        this(to, toName, subject, htmlBody, textBody, cc, List.of());
+    }
     /** Convenience constructor for simple one-recipient emails with no CC. */
     public static EmailMessage simple(String to, String subject, String htmlBody) {
         return new EmailMessage(to, null, subject, htmlBody, null, List.of());

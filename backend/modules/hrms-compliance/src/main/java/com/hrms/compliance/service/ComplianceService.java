@@ -69,6 +69,9 @@ public class ComplianceService {
 
     @Transactional
     public InspectorSessionResponse createInspectorSession(UUID companyId, InspectorSessionRequest request) {
+        if (request.expiresAt() != null && (!request.expiresAt().isAfter(Instant.now()) || request.expiresAt().isAfter(Instant.now().plusSeconds(604800)))) {
+            throw new BusinessRuleException("Inspection access must expire within the next seven days", "INSPECTOR_EXPIRY_INVALID");
+        }
         InspectorSession session = new InspectorSession();
         session.setTenantId(TenantContext.getTenantId());
         session.setCompanyId(companyId);
@@ -92,17 +95,15 @@ public class ComplianceService {
     }
 
     @Transactional(readOnly = true)
-    public List<ComplianceCalendarEventResponse> calendarEvents(UUID companyId) {
-        Pageable first200 = org.springframework.data.domain.PageRequest.of(0, 200);
-        List<ComplianceCalendarEventResponse> itemEvents = (companyId == null
-                ? itemRepository.findAllByOrderByDueDateAsc(first200)
-                : itemRepository.findByCompanyIdOrderByDueDateAsc(companyId, first200)).getContent().stream()
+    public List<ComplianceCalendarEventResponse> calendarEvents(UUID companyId, LocalDate from, LocalDate to) {
+        if (from == null) from = LocalDate.now().withDayOfMonth(1);
+        if (to == null) to = from.plusMonths(1).minusDays(1);
+        if (to.isBefore(from) || to.isAfter(from.plusYears(1))) throw new BusinessRuleException("Choose a date range of at most one year", "CALENDAR_RANGE_INVALID");
+        List<ComplianceCalendarEventResponse> itemEvents = itemRepository.calendar(companyId, from, to).stream()
                 .map(i -> new ComplianceCalendarEventResponse("item-" + i.getId(), i.getCompanyId(), i.getTitle(),
                         "COMPLIANCE_ITEM", i.getDueDate(), toItemResponse(i).status().name(), i.getCategory(), null))
                 .toList();
-        List<ComplianceCalendarEventResponse> filingEvents = (companyId == null
-                ? filingRepository.findAllByOrderByDueDateDesc(first200)
-                : filingRepository.findByCompanyIdOrderByDueDateDesc(companyId, first200)).getContent().stream()
+        List<ComplianceCalendarEventResponse> filingEvents = filingRepository.calendar(companyId, from, to).stream()
                 .map(f -> new ComplianceCalendarEventResponse("filing-" + f.getId(), f.getCompanyId(),
                         f.getFilingType().name() + (f.getPeriod() == null ? " Filing" : " Filing - " + f.getPeriod()),
                         "STATUTORY_FILING", f.getDueDate(), f.getStatus().name(), f.getFilingType().name(), null))

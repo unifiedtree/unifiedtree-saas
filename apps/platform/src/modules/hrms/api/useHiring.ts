@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiJson } from '@/core/api/client'
+import { apiJson, apiBlob } from '@/core/api/client'
 
 export type OfferStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'DECLINED' | 'WITHDRAWN'
 export const OFFER_STATUSES: OfferStatus[] = ['DRAFT', 'SENT', 'ACCEPTED', 'DECLINED', 'WITHDRAWN']
@@ -12,27 +12,41 @@ export interface HiringOfferPayload {
   offeredCtc: number
   joiningDate?: string
   notes?: string
+  offerTerms?: string
 }
 export interface HiringOffer extends HiringOfferPayload {
   id: string
   status: OfferStatus
+  emailSubmittedAt?: string
+  emailRecipient?: string
   sentAt?: string
   respondedAt?: string
   createdAt: string
 }
 export function useHiringOffers(page: number) {
-  return useQuery({ queryKey: ['hrms', 'hiring', 'offers', page],
-    queryFn: () => apiJson<Page<HiringOffer>>(`/v1/hiring/offers?page=${page}&size=20`) })
+  return useQuery({
+    queryKey: ['hrms', 'hiring', 'offers', page],
+    queryFn: () => apiJson<Page<HiringOffer>>(`/v1/hiring/offers?page=${page}&size=20`),
+  })
 }
 export function useCreateHiringOffer() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: (body: HiringOfferPayload) => apiJson<HiringOffer>('/v1/hiring/offers', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }) })
+  return useMutation({
+    mutationFn: (body: HiringOfferPayload) =>
+      apiJson<HiringOffer>('/v1/hiring/offers', { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }),
+  })
 }
 export function useUpdateHiringOfferStatus() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: ({ id, status }: { id: string; status: OfferStatus }) => apiJson<HiringOffer>(`/v1/hiring/offers/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }) })
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: OfferStatus }) =>
+      apiJson<HiringOffer>(`/v1/hiring/offers/${id}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }),
+  })
 }
 
 // Mirrors backend com.hrms.hiring.enums
@@ -40,11 +54,20 @@ export type RequisitionStatus = 'OPEN' | 'ON_HOLD' | 'CLOSED'
 export type CandidateStage = 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED'
 
 export const CANDIDATE_STAGES: CandidateStage[] = [
-  'APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'REJECTED',
+  'APPLIED',
+  'SCREENING',
+  'INTERVIEW',
+  'OFFER',
+  'HIRED',
+  'REJECTED',
 ]
 
 export const EMPLOYMENT_TYPES = [
-  'FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'TEMPORARY',
+  'FULL_TIME',
+  'PART_TIME',
+  'CONTRACT',
+  'INTERN',
+  'TEMPORARY',
 ] as const
 export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number]
 
@@ -129,7 +152,10 @@ export function useCreateRequisition() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: RequisitionPayload) =>
-      apiJson<JobRequisition>('/v1/hiring/requisitions', { method: 'POST', body: JSON.stringify(data) }),
+      apiJson<JobRequisition>('/v1/hiring/requisitions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }),
   })
 }
@@ -138,7 +164,10 @@ export function useUpdateRequisition() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, ...body }: RequisitionPayload & { id: string }) =>
-      apiJson<JobRequisition>(`/v1/hiring/requisitions/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+      apiJson<JobRequisition>(`/v1/hiring/requisitions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }),
   })
 }
@@ -191,6 +220,42 @@ export function useUpdateCandidateStage() {
       apiJson<Candidate>(`/v1/hiring/candidates/${id}/stage`, {
         method: 'PUT',
         body: JSON.stringify({ stage }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }),
+  })
+}
+
+export function useEditHiringOffer() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: HiringOfferPayload & { id: string }) =>
+      apiJson<HiringOffer>(`/v1/hiring/offers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }),
+  })
+}
+export async function downloadOfferPdf(id: string) {
+  const blob = await apiBlob(`/v1/hiring/offers/${id}/pdf`)
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `offer-${id}.pdf`
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export function useEmailHiringOffer() {
+  const qc = useQueryClient()
+  return useMutation({
+    retry: false,
+    mutationFn: ({ id, recipient }: { id: string; recipient: string }) =>
+      apiJson<HiringOffer>(`/v1/hiring/offers/${id}/email`, {
+        method: 'POST',
+        body: JSON.stringify({ recipient }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }),
   })

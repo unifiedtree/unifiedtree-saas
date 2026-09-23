@@ -22,6 +22,15 @@ public interface UserCredentialsRepository extends JpaRepository<UserCredentials
     @Query("SELECT u FROM UserCredentials u WHERE lower(u.email) = lower(:email)")
     Optional<UserCredentials> findByEmailIgnoreCase(@Param("email") String email);
 
+    /** Serialize session issuance for one account without changing ordinary read queries. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM UserCredentials u WHERE lower(u.email) = lower(:email)")
+    Optional<UserCredentials> findByEmailForSession(@Param("email") String email);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM UserCredentials u WHERE u.id = :id")
+    Optional<UserCredentials> findByIdForSession(@Param("id") UUID id);
+
     /**
      * Lookup the credential row by the employee_id foreign key. Used by the
      * mobile "promote to manager" flow so an admin can change an employee's

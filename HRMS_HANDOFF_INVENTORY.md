@@ -1,0 +1,311 @@
+# HRMS handoff inventory
+
+Snapshot: 2026-09-23. State inventory, not an exclusive authorship list. Runtime files, secrets and file contents are not included.
+
+Repository: C:\REACT\unifiedtree-saas
+Branch: main
+HEAD: e5d1982ce7d159e1c5cfff4a57819f65b0aa50f7
+
+## Working tree snapshot
+
+Essential implementation is uncommitted/untracked. A clean checkout at HEAD is insufficient. Preserve unrelated modifications as well.
+
+~~~text
+M HRMS_FUNCTIONALITY_AUDIT.md
+ M HRMS_IMPLEMENTATION_PLAN.md
+ M HRMS_IMPLEMENTATION_STATUS.md
+ M apps/platform/e2e/recovery/live-browser.mjs
+ M apps/platform/src/App.tsx
+ M apps/platform/src/layouts/PlatformShell.tsx
+ M apps/platform/src/modules/hrms/CompanyAdminDashboard.tsx
+ M apps/platform/src/modules/hrms/Compliance.tsx
+ M apps/platform/src/modules/hrms/DocumentVault.tsx
+ M apps/platform/src/modules/hrms/Employees.tsx
+ M apps/platform/src/modules/hrms/Hiring.tsx
+ M apps/platform/src/modules/hrms/Integrations.tsx
+ M apps/platform/src/modules/hrms/Learning.tsx
+ M apps/platform/src/modules/hrms/Payroll.tsx
+ M apps/platform/src/modules/hrms/Performance.tsx
+ M apps/platform/src/modules/hrms/api/useHiring.ts
+ M apps/platform/src/modules/hrms/api/useLearning.ts
+ M apps/platform/src/modules/hrms/attendance/ShiftsAndOt.tsx
+ M apps/platform/src/modules/hrms/employees/workspace/EmployeeLetters.tsx
+ M apps/platform/src/modules/hrms/ess/EssDashboard.tsx
+ M apps/platform/src/modules/hrms/hiring/OffersTab.tsx
+ M apps/platform/src/modules/hrms/letters/LetterTemplates.tsx
+ M apps/platform/src/modules/hrms/onboarding/Instances.tsx
+ M apps/platform/src/modules/hrms/onboarding/api/useOnboarding.ts
+ M apps/platform/src/modules/hrms/organization/Companies.tsx
+ M apps/platform/src/modules/hrms/organization/OrgSetup.tsx
+ M apps/platform/src/modules/hrms/payroll/SalaryStructureAdmin.tsx
+ M apps/platform/src/modules/hrms/team/TeamDashboard.tsx
+ M apps/platform/src/shared/hooks/useToast.tsx
+ M backend/app/hrms-api/src/main/java/com/hrms/api/attendance/AttendanceController.java
+ M backend/app/hrms-api/src/main/java/com/hrms/api/compliance/ComplianceController.java
+ M backend/app/hrms-api/src/main/java/com/hrms/api/hiring/HiringController.java
+ M backend/app/hrms-api/src/main/java/com/hrms/api/mail/BrevoMailService.java
+ M backend/app/hrms-api/src/main/java/com/hrms/api/mail/EmailMessage.java
+ M backend/app/hrms-api/src/main/java/com/hrms/api/mail/SmtpMailService.java
+ M backend/app/hrms-api/src/main/java/com/hrms/api/onboarding/OnboardingController.java
+ M backend/app/hrms-api/src/test/java/com/hrms/api/hiring/HiringOfferWorkflowTest.java
+ M backend/app/hrms-app/src/main/java/com/hrms/app/config/CanonicalProdSecurityConfig.java
+ M backend/modules/hrms-attendance/src/main/java/com/hrms/attendance/service/AttendanceService.java
+ M backend/modules/hrms-compliance/src/main/java/com/hrms/compliance/repository/ComplianceItemRepository.java
+ M backend/modules/hrms-compliance/src/main/java/com/hrms/compliance/repository/StatutoryFilingRepository.java
+ M backend/modules/hrms-compliance/src/main/java/com/hrms/compliance/service/ComplianceService.java
+ M backend/modules/hrms-employee/src/main/java/com/hrms/employee/repository/OnboardingAssetRepository.java
+ M backend/modules/hrms-employee/src/main/java/com/hrms/employee/service/OnboardingService.java
+ M backend/modules/hrms-employee/src/main/java/com/hrms/employee/workforce/dto/WorkforceDtos.java
+ M backend/modules/hrms-hiring/src/main/java/com/hrms/hiring/dto/HiringOfferRequest.java
+ M backend/modules/hrms-hiring/src/main/java/com/hrms/hiring/dto/HiringOfferResponse.java
+ M backend/modules/hrms-hiring/src/main/java/com/hrms/hiring/entity/HiringOffer.java
+ M backend/modules/hrms-hiring/src/main/java/com/hrms/hiring/repository/HiringOfferRepository.java
+ M backend/modules/hrms-hiring/src/main/java/com/hrms/hiring/service/HiringService.java
+ M backend/modules/hrms-integration/src/main/java/com/hrms/integration/dto/IntegrationConnectionRequest.java
+ M backend/modules/hrms-integration/src/main/java/com/hrms/integration/service/IntegrationService.java
+ M backend/modules/hrms-learning/src/main/java/com/hrms/learning/dto/EmployeeSkillRequest.java
+ M backend/modules/hrms-learning/src/main/java/com/hrms/learning/dto/EmployeeSkillResponse.java
+ M backend/modules/hrms-learning/src/main/java/com/hrms/learning/entity/EmployeeSkill.java
+ M backend/modules/hrms-learning/src/main/java/com/hrms/learning/service/SkillService.java
+ M backend/platform/platform-rbac/src/main/java/com/unifiedtree/auth/dto/AuthDtos.java
+ M backend/platform/platform-rbac/src/main/java/com/unifiedtree/auth/repository/UserCredentialsRepository.java
+ M backend/platform/platform-rbac/src/main/java/com/unifiedtree/auth/service/AuthService.java
+ M backend/platform/platform-settings/src/main/java/com/unifiedtree/settings/branding/DocumentStorage.java
+ M backend/platform/platform-settings/src/main/java/com/unifiedtree/settings/branding/R2Storage.java
+?? .claude/
+?? CLAUDE_CONTINUATION_PROMPT.md
+?? HRMS_CLAUDE_HANDOFF.md
+?? HRMS_HANDOFF_INVENTORY.md
+?? apps/platform/e2e/recovery/live-assets-browser.mjs
+?? apps/platform/e2e/recovery/live-assets-calendar.mjs
+?? apps/platform/e2e/recovery/live-concurrent-login.mjs
+?? apps/platform/e2e/recovery/live-inspection-documents.mjs
+?? apps/platform/e2e/recovery/live-inspector-browser.mjs
+?? apps/platform/e2e/recovery/live-inspector.mjs
+?? apps/platform/e2e/recovery/live-learning-dashboard.mjs
+?? apps/platform/e2e/recovery/live-mobile-layout.mjs
+?? apps/platform/e2e/recovery/live-new-admin-browser.mjs
+?? apps/platform/e2e/recovery/live-night-integration.mjs
+?? apps/platform/e2e/recovery/live-notices-browser.mjs
+?? apps/platform/e2e/recovery/live-offer-documents.mjs
+?? apps/platform/e2e/recovery/live-offer-email.mjs
+?? apps/platform/e2e/recovery/live-offers-browser.mjs
+?? apps/platform/e2e/recovery/live-overtime-browser.mjs
+?? apps/platform/e2e/recovery/live-projects.mjs
+?? apps/platform/e2e/recovery/live-role-matrix.mjs
+?? apps/platform/e2e/recovery/live-summary-notices.mjs
+?? apps/platform/e2e/recovery/live-time-browser.mjs
+?? apps/platform/e2e/recovery/live-time-workflows.mjs
+?? apps/platform/src/modules/hrms/attendance/OvertimeApprovals.tsx
+?? apps/platform/src/modules/hrms/attendance/ShiftRoster.tsx
+?? apps/platform/src/modules/hrms/compliance/
+?? apps/platform/src/modules/hrms/dashboard/
+?? apps/platform/src/modules/hrms/ess/AttendanceHistory.tsx
+?? apps/platform/src/modules/hrms/ess/TimeEntries.tsx
+?? apps/platform/src/modules/hrms/onboarding/AssetHistory.tsx
+?? apps/platform/src/modules/hrms/onboarding/AssetsTab.tsx
+?? apps/platform/src/modules/hrms/onboarding/api/useAssets.ts
+?? apps/platform/src/modules/hrms/payroll/SalaryOverview.tsx
+?? apps/platform/src/modules/hrms/team/TeamSchedule.tsx
+?? backend/app/hrms-api/src/main/java/com/hrms/api/attendance/OvertimeController.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/attendance/TeamEmployeeScope.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/attendance/TeamScheduleController.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/compliance/InspectionDocumentController.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/compliance/InspectionDocuments.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/compliance/InspectorAccessController.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/compliance/InspectorAccessService.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/hiring/OfferDeliveryController.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/hiring/OfferDeliveryService.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/hiring/OfferDocumentController.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/workforce/AdminDashboardController.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/workforce/CompanyNoticeController.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/workforce/DashboardSummaryController.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/workforce/ProjectController.java
+?? backend/app/hrms-api/src/main/java/com/hrms/api/workforce/TimeEntryController.java
+?? backend/app/hrms-api/src/test/java/com/hrms/api/auth/
+?? backend/app/hrms-api/src/test/java/com/hrms/api/hiring/OfferDeliveryTest.java
+?? backend/app/hrms-api/src/test/java/com/hrms/api/hiring/OfferDocumentTest.java
+?? backend/app/hrms-api/src/test/java/com/hrms/api/onboarding/
+?? backend/app/hrms-app/src/main/resources/db/canonical/V131__learning_certification_expiry.sql
+?? backend/app/hrms-app/src/main/resources/db/canonical/V132__hr_projects.sql
+?? backend/app/hrms-app/src/main/resources/db/canonical/V133__employee_time_entries.sql
+?? backend/app/hrms-app/src/main/resources/db/canonical/V134__overtime_decisions.sql
+?? backend/app/hrms-app/src/main/resources/db/canonical/V135__company_notices.sql
+?? backend/app/hrms-app/src/main/resources/db/canonical/V136__asset_allocation_history.sql
+?? backend/app/hrms-app/src/main/resources/db/canonical/V137__hiring_offer_document_terms.sql
+?? backend/app/hrms-app/src/main/resources/db/canonical/V138__offer_email_submission.sql
+?? backend/app/hrms-app/src/main/resources/db/canonical/V139__inspection_documents.sql
+?? backend/modules/hrms-attendance/src/main/java/com/hrms/attendance/service/ShiftTiming.java
+?? backend/modules/hrms-attendance/src/test/java/com/hrms/attendance/service/
+?? scripts/local-mail-catcher.mjs
+?? scripts/recovery-company-owner.sql
+?? scripts/start-recovery-backend.ps1
+?? scripts/test-recovery-backend.ps1
+~~~
+
+## Recovery scripts
+
+- apps/platform/e2e/recovery/company-admin-preview.mjs
+- apps/platform/e2e/recovery/expense-batches-live.mjs
+- apps/platform/e2e/recovery/letters-admin-live.mjs
+- apps/platform/e2e/recovery/live-admin-actions.mjs
+- apps/platform/e2e/recovery/live-advance-admin.mjs
+- apps/platform/e2e/recovery/live-api.mjs
+- apps/platform/e2e/recovery/live-assets-browser.mjs
+- apps/platform/e2e/recovery/live-assets-calendar.mjs
+- apps/platform/e2e/recovery/live-browser.mjs
+- apps/platform/e2e/recovery/live-compliance-reports.mjs
+- apps/platform/e2e/recovery/live-concurrent-login.mjs
+- apps/platform/e2e/recovery/live-directory-search.mjs
+- apps/platform/e2e/recovery/live-employee-exit.mjs
+- apps/platform/e2e/recovery/live-employee-import.mjs
+- apps/platform/e2e/recovery/live-fnf-admin.mjs
+- apps/platform/e2e/recovery/live-hiring-offers.mjs
+- apps/platform/e2e/recovery/live-hr-lifecycle.mjs
+- apps/platform/e2e/recovery/live-inspection-documents.mjs
+- apps/platform/e2e/recovery/live-inspector-browser.mjs
+- apps/platform/e2e/recovery/live-inspector.mjs
+- apps/platform/e2e/recovery/live-learning-dashboard.mjs
+- apps/platform/e2e/recovery/live-mobile-layout.mjs
+- apps/platform/e2e/recovery/live-module-workflows.mjs
+- apps/platform/e2e/recovery/live-modules.mjs
+- apps/platform/e2e/recovery/live-new-admin-browser.mjs
+- apps/platform/e2e/recovery/live-night-integration.mjs
+- apps/platform/e2e/recovery/live-notices-browser.mjs
+- apps/platform/e2e/recovery/live-offer-documents.mjs
+- apps/platform/e2e/recovery/live-offer-email.mjs
+- apps/platform/e2e/recovery/live-offers-browser.mjs
+- apps/platform/e2e/recovery/live-onboarding.mjs
+- apps/platform/e2e/recovery/live-overtime-browser.mjs
+- apps/platform/e2e/recovery/live-payroll-access.mjs
+- apps/platform/e2e/recovery/live-projects.mjs
+- apps/platform/e2e/recovery/live-role-matrix.mjs
+- apps/platform/e2e/recovery/live-summary-notices.mjs
+- apps/platform/e2e/recovery/live-tenant-isolation.mjs
+- apps/platform/e2e/recovery/live-time-browser.mjs
+- apps/platform/e2e/recovery/live-time-workflows.mjs
+- apps/platform/e2e/recovery/live-workflows.mjs
+- apps/platform/e2e/recovery/performance-admin-live.mjs
+- apps/platform/e2e/recovery/performance-authorization-live.mjs
+
+## Recovery runtime tools
+
+- scripts/local-mail-catcher.mjs
+- scripts/recovery-company-owner.sql
+- scripts/recovery-runtime-grants.sql
+- scripts/restart-recovery-postgres.ps1
+- scripts/start-recovery-backend.ps1
+- scripts/test-recovery-backend.ps1
+
+## Applied continuation migration files
+
+- backend/app/hrms-app/src/main/resources/db/canonical/V130__hrms_static_ui_backend_foundations.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V131__learning_certification_expiry.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V132__hr_projects.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V133__employee_time_entries.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V134__overtime_decisions.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V135__company_notices.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V136__asset_allocation_history.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V137__hiring_offer_document_terms.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V138__offer_email_submission.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V139__inspection_documents.sql
+
+## Current added/untracked implementation files (excluding unrelated hidden directories)
+
+- apps/platform/src/modules/hrms/attendance/OvertimeApprovals.tsx
+- apps/platform/src/modules/hrms/attendance/ShiftRoster.tsx
+- apps/platform/src/modules/hrms/compliance/FilingCalendar.tsx
+- apps/platform/src/modules/hrms/compliance/InspectionFiles.tsx
+- apps/platform/src/modules/hrms/compliance/InspectorSessions.tsx
+- apps/platform/src/modules/hrms/compliance/InspectorView.tsx
+- apps/platform/src/modules/hrms/compliance/inspectorCsv.test.ts
+- apps/platform/src/modules/hrms/compliance/inspectorCsv.ts
+- apps/platform/src/modules/hrms/dashboard/CompanyNotices.tsx
+- apps/platform/src/modules/hrms/dashboard/CompanySummary.tsx
+- apps/platform/src/modules/hrms/dashboard/OperationalWidgets.tsx
+- apps/platform/src/modules/hrms/dashboard/ProjectProductivity.tsx
+- apps/platform/src/modules/hrms/ess/AttendanceHistory.tsx
+- apps/platform/src/modules/hrms/ess/TimeEntries.tsx
+- apps/platform/src/modules/hrms/onboarding/AssetHistory.tsx
+- apps/platform/src/modules/hrms/onboarding/AssetsTab.tsx
+- apps/platform/src/modules/hrms/onboarding/api/useAssets.ts
+- apps/platform/src/modules/hrms/payroll/SalaryOverview.tsx
+- apps/platform/src/modules/hrms/team/TeamSchedule.tsx
+- backend/app/hrms-api/src/main/java/com/hrms/api/attendance/OvertimeController.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/attendance/TeamEmployeeScope.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/attendance/TeamScheduleController.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/compliance/InspectionDocumentController.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/compliance/InspectionDocuments.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/compliance/InspectorAccessController.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/compliance/InspectorAccessService.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/hiring/OfferDeliveryController.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/hiring/OfferDeliveryService.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/hiring/OfferDocumentController.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/workforce/AdminDashboardController.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/workforce/CompanyNoticeController.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/workforce/DashboardSummaryController.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/workforce/ProjectController.java
+- backend/app/hrms-api/src/main/java/com/hrms/api/workforce/TimeEntryController.java
+- backend/app/hrms-api/src/test/java/com/hrms/api/auth/canonical/AuthLogRedactionTest.java
+- backend/app/hrms-api/src/test/java/com/hrms/api/hiring/OfferDeliveryTest.java
+- backend/app/hrms-api/src/test/java/com/hrms/api/hiring/OfferDocumentTest.java
+- backend/app/hrms-api/src/test/java/com/hrms/api/onboarding/AssetWorkflowTest.java
+- backend/app/hrms-app/src/main/resources/db/canonical/V131__learning_certification_expiry.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V132__hr_projects.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V133__employee_time_entries.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V134__overtime_decisions.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V135__company_notices.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V136__asset_allocation_history.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V137__hiring_offer_document_terms.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V138__offer_email_submission.sql
+- backend/app/hrms-app/src/main/resources/db/canonical/V139__inspection_documents.sql
+- backend/modules/hrms-attendance/src/main/java/com/hrms/attendance/service/ShiftTiming.java
+- backend/modules/hrms-attendance/src/test/java/com/hrms/attendance/service/ShiftTimingTest.java
+- scripts/local-mail-catcher.mjs
+- scripts/recovery-company-owner.sql
+- scripts/start-recovery-backend.ps1
+- scripts/test-recovery-backend.ps1
+
+## Recorded local evidence files
+
+Historical screenshots/results may include intermediate failures. See the handoff and status for which checks passed; filenames alone do not establish final-state success.
+
+- apps/platform/test-results/recovery/advance-recovery-live.png
+- apps/platform/test-results/recovery/attendance-late.png
+- apps/platform/test-results/recovery/company-admin-desktop.png
+- apps/platform/test-results/recovery/company-admin-live.png
+- apps/platform/test-results/recovery/company-admin-mobile.png
+- apps/platform/test-results/recovery/company-advances-live.png
+- apps/platform/test-results/recovery/employee-exit-live.png
+- apps/platform/test-results/recovery/employee-shift-live.png
+- apps/platform/test-results/recovery/expense-batch-mobile-live.png
+- apps/platform/test-results/recovery/expense-batch-paid-live.png
+- apps/platform/test-results/recovery/fnf-admin-failure.png
+- apps/platform/test-results/recovery/fnf-admin-live.json
+- apps/platform/test-results/recovery/fnf-approved-live.png
+- apps/platform/test-results/recovery/fnf-full-name-picker-live.png
+- apps/platform/test-results/recovery/fnf-paid-mobile-live.png
+- apps/platform/test-results/recovery/inspection-fixture.pdf
+- apps/platform/test-results/recovery/late-employee-live.png
+- apps/platform/test-results/recovery/letter-detail-live.png
+- apps/platform/test-results/recovery/letter-generate-mobile-live.png
+- apps/platform/test-results/recovery/letter-generated-live.pdf
+- apps/platform/test-results/recovery/letters-failure.png
+- apps/platform/test-results/recovery/live-api.json
+- apps/platform/test-results/recovery/live-browser-targeted.json
+- apps/platform/test-results/recovery/live-browser.json
+- apps/platform/test-results/recovery/live-compliance-reports.json
+- apps/platform/test-results/recovery/live-directory-search.json
+- apps/platform/test-results/recovery/live-employee-exit.json
+- apps/platform/test-results/recovery/live-hr-lifecycle.json
+- apps/platform/test-results/recovery/live-modules.json
+- apps/platform/test-results/recovery/modules-loaded-live.png
+- apps/platform/test-results/recovery/modules-outage-live.png
+- apps/platform/test-results/recovery/onboarding-failure.png
+- apps/platform/test-results/recovery/onboarding-profile-live.png
+- apps/platform/test-results/recovery/payroll-access-live.json
+- apps/platform/test-results/recovery/payroll-batch-exclusions-live.png
+- apps/platform/test-results/recovery/performance-cycle-live.png
+- apps/platform/test-results/recovery/performance-failure.png
+- apps/platform/test-results/recovery/performance-kpis-live.png
+- apps/platform/test-results/recovery/performance-mobile-live.png

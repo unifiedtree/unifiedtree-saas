@@ -1,3 +1,7 @@
+import { ProjectProductivity } from './dashboard/ProjectProductivity'
+import { CompanyNotices } from './dashboard/CompanyNotices'
+import { CompanySummary } from './dashboard/CompanySummary'
+import { Performers, OnboardingTracker, HiringProgress, PayrollTrend } from './dashboard/OperationalWidgets'
 import { attendanceDate } from './attendance/date'
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -47,6 +51,8 @@ function Card({ title, chip, className = '', children }: {
 
 export const CompanyAdminDashboard: React.FC = () => {
   const navigate = useNavigate()
+  const canReadPerformance = usePermission('hrms.performance.read')
+  const canReadOnboarding = usePermission('hrms.onboarding.instance.read')
   const { data: companies = [] } = useCompanies()
   const activeCompany = companies[0]
 
@@ -101,7 +107,7 @@ export const CompanyAdminDashboard: React.FC = () => {
   const directory        = directoryQuery.data
   const leaveOverview    = leaveOverviewQuery.data
 
-  const totalEmployees   = directory?.totalElements ?? 0
+  const totalEmployees = directoryQuery.isError ? 'Unavailable' : directory?.totalElements ?? 'Loading...'
   const recentEmployees  = directory?.content ?? []
   const pendingApprovals = leaveOverview?.pendingApprovals ?? 0
 
@@ -192,7 +198,7 @@ export const CompanyAdminDashboard: React.FC = () => {
     </div>
 
     {/* SECTION 1: OVERVIEW KPI WIDGETS */}
-    <section aria-label="Live overview">
+    <section aria-label="Live overview" aria-busy={directoryQuery.isLoading || teamDashboardQuery.isLoading}>
       <h2 className="dashboard-section-title flex items-center gap-2 text-[var(--primary)]"><Clock size={18} /> Live Overview</h2>
       
       {/* Top 4 KPI Cards */}
@@ -203,7 +209,7 @@ export const CompanyAdminDashboard: React.FC = () => {
               <div>
                 <p className="text-[13px] font-medium text-[var(--text-secondary)]">Total Employees</p>
                 <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{totalEmployees}</div>
-                <p className="mt-2 text-[11px] font-medium text-[#059669] flex items-center gap-1"><Activity size={12} /> Active</p>
+                <p className="mt-2 text-[11px] font-medium text-[#059669] flex items-center gap-1"><Activity size={12} /> Employee directory</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#2563EB]"><Users size={20} /></div>
             </div>
@@ -214,8 +220,8 @@ export const CompanyAdminDashboard: React.FC = () => {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[13px] font-medium text-[var(--text-secondary)]">Present</p>
-                <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{oCounts?.present ?? 0}</div>
-                <p className="mt-2 text-[11px] font-medium text-[#059669] flex items-center gap-1"><ArrowRight size={12} className="-rotate-45" /> High Attendance</p>
+                <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{teamDashboardQuery.isError ? 'Unavailable' : oCounts?.present ?? 'Loading...'}</div>
+                <p className="mt-2 text-[11px] font-medium text-[#059669] flex items-center gap-1"><ArrowRight size={12} className="-rotate-45" /> Checked in today</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ECFDF5] text-[#059669]"><UserCheck size={20} /></div>
             </div>
@@ -226,8 +232,8 @@ export const CompanyAdminDashboard: React.FC = () => {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[13px] font-medium text-[var(--text-secondary)]">On Leave</p>
-                <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{oCounts?.onLeave ?? 0}</div>
-                <p className="mt-2 text-[11px] font-medium text-[#D97706] flex items-center gap-1"><ArrowRight size={12} className="rotate-45" /> From yesterday</p>
+                <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{teamDashboardQuery.isError ? 'Unavailable' : oCounts?.onLeave ?? 'Loading...'}</div>
+                <p className="mt-2 text-[11px] font-medium text-[#D97706] flex items-center gap-1"><ArrowRight size={12} className="rotate-45" /> Approved leave today</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF7ED] text-[#D97706]"><UserMinus size={20} /></div>
             </div>
@@ -238,7 +244,7 @@ export const CompanyAdminDashboard: React.FC = () => {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[13px] font-medium text-[var(--text-secondary)]">Late Arrivals</p>
-                <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{oCounts?.late ?? 0}</div>
+                <div className="mt-1 text-3xl font-bold text-[var(--text-primary)]">{teamDashboardQuery.isError ? 'Unavailable' : oCounts?.late ?? 'Loading...'}</div>
                 <p className="mt-2 text-[11px] font-medium text-[#DC2626] flex items-center gap-1">Needs attention</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FEF2F2] text-[#DC2626]"><AlertCircle size={20} /></div>
@@ -253,7 +259,7 @@ export const CompanyAdminDashboard: React.FC = () => {
           <button className="flex items-center justify-between rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('HALF_DAY')}>
             <div>
               <p className="text-[13px] font-medium text-[var(--text-secondary)]">Half Day</p>
-              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{oCounts?.halfDay ?? 0}</div>
+              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{teamDashboardQuery.isError ? 'Unavailable' : oCounts?.halfDay ?? 'Loading...'}</div>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F3E8FF] text-[#9333EA]"><Lightbulb size={20} /></div>
           </button>
@@ -262,7 +268,7 @@ export const CompanyAdminDashboard: React.FC = () => {
           <button className="flex items-center justify-between rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('WORK_FROM_HOME')}>
             <div>
               <p className="text-[13px] font-medium text-[var(--text-secondary)]">Work From Home</p>
-              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{oCounts?.workFromHome ?? 0}</div>
+              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{teamDashboardQuery.isError ? 'Unavailable' : oCounts?.workFromHome ?? 'Loading...'}</div>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#2563EB]"><Home size={20} /></div>
           </button>
@@ -271,7 +277,7 @@ export const CompanyAdminDashboard: React.FC = () => {
           <button className="flex items-center justify-between rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('NOT_MARKED')}>
             <div>
               <p className="text-[13px] font-medium text-[var(--text-secondary)]">Not Marked</p>
-              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{oCounts?.notMarked ?? 0}</div>
+              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{teamDashboardQuery.isError ? 'Unavailable' : oCounts?.notMarked ?? 'Loading...'}</div>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF7ED] text-[#EA580C]"><HelpCircle size={20} /></div>
           </button>
@@ -280,7 +286,7 @@ export const CompanyAdminDashboard: React.FC = () => {
           <button className="flex items-center justify-between rounded-2xl border border-[var(--border-default)] bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md" onClick={() => openAttendance('ABSENT')}>
             <div>
               <p className="text-[13px] font-medium text-[var(--text-secondary)]">Absence</p>
-              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{oCounts?.absent ?? 0}</div>
+              <div className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{teamDashboardQuery.isError ? 'Unavailable' : oCounts?.absent ?? 'Loading...'}</div>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FEF2F2] text-[#DC2626]"><UserX size={20} /></div>
           </button>
@@ -289,6 +295,7 @@ export const CompanyAdminDashboard: React.FC = () => {
     </section>
 
     {/* SECTION 2: ATTENDANCE ANALYTICS */}
+    <CompanySummary companyId={activeCompany?.id || ''} />
     {canReadTeamAttendance && <section aria-label="Attendance analytics"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="dashboard-section-title !mb-0 flex items-center gap-2 text-[#059669]"><Clock size={18} /> Attendance Analytics</h2><button onClick={() => navigate(`/hrms/attendance?tab=team&date=${todayIso}`)} className="text-xs font-semibold text-primary">View attendance &rarr;</button></div>
       <div className="grid items-start gap-5 xl:grid-cols-[1.4fr_1fr]">
         <Card title="Weekly Attendance Trend" chip={<span className="text-xs text-text-secondary">Last 7 days - IST</span>}>
@@ -312,134 +319,23 @@ export const CompanyAdminDashboard: React.FC = () => {
       {canExportHeadcount && <Card title="Dept Distribution">{queryState(headcountQuery.isPending, headcountQuery.isError, headcountQuery.refetch, !headcountRows.length,
         <div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={headcountRows} layout="vertical" margin={{ left: 0, right: 16 }}><CartesianGrid stroke="#E2E8F0" horizontal={false} /><XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} /><YAxis type="category" dataKey="department" width={100} tick={{ fontSize: 11 }} /><Tooltip /><Bar dataKey="active" name="Active employees" fill="#0F6E56" radius={[0, 3, 3, 0]} maxBarSize={22} /></BarChart></ResponsiveContainer></div>)}</Card>}
       
-      <Card title="Top Performers (Mock)">
-        <div className="flex flex-col gap-4 mt-2">
-          {[
-            { initials: 'DL', name: 'David Lee', role: 'Engineering', score: '98%', bg: '#F3E8FF', color: '#9333EA' },
-            { initials: 'SN', name: 'Sarah Nair', role: 'Marketing', score: '96%', bg: '#ECFDF5', color: '#10B981' },
-            { initials: 'RJ', name: 'Rahul Joshi', role: 'Sales', score: '94%', bg: '#EFF6FF', color: '#3B82F6' },
-            { initials: 'VK', name: 'Vikram Kumar', role: 'Operations', score: '92%', bg: '#FFF7ED', color: '#F59E0B' }
-          ].map(p => (
-            <div key={p.name} className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: p.bg, color: p.color }}>{p.initials}</div>
-                <div>
-                  <div className="text-[13px] font-semibold text-gray-800">{p.name}</div>
-                  <div className="text-[11px] text-gray-500">{p.role}</div>
-                </div>
-              </div>
-              <div className="font-bold text-[#059669]">{p.score}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
+      {canReadPerformance && <Card title="Top performers"><Performers companyId={activeCompany?.id || ''} /></Card>}
       
-      <Card title="Onboarding Tracker (Mock)">
-        <div className="flex flex-col gap-4 mt-2">
-          {[
-            { name: 'Anita R.', role: 'Product', progress: 80, color: '#3B82F6' },
-            { name: 'James W.', role: 'Design', progress: 55, color: '#F59E0B' },
-            { name: 'Pooja K.', role: 'Sales', progress: 100, color: '#10B981' }
-          ].map(o => (
-            <div key={o.name}>
-              <div className="flex justify-between text-[12px] mb-1">
-                <span><b>{o.name}</b> ({o.role})</span>
-                <span className="font-semibold">{o.progress}%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                <div className="h-full rounded-full transition-all" style={{ width: `${o.progress}%`, backgroundColor: o.color }} />
-              </div>
-            </div>
-          ))}
-          <HrButton variant="ghost" className="mt-2 w-full justify-center">View All Onboardings</HrButton>
-        </div>
-      </Card>
+      {canReadOnboarding && <Card title="Onboarding tracker"><OnboardingTracker companyId={activeCompany?.id || ''} /></Card>}
     </div></section>}
 
     {/* SECTION 4 & 5: RECRUITMENT & PROJECTS */}
     <div className="grid gap-5 xl:grid-cols-2">
-      <section aria-label="Recruitment & Pipeline">
-        <h2 className="dashboard-section-title flex items-center gap-2 text-[#D97706]"><Briefcase size={18} /> Recruitment & Pipeline</h2>
-        <Card>
-          <div className="flex gap-3 mb-6">
-            <div className="flex-1 rounded-xl border border-[var(--border-default)] bg-[var(--bg-base)] p-4 text-center">
-              <div className="text-2xl font-bold text-gray-800">24</div>
-              <div className="text-[11px] font-semibold uppercase text-gray-500">Open Jobs</div>
-            </div>
-            <div className="flex-1 rounded-xl border border-[var(--border-default)] bg-[var(--bg-base)] p-4 text-center">
-              <div className="text-2xl font-bold text-[#3B82F6]">186</div>
-              <div className="text-[11px] font-semibold uppercase text-gray-500">Applicants</div>
-            </div>
-            <div className="flex-1 rounded-xl border border-[var(--border-default)] bg-[var(--bg-base)] p-4 text-center">
-              <div className="text-2xl font-bold text-[#10B981]">12</div>
-              <div className="text-[11px] font-semibold uppercase text-gray-500">Interviews</div>
-            </div>
-          </div>
-          <h4 className="text-[13px] font-semibold mb-3">Hiring Progress (Mock)</h4>
-          <div className="h-32 flex flex-col justify-end gap-2">
-            {/* Mock Funnel UI */}
-            <div className="w-full bg-[#EFF6FF] rounded-md py-1.5 text-center text-[11px] font-bold text-[#2563EB]">Sourced (450)</div>
-            <div className="w-10/12 mx-auto bg-[#ECFDF5] rounded-md py-1.5 text-center text-[11px] font-bold text-[#059669]">Screened (186)</div>
-            <div className="w-8/12 mx-auto bg-[#FEF2F2] rounded-md py-1.5 text-center text-[11px] font-bold text-[#DC2626]">Interviewed (12)</div>
-            <div className="w-6/12 mx-auto bg-[#F3E8FF] rounded-md py-1.5 text-center text-[11px] font-bold text-[#9333EA]">Offered (3)</div>
-          </div>
-        </Card>
-      </section>
+      {canReadHiring && <section aria-label="Recruitment & Pipeline"><h2 className="dashboard-section-title">Recruitment & Pipeline</h2><Card><HiringProgress companyId={activeCompany?.id || ''} /></Card></section>}
 
-      <section aria-label="Projects & Productivity">
-        <h2 className="dashboard-section-title flex items-center gap-2 text-[#2563EB]"><ClipboardCheck size={18} /> Projects & Productivity (Mock)</h2>
-        <Card className="h-[calc(100%-36px)] flex flex-col justify-center">
-          <div className="flex justify-between items-center h-full">
-            <div className="w-1/2 flex items-center justify-center">
-              {/* Mock Gauge */}
-              <div className="relative h-32 w-32 rounded-full border-[12px] border-gray-100 border-t-[#3B82F6] border-r-[#3B82F6] flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold text-gray-800">85%</span>
-                <span className="text-[10px] uppercase font-bold text-gray-400">Efficiency</span>
-              </div>
-            </div>
-            <div className="w-1/2 flex flex-col gap-3">
-              <div className="flex items-center justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-base)] p-3">
-                <span className="text-[12px] font-semibold text-gray-700">Active Projects</span>
-                <span className="rounded-md bg-[#EFF6FF] px-2 py-0.5 text-[11px] font-bold text-[#2563EB]">42</span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-base)] p-3">
-                <span className="text-[12px] font-semibold text-gray-700">Tasks Completed</span>
-                <span className="rounded-md bg-[#ECFDF5] px-2 py-0.5 text-[11px] font-bold text-[#059669]">846</span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-[var(--border-default)] bg-[var(--bg-base)] p-3">
-                <span className="text-[12px] font-semibold text-gray-700">Avg Velocity</span>
-                <span className="rounded-md bg-[#FFF7ED] px-2 py-0.5 text-[11px] font-bold text-[#D97706]">High</span>
-              </div>
-            </div>
-          </div>
-        </Card>
-      </section>
+      <section aria-label="Projects & Productivity"><h2 className="dashboard-section-title">Projects & Productivity</h2><Card>{activeCompany ? <ProjectProductivity key={activeCompany.id} companyId={activeCompany.id} /> : <p role="status">Loading company...</p>}</Card></section>
     </div>
 
     {/* SECTION 6 & 7: PAYROLL & ACTIVITY FEED */}
     <div className="grid gap-5 xl:grid-cols-[2fr_1fr]">
       <section aria-label="Payroll & Finance">
         <h2 className="dashboard-section-title flex items-center gap-2 text-[#DC2626]"><Receipt size={18} /> Payroll & Finance</h2>
-        <Card title="Monthly Payroll Expense vs Budget (Mock)">
-          <div className="h-64 mt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={[
-                { name: 'Jan', expense: 4000, budget: 4200 },
-                { name: 'Feb', expense: 4100, budget: 4200 },
-                { name: 'Mar', expense: 4250, budget: 4400 },
-                { name: 'Apr', expense: 4300, budget: 4400 },
-                { name: 'May', expense: 4800, budget: 4600 }
-              ]} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip />
-                <Area type="monotone" dataKey="budget" stroke="#94A3B8" fill="#F1F5F9" strokeDasharray="4 4" />
-                <Area type="monotone" dataKey="expense" stroke="#DC2626" fill="#FEE2E2" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
+        {canRunPayroll && <Card title="Monthly payroll expense"><PayrollTrend companyId={activeCompany?.id || ''} /></Card>}
       </section>
 
       {canReadAudit && <section aria-label="Live activity feed">
@@ -465,36 +361,13 @@ export const CompanyAdminDashboard: React.FC = () => {
     </div>
 
     {/* SECTION 7.5: UPCOMING MILESTONES */}
+    {activeCompany && <CompanyNotices key={activeCompany.id} companyId={activeCompany.id} />}
     <section aria-label="Upcoming milestones"><h2 className="dashboard-section-title">Upcoming milestones</h2><UpcomingMilestones />{canSeeProbation && <UpcomingProbations />}</section>
 
-    {/* SECTION 8: AI INSIGHTS PANEL */}
-    <section aria-label="AI & Predictive Insights">
-      <h2 className="dashboard-section-title flex items-center gap-2 text-[#9333EA]"><Brain size={18} /> AI & Predictive Insights (Mock)</h2>
-      <div className="grid gap-5 xl:grid-cols-3 mb-8">
-        <div className="relative overflow-hidden rounded-2xl border-none p-5 text-white" style={{ background: 'linear-gradient(135deg, #1e1e2f, #2a2a4a)' }}>
-          <div className="absolute -right-5 -top-5 text-[100px] opacity-10"><Bot /></div>
-          <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-[#a78bfa]">Anomaly Detected</div>
-          <div className="mb-2 text-[16px] font-semibold leading-snug">Unusual spike in absenteeism in the Engineering Department.</div>
-          <p className="mb-4 text-[13px] text-[#cbd5e1]">12% of engineers are on sick leave today, which is 3x the standard deviation.</p>
-          <button className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-[13px] font-medium transition-colors hover:bg-white/20">View Analysis</button>
-        </div>
-        
-        <div className="relative overflow-hidden rounded-2xl border-none p-5 text-white" style={{ background: 'linear-gradient(135deg, #2d3748, #1a202c)' }}>
-          <div className="absolute -right-5 -top-5 text-[100px] opacity-10"><Flame /></div>
-          <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-[#fca5a5]">Burnout Risk Alert</div>
-          <div className="mb-2 text-[16px] font-semibold leading-snug">Sales team is showing high burnout markers based on OT.</div>
-          <p className="mb-4 text-[13px] text-[#cbd5e1]">Average of 18 hours of overtime recorded over the last 2 weeks.</p>
-          <button className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-[13px] font-medium transition-colors hover:bg-white/20">Send Wellness Survey</button>
-        </div>
-        
-        <div className="relative overflow-hidden rounded-2xl border-none p-5 text-white" style={{ background: 'linear-gradient(135deg, #276749, #1c4532)' }}>
-          <div className="absolute -right-5 -top-5 text-[100px] opacity-10"><Lightbulb /></div>
-          <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-[#6ee7b7]">Hiring Suggestion</div>
-          <div className="mb-2 text-[16px] font-semibold leading-snug">Open req for Senior Dev is taking 40% longer to fill.</div>
-          <p className="mb-4 text-[13px] text-[#cbd5e1]">Consider increasing the budget band or opening remote positions.</p>
-          <button className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-[13px] font-medium transition-colors hover:bg-white/20">Adjust Req</button>
-        </div>
-      </div>
-    </section>
+    <section aria-label="Operational insights"><h2 className="dashboard-section-title">Operational insights</h2><div className="grid gap-5 xl:grid-cols-3">
+      {canReadTeamAttendance && <Card title="Attendance follow-up"><p className="text-sm">Review today's attendance exceptions and open the employee list behind each count.</p><HrButton className="mt-3" onClick={() => navigate(`/hrms/attendance?tab=team&date=${todayIso}`)}>Review attendance</HrButton></Card>}
+      {canApproveCorrections && <Card title="Correction requests">{queryState(corrections.isPending, corrections.isError, corrections.refetch, false, <p className="text-lg font-semibold">{corrections.data?.totalElements ?? 0} awaiting review</p>)}<HrButton className="mt-3" onClick={() => navigate('/hrms/attendance?tab=corrections')}>Review requests</HrButton></Card>}
+      {canApproveLeaves && <Card title="Leave approvals"><p className="text-lg font-semibold">{leaveOverviewQuery.isLoading ? 'Loading...' : leaveOverviewQuery.isError ? 'Unable to load approvals' : `${pendingApprovals} awaiting review`}</p><HrButton className="mt-3" onClick={() => navigate('/hrms/leave')}>Open leave approvals</HrButton></Card>}
+    </div></section>
   </div>
 }

@@ -1,3 +1,5 @@
+import { ShiftRoster } from './ShiftRoster'
+import { OvertimeApprovals } from './OvertimeApprovals'
 import React, { useMemo, useState } from 'react'
 import { Clock, Moon, Timer, Building2, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
@@ -333,31 +335,6 @@ function ShiftFormModal({
 // ── Main page ───────────────────────────────────────────────────────────────────
 
 
-function ShiftRosterMock() {
-  return (
-    <div>
-      <h3 className="mb-2 text-sm font-bold text-text-primary">Shift Roster</h3>
-      <TableCard>
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-[var(--border-default)] bg-[var(--bg-base)] text-xs text-gray-500">
-            <tr><th className="p-4 font-medium">Employee</th><th className="p-4 font-medium">Mon (11)</th><th className="p-4 font-medium">Tue (12)</th><th className="p-4 font-medium">Wed (13)</th><th className="p-4 font-medium">Thu (14)</th><th className="p-4 font-medium">Fri (15)</th></tr>
-          </thead>
-          <tbody>
-            <tr className="border-b border-[var(--border-default)]">
-              <td className="p-4 font-semibold">John Smith</td>
-              <td className="p-4"><span className="badge bg-gray-100 text-gray-700 px-2 py-1 rounded">Morning</span></td>
-              <td className="p-4"><span className="badge bg-gray-100 text-gray-700 px-2 py-1 rounded">Morning</span></td>
-              <td className="p-4"><span className="badge bg-gray-100 text-gray-700 px-2 py-1 rounded">Morning</span></td>
-              <td className="p-4"><span className="badge bg-gray-100 text-gray-700 px-2 py-1 rounded">Morning</span></td>
-              <td className="p-4"><span className="badge bg-gray-100 text-gray-700 px-2 py-1 rounded">Morning</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </TableCard>
-    </div>
-  )
-}
-
 export const ShiftsAndOt: React.FC = () => {
   const { toast } = useToast()
   const { data: companies = [] } = useCompanies()
@@ -486,7 +463,7 @@ export const ShiftsAndOt: React.FC = () => {
       <div className="mt-6">
         {tab === 'roster' && (
           <HrTabPanel tabKey="roster">
-            <ShiftRosterMock />
+            <ShiftRoster key={activeCompany} companyId={activeCompany} />
           </HrTabPanel>
         )}
         {tab === 'ot' && (
@@ -558,6 +535,7 @@ export const ShiftsAndOt: React.FC = () => {
       </div>
 
       {/* Overtime this month */}
+      <OvertimeApprovals />
       <div>
         <h3 className="mb-2 text-sm font-bold text-text-primary">Overtime — {format(now, 'MMMM yyyy')}</h3>
         <TableCard>

@@ -30,13 +30,16 @@ public class IntegrationService {
     private static final Logger log = LoggerFactory.getLogger(IntegrationService.class);
 
     private final IntegrationConnectionRepository connectionRepository;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
-    public IntegrationService(IntegrationConnectionRepository connectionRepository) {
+    public IntegrationService(IntegrationConnectionRepository connectionRepository, org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
         this.connectionRepository = connectionRepository;
     }
 
     @Transactional
     public IntegrationConnectionResponse createConnection(IntegrationConnectionRequest request) {
+        if (jdbc.queryForObject("SELECT count(*) FROM org.companies WHERE id=? AND tenant_id=?", Integer.class, request.companyId(), TenantContext.getTenantId()) == 0) throw new com.hrms.core.exception.BusinessRuleException("Company not found", "INTEGRATION_COMPANY_INVALID");
         IntegrationConnection connection = new IntegrationConnection();
         connection.setTenantId(TenantContext.getTenantId());
         connection.setCompanyId(request.companyId());
@@ -63,7 +66,7 @@ public class IntegrationService {
 
     /**
      * Flip the connection between CONNECTED and DISCONNECTED. Connecting (from any
-     * non-connected state, incl. ERROR) records a fresh sync timestamp.
+     * non-connected state, incl. ERROR) records only the administrative state.
      */
     @Transactional
     public IntegrationConnectionResponse toggleConnection(UUID id) {
@@ -73,7 +76,7 @@ public class IntegrationService {
             connection.setStatus(IntegrationStatus.DISCONNECTED);
         } else {
             connection.setStatus(IntegrationStatus.CONNECTED);
-            connection.setLastSyncedAt(Instant.now());
+            // Registry status is a manual declaration, not a provider handshake.
         }
         connection = connectionRepository.save(connection);
         log.info("Integration connection {} toggled to {}", id, connection.getStatus());

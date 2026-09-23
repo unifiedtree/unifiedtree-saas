@@ -167,10 +167,11 @@ export function useDeleteTemplateTask(templateId: string) {
 
 // ── Instance hooks ─────────────────────────────────────────────────────────────
 
-export function useInstances(status?: string) {
+export function useInstances(status?: string, enabled = true) {
   const params = status ? `?status=${status}` : ''
   return useQuery({
     queryKey: instancesKey(status),
+    enabled,
     queryFn: () => apiJson<OnboardingInstance[]>(`/v1/onboarding/instances${params}`),
   })
 }

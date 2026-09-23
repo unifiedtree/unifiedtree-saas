@@ -1,3 +1,4 @@
+import { PerformanceEmployeePicker as EmployeePicker } from './performance/PerformanceEmployeePicker'
 import { HrPagination } from '@/shared/components/HrPagination'
 import React, { useMemo, useState } from 'react'
 import {
@@ -55,7 +56,7 @@ export const Learning: React.FC = () => {
     ...(canRead ? [{ key: 'programs' as Tab, label: 'Programs' }] : []),
     ...(canEnroll ? [{ key: 'my' as Tab, label: 'My Training' }] : []),
     ...(canViewSkills ? [{ key: 'skills' as Tab, label: 'Skill Matrix' }] : []),
-    ...(canRead ? [{ key: 'certifications' as Tab, label: 'Certifications' }] : []),
+    ...(canViewSkills ? [{ key: 'certifications' as Tab, label: 'Certifications' }] : []),
   ]
 
   // Land on the first tab this role actually has. The old default hard-coded
@@ -80,7 +81,7 @@ export const Learning: React.FC = () => {
       {activeTab === 'programs' && canRead && <HrTabPanel tabKey="programs"><ProgramsTab canWrite={canWrite} canEnroll={canEnroll} /></HrTabPanel>}
       {activeTab === 'my' && canEnroll && <HrTabPanel tabKey="my"><MyTrainingTab /></HrTabPanel>}
       {activeTab === 'skills' && canViewSkills && <HrTabPanel tabKey="skills"><SkillMatrixTab canWrite={canWrite} /></HrTabPanel>}
-      {activeTab === 'certifications' && canRead && <HrTabPanel tabKey="certifications"><CertificationsStatic /></HrTabPanel>}
+      {activeTab === 'certifications' && canViewSkills && <HrTabPanel tabKey="certifications"><SkillMatrixTab canWrite={canWrite} certificationsOnly /></HrTabPanel>}
     </div>
   )
 }
@@ -701,22 +702,20 @@ function MySkillsPanel() {
 
 // ── Skill Matrix ─────────────────────────────────────────────────────────────
 
-function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
+function SkillMatrixTab({ canWrite, certificationsOnly = false }: { canWrite: boolean; certificationsOnly?: boolean }) {
   const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  const companyId = companies[0]?.id || ''
-  const { data: dir } = useEmployeeDirectory({ companyId, pageSize: 200 }, { enabled: !!companyId })
-  const employees = dir?.content ?? []
-
   const [employeeId, setEmployeeId] = useState('')
-  const activeEmployee = employeeId || employees[0]?.id || ''
-  const { data: skills = [], isLoading } = useEmployeeSkills(activeEmployee)
+  const [employeeName, setEmployeeName] = useState('')
+  const activeEmployee = employeeId
+  const { data: allSkills = [], isLoading, isError, error, refetch } = useEmployeeSkills(activeEmployee)
+  const skills = certificationsOnly ? allSkills.filter(s => s.certified) : allSkills
   const upsert = useUpsertSkill()
 
   const [skillName, setSkillName] = useState('')
   const [proficiency, setProficiency] = useState('3')
-  const [certified, setCertified] = useState(false)
+  const [certified, setCertified] = useState(certificationsOnly)
   const [certificationName, setCertificationName] = useState('')
+  const [expiresOn, setExpiresOn] = useState('')
   const [certifiedOn, setCertifiedOn] = useState('')
 
   const onAdd = async () => {
@@ -727,78 +726,57 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
         employeeId: activeEmployee,
         skillName: skillName.trim(),
         proficiency: parseInt(proficiency, 10),
-        certified,
+        certified: certificationsOnly || certified,
         certificationName: certified ? certificationName.trim() || undefined : undefined,
-        certifiedOn: certified ? certifiedOn || undefined : undefined,
+        certifiedOn: certifiedOn || undefined,
+        expiresOn: expiresOn || undefined,
       })
       toast('Skill saved', 'success')
-      setSkillName(''); setProficiency('3'); setCertified(false); setCertificationName(''); setCertifiedOn('')
+      setSkillName(''); setProficiency('3'); setCertified(certificationsOnly); setCertificationName(''); setCertifiedOn(''); setExpiresOn('')
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed to save skill', 'error')
     }
   }
 
-  const empLabel = (id: string) => {
-    const e = employees.find((x) => x.id === id)
-    return e ? `${e.firstName} ${e.lastName ?? ''}`.trim() : ''
-  }
-
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-        <div className="md:col-span-2 ut-card p-5">
-          <h3 className="mb-4 text-center text-[15px] font-semibold text-text-primary">Engineering Skill Distribution (Static Preview)</h3>
-          <div className="flex h-[250px] items-center justify-center rounded-lg border border-border-default bg-bg-subtle text-sm text-text-tertiary">
-            [ Radar Chart Visualization Placeholder ]
-          </div>
-        </div>
-        <div className="flex flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-[#059669] to-[#8B5CF6] p-6 text-center text-white shadow-sm">
-          <span className="mb-3 text-4xl opacity-90">💡</span>
-          <h2 className="mb-2 text-xl font-bold">Identify Skill Gaps</h2>
-          <p className="text-sm opacity-80">Use the matrix to plan your hiring requirements.</p>
-        </div>
-      </div>
-      <div className="ut-card p-4">
-        <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Employee</label>
-        <select value={activeEmployee} onChange={(e) => setEmployeeId(e.target.value)} className="ut-select">
-          {employees.length === 0 && <option value="">No employees</option>}
-          {employees.map((e) => (
-            <option key={e.id} value={e.id}>{`${e.firstName} ${e.lastName ?? ''}`.trim()} {e.employeeCode ? `(${e.employeeCode})` : ''}</option>
-          ))}
-        </select>
-      </div>
-
+      <div className="ut-card p-5"><EmployeePicker value={employeeId} selectedLabel={employeeName} onChange={e => { setEmployeeId(e.id); setEmployeeName(`${e.firstName} ${e.lastName || ''}`) }} /></div>
+      {isError && <div role="alert" className="ut-card p-4"><p>{error.message}</p><HrButton onClick={() => refetch()}>Retry</HrButton></div>}
+      {!certificationsOnly && activeEmployee && <div className="ut-card p-5"><h3 className="mb-3 font-semibold">Skill proficiency: {employeeName}</h3>
+        {!skills.length ? <p>No recorded skills.</p> : skills.map(skill => <div key={skill.id} className="mb-3"><div className="flex justify-between text-sm"><span>{skill.skillName}</span><span>{skill.proficiency}/5</span></div><div className="h-2 rounded bg-bg-base"><div className="h-2 rounded bg-primary" style={{ width: `${skill.proficiency / 5 * 100}%` }} /></div></div>)}
+      </div>}
       {canWrite && activeEmployee && (
         <div className="ut-card space-y-3 p-5">
-          <h3 className="text-[15px] font-semibold text-text-primary">Add / update skill for {empLabel(activeEmployee)}</h3>
+          <h3 className="text-[15px] font-semibold text-text-primary">Add / update skill for {employeeName}</h3>
           <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Skill name</label>
-              <input value={skillName} onChange={(e) => setSkillName(e.target.value)} placeholder="e.g. TypeScript" className="ut-input" />
+              <input aria-label="Skill name" maxLength={120} value={skillName} onChange={(e) => setSkillName(e.target.value)} placeholder="e.g. TypeScript" className="ut-input" />
             </div>
             <div>
               <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Proficiency (1–5)</label>
-              <select value={proficiency} onChange={(e) => setProficiency(e.target.value)} className="ut-select">
+              <select aria-label="Proficiency" value={proficiency} onChange={(e) => setProficiency(e.target.value)} className="ut-select">
                 {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm text-text-secondary">
-            <input type="checkbox" checked={certified} onChange={(e) => setCertified(e.target.checked)} className="h-4 w-4 rounded border-border-default text-[#059669] focus:ring-[#059669]" />
+            <input type="checkbox" disabled={certificationsOnly} checked={certified} onChange={(e) => setCertified(e.target.checked)} className="h-4 w-4 rounded border-border-default text-[#059669] focus:ring-[#059669]" />
             Certified
           </label>
           {certified && (
             <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Certification name</label>
-                <input value={certificationName} onChange={(e) => setCertificationName(e.target.value)} placeholder="e.g. AWS Solutions Architect" className="ut-input" />
+                <input aria-label="Certification name" maxLength={200} value={certificationName} onChange={(e) => setCertificationName(e.target.value)} placeholder="e.g. AWS Solutions Architect" className="ut-input" />
               </div>
               <div>
                 <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Certified on</label>
-                <input type="date" value={certifiedOn} onChange={(e) => setCertifiedOn(e.target.value)} className="ut-input" />
+                <input aria-label="Certified on" type="date" value={certifiedOn} onChange={(e) => setCertifiedOn(e.target.value)} className="ut-input" />
               </div>
             </div>
           )}
+      {(certified || certificationsOnly) && canWrite && activeEmployee && <label className="block text-sm">Certification expiry<input className="ut-input max-w-xs" type="date" value={expiresOn} min={certifiedOn || undefined} onChange={e => setExpiresOn(e.target.value)} /></label>}
           <div className="flex justify-end border-t border-border-default pt-4">
             <HrButton onClick={onAdd} disabled={upsert.isPending}><Plus size={15} /> {upsert.isPending ? 'Saving…' : 'Save Skill'}</HrButton>
           </div>
@@ -811,14 +789,14 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
             <tr>
               <th>Skill</th>
               <th>Proficiency</th>
-              <th>Certification</th>
+              <th>Certification</th>{canWrite && <th>Action</th>}
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              [...Array(3)].map((_, i) => <tr key={i}><td colSpan={3} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
+              [...Array(3)].map((_, i) => <tr key={i}><td colSpan={canWrite ? 4 : 3} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
             ) : skills.length === 0 ? (
-              <tr><td colSpan={3} className="py-14 text-center text-sm text-text-tertiary">No skills recorded for this employee yet.</td></tr>
+              <tr><td colSpan={canWrite ? 4 : 3} className="py-14 text-center text-sm text-text-tertiary">No skills recorded for this employee yet.</td></tr>
             ) : skills.map((s) => (
               <tr key={s.id}>
                 <td className="font-medium text-text-primary">{s.skillName}</td>
@@ -835,73 +813,19 @@ function SkillMatrixTab({ canWrite }: { canWrite: boolean }) {
                     <span className="inline-flex items-center gap-1.5 text-sm text-text-primary">
                       <Award size={14} className="text-[#047857]" />
                       {s.certificationName || 'Certified'}
+                      {s.expiresOn && <span className={s.expiresOn < format(new Date(), 'yyyy-MM-dd') ? 'text-red-700' : 'text-text-secondary'}>{s.expiresOn < format(new Date(), 'yyyy-MM-dd') ? 'Expired' : 'Expires'} {fmtDate(s.expiresOn)}</span>}
                       {s.certifiedOn && <span className="text-xs text-text-tertiary">· {fmtDate(s.certifiedOn)}</span>}
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-xs text-text-tertiary"><Star size={12} /> Not certified</span>
                   )}
                 </td>
+                {canWrite && <td><HrButton variant="ghost" onClick={() => { setSkillName(s.skillName); setProficiency(String(s.proficiency)); setCertified(s.certified); setCertificationName(s.certificationName || ''); setCertifiedOn(s.certifiedOn || ''); setExpiresOn(s.expiresOn || '') }}>Edit</HrButton></td>}
               </tr>
             ))}
           </tbody>
         </table>
       </TableCard>
-    </div>
-  )
-}
-
-
-// ── Static Components (Phase 5) ───────────────────────────────────────────────
-
-function CertificationsStatic() {
-  return (
-    <div className="ut-card">
-      <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
-        <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
-          <span className="text-text-tertiary">🔍</span>
-          <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
-        </div>
-        <HrButton variant="ghost" size="sm">Filter</HrButton>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="hr-table">
-          <thead className="bg-bg-subtle">
-            <tr>
-              <th>Employee</th>
-              <th>Certification / Compliance</th>
-              <th>Status</th>
-              <th>Expiry Date</th>
-              <th className="text-center w-16">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">MK</div>
-                  <span className="font-semibold text-text-primary">Mohan Kumar</span>
-                </div>
-              </td>
-              <td className="text-text-secondary">ISO 27001 Security Awareness</td>
-              <td><HrStatusPill tone="ok">Valid</HrStatusPill></td>
-              <td className="text-text-secondary">Dec 31, 2026</td>
-              <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">🏅</button></td>
-            </tr>
-            <tr>
-              <td>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700">PM</div>
-                  <span className="font-semibold text-text-primary">Priya Mehta</span>
-                </div>
-              </td>
-              <td className="text-text-secondary">Fire Safety Protocol</td>
-              <td><HrStatusPill tone="red">Expired</HrStatusPill></td>
-              <td className="text-text-secondary">April 10, 2026</td>
-              <td className="text-center"><button className="text-text-tertiary hover:text-red-500">⚠</button></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </div>
   )
 }

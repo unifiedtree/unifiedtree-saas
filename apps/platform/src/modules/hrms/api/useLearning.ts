@@ -77,6 +77,7 @@ export interface EmployeeSkill {
   proficiency: number
   certified: boolean
   certificationName?: string
+  expiresOn?: string
   certifiedOn?: string
   createdAt: string
 }
@@ -293,6 +294,7 @@ export interface UpsertSkillPayload {
   proficiency?: number
   certified?: boolean
   certificationName?: string
+  expiresOn?: string
   certifiedOn?: string
 }
 

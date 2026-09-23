@@ -10,6 +10,10 @@ import java.util.UUID;
 
 @Repository
 public interface HiringOfferRepository extends JpaRepository<HiringOffer, UUID> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select o from HiringOffer o where o.id = :id")
+    java.util.Optional<HiringOffer> findForUpdate(@org.springframework.data.repository.query.Param("id") UUID id);
+
     Page<HiringOffer> findByCompanyIdOrderByCreatedAtDesc(UUID companyId, Pageable pageable);
     Page<HiringOffer> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }

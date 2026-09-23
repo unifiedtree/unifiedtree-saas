@@ -57,6 +57,9 @@ public class HiringService {
 
     @Transactional
     public HiringOfferResponse createOffer(UUID companyId, HiringOfferRequest request) {
+        if (request.status() != null && request.status() != OfferStatus.DRAFT)
+            throw new BusinessRuleException("Create a draft before issuing an offer", "OFFER_TRANSITION_INVALID");
+        validateOfferLinks(companyId, request);
         UUID tenantId = TenantContext.getTenantId();
         HiringOffer offer = new HiringOffer();
         offer.setTenantId(tenantId);
@@ -73,7 +76,7 @@ public class HiringService {
 
     @Transactional
     public HiringOfferResponse updateOfferStatus(UUID id, OfferStatus status) {
-        HiringOffer offer = offerRepository.findById(id)
+        HiringOffer offer = offerRepository.findForUpdate(id)
                 .orElseThrow(() -> new ResourceNotFoundException("HiringOffer", id));
         if (status == null) throw new BusinessRuleException("Offer status is required", "OFFER_STATUS_MISSING");
         if (status == offer.getStatus()) return toOffer(offer);
@@ -92,15 +95,51 @@ public class HiringService {
         return toOffer(offerRepository.save(offer));
     }
 
+    @Transactional(readOnly = true)
+    public HiringOfferResponse getOffer(UUID id) {
+        return toOffer(offerRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("HiringOffer", id)));
+    }
+
+    @Transactional
+    public HiringOfferResponse updateOffer(UUID id, HiringOfferRequest request) {
+        HiringOffer offer = offerRepository.findForUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("HiringOffer", id));
+        if (offer.getStatus() != OfferStatus.DRAFT ||
+                (request.status() != null && request.status() != OfferStatus.DRAFT))
+            throw new BusinessRuleException("Only drafts can be edited", "OFFER_NOT_DRAFT");
+        if (request.companyId() != null && !offer.getCompanyId().equals(request.companyId()))
+            throw new BusinessRuleException("An offer cannot move to another company", "OFFER_COMPANY_MISMATCH");
+        validateOfferLinks(offer.getCompanyId(), request);
+        applyOffer(offer, request);
+        return toOffer(offerRepository.save(offer));
+    }
+
+    private void validateOfferLinks(UUID companyId, HiringOfferRequest request) {
+        if (request.requisitionId() != null) {
+            JobRequisition requisition = requisitionRepository.findById(request.requisitionId())
+                    .orElseThrow(() -> new ResourceNotFoundException("JobRequisition", request.requisitionId()));
+            if (!companyId.equals(requisition.getCompanyId()))
+                throw new BusinessRuleException("Requisition belongs to another company", "OFFER_COMPANY_MISMATCH");
+        }
+        if (request.candidateId() != null) {
+            Candidate candidate = candidateRepository.findById(request.candidateId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Candidate", request.candidateId()));
+            if (!candidate.getRequisitionId().equals(request.requisitionId()))
+                throw new BusinessRuleException("Candidate must belong to the selected requisition", "OFFER_CANDIDATE_MISMATCH");
+        }
+    }
+
     private void applyOffer(HiringOffer offer, HiringOfferRequest request) {
         offer.setRequisitionId(request.requisitionId());
         offer.setCandidateId(request.candidateId());
-        offer.setCandidateName(request.candidateName());
-        offer.setRoleTitle(request.roleTitle());
+        offer.setCandidateName(request.candidateName().trim());
+        offer.setRoleTitle(request.roleTitle().trim());
         offer.setOfferedCtc(request.offeredCtc());
         offer.setJoiningDate(request.joiningDate());
         offer.setStatus(request.status() == null ? OfferStatus.DRAFT : request.status());
         offer.setNotes(request.notes());
+        offer.setOfferTerms(request.offerTerms());
     }
 
     // ── Requisitions ─────────────────────────────────────────────────────────
@@ -333,7 +372,7 @@ public class HiringService {
     private HiringOfferResponse toOffer(HiringOffer o) {
         return new HiringOfferResponse(o.getId(), o.getCompanyId(), o.getRequisitionId(), o.getCandidateId(),
                 o.getCandidateName(), o.getRoleTitle(), o.getOfferedCtc(), o.getJoiningDate(),
-                o.getStatus(), o.getSentAt(), o.getRespondedAt(), o.getNotes(), o.getCreatedAt());
+                o.getStatus(), o.getSentAt(), o.getRespondedAt(), o.getNotes(), o.getCreatedAt(), o.getOfferTerms(), o.getEmailSubmittedAt(), o.getEmailRecipient());
     }
 
     private CandidateResponse toCandidate(Candidate c) {

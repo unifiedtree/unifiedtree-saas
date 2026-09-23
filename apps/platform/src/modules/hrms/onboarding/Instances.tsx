@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { AssetsTab } from './AssetsTab'
 import { useNavigate } from 'react-router-dom'
 import {
   CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, MoreVertical, PauseCircle, Plus, UserPlus,
@@ -111,7 +112,12 @@ type Tab = 'onboard' | 'assets'
 
 export const Instances: React.FC = () => {
   const navigate = useNavigate()
-  const [tab, setTab] = useState<Tab>('onboard')
+  const canReadInstances = usePermission('hrms.onboarding.instance.read')
+  const assetRead = usePermission('hrms.onboarding.asset.read')
+  const instanceWrite = usePermission('hrms.onboarding.instance.write')
+  const canReadAssets = assetRead || instanceWrite
+  const [selectedTab, setTab] = useState<Tab | null>(null)
+  const tab = selectedTab === 'assets' && canReadAssets ? 'assets' : selectedTab === 'onboard' && canReadInstances ? 'onboard' : canReadInstances ? 'onboard' : 'assets'
   const { toast } = useToast()
   const [status, setStatus] = useState<'' | StatusKey>('')
   const [page, setPage] = useState(0)
@@ -128,7 +134,7 @@ export const Instances: React.FC = () => {
   // The stat cards count every run, so the list is fetched unfiltered and
   // narrowed client-side. A server-side ?status= filter would make three of
   // the four cards report the filtered slice instead of the real totals.
-  const { data: instances = [], isLoading, error, refetch } = useInstances()
+  const { data: instances = [], isLoading, error, refetch } = useInstances(undefined, canReadInstances)
 
   // B8 web-perf: fetch ONLY the employees that appear as instance.employeeId
   // on this page, via the by-ids batch endpoint. Previously this pulled a
@@ -213,14 +219,14 @@ export const Instances: React.FC = () => {
 
       <HrTabs
         tabs={[
-          { key: 'onboard', label: 'New Employee Onboarding' },
-          { key: 'assets', label: 'Asset Allocation' },
+          ...(canReadInstances ? [{ key: 'onboard', label: 'New Employee Onboarding' }] : []),
+          ...(canReadAssets ? [{ key: 'assets', label: 'Asset Allocation' }] : []),
         ]}
         active={tab}
         onChange={(k) => setTab(k as Tab)}
       />
 
-      <HrTabPanel tabKey="onboard">
+      {tab === 'onboard' && canReadInstances && <HrTabPanel tabKey="onboard">
         <div className="space-y-6">
           <div className="flex justify-end">
             {canStart && (
@@ -405,52 +411,11 @@ export const Instances: React.FC = () => {
         </TableCard>
       )}
         </div>
-      </HrTabPanel>
+      </HrTabPanel>}
 
-      <HrTabPanel tabKey="assets">
-        <AssetsTabStatic />
-      </HrTabPanel>
-    </div>
-  )
-}
-
-// ── Assets (Static) ─────────────────────────────────────────────────────────
-
-function AssetsTabStatic() {
-  return (
-    <div className="space-y-4">
-      <div className="ut-card">
-        <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
-          <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
-            <span className="text-text-tertiary">🔍</span>
-            <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="hr-table">
-            <thead className="bg-bg-subtle">
-              <tr>
-                <th>Asset ID</th>
-                <th>Category</th>
-                <th>Assigned To</th>
-                <th>Allocation Date</th>
-                <th>Condition</th>
-                <th className="text-center w-16">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="text-text-secondary">IT-LT-4029</td>
-                <td className="text-text-secondary">Laptop (MacBook Pro)</td>
-                <td className="font-semibold text-text-primary">John Smith</td>
-                <td className="text-text-secondary">Jan 15, 2025</td>
-                <td><HrStatusPill tone="green">Good</HrStatusPill></td>
-                <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">✎</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {tab === 'assets' && canReadAssets && <HrTabPanel tabKey="assets">
+        <AssetsTab />
+      </HrTabPanel>}
     </div>
   )
 }

@@ -143,7 +143,7 @@ public class AuthService {
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
 
-        UserCredentials creds = credentialsRepo.findByEmailIgnoreCase(req.email())
+        UserCredentials creds = credentialsRepo.findByEmailForSession(req.email())
             .orElseThrow(() -> new BusinessRuleException("Invalid email or password", "INVALID_CREDENTIALS"));
 
         if (!creds.isActive()) {
@@ -209,7 +209,7 @@ public class AuthService {
                 TenantContext.setTenantId(t);
                 com.hrms.core.tenant.TenantContext.setTenantId(t);
 
-                UserCredentials creds = credentialsRepo.findById(rt.getUserId())
+                UserCredentials creds = credentialsRepo.findByIdForSession(rt.getUserId())
                         .orElseThrow(() -> new BusinessRuleException("Session expired — please sign in again.", "REFRESH_USER_GONE"));
                 if (!creds.isActive()) {
                     throw new BusinessRuleException("Account is inactive", "ACCOUNT_INACTIVE");
@@ -264,7 +264,7 @@ public class AuthService {
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
 
-        UserCredentials creds = credentialsRepo.findById(authUserId)
+        UserCredentials creds = credentialsRepo.findByIdForSession(authUserId)
             .orElseThrow(() -> new BusinessRuleException("Workspace account not found", "WORKSPACE_USER_NOT_FOUND"));
         if (!creds.isActive()) {
             throw new BusinessRuleException("Account is inactive", "ACCOUNT_INACTIVE");
@@ -337,7 +337,7 @@ public class AuthService {
     public LoginResponse issueSessionForActivatedUser(UUID userId, UUID tenantId) {
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
-        UserCredentials creds = credentialsRepo.findById(userId)
+        UserCredentials creds = credentialsRepo.findByIdForSession(userId)
             .orElseThrow(() -> new BusinessRuleException("User not found", "USER_NOT_FOUND"));
         return issueSession(creds, tenantId);
     }

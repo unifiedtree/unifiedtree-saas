@@ -18,6 +18,7 @@ public class DocumentStorage {
 
     public boolean isConfigured() { return storage.isConfigured(); }
     public void put(String key, byte[] bytes, String contentType) { storage.put(key, bytes, contentType); }
+    public byte[] read(String key) { return storage.read(key); }
     public String urlFor(String key) { return storage.urlFor(key); }
     public void deleteQuietly(String key) { storage.deleteQuietly(key); }
 }

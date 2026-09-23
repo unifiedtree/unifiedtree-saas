@@ -1,0 +1,21 @@
+import { useState } from 'react'
+import { format } from 'date-fns'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { usePermission } from '@unifiedtree/sdk'
+import { apiJson } from '@/core/api/client'
+import { HrButton } from '@/shared/components/hr'
+import { useToast } from '@/shared/hooks/useToast'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
+interface Notice {id:string;title:string;body:string;expiresOn?:string;createdAt:string}
+export function CompanyNotices({companyId}:{companyId:string}) {
+ const read=usePermission('org.company.read'),write=usePermission('org.company.write'),qc=useQueryClient(),{toast}=useToast(),confirm=useConfirmDialog()
+ const [page,setPage]=useState(0),[open,setOpen]=useState(false),[editing,setEditing]=useState(''),[title,setTitle]=useState(''),[body,setBody]=useState(''),[expiry,setExpiry]=useState('')
+ const notices=useQuery({queryKey:['dashboard','notices',companyId,page],queryFn:()=>apiJson<{content:Notice[];totalElements:number}>(`/v1/admin/dashboard/notices?companyId=${companyId}&page=${page}`),enabled:read&&!!companyId})
+ const save=useMutation({mutationFn:({id,archive=false}:{id?:string;archive?:boolean})=>apiJson(`/v1/admin/dashboard/notices${id?'/'+id:''}`,{method:archive?'DELETE':id?'PUT':'POST',...(!archive?{body:JSON.stringify({companyId,title,body,expiresOn:expiry||null})}:{})}),onSuccess:()=>{qc.invalidateQueries({queryKey:['dashboard','notices']});setOpen(false);setPage(0)},onError:(e:Error)=>toast(e.message,'error')})
+ if(!read)return null
+ return <section className="ut-card space-y-4 p-5"><div className="flex items-center justify-between"><h2 className="font-semibold">Company notices</h2>{write&&<HrButton onClick={()=>{setEditing('');setTitle('');setBody('');setExpiry('');setOpen(true)}}>Add notice</HrButton>}</div>
+ {notices.isLoading?<p>Loading notices...</p>:notices.isError?<div role="alert"><p>{notices.error.message}</p><HrButton onClick={()=>notices.refetch()}>Retry</HrButton></div>:!notices.data?.content.length?<p className="text-sm text-text-secondary">No current company notices.</p>:notices.data.content.map(n=><article key={n.id} className="space-y-2 border-b border-border-default pb-4"><h3 className="font-medium">{n.title}</h3><p className="whitespace-pre-wrap break-words text-sm">{n.body}</p><p className="text-xs text-text-secondary">Published {format(new Date(n.createdAt),'d MMM yyyy')}{n.expiresOn&&` · Until ${n.expiresOn}`}</p>{write&&<div className="flex gap-2"><HrButton variant="ghost" onClick={()=>{setEditing(n.id);setTitle(n.title);setBody(n.body);setExpiry(n.expiresOn||'');setOpen(true)}}>Edit notice</HrButton><HrButton variant="ghost" disabled={save.isPending} onClick={async()=>{if(await confirm({title:'Archive notice?',body:'This notice will no longer appear on the dashboard.',confirmLabel:'Archive',tone:'danger'}))save.mutate({id:n.id,archive:true})}}>Archive notice</HrButton></div>}</article>)}
+ {open&&write&&<form aria-label="Company notice" className="space-y-3 rounded-lg border border-border-default p-4" onSubmit={e=>{e.preventDefault();save.mutate({id:editing||undefined})}}><label className="block text-sm">Notice title<input aria-label="Notice title" required maxLength={200} className="ut-input" value={title} onChange={e=>setTitle(e.target.value)} /></label><label className="block text-sm">Notice message<textarea aria-label="Notice message" required maxLength={5000} rows={4} className="ut-input" value={body} onChange={e=>setBody(e.target.value)} /></label><label className="block text-sm">Expiry (optional)<input type="date" min={format(new Date(),'yyyy-MM-dd')} className="ut-input" value={expiry} onChange={e=>setExpiry(e.target.value)} /></label><div className="flex gap-2"><HrButton type="submit" disabled={save.isPending||!companyId}>Save notice</HrButton><HrButton variant="ghost" onClick={()=>setOpen(false)}>Cancel</HrButton></div></form>}
+ {!!notices.data?.totalElements&&<div className="flex justify-end gap-2"><HrButton disabled={page===0} onClick={()=>setPage(page-1)}>Previous notices</HrButton><span className="self-center text-sm">{page+1} / {Math.ceil(notices.data.totalElements/5)}</span><HrButton disabled={(page+1)*5>=notices.data.totalElements} onClick={()=>setPage(page+1)}>Next notices</HrButton></div>}
+ </section>
+}

@@ -136,6 +136,8 @@ public class CanonicalProdSecurityConfig {
                     "/v1/auth/reset-password",
                     // SaaS portal: customer signup + workspace lookup (com.unifiedtree.saas)
                     "/v1/public/signup-request",
+                    "/v1/public/inspector-view",
+                    "/v1/public/inspector-view/document",
                     "/v1/public/subdomains/check",
                     "/v1/public/workspace-status",
                     // "/v1/public/module-request" REMOVED from permitAll

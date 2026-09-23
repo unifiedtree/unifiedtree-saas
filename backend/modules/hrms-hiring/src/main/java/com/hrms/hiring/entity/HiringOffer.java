@@ -30,4 +30,7 @@ public class HiringOffer extends BaseEntity {
     @Column(name = "sent_at") private Instant sentAt;
     @Column(name = "responded_at") private Instant respondedAt;
     @Column(name = "notes", columnDefinition = "TEXT") private String notes;
+    @Column(name = "offer_terms", columnDefinition = "TEXT") private String offerTerms;
+    @Column(name = "email_submitted_at") private Instant emailSubmittedAt;
+    @Column(name = "email_recipient", length = 254) private String emailRecipient;
 }

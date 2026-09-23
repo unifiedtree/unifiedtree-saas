@@ -19,5 +19,8 @@ public record HiringOfferResponse(
         Instant sentAt,
         Instant respondedAt,
         String notes,
-        Instant createdAt
+        Instant createdAt,
+        String offerTerms,
+        Instant emailSubmittedAt,
+        String emailRecipient
 ) {}

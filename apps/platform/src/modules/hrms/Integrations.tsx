@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import { HrPagination } from '@/shared/components/HrPagination'
 import { Plus, Trash2, Plug, PlugZap, Power, AlertTriangle, Boxes } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
@@ -20,7 +21,7 @@ const STATUS_TONE: Record<IntegrationStatus, PillTone> = {
 }
 
 const fmtStatus = (s: IntegrationStatus) =>
-  s.charAt(0) + s.slice(1).toLowerCase()
+  s === 'CONNECTED' ? 'Marked configured' : s === 'DISCONNECTED' ? 'Not configured' : 'Needs attention'
 
 export const Integrations: React.FC = () => {
   const { toast } = useToast()
@@ -30,7 +31,8 @@ export const Integrations: React.FC = () => {
   const [companyId, setCompanyId] = useState('')
   const activeCompany = companyId || companies[0]?.id || ''
 
-  const { data, isLoading } = useIntegrationConnections(activeCompany || undefined, 0)
+  const [page, setPage] = useState(0)
+  const { data, isLoading, error, refetch } = useIntegrationConnections(activeCompany || undefined, page)
   const create = useCreateConnection()
   const toggle = useToggleConnection()
   const remove = useDeleteConnection()
@@ -67,7 +69,7 @@ export const Integrations: React.FC = () => {
   const onToggle = async (id: string, status: IntegrationStatus) => {
     try {
       await toggle.mutateAsync(id)
-      toast(status === 'CONNECTED' ? 'Disconnected' : 'Connected', 'success')
+      toast('Integration registry status updated', 'success')
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed', 'error')
     }
@@ -93,17 +95,19 @@ export const Integrations: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-5xl p-6 sm:p-8">
-      <HrPageHeader crumb="Integrations" title="Integrations Directory" subtitle="Connect and manage your third-party services" />
+      <HrPageHeader crumb="Integrations" title="Integrations Directory" subtitle="Track third-party service configuration records" />
 
+      <p className="mb-4 text-sm text-text-secondary">Status is recorded manually. Adding a record here does not authorize the provider or synchronize data.</p>
+      {error && <div role="alert" className="ut-card mb-4 p-4"><p>{error.message}</p><HrButton onClick={() => refetch()}>Retry</HrButton></div>}
       <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <HrStatCard icon={<Boxes size={18} />} color="blue" value={stats.total} label="Integrations" loading={isLoading} />
-        <HrStatCard icon={<PlugZap size={18} />} color="green" value={stats.connected} label="Connected" loading={isLoading} />
-        <HrStatCard icon={<AlertTriangle size={18} />} color="orange" value={stats.errored} label="Needs Attention" loading={isLoading} />
+        <HrStatCard icon={<Boxes size={18} />} color="blue" value={data?.totalElements ?? 0} label="Registered services" loading={isLoading} />
+        <HrStatCard icon={<PlugZap size={18} />} color="green" value={stats.connected} label="Marked configured (this page)" loading={isLoading} />
+        <HrStatCard icon={<AlertTriangle size={18} />} color="orange" value={stats.errored} label="Needs attention (this page)" loading={isLoading} />
       </div>
 
       {companies.length > 1 && (
         <div className="mb-4">
-          <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className={inputCls}>
+          <select value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setPage(0) }} className={inputCls}>
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
@@ -137,7 +141,7 @@ export const Integrations: React.FC = () => {
               <th>Provider</th>
               <th>Category</th>
               <th>Status</th>
-              <th className="hidden sm:table-cell">Last Synced</th>
+              <th className="hidden sm:table-cell">Registered</th>
               {canWrite && <th className="text-right">Actions</th>}
             </tr>
           </thead>
@@ -167,7 +171,7 @@ export const Integrations: React.FC = () => {
                   <td>
                     <div className="flex items-center justify-end gap-2">
                       <HrButton size="sm" variant={c.status === 'CONNECTED' ? 'ghost' : undefined} onClick={() => onToggle(c.id, c.status)} disabled={toggle.isPending}>
-                        {c.status === 'CONNECTED' ? <><Power size={14} /> Disconnect</> : <><Plug size={14} /> Connect</>}
+                        {c.status === 'CONNECTED' ? <><Power size={14} /> Mark unconfigured</> : <><Plug size={14} /> Mark configured</>}
                       </HrButton>
                       <button onClick={() => onRemove(c)} disabled={remove.isPending} aria-label={`Remove ${c.provider} integration ${c.name}`} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Remove">
                         <Trash2 size={14} />
@@ -180,6 +184,7 @@ export const Integrations: React.FC = () => {
           </tbody>
         </table>
       </TableCard>
+      <HrPagination page={page} pageSize={20} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} onPageChange={setPage} />
     </div>
   )
 }

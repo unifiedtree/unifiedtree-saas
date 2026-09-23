@@ -38,7 +38,7 @@ public class OnboardingController {
 
     @GetMapping("/assets")
     @Operation(summary = "List onboarding and employee assets")
-    @PreAuthorize("hasAnyAuthority('hrms.onboarding.asset.read','hrms.onboarding.instance.read')")
+    @PreAuthorize("hasAnyAuthority('hrms.onboarding.asset.read','hrms.onboarding.instance.write')")
     public List<OnboardingAsset> listAssets(@RequestParam(required = false) UUID companyId) {
         return onboardingService.listAssets(companyId);
     }
@@ -48,6 +48,12 @@ public class OnboardingController {
     @PreAuthorize("hasAnyAuthority('hrms.onboarding.asset.write','hrms.onboarding.instance.write')")
     public ResponseEntity<OnboardingAsset> createAsset(@Valid @RequestBody OnboardingAsset asset) {
         return ResponseEntity.status(HttpStatus.CREATED).body(onboardingService.createAsset(asset));
+    }
+
+    @GetMapping("/assets/{assetId}/history")
+    @PreAuthorize("hasAnyAuthority('hrms.onboarding.asset.read','hrms.onboarding.instance.write')")
+    public List<java.util.Map<String,Object>> assetHistory(@PathVariable UUID assetId) {
+        return onboardingService.assetHistory(assetId);
     }
 
     @PostMapping("/assets/{assetId}/assign")

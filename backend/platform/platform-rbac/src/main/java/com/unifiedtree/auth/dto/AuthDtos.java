@@ -20,7 +20,9 @@ public final class AuthDtos {
             UUID tenantId,
             @NotBlank @Email String email,
             @NotBlank String password
-    ) { }
+    ) {
+        @Override public String toString() { return "LoginRequest[credentials=REDACTED]"; }
+    }
 
     public record LoginResponse(
             String accessToken,
@@ -34,11 +36,15 @@ public final class AuthDtos {
             String lastName,
             List<String> roles,
             List<String> permissions
-    ) { }
+    ) {
+        @Override public String toString() { return "LoginResponse[tokens=REDACTED]"; }
+    }
 
     public record RefreshRequest(
             @NotBlank String refreshToken
-    ) { }
+    ) {
+        @Override public String toString() { return "RefreshRequest[token=REDACTED]"; }
+    }
 
     public record MeResponse(
             UUID userId,

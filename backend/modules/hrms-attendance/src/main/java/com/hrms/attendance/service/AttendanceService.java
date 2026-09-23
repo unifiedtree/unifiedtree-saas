@@ -780,22 +780,9 @@ public class AttendanceService {
         }
     }
 
-    /**
-     * Bulk-fetch the current shift {@code end_time} for a batch of employees.
-     * Used by the dashboard's Early Out tile so we don't issue N+1 queries when
-     * computing early-checkout counts across the whole team. Returns one entry
-     * per employee whose active shift assignment (on {@code onDate}) has a
-     * non-null {@code end_time}. Employees without an assignment or without an
-     * end_time simply do not appear in the map — the caller treats absence as
-     * "cannot determine early out" and returns {@code false}.
-     *
-     * <p>NOTE: {@code shift_policies.end_time} is a naked wall-clock TIME; the
-     * caller must convert the record's UTC {@code check_out_at} to the IST
-     * zone before comparing. Cross-midnight (night) shifts are NOT handled —
-     * see the caller for the TODO.
-     */
+    /** Bulk-fetch expected shift-end instants, including overnight date rollover. */
     @Transactional(readOnly = true)
-    public Map<UUID, LocalTime> getShiftEndTimesForEmployees(List<UUID> employeeIds, LocalDate onDate) {
+    public Map<UUID, Instant> getShiftEndInstantsForEmployees(List<UUID> employeeIds, LocalDate onDate) {
         if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) {
             return Map.of();
         }
@@ -803,9 +790,9 @@ public class AttendanceService {
         // just expressed as a correlated subquery so it works across a batch.
         String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
         String sql = ("""
-                SELECT esa.employee_id, sp.end_time
+                SELECT esa.employee_id, sp.start_time, sp.end_time
                   FROM attendance.employee_shift_assignments esa
-                  JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id
+                  JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id AND sp.tenant_id = esa.tenant_id
                  WHERE esa.employee_id IN (%s)
                    AND esa.effective_from <= ?
                    AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
@@ -828,21 +815,14 @@ public class AttendanceService {
         args[employeeIds.size() + 1] = onDate;
         args[employeeIds.size() + 2] = onDate;
         args[employeeIds.size() + 3] = onDate;
-        Map<UUID, LocalTime> out = new HashMap<>();
-        try {
-            jdbcTemplate.query(sql, rs -> {
-                UUID eid = (UUID) rs.getObject("employee_id");
-                java.sql.Time t = rs.getTime("end_time");
-                if (eid != null && t != null) {
-                    out.put(eid, t.toLocalTime());
-                }
-            }, args);
-        } catch (Exception ex) {
-            // Match getShiftProfile: log-and-swallow so a schema hiccup doesn't
-            // 500 the whole dashboard. Callers treat empty map as "unknown" and
-            // simply report earlyCheckout = 0.
-            log.debug("Shift end times lookup failed for {} employees: {}", employeeIds.size(), ex.getMessage());
-        }
+        Map<UUID, Instant> out = new HashMap<>();
+        jdbcTemplate.query(sql, rs -> {
+            UUID eid = (UUID) rs.getObject("employee_id");
+            java.sql.Time start = rs.getTime("start_time"), end = rs.getTime("end_time");
+            if (eid != null && start != null && end != null) {
+                out.put(eid, ShiftTiming.expectedEnd(onDate, start.toLocalTime(), end.toLocalTime()));
+            }
+        }, args);
         return out;
     }
 

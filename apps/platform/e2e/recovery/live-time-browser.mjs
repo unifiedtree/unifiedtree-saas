@@ -1,0 +1,9 @@
+import { chromium, expect } from '@playwright/test'
+const base='http://demo.localhost:3002',browser=await chromium.launch({headless:true}),page=await browser.newPage(),errors=[]
+page.on('pageerror',e=>errors.push(e.message))
+try{
+ await page.goto(base+'/login');await page.locator('input[type=email]').fill('reader@unifiedtree.demo');await page.locator('input[type=password]').fill(process.env.RECOVERY_PASSWORD||'Hrms@12345');await page.locator('button[type=submit]').click();await page.waitForURL(u=>!u.pathname.includes('login'),{timeout:60000})
+ await page.goto(base+'/hrms/ess');await page.getByLabel('Time entry date',{exact:true}).fill('2026-01-12');const text=`Browser time entry ${Date.now()}`;await page.getByLabel('Work description',{exact:true}).fill(text);await page.getByLabel('Time entry minutes',{exact:true}).fill('45');await page.getByRole('button',{name:'Add time entry',exact:true}).click();await expect(page.locator('p').filter({hasText:text})).toBeVisible();await page.reload();await page.getByLabel('Time entry date',{exact:true}).fill('2026-01-12');await expect(page.locator('p').filter({hasText:text})).toBeVisible()
+ const row=page.locator('p').filter({hasText:text}).locator('../..');await row.getByRole('button',{name:'Edit',exact:true}).click();await page.getByLabel('Time entry minutes',{exact:true}).fill('55');await page.getByRole('button',{name:'Save time entry',exact:true}).click();await expect(row).toContainText('55 minutes');await row.getByRole('button',{name:'Delete',exact:true}).click();await page.getByRole('button',{name:'Confirm deletion',exact:true}).click();await expect(page.locator('p').filter({hasText:text})).toHaveCount(0)
+ console.log('PASS employee browser time entry create, reload, edit and delete');expect(errors).toEqual([])
+}finally{await browser.close()}

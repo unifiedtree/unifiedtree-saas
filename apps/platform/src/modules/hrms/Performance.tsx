@@ -54,9 +54,9 @@ export const Performance: React.FC = () => {
       {tab === 'cycles' && canRead && <HrTabPanel tabKey="cycles"><AdminCycles /></HrTabPanel>}
       {tab === 'kpis' && canRead && <HrTabPanel tabKey="kpis"><AdminKpis /></HrTabPanel>}
       {tab === 'admin' && canRead && <HrTabPanel tabKey="admin"><AdminReviews /></HrTabPanel>}
-      {tab === 'emp-performance' && canRead && <HrTabPanel tabKey="emp-performance"><EmpPerformanceStatic /></HrTabPanel>}
-      {tab === 'appraisals' && canRead && <HrTabPanel tabKey="appraisals"><AppraisalsStatic /></HrTabPanel>}
-      {tab === 'kpi-tracking' && canRead && <HrTabPanel tabKey="kpi-tracking"><KpiTrackingStatic /></HrTabPanel>}
+      {tab === 'emp-performance' && canRead && <HrTabPanel tabKey="emp-performance"><AdminReviews /></HrTabPanel>}
+      {tab === 'appraisals' && canRead && <HrTabPanel tabKey="appraisals"><AdminCycles /></HrTabPanel>}
+      {tab === 'kpi-tracking' && canRead && <HrTabPanel tabKey="kpi-tracking"><AdminKpis /></HrTabPanel>}
     </div>
   )
 }
@@ -266,127 +266,6 @@ function MyReviewCard({ review, employeeId }: { review: PerformanceReview; emplo
           {review.improvements && <p className="text-text-secondary"><span className="font-medium text-text-primary">Improvements: </span>{review.improvements}</p>}
         </div>
       )}
-    </div>
-  )
-}
-
-
-// ── Static Components (Phase 5) ───────────────────────────────────────────────
-
-function EmpPerformanceStatic() {
-  return (
-    <div className="ut-card">
-      <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
-        <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
-          <span className="text-text-tertiary">🔍</span>
-          <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
-        </div>
-        <HrButton variant="ghost" size="sm">Filter</HrButton>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="hr-table">
-          <thead className="bg-bg-subtle">
-            <tr>
-              <th>Employee</th>
-              <th>Department</th>
-              <th>Overall Rating</th>
-              <th>Score</th>
-              <th>Last Review</th>
-              <th className="text-center w-16">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">JS</div>
-                  <span className="font-semibold text-text-primary">John Smith</span>
-                </div>
-              </td>
-              <td className="text-text-secondary">Engineering</td>
-              <td><HrStatusPill tone="ok">Exceeds Expectations</HrStatusPill></td>
-              <td className="font-medium text-text-primary">4.8 / 5.0</td>
-              <td className="text-text-secondary">Q1 2026</td>
-              <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">👁</button></td>
-            </tr>
-            <tr>
-              <td>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">PM</div>
-                  <span className="font-semibold text-text-primary">Priya Mehta</span>
-                </div>
-              </td>
-              <td className="text-text-secondary">Marketing</td>
-              <td><HrStatusPill tone="info">Meets Expectations</HrStatusPill></td>
-              <td className="font-medium text-text-primary">3.9 / 5.0</td>
-              <td className="text-text-secondary">Q1 2026</td>
-              <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">👁</button></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-function AppraisalsStatic() {
-  return (
-    <div className="ut-card">
-      <div className="flex items-center justify-between border-b border-border-default bg-bg-base p-4 rounded-t-xl">
-        <div className="flex w-[300px] items-center gap-2 rounded-lg border border-border-default bg-white px-3 py-1.5">
-          <span className="text-text-tertiary">🔍</span>
-          <input type="text" placeholder="Search..." className="flex-1 bg-transparent text-sm outline-none" />
-        </div>
-        <div className="flex gap-2">
-          <HrButton variant="ghost" size="sm">Filter</HrButton>
-          <HrButton size="sm">Initiate Cycle</HrButton>
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="hr-table">
-          <thead className="bg-bg-subtle">
-            <tr>
-              <th>Employee</th>
-              <th>Review Type</th>
-              <th>Reviewers</th>
-              <th>Completion</th>
-              <th>Status</th>
-              <th className="text-center w-16">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">DL</div>
-                  <span className="font-semibold text-text-primary">David Lee</span>
-                </div>
-              </td>
-              <td className="text-text-secondary">Annual 360 Review</td>
-              <td className="text-text-secondary">Manager & Peers</td>
-              <td>
-                <div className="flex items-center gap-2 text-sm text-text-secondary">
-                  <div className="h-1.5 w-12 overflow-hidden rounded-full bg-border-default">
-                    <div className="h-full w-4/5 bg-[#059669]"></div>
-                  </div>
-                  4/5 Received
-                </div>
-              </td>
-              <td><HrStatusPill tone="warn">In Progress</HrStatusPill></td>
-              <td className="text-center"><button className="text-text-tertiary hover:text-text-primary">🔔</button></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-function KpiTrackingStatic() {
-  return (
-    <div className="ut-card p-6 text-center">
-      <p className="text-sm font-semibold text-text-secondary">KPI Tracking (Static)</p>
-      <p className="mt-1 text-xs text-text-tertiary">This module is currently UI-only.</p>
     </div>
   )
 }

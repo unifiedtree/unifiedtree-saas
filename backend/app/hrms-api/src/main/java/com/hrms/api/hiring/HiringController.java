@@ -44,11 +44,14 @@ public class HiringController {
 
     private final HiringService hiringService;
     private final EmployeeRepository employeeRepository;
+    private final com.hrms.employee.workforce.repository.WorkforceCompanyRepository companies;
 
     public HiringController(HiringService hiringService,
-                            EmployeeRepository employeeRepository) {
+                            EmployeeRepository employeeRepository,
+                            com.hrms.employee.workforce.repository.WorkforceCompanyRepository companies) {
         this.hiringService = hiringService;
         this.employeeRepository = employeeRepository;
+        this.companies = companies;
     }
 
     @Operation(summary = "List hiring offers")
@@ -72,7 +75,16 @@ public class HiringController {
                     .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
             companyId = employee.getCompanyId();
         }
+        if (companies.findById(companyId).isEmpty())
+            throw new com.hrms.core.exception.ResourceNotFoundException("Company", companyId);
         return ResponseEntity.status(HttpStatus.CREATED).body(hiringService.createOffer(companyId, request));
+    }
+
+    @PutMapping("/offers/{id}")
+    @PreAuthorize("hasAnyAuthority('hrms.hiring.offer.write','hrms.hiring.write')")
+    public ResponseEntity<HiringOfferResponse> updateOffer(@PathVariable UUID id,
+            @Valid @RequestBody HiringOfferRequest request) {
+        return ResponseEntity.ok(hiringService.updateOffer(id, request));
     }
 
     @Operation(summary = "Update a hiring offer status")

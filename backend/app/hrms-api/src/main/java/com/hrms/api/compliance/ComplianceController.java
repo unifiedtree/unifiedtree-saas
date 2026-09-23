@@ -62,8 +62,8 @@ public class ComplianceController {
     @Operation(summary = "List compliance calendar events")
     @GetMapping("/calendar-events")
     @PreAuthorize("hasAuthority('hrms.compliance.read')")
-    public ResponseEntity<List<ComplianceCalendarEventResponse>> calendarEvents(@RequestParam(required = false) UUID companyId) {
-        return ResponseEntity.ok(complianceService.calendarEvents(companyId));
+    public ResponseEntity<List<ComplianceCalendarEventResponse>> calendarEvents(@RequestParam(required = false) UUID companyId, @RequestParam(required = false) java.time.LocalDate from, @RequestParam(required = false) java.time.LocalDate to) {
+        return ResponseEntity.ok(complianceService.calendarEvents(companyId, from, to));
     }
 
     @Operation(summary = "List inspector access sessions")

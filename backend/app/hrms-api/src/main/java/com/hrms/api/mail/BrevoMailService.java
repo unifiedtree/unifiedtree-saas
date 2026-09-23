@@ -76,6 +76,10 @@ public class BrevoMailService implements MailService {
             payload.put("cc", msg.cc().stream().map(cc -> Map.of("email", cc)).toList());
         }
 
+        if (msg.attachments() != null && !msg.attachments().isEmpty()) {
+            payload.put("attachment", msg.attachments().stream().map(a -> Map.of(
+                    "name", a.filename(), "content", Base64.getEncoder().encodeToString(a.bytes()))).toList());
+        }
         try {
             String body = mapper.writeValueAsString(payload);
             HttpRequest req = HttpRequest.newBuilder()
