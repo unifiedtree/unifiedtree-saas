@@ -14,6 +14,11 @@ import { SkeletonCardGrid } from '@/shared/components/SkeletonCard'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import { useCompanies } from './api/useOrg'
 import { useLeaveOverview } from './api/useLeave'
+import { usePendingWfhApprovals } from './api/useWfh'
+import { useCorrectionApprovals } from './api/useAttendance'
+import { usePendingShiftRequests } from './api/useShiftRequests'
+import { usePendingExpenseApprovals } from './api/useExpense'
+import { usePendingAdvanceApprovals } from './api/useAdvance'
 import { useTeamDashboard, useAttendanceTrend, useAttendanceSources } from './api/useAttendance'
 import { useHeadcountReport } from './api/useReports'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
@@ -207,6 +212,19 @@ const RoleDashboard: React.FC = () => {
     { enabled: canReadEmployees && !!activeCompany?.id },
   )
   const leaveOverviewQuery = useLeaveOverview()
+  // Pending across every request type (leave + WFH + correction + shift +
+  // expense + advance). Each hook is gated by the same permission its API
+  // needs so an employee never sees a 403 in the network log; enabled=false
+  // returns undefined data.
+  const canApproveCorrections = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
+  const canApproveWfh = usePermission(P.WFH_APPROVE)
+  const canApproveExpense = usePermission('hrms.expense.claim.approve')
+  const canApproveAdvance = usePermission('hrms.advance.approve')
+  const wfhApprovalsQuery = usePendingWfhApprovals(0, 1)
+  const correctionApprovalsQuery = useCorrectionApprovals('PENDING', { enabled: canApproveCorrections, page: 0, size: 1 })
+  const shiftRequestsQuery = usePendingShiftRequests()
+  const expenseApprovalsQuery = usePendingExpenseApprovals(0, canApproveExpense, 1)
+  const advanceApprovalsQuery = usePendingAdvanceApprovals(0, canApproveAdvance)
   const now = new Date()
 
   /* ── Live Overview: today's org-wide attendance split, the trailing 7-day
@@ -236,12 +254,28 @@ const RoleDashboard: React.FC = () => {
 
   const totalEmployees   = directory?.totalElements ?? 0
   const recentEmployees  = directory?.content ?? []
-  const pendingApprovals = leaveOverview?.pendingApprovals ?? 0
+  const leavePendingApprovals = leaveOverview?.pendingApprovals ?? 0
   // Own pending requests — derived from recentRequests, no extra hook.
   const myPendingRequests = (leaveOverview?.recentRequests ?? []).filter(
     (r) => r.status === 'PENDING',
   ).length
-  const pendingCount = canApproveLeaves ? pendingApprovals : myPendingRequests
+  // Sum across every queue this caller can approve. Each hook is only
+  // enabled when its permission is held, so a manager without WFH approve
+  // rights simply contributes 0 rather than a 403.
+  const approverPendingCount =
+    (canApproveLeaves ? leavePendingApprovals : 0) +
+    (canApproveWfh ? (wfhApprovalsQuery.data?.totalElements ?? 0) : 0) +
+    (canApproveCorrections ? (correctionApprovalsQuery.data?.totalElements ?? 0) : 0) +
+    ((shiftRequestsQuery.data?.length ?? 0)) +
+    (canApproveExpense ? (expenseApprovalsQuery.data?.totalElements ?? 0) : 0) +
+    (canApproveAdvance ? (advanceApprovalsQuery.data?.totalElements ?? 0) : 0)
+  const canApproveAny = canApproveLeaves || canApproveWfh || canApproveCorrections || canApproveExpense || canApproveAdvance
+  const pendingCount = canApproveAny ? approverPendingCount : myPendingRequests
+  const anyPendingError = leaveOverviewQuery.isError
+    || (canApproveWfh && wfhApprovalsQuery.isError)
+    || (canApproveCorrections && correctionApprovalsQuery.isError)
+    || (canApproveExpense && expenseApprovalsQuery.isError)
+    || (canApproveAdvance && advanceApprovalsQuery.isError)
   // Approvers go to their queue even when it is empty — routing on
   // `pendingApprovals > 0` dropped an approver with a clear queue onto "my".
   const leaveTarget = canApproveLeaves ? '/hrms/leave?tab=approvals' : '/hrms/leave?tab=my'
@@ -490,10 +524,10 @@ const RoleDashboard: React.FC = () => {
               <div>
                 <p className="text-[13px] font-medium text-[var(--text-secondary)]">Pending Requests</p>
                 <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-[var(--text-primary)]">{leaveOverviewQuery.isError ? '—' : pendingCount}</span>
+                  <span className="text-2xl font-bold text-[var(--text-primary)]">{anyPendingError ? '—' : pendingCount}</span>
                 </div>
                 <p className="mt-1 text-[11px] text-[var(--text-tertiary)] flex items-center gap-1">
-                  {leaveOverviewQuery.isError ? "Couldn't load requests" : canApproveLeaves ? 'awaiting your approval' : 'awaiting decision'}
+                  {anyPendingError ? "Couldn't load requests" : canApproveAny ? 'awaiting your approval' : 'awaiting decision'}
                 </p>
               </div>
             </button>
@@ -831,11 +865,11 @@ const RoleDashboard: React.FC = () => {
                  className="flex w-full items-center justify-between p-3 rounded-xl border border-gray-100 hover:border-[#C8E6C9] hover:bg-[#F2FBF4] transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                >
                  <span className="text-[13px] font-medium text-gray-700 group-hover:text-[#059669]">
-                   {canApproveLeaves ? 'Leave requests to approve' : 'My pending leave requests'}
+                   {canApproveAny ? 'Requests to approve' : 'My pending requests'}
                  </span>
                  <span className="flex items-center gap-2">
                    <span className="flex h-5 min-w-[1.25rem] px-1 items-center justify-center rounded-full bg-gray-100 text-[11px] font-bold text-gray-600 group-hover:bg-[#059669] group-hover:text-white transition-colors">
-                     {leaveOverviewQuery.isError ? '—' : pendingCount}
+                     {anyPendingError ? '—' : pendingCount}
                    </span>
                    <ChevronRight size={14} className="text-gray-400 group-hover:text-[#059669]" />
                  </span>
