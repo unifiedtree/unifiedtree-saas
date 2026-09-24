@@ -1,0 +1,943 @@
+{
+  "capturedAt": "2026-09-24T02:21:19.632Z",
+  "shots": [
+    {
+      "view": "owner",
+      "route": "/dashboard",
+      "url": "/dashboard",
+      "label": "",
+      "file": "owner/dashboard.png",
+      "brief": "01-dashboards.md › Company Admin Dashboard",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/dashboard",
+      "url": "/dashboard",
+      "label": "open Add employee",
+      "file": "owner/dashboard__open-Add-employee.png",
+      "brief": "01-dashboards.md › Company Admin Dashboard",
+      "flags": [
+        "REDIRECTED→/hrms/employees",
+        "EMPTY-STATE"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/dashboard",
+      "url": "/dashboard",
+      "label": "open Create",
+      "file": "owner/dashboard__open-Create.png",
+      "brief": "01-dashboards.md › Company Admin Dashboard",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/dashboard",
+      "url": "/dashboard",
+      "label": "open Add notice",
+      "file": "owner/dashboard__open-Add-notice.png",
+      "brief": "01-dashboards.md › Company Admin Dashboard",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/audit-logs",
+      "url": "/audit-logs",
+      "label": "",
+      "file": "owner/audit-logs.png",
+      "brief": "10-platform-shell-admin-auth.md › Audit Logs",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/me",
+      "url": "/me",
+      "label": "",
+      "file": "owner/me.png",
+      "brief": "02-self-service-and-team.md › My Workspace (ESS Dashboard)",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/me",
+      "url": "/me",
+      "label": "open Apply leave",
+      "file": "owner/me__open-Apply-leave.png",
+      "brief": "02-self-service-and-team.md › My Workspace (ESS Dashboard)",
+      "flags": [
+        "REDIRECTED→/hrms/leave"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/me",
+      "url": "/me",
+      "label": "open Request WFH",
+      "file": "owner/me__open-Request-WFH.png",
+      "brief": "02-self-service-and-team.md › My Workspace (ESS Dashboard)",
+      "flags": [
+        "REDIRECTED→/me/wfh"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/me",
+      "url": "/me",
+      "label": "open Request Shift Change",
+      "file": "owner/me__open-Request-Shift-Change.png",
+      "brief": "02-self-service-and-team.md › My Workspace (ESS Dashboard)",
+      "flags": [
+        "REDIRECTED→/me/shift-change"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/me",
+      "url": "/me",
+      "label": "open Add time entry",
+      "file": "owner/me__open-Add-time-entry.png",
+      "brief": "02-self-service-and-team.md › My Workspace (ESS Dashboard)",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/me/wfh",
+      "url": "/me/wfh",
+      "label": "",
+      "file": "owner/me-wfh.png",
+      "brief": "02-self-service-and-team.md › Apply for Work From Home",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees",
+      "url": "/hrms/employees",
+      "label": "",
+      "file": "owner/hrms-employees.png",
+      "brief": "03-company-and-master.md › Workforce Directory",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees",
+      "url": "/hrms/employees",
+      "label": "open Import",
+      "file": "owner/hrms-employees__open-Import.png",
+      "brief": "03-company-and-master.md › Workforce Directory",
+      "flags": [
+        "REDIRECTED→/hrms/employees/import"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees",
+      "url": "/hrms/employees",
+      "label": "open Add Employee",
+      "file": "owner/hrms-employees__open-Add-Employee.png",
+      "brief": "03-company-and-master.md › Workforce Directory",
+      "flags": [
+        "EMPTY-STATE"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees/:id",
+      "url": "/hrms/employees/22222222-2222-2222-2222-222222222222",
+      "label": "",
+      "file": "owner/hrms-employees-22222222-2222-2222-2222-222222222222.png",
+      "brief": "03-company-and-master.md › Employee workspace",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees/:id",
+      "url": "/hrms/employees/22222222-2222-2222-2222-222222222222",
+      "label": "tab Personal",
+      "file": "owner/hrms-employees-22222222-2222-2222-2222-222222222222__tab-Personal.png",
+      "brief": "03-company-and-master.md › Employee workspace",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees/:id",
+      "url": "/hrms/employees/22222222-2222-2222-2222-222222222222",
+      "label": "tab Job",
+      "file": "owner/hrms-employees-22222222-2222-2222-2222-222222222222__tab-Job.png",
+      "brief": "03-company-and-master.md › Employee workspace",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees/:id",
+      "url": "/hrms/employees/22222222-2222-2222-2222-222222222222",
+      "label": "tab Attendance",
+      "file": "owner/hrms-employees-22222222-2222-2222-2222-222222222222__tab-Attendance.png",
+      "brief": "03-company-and-master.md › Employee workspace",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees/:id",
+      "url": "/hrms/employees/22222222-2222-2222-2222-222222222222",
+      "label": "tab Payroll",
+      "file": "owner/hrms-employees-22222222-2222-2222-2222-222222222222__tab-Payroll.png",
+      "brief": "03-company-and-master.md › Employee workspace",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees/:id",
+      "url": "/hrms/employees/22222222-2222-2222-2222-222222222222",
+      "label": "tab Documents",
+      "file": "owner/hrms-employees-22222222-2222-2222-2222-222222222222__tab-Documents.png",
+      "brief": "03-company-and-master.md › Employee workspace",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees/:id",
+      "url": "/hrms/employees/22222222-2222-2222-2222-222222222222",
+      "label": "tab Letters",
+      "file": "owner/hrms-employees-22222222-2222-2222-2222-222222222222__tab-Letters.png",
+      "brief": "03-company-and-master.md › Employee workspace",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees/:id",
+      "url": "/hrms/employees/22222222-2222-2222-2222-222222222222",
+      "label": "tab Performance",
+      "file": "owner/hrms-employees-22222222-2222-2222-2222-222222222222__tab-Performance.png",
+      "brief": "03-company-and-master.md › Employee workspace",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees/:id",
+      "url": "/hrms/employees/22222222-2222-2222-2222-222222222222",
+      "label": "tab Exit",
+      "file": "owner/hrms-employees-22222222-2222-2222-2222-222222222222__tab-Exit.png",
+      "brief": "03-company-and-master.md › Employee workspace",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/employees/:id",
+      "url": "/hrms/employees/22222222-2222-2222-2222-222222222222",
+      "label": "open Start Notice",
+      "file": "owner/hrms-employees-22222222-2222-2222-2222-222222222222__open-Start-Notice.png",
+      "brief": "03-company-and-master.md › Employee workspace",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/attendance",
+      "url": "/hrms/attendance",
+      "label": "",
+      "file": "owner/hrms-attendance.png",
+      "brief": "04-attendance-and-time.md › Daily Tracking (Attendance)",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/attendance",
+      "url": "/hrms/attendance",
+      "label": "tab Daily Logs",
+      "file": "owner/hrms-attendance__tab-Daily-Logs.png",
+      "brief": "04-attendance-and-time.md › Daily Tracking (Attendance)",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/attendance",
+      "url": "/hrms/attendance",
+      "label": "tab Face Punch Logs",
+      "file": "owner/hrms-attendance__tab-Face-Punch-Logs.png",
+      "brief": "04-attendance-and-time.md › Daily Tracking (Attendance)",
+      "flags": [
+        "EMPTY-STATE"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/attendance",
+      "url": "/hrms/attendance",
+      "label": "tab Regularization",
+      "file": "owner/hrms-attendance__tab-Regularization.png",
+      "brief": "04-attendance-and-time.md › Daily Tracking (Attendance)",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/expenses",
+      "url": "/hrms/expenses",
+      "label": "",
+      "file": "owner/hrms-expenses.png",
+      "brief": "05-leave-expense-advances.md › Expense Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/expenses",
+      "url": "/hrms/expenses",
+      "label": "tab Submit Claim",
+      "file": "owner/hrms-expenses__tab-Submit-Claim.png",
+      "brief": "05-leave-expense-advances.md › Expense Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/expenses",
+      "url": "/hrms/expenses",
+      "label": "tab Approvals",
+      "file": "owner/hrms-expenses__tab-Approvals.png",
+      "brief": "05-leave-expense-advances.md › Expense Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/expenses",
+      "url": "/hrms/expenses",
+      "label": "tab Reimbursement batches",
+      "file": "owner/hrms-expenses__tab-Reimbursement-batches.png",
+      "brief": "05-leave-expense-advances.md › Expense Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/expenses",
+      "url": "/hrms/expenses",
+      "label": "tab Policies",
+      "file": "owner/hrms-expenses__tab-Policies.png",
+      "brief": "05-leave-expense-advances.md › Expense Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "",
+      "file": "owner/hrms-performance.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "tab Appraisals & 360 Feedback",
+      "file": "owner/hrms-performance__tab-Appraisals-360-Feedback.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "tab KPI Tracking",
+      "file": "owner/hrms-performance__tab-KPI-Tracking.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "tab Review cycles",
+      "file": "owner/hrms-performance__tab-Review-cycles.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "tab Goals & KPIs",
+      "file": "owner/hrms-performance__tab-Goals-KPIs.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "tab Employee reviews",
+      "file": "owner/hrms-performance__tab-Employee-reviews.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "tab My Goals",
+      "file": "owner/hrms-performance__tab-My-Goals.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "tab My Reviews",
+      "file": "owner/hrms-performance__tab-My-Reviews.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "open Create cycle",
+      "file": "owner/hrms-performance__open-Create-cycle.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/learning",
+      "url": "/hrms/learning",
+      "label": "",
+      "file": "owner/hrms-learning.png",
+      "brief": "08-performance-learning-compliance-exit.md › Learning Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/learning",
+      "url": "/hrms/learning",
+      "label": "tab My Training",
+      "file": "owner/hrms-learning__tab-My-Training.png",
+      "brief": "08-performance-learning-compliance-exit.md › Learning Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/learning",
+      "url": "/hrms/learning",
+      "label": "tab Skill Matrix",
+      "file": "owner/hrms-learning__tab-Skill-Matrix.png",
+      "brief": "08-performance-learning-compliance-exit.md › Learning Center",
+      "flags": [
+        "EMPTY-STATE"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/learning",
+      "url": "/hrms/learning",
+      "label": "tab Certifications",
+      "file": "owner/hrms-learning__tab-Certifications.png",
+      "brief": "08-performance-learning-compliance-exit.md › Learning Center",
+      "flags": [
+        "EMPTY-STATE"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/learning",
+      "url": "/hrms/learning",
+      "label": "open New Program",
+      "file": "owner/hrms-learning__open-New-Program.png",
+      "brief": "08-performance-learning-compliance-exit.md › Learning Center",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/pli",
+      "url": "/hrms/pli",
+      "label": "",
+      "file": "owner/hrms-pli.png",
+      "brief": "06-payroll.md › Production-Linked Incentive (Incentive Center)",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/pli",
+      "url": "/hrms/pli",
+      "label": "tab All Awards",
+      "file": "owner/hrms-pli__tab-All-Awards.png",
+      "brief": "06-payroll.md › Production-Linked Incentive (Incentive Center)",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/pli",
+      "url": "/hrms/pli",
+      "label": "tab My Incentives",
+      "file": "owner/hrms-pli__tab-My-Incentives.png",
+      "brief": "06-payroll.md › Production-Linked Incentive (Incentive Center)",
+      "flags": [
+        "EMPTY-STATE"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/integrations",
+      "url": "/hrms/integrations",
+      "label": "",
+      "file": "owner/hrms-integrations.png",
+      "brief": "03-company-and-master.md › Integrations Directory",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/integrations",
+      "url": "/hrms/integrations",
+      "label": "open Add Integration",
+      "file": "owner/hrms-integrations__open-Add-Integration.png",
+      "brief": "03-company-and-master.md › Integrations Directory",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/notification-templates",
+      "url": "/hrms/notification-templates",
+      "label": "",
+      "file": "owner/hrms-notification-templates.png",
+      "brief": "03-company-and-master.md › Notification Templates",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/notification-templates",
+      "url": "/hrms/notification-templates",
+      "label": "open Add Template",
+      "file": "owner/hrms-notification-templates__open-Add-Template.png",
+      "brief": "03-company-and-master.md › Notification Templates",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/shifts",
+      "url": "/hrms/shifts",
+      "label": "",
+      "file": "owner/hrms-shifts.png",
+      "brief": "04-attendance-and-time.md › Shifts & Overtime",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/shifts",
+      "url": "/hrms/shifts",
+      "label": "tab Roster",
+      "file": "owner/hrms-shifts__tab-Roster.png",
+      "brief": "04-attendance-and-time.md › Shifts & Overtime",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/shifts",
+      "url": "/hrms/shifts",
+      "label": "tab Overtime",
+      "file": "owner/hrms-shifts__tab-Overtime.png",
+      "brief": "04-attendance-and-time.md › Shifts & Overtime",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/shifts",
+      "url": "/hrms/shifts",
+      "label": "tab Shift requests 1",
+      "file": "owner/hrms-shifts__tab-Shift-requests-1.png",
+      "brief": "04-attendance-and-time.md › Shifts & Overtime",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/shifts",
+      "url": "/hrms/shifts",
+      "label": "open Add Shift",
+      "file": "owner/hrms-shifts__open-Add-Shift.png",
+      "brief": "04-attendance-and-time.md › Shifts & Overtime",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/ess",
+      "url": "/hrms/ess",
+      "label": "",
+      "file": "owner/hrms-ess.png",
+      "brief": "",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/ess",
+      "url": "/hrms/ess",
+      "label": "open Apply leave",
+      "file": "owner/hrms-ess__open-Apply-leave.png",
+      "brief": "",
+      "flags": [
+        "REDIRECTED→/hrms/leave"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/ess",
+      "url": "/hrms/ess",
+      "label": "open Request WFH",
+      "file": "owner/hrms-ess__open-Request-WFH.png",
+      "brief": "",
+      "flags": [
+        "REDIRECTED→/me/wfh"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/ess",
+      "url": "/hrms/ess",
+      "label": "open Request Shift Change",
+      "file": "owner/hrms-ess__open-Request-Shift-Change.png",
+      "brief": "",
+      "flags": [
+        "REDIRECTED→/me/shift-change"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/ess",
+      "url": "/hrms/ess",
+      "label": "open Add time entry",
+      "file": "owner/hrms-ess__open-Add-time-entry.png",
+      "brief": "",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/me/salary",
+      "url": "/me/salary",
+      "label": "",
+      "file": "owner/me-salary.png",
+      "brief": "02-self-service-and-team.md › My Salary",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/me/payslips",
+      "url": "/me/payslips",
+      "label": "",
+      "file": "owner/me-payslips.png",
+      "brief": "02-self-service-and-team.md › My Payslips",
+      "flags": [
+        "EMPTY-STATE"
+      ]
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/letters/distributions",
+      "url": "/hrms/letters/distributions",
+      "label": "",
+      "file": "owner/hrms-letters-distributions.png",
+      "brief": "07-recruitment-onboarding-letters.md › Letter Distributions",
+      "flags": []
+    },
+    {
+      "view": "owner",
+      "route": "/hrms/letters/distributions",
+      "url": "/hrms/letters/distributions",
+      "label": "open New Distribution",
+      "file": "owner/hrms-letters-distributions__open-New-Distribution.png",
+      "brief": "07-recruitment-onboarding-letters.md › Letter Distributions",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/dashboard",
+      "url": "/dashboard",
+      "label": "",
+      "file": "employee/dashboard.png",
+      "brief": "01-dashboards.md › Company Admin Dashboard",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/dashboard",
+      "url": "/dashboard",
+      "label": "open Add Time-Off",
+      "file": "employee/dashboard__open-Add-Time-Off.png",
+      "brief": "01-dashboards.md › Company Admin Dashboard",
+      "flags": [
+        "REDIRECTED→/hrms/leave"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/me",
+      "url": "/me",
+      "label": "",
+      "file": "employee/me.png",
+      "brief": "02-self-service-and-team.md › My Workspace (ESS Dashboard)",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/me",
+      "url": "/me",
+      "label": "open Apply leave",
+      "file": "employee/me__open-Apply-leave.png",
+      "brief": "02-self-service-and-team.md › My Workspace (ESS Dashboard)",
+      "flags": [
+        "REDIRECTED→/hrms/leave"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/me",
+      "url": "/me",
+      "label": "open Request WFH",
+      "file": "employee/me__open-Request-WFH.png",
+      "brief": "02-self-service-and-team.md › My Workspace (ESS Dashboard)",
+      "flags": [
+        "REDIRECTED→/me/wfh"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/me",
+      "url": "/me",
+      "label": "open Request Shift Change",
+      "file": "employee/me__open-Request-Shift-Change.png",
+      "brief": "02-self-service-and-team.md › My Workspace (ESS Dashboard)",
+      "flags": [
+        "REDIRECTED→/me/shift-change"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/me",
+      "url": "/me",
+      "label": "open Add time entry",
+      "file": "employee/me__open-Add-time-entry.png",
+      "brief": "02-self-service-and-team.md › My Workspace (ESS Dashboard)",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/me/wfh",
+      "url": "/me/wfh",
+      "label": "",
+      "file": "employee/me-wfh.png",
+      "brief": "02-self-service-and-team.md › Apply for Work From Home",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/me/payslips",
+      "url": "/me/payslips",
+      "label": "",
+      "file": "employee/me-payslips.png",
+      "brief": "02-self-service-and-team.md › My Payslips",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/me/salary",
+      "url": "/me/salary",
+      "label": "",
+      "file": "employee/me-salary.png",
+      "brief": "02-self-service-and-team.md › My Salary",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/ess",
+      "url": "/hrms/ess",
+      "label": "",
+      "file": "employee/hrms-ess.png",
+      "brief": "",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/ess",
+      "url": "/hrms/ess",
+      "label": "open Apply leave",
+      "file": "employee/hrms-ess__open-Apply-leave.png",
+      "brief": "",
+      "flags": [
+        "REDIRECTED→/hrms/leave"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/ess",
+      "url": "/hrms/ess",
+      "label": "open Request WFH",
+      "file": "employee/hrms-ess__open-Request-WFH.png",
+      "brief": "",
+      "flags": [
+        "REDIRECTED→/me/wfh"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/ess",
+      "url": "/hrms/ess",
+      "label": "open Request Shift Change",
+      "file": "employee/hrms-ess__open-Request-Shift-Change.png",
+      "brief": "",
+      "flags": [
+        "REDIRECTED→/me/shift-change"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/ess",
+      "url": "/hrms/ess",
+      "label": "open Add time entry",
+      "file": "employee/hrms-ess__open-Add-time-entry.png",
+      "brief": "",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/attendance",
+      "url": "/hrms/attendance",
+      "label": "",
+      "file": "employee/hrms-attendance.png",
+      "brief": "04-attendance-and-time.md › Daily Tracking (Attendance)",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/attendance",
+      "url": "/hrms/attendance",
+      "label": "tab Face Punch Logs",
+      "file": "employee/hrms-attendance__tab-Face-Punch-Logs.png",
+      "brief": "04-attendance-and-time.md › Daily Tracking (Attendance)",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/attendance",
+      "url": "/hrms/attendance",
+      "label": "tab Regularization",
+      "file": "employee/hrms-attendance__tab-Regularization.png",
+      "brief": "04-attendance-and-time.md › Daily Tracking (Attendance)",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/expenses",
+      "url": "/hrms/expenses",
+      "label": "",
+      "file": "employee/hrms-expenses.png",
+      "brief": "05-leave-expense-advances.md › Expense Center",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/expenses",
+      "url": "/hrms/expenses",
+      "label": "tab Submit Claim",
+      "file": "employee/hrms-expenses__tab-Submit-Claim.png",
+      "brief": "05-leave-expense-advances.md › Expense Center",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "",
+      "file": "employee/hrms-performance.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "tab My Reviews",
+      "file": "employee/hrms-performance__tab-My-Reviews.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/performance",
+      "url": "/hrms/performance",
+      "label": "open Add Goal",
+      "file": "employee/hrms-performance__open-Add-Goal.png",
+      "brief": "08-performance-learning-compliance-exit.md › Performance Center",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/learning",
+      "url": "/hrms/learning",
+      "label": "",
+      "file": "employee/hrms-learning.png",
+      "brief": "08-performance-learning-compliance-exit.md › Learning Center",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/learning",
+      "url": "/hrms/learning",
+      "label": "tab My Training",
+      "file": "employee/hrms-learning__tab-My-Training.png",
+      "brief": "08-performance-learning-compliance-exit.md › Learning Center",
+      "flags": []
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/employees",
+      "url": "/hrms/employees",
+      "label": "",
+      "file": "employee/hrms-employees.png",
+      "brief": "03-company-and-master.md › Workforce Directory",
+      "flags": [
+        "REDIRECTED→/me"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/employees",
+      "url": "/hrms/employees",
+      "label": "open Apply leave",
+      "file": "employee/hrms-employees__open-Apply-leave.png",
+      "brief": "03-company-and-master.md › Workforce Directory",
+      "flags": [
+        "REDIRECTED→/hrms/leave"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/employees",
+      "url": "/hrms/employees",
+      "label": "open Request WFH",
+      "file": "employee/hrms-employees__open-Request-WFH.png",
+      "brief": "03-company-and-master.md › Workforce Directory",
+      "flags": [
+        "REDIRECTED→/me/wfh"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/employees",
+      "url": "/hrms/employees",
+      "label": "open Request Shift Change",
+      "file": "employee/hrms-employees__open-Request-Shift-Change.png",
+      "brief": "03-company-and-master.md › Workforce Directory",
+      "flags": [
+        "REDIRECTED→/me/shift-change"
+      ]
+    },
+    {
+      "view": "employee",
+      "route": "/hrms/employees",
+      "url": "/hrms/employees",
+      "label": "open Add time entry",
+      "file": "employee/hrms-employees__open-Add-time-entry.png",
+      "brief": "03-company-and-master.md › Workforce Directory",
+      "flags": [
+        "REDIRECTED→/me"
+      ]
+    }
+  ],
+  "skipped": [
+    "/hrms/soon/:key — generic coming-soon placeholder"
+  ]
+}
