@@ -17,6 +17,7 @@ import {
   useUploadAvatar,
   type CurrentUser,
 } from '@/shared/hooks/useCurrentUser'
+import { DelegationCard } from './DelegationCard'
 
 /**
  * Personal profile page.
@@ -378,6 +379,11 @@ export const Profile: React.FC = () => {
                 </Field>
               </div>
             </section>
+
+            <div className="my-8 h-px bg-border-subtle" />
+
+            {/* ── Approval delegation ─────────────────────────────────── */}
+            <DelegationCard />
 
             <div className="my-8 h-px bg-border-subtle" />
 
