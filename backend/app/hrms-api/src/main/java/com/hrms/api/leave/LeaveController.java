@@ -46,6 +46,8 @@ public class LeaveController {
     private final EmployeeRepository employeeRepository;
     private final WorkforceDepartmentRepository departmentRepository;
     private final ApproverFallbackResolver approverFallbackResolver;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrms.api.attendance.ApproverScopeGuard approverScopeGuard;
 
     public LeaveController(LeaveService leaveService,
                            LeaveTypeService leaveTypeService,
@@ -252,7 +254,9 @@ public class LeaveController {
     public ResponseEntity<LeaveRequestResponse> decideL1(
             @PathVariable UUID requestId,
             @Valid @RequestBody LeaveApprovalRequest approval,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth) {
+        approverScopeGuard.assertCanDecideFor(leaveService.requesterOf(requestId), jwt, auth);
         return ResponseEntity.ok(enrichOne(leaveService.approveL1(requestId, extractEmployeeId(jwt), approval)));
     }
 
@@ -272,7 +276,9 @@ public class LeaveController {
     public ResponseEntity<LeaveRequestResponse> decideL2(
             @PathVariable UUID requestId,
             @Valid @RequestBody LeaveApprovalRequest approval,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth) {
+        approverScopeGuard.assertCanDecideFor(leaveService.requesterOf(requestId), jwt, auth);
         return ResponseEntity.ok(enrichOne(leaveService.approveL2(requestId, extractEmployeeId(jwt), approval)));
     }
 
@@ -282,7 +288,9 @@ public class LeaveController {
     public ResponseEntity<LeaveRequestResponse> decide(
             @PathVariable UUID requestId,
             @Valid @RequestBody LeaveApprovalRequest approval,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth) {
+        approverScopeGuard.assertCanDecideFor(leaveService.requesterOf(requestId), jwt, auth);
         return ResponseEntity.ok(enrichOne(leaveService.approveLeave(requestId, extractEmployeeId(jwt), approval)));
     }
 

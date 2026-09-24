@@ -306,10 +306,23 @@ public class AttendanceService {
         // 18:00 punch-out that flushes at 00:30 must not 404 against a fresh,
         // empty record for the new date.
         LocalDate today = checkOutAt.atZone(IST).toLocalDate();
+        // Overnight shifts: an employee who punched in yesterday at 22:00 taps
+        // punch-out at 02:00 tomorrow — the record is on YESTERDAY. When there
+        // is no record for `today` (or one exists but has never been punched
+        // in), close yesterday's open record. Client acceptance case: night
+        // shift check-out was 404-ing and the app then created a fresh new-day
+        // record on the next punch-in.
+        final Instant lookupCheckOutAt = checkOutAt;
         AttendanceRecord record = attendanceRecordRepository
                 .findByEmployeeIdAndAttendanceDate(employeeId, today)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "No attendance record for employee " + employeeId + " on " + today));
+                .filter(r -> r.getCheckInAt() != null)
+                .orElseGet(() -> attendanceRecordRepository
+                        .findByEmployeeIdAndAttendanceDate(employeeId, today.minusDays(1))
+                        .filter(r -> r.getCheckInAt() != null && r.getCheckOutAt() == null
+                                && java.time.Duration.between(r.getCheckInAt(), lookupCheckOutAt).toHours() <= 20)
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "No open attendance record for employee " + employeeId + " on " + today
+                                        + " or " + today.minusDays(1))));
 
         if (record.getCheckOutAt() != null) {
             return toDto(record);
@@ -325,7 +338,9 @@ public class AttendanceService {
             // straight across the date boundary and fabricate a full night of
             // overtime on a record that belongs to yesterday. Clamp the
             // fallback into the record's own day.
-            Instant endOfRecordDay = today.atTime(LocalTime.MAX).atZone(IST).toInstant();
+            // Use the record's own attendance_date, not `today`: on an
+            // overnight-shift punch-out we're closing yesterday's row.
+            Instant endOfRecordDay = record.getAttendanceDate().atTime(LocalTime.MAX).atZone(IST).toInstant();
             Instant fallback = serverNow.isAfter(endOfRecordDay) ? endOfRecordDay : serverNow;
             if (fallback.isBefore(record.getCheckInAt())) {
                 fallback = record.getCheckInAt();   // zero-length beats negative
@@ -409,6 +424,37 @@ public class AttendanceService {
         } catch (Exception ex) {
             return null;
         }
+    }
+
+    /**
+     * The first date this employee has ANY attendance record for. Returns null
+     * when they have never punched — the caller then treats every day before
+     * today as "no data" instead of marking employees who joined years ago
+     * absent on every day the company wasn't yet on the product.
+     */
+    private LocalDate resolveEarliestRecordDate(UUID employeeId) {
+        if (jdbcTemplate == null || employeeId == null) return null;
+        try {
+            java.sql.Date d = jdbcTemplate.queryForObject(
+                    "SELECT MIN(attendance_date) FROM attendance.records WHERE employee_id = ?",
+                    java.sql.Date.class, employeeId);
+            return d != null ? d.toLocalDate() : null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /**
+     * Where to start counting attendance days for an employee: the later of
+     * their joining date and the first attendance record ever. When they have
+     * no record, count from today (nothing to score). Used by the monthly
+     * stats, the calendar and the weekly summary.
+     */
+    private LocalDate attendanceStartFor(UUID employeeId, LocalDate today) {
+        LocalDate join = resolveJoiningDate(employeeId);
+        LocalDate first = resolveEarliestRecordDate(employeeId);
+        if (first == null) return today;
+        return join != null && join.isAfter(first) ? join : first;
     }
 
     /**
@@ -529,7 +575,7 @@ public class AttendanceService {
 
         // Don't count days before the employee joined as Absent. A new hire on
         // the 13th has no records for the 1st-12th, but those weren't absences.
-        LocalDate joining = resolveJoiningDate(employeeId);
+        LocalDate joining = attendanceStartFor(employeeId, today);
         // Per-employee week-offs (not hardcoded Sat+Sun).
         java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
         // Holidays + approved leave are NOT absences and don't drag the score.
@@ -583,7 +629,7 @@ public class AttendanceService {
         // Pre-join weekdays must NOT be painted ABSENT (the employee didn't exist
         // yet). We still walk the whole month so WEEKEND grid cells render, but
         // gate the ABSENT branch below on the join date.
-        LocalDate joining = resolveJoiningDate(employeeId);
+        LocalDate joining = attendanceStartFor(employeeId, today);
         // Per-employee week-offs (not hardcoded Sat+Sun).
         java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
         // Overlay company holidays + approved leave so those days render as
@@ -648,7 +694,7 @@ public class AttendanceService {
 
         // Per-employee week-offs + join date (so pre-join weekdays aren't "Absent").
         java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
-        LocalDate joining = resolveJoiningDate(employeeId);
+        LocalDate joining = attendanceStartFor(employeeId, today);
         // Holiday + approved-leave overlay (so those days aren't "Absent").
         java.util.Set<LocalDate> holidays = resolveHolidayDates(employeeId, monday, sunday);
         java.util.Set<LocalDate> leaveDays = resolveApprovedLeaveDates(employeeId, monday, sunday);
@@ -1179,6 +1225,13 @@ public class AttendanceService {
                 ? correctionRequestRepository.findByEmployeeIdIn(employeeIds, pageable)
                 : correctionRequestRepository.findByEmployeeIdInAndStatus(employeeIds, status, pageable);
         return PageResponse.from(page, this::toCorrectionResponse);
+    }
+
+    /** The employee who filed a correction request, or null if it isn't in this tenant. */
+    @Transactional(readOnly = true)
+    public UUID correctionRequesterOf(UUID correctionId) {
+        return correctionRequestRepository.findById(correctionId)
+                .map(AttendanceCorrectionRequest::getEmployeeId).orElse(null);
     }
 
     @Transactional

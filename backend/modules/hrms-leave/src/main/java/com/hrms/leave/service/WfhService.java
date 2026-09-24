@@ -121,6 +121,12 @@ public class WfhService {
         return toResponse(saved);
     }
 
+    /** The employee who filed a WFH request, or null if it isn't in this tenant. */
+    @Transactional(readOnly = true)
+    public UUID requesterOf(UUID requestId) {
+        return repository.findById(requestId).map(WfhRequest::getEmployeeId).orElse(null);
+    }
+
     @Transactional
     public WfhRequestResponse decide(UUID requestId,
                                      UUID approverId,

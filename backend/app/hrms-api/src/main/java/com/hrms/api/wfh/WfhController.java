@@ -50,6 +50,8 @@ public class WfhController {
     private final EmployeeRepository employeeRepository;
     private final WorkforceDepartmentRepository departmentRepository;
     private final ApproverFallbackResolver approverFallbackResolver;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrms.api.attendance.ApproverScopeGuard approverScopeGuard;
 
     public WfhController(WfhService service,
                          EmployeeRepository employeeRepository,
@@ -153,7 +155,9 @@ public class WfhController {
     public ResponseEntity<WfhRequestResponse> approve(
             @PathVariable UUID requestId,
             @RequestBody(required = false) @Valid WfhDecisionRequest body,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth) {
+        approverScopeGuard.assertCanDecideFor(service.requesterOf(requestId), jwt, auth);
         String comment = body != null ? body.comment() : null;
         return ResponseEntity.ok(enrichOne(
                 service.decide(requestId, extractEmployeeId(jwt), ApprovalStatus.APPROVED, comment)));
@@ -165,7 +169,9 @@ public class WfhController {
     public ResponseEntity<WfhRequestResponse> reject(
             @PathVariable UUID requestId,
             @RequestBody(required = false) @Valid WfhDecisionRequest body,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth) {
+        approverScopeGuard.assertCanDecideFor(service.requesterOf(requestId), jwt, auth);
         // Rejection reason is UX-mandatory — the mobile Reject modal forces the
         // approver to type one before the button enables. Enforce it here too so
         // an API caller can't reject with no explanation.

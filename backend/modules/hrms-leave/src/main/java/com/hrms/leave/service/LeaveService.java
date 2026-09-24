@@ -328,6 +328,12 @@ public class LeaveService {
         );
     }
 
+    /** The employee who filed a leave request, or null if it isn't in this tenant. */
+    @Transactional(readOnly = true)
+    public UUID requesterOf(UUID requestId) {
+        return leaveRequestRepository.findById(requestId).map(LeaveRequest::getEmployeeId).orElse(null);
+    }
+
     @Transactional
     public LeaveRequestResponse approveLeave(UUID requestId, UUID approverId, LeaveApprovalRequest approval) {
         log.info("Processing leave approval requestId={} approverId={} status={}",

@@ -78,6 +78,8 @@ public class AttendanceController {
     private final EmployeeRepository employeeRepository;
     private final WorkforceDepartmentRepository departmentRepository;
     private final LeaveRequestRepository leaveRequestRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private ApproverScopeGuard approverScopeGuard;
 
     /** Longest window the trend endpoint will serve; longer requests are clamped. */
     private static final int MAX_TREND_DAYS = 31;
@@ -596,7 +598,9 @@ public class AttendanceController {
     public ResponseEntity<CorrectionRequestResponse> decideCorrection(
             @PathVariable UUID correctionId,
             @Valid @RequestBody CorrectionDecisionRequest decision,
-            @AuthenticationPrincipal Jwt jwt) {
+            @AuthenticationPrincipal Jwt jwt,
+            org.springframework.security.core.Authentication auth) {
+        approverScopeGuard.assertCanDecideFor(attendanceService.correctionRequesterOf(correctionId), jwt, auth);
         CorrectionRequestResponse decided =
                 attendanceService.decideCorrection(correctionId, extractEmployeeId(jwt), decision);
         Employee employee = employeeRepository.findById(decided.employeeId()).orElse(null);
