@@ -150,15 +150,17 @@ export function DesignSubNav({ label, items }: { label: string; items: SubNavEnt
       <span aria-hidden="true" style={{ position: 'absolute', left: '0', right: '0', bottom: '0', height: '1px', background: '#e2e8f0' }} />
       <div className="ds-subnav-scroll" style={{ position: 'relative', maxWidth: '1320px', margin: '0 auto', padding: '0 clamp(16px,2.5vw,28px)', boxSizing: 'border-box', display: 'flex', alignItems: 'stretch', gap: '24px', overflowX: 'auto' }}>
         {items.map((s) => s.active ? (
-          <button key={s.path} type="button" aria-current="page"
-            style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', height: '56px', padding: '0 4px', border: '0', background: 'none', font: 'inherit', fontSize: '14px', fontWeight: 700, color: '#0f6e56', whiteSpace: 'nowrap', cursor: 'default', boxShadow: 'inset 0 -3px 0 #0f6e56' }}>
+          <a key={s.path} href={s.path} aria-current="page" onClick={(e) => e.preventDefault()}
+            style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', height: '56px', padding: '0 4px', border: '0', background: 'none', font: 'inherit', fontSize: '14px', fontWeight: 700, color: '#0f6e56', whiteSpace: 'nowrap', cursor: 'default', boxShadow: 'inset 0 -3px 0 #0f6e56', textDecoration: 'none' }}>
             {s.label}
-          </button>
+          </a>
         ) : (
-          <button key={s.path} type="button" onClick={s.onClick} className="ds-subnav-idle"
-            style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', height: '56px', padding: '0 4px', border: '0', background: 'none', font: 'inherit', fontSize: '14px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', cursor: 'pointer', boxShadow: 'inset 0 -3px 0 transparent', transition: 'color .15s,box-shadow .15s' }}>
+          // A real link (open in a new tab works); a plain click stays in the app.
+          <a key={s.path} href={s.path} className="ds-subnav-idle"
+            onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); s.onClick() }}
+            style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', height: '56px', padding: '0 4px', border: '0', background: 'none', font: 'inherit', fontSize: '14px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', cursor: 'pointer', boxShadow: 'inset 0 -3px 0 transparent', transition: 'color .15s,box-shadow .15s', textDecoration: 'none' }}>
             {s.label}
-          </button>
+          </a>
         ))}
       </div>
     </nav>

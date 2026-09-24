@@ -51,12 +51,11 @@ const Templates = React.lazy(() => import('@/modules/hrms/onboarding/Templates')
 const TemplateDetail = React.lazy(() => import('@/modules/hrms/onboarding/TemplateDetail').then(m => ({ default: m.TemplateDetail })))
 const Instances = React.lazy(() => import('@/modules/hrms/onboarding/Instances').then(m => ({ default: m.Instances })))
 const InstanceDetail = React.lazy(() => import('@/modules/hrms/onboarding/InstanceDetail').then(m => ({ default: m.InstanceDetail })))
-const Employees = React.lazy(() => import('@/modules/hrms/Employees').then(m => ({ default: m.Employees })))
+const MasterModule = React.lazy(() => import('@/modules/hrms/master/MasterContainer').then(m => ({ default: m.MasterContainer })))
 // Attendance & Time (Analytics · Daily Tracking · Shifts & Overtime) — one designed page, three routes.
 const AttendanceModule = React.lazy(() => import('@/modules/hrms/attendance/AttendanceContainer').then(m => ({ default: m.AttendanceContainer })))
 const GeofenceZones = React.lazy(() => import('@/modules/hrms/attendance/GeofenceZones').then(m => ({ default: m.GeofenceZones })))
 const Leave = React.lazy(() => import('@/modules/hrms/Leave').then(m => ({ default: m.Leave })))
-const OrgSetup = React.lazy(() => import('@/modules/hrms/organization/OrgSetup').then(m => ({ default: m.OrgSetup })))
 const Companies = React.lazy(() => import('@/modules/hrms/organization/CompaniesPageContainer').then(m => ({ default: m.CompaniesPageContainer })))
 const EmployeeDetail = React.lazy(() => import('@/modules/hrms/employees/EmployeeDetail').then(m => ({ default: m.EmployeeDetail })))
 const EssDashboard = React.lazy(() => import('@/modules/hrms/ess/EssDashboard').then(m => ({ default: m.EssDashboard })))
@@ -81,9 +80,13 @@ const PendingDocuments = React.lazy(() => import('@/pages/PendingDocuments').the
 const Learning = React.lazy(() => import('@/modules/hrms/Learning').then(m => ({ default: m.Learning })))
 const Compliance = React.lazy(() => import('@/modules/hrms/Compliance').then(m => ({ default: m.Compliance })))
 const Policies = React.lazy(() => import('@/modules/hrms/Policies').then(m => ({ default: m.Policies })))
+/** Policy admins get the Master "Policy Documents" page; everyone else keeps the page where they read and acknowledge policies. */
+function PoliciesRoute() {
+  const admin = useSdkStore(s => s.permissions.has('hrms.policy.write') && s.permissions.has('hrms.policy.read'))
+  return admin ? <MasterModule /> : <Policies />
+}
 const Integrations = React.lazy(() => import('@/modules/hrms/Integrations').then(m => ({ default: m.Integrations })))
 const NotificationTemplates = React.lazy(() => import('@/modules/hrms/NotificationTemplates').then(m => ({ default: m.NotificationTemplates })))
-const SalaryComponents = React.lazy(() => import('@/modules/hrms/payroll/SalaryComponents').then(m => ({ default: m.SalaryComponents })))
 const MySalaryStructure = React.lazy(() => import('@/modules/hrms/payroll/MySalaryStructure').then(m => ({ default: m.MySalaryStructure })))
 const EmployeePayslips = React.lazy(() => import('@/modules/hrms/payroll/EmployeePayslips').then(m => ({ default: m.EmployeePayslips })))
 const LetterTemplates = React.lazy(() => import('@/modules/hrms/letters/LetterTemplates').then(m => ({ default: m.LetterTemplates })))
@@ -289,7 +292,7 @@ export default function App() {
           element={
             <RequirePermission code={P.HRMS_EMPLOYEE_READ}>
               <RouteGuard anyOf={[P.HRMS_EMPLOYEE_READ]}>
-                <ModuleGate moduleKey="hrms"><Employees /></ModuleGate>
+                <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
               </RouteGuard>
             </RequirePermission>
           }
@@ -314,13 +317,23 @@ export default function App() {
             </RouteGuard>
           }
         />
+        {/* Master data (design: docs/Designs/UnifiedTree Master (offline).html). Each
+            section checks its own permissions; the overview shows the ones you can open. */}
+        <Route
+          path="/hrms/master/*"
+          element={
+            <RouteGuard anyOf={[P.HRMS_EMPLOYEE_READ, P.HRMS_DEPARTMENT_WRITE, P.HRMS_BRANCH_WRITE, P.HRMS_DESIGNATION_WRITE, P.HRMS_CONTRACTOR_READ, P.LEAVE_TYPE_WRITE, 'hrms.policy.write', 'attendance.workforce.admin', P.PAYROLL_COMPONENTS_READ, P.PAYROLL_SETTINGS_READ]}>
+              <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
         <Route
           path="/hrms/organization"
           element={
             // A setup page: every employee holds department.read (for their own
             // lookups), which let them open it and hit 403s on the Branches tab.
             <RouteGuard anyOf={[P.HRMS_DEPARTMENT_WRITE, P.HRMS_BRANCH_WRITE, P.HRMS_DESIGNATION_WRITE]}>
-              <ModuleGate moduleKey="hrms"><OrgSetup /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -541,7 +554,7 @@ export default function App() {
           path="/hrms/policies"
           element={
             <RouteGuard anyOf={['hrms.policy.read', 'hrms.policy.write', 'hrms.policy.acknowledge.self']}>
-              <ModuleGate moduleKey="hrms"><Policies /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><PoliciesRoute /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -667,7 +680,7 @@ export default function App() {
           path="/hrms/payroll/components"
           element={
             <RouteGuard anyOf={[P.PAYROLL_COMPONENTS_READ]}>
-              <ModuleGate moduleKey="payroll"><SalaryComponents /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><MasterModule /></ModuleGate>
             </RouteGuard>
           }
         />

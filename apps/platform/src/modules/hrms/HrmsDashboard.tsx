@@ -177,12 +177,12 @@ const RoleDashboard: React.FC = () => {
   // Quick-action "View Reports" — any of the HRMS report perms is enough to
   // land on /hrms/reports without a 403 (the page picks whichever tab the
   // caller can open).
-  const canViewReports   =
-    usePermission(P.HRMS_REPORT_HEADCOUNT) ||
-    usePermission(P.HRMS_REPORT_ATTRITION) ||
-    usePermission(P.HRMS_REPORT_ATTENDANCE) ||
-    usePermission(P.HRMS_REPORT_LEAVE) ||
-    usePermission(P.HRMS_REPORT_DIVERSITY)
+  // Each hook runs on every render (an `a() || b()` chain would skip the rest).
+  const reportPerms      = [
+    usePermission(P.HRMS_REPORT_HEADCOUNT), usePermission(P.HRMS_REPORT_ATTRITION), usePermission(P.HRMS_REPORT_ATTENDANCE),
+    usePermission(P.HRMS_REPORT_LEAVE), usePermission(P.HRMS_REPORT_DIVERSITY),
+  ]
+  const canViewReports   = reportPerms.some(Boolean)
   // Org-wide attendance ("who is in today") is its own permission — the
   // endpoints are guarded by exactly this, so the tiles are gated on the same
   // code rather than on a role string.

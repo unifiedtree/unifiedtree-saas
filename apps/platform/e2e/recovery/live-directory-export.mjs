@@ -34,7 +34,7 @@ try {
   check('export returns 200 text/csv', r.status === 200 && (r.headers.get('content-type') || '').includes('text/csv'), `${r.status} ${r.headers.get('content-type')}`)
   check('row count matches the directory total', lines.length - 1 === dir.totalElements, `${lines.length - 1} rows vs ${dir.totalElements}`)
   check('header has the directory columns', lines[0].startsWith('Employee code,First name,Last name,Work email'), lines[0].slice(0, 80))
-  check('no salary / bank / identity columns', !/ctc|salary|bank|pan|aadhaar|uan|esi|birth/i.test(lines[0]), lines[0])
+  check('no salary / bank / identity columns', !/(ctc|salary|bank|pan|aadhaar|uan|esi|birth)/i.test(lines[0]), lines[0])
   const fxLine = lines.find((l) => l.includes(`Qa${tag}`)) || ''
   check('formula-like names are neutralised', fxLine.includes(`"'=HYPERLINK(""x"")"`), fxLine.slice(0, 80))
   const filtered = await (await fetch(`${api}/v1/hrms/employees/export.csv?companyId=${company}&status=NOTICE_PERIOD`, { headers: owner })).text()
@@ -49,7 +49,7 @@ try {
   await page.goto(base + '/login'); await page.locator('input[type=email]').fill('owner@unifiedtree.demo'); await page.locator('input[type=password]').fill(password); await page.locator('button[type=submit]').click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 }); await page.waitForTimeout(1500); errs.length = 0
   await page.goto(base + '/hrms/employees')
-  const button = page.getByRole('button', { name: 'Export CSV' })
+  const button = page.getByRole('button', { name: 'Export', exact: true })
   await button.waitFor({ timeout: 30_000 })
   const [download] = await Promise.all([page.waitForEvent('download', { timeout: 30_000 }), button.click()])
   mkdirSync('test-results/recovery', { recursive: true })
@@ -57,7 +57,7 @@ try {
   await download.saveAs(saved)
   const uiLines = readFileSync(saved, 'utf8').replace(/^\uFEFF/, '').trim().split(/\r?\n/)
   check('browser button downloads the CSV', download.suggestedFilename().startsWith('employees-') && uiLines.length - 1 === dir.totalElements, `${download.suggestedFilename()} ${uiLines.length - 1} rows`)
-  await page.getByText(/Exported \d+ employees/).waitFor({ timeout: 10_000 })
+  await page.locator('.toast').filter({ hasText: /Exported \d+ employees/ }).first().waitFor({ timeout: 10_000 })
   check('success toast shows the count', true)
   check('no uncaught page errors', errs.length === 0, errs.slice(0, 2).join(' | '))
 } finally {

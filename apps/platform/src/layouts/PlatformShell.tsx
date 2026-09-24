@@ -51,7 +51,7 @@ const ROLE_LABELS: Record<PlatformRole | string, string> = {
   DEPT_MANAGER: 'Dept Manager', EMPLOYEE: 'Employee',
 }
 
-interface NavChild { label: string; path: string; icon: React.ReactNode; visibleForRoles?: string[]; visibleWithAnyPermission?: string[] }
+interface NavChild { label: string; path: string; icon: React.ReactNode; visibleForRoles?: string[]; visibleWithAnyPermission?: string[]; /** Other routes that belong to this section. */ also?: string[] }
 interface NavItemDef { key: string; label: string; icon: React.ReactNode; path?: string; module?: string; visibleForRoles?: string[]; children?: NavChild[] }
 
 // ─── Top-level nav (the HRMS app's flat links) ────────────────────────────────
@@ -99,9 +99,10 @@ const MODULE_ITEMS: NavItemDef[] = [
     children: [
       // Workforce Directory restricted to HR/admin — DEPT_MANAGER should stay
       // on My Team, not open the full company directory.
+      { label: 'Overview', path: '/hrms/master', icon: <Database size={15} />, visibleForRoles: R_HR },
       { label: 'Workforce Directory', path: '/hrms/employees', icon: <UserCheck size={15} />, visibleForRoles: R_HR },
       { label: 'Organization Setup', path: '/hrms/organization', icon: <Building2 size={15} />, visibleForRoles: R_HR },
-      { label: 'Rules & Policies', path: '/hrms/policies', icon: <ClipboardList size={15} />, visibleForRoles: R_HR },
+      { label: 'Rules & Policies', path: '/hrms/master/shift-rules', icon: <ClipboardList size={15} />, visibleForRoles: R_HR, also: ['/hrms/policies'] },
       { label: 'Payroll Configuration', path: '/hrms/payroll/components', icon: <Receipt size={15} />, visibleForRoles: R_FIN_META },
     ],
   },
@@ -324,9 +325,11 @@ const RAIL_DIVIDERS = new Set(['company', 'attendance', 'payroll-hr', 'performan
 const OWN_SECTION_BAR = new Set([
   '/hrms/att-analytics', '/hrms/attendance', '/hrms/shifts',
   '/hrms/payroll-dashboard', '/hrms/salary-structure', '/hrms/payroll/runs', '/hrms/payroll/settings', '/hrms/pli', '/hrms/advances', '/hrms/bank-disbursement',
+  // Master data (its own top tabs)
+  '/hrms/employees', '/hrms/organization', '/hrms/policies', '/hrms/payroll/components',
 ])
 /** A payroll run's own page (/hrms/payroll/runs/:id) sits under the same section bar. */
-const ownsSectionBar = (path: string) => OWN_SECTION_BAR.has(path) || /^\/hrms\/payroll\/runs\/[^/]+$/.test(path)
+const ownsSectionBar = (path: string) => OWN_SECTION_BAR.has(path) || /^\/hrms\/payroll\/runs\/[^/]+$/.test(path) || /^\/hrms\/master(\/|$)/.test(path)
 
 function matchPath(pathname: string, p?: string) {
   return !!p && (pathname === p || pathname.startsWith(p + '/'))
@@ -456,7 +459,7 @@ export function PlatformShell() {
         fullLabel: g.label,
         icon: g.icon,
         target: kids[0].path,
-        active: kids.some(c => matchPath(location.pathname, c.path)),
+        active: kids.some(c => matchPath(location.pathname, c.path) || !!c.also?.some(p => matchPath(location.pathname, p))),
         children: kids,
       })
     }

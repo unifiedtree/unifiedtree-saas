@@ -1,6 +1,6 @@
 # Redesign: what's static, what needs building
 
-This file tracks the Claude Design redesign (`docs/Designs/UnifiedTree HRMS Prototype.html`) as it's built into the app. Every screen matches the design exactly. This file lists the parts that aren't fully backed by real data yet, and every place the build differs from the prototype (with the reason). Nothing from the design was removed.
+This file tracks the Claude Design redesign (`docs/Designs/UnifiedTree HRMS Prototype.html`, and the Master export for §6) as it's built into the app. Every screen matches the design exactly. This file lists the parts that aren't fully backed by real data yet, and every place the build differs from the prototype (with the reason). Nothing from the design was removed.
 
 How the code is laid out:
 - `apps/platform/scripts/design-build.mjs` regenerates the markup of every design component from the export. Run it from `apps/platform`: `node scripts/design-build.mjs [Component …]`.
@@ -151,3 +151,88 @@ Checked live: `e2e/recovery/live-design-payroll.mjs`, 29/29. It covers:
 | Payroll cycle days, processing day, LWF, PF/ESI codes | Partial | Saved, but not used by payroll yet: runs cover the calendar month. The cycle card's switch stays on (the API has no switch for it). |
 | Payroll register | Partial | A PDF (the design said Excel), available for locked and paid runs. The run's Employees tab exports a CSV. |
 | Old pages (`PayrollDashboard`, `PayrollRuns`, `PayrollRunDetail`, `SalaryStructureAdmin`, `SalaryOverview`, `PayrollSettings`, `Payroll.tsx`) | Removed | Replaced by the designed page. `/me/payslips`, `/me/salary`, `/hrms/payroll/components` and `/hrms/fnf` are untouched. |
+
+## 6. Master data (`/hrms/master`, `/hrms/employees`, `/hrms/organization`, `/hrms/policies`, `/hrms/payroll/components`, `/hrms/master/*`): done
+
+Design: `docs/Designs/UnifiedTree Master (offline).html`: an Overview plus 13 pages under four tabs (Workforce Directory, Organization Setup, Rules & Policies, Payroll Configuration).
+
+How it's built. This export is a plain React prototype, not the dc format.
+- `apps/platform/scripts/master-build.mjs` takes the design's own components and CSS.
+  - The CSS is scoped under `.utm`, so it can't reach other pages.
+  - It drops the sample data, the prototype's own rail and top bar (the app keeps its shell), and the tweaks panel.
+  - It applies the patches in `scripts/master-patches.mjs`. Each patch is a find/replace with a reason, and the build fails if a target changes.
+  - Output: `src/design/master/MasterDesign.tsx` and `master.css`. Don't edit these by hand.
+- Real data: `src/modules/hrms/master/MasterContainer.tsx` loads the API.
+  - `masterData.ts` turns API rows into the design's records.
+  - `masterSync.ts` turns every edit the design makes into the matching API calls.
+- A change shows at once. The page's success toast waits until the server accepts it. If the server refuses, the data goes back and a red toast gives the reason.
+- Nothing that wasn't saved is ever shown as saved.
+
+Routes:
+- `/hrms/master`: the Overview.
+- `/hrms/employees`: Employee Master.
+- `/hrms/master/{contractors, classifications, companies, branches, departments, designations, grades, shift-rules, leave-rules, statutory}`.
+- `/hrms/policies`: Policy Documents for policy admins. Employees keep their acknowledgement page here.
+- `/hrms/payroll/components`: Salary Components.
+- `/hrms/organization`: opens the first Organization Setup page the person can see.
+
+Other details:
+- Each page shows only when the person holds the permissions its endpoints check.
+- The design's tabs replace the shell's sub-tabs on these routes.
+- The old `Employees.tsx`, `OrgSetup.tsx` and `SalaryComponents.tsx` are removed. Everything they did is on the new pages.
+
+Checked live:
+- `e2e/recovery/live-design-master.mjs`, 41/41. It covers:
+  - All 15 routes.
+  - The employee list: search, CSV export, profile, an edit that saves, and "Full record".
+  - Creating, editing and archiving a department, grade, designation, leave type, shift, policy draft, salary component, agency and employment type, all removed from the local database afterwards.
+  - The statutory switch.
+  - An employee keeping the policies page.
+- `e2e/recovery/live-directory-export.mjs`, 10/10.
+
+| Item | Status | Detail |
+|---|---|---|
+| Overview, Employee Master, Companies, Branches, Departments, Designations, Shift Rules, Leave Rules, Policy Documents, Salary Components, Statutory Settings | Done | Real data and real saves. Headcounts come from the employee list, because the API's cached counts are never updated. |
+| Classification Rules | Changed | Backed by **employment types**, which are what employee records link to (by code). Probation and notice show the company-wide HR configuration. PF/ESI shows "Set per employee", because it lives on each salary structure. The separate `/v1/hrms/classifications` API has no screen, and its list refuses Owner/Admin by role name, so it isn't used. Built-in types can't be edited, as on the old page. |
+| Contractor Master | Partial | Add, End contract and Export work. **Edit agency**, **Renew licence** and **Reactivate** are off ("Coming soon"): the API has no update or restore. Service, deployment sites, worker count and licence date aren't stored, so the form shows those fields switched off and the cards show a dash. |
+| Grades & Bands | Needs backend | Grades are saved (level and name). **Pay bands (min/max CTC) aren't stored**, so the band bars are empty, "Band not set yet" shows, and the form's band fields are off. Deactivate was added to the grade menu, matching the old page. |
+| Employee add / edit | Done | Creates with the fields the design asks for, assigns the shift, and sends the login invitation (as the old wizard did). The next employee code comes from the company's code settings. Company can't be changed on edit. The full record page (`/hrms/employees/:id`) stays and has a **Full record** button in the profile. |
+| Bulk status change | Changed | "Mark as active" confirms people on probation and cancels notice for people serving it. "Mark as probation" changes active people only; people on notice are left alone. The toast counts only the people who changed. |
+| Start exit | Done | A last working day of today or earlier marks the person exited; a later one starts their notice. |
+| Import / Export | Done | **Import** opens the existing bulk import. **Export** downloads the rows shown, with the same columns and spreadsheet-formula guard as the server export. |
+| Shift Rules | Partial | Name, type, times, grace, hours and overtime rate are saved. Shift code, flexible core hours and per-shift weekly offs aren't stored ("Coming soon"). **Duplicate** opens a filled "Add shift" form, because shifts can't be parked as inactive. Overtime copy says the rate is recorded, not paid, which is the business rule. An overnight shift is saved as a Night shift. |
+| Leave Rules | Partial | Name, code, category, quota (must be more than 0), paid and carry-forward cap are saved. Accrual shows "Credited upfront", which is what the balance job does. Monthly/quarterly accrual, encashment and per-classification "Applies to" aren't in the API ("Coming soon"). The year-end carry-forward move isn't automated; the tip says so. |
+| Policy Documents | Partial | Publish, save as draft, edit, new version (a new draft), archive and restore all work. **Remind**, **Email everyone when published** and optional acknowledgement aren't in the API ("Coming soon"). **Discard draft** archives the draft, because policies can't be deleted. |
+| Salary Components | Partial | Add, edit and delete (for components that aren't built-in or in use) work. Computation shows the backend's types: Fixed, % of Basic, % of Gross, Formula, Statutory. Statutory lines show the real PF/ESI rates. Fixed amounts, "Partly exempt", **Show on payslip** and **Deactivate** aren't in the API ("Coming soon"). The CTC card shows the split new salary structures use. |
+| Statutory Settings | Partial | The switches save the payroll settings (the same ones as Payroll Settings). PT shows the configured state's real slabs. **LWF is saved but payroll doesn't deduct it** (the card says so). PT and LWF registration numbers and PF admin charges aren't stored, so they show a dash. |
+| Companies | Partial | The head office comes from the branch marked HQ. TAN and "since" aren't stored ("Coming soon" on the form). |
+| Branches | Changed | Only "Head office" is recorded as a type, so every other branch shows "Branch". Plant, warehouse and other types are "Coming soon". Deactivated branches leave the list (the API lists active ones only). |
+| Departments | Partial | Rename, code, icon, head and archive work. A department can't be moved under another after it's created (no API). |
+| Designations | Partial | Designations have no code in the API, so the code line is empty. The grade is free text; one that matches no grade shows as a chip. |
+| Loading / error / no access | Kept | The design had no such states. Each page waits for its own data and shows a loading card, an error card with **Try again**, or "You don't have access". |
+
+**Backend gaps found while building Master** (to build; not built here):
+- Grade pay bands (min/max CTC) and a link from designation to grade by id. The grade is free text today.
+- Agencies:
+  - An update and restore endpoint.
+  - Licence expiry, service, deployment sites and worker counts (`active_workers_count` is never written).
+  - A link from contract workers to agencies.
+- Classifications API: `GET` is gated by role name (Owner/Admin get 403), and there's no update endpoint.
+- Components:
+  - Can't be deactivated (`is_active` isn't updatable).
+  - No fixed amounts: `percent_value` is `NUMERIC(6,3)`.
+  - No "show on payslip" flag.
+  - `POST` silently ignores a duplicate code.
+- Leave types: accrual frequency and encashable exist in the database but not in the API; there is no year-end carry-forward job; `annualEntitlement` must be more than 0.
+- Shifts:
+  - `GET /v1/shifts` re-creates the four default shifts on every read, so deleting one of them is undone.
+  - No code, core hours or weekly offs.
+- Departments: no endpoint to change the parent; `branchIds` on create is ignored.
+- Policies: no delete, no reminders, no email on publish.
+- Cached counts (company, branch and department `employeeCount`, designation `headcount`) are never maintained.
+- Payroll: LWF, cycle days and PF/ESI establishment codes are stored but not used by runs.
+
+Also fixed along the way:
+- The shell's section tabs are real links again, so they can be opened in a new tab.
+- The HR dashboard's "View reports" permission check no longer calls hooks conditionally.
+- The directory-export test's column check no longer flags "Designation".
