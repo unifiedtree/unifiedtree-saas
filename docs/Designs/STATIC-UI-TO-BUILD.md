@@ -152,6 +152,17 @@ Checked live: `e2e/recovery/live-design-payroll.mjs`, 29/29. It covers:
 | Payroll register | Partial | A PDF (the design said Excel), available for locked and paid runs. The run's Employees tab exports a CSV. |
 | Old pages (`PayrollDashboard`, `PayrollRuns`, `PayrollRunDetail`, `SalaryStructureAdmin`, `SalaryOverview`, `PayrollSettings`, `Payroll.tsx`) | Removed | Replaced by the designed page. `/me/payslips`, `/me/salary`, `/hrms/payroll/components` and `/hrms/fnf` are untouched. |
 
+
+**Follow-up (25 Sep): two gaps from the redesign, now fixed.**
+- *Bank file with missing bank details.* The server leaves out anyone without a usable primary bank account and refuses the file (`BATCH_HAS_EXCLUDED_EMPLOYEES`). The old page listed those people. The redesigned Bank page only showed "Could not download the file". Now:
+  - The file card reads "N without bank details".
+  - Download and "Mark transferred" are hidden.
+  - A notice names each person; each name opens their Payroll tab, where the bank account is added.
+  - **Rebuild file** refreshes a draft; **Cancel this file** handles one already sent.
+  - The Bank page also opens on a chosen run (`?run=`); a run's page links to its own file.
+- *Payslip that can't load.* The drawer stayed blank forever. It now shows a skeleton while loading, and "Couldn’t load this payslip" with **Try again** on error.
+- Checked live: `live-payroll-access.mjs` was rewritten for the redesigned pages. All 6 steps pass: reopen with a reason, exclusions named and blocked, fix and rebuild, pay, the payslip outage, and a missing run. The test now removes its run, bank file, bank profile and fixture employee afterwards.
+
 ## 6. Master data (`/hrms/master`, `/hrms/employees`, `/hrms/organization`, `/hrms/policies`, `/hrms/payroll/components`, `/hrms/master/*`): done
 
 Design: `docs/Designs/UnifiedTree Master (offline).html`: an Overview plus 13 pages under four tabs (Workforce Directory, Organization Setup, Rules & Policies, Payroll Configuration).

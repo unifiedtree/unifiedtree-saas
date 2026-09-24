@@ -271,6 +271,22 @@ const PATCH = {
     if (n !== 11) throw new Error('AttendancePage: expected 11 tab components, patched ' + n)
     return out
   },
+  // The server refuses a bank file while anyone in it lacks bank details
+  // (BATCH_HAS_EXCLUDED_EMPLOYEES). The design had nowhere to say who, so a
+  // slot after the file rows lists them with the way to fix it.
+  PayBank(html) {
+    const i = html.indexOf('<sc-for list="{{ batches }}"')
+    if (i < 0) throw new Error('PayBank: batches list not found')
+    const j = html.indexOf('</sc-for>', i) + '</sc-for>'.length
+    return html.slice(0, j) + '\n{{ excludedBlock }}' + html.slice(j)
+  },
+  // The design drew only a loaded payslip; while it loads, or if it can't be
+  // loaded, the drawer was blank forever. A slot after it shows either state.
+  PayslipDrawer(html) {
+    const i = html.lastIndexOf('</sc-if>')
+    if (i < 0) throw new Error('PayslipDrawer: payslip block not found')
+    return html.slice(0, i + '</sc-if>'.length) + '\n{{ stateBlock }}' + html.slice(i + '</sc-if>'.length)
+  },
   // Same for the payroll module: every section gets its own real-data props slot.
   PayrollModule(html) {
     const KIDS = 'PayDashboard|PaySalary|PayRuns|PayrollRunPage|PaySettings|PayPli|PayAdvances|PayBank'

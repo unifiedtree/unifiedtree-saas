@@ -30,11 +30,22 @@ export function inWords(num: number): string {
 }
 export const inr = (n: number | null | undefined, dec = 0) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 
-export class PayslipDrawer extends DCLogic<{ slip: Payslip | null; runLabel: string; final: boolean; loading?: boolean; onClose: () => void; onDownload?: () => void; downloading?: boolean }> {
+export class PayslipDrawer extends DCLogic<{ slip: Payslip | null; runLabel: string; final: boolean; loading?: boolean; error?: string | null; onRetry?: () => void; onClose: () => void; onDownload?: () => void; downloading?: boolean }> {
   renderVals() {
     const p = this.props, close = p.onClose, e = p.slip
     const base = { title: 'Payslip', close, footer: null as any, icInfo: dashIcon('info', 16) }
-    if (!e) return { ...base, ready: false }
+    if (!e) {
+      // Not loaded yet, or it couldn't be: say which, instead of an empty drawer.
+      const stateBlock = p.error
+        ? createElement('div', { role: 'alert', style: { display: 'grid', justifyItems: 'center', gap: 10, padding: '32px 12px', textAlign: 'center', fontFamily: 'Inter,-apple-system,sans-serif' } },
+          createElement('span', { style: { width: 44, height: 44, borderRadius: 12, background: '#fff1f2', border: '1px solid #fecdd3', color: '#e11d48', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' } }, dashIcon('alertTriangle', 20)),
+          createElement('strong', { style: { fontSize: 15, color: '#0f172a' } }, 'Couldn\u2019t load this payslip'),
+          createElement('span', { style: { fontSize: 13, lineHeight: 1.5, color: '#64748b', maxWidth: 300 } }, p.error),
+          p.onRetry ? createElement(HrButton, { variant: 'ghost', onClick: p.onRetry } as any, 'Try again') : null)
+        : createElement('div', { role: 'status', 'aria-label': 'Loading payslip', style: { display: 'grid', gap: 12 } },
+          ...[48, 16, 120, 120, 64].map((h, i) => createElement('div', { key: i, className: 'ut-skel', style: { height: h, borderRadius: 12 } })))
+      return { ...base, ready: false, stateBlock }
+    }
     const money = (n: number) => inr(n, 2), final = !!p.final
     const footer = createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', width: '100%' } },
       createElement(HrButton, { variant: 'ghost', onClick: close } as any, 'Close'),

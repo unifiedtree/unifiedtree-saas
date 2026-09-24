@@ -10,7 +10,11 @@ import { dashIcon, dashIconComponent } from './icons'
 import { inr } from './PayslipDrawer'
 import type { RunStatus } from './PayRuns'
 
-export interface BankBatch { id: string; reference: string; bank: string; count: number; amount: number; status: 'DRAFT' | 'POSTED' | 'PAID' | 'CANCELLED' }
+export interface BankBatch {
+  id: string; reference: string; bank: string; count: number; amount: number; status: 'DRAFT' | 'POSTED' | 'PAID' | 'CANCELLED'
+  /** People the server left out of the file (no usable bank details). While any are listed the bank refuses the file. */
+  excluded?: { id: string; name: string; code: string }[]
+}
 export interface BankData {
   run: { id: string; label: string; status: RunStatus; net: number; employees: number } | null
   batch: BankBatch | null
@@ -31,10 +35,11 @@ export class PayBank extends DCLogic {
     const b = D?.batch && D.batch.status !== 'CANCELLED' ? D.batch : null
     const rows = !run ? [] : b
       ? [b].map((x) => {
-        const paid = paidRun || x.status === 'PAID', k = paid ? ['ok', 'Paid'] : x.status === 'POSTED' ? ['green', 'Sent to bank'] : ['teal', 'File generated']
+        const paid = paidRun || x.status === 'PAID', nEx = paid ? 0 : x.excluded?.length || 0
+        const k = paid ? ['ok', 'Paid'] : nEx ? ['red', `${nEx} without bank details`] : x.status === 'POSTED' ? ['green', 'Sent to bank'] : ['teal', 'File generated']
         return {
           id: x.reference, bank: x.bank, count: x.count, amountL: inr(x.amount), tone: k[0], statusLabel: k[1],
-          canDownload: canBuild, canConfirm: !paid && canPost, needsRun: false, runCta: 'Open run',
+          canDownload: canBuild && !nEx, canConfirm: !paid && canPost && !nEx, needsRun: false, runCta: 'Open run',
           fileTip: 'Downloads the bank upload file', onDownload: () => p.onDownload && p.onDownload(x), onConfirm: () => this.setState({ confirm: x.id, utr: '' }), onView: () => { this.setState({ view: x.id }); if (p.onView) p.onView(x.id) },
         }
       })
@@ -45,7 +50,19 @@ export class PayBank extends DCLogic {
         fileTip: '', onDownload: () => {}, onConfirm: () => {}, onView: openRun,
       }]
     const batches = rows
-    const runNote = paidRun ? 'Paid · all transfers confirmed' : b ? 'File ready · upload it to your bank, then confirm the transfer' : locked ? 'Run is locked · prepare the file from the run' : 'The run must be locked before the file can be made'
+    const ex = b && !paidRun && b.status !== 'PAID' ? b.excluded || [] : []
+    const runNote = paidRun ? 'Paid · all transfers confirmed' : ex.length ? 'Fix the people below, then rebuild the file' : b ? 'File ready · upload it to your bank, then confirm the transfer' : locked ? 'Run is locked · prepare the file from the run' : 'The run must be locked before the file can be made'
+    const excludedBlock = ex.length ? createElement('div', { role: 'alert', style: { display: 'grid', gap: 10, padding: '14px 16px', borderRadius: 14, border: '1px solid #fde68a', background: '#fffbeb' } },
+      createElement('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 10 } },
+        createElement('span', { style: { display: 'inline-flex', color: '#b45309', marginTop: 1 } }, dashIcon('alertTriangle', 18)),
+        createElement('div', { style: { display: 'grid', gap: 2 } },
+          createElement('strong', { style: { fontSize: 14, color: '#78350f' } }, `${ex.length} ${ex.length === 1 ? 'person has' : 'people have'} no usable bank account, so the bank won’t accept this file`),
+          createElement('span', { style: { fontSize: 13, lineHeight: 1.5, color: '#92400e' } }, b!.status === 'DRAFT' ? 'Add a primary bank account for each of them, then rebuild the file. Nobody is paid until everyone is in it.' : 'This file was already sent. Cancel it, add their bank accounts, then prepare a new file from the run.'))),
+      createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } }, ...ex.map((e) => createElement('button', { key: e.id, type: 'button', onClick: () => p.onFixEmployee && p.onFixEmployee(e.id), 'data-tip': 'Opens their Payroll tab to add a bank account', style: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 999, border: '1px solid #fcd34d', background: '#fff', font: 'inherit', fontSize: 12.5, fontWeight: 600, color: '#78350f', cursor: 'pointer' } }, e.name, e.code ? createElement('span', { style: { fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 11.5, color: '#b45309' } }, e.code) : null))),
+      canBuild ? createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
+        b!.status === 'DRAFT'
+          ? createElement(HrButton, { size: 'sm', onClick: () => p.onRebuild && p.onRebuild(b), disabled: s.busy } as any, 'Rebuild file')
+          : createElement(HrButton, { size: 'sm', variant: 'ghost', onClick: () => p.onCancelBatch && p.onCancelBatch(b), disabled: s.busy } as any, 'Cancel this file')) : null) : null
     const cb = s.confirm && b && b.id === s.confirm ? b : null, vb = s.view && b && b.id === s.view ? b : null
     const columns = [
       { key: 'id', header: 'Batch ID', render: (x: any) => createElement('strong', { style: { fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12.5, color: '#0f172a' } }, x.reference) },
@@ -57,7 +74,7 @@ export class PayBank extends DCLogic {
     ]
     const people = (vb && D?.people) || []
     return {
-      isLoading, isError, isEmpty, live, batches, runNote, allDone: false, allDoneText: '', totalLabel: inr(run?.net || 0), openRun, columns, history: D?.history || [],
+      isLoading, isError, isEmpty, live, batches, runNote, excludedBlock, allDone: false, allDoneText: '', totalLabel: inr(run?.net || 0), openRun, columns, history: D?.history || [],
       runLabel: run?.label || '', runTip: run ? `Opens the ${run.label} payroll run` : 'Opens Processing & Payslips', openProfiles: () => p.onProfiles && p.onProfiles(), icBankSm: dashIcon('building', 15),
       viewOpen: !!vb, vTitle: vb ? vb.reference : '', vSub: vb ? `${vb.bank} · ${vb.count} employees · ${inr(vb.amount)}` : '', closeView: () => this.setState({ view: null }),
       people: people.slice(0, 8).map((e) => ({ ...e, netL: inr(e.net) })), moreLabel: vb ? (vb.count > 8 ? `…and ${vb.count - 8} more in the file.` : '') : '',

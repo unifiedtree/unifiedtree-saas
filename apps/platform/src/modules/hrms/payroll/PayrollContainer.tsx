@@ -193,10 +193,15 @@ export function PayrollContainer() {
   const decide = useAdvanceDecision(), requestAdv = useRequestAdvance()
 
   // ── Bank ──
-  const bankRun = section === 'bank' ? thisMonthRun && ['LOCKED', 'PAID', 'PROCESSING', 'DRAFT'].includes(thisMonthRun.status) ? thisMonthRun : sorted.find((r) => r.status === 'LOCKED') || sorted[0] || null : null
+  // ?run= (from a run's page) shows that run's bank file; otherwise this month's, or the latest locked one.
+  const bankRunParam = section === 'bank' ? sorted.find((r) => r.id === params.get('run')) || null : null
+  const bankRun = section === 'bank' ? bankRunParam ? bankRunParam : thisMonthRun && ['LOCKED', 'PAID', 'PROCESSING', 'DRAFT'].includes(thisMonthRun.status) ? thisMonthRun : sorted.find((r) => r.status === 'LOCKED') || sorted[0] || null : null
   const bankBatches = (allBatchesQ.data ?? [])
   const [bankView, setBankView] = useState<string | null>(null)
   const bankDetailQ = useQuery({ queryKey: ['hrms', 'payroll', 'disbursement-batches', 'detail', bankView], queryFn: () => apiJson<BatchDetail>(`/v1/payroll/disbursement/batches/${bankView}`), enabled: !!bankView && canDisbRead })
+  // The current file's lines, to see who the server left out for missing bank details.
+  const bankRunBatch = bankRun ? bankBatches.filter((b) => b.runId === bankRun.id && b.status !== 'CANCELLED').sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] || null : null
+  const bankLinesQ = useQuery({ queryKey: ['hrms', 'payroll', 'disbursement-batches', 'detail', bankRunBatch?.id], queryFn: () => apiJson<BatchDetail>(`/v1/payroll/disbursement/batches/${bankRunBatch!.id}`), enabled: !!bankRunBatch && canDisbRead && (bankRunBatch.status === 'DRAFT' || bankRunBatch.status === 'POSTED') })
   const bankProfilesQ = useQuery({ queryKey: ['hrms', 'payroll', 'bank-profiles', 'list', bankRun?.companyId || 'all'], queryFn: () => apiJson<BankProfile[]>(`/v1/payroll/bank-profiles${bankRun?.companyId ? `?companyId=${bankRun.companyId}` : ''}`), enabled: canProfiles && section === 'bank', staleTime: 60_000 })
 
   const go = (path: string) => navigate(path)
@@ -288,11 +293,13 @@ export function PayrollContainer() {
         earnings: slipQ.data.earnings.map((l) => [l.name, num(l.amount)] as [string, number]), deductions: slipQ.data.deductions.map((l) => [l.name, num(l.amount)] as [string, number]),
         gross: num(slipQ.data.gross), ded: num(slipQ.data.totalDeductions), net: num(slipQ.data.netPay),
       } as Payslip : null,
+      slipError: slipQ.isError ? 'Unable to load this payslip. It may no longer be available for this run.' : null,
     } : undefined
     px.PayrollRunPage = {
       state: runQ.isError ? 'error' : runQ.isLoading ? 'loading' : 'live', data, canManage, canLock, canBuild, canPost, initialTab: params.get('tab') || '',
       onRetry: () => { runQ.refetch(); runEmpsQ.refetch(); skippedQ.refetch() },
       actions: {
+        retrySlip: () => { slipQ.refetch() },
         process: () => processRun.mutateAsync().then((r) => { qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'runs', 'detail', runId] }); qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'dashboard'] }); return done(`Payroll processed · ${r.employeeCount} payslips ready to review`) }, failed('Could not process payroll')),
         lock: () => lockRun.mutateAsync().then(() => { qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'dashboard'] }); return done('Payroll locked · payslips are final') }, failed('Could not lock the run')),
         reopen: async (reason: string) => {
@@ -416,7 +423,8 @@ export function PayrollContainer() {
     const rb = bankRun ? bankBatches.filter((b) => b.runId === bankRun.id && b.status !== 'CANCELLED').sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] || null : null
     const profiles = bankProfilesQ.data ?? []
     const nameOfProfile = (id: string) => profiles.find((p) => p.id === id)?.profileName || 'Bank file'
-    const toBatch = (b: DisbursementBatch): BankBatch => ({ id: b.id, reference: b.batchReference, bank: nameOfProfile(b.bankProfileId), count: b.beneficiaryCount, amount: num(b.totalAmount), status: b.status })
+    const excludedOf = (b: DisbursementBatch) => (bankLinesQ.data && bankLinesQ.data.batch.id === b.id ? bankLinesQ.data.lines.filter((l) => l.status !== 'READY').map((l) => ({ id: l.employeeId, name: l.beneficiaryName || 'Employee', code: empById.get(l.employeeId)?.employeeCode || '' })) : undefined)
+    const toBatch = (b: DisbursementBatch): BankBatch => ({ id: b.id, reference: b.batchReference, bank: nameOfProfile(b.bankProfileId), count: b.beneficiaryCount, amount: num(b.totalAmount), status: b.status, excluded: excludedOf(b) })
     const lines = bankDetailQ.data?.lines ?? null
     const data: BankData = {
       run: bankRun ? { id: bankRun.id, label: runLabel(bankRun), status: STATUS[bankRun.status] || 'draft', net: num(bankRun.totalNet), employees: bankRun.employeeCount } : null,
@@ -429,6 +437,10 @@ export function PayrollContainer() {
       onView: (id: string) => setBankView(id), onProfiles: () => navigate('/hrms/bank-disbursement/setup'),
       onDownload: (b: BankBatch) => downloadBatchFile(b.id, `${b.reference}.csv`).then(() => { qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'disbursement-batches'] }); toast.success('Bank file downloaded · upload it to your bank') }, failed('Could not download the file')),
       onConfirm: (b: BankBatch, utr: string) => markPaid.mutateAsync({ batch: b, utr }).then(() => done(`${b.bank} transfer confirmed · ${bankRun ? runLabel(bankRun) : 'run'} marked as paid`), failed('Could not confirm the transfer')),
+      onFixEmployee: (id: string) => navigate(`/hrms/employees/${id}?tab=payroll`),
+      // Building again for the same run and profile refreshes the draft from everyone's current bank details.
+      onRebuild: () => (rb && bankRun ? buildBatch.mutateAsync({ runId: bankRun.id, bankProfileId: rb.bankProfileId }).then(() => { bankLinesQ.refetch(); return done('Bank file rebuilt from current bank details') }, failed('Could not rebuild the bank file')) : false),
+      onCancelBatch: (b: BankBatch) => cancelBatch.mutateAsync(b.id).then(() => done('Bank file cancelled · prepare a new one from the run'), failed('Could not cancel the bank file')),
     }
   }
 

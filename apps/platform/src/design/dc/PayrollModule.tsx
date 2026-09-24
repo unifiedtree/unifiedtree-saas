@@ -28,7 +28,7 @@ export class PayrollModule extends DCLogic {
       const e = extra || {}
       if (!e.force && typeof window.__utLeaveGuard === 'function' && window.__utLeaveGuard(() => go(sec, { ...e, force: true }))) return
       const base = PAYROLL_ROUTES[sec] || PAYROLL_ROUTES.runs
-      const path = sec === 'runs' && e.runId ? `${base}/${e.runId}${e.tab ? '?tab=' + e.tab : ''}` : sec === 'salary' && e.focus ? `${base}?employee=${e.focus}` : base
+      const path = sec === 'runs' && e.runId ? `${base}/${e.runId}${e.tab ? '?tab=' + e.tab : ''}` : sec === 'bank' && e.runId ? `${base}?run=${e.runId}` : sec === 'salary' && e.focus ? `${base}?employee=${e.focus}` : base
       if (nav) nav(path)
     }
     const sections = SECTIONS.filter(([k]) => visible.includes(k)).map(([k, label, icon]) => {

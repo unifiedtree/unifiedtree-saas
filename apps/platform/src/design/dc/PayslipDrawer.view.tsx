@@ -123,6 +123,7 @@ export function PayslipDrawerView({ v }: { v: any }) {
             </div>
           </>
         ) : null}
+        {" "}{txt(v.stateBlock)}{" "}
       </HrDrawer>
     </>
   )

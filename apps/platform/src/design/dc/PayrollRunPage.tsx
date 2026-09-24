@@ -25,6 +25,8 @@ export interface RunPageData {
   employees: RunEmployeeRow[]
   overview: RunOverviewData
   slip: Payslip | null
+  /** Why the open payslip couldn't be loaded, if it couldn't. */
+  slipError?: string | null
 }
 type Act = () => Promise<boolean> | boolean
 
@@ -117,7 +119,7 @@ export class PayrollRunPage extends DCLogic {
     const PATHSEC: Record<string, string> = { '/hrms/bank-disbursement': 'bank', '/hrms/pli': 'pli', '/hrms/advances': 'advances', '/hrms/salary-structure': 'salary' }
     const slipRow = s.slip
     return {
-      goRuns: () => go('runs'), goBank: () => go('bank'), downloadRegister: () => A.downloadRegister && A.downloadRegister(),
+      goRuns: () => go('runs'), goBank: () => go('bank', run ? { runId: run.id } : undefined), downloadRegister: () => A.downloadRegister && A.downloadRegister(),
       navOverview: (path: string) => { const k = PATHSEC[path.split('?')[0]]; if (k) go(k); else if (nav) nav(path) },
       runLabel: label, subtitle: run ? `${run.company} · ${run.period}` : '', pillTone: pill[0], pillLabel: pill[1], meta: run || {}, totals, totalsEmployees: count ?? totals.employees, scale: 1, extraRows: [], limit: 0,
       headReady: ok && !!run, headLoading: isLoading, headError: isError, showActions: ok && !cx, showSteps: ok, stepsLoading: isLoading,
@@ -147,7 +149,7 @@ export class PayrollRunPage extends DCLogic {
       mIsPrepare: !!m && !!m.prepare, mIsPaid: !!m && !!m.paid, utr: s.utr, setUtr: (e: any) => this.setState({ utr: e.target.value }),
       batchRows: D?.bankProfile ? [{ bank: D.bankProfile, count: totals.employees, file: 'NEFT/RTGS upload file', amount: inr(totals.net) }] : [], netLabel: inr(totals.net),
       setModalOpen: (o: boolean) => { if (!o && !s.acting) close() }, closeModal: () => { if (!s.acting) close() }, reason: s.reason, setReason: (e: any) => this.setState({ reason: e.target.value }),
-      pxOverview: { data: D?.overview }, pxEmployees: { rows: D?.employees || [], canProcess: perm.manage, fileTag: run?.fileTag }, pxSlip: { slip: slipRow ? D?.slip || null : null, onDownload: slipRow && A.downloadSlip ? () => A.downloadSlip(slipRow.id) : undefined },
+      pxOverview: { data: D?.overview }, pxEmployees: { rows: D?.employees || [], canProcess: perm.manage, fileTag: run?.fileTag }, pxSlip: { slip: slipRow ? D?.slip || null : null, error: slipRow ? D?.slipError || null : null, onRetry: A.retrySlip, onDownload: slipRow && A.downloadSlip ? () => A.downloadSlip(slipRow.id) : undefined },
       skTitle: { style: { height: 32, width: 180, borderRadius: 8 } }, skSub: { style: { height: 18, width: 'min(300px,100%)', borderRadius: 6 } }, skSteps: { style: { height: 72, width: '100%', borderRadius: 14 } },
       skBlock: { style: { height: 220, width: '100%', borderRadius: 16 } }, skBlockSm: { style: { height: 140, width: '100%', borderRadius: 16 } },
       icBack: dashIcon('chevronLeft', 16), icPlay: dashIcon('activity', 15), icRedo: dashIcon('swap', 15), icLock: dashIcon('lock', 15), icPencil: dashIcon('pencil', 15), icBank: dashIcon('building', 15),

@@ -134,6 +134,7 @@ export function PayBankView({ v }: { v: any }) {
                   </div>
                 </Fragment>
               ))}
+              {" "}{txt(v.excludedBlock)}{" "}
             </section>
             <section style={{display: "grid", gap: "10px"}}>
               <h2 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "16px", fontWeight: "700"}}>
