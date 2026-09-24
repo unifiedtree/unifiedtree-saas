@@ -52,7 +52,9 @@ function Card({ title, chip, className = '', children }: {
 export const CompanyAdminDashboard: React.FC = () => {
   const navigate = useNavigate()
   const canReadPerformance = usePermission('hrms.performance.read')
-  const canReadOnboarding = usePermission('hrms.onboarding.instance.read')
+  // The tracker lists every new joiner's progress: HR/admin only (instance.read
+  // is held by every employee for their own onboarding).
+  const canReadOnboarding = usePermission('hrms.onboarding.instance.write')
   const { data: companies = [] } = useCompanies()
   const activeCompany = companies[0]
 

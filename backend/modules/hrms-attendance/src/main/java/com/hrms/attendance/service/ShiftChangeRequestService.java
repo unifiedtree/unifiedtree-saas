@@ -187,6 +187,13 @@ public class ShiftChangeRequestService {
                 MAPPER, tenantId, employeeId);
     }
 
+    /** The employee who raised a request, or null if it doesn't exist in this tenant. */
+    @Transactional(readOnly = true)
+    public UUID requesterOf(UUID requestId) {
+        ShiftChangeRequestResponse r = getById(requestId);
+        return r == null ? null : r.employeeId();
+    }
+
     /** Pending requests an approver can still act on — expired ones are left for the expiry run. */
     @Transactional(readOnly = true)
     public List<ShiftChangeRequestResponse> listPending() {

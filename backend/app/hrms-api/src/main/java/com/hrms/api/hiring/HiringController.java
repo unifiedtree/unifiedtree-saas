@@ -59,7 +59,7 @@ public class HiringController {
 
     @Operation(summary = "List hiring offers")
     @GetMapping("/offers")
-    @PreAuthorize("hasAnyAuthority('hrms.hiring.offer.read','hrms.hiring.read')")
+    @PreAuthorize("hasAuthority('hrms.hiring.offer.read')") // offers carry salary: offer.read only, not general hiring.read
     public ResponseEntity<PageResponse<HiringOfferResponse>> listOffers(
             @RequestParam(required = false) UUID companyId,
             @PageableDefault(size = 20) Pageable pageable) {

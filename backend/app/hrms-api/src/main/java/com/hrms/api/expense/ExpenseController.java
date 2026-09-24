@@ -57,8 +57,13 @@ public class ExpenseController {
     @Operation(summary = "Get expense dashboard statistics")
     @GetMapping("/dashboard-stats")
     @PreAuthorize("hasAnyAuthority('hrms.expense.claim.read','hrms.expense.claim.approve','hrms.expense.reimbursement')")
-    public ResponseEntity<ExpenseDashboardStatsResponse> dashboardStats() {
-        return ResponseEntity.ok(expenseService.dashboardStats());
+    public ResponseEntity<ExpenseDashboardStatsResponse> dashboardStats(@AuthenticationPrincipal Jwt jwt) {
+        // Same scope as the approvals queue below: finance/admin (reimbursement
+        // holders) see company-wide totals; anyone else only the claims routed
+        // to them. Company-wide totals were reaching every department manager.
+        return ResponseEntity.ok(callerHasPermission(jwt, "hrms.expense.reimbursement")
+                ? expenseService.dashboardStats()
+                : expenseService.dashboardStatsForApprover(extractEmployeeId(jwt)));
     }
 
     // ─── Employee self-service ───────────────────────────────────────────────

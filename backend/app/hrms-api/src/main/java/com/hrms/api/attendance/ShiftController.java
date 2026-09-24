@@ -43,11 +43,31 @@ public class ShiftController {
 
     private final EmployeeShiftService shiftService;
     private final ShiftChangeRequestService changeRequestService;
+    private final TeamEmployeeScope teamScope;
 
     public ShiftController(EmployeeShiftService shiftService,
-                           ShiftChangeRequestService changeRequestService) {
+                           ShiftChangeRequestService changeRequestService,
+                           TeamEmployeeScope teamScope) {
         this.shiftService = shiftService;
         this.changeRequestService = changeRequestService;
+        this.teamScope = teamScope;
+    }
+
+    /**
+     * Whose shift requests this approver may see and decide: HR/admin the whole
+     * company (null = no filter), a manager their team — the rule attendance
+     * correction approvals use. Every DEPT_MANAGER used to see and decide every
+     * request in the company.
+     */
+    private java.util.Set<UUID> approverScope(Jwt jwt) {
+        if (AttendanceController.isAdmin(jwt)) return null;
+        try {
+            return teamScope.resolve(jwt, null).stream()
+                    .map(com.hrms.employee.entity.Employee::getId)
+                    .collect(java.util.stream.Collectors.toSet());
+        } catch (IllegalArgumentException noEmployeeRecord) {
+            return java.util.Set.of();
+        }
     }
 
     private static UUID employeeId(Jwt jwt) {
@@ -121,8 +141,11 @@ public class ShiftController {
     @Operation(summary = "Pending shift-change requests (HR/manager)")
     @GetMapping("/change-requests/pending")
     @PreAuthorize("hasAuthority('attendance.regularization.approve')")
-    public ResponseEntity<List<ShiftChangeRequestResponse>> pendingChangeRequests() {
-        return ResponseEntity.ok(changeRequestService.listPending());
+    public ResponseEntity<List<ShiftChangeRequestResponse>> pendingChangeRequests(@AuthenticationPrincipal Jwt jwt) {
+        java.util.Set<UUID> scope = approverScope(jwt);
+        List<ShiftChangeRequestResponse> pending = changeRequestService.listPending();
+        return ResponseEntity.ok(scope == null ? pending
+                : pending.stream().filter(r -> scope.contains(r.employeeId())).toList());
     }
 
     @Operation(summary = "Approve or reject a shift-change request (HR/manager)")
@@ -131,6 +154,14 @@ public class ShiftController {
     public ResponseEntity<ShiftChangeRequestResponse> decideChange(@AuthenticationPrincipal Jwt jwt,
                                                                    @PathVariable UUID requestId,
                                                                    @RequestBody ShiftChangeDecisionRequest decision) {
+        java.util.Set<UUID> scope = approverScope(jwt);
+        if (scope != null) {
+            UUID requester = changeRequestService.requesterOf(requestId);
+            if (requester != null && !scope.contains(requester)) {
+                throw new org.springframework.security.access.AccessDeniedException(
+                        "This shift change request is not from your team.");
+            }
+        }
         return ResponseEntity.ok(changeRequestService.decide(requestId, employeeId(jwt), decision));
     }
 }

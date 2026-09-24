@@ -60,6 +60,20 @@ public class ExpenseService {
                 claimRepository.sumAmountByStatusAndReimbursedAtBetween(ExpenseStatus.REIMBURSED, from, to));
     }
 
+    /** The same figures over only the claims routed to {@code approverId} — what their queue shows. */
+    @Transactional(readOnly = true)
+    public ExpenseDashboardStatsResponse dashboardStatsForApprover(UUID approverId) {
+        Instant from = LocalDate.now(ZoneOffset.UTC).withDayOfMonth(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant to = LocalDate.now(ZoneOffset.UTC).plusMonths(1).withDayOfMonth(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        return new ExpenseDashboardStatsResponse(
+                claimRepository.countByApproverIdAndStatus(approverId, ExpenseStatus.SUBMITTED),
+                claimRepository.sumAmountByApproverIdAndStatus(approverId, ExpenseStatus.SUBMITTED),
+                claimRepository.countByApproverIdAndStatus(approverId, ExpenseStatus.APPROVED),
+                claimRepository.sumAmountByApproverIdAndStatus(approverId, ExpenseStatus.APPROVED),
+                claimRepository.countByApproverIdAndStatusAndReimbursedAtBetween(approverId, ExpenseStatus.REIMBURSED, from, to),
+                claimRepository.sumAmountByApproverIdAndStatusAndReimbursedAtBetween(approverId, ExpenseStatus.REIMBURSED, from, to));
+    }
+
     /**
      * Create and submit a claim with its line items in one shot. The claim total
      * is computed server-side from the items (never trusted from the client).

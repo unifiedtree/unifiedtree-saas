@@ -36,5 +36,16 @@ public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, UUID
 
     @Query("select coalesce(sum(c.totalAmount), 0) from ExpenseClaim c where c.status = :status and c.reimbursedAt >= :from and c.reimbursedAt < :to")
     BigDecimal sumAmountByStatusAndReimbursedAtBetween(ExpenseStatus status, Instant from, Instant to);
+
+    // Approver-scoped versions of the dashboard figures (a manager's own queue).
+    long countByApproverIdAndStatus(UUID approverId, ExpenseStatus status);
+
+    @Query("select coalesce(sum(c.totalAmount), 0) from ExpenseClaim c where c.approverId = :approverId and c.status = :status")
+    BigDecimal sumAmountByApproverIdAndStatus(UUID approverId, ExpenseStatus status);
+
+    long countByApproverIdAndStatusAndReimbursedAtBetween(UUID approverId, ExpenseStatus status, Instant from, Instant to);
+
+    @Query("select coalesce(sum(c.totalAmount), 0) from ExpenseClaim c where c.approverId = :approverId and c.status = :status and c.reimbursedAt >= :from and c.reimbursedAt < :to")
+    BigDecimal sumAmountByApproverIdAndStatusAndReimbursedAtBetween(UUID approverId, ExpenseStatus status, Instant from, Instant to);
 }
 

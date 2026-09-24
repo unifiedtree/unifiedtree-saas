@@ -28,7 +28,7 @@ public class OfferDocumentController {
     }
 
     @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
-    @PreAuthorize("hasAnyAuthority('hrms.hiring.offer.read','hrms.hiring.read')")
+    @PreAuthorize("hasAuthority('hrms.hiring.offer.read')") // offers carry salary: offer.read only, not general hiring.read
     public ResponseEntity<byte[]> download(@PathVariable UUID id) {
         HiringOfferResponse offer = hiring.getOffer(id);
         var company = companies.findById(offer.companyId())

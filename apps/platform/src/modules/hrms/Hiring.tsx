@@ -39,7 +39,9 @@ export const Hiring: React.FC = () => {
   const tabs: { key: Tab; label: string }[] = [
     ...(canRead ? [{ key: 'requisitions' as Tab, label: 'Requisitions' }] : []),
     ...(canRead ? [{ key: 'pipeline' as Tab, label: 'Pipeline' }] : []),
-    ...(canRead || canOfferRead ? [{ key: 'offers' as Tab, label: 'Offer Management' }] : []),
+    // Offers carry salary, so they need offer.read itself; the API no longer
+    // accepts plain hiring.read for them (managers keep the pipeline).
+    ...(canOfferRead ? [{ key: 'offers' as Tab, label: 'Offer Management' }] : []),
   ]
 
   const tab = selectedTab && tabs.some(t => t.key === selectedTab) ? selectedTab : tabs[0]?.key
@@ -52,7 +54,7 @@ export const Hiring: React.FC = () => {
 
       {tab === 'requisitions' && <HrTabPanel tabKey="requisitions"><RequisitionsTab canWrite={canWrite} /></HrTabPanel>}
       {tab === 'pipeline' && canRead && <HrTabPanel tabKey="pipeline"><PipelineTab canCandidateWrite={canCandidateWrite} /></HrTabPanel>}
-      {tab === 'offers' && (canRead || canOfferRead) && <HrTabPanel tabKey="offers"><OffersTab /></HrTabPanel>}
+      {tab === 'offers' && canOfferRead && <HrTabPanel tabKey="offers"><OffersTab /></HrTabPanel>}
     </div>
   )
 }

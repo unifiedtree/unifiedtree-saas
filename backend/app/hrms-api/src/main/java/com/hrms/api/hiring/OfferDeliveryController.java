@@ -33,7 +33,7 @@ public class OfferDeliveryController {
 
     /** Every send of this offer with its outcome — the trail behind "was it emailed?". */
     @GetMapping("/{id}/email/attempts")
-    @PreAuthorize("hasAnyAuthority('hrms.hiring.offer.read','hrms.hiring.read')")
+    @PreAuthorize("hasAuthority('hrms.hiring.offer.read')") // offers carry salary: offer.read only, not general hiring.read
     public List<OfferEmailAttemptStore.Attempt> attempts(@PathVariable UUID id) {
         return service.attempts(id);
     }
