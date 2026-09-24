@@ -1,126 +1,78 @@
-import React from 'react'
+// Every late arrival in a date range, with minutes late and check-in time, in
+// the Workforce Analytics design's report layout (ReportKit). A check-in is
+// late after its shift's start plus that shift's grace.
 import { useSearchParams } from 'react-router-dom'
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-} from 'recharts'
 import { useLateMarksReport } from '@/modules/hrms/api/useReports'
-import type { LateMarkRow } from '@/modules/hrms/api/useReports'
-import { TableCard, HrAvatar, HrStatusPill } from '@/shared/components/hr'
-import { ReportShell, CompanySelector } from './ReportShell'
+import { HrStatusPill } from '@/shared/components/hr'
+import { stackedBarsSvg } from '@/shared/export/charts'
+import { useReportCompany } from './useReportCompany'
+import { todayIso, monthStartIso, longDate, dayMonth, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, printHead, printKpis, printTable, type Kpi } from './ReportKit'
 
-function defaultFrom() {
-  const d = new Date()
-  d.setDate(1)
-  return d.toISOString().slice(0, 10)
-}
-
-// Top offenders aggregated by employee
-function aggregateByEmployee(rows: LateMarkRow[]) {
-  const map = new Map<string, { name: string; count: number; totalMins: number }>()
-  for (const r of rows) {
-    const key = r.employee_code
-    const existing = map.get(key)
-    if (existing) {
-      existing.count++
-      existing.totalMins += r.late_by_minutes
-    } else {
-      map.set(key, { name: r.employee_name, count: 1, totalMins: r.late_by_minutes })
-    }
-  }
-  return [...map.values()].sort((a, b) => b.totalMins - a.totalMins).slice(0, 15)
-}
+const long = longDate, dayShort = dayMonth
+const time = (at: string | null) => (at ? new Date(at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '—')
+const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`)
+const SERIES: [string, string][] = [['Late marks', '#0f6e56']]
 
 export function LateMarksReport() {
   const [params, setParams] = useSearchParams()
-  const companyId = params.get('company') ?? ''
-  const from      = params.get('from')    ?? defaultFrom()
-  const to        = params.get('to')      ?? new Date().toISOString().slice(0, 10)
+  const co = useReportCompany()
+  const TODAY = todayIso()
+  const from = params.get('from') ?? monthStartIso(), to = params.get('to') ?? TODAY
+  const set = (k: string, v: string) => setParams((p) => { const n = new URLSearchParams(p); n.set(k, v); return n }, { replace: true })
+  const q = useLateMarksReport(co.company || null, from, to)
 
-  const set = (key: string, val: string) =>
-    setParams((p) => { const n = new URLSearchParams(p); n.set(key, val); return n })
+  const rows = (q.data ?? []).map((r) => ({
+    id: `${r.employee_code}-${r.attendance_date}`, code: r.employee_code, name: r.employee_name, dept: r.department || 'No department', none: !r.department,
+    date: r.attendance_date, late: Number(r.late_by_minutes) || 0, checkIn: r.check_in_at,
+  })).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.late - a.late))
+  type Row = (typeof rows)[number]
+  const people = new Map<string, { name: string; count: number; mins: number }>()
+  for (const r of rows) { const p = people.get(r.code) || { name: r.name, count: 0, mins: 0 }; p.count++; p.mins += r.late; people.set(r.code, p) }
+  const most = [...people.values()].sort((a, b) => b.count - a.count || b.mins - a.mins)[0]
+  const total = rows.reduce((a, r) => a + r.late, 0)
+  const days = [...rows.reduce((m, r) => m.set(r.date, (m.get(r.date) || 0) + 1), new Map<string, number>()).entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
+  const state = q.isLoading ? 'loading' : q.error ? 'error' : rows.length ? 'live' : 'empty'
+  const range = `${long(from)} – ${long(to)}`
 
-  const { data = [], isLoading, error, refetch } = useLateMarksReport(companyId || null, from, to)
-
-  const chartData = aggregateByEmployee(data).map((r) => ({
-    name: r.name,
-    'Total Late (min)': r.totalMins,
-    'Occurrences': r.count,
-  }))
+  const kpis: Kpi[] = [
+    { label: 'Late marks', value: num(rows.length), sub: range, color: 'orange', icon: KPI_ICON.alarm },
+    { label: 'People late', value: num(people.size), sub: people.size ? `${(rows.length / people.size).toFixed(1)} marks each on average` : '—', color: 'blue', icon: KPI_ICON.users },
+    { label: 'Average lateness', value: rows.length ? mins(Math.round(total / rows.length)) : '—', sub: `${mins(total)} in all`, color: 'purple', icon: KPI_ICON.clock },
+    { label: 'Most often late', value: most ? most.name : '—', sub: most ? `${most.count} ${most.count === 1 ? 'time' : 'times'} · ${mins(most.mins)}` : '', color: 'red', icon: KPI_ICON.trend },
+  ]
+  const fileBase = `late-marks-${slug(co.companyName)}-${from}_${to}`
+  const chart = () => stackedBarsSvg({ title: 'Late marks per day', subtitle: `${co.companyName} · ${range}`, bars: days.map(([d, n]) => ({ label: dayShort(d), parts: [n] })), series: SERIES })
+  const HEAD = ['Date', 'Code', 'Name', 'Department', 'Check-in', 'Late by (min)']
+  const table = () => rows.map((r) => [long(r.date), r.code, r.name, r.dept, time(r.checkIn), r.late])
 
   return (
-    <ReportShell
-      title="Late Marks Report"
-      description="All late-arrival records with minutes late and check-in time"
-      companyId={companyId || null}
-      isLoading={isLoading}
-      error={error}
-      hasData={data.length > 0}
-      onRetry={refetch}
-      report="late-marks"
-      /* Same from/to the JSON query above ran with, so the CSV is the table.
-         Note the CSV holds every late record in range, not just the top-15
-         offenders the chart aggregates — same rows as the table below. */
-      exportParams={{ from, to }}
-      filters={
-        <>
-          <CompanySelector value={companyId} onChange={(v) => set('company', v)} />
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => set('from', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#059669] transition-all"
-          />
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => set('to', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#059669] transition-all"
-          />
-        </>
-      }
-    >
-      <div className="ut-card ut-card-lg p-5">
-        <p className="text-xs text-text-tertiary mb-3">Top 15 offenders by total minutes late</p>
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 16, left: 90, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#6EE7B7" horizontal={false} />
-            <XAxis type="number" tick={{ fontSize: 11, fill: '#94A3B8' }} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#94A3B8' }} width={90} />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#FFFFFF', border: '1px solid #6EE7B7', borderRadius: 8, fontSize: 12 }}
-              labelStyle={{ color: '#0F172A' }}
-            />
-            <Bar dataKey="Total Late (min)" fill="#059669" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Emp Code</th>
-              <th>Name</th>
-              <th>Department</th>
-              <th>Date</th>
-              <th>Late (min)</th>
-              <th>Check-in</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((r, i) => (
-              <tr key={`${r.employee_code}-${r.attendance_date}`}>
-                <td><span className="hr-mono">{r.employee_code}</span></td>
-                <td><HrAvatar name={r.employee_name} seed={i} /></td>
-                <td>{r.department ?? '—'}</td>
-                <td>{r.attendance_date}</td>
-                <td><HrStatusPill tone="late">{r.late_by_minutes} min</HrStatusPill></td>
-                <td>{r.check_in_at ?? '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
-    </ReportShell>
+    <ReportPage title="Late Marks Report" subtitle="Every late arrival, with minutes late and check-in time" report="late-marks" co={co}
+      filters={<><DateFilter label="From" value={from} max={to} onChange={(v) => set('from', v)} /><DateFilter label="To" value={to} min={from} max={TODAY} onChange={(v) => set('to', v)} /></>}
+      note={range}
+      state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
+      exports={{
+        fileBase, csvParams: { from, to },
+        sheets: () => [{ name: 'Summary', widths: [24, 34], rows: [['Late marks report', ''], ['Company', co.companyName], ['Range', range], ...kpis.map((k) => [k.label, k.value])] }, { name: 'Late marks', widths: [14, 12, 26, 22, 10, 12], rows: [HEAD, ...table()] }, { name: 'By person', widths: [26, 10, 14], rows: [['Name', 'Late marks', 'Minutes late'], ...[...people.values()].sort((a, b) => b.count - a.count).map((p) => [p.name, p.count, p.mins])] }],
+        print: () => printHead('Late marks report', `${co.companyName} · ${range}`) + printKpis(kpis) + `<div class="card">${chart().svg}</div>` + printTable('Late marks', HEAD, table()),
+      }}>
+      <KpiRow items={kpis} />
+      <ReportSection title="Late marks per day" legend={SERIES}
+        onDownload={() => downloadChart(`late-marks-per-day-${slug(co.companyName)}-${from}_${to}.png`, chart(), { report: 'Late Marks', company: co.companyName })}>
+        <BarsChart series={SERIES} unit="late marks" bars={days.map(([d, n]) => ({ key: d, label: dayShort(d), parts: [n], tip: `${n} late ${n === 1 ? 'mark' : 'marks'} · ${long(d)}` }))} />
+      </ReportSection>
+      <ReportTable<Row & { sL: string }>
+        title="Late marks" subtitle="Late means after the shift’s start plus its grace time"
+        search={{ placeholder: 'Search name, code or department…', match: (r, s) => `${r.name} ${r.code} ${r.dept}`.toLowerCase().includes(s) }}
+        rows={rows.map((r) => ({ ...r, sL: sortKey(r.late) }))}
+        columns={[
+          { key: 'date', header: 'Date', sortable: true, render: (r) => <span style={{ fontWeight: 600 }}>{long(r.date)}</span> },
+          { key: 'name', header: 'Employee', sortable: true, render: (r) => <span><span style={{ fontWeight: 700 }}>{r.name}</span><span style={{ display: 'block', fontSize: 12, color: '#64748b', fontFamily: 'JetBrains Mono,monospace' }}>{r.code}</span></span> },
+          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span style={{ color: r.none ? '#64748b' : undefined, fontStyle: r.none ? 'italic' : 'normal' }}>{r.dept}</span> },
+          { key: 'checkIn', header: 'Check-in', render: (r) => time(r.checkIn) },
+          { key: 'sL', header: 'Late by', sortable: true, render: (r) => <HrStatusPill tone={r.late >= 30 ? 'red' : 'orange'}>{mins(r.late)}</HrStatusPill> },
+        ]}
+        card={(r) => ({ title: r.name, big: mins(r.late), small: 'late', stats: [['Date', dayShort(r.date)], ['Check-in', time(r.checkIn)], ['Department', r.dept]] })}
+      />
+    </ReportPage>
   )
 }

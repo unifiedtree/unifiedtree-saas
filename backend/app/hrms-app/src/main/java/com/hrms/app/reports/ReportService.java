@@ -28,19 +28,31 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> headcountReport(UUID companyId, LocalDate asOf) {
+        // Who is employed on asOf. The workforce exit flow records the leaving
+        // date in last_working_day and leaves date_of_termination NULL, so the
+        // old filter on date_of_termination alone counted every exited person.
+        // An exit only ends employment once the status says so: someone on
+        // notice with a future last day is still here; a last working day on or
+        // before asOf counts as gone (the status already says they left).
+        // department_id lets a click open that department's people. (Gender
+        // stays in the diversity report, behind its own permission.)
         String sql = """
                 SELECT
+                    d.id                            AS department_id,
                     d.name                          AS department,
                     COUNT(e.id)                     AS total,
-                    SUM(CASE WHEN e.employment_status = 'ACTIVE'     THEN 1 ELSE 0 END) AS active,
-                    SUM(CASE WHEN e.employment_status = 'NOTICE_PERIOD'  THEN 1 ELSE 0 END) AS on_notice,
-                    SUM(CASE WHEN e.employment_status = 'PROBATION'  THEN 1 ELSE 0 END) AS probation
+                    SUM(CASE WHEN e.employment_status = 'ACTIVE'        THEN 1 ELSE 0 END) AS active,
+                    SUM(CASE WHEN e.employment_status = 'NOTICE_PERIOD' THEN 1 ELSE 0 END) AS on_notice,
+                    SUM(CASE WHEN e.employment_status = 'PROBATION'     THEN 1 ELSE 0 END) AS probation
                 FROM hrms.employees e
                 LEFT JOIN hrms.departments d ON d.id = e.department_id
                 WHERE e.company_id = ?
                   AND e.date_of_joining <= ?
-                  AND (e.date_of_termination IS NULL OR e.date_of_termination > ?)
-                GROUP BY d.name
+                  AND NOT (
+                        e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')
+                    AND COALESCE(e.last_working_day, e.date_of_termination, DATE '1900-01-01') <= ?
+                  )
+                GROUP BY d.id, d.name
                 ORDER BY total DESC
                 """;
         return jdbc.queryForList(sql, companyId, asOf, asOf);
@@ -50,31 +62,45 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> attritionReport(UUID companyId, LocalDate fromDate, LocalDate toDate) {
-        // Exits are recorded in last_working_day by the workforce offboarding flow
-        // (WorkforceEmployeeService.exit/startNotice); the legacy date_of_termination
-        // column is left NULL, so attrition must filter/group on last_working_day.
+        // One row per month in [from, to], months without exits included, so a
+        // trend line has no gaps. An exit is a person whose status is EXITED,
+        // TERMINATED or RESIGNED, dated by last_working_day (the workforce exit
+        // flow leaves date_of_termination NULL). People still serving notice
+        // are not exits yet, even with a last working day set. The workforce
+        // flow marks everyone EXITED, so "resignations" only counts the legacy
+        // RESIGNED status and other_exits holds the rest. headcount is who was
+        // employed at the month's end (or today, for the current month);
+        // attrition_pct is exits over the month's average headcount.
         String sql = """
-                SELECT
-                    TO_CHAR(e.last_working_day, 'YYYY-MM')              AS month,
-                    COUNT(*)                                             AS exits,
-                    SUM(CASE WHEN e.employment_status = 'RESIGNED'  THEN 1 ELSE 0 END) AS resignations,
-                    SUM(CASE WHEN e.employment_status = 'TERMINATED' THEN 1 ELSE 0 END) AS terminations,
-                    ROUND(
-                        COUNT(*) * 100.0 / NULLIF(
-                            -- MAX() wraps the outer column so the correlated subquery is valid
-                            -- under GROUP BY (the raw e.last_working_day is not a grouped column).
-                            (SELECT COUNT(*) FROM hrms.employees
-                             WHERE company_id = e.company_id
-                               AND date_of_joining <= MAX(e.last_working_day)
-                               AND (last_working_day IS NULL OR last_working_day > MAX(e.last_working_day))
-                            ), 0
-                        ), 2
-                    )                                                    AS attrition_pct
-                FROM hrms.employees e
-                WHERE e.company_id = ?
-                  AND e.last_working_day BETWEEN ? AND ?
-                GROUP BY TO_CHAR(e.last_working_day, 'YYYY-MM'), e.company_id
-                ORDER BY month
+                WITH people AS (
+                    SELECT e.date_of_joining AS joined,
+                           e.employment_status AS status,
+                           CASE WHEN e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')
+                                THEN COALESCE(e.last_working_day, e.date_of_termination) END AS left_on
+                    FROM hrms.employees e
+                    WHERE e.company_id = ?
+                ), months AS (
+                    SELECT m::date AS m_start,
+                           LEAST((m + INTERVAL '1 month' - INTERVAL '1 day')::date, CURRENT_DATE) AS m_end
+                    FROM generate_series(date_trunc('month', ?::date), date_trunc('month', ?::date), INTERVAL '1 month') AS m
+                ), agg AS (
+                    SELECT mo.m_start,
+                           COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end)                                AS exits,
+                           COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end AND p.status = 'RESIGNED')      AS resignations,
+                           COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end AND p.status = 'TERMINATED')    AS terminations,
+                           COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end AND p.status = 'EXITED')        AS other_exits,
+                           COUNT(*) FILTER (WHERE p.joined <  mo.m_start AND (p.left_on IS NULL OR p.left_on >= mo.m_start)) AS opening,
+                           COUNT(*) FILTER (WHERE p.joined <= mo.m_end   AND (p.left_on IS NULL OR p.left_on >  mo.m_end))   AS closing
+                    FROM months mo
+                    LEFT JOIN people p ON TRUE
+                    GROUP BY mo.m_start
+                )
+                SELECT TO_CHAR(m_start, 'YYYY-MM') AS month,
+                       exits, resignations, terminations, other_exits,
+                       closing AS headcount,
+                       COALESCE(ROUND(exits * 100.0 / NULLIF((opening + closing) / 2.0, 0), 2), 0) AS attrition_pct
+                FROM agg
+                ORDER BY m_start
                 """;
         return jdbc.queryForList(sql, companyId, fromDate, toDate);
     }
@@ -168,18 +194,21 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> diversityReport(UUID companyId) {
+        // Everyone currently employed (active, probation and notice), not just
+        // ACTIVE. People without a recorded gender are counted as NOT_SPECIFIED
+        // instead of silently disappearing from the totals.
         String sql = """
                 SELECT
+                    d.id                                                 AS department_id,
                     d.name                                               AS department,
-                    e.gender,
+                    COALESCE(e.gender, 'NOT_SPECIFIED')                  AS gender,
                     COUNT(*)                                             AS count,
-                    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY d.name), 2) AS pct
+                    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY d.id), 2) AS pct
                 FROM hrms.employees e
                 LEFT JOIN hrms.departments d ON d.id = e.department_id
                 WHERE e.company_id = ?
-                  AND e.employment_status = 'ACTIVE'
-                  AND e.gender IS NOT NULL
-                GROUP BY d.name, e.gender
+                  AND e.employment_status IN ('ACTIVE', 'PROBATION', 'NOTICE_PERIOD')
+                GROUP BY d.id, d.name, COALESCE(e.gender, 'NOT_SPECIFIED')
                 ORDER BY d.name, count DESC
                 """;
         return jdbc.queryForList(sql, companyId);

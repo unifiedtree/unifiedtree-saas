@@ -1,122 +1,80 @@
-import React from 'react'
+// Leave entitlement, carry-forward, used, pending and available days per person
+// and leave type for a year, in the Workforce Analytics design's report layout
+// (ReportKit).
 import { useSearchParams } from 'react-router-dom'
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-} from 'recharts'
 import { useLeaveBalanceReport } from '@/modules/hrms/api/useReports'
-import type { LeaveBalanceRow } from '@/modules/hrms/api/useReports'
-import { TableCard, HrAvatar } from '@/shared/components/hr'
-import { ReportShell, CompanySelector } from './ReportShell'
+import { HrSelect } from '@/shared/components/hr'
+import { stackedBarsSvg } from '@/shared/export/charts'
+import { useReportCompany } from './useReportCompany'
+import { ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, downloadChart, num, sortKey, slug, printHead, printKpis, printTable, type Kpi } from './ReportKit'
 
-const CURRENT_YEAR = String(new Date().getFullYear())
-
-// Aggregate by employee for the chart (sum across leave types)
-function aggregateByEmployee(rows: LeaveBalanceRow[]) {
-  const map = new Map<string, { name: string; available: number; used: number; pending: number }>()
-  for (const r of rows) {
-    const key = r.employee_code
-    const existing = map.get(key)
-    if (existing) {
-      existing.available += r.available
-      existing.used      += r.used
-      existing.pending   += r.pending
-    } else {
-      map.set(key, { name: r.employee_name, available: r.available, used: r.used, pending: r.pending })
-    }
-  }
-  return [...map.values()].sort((a, b) => b.used - a.used).slice(0, 20)
-}
+const YEAR = new Date().getFullYear()
+const YEARS = [YEAR + 1, YEAR, YEAR - 1, YEAR - 2].map((y) => ({ value: String(y), label: String(y) }))
+const SERIES: [string, string][] = [['Used', '#0f6e56'], ['Pending', '#34d399'], ['Available', '#a7f3d0']]
+const d1 = (n: number) => (Number.isInteger(n) ? num(n) : n.toFixed(1))
+/** Codes like CASUAL_LEAVE read as "Casual leave"; real names are kept as written. */
+const typeLabel = (t: string) => (/^[A-Z0-9_]+$/.test(t) ? t.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : t)
 
 export function LeaveBalanceReport() {
   const [params, setParams] = useSearchParams()
-  const companyId = params.get('company') ?? ''
-  const year      = params.get('year')    ?? CURRENT_YEAR
+  const co = useReportCompany()
+  const year = params.get('year') ?? String(YEAR)
+  const setYear = (v: string) => setParams((p) => { const n = new URLSearchParams(p); n.set('year', v); return n }, { replace: true })
+  const q = useLeaveBalanceReport(co.company || null, year)
 
-  const set = (key: string, val: string) =>
-    setParams((p) => { const n = new URLSearchParams(p); n.set(key, val); return n })
+  const rows = (q.data ?? []).map((r) => ({
+    id: `${r.employee_code}-${r.leave_type}`, code: r.employee_code, name: r.employee_name, dept: r.department || 'No department', none: !r.department,
+    type: typeLabel(r.leave_type), ent: Number(r.total_entitlement) || 0, cf: Number(r.carry_forward) || 0, used: Number(r.used) || 0, pending: Number(r.pending) || 0, avail: Number(r.available) || 0,
+  }))
+  type Row = (typeof rows)[number]
+  const sum = (k: 'ent' | 'cf' | 'used' | 'pending' | 'avail') => rows.reduce((a, r) => a + r[k], 0)
+  const people = new Set(rows.map((r) => r.code)).size
+  const types = [...rows.reduce((m, r) => { const t = m.get(r.type) || { type: r.type, used: 0, pending: 0, avail: 0 }; t.used += r.used; t.pending += r.pending; t.avail += Math.max(0, r.avail); m.set(r.type, t); return m }, new Map<string, { type: string; used: number; pending: number; avail: number }>()).values()]
+  const state = q.isLoading ? 'loading' : q.error ? 'error' : rows.length ? 'live' : 'empty'
 
-  const { data = [], isLoading, error, refetch } = useLeaveBalanceReport(companyId || null, year)
-
-  const chartData = aggregateByEmployee(data)
-
-  const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i))
+  const kpis: Kpi[] = [
+    { label: 'People', value: num(people), sub: `${types.length} leave ${types.length === 1 ? 'type' : 'types'}`, color: 'blue', icon: KPI_ICON.users },
+    { label: 'Days available', value: d1(sum('avail')), sub: `of ${d1(sum('ent') + sum('cf'))} entitled + carried`, color: 'green', icon: KPI_ICON.calendar },
+    { label: 'Days used', value: d1(sum('used')), sub: `In ${year}`, color: 'teal', icon: KPI_ICON.check },
+    { label: 'Pending approval', value: d1(sum('pending')), sub: 'Requested, not yet decided', color: 'orange', icon: KPI_ICON.hourglass },
+  ]
+  const fileBase = `leave-balance-${slug(co.companyName)}-${year}`
+  const chart = () => stackedBarsSvg({ title: 'Leave by type', subtitle: `${co.companyName} · ${year}`, bars: types.map((t) => ({ label: t.type, parts: [t.used, t.pending, t.avail] })), series: SERIES })
+  const HEAD = ['Code', 'Name', 'Department', 'Leave type', 'Entitled', 'Carried forward', 'Used', 'Pending', 'Available']
+  const table = () => rows.map((r) => [r.code, r.name, r.dept, r.type, r.ent, r.cf, r.used, r.pending, r.avail])
+  const foot = ['Total', '', '', '', sum('ent'), sum('cf'), sum('used'), sum('pending'), sum('avail')]
 
   return (
-    <ReportShell
-      title="Leave Balance Report"
-      description="Leave entitlement, used, pending, carry-forward, and available days per employee"
-      companyId={companyId || null}
-      isLoading={isLoading}
-      error={error}
-      hasData={data.length > 0}
-      onRetry={refetch}
-      report="leave-balance"
-      /* Same year the JSON query above ran with, so the CSV is the table. */
-      exportParams={{ year }}
-      filters={
-        <>
-          <CompanySelector value={companyId} onChange={(v) => set('company', v)} />
-          <select
-            value={year}
-            onChange={(e) => set('year', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#059669] transition-all"
-          >
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </>
-      }
-    >
-      <div className="ut-card ut-card-lg p-5">
-        <p className="text-xs text-text-tertiary mb-3">Top 20 by leave used (summed across types)</p>
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={chartData} margin={{ top: 4, right: 16, left: -10, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #6EE7B7)" />
-            <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #94a3b8)' }} interval={0} angle={-35} textAnchor="end" height={50} />
-            <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} allowDecimals={false} />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#fff', border: '1px solid #6EE7B7', borderRadius: 8, fontSize: 12 }}
-              labelStyle={{ color: '#0F172A' }}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="used"      fill="#EF4444" />
-            <Bar dataKey="pending"   fill="#059669" />
-            <Bar dataKey="available" fill="#22C55E" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Emp Code</th>
-              <th>Name</th>
-              <th>Department</th>
-              <th>Leave Type</th>
-              <th>Entitled</th>
-              <th>Used</th>
-              <th>Pending</th>
-              <th>Carry Fwd</th>
-              <th>Available</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((r, i) => (
-              <tr key={`${r.employee_code}-${r.leave_type}`}>
-                <td><span className="hr-mono">{r.employee_code}</span></td>
-                <td><HrAvatar name={r.employee_name} seed={i} /></td>
-                <td>{r.department ?? '—'}</td>
-                <td>{r.leave_type}</td>
-                <td>{r.total_entitlement}</td>
-                <td>{r.used}</td>
-                <td>{r.pending}</td>
-                <td>{r.carry_forward}</td>
-                <td>{r.available}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
-    </ReportShell>
+    <ReportPage title="Leave Balance Report" subtitle="Entitlement, carry-forward, used, pending and available days per person" report="leave-balance" co={co}
+      filters={<div style={{ flex: '0 1 140px', minWidth: 0 }}><HrSelect value={year} options={YEARS} onChange={setYear} size="sm" /></div>}
+      note={`Leave year ${year}`}
+      state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
+      exports={{
+        fileBase, csvParams: { year },
+        sheets: () => [{ name: 'Summary', widths: [24, 34], rows: [['Leave balance report', ''], ['Company', co.companyName], ['Year', year], ...kpis.map((k) => [k.label, k.value])] }, { name: 'Balances', widths: [12, 26, 22, 16, 10, 15, 8, 9, 10], rows: [HEAD, ...table(), foot] }],
+        print: () => printHead('Leave balance report', `${co.companyName} · ${year}`) + printKpis(kpis) + `<div class="card">${chart().svg}</div>` + printTable('Balances', HEAD, table(), foot),
+      }}>
+      <KpiRow items={kpis} />
+      <ReportSection title="Leave by type" legend={SERIES}
+        onDownload={() => downloadChart(`leave-by-type-${slug(co.companyName)}-${year}.png`, chart(), { report: 'Leave Balance', company: co.companyName })}>
+        <BarsChart series={SERIES} unit="days" bars={types.map((t) => ({ key: t.type, label: t.type, parts: [t.used, t.pending, t.avail] }))} />
+      </ReportSection>
+      <ReportTable<Row & { sE: string; sU: string; sP: string; sA: string }>
+        title="Balances" subtitle="One row per person and leave type"
+        search={{ placeholder: 'Search name, code, department or type…', match: (r, s) => `${r.name} ${r.code} ${r.dept} ${r.type}`.toLowerCase().includes(s) }}
+        rows={rows.map((r) => ({ ...r, sE: sortKey(r.ent + r.cf), sU: sortKey(r.used), sP: sortKey(r.pending), sA: sortKey(r.avail) }))}
+        columns={[
+          { key: 'name', header: 'Employee', sortable: true, render: (r) => <span><span style={{ fontWeight: 700 }}>{r.name}</span><span style={{ display: 'block', fontSize: 12, color: '#64748b', fontFamily: 'JetBrains Mono,monospace' }}>{r.code}</span></span> },
+          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span style={{ color: r.none ? '#64748b' : undefined, fontStyle: r.none ? 'italic' : 'normal' }}>{r.dept}</span> },
+          { key: 'type', header: 'Leave type', sortable: true, render: (r) => <span style={{ fontWeight: 600 }}>{r.type}</span> },
+          { key: 'sE', header: 'Entitled', sortable: true, render: (r) => <span>{d1(r.ent)}{r.cf ? <span style={{ color: '#64748b' }}> + {d1(r.cf)}</span> : null}</span> },
+          { key: 'sU', header: 'Used', sortable: true, render: (r) => d1(r.used) },
+          { key: 'sP', header: 'Pending', sortable: true, render: (r) => (r.pending ? <b style={{ color: '#b45309' }}>{d1(r.pending)}</b> : <span style={{ color: '#94a3b8' }}>0</span>) },
+          { key: 'sA', header: 'Available', sortable: true, render: (r) => <b style={{ color: r.avail < 0 ? '#b91c1c' : '#0f6e56' }}>{d1(r.avail)}</b> },
+        ]}
+        footerCells={['Total', '', '', `${d1(sum('ent'))} + ${d1(sum('cf'))}`, d1(sum('used')), d1(sum('pending')), d1(sum('avail'))]}
+        card={(r) => ({ title: `${r.name} · ${r.type}`, big: d1(r.avail), small: 'available', stats: [['Entitled', d1(r.ent + r.cf)], ['Used', d1(r.used)], ['Pending', d1(r.pending)]] })}
+      />
+    </ReportPage>
   )
 }

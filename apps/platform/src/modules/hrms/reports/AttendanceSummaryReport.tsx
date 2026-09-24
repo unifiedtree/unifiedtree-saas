@@ -1,111 +1,78 @@
-import React from 'react'
+// Present days, late days, average hours and recorded overtime per person, in
+// the Workforce Analytics design's report layout (ReportKit). Overtime is
+// shown as recorded minutes: it is approval-only and isn't paid through payroll.
 import { useSearchParams } from 'react-router-dom'
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-} from 'recharts'
 import { useAttendanceSummaryReport } from '@/modules/hrms/api/useReports'
-import { ReportShell, CompanySelector } from './ReportShell'
-import { TableCard, HrAvatar, HrStatusPill } from '@/shared/components/hr'
+import { HrStatusPill } from '@/shared/components/hr'
+import { stackedBarsSvg } from '@/shared/export/charts'
+import { useReportCompany } from './useReportCompany'
+import { todayIso, monthStartIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, printHead, printKpis, printTable, type Kpi } from './ReportKit'
 
-function defaultFrom() {
-  const d = new Date()
-  d.setDate(1)
-  return d.toISOString().slice(0, 10)
-}
+const long = longDate
+const hm = (mins: number) => (mins ? `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m` : '—')
+const SERIES: [string, string][] = [['On time', '#0f6e56'], ['Late', '#34d399']]
 
 export function AttendanceSummaryReport() {
   const [params, setParams] = useSearchParams()
-  const companyId = params.get('company') ?? ''
-  const from      = params.get('from')    ?? defaultFrom()
-  const to        = params.get('to')      ?? new Date().toISOString().slice(0, 10)
+  const co = useReportCompany()
+  const TODAY = todayIso()
+  const from = params.get('from') ?? monthStartIso(), to = params.get('to') ?? TODAY
+  const set = (k: string, v: string) => setParams((p) => { const n = new URLSearchParams(p); n.set(k, v); return n }, { replace: true })
+  const q = useAttendanceSummaryReport(co.company || null, from, to)
 
-  const set = (key: string, val: string) =>
-    setParams((p) => { const n = new URLSearchParams(p); n.set(key, val); return n })
+  const rows = (q.data ?? []).map((r) => ({
+    id: r.employee_code, code: r.employee_code, name: r.employee_name, dept: r.department || 'No department', none: !r.department,
+    present: Number(r.present_days) || 0, late: Number(r.late_days) || 0, hours: r.avg_hours == null ? null : Number(r.avg_hours), ot: Number(r.total_overtime_mins) || 0,
+  }))
+  type Row = (typeof rows)[number]
+  const present = rows.reduce((a, r) => a + r.present, 0), late = rows.reduce((a, r) => a + r.late, 0), ot = rows.reduce((a, r) => a + r.ot, 0)
+  const withHours = rows.filter((r) => r.hours != null), avgHours = withHours.length ? withHours.reduce((a, r) => a + (r.hours || 0), 0) / withHours.length : null
+  const depts = [...rows.reduce((m, r) => { const d = m.get(r.dept) || { dept: r.dept, none: r.none, onTime: 0, late: 0 }; d.onTime += Math.max(0, r.present - r.late); d.late += r.late; m.set(r.dept, d); return m }, new Map<string, { dept: string; none: boolean; onTime: number; late: number }>()).values()]
+    .sort((a, b) => (a.none ? 1 : b.none ? -1 : b.onTime + b.late - (a.onTime + a.late)))
+  const state = q.isLoading ? 'loading' : q.error ? 'error' : rows.length ? 'live' : 'empty'
+  const range = `${long(from)} – ${long(to)}`
 
-  const { data = [], isLoading, error, refetch } = useAttendanceSummaryReport(companyId || null, from, to)
-
-  // Chart: top 20 by late_days
-  const chartData = [...data]
-    .sort((a, b) => b.late_days - a.late_days)
-    .slice(0, 20)
-    .map((r) => ({ name: r.employee_name, 'Late Days': r.late_days, 'Present Days': r.present_days }))
+  const kpis: Kpi[] = [
+    { label: 'People', value: num(rows.length), sub: `${num(present)} days present in all`, color: 'blue', icon: KPI_ICON.users },
+    { label: 'Average present days', value: rows.length ? (present / rows.length).toFixed(1) : '—', sub: range, color: 'green', icon: KPI_ICON.calendar },
+    { label: 'Late days', value: num(late), sub: present ? `${Math.round((late / present) * 100)}% of present days` : 'No days present', color: 'orange', icon: KPI_ICON.alarm },
+    { label: 'Overtime recorded', value: hm(ot), sub: 'Approval-only, not paid', color: 'purple', icon: KPI_ICON.timer },
+  ]
+  const fileBase = `attendance-summary-${slug(co.companyName)}-${from}_${to}`
+  const chart = () => stackedBarsSvg({ title: 'Present days by department', subtitle: `${co.companyName} · ${range}`, bars: depts.map((d) => ({ label: d.dept, parts: [d.onTime, d.late] })), series: SERIES })
+  const HEAD = ['Code', 'Name', 'Department', 'Present days', 'Late days', 'Avg hours', 'Overtime (min, recorded)']
+  const table = () => rows.map((r) => [r.code, r.name, r.dept, r.present, r.late, r.hours == null ? null : Number(r.hours.toFixed(2)), r.ot])
 
   return (
-    <ReportShell
-      title="Attendance Summary"
-      description="Present days, late days, average hours, and overtime per employee"
-      companyId={companyId || null}
-      isLoading={isLoading}
-      error={error}
-      hasData={data.length > 0}
-      onRetry={refetch}
-      report="attendance-summary"
-      /* Same from/to the JSON query above ran with, so the CSV is the table. */
-      exportParams={{ from, to }}
-      filters={
-        <>
-          <CompanySelector value={companyId} onChange={(v) => set('company', v)} />
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => set('from', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#059669] transition-all"
-          />
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => set('to', e.target.value)}
-            className="bg-white border border-border-default rounded-xl px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#059669] transition-all"
-          />
-        </>
-      }
-    >
-      <div className="ut-card ut-card-lg p-5">
-        <p className="text-xs text-text-tertiary mb-3">Top 20 by late days</p>
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 16, left: 80, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #E5E7EB)" horizontal={false} />
-            <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} allowDecimals={false} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-tertiary, #94a3b8)' }} width={80} />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 12 }}
-              labelStyle={{ color: '#111827' }}
-            />
-            <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
-            <Bar dataKey="Present Days" fill="#059669" />
-            <Bar dataKey="Late Days"    fill="#C2410C" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Emp Code</th>
-              <th>Name</th>
-              <th>Department</th>
-              <th>Present Days</th>
-              <th>Late Days</th>
-              <th>Avg Hours</th>
-              <th>Overtime (min)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((r, i) => (
-              <tr key={r.employee_code}>
-                <td><span className="hr-mono">{r.employee_code}</span></td>
-                <td><HrAvatar name={r.employee_name} seed={i} /></td>
-                <td>{r.department ?? '—'}</td>
-                <td>{r.present_days}</td>
-                <td>{r.late_days > 0 ? <HrStatusPill tone="late">{r.late_days}</HrStatusPill> : r.late_days}</td>
-                <td>{r.avg_hours != null ? r.avg_hours.toFixed(1) : '—'}</td>
-                <td>{r.total_overtime_mins}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
-    </ReportShell>
+    <ReportPage title="Attendance Summary" subtitle="Present days, late days, average hours and recorded overtime per person" report="attendance-summary" co={co} skeleton="bars"
+      filters={<><DateFilter label="From" value={from} max={to} onChange={(v) => set('from', v)} /><DateFilter label="To" value={to} min={from} max={TODAY} onChange={(v) => set('to', v)} /></>}
+      note={range}
+      state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
+      exports={{
+        fileBase, csvParams: { from, to },
+        sheets: () => [{ name: 'Summary', widths: [26, 34], rows: [['Attendance summary', ''], ['Company', co.companyName], ['Range', range], ...kpis.map((k) => [k.label, k.value])] }, { name: 'People', widths: [12, 26, 22, 13, 10, 10, 22], rows: [HEAD, ...table()] }],
+        print: () => printHead('Attendance summary', `${co.companyName} · ${range}`) + printKpis(kpis) + `<div class="card">${chart().svg}</div>` + printTable('People', HEAD, table()),
+      }}>
+      <KpiRow items={kpis} />
+      <ReportSection title="Present days by department" legend={SERIES}
+        onDownload={() => downloadChart(`attendance-by-department-${slug(co.companyName)}-${from}_${to}.png`, chart(), { report: 'Attendance Summary', company: co.companyName })}>
+        <BarsChart series={SERIES} unit="days" bars={depts.map((d) => ({ key: d.dept, label: d.dept, none: d.none, parts: [d.onTime, d.late] }))} />
+      </ReportSection>
+      <ReportTable<Row & { sP: string; sL: string; sH: string; sO: string }>
+        title="People" subtitle="Overtime is recorded for approval; it isn’t paid through payroll"
+        search={{ placeholder: 'Search name, code or department…', match: (r, s) => `${r.name} ${r.code} ${r.dept}`.toLowerCase().includes(s) }}
+        rows={rows.map((r) => ({ ...r, sP: sortKey(r.present), sL: sortKey(r.late), sH: sortKey(r.hours ?? -1), sO: sortKey(r.ot) }))}
+        columns={[
+          { key: 'name', header: 'Employee', sortable: true, render: (r) => <span><span style={{ fontWeight: 700 }}>{r.name}</span><span style={{ display: 'block', fontSize: 12, color: '#64748b', fontFamily: 'JetBrains Mono,monospace' }}>{r.code}</span></span> },
+          { key: 'dept', header: 'Department', sortable: true, render: (r) => <span style={{ color: r.none ? '#64748b' : undefined, fontStyle: r.none ? 'italic' : 'normal' }}>{r.dept}</span> },
+          { key: 'sP', header: 'Present', sortable: true, render: (r) => <b>{num(r.present)}</b> },
+          { key: 'sL', header: 'Late', sortable: true, render: (r) => (r.late ? <HrStatusPill tone="orange">{num(r.late)}</HrStatusPill> : <span style={{ color: '#94a3b8' }}>0</span>) },
+          { key: 'sH', header: 'Avg hours', sortable: true, render: (r) => (r.hours == null ? '—' : r.hours.toFixed(1)) },
+          { key: 'sO', header: 'Overtime', sortable: true, render: (r) => hm(r.ot) },
+        ]}
+        footerCells={['Total', '', num(present), num(late), avgHours == null ? '—' : `${avgHours.toFixed(1)} avg`, hm(ot)]}
+        card={(r) => ({ title: r.name, big: num(r.present), small: 'present', stats: [['Late', num(r.late)], ['Avg hours', r.hours == null ? '—' : r.hours.toFixed(1)], ['Overtime', hm(r.ot)]] })}
+      />
+    </ReportPage>
   )
 }

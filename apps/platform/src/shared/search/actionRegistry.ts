@@ -214,8 +214,10 @@ export const QUICK_ACTIONS: QuickAction[] = [
   },
   {
     id: 'workforce-analytics', label: 'Workforce Analytics', category: 'Insights',
-    description: 'Headcount and workforce trends',
-    path: '/hrms/workforce-analytics', permission: P.HRMS_EMPLOYEE_READ,
+    description: 'Headcount, diversity and attrition trends',
+    // The same codes the route admits (any one of the three reports it shows).
+    anyOf: [P.HRMS_REPORT_HEADCOUNT, P.HRMS_REPORT_ATTRITION, P.HRMS_REPORT_DIVERSITY],
+    path: '/hrms/workforce-analytics',
     keywords: ['analytics', 'workforce', 'trend', 'insight', 'chart'],
   },
 

@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 const EXPORT = resolve(here, '../../../docs/Designs/UnifiedTree HRMS Prototype.html')
 const WORKSPACE_EXPORT = resolve(here, '../../../docs/Designs/UnifiedTree Employee Workspace (offline).html')
+const ANALYTICS_EXPORT = resolve(here, '../../../docs/Designs/UnifiedTree Workforce Analytics (offline).html')
 const OUT = resolve(here, '../src/design/dc')
 
 // ── unpack ───────────────────────────────────────────────────────────────────
@@ -35,6 +36,8 @@ const components = { ...hrms.components, HrmsPrototype: hrms.template }
 // The Employee Workspace export (record page with tabs) ships one component, EmployeeBodyOffline.
 const ws = unpack(WORKSPACE_EXPORT)
 Object.assign(components, ws.components)
+// The Workforce Analytics export is a single page: its component is the template itself.
+const analytics = unpack(ANALYTICS_EXPORT)
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const body = (html) => html.slice(html.indexOf('<x-dc>') + 6, html.lastIndexOf('</x-dc>'))
@@ -78,6 +81,25 @@ function sequence(s, token, keys, fmt) {
 // ── derived components + patches ─────────────────────────────────────────────
 const CARDS = ['trend', 'today', 'dept', 'performers', 'onboarding', 'hiring', 'projects', 'payroll', 'activity', 'notices', 'milestones', 'probations']
 const DERIVED = {
+  // Workforce Analytics (also the template the report pages follow). The
+  // template's <helmet> only loaded the prototype's demo data and design
+  // system; the app supplies both.
+  WorkforceAnalytics() {
+    const tpl = analytics.template
+    let t = tpl.slice(tpl.indexOf('<x-dc>'), tpl.indexOf('</x-dc>') + 7)
+    t = t.replace(/<helmet>[\s\S]*?<\/helmet>\n?/, '')
+    // Each chart shows only for people allowed to read its report (the page opens with any one of them).
+    const section = (marker, flag) => {
+      const a = t.indexOf(marker)
+      if (a < 0) throw new Error('WorkforceAnalytics: section not found: ' + marker)
+      const b = t.indexOf('</section>', a) + '</section>'.length
+      t = t.slice(0, a) + `<sc-if value="{{ ${flag} }}">` + t.slice(a, b) + '</sc-if>' + t.slice(b)
+    }
+    section('<section style="flex:2 1 520px', 'canHead')
+    section('<section style="flex:1 1 300px', 'canDiv')
+    section('<section style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.05);padding:16px 18px 14px;min-width:0">', 'canAttr')
+    return t
+  },
   // The Employee Workspace export's page body; the app names it for what it is.
   EmployeeWorkspace() {
     let t = components.EmployeeBodyOffline
@@ -115,6 +137,12 @@ const DERIVED = {
 }
 // Prototype literals (fixed demo dates) replaced by real values the logic supplies.
 const LITERALS = {
+  WorkforceAnalytics: [
+    // The prototype's fixed 504 message → what actually went wrong.
+    ['The analytics service took too long to respond (504 Gateway Timeout). Your filters are kept.', '{{ errText }}'],
+    // The attrition chart's scroll box clipped its top axis label; give it room.
+    ['<div style="overflow-x:auto"><div style="min-width:560px">', '<div style="overflow-x:auto;padding-top:10px"><div style="min-width:560px">'],
+  ],
   // Employee Workspace: the sample person → the real record; states the design didn't draw.
   EmployeeWorkspace: [
     ['name="Aarav Menon" seed="{{ zero }}"', 'name="{{ name }}" seed="{{ seed }}"'],

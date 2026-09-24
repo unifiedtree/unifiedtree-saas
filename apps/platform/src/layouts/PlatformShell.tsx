@@ -194,7 +194,8 @@ const MODULE_ITEMS: NavItemDef[] = [
       // Restricted page. Show only when at least one report permission is held.
       { label: 'Reports Center', path: '/hrms/reports', icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN,
         visibleWithAnyPermission: ['hrms.report.headcount', 'hrms.report.attrition', 'hrms.report.attendance', 'hrms.report.leave', 'hrms.report.diversity'] },
-      { label: 'Workforce Analytics', path: '/hrms/workforce-analytics', icon: <TrendingUp size={15} />, visibleForRoles: R_ADMIN },
+      { label: 'Workforce Analytics', path: '/hrms/workforce-analytics', icon: <TrendingUp size={15} />, visibleForRoles: R_ADMIN,
+        visibleWithAnyPermission: ['hrms.report.headcount', 'hrms.report.attrition', 'hrms.report.diversity'] },
     ],
   },
   {

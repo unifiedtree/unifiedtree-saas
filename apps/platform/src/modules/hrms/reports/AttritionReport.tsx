@@ -1,113 +1,87 @@
-import React from 'react'
+// Monthly exits and attrition rate, in the Workforce Analytics design's report
+// layout (ReportKit). Every month in the range is shown, including months
+// without exits. Exits are split into resigned, terminated and other (the
+// workforce exit flow records people as EXITED without a reason type).
 import { useSearchParams } from 'react-router-dom'
-import {
-  ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend,
-} from 'recharts'
 import { useAttritionReport } from '@/modules/hrms/api/useReports'
-import { TableCard } from '@/shared/components/hr'
-import { ReportShell, CompanySelector } from './ReportShell'
+import { lineSvg } from '@/shared/export/charts'
+import { useReportCompany } from './useReportCompany'
+import { todayIso, monthStartIso, ReportPage, KpiRow, KPI_ICON, ReportSection, TrendChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, printHead, printKpis, printTable, type Kpi } from './ReportKit'
 
-function defaultFrom() {
-  const d = new Date()
-  d.setMonth(d.getMonth() - 11)
-  d.setDate(1)
-  return d.toISOString().slice(0, 10)
-}
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const label = (ym: string) => { const [y, m] = ym.split('-').map(Number); return `${MON[m - 1]} ${y}` }
+const short = (ym: string) => { const [y, m] = ym.split('-').map(Number); return `${MON[m - 1]} ’${String(y).slice(2)}` }
 
 export function AttritionReport() {
   const [params, setParams] = useSearchParams()
-  const companyId = params.get('company') ?? ''
-  const from      = params.get('from')    ?? defaultFrom()
-  const to        = params.get('to')      ?? new Date().toISOString().slice(0, 10)
+  const co = useReportCompany()
+  const TODAY = todayIso()
+  const from = params.get('from') ?? monthStartIso(11), to = params.get('to') ?? TODAY
+  const set = (k: string, v: string) => setParams((p) => { const n = new URLSearchParams(p); n.set(k, v); return n }, { replace: true })
+  const q = useAttritionReport(co.company || null, from, to)
 
-  const set = (key: string, val: string) =>
-    setParams((p) => { const n = new URLSearchParams(p); n.set(key, val); return n })
-
-  const { data = [], isLoading, error, refetch } = useAttritionReport(companyId || null, from, to)
-
-  const chartData = data.map((r) => ({
-    name: r.month,
-    Exits: r.exits,
-    Resignations: r.resignations,
-    Terminations: r.terminations,
-    'Attrition %': r.attrition_pct,
+  const rows = (q.data ?? []).map((r) => ({
+    id: r.month, month: r.month, label: label(r.month), short: short(r.month), exits: Number(r.exits) || 0, resign: Number(r.resignations) || 0,
+    term: Number(r.terminations) || 0, other: Number(r.other_exits) || 0, headcount: Number(r.headcount) || 0, pct: Number(r.attrition_pct) || 0,
   }))
+  type Row = (typeof rows)[number]
+  const exits = rows.reduce((a, r) => a + r.exits, 0), term = rows.reduce((a, r) => a + r.term, 0)
+  const avg = rows.length ? rows.reduce((a, r) => a + r.pct, 0) / rows.length : 0
+  const peak = rows.reduce<Row | null>((a, r) => (!a || r.pct > a.pct ? r : a), null)
+  const state = q.isLoading ? 'loading' : q.error ? 'error' : rows.length ? 'live' : 'empty'
+  const range = rows.length ? `${rows[0].label} – ${rows[rows.length - 1].label}` : ''
+  const split = (r: Row) => [r.resign && `${r.resign} resigned`, r.term && `${r.term} terminated`, r.other && `${r.other} other`].filter(Boolean).join(' · ') || 'none'
+
+  const kpis: Kpi[] = [
+    { label: 'Exits in range', value: num(exits), sub: range, color: 'red', icon: KPI_ICON.trend },
+    { label: 'Average monthly attrition', value: `${avg.toFixed(1)}%`, sub: `${rows.length} ${rows.length === 1 ? 'month' : 'months'}`, color: 'orange', icon: KPI_ICON.pie },
+    { label: 'Highest month', value: peak && peak.exits ? `${peak.pct.toFixed(1)}%` : '—', sub: peak && peak.exits ? `${peak.label} · ${peak.exits} exits` : 'No exits in range', color: 'purple', icon: KPI_ICON.calendar },
+    { label: 'Terminations', value: num(term), sub: exits ? `${Math.round((term / exits) * 100)}% of exits` : 'No exits in range', color: 'blue', icon: KPI_ICON.users },
+  ]
+  const fileBase = `attrition-${slug(co.companyName)}-${from}_${to}`
+  const chart = () => lineSvg({ title: 'Monthly attrition', subtitle: `${co.companyName} · ${range}`, points: rows.map((r) => ({ label: r.short, value: r.pct })) })
+  const HEAD = ['Month', 'Exits', 'Resigned', 'Terminated', 'Other', 'Headcount', 'Attrition %']
+  const table = () => rows.map((r) => [r.label, r.exits, r.resign, r.term, r.other, r.headcount, r.pct])
+  const foot = ['Total', exits, rows.reduce((a, r) => a + r.resign, 0), term, rows.reduce((a, r) => a + r.other, 0), '', `${avg.toFixed(1)} avg`]
 
   return (
-    <ReportShell
-      title="Attrition Report"
-      description="Monthly exits, resignations, terminations, and attrition rate"
-      companyId={companyId || null}
-      isLoading={isLoading}
-      error={error}
-      hasData={data.length > 0}
-      onRetry={refetch}
-      report="attrition"
-      /* Same from/to the JSON query above ran with, so the CSV is the table. */
-      exportParams={{ from, to }}
-      filters={
-        <>
-          <CompanySelector value={companyId} onChange={(v) => set('company', v)} />
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => set('from', e.target.value)}
-            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-all"
-          />
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => set('to', e.target.value)}
-            className="bg-white border border-border-default rounded-lg px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-[#059669] focus:ring-2 focus:ring-[#059669]/20 transition-all"
-          />
-        </>
-      }
-    >
-      <div className="ut-card ut-card-lg p-5">
-        <ResponsiveContainer width="100%" height={280}>
-          <ComposedChart data={chartData} margin={{ top: 4, right: 24, left: -10, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border-default, #E2E8F0)" />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} />
-            <YAxis yAxisId="left"  tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} allowDecimals={false} />
-            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: 'var(--color-text-tertiary, #94a3b8)' }} unit="%" />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#ffffff', border: '1px solid var(--color-border-default, #E2E8F0)', borderRadius: 8, fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-              labelStyle={{ color: 'var(--color-text-primary, #0F172A)' }}
-              itemStyle={{ color: 'var(--color-text-secondary, #334155)' }}
-            />
-            <Legend wrapperStyle={{ fontSize: 12, color: 'var(--color-text-tertiary, #64748B)' }} />
-            <Bar yAxisId="left" dataKey="Resignations" stackId="a" fill="#F59E0B" />
-            <Bar yAxisId="left" dataKey="Terminations" stackId="a" fill="#EF4444" radius={[4, 4, 0, 0]} />
-            <Line yAxisId="right" type="monotone" dataKey="Attrition %" stroke="#059669" strokeWidth={2} dot={{ r: 3 }} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-
-      <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th>Exits</th>
-              <th>Resignations</th>
-              <th>Terminations</th>
-              <th>Attrition %</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((r) => (
-              <tr key={r.month}>
-                <td>{r.month}</td>
-                <td>{r.exits}</td>
-                <td>{r.resignations}</td>
-                <td>{r.terminations}</td>
-                <td>{r.attrition_pct}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
-    </ReportShell>
+    <ReportPage title="Attrition Report" subtitle="Monthly exits, resignations, terminations and attrition rate" report="attrition" co={co} skeleton="line"
+      filters={<><DateFilter label="From" value={from} max={to} onChange={(v) => set('from', v)} /><DateFilter label="To" value={to} min={from} max={TODAY} onChange={(v) => set('to', v)} /></>}
+      note={range && `Showing ${range}`}
+      state={state} errText={q.error ? `${(q.error as Error).message}. Your filters are kept.` : undefined} onRetry={() => q.refetch()}
+      exports={{
+        fileBase, csvParams: { from, to },
+        sheets: () => [{ name: 'Summary', widths: [28, 30], rows: [['Attrition report', ''], ['Company', co.companyName], ['Range', range], ...kpis.map((k) => [k.label, k.value])] }, { name: 'Monthly attrition', widths: [12, 8, 10, 11, 8, 11, 12], rows: [HEAD, ...table()] }],
+        print: () => printHead('Attrition report', `${co.companyName} · ${range}`) + printKpis(kpis) + `<div class="card">${chart().svg}</div>` + printTable('Months', HEAD, table(), foot),
+      }}>
+      <KpiRow items={kpis} />
+      <ReportSection title="Monthly attrition" aside={<span style={{ fontSize: 12.5, color: '#64748b', fontWeight: 500 }}>{range}</span>} legend={[['Attrition %', '#0f6e56', 'line']]}
+        onDownload={() => downloadChart(`monthly-attrition-${slug(co.companyName)}-${from}_${to}.png`, chart(), { report: 'Attrition', company: co.companyName })}>
+        <TrendChart points={rows.map((r) => ({ key: r.id, short: r.short, value: r.pct }))} readout={(i) => {
+          const r = rows[i]
+          return <>
+            <span style={{ fontSize: 13.5, fontWeight: 800, color: '#0a5240' }}>{r.label}</span>
+            <span style={{ fontSize: 13, color: '#334155' }}><b style={{ color: '#0f172a' }}>{r.pct.toFixed(1)}%</b> attrition</span>
+            <span style={{ fontSize: 13, color: '#334155' }}><b style={{ color: '#0f172a' }}>{r.exits}</b> exits · {split(r)}</span>
+            <span style={{ fontSize: 13, color: '#334155' }}>Headcount <b style={{ color: '#0f172a' }}>{num(r.headcount)}</b></span>
+          </>
+        }} />
+      </ReportSection>
+      <ReportTable<Row & { sE: string; sP: string; sH: string }>
+        title="Months" subtitle="Exits are dated by the person’s last working day"
+        rows={rows.map((r) => ({ ...r, sE: sortKey(r.exits), sP: sortKey(r.pct), sH: sortKey(r.headcount) })).reverse()}
+        columns={[
+          { key: 'month', header: 'Month', sortable: true, render: (r) => <span style={{ fontWeight: 700 }}>{r.label}</span> },
+          { key: 'sE', header: 'Exits', sortable: true, render: (r) => <b>{num(r.exits)}</b> },
+          { key: 'resign', header: 'Resigned', render: (r) => num(r.resign) },
+          { key: 'term', header: 'Terminated', render: (r) => num(r.term) },
+          { key: 'other', header: 'Other', render: (r) => num(r.other) },
+          { key: 'sH', header: 'Headcount', sortable: true, render: (r) => num(r.headcount) },
+          { key: 'sP', header: 'Attrition', sortable: true, render: (r) => <b style={{ color: r.pct ? '#b91c1c' : '#64748b' }}>{r.pct.toFixed(1)}%</b> },
+        ]}
+        footerCells={foot.map((c) => (typeof c === 'number' ? num(c) : c))}
+        card={(r) => ({ title: r.label, big: `${r.pct.toFixed(1)}%`, small: `${r.exits} exits`, stats: [['Resigned', num(r.resign)], ['Terminated', num(r.term)], ['Headcount', num(r.headcount)]] })}
+      />
+    </ReportPage>
   )
 }

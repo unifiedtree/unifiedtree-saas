@@ -1,380 +1,145 @@
-import React, { useMemo, useState } from 'react'
-import {
-  ResponsiveContainer,
-  BarChart, Bar,
-  PieChart, Pie, Cell,
-  LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-} from 'recharts'
-import { Users, UserCheck, TrendingDown, Building2 } from 'lucide-react'
-import { format, subMonths } from 'date-fns'
-import {
-  useHeadcountReport,
-  useDiversityReport,
-  useAttritionReport,
-} from '@/modules/hrms/api/useReports'
+// Workforce Analytics (/hrms/workforce-analytics) in the Claude Design export's
+// layout (design/dc/WorkforceAnalytics). Loads the headcount, diversity and
+// attrition reports for the chosen company and period, each only when the
+// person may read it, and does the exports: a print-ready PDF snapshot, an
+// Excel workbook, the departments CSV and PNGs of the two charts.
+import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { P, usePermission } from '@unifiedtree/sdk'
+import { useHeadcountReport, useDiversityReport, useAttritionReport } from '@/modules/hrms/api/useReports'
 import { useEmployeeDirectory } from '@/modules/hrms/api/useWorkforce'
-import { useCompanies } from '@/modules/hrms/api/useOrg'
-import { usePermission, P } from '@unifiedtree/sdk'
-import {
-  HrPageHeader,
-  HrStatCard,
-  HrStatusPill,
-  TableCard,
-} from '@/shared/components/hr'
+import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
+import { WorkforceAnalytics as WorkforceAnalyticsDesign, GENDER_SERIES, type ExportKind, type WaData, type WaDept, type WaGender, type WaMonth } from '@/design/dc/WorkforceAnalytics'
+import { csvBlob, xlsxBlob, svgToPng, printDocument, saveAndRecord, esc, type Cell } from '@/shared/export/fileExport'
+import { stackedBarsSvg, donutSvg, lineSvg } from '@/shared/export/charts'
+import { useReportCompany, slug } from '@/modules/hrms/reports/useReportCompany'
 
-const CHART = {
-  blue: '#2563EB',
-  green: '#22C55E',
-  amber: '#F59E0B',
-  purple: '#8B5CF6',
-  red: '#EF4444',
-  cyan: '#06B6D4',
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const monthLabel = (ym: string) => { const [y, m] = ym.split('-').map(Number); return `${MON[m - 1]} ${y}` }
+const monthShort = (ym: string) => { const [y, m] = ym.split('-').map(Number); return `${MON[m - 1]} ’${String(y).slice(2)}` }
+const longDate = (d: Date) => `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`
+
+/** The design's three periods, computed from today. */
+function periodsFor(today: Date) {
+  const y = today.getFullYear()
+  const start12 = new Date(y, today.getMonth() - 11, 1)
+  return [
+    { value: 'l12', label: 'Last 12 months', from: iso(start12), to: iso(today) },
+    { value: 'ytd', label: `${y} so far`, from: `${y}-01-01`, to: iso(today) },
+    { value: `y${y - 1}`, label: `Calendar ${y - 1}`, from: `${y - 1}-01-01`, to: `${y - 1}-12-31` },
+  ]
 }
-const DONUT_COLORS = [CHART.blue, '#EC4899', CHART.amber, CHART.purple, CHART.cyan, CHART.green]
+const genderKey = (g: string): keyof WaGender => (g === 'FEMALE' ? 'women' : g === 'MALE' ? 'men' : 'other')
 
-const GENDER_LABEL: Record<string, string> = {
-  MALE: 'Male',
-  FEMALE: 'Female',
-  OTHER: 'Other',
-  PREFER_NOT_TO_SAY: 'Prefer not to say',
-}
-
-const TOOLTIP_STYLE = {
-  backgroundColor: '#ffffff',
-  border: '1px solid var(--color-border-default, #6EE7B7)',
-  borderRadius: 8,
-  fontSize: 12,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-}
-
-export const WorkforceAnalytics: React.FC = () => {
-  // ── Company picker (defaults to first company once loaded) ──────────────────
-  const { data: companies = [], isLoading: loadingCompanies } = useCompanies()
-  const [companyId, setCompanyId] = useState<string>('')
-  const activeCompanyId = companyId || companies[0]?.id || ''
-
-  // ── Date window: trailing 12 months for attrition ───────────────────────────
+export function WorkforceAnalytics() {
+  const navigate = useNavigate()
+  const mobile = useIsMobile()
+  const canHead = usePermission(P.HRMS_REPORT_HEADCOUNT), canDiv = usePermission(P.HRMS_REPORT_DIVERSITY), canAttr = usePermission(P.HRMS_REPORT_ATTRITION)
+  const canDirectory = usePermission(P.HRMS_EMPLOYEE_READ)
+  const co = useReportCompany()
   const today = useMemo(() => new Date(), [])
-  const from = useMemo(() => format(subMonths(today, 11), 'yyyy-MM-dd'), [today])
-  const to = useMemo(() => format(today, 'yyyy-MM-dd'), [today])
-  const asOf = to
+  const periods = useMemo(() => periodsFor(today), [today])
+  const [period, setPeriod] = useState('l12')
+  const range = periods.find((x) => x.value === period) || periods[0]
+  const asOf = iso(today)
 
-  // ── Data hooks (all gated on a real companyId) ──────────────────────────────
-  // 2026-09-10: the route admits anyOf[headcount, attrition, diversity], but
-  // all three hooks fired unconditionally, so a role granted only one of them
-  // (e.g. FINANCE_LEAD, per V026) got a 403 on the other two — and since the
-  // hooks' `.error` is never read, those cards rendered as empty data rather
-  // than as "you can't see this". Gate each fetch on the specific permission
-  // the endpoint enforces; the tiles below already handle empty gracefully.
-  const canReadHeadcount = usePermission(P.HRMS_REPORT_HEADCOUNT)
-  const canReadDiversity = usePermission(P.HRMS_REPORT_DIVERSITY)
-  const canReadAttrition = usePermission(P.HRMS_REPORT_ATTRITION)
-  const headcount = useHeadcountReport(activeCompanyId || null, asOf, { enabled: canReadHeadcount })
-  const diversity = useDiversityReport(activeCompanyId || null, { enabled: canReadDiversity })
-  const attrition = useAttritionReport(activeCompanyId || null, from, to, { enabled: canReadAttrition })
-  const directory = useEmployeeDirectory(
-    { companyId: activeCompanyId, page: 0, pageSize: 1 },
-    { enabled: !!activeCompanyId },
-  )
+  const company = co.company || null
+  const head = useHeadcountReport(company, asOf, { enabled: canHead && !!company })
+  const div = useDiversityReport(company, { enabled: canDiv && !!company })
+  const attr = useAttritionReport(company, range.from, range.to, { enabled: canAttr && !!company })
+  const dir = useEmployeeDirectory({ companyId: co.company, page: 0, pageSize: 1 }, { enabled: canDirectory && !!company })
 
-  const headcountRows = headcount.data ?? []
-  const diversityRows = diversity.data ?? []
-  const attritionRows = attrition.data ?? []
+  const data: WaData | undefined = useMemo(() => {
+    const depts: WaDept[] | null = canHead && head.data ? (() => {
+      const rows = head.data.map((r) => ({ id: r.department_id ?? null, dept: r.department || 'No department', none: !r.department, total: Number(r.total) || 0, active: Number(r.active) || 0, notice: Number(r.on_notice) || 0, probation: Number(r.probation) || 0 }))
+      return [...rows.filter((r) => !r.none).sort((a, b) => b.total - a.total), ...rows.filter((r) => r.none)]
+    })() : null
+    const gender = canDiv && div.data ? (() => {
+      const total: WaGender = { women: 0, men: 0, other: 0 }, byDept = new Map<string, WaGender>()
+      for (const r of div.data) {
+        const k = genderKey(r.gender), n = Number(r.count) || 0, key = r.department_id || ''
+        total[k] += n
+        const g = byDept.get(key) || { women: 0, men: 0, other: 0 }
+        g[k] += n; byDept.set(key, g)
+      }
+      return { total, byDept }
+    })() : null
+    const months: WaMonth[] | null = canAttr && attr.data ? attr.data.map((r) => ({
+      m: r.month, label: monthLabel(r.month), short: monthShort(r.month), exits: Number(r.exits) || 0, resign: Number(r.resignations) || 0, term: Number(r.terminations) || 0,
+      other: Number(r.other_exits) || 0, headcount: Number(r.headcount) || 0, pct: Number(r.attrition_pct) || 0,
+    })) : null
+    return { depts, gender, months, directory: dir.data?.totalElements ?? null }
+  }, [canHead, canDiv, canAttr, head.data, div.data, attr.data, dir.data])
 
-  // ── Derived KPIs (everything from real report rows) ─────────────────────────
-  const totals = useMemo(() => {
-    const total = headcountRows.reduce((s, r) => s + (r.total ?? 0), 0)
-    const active = headcountRows.reduce((s, r) => s + (r.active ?? 0), 0)
-    const onNotice = headcountRows.reduce((s, r) => s + (r.on_notice ?? 0), 0)
-    const probation = headcountRows.reduce((s, r) => s + (r.probation ?? 0), 0)
-    return { total, active, onNotice, probation }
-  }, [headcountRows])
+  const queries = [canHead && head, canDiv && div, canAttr && attr].filter(Boolean) as { isLoading: boolean; error: unknown; refetch: () => unknown }[]
+  const denied = !canHead && !canDiv && !canAttr
+  const failed = queries.find((q) => q.error)
+  const loading = co.loading || queries.some((q) => q.isLoading)
+  const nothing = (!canHead || !data.depts?.length) && (!canDiv || !data.gender || data.gender.total.women + data.gender.total.men + data.gender.total.other === 0) && (!canAttr || !data.months?.some((m) => m.exits > 0))
+  const state = denied ? 'denied' : loading ? 'loading' : failed ? 'error' : nothing ? 'empty' : 'live'
+  const errText = failed ? `${(failed.error as Error)?.message || 'The report service didn’t answer'}. Your filters are kept.` : ''
 
-  // Latest month's attrition % from the trailing window.
-  const latestAttritionPct = useMemo(() => {
-    if (attritionRows.length === 0) return null
-    return attritionRows[attritionRows.length - 1].attrition_pct
-  }, [attritionRows])
+  const onOpen = (r: string) => navigate(`/hrms/reports/${r}${co.company ? `?co=${co.company}` : ''}`)
+  const onDept = (r: WaDept) => { if (canDirectory) navigate(`/hrms/employees?co=${co.company}${r.id ? `&departmentId=${r.id}` : ''}`) }
 
-  const totalExits = useMemo(
-    () => attritionRows.reduce((s, r) => s + (r.exits ?? 0), 0),
-    [attritionRows],
-  )
+  // ── exports ──
+  const base = `workforce-analytics-${slug(co.companyName)}-${range.value}`
+  const meta = (fmt: string) => ({ report: 'Workforce Analytics', fmt, company: co.companyName })
+  const depts = data.depts || [], months = data.months || [], G = data.gender
+  const totals = depts.reduce((a, r) => ({ total: a.total + r.total, active: a.active + r.active, notice: a.notice + r.notice, probation: a.probation + r.probation }), { total: 0, active: 0, notice: 0, probation: 0 })
+  const womenPct = (id: string | null, none: boolean) => { const g = G?.byDept.get(id || (none ? '' : '#')); const t = g ? g.women + g.men + g.other : 0; return g && t ? Math.round((g.women / t) * 100) : null }
+  const deptRows = (): Cell[][] => [
+    ['Department', 'Total', 'Active', 'On notice', 'Probation', ...(canDiv ? ['Women %'] : []), 'Share %'],
+    ...depts.map((r) => [r.dept, r.total, r.active, r.notice, r.probation, ...(canDiv ? [womenPct(r.id, r.none)] : []), totals.total ? Math.round((r.total / totals.total) * 100) : 0]),
+    ['Total', totals.total, totals.active, totals.notice, totals.probation, ...(canDiv ? [G ? Math.round((G.total.women / Math.max(1, G.total.women + G.total.men + G.total.other)) * 100) : null] : []), 100],
+  ]
+  const headChart = () => stackedBarsSvg({ title: 'Headcount by department', subtitle: `${co.companyName} · as of ${longDate(today)}`, bars: depts.map((r) => ({ label: r.dept, parts: [r.active, r.notice, r.probation] })), series: [['Active', '#0f6e56'], ['On notice', '#34d399'], ['Probation', '#a7f3d0']] })
+  const attrChart = () => lineSvg({ title: 'Monthly attrition', subtitle: `${co.companyName} · ${months.length ? `${months[0].label} – ${months[months.length - 1].label}` : range.label}`, points: months.map((m) => ({ label: m.short, value: m.pct })) })
+  const genderChart = () => donutSvg({ title: 'Gender diversity', subtitle: co.companyName, parts: GENDER_SERIES.map(([label, k, color]) => ({ label, value: G ? G.total[k] : 0, color })) })
 
-  const directoryTotal = directory.data?.totalElements ?? null
-
-  // ── Chart datasets ──────────────────────────────────────────────────────────
-  const deptBarData = useMemo(
-    () =>
-      headcountRows
-        .map((r) => ({
-          name: r.department ?? '(No dept)',
-          Total: r.total ?? 0,
-          Active: r.active ?? 0,
-        }))
-        .sort((a, b) => b.Total - a.Total),
-    [headcountRows],
-  )
-
-  // Aggregate diversity rows (which are per department+gender) to company-wide gender split.
-  const genderData = useMemo(() => {
-    const byGender = new Map<string, number>()
-    for (const r of diversityRows) {
-      const key = r.gender || 'PREFER_NOT_TO_SAY'
-      byGender.set(key, (byGender.get(key) ?? 0) + (r.count ?? 0))
+  const onExport = async (k: ExportKind): Promise<string> => {
+    if (k === 'csv') {
+      const file = `${base}-departments.csv`
+      saveAndRecord(file, csvBlob(deptRows()), meta('CSV'))
+      return `${file} downloaded`
     }
-    return Array.from(byGender.entries())
-      .map(([gender, count]) => ({ name: GENDER_LABEL[gender] ?? gender, value: count }))
-      .sort((a, b) => b.value - a.value)
-  }, [diversityRows])
-
-  const genderTotal = useMemo(() => genderData.reduce((s, g) => s + g.value, 0), [genderData])
-
-  const attritionLineData = useMemo(
-    () =>
-      attritionRows.map((r) => ({
-        name: r.month,
-        'Attrition %': r.attrition_pct,
-        Exits: r.exits,
-      })),
-    [attritionRows],
-  )
-
-  const isLoading =
-    loadingCompanies || headcount.isLoading || diversity.isLoading || attrition.isLoading
+    if (k === 'xlsx') {
+      const sheets = [{ name: 'Summary', widths: [28, 40], rows: [['Workforce Analytics', ''], ['Company', co.companyName], ['Period', range.label], ['Data as of', longDate(today)], ...(canHead ? [['Total headcount', totals.total], ['Active', totals.active], ['On notice', totals.notice], ['Probation', totals.probation]] : []), ...(canAttr && months.length ? [['Attrition (latest month)', `${months[months.length - 1].pct.toFixed(1)}%`]] : [])] as Cell[][] }]
+      if (canHead) sheets.push({ name: 'Departments', widths: [28, 10, 10, 12, 12, 10, 10], rows: deptRows() })
+      if (canDiv && G) sheets.push({ name: 'Gender', widths: [28, 10, 10, 22], rows: [['Department', 'Women', 'Men', 'Other or not specified'], ...[...G.byDept.entries()].map(([id, g]) => [depts.find((d) => (d.id || '') === id)?.dept || (id ? 'Department' : 'No department'), g.women, g.men, g.other] as Cell[]), ['Total', G.total.women, G.total.men, G.total.other]] })
+      if (canAttr) sheets.push({ name: 'Monthly attrition', widths: [12, 8, 11, 12, 8, 12, 12], rows: [['Month', 'Exits', 'Resigned', 'Terminated', 'Other', 'Headcount', 'Attrition %'], ...months.map((m) => [m.label, m.exits, m.resign, m.term, m.other, m.headcount, m.pct] as Cell[])] })
+      const file = `${base}.xlsx`
+      saveAndRecord(file, xlsxBlob(sheets), meta('Excel'))
+      return `${file} downloaded`
+    }
+    if (k === 'png-headcount' || k === 'png-attrition') {
+      const c = k === 'png-headcount' ? headChart() : attrChart()
+      const file = k === 'png-headcount' ? `headcount-by-department-${slug(co.companyName)}.png` : `monthly-attrition-${slug(co.companyName)}-${range.value}.png`
+      saveAndRecord(file, await svgToPng(c.svg, c.width, c.height), meta('PNG'))
+      return `${file} downloaded`
+    }
+    // PDF: a print-ready page; the browser's "Save as PDF" writes the file.
+    const kpi = (label: string, v: string, sub: string) => `<div class="kpi"><span class="muted">${esc(label)}</span><b>${esc(v)}</b><span class="muted">${esc(sub)}</span></div>`
+    const last = months[months.length - 1]
+    const body = `<h1>Workforce Analytics</h1><div class="muted">${esc(co.companyName)} · ${esc(range.label)} · data as of ${esc(longDate(today))}</div>
+<div class="kpis">${canHead ? kpi('Total headcount', totals.total.toLocaleString('en-IN'), `${totals.active} active`) + kpi('On notice / probation', String(totals.notice + totals.probation), `${totals.notice} notice · ${totals.probation} probation`) : ''}${canAttr && last ? kpi('Attrition (latest month)', `${last.pct.toFixed(1)}%`, `${last.exits} exits · ${last.label}`) : ''}${canDiv && G ? kpi('People by gender', (G.total.women + G.total.men + G.total.other).toLocaleString('en-IN'), `${G.total.women} women · ${G.total.men} men`) : ''}</div>
+${canHead ? `<div class="card">${headChart().svg}</div>` : ''}${canDiv && G ? `<div class="card">${genderChart().svg}</div>` : ''}${canAttr ? `<div class="card">${attrChart().svg}</div>` : ''}
+${canHead ? `<div class="card"><h2>Departments</h2><table><thead><tr>${deptRows()[0].map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${deptRows().slice(1, -1).map((r) => `<tr>${r.map((c) => `<td>${esc(c ?? '—')}</td>`).join('')}</tr>`).join('')}</tbody><tfoot><tr>${deptRows()[deptRows().length - 1].map((c) => `<td>${esc(c ?? '—')}</td>`).join('')}</tr></tfoot></table></div>` : ''}`
+    if (!printDocument(`${base}.pdf`, body)) throw new Error('Your browser blocked the print window. Allow pop-ups for this site, then try again.')
+    return 'Print dialog opened. Choose “Save as PDF” to keep a copy.'
+  }
 
   return (
-    <div className="mx-auto max-w-6xl p-6 sm:p-8">
-      <HrPageHeader
-        crumb="Reports & Analytics"
-        title="Workforce Analytics"
-        subtitle="Headcount, diversity, and attrition across your organization"
-        actions={
-          <select
-            value={activeCompanyId}
-            onChange={(e) => setCompanyId(e.target.value)}
-            disabled={loadingCompanies || companies.length === 0}
-            className="rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20 disabled:opacity-50"
-          >
-            {companies.length === 0 && <option value="">No companies</option>}
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        }
+    <DesignFrame>
+      <WorkforceAnalyticsDesign
+        state={state} errText={errText} mobile={mobile} locked={co.locked}
+        canHead={canHead} canDiv={canDiv} canAttr={canAttr} canDirectory={canDirectory}
+        companies={co.options} company={co.company} setCompany={co.setCompany}
+        periods={periods.map((x) => ({ value: x.value, label: x.label }))} period={period} setPeriod={setPeriod}
+        asOf={longDate(today)} data={data}
+        onRetry={() => queries.forEach((q) => q.refetch())} onOpen={onOpen} onDept={onDept} onExport={onExport}
       />
-
-      {/* ── KPI row ─────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <HrStatCard
-          icon={<Users size={18} />}
-          color="blue"
-          value={totals.total.toLocaleString()}
-          label="Total Headcount"
-          sub={
-            directoryTotal != null
-              ? `${directoryTotal.toLocaleString()} in directory`
-              : `${headcountRows.length} departments`
-          }
-          loading={headcount.isLoading}
-        />
-        <HrStatCard
-          icon={<UserCheck size={18} />}
-          color="green"
-          value={totals.active.toLocaleString()}
-          label="Active Employees"
-          sub={
-            totals.total > 0
-              ? `${Math.round((totals.active / totals.total) * 100)}% of headcount`
-              : undefined
-          }
-          loading={headcount.isLoading}
-        />
-        <HrStatCard
-          icon={<TrendingDown size={18} />}
-          color="red"
-          value={latestAttritionPct != null ? `${latestAttritionPct}%` : '—'}
-          label="Attrition (latest month)"
-          sub={`${totalExits.toLocaleString()} exits · trailing 12 mo`}
-          loading={attrition.isLoading}
-        />
-        <HrStatCard
-          icon={<Building2 size={18} />}
-          color="orange"
-          value={(totals.onNotice + totals.probation).toLocaleString()}
-          label="On Notice / Probation"
-          sub={`${totals.onNotice} notice · ${totals.probation} probation`}
-          loading={headcount.isLoading}
-        />
-      </div>
-
-      {/* ── Charts row: dept bar + gender donut ─────────────────────────────── */}
-      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <div className="ut-card ut-card-lg p-5 lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-text-primary">Headcount by Department</h2>
-            <HrStatusPill tone="blue">{headcountRows.length} depts</HrStatusPill>
-          </div>
-          {headcount.isLoading ? (
-            <div className="h-[280px] animate-pulse rounded-lg bg-bg-base" />
-          ) : deptBarData.length === 0 ? (
-            <EmptyChart label="No headcount data for this company" />
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={deptBarData} margin={{ top: 4, right: 16, left: -10, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} interval={0} angle={-12} textAnchor="end" height={48} />
-                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} allowDecimals={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#111827', fontWeight: 600 }} />
-                <Legend wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
-                <Bar dataKey="Active" fill={CHART.green} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Total" fill={CHART.blue} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        <div className="ut-card ut-card-lg p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-text-primary">Gender Diversity</h2>
-            <HrStatusPill tone="purple">{genderTotal.toLocaleString()} people</HrStatusPill>
-          </div>
-          {diversity.isLoading ? (
-            <div className="h-[280px] animate-pulse rounded-lg bg-bg-base" />
-          ) : genderData.length === 0 ? (
-            <EmptyChart label="No diversity data" />
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={genderData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={58}
-                  outerRadius={88}
-                  paddingAngle={2}
-                >
-                  {genderData.map((_, i) => (
-                    <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <Legend wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* ── Attrition line ──────────────────────────────────────────────────── */}
-      <div className="mt-5 ut-card ut-card-lg p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-text-primary">Monthly Attrition</h2>
-          <span className="text-xs text-text-tertiary">
-            {format(subMonths(today, 11), 'MMM yyyy')} – {format(today, 'MMM yyyy')}
-          </span>
-        </div>
-        {attrition.isLoading ? (
-          <div className="h-[260px] animate-pulse rounded-lg bg-bg-base" />
-        ) : attritionLineData.length === 0 ? (
-          <EmptyChart label="No attrition data in this window" />
-        ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={attritionLineData} margin={{ top: 4, right: 24, left: -10, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} unit="%" />
-              <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#111827', fontWeight: 600 }} />
-              <Legend wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
-              <Line type="monotone" dataKey="Attrition %" stroke="#059669" strokeWidth={2} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* ── Department headcount table ──────────────────────────────────────── */}
-      <div className="mt-5">
-        <TableCard>
-          <table className="hr-table">
-            <thead>
-              <tr>
-                <th>Department</th>
-                <th>Total</th>
-                <th>Active</th>
-                <th>On Notice</th>
-                <th>Probation</th>
-                <th>Share</th>
-              </tr>
-            </thead>
-            <tbody>
-              {headcount.isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}>
-                    {Array.from({ length: 6 }).map((__, j) => (
-                      <td key={j}>
-                        <div className="h-4 w-16 animate-pulse rounded bg-bg-base" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : headcountRows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-10 text-center text-sm text-text-tertiary">
-                    No department headcount to display.
-                  </td>
-                </tr>
-              ) : (
-                deptBarData.map((row) => {
-                  const src = headcountRows.find((r) => (r.department ?? '(No dept)') === row.name)!
-                  const share = totals.total > 0 ? Math.round((src.total / totals.total) * 100) : 0
-                  return (
-                    <tr key={row.name}>
-                      <td className="font-medium text-text-primary">{row.name}</td>
-                      <td>{src.total}</td>
-                      <td>{src.active}</td>
-                      <td>
-                        {src.on_notice > 0 ? (
-                          <HrStatusPill tone="orange">{src.on_notice}</HrStatusPill>
-                        ) : (
-                          <span className="text-text-tertiary">0</span>
-                        )}
-                      </td>
-                      <td>
-                        {src.probation > 0 ? (
-                          <HrStatusPill tone="info">{src.probation}</HrStatusPill>
-                        ) : (
-                          <span className="text-text-tertiary">0</span>
-                        )}
-                      </td>
-                      <td className="text-text-secondary">{share}%</td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </TableCard>
-      </div>
-
-      {!isLoading && !activeCompanyId && (
-        <p className="mt-6 text-center text-sm text-text-tertiary">
-          Select a company to view workforce analytics.
-        </p>
-      )}
-    </div>
-  )
-}
-
-function EmptyChart({ label }: { label: string }) {
-  return (
-    <div className="flex h-[260px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border-default text-text-tertiary">
-      <Building2 size={22} className="opacity-50" />
-      <p className="text-sm">{label}</p>
-    </div>
+    </DesignFrame>
   )
 }

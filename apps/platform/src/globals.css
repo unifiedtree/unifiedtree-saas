@@ -406,3 +406,13 @@ table td, table th,
 
 /* Settings pages (design/settings/SettingsKit.tsx): the "On this page" hover from the Payroll Settings design. */
 .ut-toc-idle:hover { background: #f1f5f9 !important; color: #0f172a !important }
+
+/* Report pages (Workforce Analytics design): hover states for chart columns, icon buttons and links. */
+.ut-bar-col:hover { background: #f0fdf4; }
+.ut-dl-btn:hover { border-color: #0f6e56 !important; color: #0f6e56 !important; background: #f0fdf4 !important; }
+.ut-link-btn:hover { color: #0a5240 !important; }
+.ut-row-hover:hover { background: #f8fafc; }
+.ut-report-card { transition: border-color .15s, box-shadow .15s, transform .15s; }
+.ut-report-card:hover { border-color: #6ee7b7 !important; box-shadow: 0 12px 28px -18px rgba(15,110,86,.45) !important; }
+.ut-report-card:hover .ut-report-go { color: #0f6e56 !important; }
+.ut-report-card:focus-visible { outline: 2px solid #10b981; outline-offset: 2px; }

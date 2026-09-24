@@ -343,3 +343,77 @@ Checked live: `e2e/recovery/live-design-settings.mjs`, 38/38:
 - **Workspace Settings:** every tab renders its sections. Security has two "Coming soon" sections. Danger zone links are email links only.
 - **Phone width:** no sideways scroll.
 - **Reader:** their own profile works, and the danger zone stays closed.
+
+## 9. Workforce Analytics, Reports Center and the six reports (`/hrms/workforce-analytics`, `/hrms/reports`, `/hrms/reports/*`): done
+
+Design: `docs/Designs/UnifiedTree Workforce Analytics (offline).html`. It draws one page, Workforce Analytics, in seven states:
+- ready
+- loading
+- no company chosen
+- no results
+- error
+- company list not allowed
+- no permission
+
+Its demo data is labelled "for the Reports template". It includes late marks, attendance, leave balances and a list of recent exports. So the same layout is used for every report page, and for a Reports Center that has no design of its own.
+
+How it's built:
+- `scripts/design-build.mjs` reads the new export: the page is its template. The view is generated as `src/design/dc/WorkforceAnalytics.view.tsx`; the logic is hand-written in `WorkforceAnalytics.tsx`.
+- The build makes three changes to the markup:
+  - Each chart is wrapped in its own permission.
+  - The fixed "504 Gateway Timeout" message becomes the real error.
+  - The attrition chart gets room for its top axis label.
+- `src/modules/hrms/analytics/WorkforceAnalytics.tsx` loads the data and does the exports.
+- `src/modules/hrms/reports/ReportKit.tsx` holds the shared report parts, copied from the design: the page frame with its seven states, the Export menu, the filter bar, stat cards, chart cards, bar/line/donut charts and a table that becomes cards on a phone.
+- The six report pages and the Reports Center (`ReportsIndex.tsx`) are built from it. `ReportShell.tsx` is gone.
+- `src/shared/export/` holds the exports:
+  - CSV
+  - a real `.xlsx` writer (no library)
+  - chart PNGs drawn from the same numbers
+  - a print-ready snapshot
+  - the "Recent downloads" list
+- `useReportCompany` shares the company filter through `?co=` (old `?company=` links still work). If a role can't list companies, it uses the person's own company and locks the picker.
+
+**Who sees what:**
+- **Workforce Analytics:** opens with any of `hrms.report.headcount`, `hrms.report.attrition` or `hrms.report.diversity`. Each chart, stat card and table column shows only with its own permission; gender comes only from the diversity report.
+- **Department clicks:** open the Workforce Directory only for people with `hrms.employee.read`.
+- **Report pages:** each keeps its own permission. The Reports Center shows only the cards you may open.
+- **Nav fix:** the Workforce Analytics nav entry now also appears to non-admin roles that hold a report permission (FINANCE_LEAD had all five report permissions and couldn't see it).
+- **Search fix:** search offered Workforce Analytics to anyone with `hrms.employee.read`; it now uses the report permissions.
+
+**Checked live:** `e2e/recovery/live-design-reports.mjs`, 56/56.
+- Workforce Analytics:
+  - headcount and this month's exits match the database
+  - no one is dropped from the gender split
+  - department CSV, `.xlsx` workbook, chart PNG and PDF snapshot all work
+  - a department click opens the directory filtered to it
+- All six reports render. Server CSV and `.xlsx` download from each.
+- Reports Center:
+  - every card shows
+  - Recent downloads lists the files
+  - a card keeps the chosen company
+- No sideways scroll on a phone.
+- FINANCE_LEAD sees and opens Workforce Analytics.
+- Reader and manager are kept out, and no report API is called for them.
+
+**Backend fixes** (`ReportService`; running locally, pushed to main):
+
+| Report | Was | Now |
+|---|---|---|
+| Headcount | Filtered on `date_of_termination`, which the exit flow never sets, so every exited person was still counted (12 of 32 locally). | Leaving is by status plus last working day; someone on notice still counts. Adds `department_id` for drill-down. |
+| Attrition | Counted people still serving notice as exits. "Resignations" only matched `RESIGNED`, which the exit flow never uses. Months without exits were missing. The rate divided by a count that included exited people. | An exit is `EXITED`, `TERMINATED` or `RESIGNED`, dated by last working day. Every month in the range is returned. New `other_exits` and month-end `headcount`. The rate is exits over the month's average headcount. |
+| Diversity | Counted only `ACTIVE` people and silently dropped anyone without a gender. | Counts active, probation and notice. Missing gender is `NOT_SPECIFIED`. Adds `department_id`. |
+
+| Item | Status | Detail |
+|---|---|---|
+| Workforce Analytics page (all seven states, charts, table, mobile cards) | Done | "Company list not allowed" couldn't be tested live: every seeded role that can see reports can also list companies. |
+| Export → Dashboard snapshot (PDF) | Done (browser) | Opens a print-ready page; the browser's "Save as PDF" writes the file. *Needs:* server-side PDF for a direct download and for scheduled emails. |
+| Export → Excel and CSV; chart PNGs | Done | Excel and PNG are built in the browser from the numbers on screen. Report CSVs come from the server routes. |
+| Recent downloads (Reports Center) | Partial | Lists downloads made in this browser. *Needs:* a server export log (who downloaded what, when) for a shared, auditable history. |
+| Attrition split (resigned / terminated / other) | Partial | The exit flow marks people `EXITED` without saying whether they resigned, so most exits show as "other". *Needs:* an exit type on the exit flow. |
+| Headcount on a past date | Partial | Who was employed is correct for any date. The active/notice/probation split uses today's status. *Needs:* status history. |
+| "No department" click | Partial | Opens the company's whole directory; the directory has no "no department" filter. *Needs:* that filter. |
+| "N in directory" (Total headcount card) | As designed | Counts every record in the directory, including people who have left. |
+| Headcount CSV | Changed | Now also has a `department_id` column. |
+
+**Still to do in the backend batch:** the headcount query briefly carried gender counts too. They were removed so gender stays behind the diversity permission, and that goes live with the next backend rebuild.

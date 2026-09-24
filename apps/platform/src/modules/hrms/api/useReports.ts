@@ -4,6 +4,8 @@ import { apiJson } from '@/core/api/client'
 // ── Response interfaces (column names match backend SQL exactly) ───────────────
 
 export interface HeadcountRow {
+  /** Null for people without a department. */
+  department_id?: string | null
   department: string | null
   total: number
   active: number
@@ -16,6 +18,10 @@ export interface AttritionRow {
   exits: number
   resignations: number
   terminations: number
+  /** Exits that aren't a resignation or termination (the workforce exit flow marks people EXITED). */
+  other_exits?: number
+  /** People employed at the month's end (today, for the current month). */
+  headcount?: number
   attrition_pct: number
 }
 
@@ -51,6 +57,7 @@ export interface LateMarkRow {
 }
 
 export interface DiversityRow {
+  department_id?: string | null
   department: string | null
   gender: string
   count: number
