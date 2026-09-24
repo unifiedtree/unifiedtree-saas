@@ -1,4 +1,4 @@
-import { CompanyAdminDashboard } from './CompanyAdminDashboard'
+import { AdminDashboardContainer } from './dashboard/AdminDashboardContainer'
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -916,5 +916,5 @@ const RoleDashboard: React.FC = () => {
 // Company-admin recovery leaves the existing staff dashboard behavior intact.
 export const HrmsDashboard: React.FC = () => {
   const { isAdmin } = useRoles()
-  return isAdmin ? <CompanyAdminDashboard /> : <RoleDashboard />
+  return isAdmin ? <AdminDashboardContainer /> : <RoleDashboard />
 }

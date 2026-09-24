@@ -121,7 +121,7 @@ function decode(s) {
 const camel = (s) => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
 const WHOLE = /^\s*\{\{\s*([\s\S]+?)\s*\}\}\s*$/
 const EVENT_MAP = { onclick: 'onClick', onchange: 'onChange', oninput: 'onInput', onsubmit: 'onSubmit', onkeydown: 'onKeyDown', onkeyup: 'onKeyUp', onkeypress: 'onKeyPress', onmousedown: 'onMouseDown', onmouseup: 'onMouseUp', onmouseenter: 'onMouseEnter', onmouseleave: 'onMouseLeave', onfocus: 'onFocus', onblur: 'onBlur', ondoubleclick: 'onDoubleClick', onmousemove: 'onMouseMove', onmouseover: 'onMouseOver', onmouseout: 'onMouseOut', onpointerdown: 'onPointerDown', onpointerup: 'onPointerUp', onpointerenter: 'onPointerEnter', onpointerleave: 'onPointerLeave', onscroll: 'onScroll', onwheel: 'onWheel' }
-const NUMERIC = new Set(['tabIndex', 'rows', 'cols', 'maxLength', 'minLength', 'colSpan', 'rowSpan', 'span', 'size'])
+const NUMERIC = new Set(['tabIndex', 'rows', 'cols', 'maxLength', 'minLength', 'colSpan', 'rowSpan', 'span', 'size', 'aria-valuemin', 'aria-valuemax', 'aria-valuenow', 'aria-level', 'aria-setsize', 'aria-posinset', 'aria-rowcount', 'aria-colcount', 'aria-rowindex', 'aria-colindex'])
 const DS_SOURCES = {
   HrButton: 'hr', HrStatusPill: 'hr', HrAvatar: 'hr', HrPageHeader: 'hr', HrDrawer: 'hr', HrSelect: 'hr', HrTabs: 'hr', TableCard: 'hr', HrStatCard: 'hr', FilterBar: 'hr', HrTabPanel: 'hr',
   DataTable: 'DataTable', EmptyState: 'EmptyState', SkeletonBlock: 'SkeletonCard', HrPagination: 'HrPagination',
@@ -317,7 +317,7 @@ function emit(node, scope, depth) {
 const tree = parse(tpl)
 const body = emitChildren(tree.children, [], 3)
 
-const imports = ["import { Fragment } from 'react'"]
+const imports = usesArr ? ["import { Fragment } from 'react'"] : []
 const byMod = {}
 for (const c of used) (byMod[DS_SOURCES[c] || 'unknown'] ||= []).push(c)
 if (byMod.hr) imports.push(`import { ${byMod.hr.sort().join(', ')} } from '@/shared/components/hr'`)

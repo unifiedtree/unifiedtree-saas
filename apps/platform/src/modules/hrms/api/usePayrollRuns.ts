@@ -103,7 +103,7 @@ const KEY = ['hrms', 'payroll', 'runs'] as const
 
 // ── Queries ─────────────────────────────────────────────────────────────────
 
-export function useRuns(filters: RunFilters = {}) {
+export function useRuns(filters: RunFilters = {}, opts?: { enabled?: boolean }) {
   const qs = new URLSearchParams()
   if (filters.companyId) qs.set('companyId', filters.companyId)
   if (filters.year) qs.set('year', String(filters.year))
@@ -113,6 +113,7 @@ export function useRuns(filters: RunFilters = {}) {
     queryKey: [...KEY, 'list', filters],
     queryFn: () => apiJson<PayrollRun[]>(`/v1/payroll/runs${suffix}`),
     staleTime: 30_000,
+    enabled: opts?.enabled ?? true,
   })
 }
 
