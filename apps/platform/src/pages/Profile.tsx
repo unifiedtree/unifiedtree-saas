@@ -1,9 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Camera, Loader2 } from 'lucide-react'
-import { HrPageHeader, HrButton, HrStatusPill } from '@/shared/components/hr'
+import { useQuery } from '@tanstack/react-query'
+import { format } from 'date-fns'
+import { Camera, Loader2, Mail, Phone, MapPin, UserX } from 'lucide-react'
+import { usePermission, P } from '@unifiedtree/sdk'
+import { HrPageHeader, HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { SkeletonBlock } from '@/shared/components/SkeletonCard'
+import { EmptyState } from '@/shared/components/EmptyState'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
+import { apiJson } from '@/core/api/client'
+import { useDepartments } from '@/modules/hrms/api/useOrg'
+import { useEmployeesByIds, type EmploymentStatus } from '@/modules/hrms/api/useWorkforce'
 import {
   useCurrentUser,
   useUpdateCurrentUser,
@@ -44,6 +51,38 @@ const MAX_AVATAR_BYTES = 5 * 1024 * 1024 // 5 MB
 // through rather than blocked client-side.
 const ACCEPTED_TYPES = 'image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,image/gif,image/bmp'
 
+/**
+ * The signed-in user's own employee row, as GET /v1/employees/me returns it
+ * (backend EmployeeResponse — only the fields this page reads). That endpoint
+ * is isAuthenticated() and resolves the row from the JWT, so it works for a
+ * plain EMPLOYEE too, unlike /v1/hrms/employees/{id} (hrms.employee.read).
+ */
+interface MyEmployee {
+  id: string
+  companyId: string
+  employeeCode: string
+  jobTitle?: string | null
+  employmentType?: string | null
+  employmentStatus?: EmploymentStatus | null
+  dateOfJoining?: string | null
+  departmentId?: string | null
+  managerId?: string | null
+  workLocation?: string | null
+}
+
+const STATUS_PILL: Record<EmploymentStatus, { tone: PillTone; label: string }> = {
+  ACTIVE: { tone: 'ok', label: 'Active' },
+  PROBATION: { tone: 'pink', label: 'Probation' },
+  NOTICE_PERIOD: { tone: 'warn', label: 'On notice' },
+  SUSPENDED: { tone: 'red', label: 'Suspended' },
+  EXITED: { tone: 'gray', label: 'Exited' },
+  TERMINATED: { tone: 'red', label: 'Terminated' },
+}
+
+const EMPLOYMENT_TYPE_LABEL: Record<string, string> = {
+  FULL_TIME: 'Full time', PART_TIME: 'Part time', CONTRACT: 'Contract', INTERN: 'Intern', CONSULTANT: 'Consultant',
+}
+
 function humanUploadError(status: number, fallback = 'Please try again.'): string {
   if (status === 413) return 'That image is over 5 MB. Please pick a smaller file.'
   if (status === 415) return "This image format isn't supported. Try JPG, PNG, WebP, HEIC or GIF."
@@ -58,6 +97,35 @@ export const Profile: React.FC = () => {
   const update = useUpdateCurrentUser()
   const upload = useUploadAvatar()
   const { fullName, initials } = useDisplayName()
+
+  // Employment details come from the user's linked employee row. Accounts with
+  // no employee record (platform admins) skip the fetch and get an empty state
+  // — never someone else's data or placeholder values.
+  const employeeLinked = !!user?.employeeId
+  const employee = useQuery({
+    queryKey: ['employee', 'me'],
+    queryFn: () => apiJson<MyEmployee>('/v1/employees/me'),
+    enabled: employeeLinked,
+    staleTime: 60_000,
+  })
+  const emp = employee.data
+
+  // Department / manager ids resolve to names only through endpoints the
+  // caller may read; without the permission the row is hidden, not guessed.
+  const canReadDepartments = usePermission(P.HRMS_DEPARTMENT_READ)
+  const canReadEmployees = usePermission(P.HRMS_EMPLOYEE_READ)
+  const departments = useDepartments(emp?.departmentId && canReadDepartments ? emp.companyId : '')
+  const manager = useEmployeesByIds(emp?.managerId ? [emp.managerId] : [], {
+    enabled: !!emp?.managerId && canReadEmployees,
+  })
+  const departmentName = emp?.departmentId
+    ? departments.data?.find((d) => d.id === emp.departmentId)?.name
+    : undefined
+  const managerRow = emp?.managerId ? manager.data?.find((m) => m.id === emp.managerId) : undefined
+  const managerName = managerRow
+    ? [managerRow.firstName, managerRow.lastName].filter(Boolean).join(' ')
+    : undefined
+  const statusPill = emp?.employmentStatus ? STATUS_PILL[emp.employmentStatus] : undefined
 
   // Editable draft — never written directly to the query cache. On Save we
   // diff against the server row and only send changed fields.
@@ -204,20 +272,24 @@ export const Profile: React.FC = () => {
                   )}
                 </div>
                 <h3 className="text-lg font-bold text-text-primary">{fullName}</h3>
-                <p className="text-sm text-text-secondary mb-3">Senior Software Engineer</p>
-                
-                <HrStatusPill tone="ok">Active Employee</HrStatusPill>
-                
+                {emp?.jobTitle && <p className="text-sm text-text-secondary mb-3">{emp.jobTitle}</p>}
+
+                {statusPill && <HrStatusPill tone={statusPill.tone}>{statusPill.label}</HrStatusPill>}
+
                 <div className="mt-5 border-t border-border-default pt-4 text-left text-sm text-text-secondary space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-text-tertiary">✉</span> {user.email}
+                  <div className="flex items-center gap-2 break-all">
+                    <Mail size={14} className="shrink-0 text-text-tertiary" /> {user.email}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-text-tertiary">📞</span> {user.phone || '+91 98765 43210'}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-text-tertiary">📍</span> Bangalore, India
-                  </div>
+                  {user.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone size={14} className="shrink-0 text-text-tertiary" /> {user.phone}
+                    </div>
+                  )}
+                  {emp?.workLocation && (
+                    <div className="flex items-center gap-2">
+                      <MapPin size={14} className="shrink-0 text-text-tertiary" /> {emp.workLocation}
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-5 flex justify-center">
@@ -228,55 +300,47 @@ export const Profile: React.FC = () => {
                 </div>
               </div>
 
-              {/* Right Col: Details */}
-              <div className="md:col-span-2 flex flex-col gap-6">
-                <div className="rounded-2xl border border-border-default bg-bg-base p-6 shadow-sm">
-                  <h3 className="mb-4 border-b border-border-default pb-3 text-sm font-semibold text-text-primary">
-                    Employment Information (Static)
-                  </h3>
-                  <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
-                    <div>
-                      <p className="text-xs text-text-tertiary mb-0.5">Employee ID</p>
-                      <p className="font-medium text-text-primary">EMP-2023-085</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-text-tertiary mb-0.5">Date of Joining</p>
-                      <p className="font-medium text-text-primary">Jan 15, 2023</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-text-tertiary mb-0.5">Department</p>
-                      <p className="font-medium text-text-primary">Engineering</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-text-tertiary mb-0.5">Reporting Manager</p>
-                      <p className="font-medium text-text-primary">Sarah Jenkins</p>
-                    </div>
+              {/* Right Col: Employment — GET /v1/employees/me. The old bank card
+                  is gone: it only ever showed placeholder values. */}
+              <div className="md:col-span-2 rounded-2xl border border-border-default bg-bg-base p-6 shadow-sm">
+                <h3 className="mb-4 border-b border-border-default pb-3 text-sm font-semibold text-text-primary">
+                  Employment
+                </h3>
+                {!employeeLinked ? (
+                  <EmptyState
+                    icon={UserX}
+                    title="No employee record linked to this login"
+                    description="Employment details appear here once HR links your account to an employee record."
+                  />
+                ) : employee.isLoading ? (
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-6" role="status" aria-label="Loading employment details">
+                    {[...Array(4)].map((_, i) => <SkeletonBlock key={i} className="h-10" />)}
                   </div>
-                </div>
-
-                <div className="rounded-2xl border border-border-default bg-bg-base p-6 shadow-sm">
-                  <h3 className="mb-4 border-b border-border-default pb-3 text-sm font-semibold text-text-primary">
-                    Bank Details (Static)
-                  </h3>
-                  <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
-                    <div>
-                      <p className="text-xs text-text-tertiary mb-0.5">Bank Name</p>
-                      <p className="font-medium text-text-primary">HDFC Bank</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-text-tertiary mb-0.5">Account Number</p>
-                      <p className="font-medium text-text-primary">XXXX-XXXX-4567</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-text-tertiary mb-0.5">IFSC Code</p>
-                      <p className="font-medium text-text-primary">HDFC0001234</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-text-tertiary mb-0.5">PAN Number</p>
-                      <p className="font-medium text-text-primary">ABCDE1234F</p>
-                    </div>
+                ) : employee.isError || !emp ? (
+                  <div className="rounded-xl border border-[#FCA5A5] bg-[#FEF2F2] p-4 text-sm text-[#B91C1C]">
+                    <p className="font-semibold">Couldn't load your employment details</p>
+                    <button
+                      onClick={() => employee.refetch()}
+                      className="mt-3 rounded-lg border border-[#FCA5A5] px-3 py-1.5 text-xs font-medium hover:bg-[#FEE2E2]"
+                    >
+                      Try again
+                    </button>
                   </div>
-                </div>
+                ) : (
+                  <dl className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                    <InfoItem label="Employee ID" value={emp.employeeCode} />
+                    <InfoItem
+                      label="Date of joining"
+                      value={emp.dateOfJoining ? format(new Date(`${emp.dateOfJoining}T00:00:00`), 'd MMM yyyy') : undefined}
+                    />
+                    <InfoItem
+                      label="Employment type"
+                      value={emp.employmentType ? EMPLOYMENT_TYPE_LABEL[emp.employmentType] ?? emp.employmentType : undefined}
+                    />
+                    {(!emp.departmentId || departmentName) && <InfoItem label="Department" value={departmentName} />}
+                    {(!emp.managerId || managerName) && <InfoItem label="Reporting manager" value={managerName} />}
+                  </dl>
+                )}
               </div>
             </div>
 
@@ -370,6 +434,14 @@ const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode 
     <label className="mb-1.5 block text-[13px] font-semibold text-text-tertiary">{label}</label>
     {children}
     {hint && <p className="mt-1 text-[11px] text-text-tertiary">{hint}</p>}
+  </div>
+)
+
+/** One read-only label/value pair in the Employment card; "—" when unset. */
+const InfoItem: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
+  <div>
+    <dt className="text-xs text-text-tertiary mb-0.5">{label}</dt>
+    <dd className="font-medium text-text-primary">{value || '—'}</dd>
   </div>
 )
 

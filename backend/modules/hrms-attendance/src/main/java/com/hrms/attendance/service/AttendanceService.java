@@ -780,6 +780,67 @@ public class AttendanceService {
         }
     }
 
+    /**
+     * The shift in force for an employee on a date, as absolute instants.
+     * {@code expectedStart} is the scheduled check-in on the attendance date;
+     * {@code expectedEnd} rolls over to the next day for overnight shifts.
+     */
+    public record ShiftWindow(String shiftName, Instant expectedStart, Instant expectedEnd, int graceMinutes) {}
+
+    /**
+     * Bulk-fetch each employee's shift window for a date — same "latest active
+     * assignment in force on the date" predicate as
+     * {@link #getShiftEndInstantsForEmployees}, plus the shift's name, start and
+     * grace, so a roster can say not just that someone is LATE but how late
+     * against which shift. Employees without an assignment are absent from the map.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, ShiftWindow> getShiftWindowsForEmployees(List<UUID> employeeIds, LocalDate onDate) {
+        if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) {
+            return Map.of();
+        }
+        String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
+        String sql = ("""
+                SELECT esa.employee_id, sp.name, sp.start_time, sp.end_time, sp.grace_period_minutes
+                  FROM attendance.employee_shift_assignments esa
+                  JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id AND sp.tenant_id = esa.tenant_id
+                 WHERE esa.employee_id IN (%s)
+                   AND esa.effective_from <= ?
+                   AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
+                   AND sp.is_active = TRUE
+                   AND esa.effective_from = (
+                       SELECT MAX(esa2.effective_from)
+                         FROM attendance.employee_shift_assignments esa2
+                         JOIN attendance.shift_policies sp2 ON sp2.id = esa2.shift_policy_id
+                        WHERE esa2.employee_id = esa.employee_id
+                          AND esa2.effective_from <= ?
+                          AND (esa2.effective_to IS NULL OR esa2.effective_to >= ?)
+                          AND sp2.is_active = TRUE
+                   )
+                """).formatted(inClause);
+        Object[] args = new Object[employeeIds.size() + 4];
+        for (int i = 0; i < employeeIds.size(); i++) {
+            args[i] = employeeIds.get(i);
+        }
+        args[employeeIds.size()] = onDate;
+        args[employeeIds.size() + 1] = onDate;
+        args[employeeIds.size() + 2] = onDate;
+        args[employeeIds.size() + 3] = onDate;
+        Map<UUID, ShiftWindow> out = new HashMap<>();
+        jdbcTemplate.query(sql, rs -> {
+            UUID eid = (UUID) rs.getObject("employee_id");
+            java.sql.Time start = rs.getTime("start_time"), end = rs.getTime("end_time");
+            if (eid != null && start != null && end != null) {
+                int grace = rs.getInt("grace_period_minutes");
+                Instant startAt = onDate.atTime(start.toLocalTime()).atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant();
+                out.put(eid, new ShiftWindow(rs.getString("name"), startAt,
+                        ShiftTiming.expectedEnd(onDate, start.toLocalTime(), end.toLocalTime()),
+                        rs.wasNull() ? 0 : grace));
+            }
+        }, args);
+        return out;
+    }
+
     /** Bulk-fetch expected shift-end instants, including overnight date rollover. */
     @Transactional(readOnly = true)
     public Map<UUID, Instant> getShiftEndInstantsForEmployees(List<UUID> employeeIds, LocalDate onDate) {

@@ -345,7 +345,7 @@ export function EmployeeOverview({ emp, onOpenTab }: {
           here would mean reading the whole workspace and filtering in the browser. Use{' '}
           <button type="button" onClick={() => navigate('/hrms/leave')} className="font-semibold text-[#047857] hover:text-[#059669]">Leave</button>{' '}
           and{' '}
-          <button type="button" onClick={() => navigate('/hrms/expense')} className="font-semibold text-[#047857] hover:text-[#059669]">Expenses</button>{' '}
+          <button type="button" onClick={() => navigate('/hrms/expenses')} className="font-semibold text-[#047857] hover:text-[#059669]">Expenses</button>{' '}
           in the meantime.
         </p>
       </div>

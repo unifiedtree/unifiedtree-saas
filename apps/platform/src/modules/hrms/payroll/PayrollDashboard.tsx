@@ -89,6 +89,13 @@ export const PayrollDashboard: React.FC = () => {
   // salary-value signal on its own.
   const redactRupees = !isAdmin
 
+  // TDS Liability is the backend's sum of payslip lines coded "TDS". The
+  // payroll engine does not compute TDS, so the sum is only non-zero when a
+  // TDS component actually lands on payslips — a bare ₹0 would read as
+  // "no tax due". Show "—" and say why instead; keep the real sum otherwise.
+  const tdsAmount = kpis ? Number(kpis.tdsLiability ?? 0) : 0
+  const hasTds = tdsAmount !== 0
+
   return (
     <div className="mx-auto max-w-6xl p-6 sm:p-8">
       <HrPageHeader
@@ -141,9 +148,17 @@ export const PayrollDashboard: React.FC = () => {
           icon={<Banknote size={18} />}
           color="blue"
           loading={kpisLoading && !redactRupees}
-          value={redactRupees ? '—' : (kpis ? inr(kpis.tdsLiability) : '—')}
+          value={redactRupees ? '—' : (kpis && hasTds ? inr(tdsAmount) : '—')}
           label="TDS Liability"
-          sub={redactRupees ? 'Restricted' : (kpis ? kpis.currentPeriodLabel : 'No runs yet')}
+          sub={
+            redactRupees
+              ? 'Restricted'
+              : !kpis
+                ? 'No runs yet'
+                : hasTds
+                  ? kpis.currentPeriodLabel
+                  : `No TDS component on ${kpis.currentPeriodLabel} payslips`
+          }
         />
       </div>
 

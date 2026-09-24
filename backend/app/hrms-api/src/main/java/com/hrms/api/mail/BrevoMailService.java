@@ -57,7 +57,7 @@ public class BrevoMailService implements MailService {
     @Override
     public void send(EmailMessage msg) {
         if (apiKey == null || apiKey.isBlank()) {
-            throw new MailDeliveryException("BREVO_API_KEY is not set. Cannot send email.", null);
+            throw new MailDeliveryException("BREVO_API_KEY is not set. Cannot send email.", null, true);
         }
 
         Map<String, Object> to = new LinkedHashMap<>();
@@ -97,7 +97,9 @@ public class BrevoMailService implements MailService {
 
             if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
                 throw new MailDeliveryException(
-                    "Brevo API error " + resp.statusCode() + " sending to " + msg.to() + ": " + resp.body(), null);
+                    "Brevo API error " + resp.statusCode() + " sending to " + msg.to() + ": " + resp.body(), null,
+                    // 4xx: Brevo refused the request, nothing was queued. 5xx: unknown.
+                    resp.statusCode() >= 400 && resp.statusCode() < 500);
             }
             log.info("Brevo email sent to {}: {} (status {})", msg.to(), msg.subject(), resp.statusCode());
         } catch (MailDeliveryException e) {

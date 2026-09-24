@@ -1,4 +1,5 @@
-﻿import { useState } from 'react'
+﻿import { useEffect, useState, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { BadgeCheck, Clock, FileText, Plus, Trash2, Wallet } from 'lucide-react'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
@@ -7,7 +8,7 @@ import { HrAvatar, HrButton, HrDrawer, HrPageHeader, HrStatCard, HrStatusPill, H
 import { DataTable } from '@/shared/components/DataTable'
 import { HrPagination, useClampedPage } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
-import { useEmployeeDirectory, type WorkforceEmployee } from './api/useWorkforce'
+import { useEmployeeDirectory, useWorkforceEmployee, type WorkforceEmployee } from './api/useWorkforce'
 import { FNF_PAGE_SIZE, inr, useApproveSettlement, useCancelSettlement, useFnfSettlement, useFnfSettlements, usePaySettlement, useProcessSettlement, type FnfComponentType, type FnfSettlement, type FnfStatus } from './api/useFnf'
 
 const tones: Record<FnfStatus, PillTone> = { INITIATED: 'gray', PROCESSED: 'warn', APPROVED: 'ok', PAID: 'teal', CANCELLED: 'gray' }
@@ -17,41 +18,66 @@ function Failure({ error, retry }: { error: unknown; retry?: () => void }) {
   return <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"><p>{error instanceof Error ? error.message : 'Unable to load settlement information.'}</p>{retry && <HrButton size="sm" variant="ghost" className="mt-2" onClick={retry}>Try again</HrButton>}</div>
 }
 
+// Lifecycle tabs over the settlements ledger. `status: null` is the unfiltered "All" view.
+type LedgerTab = 'pending-approval' | 'pending-payment' | 'settled' | 'all'
+const LEDGER_TABS: { key: LedgerTab; label: string; status: FnfStatus | null; empty: string }[] = [
+  { key: 'pending-approval', label: 'Pending approval', status: 'PROCESSED', empty: 'No settlements are waiting for approval' },
+  { key: 'pending-payment', label: 'Pending payment', status: 'APPROVED', empty: 'No approved settlements are waiting for payment' },
+  { key: 'settled', label: 'Settled', status: 'PAID', empty: 'No settlements have been paid yet' },
+  { key: 'all', label: 'All', status: null, empty: '' },
+]
+const isLedgerTab = (key: string | null): key is LedgerTab => LEDGER_TABS.some(item => item.key === key)
+
 export function FullAndFinal() {
   const canRead = usePermission('hrms.fnf.read')
   const canProcess = usePermission('hrms.fnf.process')
-  const [tab, setTab] = useState(canRead ? 'settlements' : 'create')
+  // The tab lives in the URL so the Exit page can deep-link into ?tab=create&employeeId=…
+  // ("settlements" is the old single-list tab key and still lands on All).
+  const [params, setParams] = useSearchParams()
+  const requested = params.get('tab') === 'settlements' ? 'all' : params.get('tab')
+  const tab = requested === 'create' && canProcess ? 'create' : isLedgerTab(requested) && canRead ? requested : canRead ? 'pending-approval' : 'create'
+  const setTab = (key: string) => setParams(current => { const next = new URLSearchParams(current); next.set('tab', key); if (key !== 'create') next.delete('employeeId'); return next }, { replace: true })
   const [selectedId, setSelectedId] = useState('')
-  const tabs = [...(canRead ? [{ key: 'settlements', label: 'Settlements' }] : []), ...(canProcess ? [{ key: 'create', label: 'Create settlement' }] : [])]
+  const create = canProcess ? <CreateSettlement initialEmployeeId={params.get('employeeId') || undefined} onCreated={id => { if (canRead) { setTab('pending-approval'); setSelectedId(id) } }} /> : null
   return <div className="mx-auto max-w-7xl space-y-5 p-6 sm:p-8">
     <HrPageHeader crumb="Employee exit" title="Full & final settlements" subtitle="Review a leaver's earnings and deductions, approve their settlement, and record completed payment." />
-    {!tabs.length ? <p className="ut-card p-6 text-text-secondary">You do not have access to full & final settlements.</p> : <><HrTabs tabs={tabs} active={tab} onChange={setTab} />
-      {tab === 'settlements' && canRead && <HrTabPanel tabKey="settlements"><Settlements onOpen={setSelectedId} /></HrTabPanel>}
-      {tab === 'create' && canProcess && <HrTabPanel tabKey="create"><CreateSettlement onCreated={id => { if (canRead) { setTab('settlements'); setSelectedId(id) } }} /></HrTabPanel>}
-    </>}
+    {canRead ? <Settlements tab={tab} onTab={setTab} canProcess={canProcess} create={create} onOpen={setSelectedId} />
+      : canProcess ? <><HrTabs tabs={[{ key: 'create', label: 'Create settlement' }]} active="create" onChange={setTab} /><HrTabPanel tabKey="create">{create}</HrTabPanel></>
+      : <p className="ut-card p-6 text-text-secondary">You do not have access to full & final settlements.</p>}
     {selectedId && canRead && <SettlementDrawer id={selectedId} onClose={() => setSelectedId('')} />}
   </div>
 }
 
-function Settlements({ onOpen }: { onOpen: (id: string) => void }) {
+function Settlements({ tab, onTab, canProcess, create, onOpen }: { tab: string; onTab: (key: string) => void; canProcess: boolean; create: ReactNode; onOpen: (id: string) => void }) {
   const [page, setPage] = useState(0)
   const query = useFnfSettlements(page)
   useClampedPage(page, query.data?.totalPages, setPage)
-  const rows = query.data?.content ?? []
-  const paid = rows.filter(row => row.status === 'PAID').reduce((sum, row) => sum + row.netSettlement, 0)
-  if (query.isError) return <Failure error={query.error} retry={() => query.refetch()} />
-  return <div className="space-y-5"><div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+  const pageRows = query.data?.content ?? []
+  // GET /v1/fnf/settlements takes no status parameter (FnfController#list passes only
+  // the Pageable, although FnfService#getByStatus exists), so each lifecycle tab filters
+  // the page already fetched. The pager still walks the server's full ledger; when the
+  // ledger spans more than one page the tab counts are hidden and a note says the tab
+  // covers this page only, so a filtered page is never presented as the whole ledger.
+  const singlePage = (query.data?.totalPages ?? 0) <= 1
+  const ledgerTab = LEDGER_TABS.find(item => item.key === tab)
+  const rows = ledgerTab?.status ? pageRows.filter(row => row.status === ledgerTab.status) : pageRows
+  const tabs = [...LEDGER_TABS.map(item => ({ key: item.key, label: item.label, badge: query.data && singlePage ? (item.status ? pageRows.filter(row => row.status === item.status).length : query.data.totalElements) : undefined })), ...(canProcess ? [{ key: 'create', label: 'Create settlement' }] : [])]
+  const paid = pageRows.filter(row => row.status === 'PAID').reduce((sum, row) => sum + row.netSettlement, 0)
+  const empty = !query.data?.totalElements || !ledgerTab?.status ? 'No settlements yet. Create a settlement after recording the employee\'s exit.' : singlePage ? `${ledgerTab.empty}.` : `${ledgerTab.empty} on this page.`
+  return <><HrTabs tabs={tabs} active={tab} onChange={onTab} />
+    {tab === 'create' ? <HrTabPanel tabKey="create">{create}</HrTabPanel> : <HrTabPanel tabKey={tab}>{query.isError ? <Failure error={query.error} retry={() => query.refetch()} /> : <div className="space-y-5"><div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
     <HrStatCard icon={<FileText size={18} />} color="blue" value={query.data?.totalElements ?? 0} label="Total settlements" loading={query.isLoading} />
-    <HrStatCard icon={<Clock size={18} />} color="orange" value={rows.filter(row => row.status === 'PROCESSED').length} label="Awaiting approval" sub="On this page" loading={query.isLoading} />
-    <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={rows.filter(row => row.status === 'APPROVED').length} label="Approved" sub="On this page" loading={query.isLoading} />
+    <HrStatCard icon={<Clock size={18} />} color="orange" value={pageRows.filter(row => row.status === 'PROCESSED').length} label="Awaiting approval" sub="On this page" loading={query.isLoading} />
+    <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={pageRows.filter(row => row.status === 'APPROVED').length} label="Approved" sub="On this page" loading={query.isLoading} />
     <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(paid)} label="Payment recorded" sub="On this page" loading={query.isLoading} />
-  </div><TableCard footer={<HrPagination page={page} pageSize={FNF_PAGE_SIZE} totalElements={query.data?.totalElements ?? 0} totalPages={query.data?.totalPages ?? 0} onPageChange={setPage} />}><DataTable<FnfSettlement> data={rows} keyField="id" loading={query.isLoading} emptyMessage="No settlements yet. Create a settlement after recording the employee's exit." columns={[
+  </div>{ledgerTab?.status && !singlePage && <p className="text-sm text-text-secondary">Showing {rows.length} of the {pageRows.length} settlements on this page. Use the pager for older settlements.</p>}<TableCard footer={<HrPagination page={page} pageSize={FNF_PAGE_SIZE} totalElements={query.data?.totalElements ?? 0} totalPages={query.data?.totalPages ?? 0} onPageChange={setPage} />}><DataTable<FnfSettlement> data={rows} keyField="id" loading={query.isLoading} emptyMessage={empty} columns={[
     { key: 'employeeName', header: 'Employee', render: row => <HrAvatar name={row.employeeName || 'Employee record unavailable'} sub={row.employeeCode} /> },
     { key: 'lastWorkingDay', header: 'Last working day', render: row => date(row.lastWorkingDay) },
     { key: 'netSettlement', header: 'Net settlement', render: row => <span className="whitespace-nowrap font-semibold tabular-nums">{inr(row.netSettlement)}</span> },
     { key: 'status', header: 'Status', render: row => <HrStatusPill tone={tones[row.status]}>{label(row.status)}</HrStatusPill> },
     { key: 'actions', header: 'Details', render: row => <HrButton variant="ghost" size="sm" onClick={() => onOpen(row.id)}>Review settlement</HrButton> },
-  ]} /></TableCard></div>
+  ]} /></TableCard></div>}</HrTabPanel>}
+  </>
 }
 
 function SettlementDrawer({ id, onClose }: { id: string; onClose: () => void }) {
@@ -96,7 +122,8 @@ function SettlementDrawer({ id, onClose }: { id: string; onClose: () => void }) 
 }
 
 type DraftComponent = { label: string; type: FnfComponentType; amount: string }
-function CreateSettlement({ onCreated }: { onCreated: (id: string) => void }) {
+const isSeparated = (item: WorkforceEmployee) => item.employmentStatus === 'EXITED' || item.employmentStatus === 'TERMINATED'
+function CreateSettlement({ initialEmployeeId, onCreated }: { initialEmployeeId?: string; onCreated: (id: string) => void }) {
   const companies = useCompanies()
   const [companyId, setCompanyId] = useState('')
   const [status, setStatus] = useState<'EXITED' | 'TERMINATED'>('EXITED')
@@ -105,6 +132,17 @@ function CreateSettlement({ onCreated }: { onCreated: (id: string) => void }) {
   const canReadEmployee = usePermission(P.HRMS_EMPLOYEE_READ)
   const employees = useEmployeeDirectory({ companyId: companyId || undefined, status, search: search.trim() || undefined, page, pageSize: 10 }, { enabled: canReadEmployee })
   const [employee, setEmployee] = useState<WorkforceEmployee | null>(null)
+  // ?employeeId= (the Exit page's F&F hand-off) preselects that leaver once, and narrows
+  // the picker to their exit status and code so the selection is visible in the list.
+  const linked = useWorkforceEmployee(canReadEmployee ? initialEmployeeId : undefined)
+  const [appliedId, setAppliedId] = useState('')
+  useEffect(() => {
+    const item = linked.data
+    if (!item || appliedId === item.id) return
+    setAppliedId(item.id)
+    if (!isSeparated(item)) return
+    setEmployee(item); setStatus(item.employmentStatus as 'EXITED' | 'TERMINATED'); setCompanyId(''); setSearch(item.employeeCode || ''); setPage(0)
+  }, [linked.data, appliedId])
   const [components, setComponents] = useState<DraftComponent[]>([{ label: '', type: 'EARNING', amount: '' }])
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
@@ -130,6 +168,8 @@ function CreateSettlement({ onCreated }: { onCreated: (id: string) => void }) {
       <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Company<select className="ut-select mt-1" value={companyId} onChange={event => { setCompanyId(event.target.value); setPage(0) }}><option value="">All companies</option>{companies.data?.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><label className="text-sm font-medium">Exit status<select className="ut-select mt-1" value={status} onChange={event => { setStatus(event.target.value as 'EXITED' | 'TERMINATED'); setPage(0) }}><option value="EXITED">Exited</option><option value="TERMINATED">Terminated</option></select></label></div>
       {companies.isError && <Failure error={companies.error} retry={() => companies.refetch()} />}
       <label className="block text-sm font-medium">Find employee<input type="search" className="ut-input mt-1" placeholder="Search name, code or email" value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} /></label>
+      {linked.isError && <Failure error={linked.error} retry={() => linked.refetch()} />}
+      {linked.data && !isSeparated(linked.data) && <p role="status" className="rounded-lg border border-border-default p-3 text-sm text-text-secondary">{linked.data.firstName} {linked.data.lastName} ({linked.data.employeeCode}) is not marked as exited or terminated yet. Record their exit on the Resignation & exit page before creating a settlement.</p>}
       {!canReadEmployee ? <p className="text-sm text-text-secondary">Employee directory access is required to choose a leaver.</p> : employees.isError ? <Failure error={employees.error} retry={() => employees.refetch()} /> : <><div className="max-h-64 overflow-y-auto rounded-lg border border-border-default" aria-busy={employees.isFetching}>{employees.isLoading ? <p role="status" className="p-3 text-sm">Loading employees...</p> : !employees.data?.content.length ? <p className="p-3 text-sm text-text-secondary">No separated employees match this selection.</p> : employees.data.content.map(item => <button type="button" key={item.id} aria-pressed={employee?.id === item.id} onClick={() => { setEmployee(item); setReviewing(false) }} className={`block w-full border-b border-border-default p-3 text-left last:border-0 hover:bg-[#E6F4F1] ${employee?.id === item.id ? 'bg-[#E6F4F1]' : ''}`}><span className="block text-sm font-semibold">{item.firstName} {item.lastName}</span><span className="text-xs text-text-secondary">{item.employeeCode} - Last working day {date(item.lastWorkingDay)}</span></button>)}</div><HrPagination page={page} pageSize={10} totalElements={employees.data?.totalElements ?? 0} totalPages={employees.data?.totalPages ?? 0} onPageChange={setPage} /></>}
       {employee && <p className="rounded-lg bg-[#E6F4F1] p-3 text-sm text-[#0A5240]"><strong>Selected: {employee.firstName} {employee.lastName} ({employee.employeeCode})</strong><span className="mt-1 block">Last working day: {date(employee.lastWorkingDay)}</span></p>}
     </section>

@@ -7,17 +7,19 @@ import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
+  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, HrDrawer, type PillTone,
 } from '@/shared/components/hr'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { DataTable } from '@/shared/components/DataTable'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
 import { ReimbursementBatches } from './expense/ReimbursementBatches'
+import { EXPENSE_STATUS_LABEL } from './expense/expenseStatus'
 import {
   useMyClaims, usePendingExpenseApprovals, useExpenseClaim, useSubmitClaim, useExpenseDecision, useReimburseClaim,
   useExpensePolicies, useCreatePolicy, useUpdatePolicy, useDeletePolicy, useExpenseDashboardStats,
   inr, EXPENSE_CATEGORIES, EXPENSE_APPROVALS_PAGE_SIZE,
-  type ExpenseStatus, type ExpenseCategory, type ExpensePolicy,
+  type ExpenseStatus, type ExpenseCategory, type ExpensePolicy, type ExpenseClaim,
 } from './api/useExpense'
 
 const STATUS_TONE: Record<ExpenseStatus, PillTone> = {
@@ -71,20 +73,27 @@ export const Expense: React.FC = () => {
 
 
 function ExpenseDashboardCards({ enabled }: { enabled: boolean }) {
-  const { data, isLoading } = useExpenseDashboardStats(enabled)
+  const { data, isLoading, isError, refetch } = useExpenseDashboardStats(enabled)
   if (!enabled) return null
+  if (isError) {
+    return (
+      <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700">
+        Couldn't load the expense summary.{' '}
+        <button onClick={() => refetch()} className="font-semibold underline">Retry</button>
+      </div>
+    )
+  }
+  const toBeReimbursed = data?.toBeReimbursed ?? 0
+  const reimbursedThisMonth = data?.reimbursedThisMonth ?? 0
   return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 mb-5">
-      <div className="ut-card p-5 m-0">
-        <div className="text-[13px] font-semibold uppercase text-text-secondary mb-2">Pending Approvals</div>
-        <div className="text-[32px] font-bold text-text-primary mb-1">{isLoading ? '?' : data?.pendingApprovals ?? 0}</div>
-        <div className="text-[13px] text-orange-500">{isLoading ? 'Loading' : `${inr(data?.pendingApprovalAmount ?? 0)} awaiting decision`}</div>
-      </div>
-      <div className="ut-card p-5 m-0">
-        <div className="text-[13px] font-semibold uppercase text-text-secondary mb-2">To Be Reimbursed</div>
-        <div className="text-[32px] font-bold text-text-primary mb-1">{isLoading ? '?' : inr(data?.toBeReimbursedAmount ?? 0)}</div>
-        <div className="text-[13px] text-text-secondary">{data?.toBeReimbursed ?? 0} approved claim{(data?.toBeReimbursed ?? 0) === 1 ? '' : 's'}</div>
-      </div>
+    <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <HrStatCard icon={<Clock size={18} />} color="orange" value={data?.pendingApprovals ?? 0} label="Pending Approvals" loading={isLoading}
+        sub={`${inr(data?.pendingApprovalAmount ?? 0)} awaiting decision`} />
+      <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(data?.toBeReimbursedAmount ?? 0)} label="To Be Reimbursed" loading={isLoading}
+        sub={`${toBeReimbursed} approved claim${toBeReimbursed === 1 ? '' : 's'}`} />
+      {/* reimbursedThisMonth* already come back on GET /v1/expense/dashboard-stats. */}
+      <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={inr(data?.reimbursedThisMonthAmount ?? 0)} label="Reimbursed this month" loading={isLoading}
+        sub={`${reimbursedThisMonth} claim${reimbursedThisMonth === 1 ? '' : 's'} paid`} />
     </div>
   )
 }
@@ -142,7 +151,7 @@ function MyClaimsTab() {
               </button>
             ) },
             { key: 'amount', header: 'Amount', render: (c: any) => <span className="font-semibold text-text-primary">{inr(c.totalAmount)}</span> },
-            { key: 'status', header: 'Status', render: (c: any) => <HrStatusPill tone={STATUS_TONE[c.status as ExpenseStatus] || 'gray'}>{c.status}</HrStatusPill> },
+            { key: 'status', header: 'Status', render: (c: any) => <HrStatusPill tone={STATUS_TONE[c.status as ExpenseStatus] || 'gray'}>{EXPENSE_STATUS_LABEL[c.status as ExpenseStatus] ?? c.status}</HrStatusPill> },
             { key: 'submitted', header: 'Submitted', render: (c: any) => <span className="text-text-secondary">{c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—'}</span> }
           ]}
           data={claims}
@@ -438,19 +447,19 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
   // the user paged back.
   const goToPage = (next: number) => { setExpandedId(null); setPage(next) }
 
-  const onDecide = async (id: string, approved: boolean) => {
-    let comment: string | undefined
-    if (!approved) {
-      // Cancel must abort the rejection, not fall through to it. `?? undefined`
-      // collapsed null (Cancel) and '' (empty submit) into the same value, so
-      // dismissing the prompt still rejected the claim (2026-09-08 audit).
-      const answer = window.prompt('Reason for rejection (optional):')
-      if (answer === null) return
-      comment = answer
-    }
+  // The claim whose "Reject claim" drawer is open. Closing the drawer (Cancel,
+  // Escape, backdrop) must abort the rejection, never fall through to it — the
+  // old window.prompt version once rejected on dismiss (2026-09-08 audit).
+  // ExpenseDecisionRequest.comment carries no @NotBlank, so the reason stays optional.
+  const [rejecting, setRejecting] = useState<ExpenseClaim | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const closeReject = () => { if (!decide.isPending) { setRejecting(null); setRejectReason('') } }
+
+  const onDecide = async (id: string, approved: boolean, comment?: string) => {
     try {
       await decide.mutateAsync({ id, approved, comment })
       toast(approved ? 'Claim approved' : 'Claim rejected', 'success')
+      if (!approved) { setRejecting(null); setRejectReason('') }
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed', 'error')
     }
@@ -466,60 +475,89 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
   }
 
   return (
-    <TableCard
-      footer={hrPaginationFooter({
-        page, pageSize, totalElements: total, totalPages, onPageChange: goToPage,
-        onPageSizeChange: setPageSize,
-      })}
-    >
-      <DataTable
-        columns={[
-          { key: 'employee', header: 'Employee', render: (c: any) => <HrAvatar name={c.employeeName || 'Employee'} sub={c.employeeCode} seed={c.id} /> },
-          { key: 'claim', header: 'Claim', render: (c: any) => (
-            canReadClaim ? (
-              <button
-                type="button"
-                onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                aria-expanded={expandedId === c.id}
-                aria-label={`${expandedId === c.id ? 'Hide' : 'Show'} line items for ${c.title}`}
-                className="inline-flex items-center gap-1.5 text-left font-medium text-[#047857] hover:text-[#064E3B]"
-              >
-                {expandedId === c.id ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
-                {c.title}
-              </button>
-            ) : c.title
-          ) },
-          { key: 'amount', header: 'Amount', render: (c: any) => <span className="font-semibold text-text-primary">{inr(c.totalAmount)}</span> },
-          { key: 'status', header: 'Status', render: (c: any) => <HrStatusPill tone={STATUS_TONE[c.status as ExpenseStatus] || 'gray'}>{c.status}</HrStatusPill> },
-          { key: 'action', header: 'Action', render: (c: any) => (
-            <div className="flex items-center justify-end gap-2 w-full text-right">
-              {c.status === 'SUBMITTED' && canApprove && (
-                <>
-                  <HrButton size="sm" onClick={() => onDecide(c.id, true)} disabled={decide.isPending}><Check size={14} /> Approve</HrButton>
-                  <HrButton size="sm" variant="ghost" onClick={() => onDecide(c.id, false)} disabled={decide.isPending}><X size={14} /> Reject</HrButton>
-                </>
-              )}
-              {c.status === 'APPROVED' && canReimburse && (
-                <HrButton size="sm" onClick={() => onReimburse(c.id)} disabled={reimburse.isPending}><Wallet size={14} /> Mark Reimbursed</HrButton>
-              )}
-              {((c.status === 'SUBMITTED' && !canApprove) || (c.status === 'APPROVED' && !canReimburse)) && (
-                <span className="text-xs text-text-tertiary">—</span>
-              )}
+    <>
+      <TableCard
+        footer={hrPaginationFooter({
+          page, pageSize, totalElements: total, totalPages, onPageChange: goToPage,
+          onPageSizeChange: setPageSize,
+        })}
+      >
+        <DataTable
+          columns={[
+            { key: 'employee', header: 'Employee', render: (c: any) => <HrAvatar name={c.employeeName || 'Employee'} sub={c.employeeCode} seed={c.id} /> },
+            { key: 'claim', header: 'Claim', render: (c: any) => (
+              canReadClaim ? (
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
+                  aria-expanded={expandedId === c.id}
+                  aria-label={`${expandedId === c.id ? 'Hide' : 'Show'} line items for ${c.title}`}
+                  className="inline-flex items-center gap-1.5 text-left font-medium text-[#047857] hover:text-[#064E3B]"
+                >
+                  {expandedId === c.id ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
+                  {c.title}
+                </button>
+              ) : c.title
+            ) },
+            { key: 'amount', header: 'Amount', render: (c: any) => <span className="font-semibold text-text-primary">{inr(c.totalAmount)}</span> },
+            { key: 'status', header: 'Status', render: (c: any) => <HrStatusPill tone={STATUS_TONE[c.status as ExpenseStatus] || 'gray'}>{EXPENSE_STATUS_LABEL[c.status as ExpenseStatus] ?? c.status}</HrStatusPill> },
+            { key: 'action', header: 'Action', render: (c: any) => (
+              <div className="flex items-center justify-end gap-2 w-full text-right">
+                {c.status === 'SUBMITTED' && canApprove && (
+                  <>
+                    <HrButton size="sm" onClick={() => onDecide(c.id, true)} disabled={decide.isPending}><Check size={14} /> Approve</HrButton>
+                    <HrButton size="sm" variant="ghost" onClick={() => setRejecting(c)} disabled={decide.isPending}><X size={14} /> Reject</HrButton>
+                  </>
+                )}
+                {c.status === 'APPROVED' && canReimburse && (
+                  <HrButton size="sm" onClick={() => onReimburse(c.id)} disabled={reimburse.isPending}><Wallet size={14} /> Mark Reimbursed</HrButton>
+                )}
+                {((c.status === 'SUBMITTED' && !canApprove) || (c.status === 'APPROVED' && !canReimburse)) && (
+                  <span className="text-xs text-text-tertiary">—</span>
+                )}
+              </div>
+            ) }
+          ]}
+          data={claims}
+          keyField="id"
+          loading={isLoading}
+          emptyMessage={isError ? "Couldn't load the approvals queue. Try again" : "Nothing awaiting action. Submitted claims wait here for approval; approved claims wait here to be reimbursed."}
+          expandedRowIds={expandedId ? [expandedId] : []}
+          renderSubRow={(c: any) => (
+            <div className="bg-bg-base/40 p-4">
+              <ClaimDetailPanel claimId={c.id} />
             </div>
-          ) }
-        ]}
-        data={claims}
-        keyField="id"
-        loading={isLoading}
-        emptyMessage={isError ? "Couldn't load the approvals queue. Try again" : "Nothing awaiting action. Submitted claims wait here for approval; approved claims wait here to be reimbursed."}
-        expandedRowIds={expandedId ? [expandedId] : []}
-        renderSubRow={(c: any) => (
-          <div className="bg-bg-base/40 p-4">
-            <ClaimDetailPanel claimId={c.id} />
-          </div>
-        )}
-      />
-    </TableCard>
+          )}
+        />
+      </TableCard>
+      {rejecting && (
+        <HrDrawer
+          title="Reject claim"
+          onClose={closeReject}
+          footer={<>
+            <HrButton variant="ghost" disabled={decide.isPending} onClick={closeReject}>Cancel</HrButton>
+            <HrButton disabled={decide.isPending} onClick={() => onDecide(rejecting.id, false, rejectReason.trim() || undefined)}>
+              {decide.isPending ? 'Saving…' : 'Confirm rejection'}
+            </HrButton>
+          </>}
+        >
+          <p className="mb-4 text-sm text-text-secondary">
+            {rejecting.employeeName || 'Employee'} · {rejecting.title} · {inr(rejecting.totalAmount)}
+          </p>
+          <label className="block text-sm font-medium text-text-primary">
+            Reason (optional)
+            <textarea
+              className="ut-input mt-2"
+              rows={4}
+              maxLength={2000}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Tell the employee why this claim was rejected"
+            />
+          </label>
+        </HrDrawer>
+      )}
+    </>
   )
 }
 
@@ -614,6 +652,7 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
   const create = useCreatePolicy()
   const update = useUpdatePolicy()
   const remove = useDeletePolicy()
+  const confirm = useConfirmDialog()
 
   const [name, setName] = useState('')
   const [category, setCategory] = useState<ExpenseCategory>('TRAVEL')
@@ -645,8 +684,8 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
     }
   }
 
-  const onDeactivate = (p: ExpensePolicy) => {
-    if (!window.confirm(`Deactivate “${p.name}”? Claims will stop being checked against this cap. You can restore it from this table afterwards.`)) return
+  const onDeactivate = async (p: ExpensePolicy) => {
+    if (!await confirm({ title: `Deactivate “${p.name}”?`, body: 'Claims will stop being checked against this cap. You can restore it from this table afterwards.', confirmLabel: 'Deactivate', tone: 'danger' })) return
     remove.mutate(p.id, {
       onSuccess: () => toast('Policy deactivated', 'success'),
       onError: (e) => toast((e as Error)?.message ?? 'Failed to deactivate policy', 'error'),

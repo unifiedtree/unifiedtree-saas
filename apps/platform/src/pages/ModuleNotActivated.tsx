@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Lock, ArrowRight, Sparkles } from 'lucide-react'
+import { useModulePlans, type ModulePlan } from '@/core/api/modulePlans'
 
 const MODULE_LABELS: Record<string, string> = {
   hrms: 'HRMS', crm: 'CRM', accounts: 'Accounts', payroll: 'Payroll',
@@ -8,17 +9,29 @@ const MODULE_LABELS: Record<string, string> = {
   helpdesk: 'Helpdesk', analytics: 'Analytics',
 }
 
-const MODULE_PRICES: Record<string, number> = {
-  hrms: 49, crm: 39, accounts: 59, payroll: 45, inventory: 35,
-  procurement: 35, projects: 29, helpdesk: 29, analytics: 39,
+// Price line comes from the sellable-plan catalog (GET /v1/public/module-plans),
+// the same source /plan bills from: ₹ per user per month for PER_SEAT plans.
+// The plan that unlocks a module lists its key in includedModules.
+function priceLine(plan: ModulePlan | undefined): string | null {
+  if (!plan) return null
+  if (plan.status === 'LAUNCHING_SOON') return 'Launching soon — not yet available to purchase'
+  if (plan.status !== 'AVAILABLE' || !(plan.priceInr > 0)) return null
+  const price = '₹' + Number(plan.priceInr).toLocaleString('en-IN')
+  return plan.priceModel === 'PER_SEAT'
+    ? `${plan.displayName} · ${price} per user / month`
+    : `${plan.displayName} · ${price} / month`
 }
 
 interface Props { moduleKey: string }
 
 export const ModuleNotActivated: React.FC<Props> = ({ moduleKey }) => {
   const navigate = useNavigate()
-  const label = MODULE_LABELS[moduleKey] ?? moduleKey
-  const price = MODULE_PRICES[moduleKey] ?? 29
+  const { data: plans } = useModulePlans()
+  const plan = plans?.find((p) => p.includedModules?.includes(moduleKey) || p.key === moduleKey)
+  const label = MODULE_LABELS[moduleKey] ?? plan?.displayName ?? moduleKey
+  // Nothing is shown while loading or when no plan covers the module — no
+  // placeholder price.
+  const price = priceLine(plan)
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
@@ -29,7 +42,11 @@ export const ModuleNotActivated: React.FC<Props> = ({ moduleKey }) => {
       <p className="text-[var(--text-secondary)] max-w-md mb-1 leading-relaxed text-sm">
         The {label} module is not included in your current plan. Activate it to unlock all features.
       </p>
-      <p className="text-[var(--text-primary)] font-semibold mb-8 text-[15px]">Starting at ${price}/month</p>
+      {price ? (
+        <p className="text-[var(--text-primary)] font-semibold mb-8 text-[15px]">{price}</p>
+      ) : (
+        <div className="mb-8" />
+      )}
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/plan')}

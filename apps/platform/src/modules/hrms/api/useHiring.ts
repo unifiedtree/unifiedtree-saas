@@ -98,6 +98,9 @@ export interface Candidate {
   expectedCtc?: number | null
   notes?: string
   createdAt: string
+  /** Set once the HIRED candidate has been converted into an employee. */
+  convertedEmployeeId?: string | null
+  convertedAt?: string | null
 }
 
 export interface Page<T> {
@@ -222,6 +225,25 @@ export function useUpdateCandidateStage() {
         body: JSON.stringify({ stage }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }),
+  })
+}
+
+/**
+ * Convert a HIRED candidate into an employee (POST /v1/hiring/candidates/{id}/convert).
+ * Server-side: one locked transaction through the normal employee-create
+ * service, so seat quota and validation apply; a second call returns 409.
+ */
+export function useConvertCandidate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiJson<{ candidate: Candidate; employee: { id: string; employeeCode: string; firstName: string; lastName?: string } }>(
+        `/v1/hiring/candidates/${id}/convert`, { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'employees'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'employee-counts'] })
+    },
   })
 }
 

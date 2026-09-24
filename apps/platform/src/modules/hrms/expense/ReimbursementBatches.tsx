@@ -7,10 +7,12 @@ import { HrPagination, useClampedPage } from '@/shared/components/HrPagination'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies } from '../api/useOrg'
 import { useExpenseClaim } from '../api/useExpense'
+import { expenseStatusLabel } from './expenseStatus'
 import { useBuildExpenseBatch, useExpenseBatch, useExpenseBatches, useExpenseBatchAction, type ExpenseBatch } from '../api/useExpenseBatches'
 
 const tones: Record<string, PillTone> = { DRAFT: 'gray', POSTED: 'info', PAID: 'ok', CANCELLED: 'gray', APPROVED: 'ok', APPROVED_FOR_PAY: 'info', REIMBURSED: 'teal', REJECTED: 'red', SUBMITTED: 'warn' }
-const label = (value: string) => value.toLowerCase().replaceAll('_', ' ')
+// Batch, claim and category enums share one readable mapping with the Expense Center pills.
+const label = expenseStatusLabel
 const amount = (value: number, currency?: string | null) => {
   try { if (currency) return new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(value) } catch { /* Keep an unknown currency readable without crashing the batch. */ }
   return `${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${currency ? ` ${currency}` : ''}`

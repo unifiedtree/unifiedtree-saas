@@ -16,5 +16,8 @@ public record CandidateResponse(
         String source,
         BigDecimal expectedCtc,
         String notes,
-        Instant createdAt
+        Instant createdAt,
+        // Non-null once the candidate has been converted into an employee.
+        UUID convertedEmployeeId,
+        Instant convertedAt
 ) {}

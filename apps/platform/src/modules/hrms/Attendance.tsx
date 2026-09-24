@@ -1,5 +1,6 @@
 import { attendanceDate } from './attendance/date'
 import { CorrectionApprovals } from './attendance/CorrectionApprovals'
+import { FacePunchTab } from './attendance/face/FacePunchTab'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Clock, CheckCircle, XCircle, FileText } from 'lucide-react'
@@ -678,45 +679,6 @@ function CorrectionsTab() {
   )
 }
 
-
-function FacePunchTab() {
-  return (
-    <TableCard>
-      <div className="p-4 border-b border-[var(--border-default)]"><h3 className="font-semibold text-lg">Face Punch Logs</h3></div>
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-[var(--border-default)] bg-[var(--bg-base)] text-xs text-gray-500">
-          <tr><th className="p-4 font-medium">Employee</th><th className="p-4 font-medium">Location/Device</th><th className="p-4 font-medium">Timestamp</th><th className="p-4 font-medium">Match Confidence</th><th className="p-4 font-medium">Status</th></tr>
-        </thead>
-        <tbody>
-          <tr className="border-b border-[var(--border-default)]">
-            <td className="p-4 font-semibold">Rajesh Kumar</td>
-            <td className="p-4 text-gray-500">Kiosk-Pune-01</td>
-            <td className="p-4">May 14, 08:30 AM</td>
-            <td className="p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden"><div className="w-[98%] h-full bg-green-500"></div></div>
-                98%
-              </div>
-            </td>
-            <td className="p-4"><span className="badge bg-green-100 text-green-700 px-2 py-1 rounded">Verified</span></td>
-          </tr>
-          <tr>
-            <td className="p-4 font-semibold">Priya Mehta</td>
-            <td className="p-4 text-gray-500">Mobile App (Geofenced)</td>
-            <td className="p-4">May 14, 09:02 AM</td>
-            <td className="p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden"><div className="w-[72%] h-full bg-orange-500"></div></div>
-                72%
-              </div>
-            </td>
-            <td className="p-4"><span className="badge bg-orange-100 text-orange-700 px-2 py-1 rounded">Low Confidence</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </TableCard>
-  )
-}
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 

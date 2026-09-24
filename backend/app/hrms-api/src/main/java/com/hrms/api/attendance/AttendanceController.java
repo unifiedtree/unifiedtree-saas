@@ -292,10 +292,13 @@ public class AttendanceController {
         Map<UUID, AttendanceRecord> byEmployee = records.stream()
                 .collect(Collectors.toMap(AttendanceRecord::getEmployeeId, Function.identity(), (a, b) -> a));
         Map<UUID, String> departmentNames = departmentNames(employees);
-        // One bulk lookup for shift end_time; used by both the per-row
-        // earlyCheckout flag and the aggregate countSummary tile.
-        Map<UUID, java.time.Instant> shiftEndByEmployee =
-                attendanceService.getShiftEndInstantsForEmployees(employeeIds, selectedDate);
+        // One bulk lookup for the shift in force on the date; its end feeds both
+        // the per-row earlyCheckout flag and the aggregate countSummary tile,
+        // its name/start/grace feed the per-row "late by" columns.
+        Map<UUID, AttendanceService.ShiftWindow> shiftByEmployee =
+                attendanceService.getShiftWindowsForEmployees(employeeIds, selectedDate);
+        Map<UUID, java.time.Instant> shiftEndByEmployee = shiftByEmployee.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().expectedEnd()));
 
         // Approved leave is looked up ONCE and handed to both the roster rows
         // and the tiles. It used to be fetched inside countSummary only, which
@@ -310,7 +313,7 @@ public class AttendanceController {
         List<StaffStatusResponse> staff = employees.stream()
                 .map(employee -> toStaffStatus(
                         employee, byEmployee.get(employee.getId()), departmentNames, shiftEndByEmployee,
-                        onLeaveIds.contains(employee.getId())))
+                        onLeaveIds.contains(employee.getId()), shiftByEmployee.get(employee.getId())))
                 .sorted(Comparator.comparing(StaffStatusResponse::fullName))
                 .toList();
 
@@ -716,7 +719,13 @@ public class AttendanceController {
                                               AttendanceRecord record,
                                               Map<UUID, String> departmentNames,
                                               Map<UUID, java.time.Instant> shiftEndByEmployee,
-                                              boolean onLeave) {
+                                              boolean onLeave,
+                                              AttendanceService.ShiftWindow shift) {
+        String status = record == null || record.getCheckInAt() == null
+                ? "NOT_MARKED"
+                : record.getAttendanceStatus() != null ? record.getAttendanceStatus().name() : "PRESENT";
+        java.time.Instant checkIn = record != null ? record.getCheckInAt() : null;
+        java.time.Instant expected = shift != null ? shift.expectedStart() : null;
         return new StaffStatusResponse(
                 employee.getId(),
                 employee.getEmployeeCode(),
@@ -725,10 +734,8 @@ public class AttendanceController {
                 employee.getDepartmentId(),
                 employee.getDepartmentId() != null ? departmentNames.get(employee.getDepartmentId()) : null,
                 employee.getProfilePhotoUrl(),
-                record == null || record.getCheckInAt() == null
-                        ? "NOT_MARKED"
-                        : record.getAttendanceStatus() != null ? record.getAttendanceStatus().name() : "PRESENT",
-                record != null ? record.getCheckInAt() : null,
+                status,
+                checkIn,
                 record != null ? record.getCheckOutAt() : null,
                 record != null ? record.getLocationName() : null,
                 record != null ? record.getCheckInLatitude() : null,
@@ -737,7 +744,11 @@ public class AttendanceController {
                 record != null && record.getAttendanceType() != null
                         ? record.getAttendanceType().name()
                         : null,
-                onLeave);
+                onLeave,
+                shift != null ? shift.shiftName() : null,
+                expected,
+                shift != null ? shift.graceMinutes() : null,
+                StaffStatusResponse.lateBy(status, checkIn, expected));
     }
 
     // Count a set, not scalar subtraction: LATE and WFH can overlap.

@@ -1,5 +1,7 @@
 import React from 'react'
-import { Download } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Download, Wallet } from 'lucide-react'
+import { P, usePermission } from '@unifiedtree/sdk'
 import { CardSkeleton } from '@unifiedtree/ui-kit'
 import { EmptyState } from '@/shared/components/EmptyState'
 import { DataTable } from '@/shared/components/DataTable'
@@ -29,6 +31,9 @@ function fmtDays(paid: number | null | undefined, lop: number | null | undefined
 
 export const EmployeePayslips: React.FC = () => {
   const { toast } = useToast()
+  const navigate = useNavigate()
+  // Same permission the /me/salary RouteGuard checks (App.tsx).
+  const canViewSalary = usePermission(P.PAYROLL_STRUCTURE_READ_SELF)
   const { data = [], isLoading } = useMyPayslips()
 
   if (isLoading) return <div className="max-w-3xl mx-auto p-6 sm:p-8"><CardSkeleton /></div>
@@ -39,6 +44,11 @@ export const EmployeePayslips: React.FC = () => {
         crumb="Payroll"
         title="My Payslips"
         subtitle="Download payslips for finalized payroll periods."
+        actions={canViewSalary ? (
+          <HrButton variant="ghost" size="sm" onClick={() => navigate('/me/salary')}>
+            <Wallet size={15} /> My salary structure
+          </HrButton>
+        ) : undefined}
       />
 
       {data.length === 0 ? (

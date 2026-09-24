@@ -45,13 +45,16 @@ public class HiringController {
     private final HiringService hiringService;
     private final EmployeeRepository employeeRepository;
     private final com.hrms.employee.workforce.repository.WorkforceCompanyRepository companies;
+    private final CandidateConversionService conversions;
 
     public HiringController(HiringService hiringService,
                             EmployeeRepository employeeRepository,
-                            com.hrms.employee.workforce.repository.WorkforceCompanyRepository companies) {
+                            com.hrms.employee.workforce.repository.WorkforceCompanyRepository companies,
+                            CandidateConversionService conversions) {
         this.hiringService = hiringService;
         this.employeeRepository = employeeRepository;
         this.companies = companies;
+        this.conversions = conversions;
     }
 
     @Operation(summary = "List hiring offers")
@@ -171,6 +174,15 @@ public class HiringController {
             @PathVariable UUID id,
             @Valid @RequestBody CandidateStageRequest request) {
         return ResponseEntity.ok(hiringService.updateStage(id, request));
+    }
+
+    @Operation(summary = "Convert a HIRED candidate into an employee")
+    @PostMapping("/candidates/{id}/convert")
+    // Creates an hrms.employees row, so it needs the employee-write grant as
+    // well as the hiring one — conversion must not be a way round either gate.
+    @PreAuthorize("hasAuthority('hrms.hiring.candidate.write') and hasAuthority('hrms.employee.write')")
+    public ResponseEntity<CandidateConversionService.ConversionResult> convertCandidate(@PathVariable UUID id) {
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(conversions.convert(id));
     }
 
     // ─── Hiring-manager identity enrichment ──────────────────────────────────

@@ -1,16 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Clock, Plane, AlertCircle } from 'lucide-react'
-import { format, startOfMonth } from 'date-fns'
+import { useNavigate } from 'react-router-dom'
+import { CheckCircle2, Clock, Plane, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  addMonths, endOfMonth, format, getISODay, isAfter, parseISO, startOfMonth, subMonths,
+} from 'date-fns'
 import {
   ResponsiveContainer,
   PieChart, Pie, Cell,
   BarChart, Bar,
+  LineChart, Line, Legend,
   XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
+import { usePermission, P } from '@unifiedtree/sdk'
 import {
-  HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel,
+  HrPageHeader, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, HrButton,
 } from '@/shared/components/hr'
-import { useTeamDashboard } from '../api/useAttendance'
+import {
+  useTeamDashboard, useAttendanceTrend, useAttendanceSources,
+  type DailyAttendanceCounts,
+} from '../api/useAttendance'
 import { useAttendanceSummaryReport, useLateMarksReport } from '../api/useReports'
 import { useCompanies } from '../api/useOrg'
 
@@ -38,57 +46,155 @@ const STATUS_SLICES: { key: string; label: string; color: string }[] = [
   { key: 'notMarked',    label: 'Not Marked',  color: CHART.gray },
 ]
 
+// Capture methods returned by GET /v1/attendance/dashboard/sources (CheckInMethod enum).
+const SOURCE_LABELS: Record<string, string> = {
+  BIOMETRIC_DEVICE: 'Biometric device',
+  FACE_RECOGNITION: 'Face recognition',
+  GPS: 'GPS',
+  MANAGER_OVERRIDE: 'Manager override',
+  MANUAL: 'Manual entry',
+  PIN: 'PIN',
+}
 
-function AttendanceCalendarTab() {
+const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+
+const tooltipStyle = { backgroundColor: '#ffffff', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 12 }
+
+/** Drill-down target: Daily Logs filtered to one day (Attendance.tsx reads ?tab=team&date=). */
+const dailyLogsHref = (date: string) => `/hrms/attendance?tab=team&date=${date}`
+
+/** Inline error for one block — the query failed, so an empty message would be a lie. */
+function BlockError({ message, onRetry, className = 'h-[260px]' }: { message: string; onRetry: () => void; className?: string }) {
+  return (
+    <div role="alert" className={`flex flex-col items-center justify-center gap-3 text-center text-sm text-text-secondary ${className}`}>
+      <span>{message}</span>
+      <HrButton size="sm" variant="ghost" onClick={onRetry}>Retry</HrButton>
+    </div>
+  )
+}
+
+/**
+ * Month calendar driven by GET /v1/attendance/dashboard/trend — one cell per
+ * day with the server's present / late / absent counts. Days after today are
+ * never requested (the server would report the whole roster as absent), so
+ * they render blank. Clicking a day opens Daily Logs for that date.
+ */
+function AttendanceCalendar({
+  month, days, today, loading, error, onRetry, onPrev, onNext, canNext,
+}: {
+  month: Date
+  days: DailyAttendanceCounts[]
+  today: string
+  loading: boolean
+  error: boolean
+  onRetry: () => void
+  onPrev: () => void
+  onNext: () => void
+  canNext: boolean
+}) {
+  const navigate = useNavigate()
+  const byDate = useMemo(() => new Map(days.map((d) => [d.date, d])), [days])
+  const first = startOfMonth(month)
+  const daysInMonth = endOfMonth(month).getDate()
+  const leading = getISODay(first) - 1 // Monday-first grid
+
   return (
     <div className="ut-card p-5">
-      <div className="flex justify-between items-center mb-5">
-        <h3 className="m-0 text-base font-semibold">May 2026</h3>
-        <div className="flex gap-2">
-          <button className="px-3 py-1 bg-gray-100 rounded text-sm hover:bg-gray-200">Prev</button>
-          <button className="px-3 py-1 bg-gray-100 rounded text-sm hover:bg-gray-200">Next</button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="m-0 text-base font-semibold text-text-primary">{format(month, 'MMMM yyyy')}</h3>
+          <p className="text-xs text-text-tertiary">Daily present, late and absent counts · click a day to open its logs</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <HrButton size="sm" variant="ghost" onClick={onPrev} aria-label="Previous month">
+            <ChevronLeft size={14} /> Prev
+          </HrButton>
+          <HrButton size="sm" variant="ghost" onClick={onNext} disabled={!canNext} aria-label="Next month">
+            Next <ChevronRight size={14} />
+          </HrButton>
         </div>
       </div>
-      <div className="grid grid-cols-7 gap-2 text-center">
-        {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(d => (
-          <div key={d} className="font-semibold text-xs text-gray-500">{d}</div>
-        ))}
-        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
-          <div className="text-right text-sm font-semibold">1</div>
-          <div className="mt-auto text-[11px] bg-green-500 text-white rounded p-0.5">Present</div>
-        </div>
-        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
-          <div className="text-right text-sm font-semibold">2</div>
-          <div className="mt-auto text-[11px] bg-green-500 text-white rounded p-0.5">Present</div>
-        </div>
-        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
-          <div className="text-right text-sm font-semibold">3</div>
-          <div className="mt-auto text-[11px] bg-red-500 text-white rounded p-0.5">Absent</div>
-        </div>
-        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
-          <div className="text-right text-sm font-semibold">4</div>
-          <div className="mt-auto text-[11px] bg-orange-500 text-white rounded p-0.5">Half Day</div>
-        </div>
-        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
-          <div className="text-right text-sm font-semibold">5</div>
-          <div className="mt-auto text-[11px] bg-blue-500 text-white rounded p-0.5">WFH</div>
-        </div>
-        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
-          <div className="text-right text-sm font-semibold">6</div>
-          <div className="mt-auto text-[11px] text-gray-500 text-center">Weekend</div>
-        </div>
-        <div className="h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
-          <div className="text-right text-sm font-semibold">7</div>
-          <div className="mt-auto text-[11px] text-gray-500 text-center">Weekend</div>
-        </div>
+
+      <div className="mb-3 flex flex-wrap gap-4 text-xs text-text-secondary">
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: CHART.green }} />Present</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: CHART.amber }} />Late</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: CHART.red }} />Absent</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: CHART.purple }} />On leave</span>
       </div>
+
+      {error ? (
+        <BlockError message="Couldn't load attendance for this month." onRetry={onRetry} className="h-[320px]" />
+      ) : !loading && days.length === 0 ? (
+        <div className="flex h-[320px] items-center justify-center text-sm text-text-tertiary">No attendance data for this month</div>
+      ) : (
+        <div className="grid grid-cols-7 gap-2" data-testid="attendance-calendar">
+          {WEEKDAYS.map((d) => (
+            <div key={d} className="text-center text-xs font-semibold text-text-tertiary">{d}</div>
+          ))}
+          {Array.from({ length: leading }).map((_, i) => <div key={`pad-${i}`} />)}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const date = format(new Date(first.getFullYear(), first.getMonth(), i + 1), 'yyyy-MM-dd')
+            const weekend = (leading + i) % 7 >= 5
+            const future = date > today
+            const row = byDate.get(date)
+            const base = `flex h-[92px] flex-col rounded-lg border border-border-default p-2 text-left ${weekend ? 'bg-bg-subtle' : 'bg-white'}`
+            if (future || (!row && !loading)) {
+              return (
+                <div key={date} className={`${base} opacity-60`}>
+                  <span className="text-right text-sm font-semibold text-text-tertiary">{i + 1}</span>
+                </div>
+              )
+            }
+            if (!row) {
+              return (
+                <div key={date} className={base}>
+                  <span className="text-right text-sm font-semibold text-text-tertiary">{i + 1}</span>
+                  <div className="mt-auto h-3 w-full animate-pulse rounded bg-bg-base" />
+                </div>
+              )
+            }
+            const label = `${format(parseISO(date), 'd MMM yyyy')}: ${row.present} present, ${row.late} late, ${row.absent} absent${row.onLeave ? `, ${row.onLeave} on leave` : ''}. Open daily logs`
+            return (
+              <button
+                key={date}
+                type="button"
+                data-date={date}
+                aria-label={label}
+                title={label}
+                onClick={() => navigate(dailyLogsHref(date))}
+                className={`${base} transition-colors hover:border-[#059669] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#059669]/30 ${date === today ? 'ring-2 ring-[#059669]/40' : ''}`}
+              >
+                <span className="w-full text-right text-sm font-semibold text-text-primary">{i + 1}</span>
+                <span className="mt-auto flex flex-col gap-0.5 text-[11px] tabular-nums leading-tight">
+                  <span style={{ color: '#15803D' }}>{row.present} present</span>
+                  {row.late > 0 && <span style={{ color: '#B45309' }}>{row.late} late</span>}
+                  <span style={{ color: '#B91C1C' }}>{row.absent} absent</span>
+                  {row.onLeave > 0 && <span style={{ color: '#6D28D9' }}>{row.onLeave} on leave</span>}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
 export const AttendanceAnalytics: React.FC = () => {
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+  const navigate = useNavigate()
+  const now = new Date()
+  const today = format(now, 'yyyy-MM-dd')
+  const canTeamRead = usePermission(P.ATTENDANCE_TEAM_READ)
+
+  // ── Period: one calendar month, clipped at today (the trend endpoint caps at
+  // 31 days, and future days would be reported as whole-roster absences) ──────
+  const [month, setMonth] = useState<Date>(() => startOfMonth(now))
+  const isCurrentMonth = format(month, 'yyyy-MM') === format(now, 'yyyy-MM')
+  const periodFrom = format(month, 'yyyy-MM-dd')
+  const periodTo = isAfter(endOfMonth(month), now) ? today : format(endOfMonth(month), 'yyyy-MM-dd')
+  const periodLabel = `${format(parseISO(periodFrom), 'd MMM')} – ${format(parseISO(periodTo), 'd MMM yyyy')}`
+  const goPrev = () => setMonth((m) => subMonths(m, 1))
+  const goNext = () => { if (!isCurrentMonth) setMonth((m) => addMonths(m, 1)) }
 
   // ── Company scope (reports require a companyId) ──────────────────────────────
   const { data: companies = [], isLoading: companiesLoading } = useCompanies()
@@ -98,11 +204,15 @@ export const AttendanceAnalytics: React.FC = () => {
   }, [companies, companyId])
 
   // ── Live data ────────────────────────────────────────────────────────────────
-  const { data: dashboard, isLoading: dashLoading } = useTeamDashboard(today)
-  const { data: summary = [], isLoading: summaryLoading } =
-    useAttendanceSummaryReport(companyId || null, monthStart, today)
-  const { data: lateMarks = [], isLoading: lateLoading } =
-    useLateMarksReport(companyId || null, monthStart, today)
+  const { data: dashboard, isLoading: dashLoading, isError: dashError, refetch: refetchDash } = useTeamDashboard(today)
+  const { data: summary = [], isLoading: summaryLoading, isError: summaryError, refetch: refetchSummary } =
+    useAttendanceSummaryReport(companyId || null, periodFrom, periodTo)
+  const { data: lateMarks = [], isLoading: lateLoading, isError: lateError, refetch: refetchLate } =
+    useLateMarksReport(companyId || null, periodFrom, periodTo)
+  const { data: trend = [], isLoading: trendLoading, isError: trendError, refetch: refetchTrend } =
+    useAttendanceTrend(periodFrom, periodTo, undefined, canTeamRead)
+  const { data: sources, isLoading: sourcesLoading, isError: sourcesError, refetch: refetchSources } =
+    useAttendanceSources(today, undefined, canTeamRead)
 
   
   const [tab, setTab] = useState<'dash' | 'cal'>('dash')
@@ -112,6 +222,21 @@ export const AttendanceAnalytics: React.FC = () => {
   ]
 
   const counts = dashboard?.counts
+
+  // ── Trend line: per-day present / late / absent for the period ──────────────
+  const trendData = useMemo(
+    () => trend.map((d) => ({ date: d.date, Present: d.present, Late: d.late, Absent: d.absent })),
+    [trend],
+  )
+
+  // ── Punch sources today (zero-count methods are kept for a stable shape) ─────
+  const sourceRows = useMemo(() => {
+    if (!sources) return []
+    const rows = sources.sources.map((s) => ({ label: SOURCE_LABELS[s.method] ?? s.method, count: s.count }))
+    if (sources.unknown > 0) rows.push({ label: 'Not recorded', count: sources.unknown })
+    return rows.sort((a, b) => b.count - a.count)
+  }, [sources])
+  const sourcesTotal = sourceRows.reduce((acc, r) => acc + r.count, 0)
 
   // ── Donut: today's status breakdown ──────────────────────────────────────────
   const donutData = useMemo(() => {
@@ -149,17 +274,40 @@ export const AttendanceAnalytics: React.FC = () => {
         title="Attendance Analytics"
         subtitle={`Live attendance snapshot for ${format(new Date(), 'EEEE, d MMM yyyy')}`}
         actions={
-          <select
-            value={companyId}
-            onChange={(e) => setCompanyId(e.target.value)}
-            className={selectCls}
-            disabled={companiesLoading || companies.length === 0}
-          >
-            {companies.length === 0 && <option value="">No companies</option>}
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1" role="group" aria-label="Period">
+              <HrButton size="sm" variant="ghost" onClick={goPrev} aria-label="Previous period">
+                <ChevronLeft size={14} />
+              </HrButton>
+              <input
+                type="month"
+                aria-label="Period month"
+                value={format(month, 'yyyy-MM')}
+                max={format(now, 'yyyy-MM')}
+                onChange={(e) => {
+                  if (!/^\d{4}-\d{2}$/.test(e.target.value)) return
+                  const picked = startOfMonth(parseISO(`${e.target.value}-01`))
+                  if (!isAfter(picked, now)) setMonth(picked)
+                }}
+                className={selectCls}
+              />
+              <HrButton size="sm" variant="ghost" onClick={goNext} disabled={isCurrentMonth} aria-label="Next period">
+                <ChevronRight size={14} />
+              </HrButton>
+            </div>
+            <select
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              className={selectCls}
+              aria-label="Company"
+              disabled={companiesLoading || companies.length === 0}
+            >
+              {companies.length === 0 && <option value="">No companies</option>}
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
         }
       />
 
@@ -213,6 +361,8 @@ export const AttendanceAnalytics: React.FC = () => {
           <p className="mb-3 text-xs text-text-tertiary">Live distribution across tracked staff</p>
           {dashLoading ? (
             <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">Loading…</div>
+          ) : dashError ? (
+            <BlockError message="Couldn't load today's attendance." onRetry={() => refetchDash()} />
           ) : donutData.length === 0 ? (
             <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">No attendance recorded yet</div>
           ) : (
@@ -259,12 +409,14 @@ export const AttendanceAnalytics: React.FC = () => {
 
         {/* Bar: late marks per employee (period to date) */}
         <div className="ut-card ut-card-lg p-5">
-          <p className="text-sm font-semibold text-text-primary">Late Marks This Month</p>
-          <p className="mb-3 text-xs text-text-tertiary">Top offenders since {format(startOfMonth(new Date()), 'd MMM')}</p>
+          <p className="text-sm font-semibold text-text-primary">Late Marks · {format(month, 'MMM yyyy')}</p>
+          <p className="mb-3 text-xs text-text-tertiary">Top offenders, {periodLabel}</p>
           {!companyId ? (
             <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">Select a company to view late marks</div>
           ) : lateLoading ? (
             <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">Loading…</div>
+          ) : lateError ? (
+            <BlockError message="Couldn't load late marks." onRetry={() => refetchLate()} />
           ) : lateByEmployee.length === 0 ? (
             <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">No late marks in this period</div>
           ) : (
@@ -285,12 +437,76 @@ export const AttendanceAnalytics: React.FC = () => {
         </div>
       </div>
 
+      {/* ── Trend (period) + punch sources (today) ──────────────────────────────── */}
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="ut-card ut-card-lg p-5 lg:col-span-2">
+          <p className="text-sm font-semibold text-text-primary">Attendance Trend</p>
+          <p className="mb-3 text-xs text-text-tertiary">Daily present, late and absent, {periodLabel} · click a day to open its logs</p>
+          {!canTeamRead ? (
+            <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">You need team attendance access to view the trend</div>
+          ) : trendLoading ? (
+            <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">Loading…</div>
+          ) : trendError ? (
+            <BlockError message="Couldn't load the attendance trend." onRetry={() => refetchTrend()} />
+          ) : trendData.length === 0 ? (
+            <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">No attendance data for this period</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart
+                data={trendData}
+                margin={{ top: 4, right: 16, left: -8, bottom: 4 }}
+                onClick={(state) => {
+                  const label = state?.activeLabel
+                  if (typeof label === 'string') navigate(dailyLogsHref(label))
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                <XAxis dataKey="date" tickFormatter={(d: string) => format(parseISO(d), 'd')} tick={{ fontSize: 11, fill: '#94A3B8' }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#111827' }} labelFormatter={(d: string) => format(parseISO(d), 'EEE, d MMM yyyy')} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="Present" stroke={CHART.green} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="Late" stroke={CHART.amber} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="Absent" stroke={CHART.red} strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="ut-card ut-card-lg p-5">
+          <p className="text-sm font-semibold text-text-primary">Punch Sources Today</p>
+          <p className="mb-3 text-xs text-text-tertiary">How today's check-ins were captured</p>
+          {!canTeamRead ? (
+            <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">You need team attendance access to view punch sources</div>
+          ) : sourcesLoading ? (
+            <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">Loading…</div>
+          ) : sourcesError ? (
+            <BlockError message="Couldn't load punch sources." onRetry={() => refetchSources()} />
+          ) : sourcesTotal === 0 ? (
+            <div className="flex h-[260px] items-center justify-center text-sm text-text-tertiary">No check-ins recorded today</div>
+          ) : (
+            <ul className="space-y-3" data-testid="punch-sources">
+              {sourceRows.map((r) => (
+                <li key={r.label} className="text-sm">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-text-secondary">{r.label}</span>
+                    <span className="font-semibold tabular-nums text-text-primary">{r.count}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-bg-subtle">
+                    <div className="h-1.5 rounded-full bg-[#059669]" style={{ width: `${Math.round((r.count / sourcesTotal) * 100)}%` }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
       {/* ── Per-employee attendance summary ────────────────────────────────────── */}
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold text-text-primary">Employee Attendance Summary</h2>
-        <span className="text-xs text-text-tertiary">
-          {format(startOfMonth(new Date()), 'd MMM')} – {format(new Date(), 'd MMM yyyy')}
-        </span>
+        <span className="text-xs text-text-tertiary">{periodLabel}</span>
       </div>
       <TableCard>
         <table className="hr-table">
@@ -315,6 +531,8 @@ export const AttendanceAnalytics: React.FC = () => {
                   ))}
                 </tr>
               ))
+            ) : summaryError ? (
+              <tr><td colSpan={6}><BlockError message="Couldn't load the attendance summary." onRetry={() => refetchSummary()} className="py-10" /></td></tr>
             ) : summary.length === 0 ? (
               <tr><td colSpan={6} className="py-10 text-center text-sm text-text-tertiary">No attendance records for this period.</td></tr>
             ) : (
@@ -336,7 +554,23 @@ export const AttendanceAnalytics: React.FC = () => {
         )}
         {tab === 'cal' && (
           <HrTabPanel tabKey="cal">
-            <AttendanceCalendarTab />
+            {canTeamRead ? (
+              <AttendanceCalendar
+                month={month}
+                days={trend}
+                today={today}
+                loading={trendLoading}
+                error={trendError}
+                onRetry={() => refetchTrend()}
+                onPrev={goPrev}
+                onNext={goNext}
+                canNext={!isCurrentMonth}
+              />
+            ) : (
+              <div className="ut-card p-10 text-center text-sm text-text-tertiary">
+                You need team attendance access to view the attendance calendar.
+              </div>
+            )}
           </HrTabPanel>
         )}
       </div>

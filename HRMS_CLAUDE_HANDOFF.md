@@ -1,3 +1,7 @@
+> **Superseded for current status (2026-09-24):** read `HRMS_HANDOFF_2026-09-24.md` first. That file covers
+> runtime setup, what's verified, per-item state and next steps. Sections 1 and 3 of this file (mission,
+> preservation rules) still apply; the runtime, status and inventory sections below are historical.
+
 # UnifiedTree HRMS — complete engineering handoff to Claude
 
 Prepared 2026-09-23 from the working repository and implementation session. This is a continuation brief, not a declaration that the entire HRMS is production-ready. Paths are relative to C:\REACT\unifiedtree-saas unless absolute.

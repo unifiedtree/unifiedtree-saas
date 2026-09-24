@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Upload, Users, UserCheck, UserX, Clock, ChevronLeft, ChevronRight, Building2 } from 'lucide-react'
+import { Plus, Upload, Download, Users, UserCheck, UserX, Clock, ChevronLeft, ChevronRight, Building2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useToast } from '@/shared/hooks/useToast'
 import { Can, usePermission, P } from '@unifiedtree/sdk'
@@ -10,6 +10,7 @@ import { useEmployeeDirectory, useEmployeeCounts, type EmploymentStatus } from '
 import { useCompanies, useDepartments, useBranches } from './api/useOrg'
 import { EmployeeForm } from './employees/EmployeeForm'
 import { useDebounce } from '@/shared/hooks/useDebounce'
+import { apiBlob } from '@/core/api/client'
 
 // Keys MUST match backend WorkforceEmployee.EmploymentStatus.
 const STATUS_STYLE: Record<string, { label: string; color: string; bg: string }> = {
@@ -122,6 +123,39 @@ export const Employees: React.FC = () => {
 
   const resetPage = useCallback(() => setPage(0), [])
 
+  // Export exactly what the table is filtered to (company, department, branch,
+  // status, search) — GET /v1/hrms/employees/export.csv, same permission as the
+  // directory. The server caps one file at 10,000 rows; warn rather than cut silently.
+  const EXPORT_MAX_ROWS = 10_000
+  const [exporting, setExporting] = useState(false)
+  const exportCsv = async () => {
+    setExporting(true)
+    try {
+      const params = new URLSearchParams()
+      if (activeCompany?.id) params.set('companyId', activeCompany.id)
+      if (departmentId) params.set('departmentId', departmentId)
+      if (branchId) params.set('branchId', branchId)
+      if (status) params.set('status', status)
+      if (debouncedSearch) params.set('search', debouncedSearch)
+      const blob = await apiBlob(`/v1/hrms/employees/export.csv?${params}`)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `employees-${format(new Date(), 'yyyy-MM-dd')}.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      toast(total > EXPORT_MAX_ROWS
+        ? `Exported the first ${EXPORT_MAX_ROWS.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')} employees — narrow the filters for the rest`
+        : `Exported ${total.toLocaleString('en-IN')} employees`, total > EXPORT_MAX_ROWS ? 'warning' : 'success')
+    } catch (e) {
+      toast(e instanceof Error ? `Export failed: ${e.message}` : 'Export failed', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-8">
       {/* Header */}
@@ -139,6 +173,9 @@ export const Employees: React.FC = () => {
                 <Upload size={15} /> Import
               </HrButton>
             </Can>
+            <HrButton variant="ghost" disabled={exporting || total === 0} onClick={exportCsv}>
+              <Download size={15} /> {exporting ? 'Exporting…' : 'Export CSV'}
+            </HrButton>
             {canWrite && !noCompany && (
               <HrButton onClick={() => setShowForm(true)}>
                 <Plus size={15} /> Add Employee

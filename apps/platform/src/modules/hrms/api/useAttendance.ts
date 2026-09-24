@@ -78,6 +78,13 @@ export interface StaffStatusResponse {
    * derivable from the punch alone because leave lives in another module.
    */
   onLeave?: boolean
+  /** The shift in force on the date; null when the employee has no assignment. */
+  shiftName?: string | null
+  /** Scheduled check-in (shift start on the date). */
+  expectedCheckInAt?: string | null
+  graceMinutes?: number | null
+  /** Minutes after the scheduled start — set only for LATE records. */
+  lateByMinutes?: number | null
 }
 
 export interface AttendanceSummaryCounts {

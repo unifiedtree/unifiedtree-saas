@@ -19,7 +19,7 @@ export const ADVANCE_STATUS_TONE: Record<AdvanceStatus, PillTone> = {
 }
 const date = (value?: string, pattern = 'd MMM yyyy') => value ? format(new Date(value.length === 10 ? `${value}T00:00:00` : value), pattern) : '—'
 const statusLabel = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ')
-const advanceLabel = (advance: AdvanceRequest) => advance.status === 'DISBURSED' && Number(advance.outstandingAmount) === 0 ? 'Repaid' : statusLabel(advance.status)
+export const advanceLabel = (advance: AdvanceRequest) => advance.status === 'DISBURSED' && Number(advance.outstandingAmount) === 0 ? 'Repaid' : statusLabel(advance.status)
 
 export function AdvanceAdmin({ companyWide }: { companyWide: boolean }) {
   const [page, setPage] = useState(0)

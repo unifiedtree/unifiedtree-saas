@@ -1,5 +1,6 @@
 import { ShiftRoster } from './ShiftRoster'
 import { OvertimeApprovals } from './OvertimeApprovals'
+import { ShiftRequestApprovals, usePendingShiftRequestCount } from './ShiftRequestApprovals'
 import React, { useMemo, useState } from 'react'
 import { Clock, Moon, Timer, Building2, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
@@ -17,25 +18,10 @@ import {
   type ShiftType, type ShiftPolicy, type ShiftPolicyPayload,
 } from './../api/useShiftPolicies'
 import { useAttendanceSummaryReport } from './../api/useReports'
+// 12-hour display lives in shiftTime.ts so the shift-request cards format
+// timings exactly like the schedules table.
+import { hhmm } from './shiftTime'
 
-/**
- * "09:00:00" → "09:00 AM" for DISPLAY.
- *
- * The mobile Shift Timings screen renders 12-hour AM/PM and carries a note
- * that the client asked for exactly that ("no 24h clock, just AM PM 1 to 12").
- * The web was still showing raw 24-hour values, so the same shift read
- * "18:00" here and "06:00 PM" on a phone. Display only — the edit form still
- * feeds <input type="time"> through `timeInput` below, which must stay HH:mm.
- */
-const hhmm = (t?: string | null) => {
-  if (!t) return '—'
-  const m = /^(\d{1,2}):(\d{2})/.exec(t.trim())
-  if (!m) return t
-  const h24 = Math.max(0, Math.min(23, parseInt(m[1], 10)))
-  const min = Math.max(0, Math.min(59, parseInt(m[2], 10)))
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
-  return `${String(h12).padStart(2, '0')}:${String(min).padStart(2, '0')} ${h24 >= 12 ? 'PM' : 'AM'}`
-}
 /** "09:00:00" → "09:00" for <input type="time">; '' when absent. */
 const timeInput = (t?: string | null) => (t ? t.slice(0, 5) : '')
 
@@ -401,10 +387,19 @@ export const ShiftsAndOt: React.FC = () => {
   // hand every query below is disabled and the page renders a *false* "nothing
   // defined". Say which it is instead of implying the tenant has no shifts.
   
-  const [tab, setTab] = useState<'roster' | 'ot'>('roster')
+  // One job per tab. "Overtime Approvals" used to open on the shift-schedule
+  // CRUD table, and employee shift-change requests (filed at /me/shift-change)
+  // had no approval surface at all. The requests tab uses the same permission
+  // ShiftController checks on GET /change-requests/pending and on the decision
+  // POST (attendance.regularization.approve) — i.e. canManageShifts.
+  type Tab = 'schedules' | 'roster' | 'ot' | 'requests'
+  const [tab, setTab] = useState<Tab>('schedules')
+  const pendingRequests = usePendingShiftRequestCount(canManageShifts)
   const tabs = [
-    { key: 'roster', label: 'Shift Roster' },
-    { key: 'ot', label: 'Overtime Approvals' }
+    { key: 'schedules', label: 'Shift schedules' },
+    { key: 'roster', label: 'Roster' },
+    { key: 'ot', label: 'Overtime' },
+    ...(canManageShifts ? [{ key: 'requests', label: 'Shift requests', badge: pendingRequests || undefined }] : []),
   ]
 
   const noCompany = !activeCompany
@@ -458,7 +453,7 @@ export const ShiftsAndOt: React.FC = () => {
       </div>
 
 
-      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as any)} />
+      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
 
       <div className="mt-6">
         {tab === 'roster' && (
@@ -466,11 +461,10 @@ export const ShiftsAndOt: React.FC = () => {
             <ShiftRoster key={activeCompany} companyId={activeCompany} />
           </HrTabPanel>
         )}
-        {tab === 'ot' && (
-          <HrTabPanel tabKey="ot">
+        {tab === 'schedules' && (
+          <HrTabPanel tabKey="schedules">
       {/* Shift schedules */}
       <div>
-        <h3 className="mb-2 text-sm font-bold text-text-primary">Shift Schedules</h3>
         <TableCard>
           <table className="hr-table">
             <thead>
@@ -533,7 +527,11 @@ export const ShiftsAndOt: React.FC = () => {
           </table>
         </TableCard>
       </div>
-
+          </HrTabPanel>
+        )}
+        {tab === 'ot' && (
+          <HrTabPanel tabKey="ot">
+      <div className="space-y-6">
       {/* Overtime this month */}
       <OvertimeApprovals />
       <div>
@@ -563,8 +561,12 @@ export const ShiftsAndOt: React.FC = () => {
           </table>
         </TableCard>
       </div>
-
-
+      </div>
+          </HrTabPanel>
+        )}
+        {tab === 'requests' && canManageShifts && (
+          <HrTabPanel tabKey="requests">
+            <ShiftRequestApprovals companyId={activeCompany} />
           </HrTabPanel>
         )}
       </div>

@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Plus, Briefcase, DoorOpen, Lock, Pencil, Users, XCircle } from 'lucide-react'
+import { Plus, Briefcase, DoorOpen, Lock, Pencil, Users, UserPlus, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
+import { Link, useNavigate } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
+import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { useToast } from '@/shared/hooks/useToast'
 import {
   HrPageHeader, HrButton, HrDrawer, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
@@ -10,9 +12,9 @@ import { OffersTab } from './hiring/OffersTab'
 import { useCompanies } from './api/useOrg'
 import {
   useRequisitions, useRequisition, useCreateRequisition, useUpdateRequisition, useCloseRequisition,
-  useCandidates, useAddCandidate, useUpdateCandidateStage,
+  useCandidates, useAddCandidate, useUpdateCandidateStage, useConvertCandidate,
   inr, CANDIDATE_STAGES, EMPLOYMENT_TYPES,
-  type RequisitionStatus, type CandidateStage, type EmploymentType, type JobRequisition,
+  type RequisitionStatus, type CandidateStage, type EmploymentType, type JobRequisition, type Candidate,
 } from './api/useHiring'
 
 const STATUS_TONE: Record<RequisitionStatus, PillTone> = {
@@ -351,6 +353,13 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
   const { data: candidates = [], isLoading } = useCandidates(requisitionId || undefined)
   const addCandidate = useAddCandidate()
   const updateStage = useUpdateCandidateStage()
+  const convert = useConvertCandidate()
+  const confirm = useConfirmDialog()
+  const navigate = useNavigate()
+  // Converting creates an hrms.employees row, so the server also requires
+  // hrms.employee.write (POST /v1/hiring/candidates/{id}/convert).
+  const canWriteEmployees = usePermission('hrms.employee.write')
+  const canConvert = canCandidateWrite && canWriteEmployees
 
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
@@ -383,6 +392,22 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
       toast('Stage updated', 'success')
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed', 'error')
+    }
+  }
+
+  const onConvert = async (c: Candidate) => {
+    const ok = await confirm({
+      title: `Convert ${c.fullName} to an employee?`,
+      body: `Creates their employee record in the company of ${selected?.title ? `the "${selected.title}" requisition` : 'this requisition'}, with the name, email and phone on file, plus the department, role, joining date and CTC from the requisition and accepted offer where recorded. It uses one workspace seat. Complete the rest on their profile.`,
+      confirmLabel: 'Create employee',
+    })
+    if (!ok) return
+    try {
+      const result = await convert.mutateAsync(c.id)
+      toast(`${c.fullName} is now employee ${result.employee.employeeCode}`, 'success')
+      navigate(`/hrms/employees/${result.employee.id}`)
+    } catch (e) {
+      toast((e as Error)?.message ?? 'Could not convert the candidate', 'error')
     }
   }
 
@@ -431,22 +456,32 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
               <th>Source</th>
               <th>Expected CTC</th>
               <th>Stage</th>
+              <th>Employee</th>
               {canCandidateWrite && <th className="text-right">Advance</th>}
             </tr>
           </thead>
           <tbody>
             {!requisitionId ? (
-              <tr><td colSpan={canCandidateWrite ? 5 : 4} className="py-14 text-center text-sm text-text-tertiary">Pick a requisition to view its pipeline.</td></tr>
+              <tr><td colSpan={canCandidateWrite ? 6 : 5} className="py-14 text-center text-sm text-text-tertiary">Pick a requisition to view its pipeline.</td></tr>
             ) : isLoading ? (
-              [...Array(3)].map((_, i) => <tr key={i}><td colSpan={canCandidateWrite ? 5 : 4} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
+              [...Array(3)].map((_, i) => <tr key={i}><td colSpan={canCandidateWrite ? 6 : 5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
             ) : candidates.length === 0 ? (
-              <tr><td colSpan={canCandidateWrite ? 5 : 4} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No candidates yet</p><p className="mt-1 text-xs text-text-tertiary">Add candidates to start the pipeline.</p></td></tr>
+              <tr><td colSpan={canCandidateWrite ? 6 : 5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No candidates yet</p><p className="mt-1 text-xs text-text-tertiary">Add candidates to start the pipeline.</p></td></tr>
             ) : candidates.map((c, i) => (
               <tr key={c.id}>
                 <td><HrAvatar name={c.fullName} sub={c.email} seed={i} /></td>
                 <td className="text-text-secondary">{c.source || '—'}</td>
                 <td className="text-text-secondary">{c.expectedCtc != null ? inr(c.expectedCtc) : '—'}</td>
                 <td><HrStatusPill tone={STAGE_TONE[c.stage]}>{fmtEnum(c.stage)}</HrStatusPill></td>
+                <td>
+                  {c.convertedEmployeeId ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link to={`/hrms/employees/${c.convertedEmployeeId}`} className="text-[13px] font-semibold text-accent-fg hover:underline">View employee</Link>
+                    </div>
+                  ) : c.stage === 'HIRED' && canConvert ? (
+                    <HrButton size="sm" variant="ghost" disabled={convert.isPending} onClick={() => onConvert(c)}><UserPlus size={14} /> Convert to employee</HrButton>
+                  ) : <span className="text-text-tertiary">—</span>}
+                </td>
                 {canCandidateWrite && (
                   <td>
                     <div className="flex items-center justify-end">

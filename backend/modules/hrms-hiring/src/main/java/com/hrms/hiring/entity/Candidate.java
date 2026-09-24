@@ -8,6 +8,7 @@ import lombok.Setter;
 import org.hibernate.annotations.Filter;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -45,4 +46,11 @@ public class Candidate extends BaseEntity {
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    // Set once, when a HIRED candidate is converted into an employee (V140).
+    @Column(name = "converted_employee_id")
+    private UUID convertedEmployeeId;
+
+    @Column(name = "converted_at")
+    private Instant convertedAt;
 }

@@ -15,5 +15,8 @@ public interface HiringOfferRepository extends JpaRepository<HiringOffer, UUID> 
     java.util.Optional<HiringOffer> findForUpdate(@org.springframework.data.repository.query.Param("id") UUID id);
 
     Page<HiringOffer> findByCompanyIdOrderByCreatedAtDesc(UUID companyId, Pageable pageable);
+
+    /** The candidate's most recent accepted offer (source of CTC / joining date on conversion). */
+    java.util.Optional<HiringOffer> findFirstByCandidateIdAndStatusOrderByRespondedAtDescCreatedAtDesc(UUID candidateId, com.hrms.hiring.enums.OfferStatus status);
     Page<HiringOffer> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }

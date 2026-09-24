@@ -21,6 +21,7 @@ import { useWeekendDays } from './api/useSettings'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { LeaveTypes } from './leave/LeaveTypes'
 import { HolidayCalendar } from './leave/HolidayCalendar'
+import { LeaveCalendar } from './leave/LeaveCalendar'
 import { HrPageHeader, HrStatusPill, HrTabs, HrTabPanel, type PillTone } from '@/shared/components/hr'
 
 const STATUS_STYLE: Record<LeaveApprovalStatus, { label: string; color: string; bg: string; icon: React.ElementType; tone: PillTone }> = {
@@ -817,58 +818,6 @@ const ALL_TABS = [
 type TabKey = typeof ALL_TABS[number]['key']
 
 
-function LeaveCalendarTab() {
-  return (
-    <div className="ut-card p-5">
-      <div className="flex justify-between items-center mb-5">
-        <h3 className="m-0 text-base font-semibold">May 2026 - Who's Away?</h3>
-        <div className="flex gap-2">
-          <button className="px-3 py-1 bg-gray-100 rounded text-sm hover:bg-gray-200">Prev</button>
-          <button className="px-3 py-1 bg-gray-100 rounded text-sm hover:bg-gray-200">Next</button>
-        </div>
-      </div>
-      <div className="grid grid-cols-7 gap-2 text-center">
-        {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(d => (
-          <div key={d} className="font-semibold text-xs text-gray-500">{d}</div>
-        ))}
-        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
-          <div className="text-right text-sm font-semibold">18</div>
-        </div>
-        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2">
-          <div className="text-right text-sm font-semibold">19</div>
-        </div>
-        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
-          <div className="text-right text-sm font-semibold">20</div>
-          <div className="mt-auto text-left">
-            <div className="text-[11px] bg-red-50 text-red-700 rounded p-1 mt-1 font-medium"><div className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-800 text-[9px] mr-1">AS</div> A. Stone</div>
-          </div>
-        </div>
-        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
-          <div className="text-right text-sm font-semibold">21</div>
-          <div className="mt-auto text-left">
-            <div className="text-[11px] bg-red-50 text-red-700 rounded p-1 mt-1 font-medium"><div className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-800 text-[9px] mr-1">AS</div> A. Stone</div>
-            <div className="text-[11px] bg-cyan-50 text-cyan-700 rounded p-1 mt-1 font-medium"><div className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-cyan-100 text-cyan-800 text-[9px] mr-1">PM</div> P. Mehta</div>
-          </div>
-        </div>
-        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
-          <div className="text-right text-sm font-semibold">22</div>
-          <div className="mt-auto text-left">
-            <div className="text-[11px] bg-red-50 text-red-700 rounded p-1 mt-1 font-medium"><div className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-800 text-[9px] mr-1">AS</div> A. Stone</div>
-          </div>
-        </div>
-        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
-          <div className="text-right text-sm font-semibold">23</div>
-          <div className="mt-auto text-[11px] text-gray-500 text-center">Weekend</div>
-        </div>
-        <div className="min-h-[100px] border border-gray-200 rounded-lg flex flex-col p-2 bg-gray-50">
-          <div className="text-right text-sm font-semibold">24</div>
-          <div className="mt-auto text-[11px] text-gray-500 text-center">Weekend</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export const Leave: React.FC = () => {
   const { isAdmin } = useRoles()
   // Client rule: ADMIN never applies for their own leave, so the personal
@@ -948,7 +897,7 @@ export const Leave: React.FC = () => {
       {tab === 'balances' && <HrTabPanel tabKey="balances"><BalancesTab /></HrTabPanel>}
       {tab === 'approvals' && <HrTabPanel tabKey="approvals"><ApprovalsTab /></HrTabPanel>}
       {tab === 'history' && <HrTabPanel tabKey="history"><ApprovalHistoryTab /></HrTabPanel>}
-      {tab === 'calendar' && <HrTabPanel tabKey="calendar"><LeaveCalendarTab /></HrTabPanel>}
+      {tab === 'calendar' && <HrTabPanel tabKey="calendar"><LeaveCalendar /></HrTabPanel>}
       {tab === 'types' && <HrTabPanel tabKey="types"><LeaveTypes /></HrTabPanel>}
       {tab === 'holidays' && <HrTabPanel tabKey="holidays"><HolidayCalendar canEdit={canEditHolidays} /></HrTabPanel>}
     </div>

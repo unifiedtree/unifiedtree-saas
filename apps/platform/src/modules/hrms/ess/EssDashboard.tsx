@@ -2,9 +2,10 @@ import { AttendanceHistory } from './AttendanceHistory'
 import { TimeEntries } from './TimeEntries'
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, ClipboardList, CheckCircle, Clock, Home, Repeat } from 'lucide-react'
+import { ArrowRight, ClipboardList, CheckCircle, Clock, Home, Repeat, Wallet } from 'lucide-react'
 import { format } from 'date-fns'
-import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
+import { P, useAnyPermission, usePermission, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
+import { useAuthStore } from '@/core/auth/authStore'
 import { HrStatCard, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
 import { useMonthlyStats } from '../api/useAttendance'
@@ -17,6 +18,15 @@ const LEAVE_TONE: Record<string, PillTone> = {
 export const EssDashboard: React.FC = () => {
   const navigate = useNavigate()
   const user = useSdkStore((state) => state.user)
+  // Each shortcut below is shown only when the viewer can actually open its
+  // destination — same permission lists as the RouteGuards in App.tsx — so a
+  // plain employee is never sent to a NoAccess screen from their own workspace.
+  const canOpenLeave = useAnyPermission([P.HRMS_LEAVE_READ, P.HRMS_ESS_READ, P.LEAVE_REQUEST_SELF])
+  const canOpenOnboarding = useAnyPermission([P.HRMS_ONBOARDING_INSTANCE_READ, P.HRMS_ONBOARDING_TASK_COMPLETE, 'hrms.onboarding.asset.read'])
+  // /me/salary is also behind ModuleGate "payroll" — hide the link when the
+  // tenant has no payroll module rather than linking to the upsell screen.
+  const payrollActive = useAuthStore((s) => s.tenant?.activeModules.includes('payroll') ?? false)
+  const canViewSalary = usePermission(P.PAYROLL_STRUCTURE_READ_SELF) && payrollActive
 
   // Punching is mobile-only — the web ESS dashboard no longer shows a check-in/out
   // widget. useCheckIn/useCheckOut remain in ../api/useAttendance for mobile clients.
@@ -77,9 +87,11 @@ export const EssDashboard: React.FC = () => {
       <div className="ut-card p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-text-primary">Leave Balances</h2>
-          <button onClick={() => navigate('/hrms/leave')} className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]">
-            Apply leave <ArrowRight size={12} />
-          </button>
+          {canOpenLeave && (
+            <button onClick={() => navigate('/hrms/leave?tab=apply')} className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]">
+              Apply leave <ArrowRight size={12} />
+            </button>
+          )}
         </div>
         {balancesLoading ? (
           <CardSkeleton />
@@ -106,26 +118,51 @@ export const EssDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Onboarding tasks shortcut */}
-      <div className="ut-card ut-card-sm p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
-              <ClipboardList size={15} className="text-[#059669]" />
+      {/* Salary structure shortcut — /me/salary has no sidebar entry. */}
+      {canViewSalary && (
+        <div className="ut-card ut-card-sm p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
+                <Wallet size={15} className="text-[#059669]" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-text-primary">My Salary</p>
+                <p className="text-xs text-text-secondary">See your current salary structure and components</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-text-primary">Onboarding Tasks</p>
-              <p className="text-xs text-text-secondary">View your onboarding checklist</p>
-            </div>
+            <button
+              onClick={() => navigate('/me/salary')}
+              className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
+            >
+              View salary <ArrowRight size={12} />
+            </button>
           </div>
-          <button
-            onClick={() => navigate('/hrms/onboarding/instances')}
-            className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
-          >
-            Open <ArrowRight size={12} />
-          </button>
         </div>
-      </div>
+      )}
+
+      {/* Onboarding tasks shortcut */}
+      {canOpenOnboarding && (
+        <div className="ut-card ut-card-sm p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
+                <ClipboardList size={15} className="text-[#059669]" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Onboarding Tasks</p>
+                <p className="text-xs text-text-secondary">View your onboarding checklist</p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/hrms/onboarding/instances')}
+              className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
+            >
+              Open <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Employee self-service shortcuts — mirror the mobile app's "Apply WFH"
           and "Shift Change" so desk employees can raise these from a laptop

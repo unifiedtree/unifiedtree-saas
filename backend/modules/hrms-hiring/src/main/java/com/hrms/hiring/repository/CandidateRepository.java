@@ -14,5 +14,10 @@ public interface CandidateRepository extends JpaRepository<Candidate, UUID> {
 
     long countByRequisitionId(UUID requisitionId);
 
+    /** Row lock for conversion, so two clicks cannot create two employees. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select c from Candidate c where c.id = :id")
+    java.util.Optional<Candidate> findForUpdate(@org.springframework.data.repository.query.Param("id") UUID id);
+
     void deleteByRequisitionId(UUID requisitionId);
 }

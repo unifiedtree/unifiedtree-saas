@@ -24,7 +24,8 @@ class OfferDeliveryTest {
         var renderer = mock(PdfRenderer.class);
         var mail = mock(MailService.class);
         var hiring = new HiringService(mock(JobRequisitionRepository.class), candidates, offers);
-        var delivery = new OfferDeliveryService(offers, candidates, hiring, companies, renderer, mail);
+        var delivery = new OfferDeliveryService(offers, candidates, hiring, companies, renderer, mail,
+                new OfferDeliveryFailureTest.MemoryAttempts(), org.springframework.transaction.support.TransactionOperations.withoutTransaction());
         var offer = new HiringOffer(); offer.setId(UUID.randomUUID()); offer.setCompanyId(UUID.randomUUID());
         offer.setStatus(OfferStatus.DRAFT); offer.setOfferedCtc(BigDecimal.TEN);
         offer.setCandidateName("Candidate"); offer.setRoleTitle("Engineer");

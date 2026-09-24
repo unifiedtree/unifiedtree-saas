@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
-import { AdvanceAdmin, AdvanceDecisionActions, AdvanceError } from './advance/AdvanceAdmin'
+import { AdvanceAdmin, AdvanceDecisionActions, AdvanceError, advanceLabel } from './advance/AdvanceAdmin'
 import {
   HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
 } from '@/shared/components/hr'
@@ -90,7 +90,7 @@ function MyAdvancesTab() {
             { key: 'amount', header: 'Amount', render: (a: any) => <span className="font-semibold text-text-primary">{inr(a.amount)}</span> },
             { key: 'monthly', header: 'Monthly', render: (a: any) => <span className="text-text-secondary">{inr(a.monthlyDeduction)}</span> },
             { key: 'months', header: 'Months', render: (a: any) => <span className="text-text-secondary">{a.repaymentMonths}</span> },
-            { key: 'status', header: 'Status', render: (a: any) => <HrStatusPill tone={STATUS_TONE[a.status as AdvanceStatus]}>{a.status}</HrStatusPill> },
+            { key: 'status', header: 'Status', render: (a: any) => <HrStatusPill tone={STATUS_TONE[a.status as AdvanceStatus]}>{advanceLabel(a)}</HrStatusPill> },
             { key: 'requested', header: 'Requested', render: (a: any) => <span className="text-text-secondary">{a.createdAt ? format(new Date(a.createdAt), 'd MMM yyyy') : '—'}</span> }
           ]}
           data={advances}
@@ -183,7 +183,7 @@ function ApprovalsTab() {
         { key: 'amount', header: 'Amount', render: a => <span className="font-semibold">{inr(a.amount)}</span> },
         { key: 'reason', header: 'Reason', render: a => <p className="max-w-xs whitespace-pre-wrap text-sm text-text-secondary">{a.reason || 'No reason provided'}</p> },
         { key: 'monthly', header: 'Monthly', render: a => <span>{inr(a.monthlyDeduction)}</span> },
-        { key: 'status', header: 'Status', render: a => <HrStatusPill tone={STATUS_TONE[a.status]}>{a.status}</HrStatusPill> },
+        { key: 'status', header: 'Status', render: a => <HrStatusPill tone={STATUS_TONE[a.status]}>{advanceLabel(a)}</HrStatusPill> },
         { key: 'action', header: 'Action', render: a => <AdvanceDecisionActions advance={a} /> },
       ]} data={query.data?.content ?? []} keyField="id" loading={query.isPending} emptyMessage="No advances awaiting action." />
     </TableCard>

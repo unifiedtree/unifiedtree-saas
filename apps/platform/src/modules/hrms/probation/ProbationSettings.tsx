@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Clock } from 'lucide-react'
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
 import { Button, Field, Input } from '@unifiedtree/ui-kit'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
-import { HrPageHeader, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { HrButton, HrPageHeader, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import {
   useProbationConfig, useUpdateProbationConfig,
   useProbationReminders, useTriggerProbationScan,
@@ -19,6 +21,10 @@ export const ProbationSettings: React.FC = () => {
   const scan = useTriggerProbationScan()
   const { data: reminders = [], isLoading: remindersLoading } = useProbationReminders()
   const canReadReminders = usePermission(P.HRMS_PROBATION_REMINDERS_READ)
+  // Work Time Settings has no sidebar entry; this is its entry point. Gated
+  // on the permission its RouteGuard (App.tsx) requires.
+  const canEditWorkTime = usePermission(P.SETTINGS_HRCONFIG_WRITE)
+  const navigate = useNavigate()
 
   const [days, setDays] = useState(7)
   const [autoExtend, setAutoExtend] = useState(false)
@@ -55,6 +61,11 @@ export const ProbationSettings: React.FC = () => {
         crumb="Settings"
         title="Probation Settings"
         subtitle="Configure when probation-ending reminders are sent to managers and HR."
+        actions={canEditWorkTime ? (
+          <HrButton variant="ghost" size="sm" onClick={() => navigate('/hrms/settings/work-time')}>
+            <Clock size={15} /> Work time settings
+          </HrButton>
+        ) : undefined}
       />
 
       <div className="ut-card ut-card-lg space-y-5 p-6">

@@ -5,6 +5,7 @@ import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.core.tenant.TenantContext;
 import com.hrms.hiring.dto.CandidateRequest;
+import com.hrms.hiring.dto.CandidateConversionFacts;
 import com.hrms.hiring.dto.CandidateResponse;
 import com.hrms.hiring.dto.CandidateStageRequest;
 import com.hrms.hiring.dto.JobRequisitionRequest;
@@ -290,6 +291,52 @@ public class HiringService {
         return toCandidate(candidate);
     }
 
+    // ── Candidate → employee conversion ─────────────────────────────────────
+
+    /**
+     * Lock a HIRED, not-yet-converted candidate and return the facts the
+     * employee record is built from. Must run inside the caller's transaction
+     * (the lock is what makes a double-click create one employee, not two).
+     */
+    @Transactional
+    public CandidateConversionFacts beginConversion(UUID candidateId) {
+        Candidate c = candidateRepository.findForUpdate(candidateId)
+                .orElseThrow(() -> new ResourceNotFoundException("Candidate", candidateId));
+        if (c.getConvertedEmployeeId() != null) {
+            throw new com.hrms.core.exception.HrmsException(
+                    "This candidate has already been converted to an employee",
+                    org.springframework.http.HttpStatus.CONFLICT, "CANDIDATE_ALREADY_CONVERTED");
+        }
+        if (c.getStage() != CandidateStage.HIRED) {
+            throw new BusinessRuleException(
+                    "Only a HIRED candidate can be converted to an employee (current stage: " + c.getStage() + ")",
+                    "CANDIDATE_NOT_HIRED");
+        }
+        JobRequisition req = requisitionRepository.findById(c.getRequisitionId())
+                .orElseThrow(() -> new ResourceNotFoundException("JobRequisition", c.getRequisitionId()));
+        HiringOffer offer = offerRepository
+                .findFirstByCandidateIdAndStatusOrderByRespondedAtDescCreatedAtDesc(candidateId, OfferStatus.ACCEPTED)
+                .orElse(null);
+        return new CandidateConversionFacts(
+                c.getId(), c.getFullName(), c.getEmail(), c.getPhone(),
+                req.getCompanyId(), req.getDepartmentId(), req.getEmploymentType(),
+                offer != null ? offer.getRoleTitle() : req.getTitle(),
+                offer != null ? offer.getJoiningDate() : null,
+                offer != null && offer.getOfferedCtc() != null && offer.getOfferedCtc().signum() > 0 ? offer.getOfferedCtc() : null);
+    }
+
+    /** Record the employee a candidate became. Same transaction as {@link #beginConversion}. */
+    @Transactional
+    public CandidateResponse completeConversion(UUID candidateId, UUID employeeId) {
+        Candidate c = candidateRepository.findForUpdate(candidateId)
+                .orElseThrow(() -> new ResourceNotFoundException("Candidate", candidateId));
+        c.setConvertedEmployeeId(employeeId);
+        c.setConvertedAt(java.time.Instant.now());
+        c = candidateRepository.save(c);
+        log.info("Candidate {} converted to employee {}", candidateId, employeeId);
+        return toCandidate(c);
+    }
+
     /**
      * Enforce the hiring-pipeline state machine:
      * <ul>
@@ -379,6 +426,6 @@ public class HiringService {
         return new CandidateResponse(
                 c.getId(), c.getRequisitionId(), c.getFullName(), c.getEmail(),
                 c.getPhone(), c.getStage(), c.getSource(), c.getExpectedCtc(),
-                c.getNotes(), c.getCreatedAt());
+                c.getNotes(), c.getCreatedAt(), c.getConvertedEmployeeId(), c.getConvertedAt());
     }
 }

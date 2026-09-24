@@ -307,6 +307,77 @@ public class WorkforceController {
         return employees.directory(new WorkforceFilter(companyId, departmentId, branchId, status, search, page, pageSize));
     }
 
+    /** Upper bound on one export; beyond it the response says so instead of silently cutting rows. */
+    private static final int EXPORT_MAX_ROWS = 10_000;
+
+    /**
+     * Workforce Directory as CSV, honouring the same filters and the same
+     * permission as the JSON directory above — an export must not be a wider
+     * door than the screen. See {@link EmployeeDirectoryCsv} for the columns
+     * (no salary / bank / identity fields) and the escaping rules.
+     *
+     * <p>Rows are read through the directory service page by page, so tenant
+     * RLS and the list projection's masking apply unchanged. When the result
+     * exceeds {@link #EXPORT_MAX_ROWS} the file holds the first N rows and the
+     * {@code X-Export-Truncated} / {@code X-Export-Total} headers tell the client.
+     */
+    @GetMapping("/employees/export.csv")
+    @PreAuthorize("hasAuthority('hrms.employee.read')")
+    public ResponseEntity<byte[]> exportDirectory(
+            @RequestParam(required = false) UUID companyId,
+            @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) UUID branchId,
+            @RequestParam(required = false) WorkforceEmployee.EmploymentStatus status,
+            @RequestParam(required = false) String search) {
+        List<WorkforceEmployeeResponse> rows = new java.util.ArrayList<>();
+        long total = 0;
+        for (int page = 0; ; page++) {
+            PageResponse<WorkforceEmployeeResponse> chunk = employees.directory(
+                    new WorkforceFilter(companyId, departmentId, branchId, status, search, page, 500));
+            total = chunk.totalElements();
+            rows.addAll(chunk.content());
+            if (chunk.last() || chunk.content().isEmpty() || rows.size() >= EXPORT_MAX_ROWS) break;
+        }
+        boolean truncated = rows.size() > EXPORT_MAX_ROWS || total > rows.size();
+        if (rows.size() > EXPORT_MAX_ROWS) rows = rows.subList(0, EXPORT_MAX_ROWS);
+
+        java.util.Map<UUID, String> departmentNames = new java.util.HashMap<>();
+        java.util.Map<UUID, String> designationNames = new java.util.HashMap<>();
+        java.util.Map<UUID, String> branchNames = new java.util.HashMap<>();
+        for (UUID company : rows.stream().map(WorkforceEmployeeResponse::companyId).filter(java.util.Objects::nonNull).distinct().toList()) {
+            departments.listForCompany(company).forEach(d -> departmentNames.put(d.id(), d.name()));
+            designations.listForCompany(company, null).forEach(d -> designationNames.put(d.id(), d.title()));
+            branches.listForCompany(company).forEach(b -> branchNames.put(b.id(), b.name()));
+        }
+        // Managers are usually in the same export; the rest are looked up once each.
+        java.util.Map<UUID, String> managerNames = new java.util.HashMap<>();
+        rows.forEach(e -> managerNames.put(e.id(), fullName(e)));
+        for (UUID managerId : rows.stream().map(WorkforceEmployeeResponse::reportingManagerId)
+                .filter(id -> id != null && !managerNames.containsKey(id)).distinct().toList()) {
+            try {
+                managerNames.put(managerId, fullName(employees.get(managerId)));
+            } catch (RuntimeException notVisible) {
+                managerNames.put(managerId, "");
+            }
+        }
+
+        byte[] body = EmployeeDirectoryCsv.render(rows, departmentNames, designationNames, branchNames, managerNames);
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(new org.springframework.http.MediaType("text", "csv", java.nio.charset.StandardCharsets.UTF_8));
+        headers.setContentDispositionFormData("attachment", "employees-" + LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")) + ".csv");
+        headers.setContentLength(body.length);
+        headers.set("X-Export-Rows", String.valueOf(rows.size()));
+        headers.set("X-Export-Total", String.valueOf(total));
+        if (truncated) headers.set("X-Export-Truncated", "true");
+        headers.setAccessControlExposeHeaders(List.of("X-Export-Rows", "X-Export-Total", "X-Export-Truncated", "Content-Disposition"));
+        return new ResponseEntity<>(body, headers, HttpStatus.OK);
+    }
+
+    private static String fullName(WorkforceEmployeeResponse e) {
+        return java.util.stream.Stream.of(e.firstName(), e.lastName())
+                .filter(s -> s != null && !s.isBlank()).reduce((a, b) -> a + " " + b).orElse(e.employeeCode());
+    }
+
     @GetMapping("/employees/{id}")
     @PreAuthorize("hasAuthority('hrms.employee.read')")
     public WorkforceEmployeeResponse getEmployee(@PathVariable UUID id) {

@@ -32,6 +32,22 @@ public record StaffStatusResponse(
         // "On Leave" tile counts these, and "Absent" is defined as no punch AND
         // not on leave — neither is reproducible from the punch alone, because
         // leave lives in a different module entirely.
-        boolean onLeave
+        boolean onLeave,
+        // The shift in force on this date (null when unassigned). Together with
+        // expectedCheckInAt these answer the client's "one person is late — who,
+        // and how late?": status alone said LATE but not against what.
+        String shiftName,
+        // Scheduled check-in (shift start on the attendance date, IST).
+        Instant expectedCheckInAt,
+        Integer graceMinutes,
+        // Minutes between the scheduled start and the actual check-in, set only
+        // when the record's status is LATE (grace already decided lateness).
+        Integer lateByMinutes
 ) {
+    /** Minutes late for a LATE record against its scheduled start; null otherwise. */
+    public static Integer lateBy(String status, Instant checkInAt, Instant expectedCheckInAt) {
+        if (!"LATE".equals(status) || checkInAt == null || expectedCheckInAt == null) return null;
+        long minutes = java.time.Duration.between(expectedCheckInAt, checkInAt).toMinutes();
+        return minutes > 0 ? (int) minutes : null;
+    }
 }

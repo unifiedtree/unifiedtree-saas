@@ -22,7 +22,10 @@ import {
  * leaf never rendered and the only way to see who was serving notice was to
  * open each profile's Exit tab. This page is that missing list. It reuses the
  * workforce notice/exit/cancel-notice APIs and the directory's status filter —
- * nothing new on the backend — and hands off to /hrms/fnf for the settlement.
+ * nothing new on the backend — and hands off to /hrms/fnf for the settlement: a leaver's F&F button opens the
+ * Create settlement tab with that employee preselected (?tab=create&employeeId=).
+ * Their settlement status is not shown here — GET /v1/fnf/settlements cannot be
+ * filtered by employee, so it would mean paging the whole ledger per list page.
  */
 
 type TabKey = 'NOTICE_PERIOD' | 'EXITED' | 'TERMINATED'
@@ -43,6 +46,7 @@ export function ExitCenter() {
   const canRead = usePermission('hrms.employee.read')
   const canWrite = usePermission('hrms.employee.write')
   const canSettle = usePermission('hrms.fnf.read')
+  const canProcessSettlement = usePermission('hrms.fnf.process')
   const [tab, setTab] = useState<TabKey>('NOTICE_PERIOD')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
@@ -107,7 +111,7 @@ export function ExitCenter() {
       render: emp => (
         <div className="flex justify-end gap-2">
           <Link to={`/hrms/employees/${emp.id}?tab=exit`}><HrButton size="sm" variant="ghost">Profile</HrButton></Link>
-          {canSettle && <Link to="/hrms/fnf"><HrButton size="sm" variant="ghost"><Wallet size={14} /> F&amp;F</HrButton></Link>}
+          {(canSettle || canProcessSettlement) && <Link to={canProcessSettlement ? `/hrms/fnf?tab=create&employeeId=${emp.id}` : '/hrms/fnf'}><HrButton size="sm" variant="ghost"><Wallet size={14} /> F&amp;F</HrButton></Link>}
         </div>
       ),
     },
