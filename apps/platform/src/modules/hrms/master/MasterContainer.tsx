@@ -13,6 +13,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { usePermission, P } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
+import { PageSkeleton } from '@/shared/components/PageSkeleton'
 import * as Design from '@/design/master/MasterDesign'
 import { TODAY_ISO, pl } from '@/design/master/masterRuntime'
 import { useCompanies, type Branch, type Department, type Designation, type Grade, type EmploymentTypeRecord } from '../api/useOrg'
@@ -288,7 +289,7 @@ export function MasterContainer() {
   const retry = () => { qc.invalidateQueries({ queryKey: ['hrms'] }); qc.invalidateQueries({ queryKey: ['master'] }) }
   const body = !allowed ? <div className="card"><Empty icon="lock" title="You don’t have access to this section" body="Ask an admin if you need it." /></div>
     : failed ? <div className="card"><Empty icon="alert-triangle" title="This page couldn’t load" body={errText(failed)} action={<button className="btn sm" onClick={retry}>Try again</button>} /></div>
-      : loading ? <div className="card" aria-busy="true"><Empty icon="hourglass" title="Loading master data…" /></div>
+      : loading ? <PageSkeleton path={location.pathname} bare />
         : <Page key={`${route.p}|${route.q}|${route.status}|${route.co}|${route.dept}|${route.branch}`} />
   return (
     <div className="utm" data-master-page={page}>

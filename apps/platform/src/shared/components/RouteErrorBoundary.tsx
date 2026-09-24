@@ -15,13 +15,18 @@ import React from 'react'
  * single one should cost the user one page, not the whole product — and it
  * should say so instead of showing a white screen.
  *
- * Keyed by route path in App.tsx so navigating away from a broken page
+ * Reset by route path (resetKey) so navigating away from a broken page
  * automatically remounts a fresh boundary and clears the error.
  */
 interface Props {
   children: React.ReactNode
   /** Shown in the fallback so a bug report can name the screen. */
   routeLabel?: string
+  /**
+   * A change (the route) clears a caught error. Used instead of a React `key`:
+   * keying remounted the whole app — shell included — on every navigation.
+   */
+  resetKey?: string
 }
 
 interface State {
@@ -33,6 +38,10 @@ export class RouteErrorBoundary extends React.Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { error }
+  }
+
+  componentDidUpdate(prev: Props) {
+    if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null })
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {

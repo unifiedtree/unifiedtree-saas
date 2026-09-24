@@ -4,6 +4,7 @@
 // profile menu) is supplied by PlatformShell.
 import { useEffect, useRef, type ReactNode } from 'react'
 import { dashIcon } from '../dc/icons'
+import { preloadPath } from '@/shared/routing/lazyPage'
 import './shell.css'
 
 export const CHROME_FONT = 'Inter,-apple-system,sans-serif'
@@ -16,12 +17,14 @@ export interface RailEntry {
   active: boolean
   divider?: boolean
   onClick: () => void
+  /** Hover / focus: fetch the page's code before the click. */
+  onIntent?: () => void
 }
 
 function RailButton({ n }: { n: RailEntry }) {
   if (n.active) {
     return (
-      <button type="button" aria-current="page" onClick={n.onClick} title={n.title}
+      <button type="button" aria-current="page" onClick={n.onClick} onMouseEnter={n.onIntent} onFocus={n.onIntent} title={n.title}
         style={{ position: 'relative', overflow: 'hidden', width: '72px', height: '58px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', border: '0', borderRadius: '12px', background: 'rgba(255,255,255,.13)', color: '#fff', fontFamily: 'inherit', fontSize: '11px', fontWeight: 700, cursor: 'pointer', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.14),0 8px 16px -10px rgba(0,0,0,.55)' }}>
         <span aria-hidden="true" style={{ position: 'absolute', left: '0', top: '0', bottom: '0', width: '3px', background: '#6ee7b7', boxShadow: '0 0 12px rgba(110,231,183,.9)' }} />
         <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#6ee7b7' }}>{n.icon}</span>
@@ -30,7 +33,7 @@ function RailButton({ n }: { n: RailEntry }) {
     )
   }
   return (
-    <button type="button" onClick={n.onClick} title={n.title} className="ds-rail-idle"
+    <button type="button" onClick={n.onClick} onMouseEnter={n.onIntent} onFocus={n.onIntent} title={n.title} className="ds-rail-idle"
       style={{ width: '72px', height: '54px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', border: '0', borderRadius: '12px', background: 'transparent', color: 'rgba(255,255,255,.82)', fontFamily: 'inherit', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>
       {n.icon}
       <span>{n.label}</span>
@@ -156,7 +159,7 @@ export function DesignSubNav({ label, items }: { label: string; items: SubNavEnt
           </a>
         ) : (
           // A real link (open in a new tab works); a plain click stays in the app.
-          <a key={s.path} href={s.path} className="ds-subnav-idle"
+          <a key={s.path} href={s.path} className="ds-subnav-idle" onMouseEnter={() => preloadPath(s.path)} onFocus={() => preloadPath(s.path)}
             onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); s.onClick() }}
             style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', height: '56px', padding: '0 4px', border: '0', background: 'none', font: 'inherit', fontSize: '14px', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', cursor: 'pointer', boxShadow: 'inset 0 -3px 0 transparent', transition: 'color .15s,box-shadow .15s', textDecoration: 'none' }}>
             {s.label}

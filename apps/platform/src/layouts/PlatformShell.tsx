@@ -20,6 +20,9 @@ import { formatDistanceToNow } from 'date-fns'
 // Canonical admin-roles SSOT — do NOT redeclare locally. See useRoles.ts.
 import { ADMIN_ROLES as CANONICAL_ADMIN_ROLES } from '@/shared/hooks/useRoles'
 import { dashIcon } from '@/design/dc/icons'
+import { RouteErrorBoundary } from '@/shared/components/RouteErrorBoundary'
+import { PageSkeleton } from '@/shared/components/PageSkeleton'
+import { preloadPath, preloadPathsWhenIdle } from '@/shared/routing/lazyPage'
 import {
   DesignRail, DesignHeader, DesignSubNav, DesignMobileHeader, DesignMobileNav, DesignTooltip,
   HeaderSearch, HeaderIconButton, HeaderBellButton, HeaderProfileButton, HeaderDivider,
@@ -466,6 +469,16 @@ export function PlatformShell() {
     return list
   })()
 
+  // Fetch the code of every page this person can reach from the rail and its sections while the
+  // browser is idle, so opening one doesn't wait on a download (lazyPage.ts).
+  const reachable = [...railItems.flatMap(i => [i.target, ...(i.children ?? []).map(c => c.path)]), ...(isAdmin ? SETTINGS_NAV.filter(isVisible).filter(i => i.path).map(t => t.path!) : [])].join('|')
+  useEffect(() => {
+    if (!reachable) return
+    const t = window.setTimeout(() => preloadPathsWhenIdle(reachable.split('|')), 1200)
+    return () => window.clearTimeout(t)
+  }, [reachable])
+
+
   // Several nav children intentionally share a route (e.g. the compliance
   /* ── Pages for the ⌘K palette ─────────────────────────────────────────────
    *
@@ -617,6 +630,7 @@ export function PlatformShell() {
     active: scope !== 'admin' && item.key === litKey,
     divider: RAIL_DIVIDERS.has(item.key),
     onClick: () => navigate(item.target),
+    onIntent: () => preloadPath(item.target),
   })
   const railTop = railItems.filter(i => i.key !== 'hrsettings').map(railEntry)
   const railBottom = railItems.filter(i => i.key === 'hrsettings').map(railEntry)
@@ -708,7 +722,13 @@ export function PlatformShell() {
           }
         />
         {sectionTabs && <DesignSubNav label={sectionTabs.label} items={sectionTabs.items} />}
-        <div id="workspace-content" tabIndex={-1} className="workspace-content flex-1 overflow-auto"><Outlet /></div>
+        <div id="workspace-content" tabIndex={-1} className="workspace-content flex-1 overflow-auto">
+          {/* The shell stays put between pages: a broken page is contained here, and a page whose
+              code is still arriving shows its own outline instead of blanking the app. */}
+          <RouteErrorBoundary resetKey={location.pathname} routeLabel={location.pathname}>
+            <React.Suspense fallback={<PageSkeleton path={location.pathname} />}><Outlet /></React.Suspense>
+          </RouteErrorBoundary>
+        </div>
       </main>
       {searchModal}
       <DesignTooltip />

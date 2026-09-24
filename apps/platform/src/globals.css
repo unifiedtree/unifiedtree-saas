@@ -398,3 +398,8 @@ table td, table th,
     scroll-behavior: auto !important;
   }
 }
+
+/* Page skeletons (shared/components/PageSkeleton.tsx): a soft shimmer on the redesign's slate. */
+.ut-skel { background: linear-gradient(90deg, #eef2f6 0%, #f6f8fa 45%, #eef2f6 90%); background-size: 200% 100%; animation: utSkel 1.3s ease-in-out infinite; }
+@keyframes utSkel { from { background-position: 100% 0 } to { background-position: -100% 0 } }
+@media (prefers-reduced-motion: reduce) { .ut-skel { animation: none } }
