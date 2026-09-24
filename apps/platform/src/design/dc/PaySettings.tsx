@@ -201,7 +201,6 @@ export class PaySettings extends DCLogic {
       return createElement(Field as any, { label, hint: o.hint, error: vis(k) },
         createElement(Input as any, { value: o.money ? grp(raw) : raw, onChange: (e: any) => set(sa as keyof Form, sb, o.clean(e.target.value)), inputMode: o.mode || 'decimal', autoComplete: 'off', spellCheck: false, disabled: o.disabled || undefined, placeholder: o.ph, leftElement: o.pre ? affix(o.pre) : undefined, rightElement: o.suf ? affix(o.suf) : undefined, style: o.mono ? mono : undefined }))
     }
-    const NO_SLABS: Record<string, boolean> = { Kerala: true }
     const fx = {
       pfEmp: fld('pf.emp', 'Employee %', { clean: cPct, suf: '%' }),
       pfEr: fld('pf.er', 'Employer %', { clean: cPct, suf: '%' }),
@@ -237,7 +236,8 @@ export class PaySettings extends DCLogic {
       }, extra)
     }
     const slabRows = (p.ptSlabs || []) as { id: string; minSalary: number; maxSalary?: number | null; monthlyTax: number }[]
-    const ptHas = !!f.pt.state && !NO_SLABS[f.pt.state] && slabRows.length > 0
+    // Whether a state levies PT comes from its seeded slabs (Kerala has nine), not a fixed list.
+    const ptHas = !!f.pt.state && slabRows.length > 0
     const taxes = slabRows.map((r) => Number(r.monthlyTax))
     const pf = card('pf', 'Provident Fund (PF)', `Employee ${f.pf.emp || '—'}% · Employer ${f.pf.er || '—'}% · ${f.pf.applyCeiling ? 'on wages up to ' + inr(f.pf.ceiling) : 'on full PF wages'}`, {
       ceilSwitch: Switch(!!f.pf.applyCeiling, () => set('pf', 'applyCeiling', !f.pf.applyCeiling), { 'aria-labelledby': 'ps-pf-ceil-l', 'aria-describedby': 'ps-pf-ceil-d' }),

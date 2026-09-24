@@ -403,3 +403,6 @@ table td, table th,
 .ut-skel { background: linear-gradient(90deg, #eef2f6 0%, #f6f8fa 45%, #eef2f6 90%); background-size: 200% 100%; animation: utSkel 1.3s ease-in-out infinite; }
 @keyframes utSkel { from { background-position: 100% 0 } to { background-position: -100% 0 } }
 @media (prefers-reduced-motion: reduce) { .ut-skel { animation: none } }
+
+/* Settings pages (design/settings/SettingsKit.tsx): the "On this page" hover from the Payroll Settings design. */
+.ut-toc-idle:hover { background: #f1f5f9 !important; color: #0f172a !important }

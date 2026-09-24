@@ -63,7 +63,7 @@ const EssDashboard = lazyPage(() => import('@/modules/hrms/ess/EssDashboard').th
 const ShiftChangeRequest = lazyPage(() => import('@/modules/hrms/shifts/ShiftChangeRequest').then(m => ({ default: m.ShiftChangeRequest })))
 const TeamDashboard = lazyPage(() => import('@/modules/hrms/team/TeamDashboard').then(m => ({ default: m.TeamDashboard })))
 const ReportsIndex = lazyPage(() => import('@/modules/hrms/reports/ReportsIndex').then(m => ({ default: m.ReportsIndex })))
-const ProbationSettings = lazyPage(() => import('@/modules/hrms/probation/ProbationSettings').then(m => ({ default: m.ProbationSettings })))
+const HrConfigurationPage = lazyPage(() => import('@/modules/hrms/settings/HrConfigurationPage').then(m => ({ default: m.HrConfigurationPage })))
 const Expense = lazyPage(() => import('@/modules/hrms/Expense').then(m => ({ default: m.Expense })))
 const FullAndFinal = lazyPage(() => import('@/modules/hrms/FullAndFinal').then(m => ({ default: m.FullAndFinal })))
 const ExitCenter = lazyPage(() => import('@/modules/hrms/exit/ExitCenter').then(m => ({ default: m.ExitCenter })))
@@ -74,7 +74,6 @@ const WorkforceAnalytics = lazyPage(() => import('@/modules/hrms/analytics/Workf
 const PayrollModule = lazyPage(() => import('@/modules/hrms/payroll/PayrollContainer').then(m => ({ default: m.PayrollContainer })))
 const MusterRoll = lazyPage(() => import('@/modules/hrms/attendance/MusterRoll').then(m => ({ default: m.MusterRoll })))
 const ManualEntry = lazyPage(() => import('@/modules/hrms/attendance/ManualEntry').then(m => ({ default: m.ManualEntry })))
-const WorkTimeSettings = lazyPage(() => import('@/modules/hrms/organization/WorkTimeSettings').then(m => ({ default: m.WorkTimeSettings })))
 const BankDisbursement = lazyPage(() => import('@/modules/hrms/payroll/BankDisbursement').then(m => ({ default: m.BankDisbursement })))
 const DocumentVault = lazyPage(() => import('@/modules/hrms/DocumentVault').then(m => ({ default: m.DocumentVault })))
 const PendingDocuments = lazyPage(() => import('@/pages/PendingDocuments').then(m => ({ default: m.PendingDocuments })))
@@ -455,14 +454,12 @@ const ROUTE_TREE = (
             </RouteGuard>
           }
         />
-        {/* Per-company work-time settings (grace, auto-deduct, workweek). Kept
-            as its own top-level route (rather than folded into OrgSetup) so
-            the existing tabbed OrgSetup layout is untouched. */}
+        {/* HR Configuration opened at its Work week section (old link). */}
         <Route
           path="/hrms/settings/work-time"
           element={
-            <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE]}>
-              <ModuleGate moduleKey="hrms"><WorkTimeSettings /></ModuleGate>
+            <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_READ, P.HRMS_PROBATION_CONFIG_READ]}>
+              <ModuleGate moduleKey="hrms"><HrConfigurationPage /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -631,8 +628,8 @@ const ROUTE_TREE = (
         <Route
           path="/hrms/settings"
           element={
-            <RouteGuard anyOf={[P.HRMS_PROBATION_CONFIG_READ]}>
-              <ModuleGate moduleKey="hrms"><ProbationSettings /></ModuleGate>
+            <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_READ, P.HRMS_PROBATION_CONFIG_READ]}>
+              <ModuleGate moduleKey="hrms"><HrConfigurationPage /></ModuleGate>
             </RouteGuard>
           }
         />

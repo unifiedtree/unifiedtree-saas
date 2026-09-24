@@ -30,11 +30,12 @@ export interface ProbationReminder {
 
 const KEY = ['hrms', 'probation'] as const
 
-export function useProbationConfig() {
+export function useProbationConfig(enabled = true) {
   return useQuery({
     queryKey: [...KEY, 'config'],
     queryFn: () => apiJson<ProbationConfig>('/v1/probation/config'),
     staleTime: 60_000,
+    enabled,
   })
 }
 
@@ -55,11 +56,12 @@ export function useUpcomingProbations(days = 30) {
   })
 }
 
-export function useProbationReminders() {
+export function useProbationReminders(enabled = true) {
   return useQuery({
     queryKey: [...KEY, 'reminders'],
     queryFn: () => apiJson<ProbationReminder[]>('/v1/probation/reminders'),
     staleTime: 30_000,
+    enabled,
   })
 }
 

@@ -276,3 +276,55 @@ Checked live:
 - *Fixed:* The week strip called today "Absent" before the day was over; it now reads "Not marked yet". Days before a person's first punch now read "Not tracked", not "Upcoming".
 - *Fixed:* The absent count on Overview no longer includes today.
 - *Needs backend:* The weekly summary itself (`AttendanceService.getWeeklySummary`) still returns `ABSENT` for today with no punch. It should be neutral until the day ends.
+
+## 8. Settings pages: the Payroll Settings pattern (`/hrms/payroll/settings`, `/hrms/settings`, `/hrms/settings/work-time`)
+
+Design: `docs/Designs/UnifiedTree Payroll Settings.html` (`PaySettings.dc.html`). The live Payroll Settings page already matched it. The brief says every settings page should follow it, so the pattern is now a shared kit.
+
+How it's built:
+- `src/design/settings/SettingsKit.tsx` copies the design's parts with its exact styles:
+  - page header and the sticky "On this page" list, which follows the scroll (chips on a phone)
+  - a card per section with its icon, summary line and On/Off switch or "Coming soon" pill
+  - fields, view-only rows, switch rows and notes
+  - the view-only notice, loading skeleton, error state (with retry) and "Access restricted" state
+  - the sticky "You have unsaved changes" bar ("Fix N errors to save" jumps to the first one), the dark toasts, and a warning before closing the tab with unsaved changes
+- `src/modules/hrms/settings/HrConfigurationPage.tsx` is the first page built on it. It replaces two older pages:
+  - Probation Settings (`/hrms/settings`)
+  - Work Time Settings (`/hrms/settings/work-time`, which now opens the same page at the Work week section)
+- The page has seven sections: Employee IDs, Probation, Notice & exit, Work week, Late arrival, Attendance rules and Fiscal year. With more than one company, a company picker sits at the top.
+
+**Who sees what:**
+- **Open the page:** anyone with `settings.hrconfig.write`, `settings.read` or `hrms.probation.config.read`.
+- **Edit HR rules:** needs `settings.hrconfig.write`.
+- **Edit probation reminders:** needs `hrms.probation.config.update`.
+- **See the recent reminders list:** needs `hrms.probation.reminders.read`.
+- **Everyone else:** fields show as plain values under a "View only" note.
+- Reader and manager accounts are sent away by the route guard, as before.
+
+**Checked live:**
+- `e2e/recovery/live-design-hrconfig.mjs`, 25/25:
+  - all seven sections and the side list render
+  - the next code preview uses real data
+  - an empty prefix blocks saving
+  - Discard works
+  - saving writes the late grace and the reminder days to the database
+  - `/work-time` lands on Work week
+  - no sideways scroll on a phone
+  - reader and manager can't edit
+  - every value is put back afterwards
+- `live-dead-entrypoints.mjs` was updated for this page and the new employee workspace: 29/29.
+
+**Payroll Settings fix:** Kerala was hard-coded as "no professional tax slabs" in the page. The database has 9 Kerala slabs. The page now shows slabs for any state that has them.
+
+| Item | Status | Detail |
+|---|---|---|
+| Employee IDs (prefix, next number, preview) | Done, applied | New people get the next code. If a higher code is already in use, the server skips past it. The number's length sets the padding. |
+| Probation reminders (days before, auto-extend, **Send reminders now**, recent reminders) | Done, applied | Uses `/v1/probation/config`, `/scan-now` and `/reminders`. |
+| Default probation length | Saved, not applied | Nothing sets a new hire's probation end date from it. The date comes from the employee form or **Extend**. *Needs:* set `probation_end_date = date_of_joining + N months` on create when none is given. |
+| Default notice period | Applied (frontend) | Pre-fills the last working day when starting an exit in Employee Master. |
+| Retirement age | Saved, not applied | Nothing is scheduled from it. *Needs:* a retirement-due list or alert. |
+| Work week (start day, weekly offs) | Partly applied | The leave form preview and the leave calendar use the weekly offs. **Bug (backend):** `LeaveService.isWeekend` hard-codes Saturday and Sunday, so on a 6-day or Friday–Saturday week the days deducted differ from the preview. It should read `weekend_days` for the person's company. Attendance uses each person's own `weekly_off_days`. |
+| Late arrival (company grace, automatic deduction) | Saved, not applied | Late comes from each shift's start plus the shift's own grace, or 09:30 with no shift. Loss of pay for late marks comes from Payroll Settings → late-mark threshold (`PayrollRunService`). *Needs:* either wire these in or remove them. |
+| Attendance rules (geofencing on mobile, work from home) | Saved, not applied | Blocking check-ins outside the zone is one server-wide setting (`hrms.attendance.geofence-enforce`, on in production). Work-from-home requests depend only on the `wfh.request.self` permission. *Needs:* read these per company in `AttendanceController.checkIn` and `WfhController`. |
+| Fiscal year | Saved, not applied | Shown and saved, but nothing reads this copy. The company record has its own fiscal-year field (Companies page, `hrms.companies.fiscal_year_start`). *Needs:* keep one of the two. |
+| Other settings pages (Profile, Workspace Settings: branding, security, notifications, billing, integrations, danger zone) | Next | They'll move to the same kit. |

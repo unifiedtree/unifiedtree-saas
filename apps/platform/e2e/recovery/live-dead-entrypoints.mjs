@@ -1,7 +1,7 @@
 // Wired-but-unreachable screens — browser acceptance against the local recovery
 // runtime. Checks the new entry points added for pages that had no link:
 //   - My Salary (/me/salary) from My Workspace (/me) and My Payslips (/me/payslips)
-//   - Work Time Settings (/hrms/settings/work-time) from HR Configuration (/hrms/settings)
+//   - HR Configuration (/hrms/settings) and its old Work time link (/hrms/settings/work-time)
 //   - the employee workspace Overview "Expenses" link (was /hrms/expense, a dead route)
 //   - "Apply leave" on /me opening the Apply tab an employee can actually use
 // Read-only: no fixtures are written.
@@ -123,27 +123,26 @@ try {
     const { ctx, page } = await session('owner@unifiedtree.demo')
 
     await page.goto(base + '/hrms/settings')
-    await page.getByRole('heading', { name: 'Probation Settings' }).waitFor({ timeout: 30_000 })
-    const wt = page.getByRole('button', { name: /Work time settings/ })
-    check('/hrms/settings shows a "Work time settings" link to the owner', (await wt.count()) === 1)
+    await page.getByRole('heading', { name: 'Work week', exact: true }).waitFor({ timeout: 30_000 })
+    check('/hrms/settings shows the Work week section to the owner', (await page.getByRole('heading', { name: 'Work week', exact: true }).count()) === 1)
     assertClean('/hrms/settings')
-    await wt.click()
-    await page.waitForURL((u) => u.pathname === '/hrms/settings/work-time', { timeout: 15_000 })
-    await page.getByRole('heading', { name: 'Work Time Settings' }).waitFor({ timeout: 30_000 })
-    check('"Work time settings" opens /hrms/settings/work-time', path(page) === '/hrms/settings/work-time')
+    await page.goto(base + '/hrms/settings/work-time')
+    await page.getByRole('heading', { name: 'HR Configuration' }).waitFor({ timeout: 30_000 })
+    check('/hrms/settings/work-time still opens (HR Configuration)', path(page) === '/hrms/settings/work-time')
     await page.waitForTimeout(1500)
-    check('Work Time Settings loaded real settings (no load error)', !(await page.getByText(/Failed to load|Couldn.t load/i).count()))
+    check('HR Configuration loaded real settings (no load error)', !(await page.getByText(/Failed to load|Couldn.t load/i).count()))
     assertClean('/hrms/settings/work-time')
 
     await page.goto(base + `/hrms/employees/${readerEmployeeId}`)
-    await page.getByText('Not on this page yet').waitFor({ timeout: 30_000 })
-    await page.getByRole('button', { name: 'Expenses', exact: true }).click()
+    await page.getByRole('tab', { name: /^Expenses/ }).waitFor({ timeout: 30_000 })
+    await page.getByRole('tab', { name: /^Expenses/ }).click()
+    await page.getByRole('button', { name: 'Open Expenses' }).or(page.getByRole('link', { name: 'Open Expenses' })).first().click()
     await page.waitForURL((u) => u.pathname.startsWith('/hrms/expense'), { timeout: 15_000 })
-    check('Overview "Expenses" link lands on /hrms/expenses', path(page) === '/hrms/expenses', path(page))
+    check('workspace Expenses tab "Open Expenses" lands on /hrms/expenses', path(page) === '/hrms/expenses', path(page))
     await page.getByRole('heading', { level: 1 }).first().waitFor({ timeout: 30_000 })
     const h1 = await page.getByRole('heading', { level: 1 }).first().innerText()
     check('expenses page renders (not a 404 / NoAccess)', /expense/i.test(h1) && !(await noAccess(page)), h1)
-    assertClean('employee Overview → /hrms/expenses')
+    assertClean('employee workspace → /hrms/expenses')
 
     mkdirSync('test-results/recovery', { recursive: true })
     await page.screenshot({ path: 'test-results/recovery/dead-entrypoints-live.png', fullPage: true })
