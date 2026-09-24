@@ -84,6 +84,16 @@ public class PhoneLookupService {
         }
         final String last10 = digits.substring(digits.length() - 10);
 
+        if (Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT to_regprocedure('auth.phone_login_match(text)') IS NOT NULL", Boolean.class))) {
+            // One indexed lookup (V143.2) instead of scanning every workspace's employees.
+            List<Map<String, Object>> rows = jdbc.queryForList("SELECT * FROM auth.phone_login_match(?)", last10);
+            if (rows.isEmpty()) return Optional.empty();
+            Map<String, Object> r = rows.get(0);
+            return Optional.of(new Match((UUID) r.get("tenant_id"), (UUID) r.get("user_id"),
+                    (UUID) r.get("employee_id"), (String) r.get("email")));
+        }
+
         List<UUID> tenantIds;
         try {
             tenantIds = jdbc.queryForList(
@@ -105,7 +115,7 @@ public class PhoneLookupService {
                 List<Map<String, Object>> emp = jdbc.queryForList(
                         "SELECT id, email FROM hrms.employees "
                                 + "WHERE right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = ? "
-                                + "  AND (employment_status IS NULL OR employment_status = 'ACTIVE') "
+                                + "  AND (employment_status IS NULL OR employment_status IN ('ACTIVE','PROBATION','NOTICE_PERIOD')) "
                                 + "LIMIT 1",
                         last10);
                 if (emp.isEmpty()) continue;

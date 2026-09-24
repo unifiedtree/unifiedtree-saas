@@ -90,6 +90,10 @@ public class AuthService {
     public UUID resolveLoginTenant(String email) {
         if (email == null || email.isBlank()) return null;
         final String norm = email.trim();
+        if (singleLookupAvailable()) {
+            // One indexed lookup (V143.2) instead of two queries per workspace.
+            return jdbc.queryForObject("SELECT auth.login_tenant_for_email(?)", UUID.class, norm);
+        }
         List<UUID> tenantIds;
         try {
             tenantIds = jdbc.queryForList(
@@ -130,6 +134,27 @@ public class AuthService {
             }
         }
         return match;
+    }
+
+    /**
+     * Whether the V143.2 routing functions exist. Positive answers are cached
+     * (functions don't disappear); a negative one is re-checked next call so an
+     * instance picks the functions up as soon as the migration lands. The
+     * catalog check never errors, so it can't abort the surrounding transaction.
+     */
+    private volatile boolean singleLookup;
+
+    private boolean singleLookupAvailable() {
+        if (singleLookup) return true;
+        try {
+            singleLookup = Boolean.TRUE.equals(jdbc.queryForObject(
+                    "SELECT to_regprocedure('auth.login_tenant_for_email(text)') IS NOT NULL "
+                            + "AND to_regprocedure('auth.refresh_token_tenant(text)') IS NOT NULL",
+                    Boolean.class));
+        } catch (Exception e) {
+            singleLookup = false;
+        }
+        return singleLookup;
     }
 
     public LoginResponse login(LoginRequest req) {
@@ -181,10 +206,20 @@ public class AuthService {
         final String hash = sha256Hex(refreshTokenPlain.trim());
 
         List<UUID> tenantIds;
-        try {
-            tenantIds = jdbc.queryForList("SELECT id FROM platform.tenants", UUID.class);
-        } catch (Exception e) {
-            throw new BusinessRuleException("Session expired — please sign in again.", "REFRESH_INVALID");
+        if (singleLookupAvailable()) {
+            // One indexed lookup (V143.2) names the token's workspace; the loop
+            // below then runs once, for that workspace only.
+            UUID owner = jdbc.queryForObject("SELECT auth.refresh_token_tenant(?)", UUID.class, hash);
+            if (owner == null) {
+                throw new BusinessRuleException("Session expired — please sign in again.", "REFRESH_NOT_FOUND");
+            }
+            tenantIds = List.of(owner);
+        } else {
+            try {
+                tenantIds = jdbc.queryForList("SELECT id FROM platform.tenants", UUID.class);
+            } catch (Exception e) {
+                throw new BusinessRuleException("Session expired — please sign in again.", "REFRESH_INVALID");
+            }
         }
 
         for (UUID t : tenantIds) {

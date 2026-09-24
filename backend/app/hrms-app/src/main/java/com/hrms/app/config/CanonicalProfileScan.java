@@ -140,6 +140,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         // 2026-09-13, when writes had been landing in the DEFAULT partition
         // for two weeks with nothing to say so.
         "com.hrms.api.platform.partition",
+        "com.hrms.api.platform.maintenance",
         "com.hrms.api.modulereq",
         "com.hrms.api.access",
         "com.hrms.api.probation",
