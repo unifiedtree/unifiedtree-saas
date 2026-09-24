@@ -65,14 +65,13 @@ const TeamDashboard = React.lazy(() => import('@/modules/hrms/team/TeamDashboard
 const ReportsIndex = React.lazy(() => import('@/modules/hrms/reports/ReportsIndex').then(m => ({ default: m.ReportsIndex })))
 const ProbationSettings = React.lazy(() => import('@/modules/hrms/probation/ProbationSettings').then(m => ({ default: m.ProbationSettings })))
 const Expense = React.lazy(() => import('@/modules/hrms/Expense').then(m => ({ default: m.Expense })))
-const Advance = React.lazy(() => import('@/modules/hrms/Advance').then(m => ({ default: m.Advance })))
 const FullAndFinal = React.lazy(() => import('@/modules/hrms/FullAndFinal').then(m => ({ default: m.FullAndFinal })))
 const ExitCenter = React.lazy(() => import('@/modules/hrms/exit/ExitCenter').then(m => ({ default: m.ExitCenter })))
 const Hiring = React.lazy(() => import('@/modules/hrms/Hiring').then(m => ({ default: m.Hiring })))
 const Performance = React.lazy(() => import('@/modules/hrms/Performance').then(m => ({ default: m.Performance })))
 const WorkforceAnalytics = React.lazy(() => import('@/modules/hrms/analytics/WorkforceAnalytics').then(m => ({ default: m.WorkforceAnalytics })))
-const PayrollDashboard = React.lazy(() => import('@/modules/hrms/payroll/PayrollDashboard').then(m => ({ default: m.PayrollDashboard })))
-const SalaryStructureAdmin = React.lazy(() => import('@/modules/hrms/payroll/SalaryStructureAdmin').then(m => ({ default: m.SalaryStructureAdmin })))
+// Payroll (Dashboard · Salary Structure · Processing & Payslips · Settings · PLI · Advances · Bank) — one designed page.
+const PayrollModule = React.lazy(() => import('@/modules/hrms/payroll/PayrollContainer').then(m => ({ default: m.PayrollContainer })))
 const MusterRoll = React.lazy(() => import('@/modules/hrms/attendance/MusterRoll').then(m => ({ default: m.MusterRoll })))
 const ManualEntry = React.lazy(() => import('@/modules/hrms/attendance/ManualEntry').then(m => ({ default: m.ManualEntry })))
 const WorkTimeSettings = React.lazy(() => import('@/modules/hrms/organization/WorkTimeSettings').then(m => ({ default: m.WorkTimeSettings })))
@@ -82,14 +81,10 @@ const PendingDocuments = React.lazy(() => import('@/pages/PendingDocuments').the
 const Learning = React.lazy(() => import('@/modules/hrms/Learning').then(m => ({ default: m.Learning })))
 const Compliance = React.lazy(() => import('@/modules/hrms/Compliance').then(m => ({ default: m.Compliance })))
 const Policies = React.lazy(() => import('@/modules/hrms/Policies').then(m => ({ default: m.Policies })))
-const Pli = React.lazy(() => import('@/modules/hrms/Pli').then(m => ({ default: m.Pli })))
 const Integrations = React.lazy(() => import('@/modules/hrms/Integrations').then(m => ({ default: m.Integrations })))
 const NotificationTemplates = React.lazy(() => import('@/modules/hrms/NotificationTemplates').then(m => ({ default: m.NotificationTemplates })))
-const PayrollSettings = React.lazy(() => import('@/modules/hrms/payroll/PayrollSettings').then(m => ({ default: m.PayrollSettings })))
 const SalaryComponents = React.lazy(() => import('@/modules/hrms/payroll/SalaryComponents').then(m => ({ default: m.SalaryComponents })))
 const MySalaryStructure = React.lazy(() => import('@/modules/hrms/payroll/MySalaryStructure').then(m => ({ default: m.MySalaryStructure })))
-const PayrollRuns = React.lazy(() => import('@/modules/hrms/payroll/PayrollRuns').then(m => ({ default: m.PayrollRuns })))
-const PayrollRunDetail = React.lazy(() => import('@/modules/hrms/payroll/PayrollRunDetail').then(m => ({ default: m.PayrollRunDetail })))
 const EmployeePayslips = React.lazy(() => import('@/modules/hrms/payroll/EmployeePayslips').then(m => ({ default: m.EmployeePayslips })))
 const LetterTemplates = React.lazy(() => import('@/modules/hrms/letters/LetterTemplates').then(m => ({ default: m.LetterTemplates })))
 const LetterTemplateEditor = React.lazy(() => import('@/modules/hrms/letters/LetterTemplateEditor').then(m => ({ default: m.LetterTemplateEditor })))
@@ -375,7 +370,7 @@ export default function App() {
           path="/hrms/advances"
           element={
             <RouteGuard anyOf={['hrms.advance.request.self', 'hrms.advance.read', 'hrms.advance.approve', 'hrms.advance.disburse']}>
-              <ModuleGate moduleKey="hrms"><Advance /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><PayrollModule /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -432,7 +427,7 @@ export default function App() {
           element={
             <RequirePermission code={P.PAYROLL_RUNS_READ}>
               <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-                <ModuleGate moduleKey="payroll"><PayrollDashboard /></ModuleGate>
+                <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
               </RouteGuard>
             </RequirePermission>
           }
@@ -441,7 +436,7 @@ export default function App() {
           path="/hrms/salary-structure"
           element={
             <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-              <ModuleGate moduleKey="payroll"><SalaryStructureAdmin /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -479,6 +474,17 @@ export default function App() {
         />
         <Route
           path="/hrms/bank-disbursement"
+          element={
+            <RequirePermission code={P.PAYROLL_RUNS_READ}>
+              <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
+                <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
+              </RouteGuard>
+            </RequirePermission>
+          }
+        />
+        {/* Bank profiles (and the full batch tools) — linked from the designed Bank Disbursement page. */}
+        <Route
+          path="/hrms/bank-disbursement/setup"
           element={
             <RequirePermission code={P.PAYROLL_RUNS_READ}>
               <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
@@ -543,7 +549,7 @@ export default function App() {
           path="/hrms/pli"
           element={
             <RouteGuard anyOf={['hrms.pli.read', 'hrms.pli.write', 'hrms.pli.read.self']}>
-              <ModuleGate moduleKey="payroll"><Pli /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -653,7 +659,7 @@ export default function App() {
           path="/hrms/payroll/settings"
           element={
             <RouteGuard anyOf={[P.PAYROLL_SETTINGS_READ]}>
-              <ModuleGate moduleKey="payroll"><PayrollSettings /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -678,7 +684,7 @@ export default function App() {
           element={
             <RequirePermission code={P.PAYROLL_RUNS_READ}>
               <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-                <ModuleGate moduleKey="payroll"><PayrollRuns /></ModuleGate>
+                <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
               </RouteGuard>
             </RequirePermission>
           }
@@ -687,7 +693,7 @@ export default function App() {
           path="/hrms/payroll/runs/:id"
           element={
             <RouteGuard anyOf={[P.PAYROLL_RUNS_READ]}>
-              <ModuleGate moduleKey="payroll"><PayrollRunDetail /></ModuleGate>
+              <ModuleGate moduleKey="payroll"><PayrollModule /></ModuleGate>
             </RouteGuard>
           }
         />

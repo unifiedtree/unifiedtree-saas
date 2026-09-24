@@ -108,6 +108,64 @@ const LITERALS = {
   // The sample data used the employee code as the row id; real rows keep the id for the API.
   AttDailyLogs: [['name="{{ r.name }}" sub="{{ r.id }}"', 'name="{{ r.name }}" sub="{{ r.code }}"']],
   ShiftRoster: [['min="2026-09-24"', 'min="{{ tomorrowMin }}"'], ['name="{{ r.name }}" sub="{{ r.id }}"', 'name="{{ r.name }}" sub="{{ r.code }}"']],
+  // Payroll: the prototype's company and "Sep 2026" run → the real company and the current run.
+  PayDashboard: [
+    ['Acme Industries Pvt Ltd · cost, dues and where this month’s run stands.', '{{ companyName }} · cost, dues and where this month’s run stands.'],
+    ['data-tip="Opens the Sep 2026 payroll run"', 'data-tip="{{ runTip }}"'],
+    ['{{ icPlay }} Open Sep 2026 run', '{{ icPlay }} {{ openRunLabel }}'],
+    ['letter-spacing:-.01em">Sep 2026</h2>', 'letter-spacing:-.01em">{{ runLabel }}</h2>'],
+    ['label="Sep 2026 progress"', 'label="{{ progressLabel }}"'],
+    // Real lists can be empty; the design only drew the filled state.
+    ['{{ d.amountLabel }}</strong></div></sc-for>', '{{ d.amountLabel }}</strong></div></sc-for><sc-if value="{{ noDues }}"><p style="margin:0;padding:12px 0;border-top:1px solid #f1f5f9;font-size:13px;color:#64748b">{{ duesEmpty }}</p></sc-if>'],
+    ['{{ r.employees }} employees · paid {{ r.paidOn }}', '{{ r.meta }}'],
+    ['>Paid</x-import></button></sc-for>', '>Paid</x-import></button></sc-for><sc-if value="{{ noRecent }}"><p style="margin:0;padding:12px 0;border-top:1px solid #f1f5f9;font-size:13px;color:#64748b">{{ recentEmpty }}</p></sc-if>'],
+  ],
+  PaySalary: [
+    ['Re-process the Sep 2026 run to include them.', 'Re-process the {{ runLabel }} run to include them.'],
+    ['data-tip="Opens the Sep 2026 payroll run"', 'data-tip="{{ runTip }}"'],
+    ['>Open Sep 2026 run<', '>Open {{ runLabel }} run<'],
+    ['They’re skipped in the Sep 2026 run until you add one.', 'They’re skipped in the {{ runLabel }} run until you add one.'],
+    ['value="{{ fDate }}" min="2026-09-01"', 'value="{{ fDate }}" min="{{ fDateMin }}"'],
+    ['value="{{ bDate }}" min="2026-10-01"', 'value="{{ bDate }}" min="{{ bDateMin }}"'],
+    // The split is the backend's, not the prototype's fixed 50% / 40% / 12% rule.
+    ['Basic is 50% of gross, HRA is 40% of basic, and PF is 12% of basic up to ₹1,800.', '{{ splitNote }}'],
+    ['Enter at least ₹10,000.', '{{ minNote }}'],
+  ],
+  // The API doesn't record who processed or locked a run, so the line is just the time when there's no name.
+  PayrollOverview: [['{{ a.who }} · {{ a.when }}', '{{ a.meta }}']],
+  PayrollRunPage: [
+    ['title="No one to pay in Sep 2026"', 'title="{{ emptyTitle }}"'],
+    // Real data for the run's parts (appended last, so it overrides the prototype's props).
+    ['on-navigate="{{ navOverview }}" on-toast="{{ toast }}" hint-size="100%,900px"></dc-import>', 'on-navigate="{{ navOverview }}" on-toast="{{ toast }}" dc-props="{{ pxOverview }}" hint-size="100%,900px"></dc-import>'],
+    ['on-process="{{ askProcess }}" on-toast="{{ toast }}" hint-size="100%,640px"></dc-import>', 'on-process="{{ askProcess }}" on-toast="{{ toast }}" dc-props="{{ pxEmployees }}" hint-size="100%,640px"></dc-import>'],
+    ['on-close="{{ closeSlip }}" on-toast="{{ toast }}" hint-size="0,0"></dc-import>', 'on-close="{{ closeSlip }}" on-toast="{{ toast }}" dc-props="{{ pxSlip }}" hint-size="0,0"></dc-import>'],
+    // The register the API makes is a PDF.
+    ['payroll register (Excel)"', 'payroll register (PDF)"'],
+    // One bank file per run (the API's rule), and it's cancelled before reopening.
+    ['The 2 bank files you generated will be cancelled. Prepare new ones after you lock the run again.', '{{ mBankText }}'],
+    // Marking a run paid needs the bank's transfer reference (UTR) — the API requires it.
+    ['<sc-if value="{{ mBankNote }}"', '<sc-if value="{{ mIsPaid }}" hint-placeholder-val="{{ false }}"><label style="display:grid;gap:6px;font-size:13px;font-weight:600">Bank reference (UTR) *<input value="{{ utr }}" onChange="{{ setUtr }}" maxLength="120" placeholder="e.g. HDFCN52026092012345" style="font:inherit;font-weight:400;padding:9px 12px;border:1px solid #cbd5e1;border-radius:10px;outline:none" style-focus="border-color:#0f6e56;box-shadow:0 0 0 3px #a7f3d0"><span style="font-size:12px;font-weight:400;color:#64748b">From your bank’s transfer confirmation. Saved with the payment.</span></label></sc-if> <sc-if value="{{ mBankNote }}"'],
+  ],
+  PayPli: [
+    ['September targets and bonuses by team.', '{{ monthName }} targets and bonuses by team.'],
+    ['data-tip="Opens the Sep 2026 payroll run"', 'data-tip="{{ runTip }}"'],
+    // PLI isn't part of payroll processing in this backend — say so, and link to the awards it's paid through.
+    ['See Sep 2026 run →', '{{ pliLink }}'],
+    ['PLI bonuses are added to net pay automatically when payroll is processed. This month: ', '{{ pliLead }} '],
+    ['description="Targets for October 2026. Bonuses are paid when a team meets its target."', 'description="{{ targetsDesc }}"'],
+  ],
+  PayBank: [
+    ['data-tip="Opens the Sep 2026 payroll run"', 'data-tip="{{ runTip }}"'],
+    ['{{ icRun }} Sep 2026 run', '{{ icRun }} {{ runLabel }} run'],
+    ['Both Sep 2026 transfers are confirmed. Mark the run as paid to close it.', '{{ allDoneText }}'],
+    ['>Open Sep 2026 run<', '>Open {{ runLabel }} run<'],
+    ['>Sep 2026 · {{ totalLabel }}<', '>{{ runLabel }} · {{ totalLabel }}<'],
+    // Bank profiles (the account salaries are paid from) have no place in the design; keep them reachable.
+    ['<x-import component-from-global-scope="UnifiedTree.HrButton" variant="ghost" onClick="{{ openRun }}"', '<x-import component-from-global-scope="UnifiedTree.HrButton" variant="ghost" onClick="{{ openProfiles }}" data-tip="Opens bank profile setup" hint-size="150px,40px">{{ icBankSm }} Bank profiles</x-import><x-import component-from-global-scope="UnifiedTree.HrButton" variant="ghost" onClick="{{ openRun }}"'],
+    // Confirming the transfer marks the run paid, which needs the bank's reference (UTR).
+    ['size="sm" hint-size="0,0">\n<div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:8px"><x-import component-from-global-scope="UnifiedTree.HrButton" variant="ghost" onClick="{{ closeConfirm }}"', 'size="sm" hint-size="0,0"> <label style="display:grid;gap:6px;margin-top:4px;font-size:13px;font-weight:600;color:#0f172a;font-family:Inter,-apple-system,sans-serif">Bank reference (UTR) *<input value="{{ utr }}" onChange="{{ setUtr }}" maxLength="120" placeholder="e.g. HDFCN52026092012345" style="font:inherit;font-weight:400;padding:9px 12px;border:1px solid #cbd5e1;border-radius:10px;outline:none" style-focus="border-color:#0f6e56;box-shadow:0 0 0 3px #a7f3d0"><span style="font-size:12px;font-weight:400;color:#64748b">From your bank’s transfer confirmation. Saved with the payment.</span></label> <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:8px"><x-import component-from-global-scope="UnifiedTree.HrButton" variant="ghost" onClick="{{ closeConfirm }}"'],
+    ['onClick="{{ doConfirm }}" hint-size="150px,40px">Confirm transfer', 'onClick="{{ doConfirm }}" disabled="{{ confirmOff }}" hint-size="150px,40px">Confirm transfer'],
+  ],
   // The API gives a confidence band, not a percentage.
   AttFacePunch: [
     ['{{ r.conf }}% sure', '{{ r.bandSure }}'], ['{{ r.conf }}% match', '{{ r.bandMatch }}'],
@@ -134,6 +192,17 @@ const PATCH = {
     if (n !== 11) throw new Error('AttendancePage: expected 11 tab components, patched ' + n)
     return out
   },
+  // Same for the payroll module: every section gets its own real-data props slot.
+  PayrollModule(html) {
+    const KIDS = 'PayDashboard|PaySalary|PayRuns|PayrollRunPage|PaySettings|PayPli|PayAdvances|PayBank'
+    let n = 0
+    const out = html.replace(new RegExp(`<dc-import name="(${KIDS})"([^>]*?)(/?)>`, 'g'), (m, name, attrs, slash) => {
+      n++
+      return `<dc-import name="${name}"${attrs} dc-props="{{ px.${name} }}"${slash}>`
+    })
+    if (n !== 8) throw new Error('PayrollModule: expected 8 section components, patched ' + n)
+    return out
+  },
 }
 
 // Post-conversion edits on the generated TSX, when a markup patch can't express it.
@@ -141,7 +210,9 @@ const POST = {}
 
 // ── build ────────────────────────────────────────────────────────────────────
 const wanted = process.argv.slice(2)
-const all = [...Object.keys(components).filter((n) => n !== 'HrmsPrototype'), ...Object.keys(DERIVED)]
+// PlaceholderPage is the prototype's stand-in for screens that weren't designed; the app keeps its own pages there.
+const SKIP = new Set(['HrmsPrototype', 'PlaceholderPage'])
+const all = [...Object.keys(components).filter((n) => !SKIP.has(n)), ...Object.keys(DERIVED)]
 const list = wanted.length ? wanted : all
 const work = mkdtempSync(join(tmpdir(), 'design-build-'))
 mkdirSync(OUT, { recursive: true })

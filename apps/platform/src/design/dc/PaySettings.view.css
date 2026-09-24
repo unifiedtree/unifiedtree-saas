@@ -1,0 +1,3 @@
+@keyframes ps-spin{to{transform:rotate(360deg)}}
+.dc-pay-settings-0:hover{background:#f1f5f9 !important;color:#0f172a !important}
+.dc-pay-settings-1:hover{background:rgba(255,255,255,.1) !important;color:#fff !important}

@@ -107,3 +107,47 @@ Checked live: `e2e/recovery/live-design-attendance.mjs`, 26/26. As HR it checks 
 | HR without the face-log permission | Partial | The Face tab shows its empty state. The design has no "no access" state for it. |
 | Geofencing | Kept | Not in the design's section bar. Still at `/hrms/attendance/geofencing`, reachable from search (⌘K). See §1. |
 | Old pages (`Attendance.tsx`, `AttendanceAnalytics.tsx`, `ShiftsAndOt.tsx` and their parts) | Removed | Replaced by the designed page. Manual entry, Muster roll, Geofencing and `/me/shift-change` are untouched. |
+
+## 5. Payroll (`/hrms/payroll-dashboard`, `/hrms/salary-structure`, `/hrms/payroll/runs[/:id]`, `/hrms/payroll/settings`, `/hrms/pli`, `/hrms/advances`, `/hrms/bank-disbursement`): done
+
+One designed page serves all eight routes, with its own section bar in place of the shell's sub-tabs. Container: `src/modules/hrms/payroll/PayrollContainer.tsx`.
+
+Checked live: `e2e/recovery/live-design-payroll.mjs`, 29/29. It covers:
+- All seven sections.
+- A test run for Jun 2027 (a month with no advance recoveries due): created, processed, payslip opened, locked and reopened, then deleted from the local database.
+- The register and payslip PDF downloads.
+- The bank page and its profiles link.
+- The salary, settings, PLI and advances drawers.
+- The employee's own advances page.
+- No page errors and no failed API calls.
+
+| Item | Status | Detail |
+|---|---|---|
+| Payroll Dashboard | Done | Tiles, 6-month chart, this month's run and recent runs come from the runs. Pending disbursals comes from the payroll KPIs, and paid dates from the bank files. |
+| Processing & Payslips | Done | All runs, the step pipeline as a filter, and **New run** (months that already have a run are shown and disabled). |
+| Run page | Done | **Process**, **Re-process**, **Lock**, **Reopen** (with a reason), **Prepare bank disbursement**, **Mark as paid**. Overview, Employees and Skipped tabs, the payslip drawer with PDF download, and the payroll register (PDF). |
+| Salary Structure | Done | Everyone in the directory with their current structure. **Add** or **Edit** saves a new revision. The "no salary structure" list is the current run's skipped people. |
+| Payroll Settings | Done | The real settings, PT slabs for the chosen state, save, and the unsaved-changes guard. |
+| PLI | Done | This month's targets. **Edit** saves the target, **Set monthly targets** writes next month's, and **Export** gives a CSV. |
+| Advances & Loans | Done | Every advance, with **Approve**. The drawer has the real recovery plan plus the existing Approve / Reject / Record payout actions. **Recovery options** opens the existing tools (defer a month, close early, write off). |
+| Bank Disbursement | Done | This run's upload file (planned → generated → sent → paid), **Download** (which posts it), **Confirm transfer**, and past files. |
+| **Mark as paid** / **Confirm transfer** | Changed | Both ask for the bank reference (UTR). The API needs it to mark a transfer paid, and confirming also closes the run. |
+| Bank files | Changed | The API makes **one** file per run from the company's default bank profile (the design showed one per bank). Reopening cancels that file first, because the API won't reopen a run that has a live file. |
+| **Bank profiles** button (Bank Disbursement header) | Kept | Profiles aren't in the design but are needed to make files. The button opens the existing full page at `/hrms/bank-disbursement/setup`. |
+| PLI banner | Changed | The design said PLI is added to net pay automatically. This backend doesn't do that, so the banner says bonuses are paid out as awards, and **Manage awards →** opens the existing awards manager (create, approve, pay). |
+| Advances statuses and actions | Changed | The API's statuses map to Pending approval / Approved · to pay out / Active deduction / Repaid / Closed / Rejected. **Issue advance** sends a request for the signed-in person (see below). |
+| Salary drawer | Changed | A new structure uses the design's split: Basic 50%, HRA 40% of basic, ₹1,600 conveyance from ₹20,000, special allowance the rest. Editing an existing structure scales that person's own split, so a custom split is never overwritten. The preview uses the real PF, ESI and PT settings. There is no ₹10,000 minimum, because that isn't a rule in the system. |
+| Dashboard "Total payroll cost" | Changed | The gross of this month's run, so it matches the chart and the runs list. The KPI endpoint's figure also includes employer contributions. |
+| Employees without the admin view | Kept | `/hrms/pli` and `/hrms/advances` still show their own self-service pages (My Incentives; My Advances / Request). |
+| "TDS this month" tile | Needs backend | Payroll doesn't calculate TDS. The tile shows a dash and says so. |
+| Statutory dues | Partial | Comes from Compliance → Statutory Filings, a ledger filled in by hand. It isn't computed from payroll. |
+| Pay breakdown by component | Partial | Added up from the payslips for runs of up to 60 people. Bigger runs show totals only, pending a per-component totals endpoint. |
+| Run details "Pay date" / "Working days", activity names | Needs backend | The API doesn't keep them, so they show a dash. Activity lines show the time only. |
+| Salary Structure **Export** | Needs backend | There's no endpoint that lists every structure. The button is off, marked "Coming soon". |
+| **Bulk revise CTC** | Needs backend | The form shows. **Apply revision** is off and marked "Coming soon". |
+| **Issue advance** for someone else | Needs backend | Advances are self-service in the API. The form requests one for yourself; for anyone else it explains that. |
+| Advance "Loan type" | Partial | The API has no loan types, so the request's reason is shown. The first deduction is always the month after payout (API rule). |
+| PLI people and "Bonus per person" | Partial | Headcount is known for employee or department targets. For others the amount is the whole pool. PLI isn't paid through payroll. |
+| Payroll cycle days, processing day, LWF, PF/ESI codes | Partial | Saved, but not used by payroll yet: runs cover the calendar month. The cycle card's switch stays on (the API has no switch for it). |
+| Payroll register | Partial | A PDF (the design said Excel), available for locked and paid runs. The run's Employees tab exports a CSV. |
+| Old pages (`PayrollDashboard`, `PayrollRuns`, `PayrollRunDetail`, `SalaryStructureAdmin`, `SalaryOverview`, `PayrollSettings`, `Payroll.tsx`) | Removed | Replaced by the designed page. `/me/payslips`, `/me/salary`, `/hrms/payroll/components` and `/hrms/fnf` are untouched. |

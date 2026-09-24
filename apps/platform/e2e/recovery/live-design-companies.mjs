@@ -51,9 +51,10 @@ try {
   await page.getByPlaceholder('e.g. Mumbai Office').fill(name + ' Edited')
   await page.getByText('Mark as headquarters').click()
   await page.getByRole('button', { name: 'Save changes' }).click()
-  await page.getByText(name + ' Edited').first().waitFor({ timeout: 15000 })
-  await settle()
+  // Wait for the list's card (not the drawer's copy of the name) to show the saved branch.
   const card2 = page.locator('article').filter({ hasText: name + ' Edited' })
+  await card2.getByText('Headquarters').first().waitFor({ timeout: 15000 }).catch(() => {})
+  await settle()
   check('edited name shows', await card2.count() > 0)
   check('branch is now the headquarters', await card2.getByText('Headquarters').count() > 0)
 

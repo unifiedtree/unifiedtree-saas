@@ -1,0 +1,4 @@
+@keyframes ut-spin{to{transform:rotate(360deg)}}
+.dc-payroll-run-page-0:hover{background:#ecfdf5 !important;border-color:#a7f3d0 !important}
+.dc-payroll-run-page-1:hover{text-decoration:underline !important}
+.dc-payroll-run-page-2:focus{border-color:#0f6e56 !important;box-shadow:0 0 0 3px #a7f3d0 !important}

@@ -95,7 +95,7 @@ export function AdvanceDecisionActions({ advance }: { advance: AdvanceRequest })
   </>
 }
 
-function AdvanceDetail({ id, onClose }: { id: string; onClose: () => void }) {
+export function AdvanceDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const query = useAdvance(id)
   return <HrDrawer title="Advance details" width="max-w-3xl" onClose={onClose}>
     {query.isPending ? <p role="status">Loading advance…</p> : query.isError ? <AdvanceError message="Unable to load this advance." retry={() => query.refetch()} /> : query.data && <div className="space-y-6">

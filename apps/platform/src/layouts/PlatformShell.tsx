@@ -321,7 +321,12 @@ const RAIL_ICONS: Record<string, string> = {
 /** Groups that start a new rail block (a thin divider above them), per the design. */
 const RAIL_DIVIDERS = new Set(['company', 'attendance', 'payroll-hr', 'performance'])
 /** Routes whose designed page has its own section bar, so the shell's sub-nav would double it. */
-const OWN_SECTION_BAR = new Set(['/hrms/att-analytics', '/hrms/attendance', '/hrms/shifts'])
+const OWN_SECTION_BAR = new Set([
+  '/hrms/att-analytics', '/hrms/attendance', '/hrms/shifts',
+  '/hrms/payroll-dashboard', '/hrms/salary-structure', '/hrms/payroll/runs', '/hrms/payroll/settings', '/hrms/pli', '/hrms/advances', '/hrms/bank-disbursement',
+])
+/** A payroll run's own page (/hrms/payroll/runs/:id) sits under the same section bar. */
+const ownsSectionBar = (path: string) => OWN_SECTION_BAR.has(path) || /^\/hrms\/payroll\/runs\/[^/]+$/.test(path)
 
 function matchPath(pathname: string, p?: string) {
   return !!p && (pathname === p || pathname.startsWith(p + '/'))
@@ -623,7 +628,7 @@ export function PlatformShell() {
       }
     }
     // Designed pages that draw their own section bar under the header.
-    if (OWN_SECTION_BAR.has(location.pathname.replace(/\/$/, ''))) return null
+    if (ownsSectionBar(location.pathname.replace(/\/$/, ''))) return null
     const active = railItems.find(i => i.active && i.children && i.children.length > 0)
     if (!active?.children) return null
     const seen = new Set<string>()

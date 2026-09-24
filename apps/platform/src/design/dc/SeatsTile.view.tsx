@@ -2,6 +2,7 @@
 // Do not edit by hand — change the design (or the view model) and regenerate.
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
 import { txt } from './dc-runtime'
+import './SeatsTile.view.css'
 
 export function SeatsTileView({ v }: { v: any }) {
   return (

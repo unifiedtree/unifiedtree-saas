@@ -47,7 +47,7 @@ export const Pli: React.FC = () => {
 
 // ── All Awards (admin) ─────────────────────────────────────────────────────────
 
-function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
+export function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
   const { toast } = useToast()
   // Was hard-coded to page 0 with no control, so only the newest
   // PLI_PAGE_SIZE awards in the whole tenant were reachable — every older
