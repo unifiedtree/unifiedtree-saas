@@ -481,7 +481,7 @@ export function useDeleteEmploymentType() {
 //
 // All web shift UI now uses ./useShiftPolicies (`/v1/shifts`), the same store
 // the mobile client writes. Repointed callers: organization/OrgSetup.tsx
-// (Shifts tab), attendance/ShiftsAndOt.tsx, and employees/EmployeeForm.tsx
+// (Shifts tab), attendance/AttendanceContainer.tsx (Shifts & Overtime), and employees/EmployeeForm.tsx
 // (the picker whose id feeds assignEmployeeShift below).
 //
 // `/v1/hrms/shifts` and `org.shifts` are intentionally untouched on the backend

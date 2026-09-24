@@ -18,11 +18,14 @@ export interface ShiftRequest {
   appliedEffectiveDate?: string | null
 }
 
-export function usePendingShiftRequests() {
+export function usePendingShiftRequests(opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['shifts', 'requests', 'pending'],
     queryFn: () => apiJson<ShiftRequest[]>('/v1/shifts/change-requests/pending'),
     refetchInterval: 30_000,
+    // The endpoint needs attendance.regularization.approve; callers that
+    // render for everyone pass enabled:false for people without it.
+    enabled: opts?.enabled ?? true,
   })
 }
 

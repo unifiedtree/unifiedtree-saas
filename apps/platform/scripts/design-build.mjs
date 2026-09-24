@@ -93,6 +93,49 @@ const DERIVED = {
     return '<x-dc>\n' + t + '\n</x-dc>\n'
   },
 }
+// Prototype literals (fixed demo dates) replaced by real values the logic supplies.
+const LITERALS = {
+  AttCalendar: [['September 2026', '{{ monthLabel }}']],
+  AttendancePage: [['September 2026', '{{ monthLabel }}']],
+  ShiftOvertime: [['Overtime · September 2026', 'Overtime · {{ monthLabel }}']],
+  AttRegularization: [
+    ['max="2026-09-23"', 'max="{{ todayMax }}"'],
+    // The API takes no file for a fix request yet — the picker stays, switched off and marked.
+    ['<input type="file" accept=".pdf,.jpg,.png"', '<input type="file" disabled="{{ proofOff }}" title="{{ proofTip }}" accept=".pdf,.jpg,.png"'],
+    ['A gate log, an email or a photo. PDF or image, up to 5 MB.', '{{ proofHelp }}'],
+  ],
+  ShiftRequests: [['min="2026-09-24"', 'min="{{ tomorrowMin }}"']],
+  // The sample data used the employee code as the row id; real rows keep the id for the API.
+  AttDailyLogs: [['name="{{ r.name }}" sub="{{ r.id }}"', 'name="{{ r.name }}" sub="{{ r.code }}"']],
+  ShiftRoster: [['min="2026-09-24"', 'min="{{ tomorrowMin }}"'], ['name="{{ r.name }}" sub="{{ r.id }}"', 'name="{{ r.name }}" sub="{{ r.code }}"']],
+  // The API gives a confidence band, not a percentage.
+  AttFacePunch: [
+    ['{{ r.conf }}% sure', '{{ r.bandSure }}'], ['{{ r.conf }}% match', '{{ r.bandMatch }}'],
+    ['Punches under 85% need a person to check.', '{{ r.rule }}'], ['85% needed', '{{ r.needLabel }}'],
+  ],
+}
+
+// Markup patches that need code. AttendancePage: give every tab its own props
+// slot (real data + its own loading/error state). dc-props is appended last, so
+// it overrides the shared props the prototype passed.
+const PATCH = {
+  AttendancePage(html) {
+    // One column capped at the page width, so the section bar scrolls sideways
+    // on a phone (as its overflow-x:auto intends) instead of widening the page.
+    html = replaceOnce(html, 'style="display:grid;gap:16px;min-width:0;font-family:Inter', 'style="display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0;font-family:Inter')
+    const KIDS = 'AttOverview|AttCalendar|AttDailyLogs|AttFacePunch|AttRegularization|AttMine|ShiftSchedules|ShiftRoster|ShiftOvertime|ShiftRequests'
+    let n = 0
+    const out = html.replace(new RegExp(`<dc-import name="(${KIDS})"([^>]*?)(/?)>`, 'g'), (m, name, attrs, slash) => {
+      n++
+      const mode = /mode="(hr|mine)"/.exec(attrs)
+      const key = name === 'ShiftRequests' ? (mode && mode[1] === 'mine' ? 'ShiftRequestsMine' : 'ShiftRequestsHr') : name
+      return `<dc-import name="${name}"${attrs} dc-props="{{ px.${key} }}"${slash}>`
+    })
+    if (n !== 11) throw new Error('AttendancePage: expected 11 tab components, patched ' + n)
+    return out
+  },
+}
+
 // Post-conversion edits on the generated TSX, when a markup patch can't express it.
 const POST = {}
 
@@ -103,8 +146,13 @@ const list = wanted.length ? wanted : all
 const work = mkdtempSync(join(tmpdir(), 'design-build-'))
 mkdirSync(OUT, { recursive: true })
 for (const name of list) {
-  const html = DERIVED[name] ? DERIVED[name]() : components[name]
+  let html = DERIVED[name] ? DERIVED[name]() : components[name]
   if (!html) { console.warn('unknown component', name); continue }
+  for (const [from, to] of LITERALS[name] || []) {
+    if (!html.includes(from)) throw new Error(`${name}: literal not found: ${from}`)
+    html = html.split(from).join(to)
+  }
+  if (PATCH[name]) html = PATCH[name](html)
   const f = join(work, name + '.html')
   writeFileSync(f, html)
   execFileSync(process.execPath, [join(here, 'dc-to-tsx.mjs'), name, f, OUT], { stdio: 'inherit' })

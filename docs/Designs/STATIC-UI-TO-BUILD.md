@@ -43,6 +43,7 @@ Checked live: `e2e/recovery/live-design-dashboard.mjs`, 12/12 (calendar, past-da
 | Hiring stage rows → `/hrms/hiring?tab=candidates&stage=…` | To verify | Check the Hiring page applies the `stage` filter. |
 | Company notices | Partial | Shows the latest 5, as in the design ("5 per page"). There's no pager, so older notices aren't reachable from the dashboard. |
 | Date calendar colours | Partial | The trend API caps at 31 days, so only the last month is coloured. Early departures for past days show 0 (the trend API doesn't return them). Today's figures are exact. |
+| Today's Absence / Not Marked, donut, "exceptions" | Changed | Same one-bucket-per-person numbers as Attendance & Time (`attendance/attendanceBuckets.ts`). Today, someone with no punch and no leave is **Not Marked**, and Absence stays 0 until the day is over. The donut and the exceptions count no longer count them twice (the API's "not marked" also contains the absent and people on leave). |
 | Seats tile | Partial | Shown only to billing admins (Owner, Super Admin, Company Admin), and once the seats data has loaded. |
 | Sections the viewer has no permission for | Partial | They show an empty state. The design's rule is to hide them. This only affects admin roles missing a specific permission. |
 | Chart colours | Decision | The prototype's default "tones" palette (multi-colour) is used. The prototype also has an "emerald only" option, which is one switch (`chartPalette="emerald"`) if you prefer it. |
@@ -64,3 +65,45 @@ Checked live: `e2e/recovery/live-design-companies.mjs`, 10/10 (create a branch w
 | "Inactive" status filter | Partial | Archived branches aren't returned by the API, so this filter only shows branches marked inactive, not archived ones. |
 | Employees links (company and branch) | Done | The Workforce Directory now opens pre-filtered from `?companyId=`, `?branchId=` and `?departmentId=` links. |
 | Organization Setup's Companies / Branches tabs (`/hrms/organization`) | Kept | Still there, untouched. This page and those tabs manage the same records. |
+
+## 4. Attendance & Time (`/hrms/att-analytics`, `/hrms/attendance`, `/hrms/shifts`): done
+
+One designed page serves all three routes. Its own section bar (Analytics · Daily Tracking · Shifts & Overtime) replaces the shell's sub-tabs on these routes. Employees see only Daily Tracking (My Attendance, Regularization) and Shifts (My Shift). Container: `src/modules/hrms/attendance/AttendanceContainer.tsx`.
+
+Checked live: `e2e/recovery/live-design-attendance.mjs`, 26/26. As HR it checks the section bar and tabs, that tiles match the table, the status filter, "Fix this day", that the who's-where breakdown adds up, the report link, and adding, editing and deleting a shift, plus the overtime "note required" check. As an employee it checks their tabs and sends a fix request, which HR then rejects. It also checks for no page errors and no failed API calls. Nothing irreversible is approved.
+
+| Item | Status | Detail |
+|---|---|---|
+| Daily Logs | Done | The real roster for any past day (date picker), tiles, filters, search, person drawer, **Open full profile** and **View history** (`/hrms/employees/{id}?tab=attendance`). The shift reads "General · 9:00 AM–5:00 PM" from the company's shifts. |
+| Regularization | Done | Team requests approve or reject with a note, plus "My requests" and **New request**. The fix times are sent as IST, as the page labels them. |
+| My Attendance | Done | Monthly stats and the day grid from `/attendance/history` (the person's own week-offs, holidays and leave). |
+| Overview & Calendar | Done | Today comes from the live roster. The month comes from the trend API, plus how people checked in, late marks and the monthly summary report. |
+| Shift Schedules | Done | Add, edit and delete use the shift policies (`/v1/shifts`). Flexible and rotational shifts keep their type on edit. Night, or any shift past midnight, is saved as NIGHT. |
+| Roster | Done | Today's schedule. **Assign / Change shift** uses the existing effective-date assignment. |
+| Overtime | Done | "Waiting for you" (this month and last) and "This month". Approving records the decision only: **recorded, not paid**. Rejecting needs a note (API rule), and the page asks for one before sending. |
+| Shift Requests / My Shift | Done | Approve or reject pending requests. Employees see their shift and their own requests and can ask for a change. |
+| Counts (tiles, donut, calendar) | Changed | One bucket per person, so the numbers add up to the roster. The API's own counts overlap: its "not marked" includes people on leave and the absent. Today, anyone with no punch is **Not marked yet**. **Absent** is used only for finished days. |
+| "Fix this day" (HR, Daily Logs drawer) | Changed | Opens **Manual entry** for that person and date. A fix request is always raised for the signed-in person, so HR can't raise one for someone else. |
+| Face match wording | Changed | The API gives a band (High / Medium / Low), never a percentage. The card says "partly sure", "Low match" and "Medium needed", and "Low-confidence punches need a person to check" replaces "under 85%". The backend's default match cut-off is 82% (configurable). |
+| Late tile "After the 15-min grace time" | Changed | Uses the real grace when every shift shares one. Otherwise it reads "After each shift's grace time". |
+| Calendar Sunday text "Only a few on-call people worked" | Changed | Shows the real count ("N people still checked in") or just "Sunday is the weekly off." |
+| "Download report" / "Open the full report" | Changed | Open the Attendance Summary report for this month (`?company=&from=&to=`, which is what that page reads). The CSV download is on that page. |
+| On-leave days in My Attendance | Changed | Approved leave is its own colour. The design's sample month had none, so the legend lists it only when a leave day exists. |
+| Phone layout | Changed | The page column is capped at the screen width, so the section bar and tabs scroll sideways as intended instead of widening the page. |
+| Face check: **Yes, it's …** / **Not them** | Needs backend | No API records an HR check on a face punch. Tapping says so, and the punch stays as recorded. With default settings nothing lands in "Needs a look": Low matches are rejected by the camera. |
+| Face tab "Kiosk" column | Needs backend | Face events carry no device. The column shows Punch in or Punch out. |
+| Face tab names | Partial | Events carry only the login id. Names come from the enrolment email matched to the directory. Unmatched rows show the email and don't open a profile. |
+| **Proof (optional)** file on "Ask for a fix" | Needs backend | Shown switched off, marked "Coming soon". The API accepts a link (`attachmentUrl`) but has no upload. |
+| Roster "Since" column | Needs backend | `/v1/team/schedule` returns no assignment start or joining date, so the column is blank. |
+| Roster shift match | Partial | The schedule API returns the shift **name**, not its id, so two shifts with the same name would be confused. Backend: add `shiftPolicyId` (and `since`) to `/v1/team/schedule`. |
+| Note field in the Change-shift drawer | Needs backend | The assign API takes no note, so it isn't saved. |
+| Overtime: shift end, left at, reason | Needs backend | The overtime list returns only the date and minutes. These show a dash, and the card says "recorded automatically". |
+| Overtime older than last month | Partial | The design has no month picker. Pending items from this month and last are listed. |
+| Shift Requests "Already decided" (HR) | Needs backend | Only pending requests have an API. Employees still see their own history under My Shift. |
+| Shift colour | Partial | Not stored: it's worked out from the start time, and night shifts are the moon. Picking **Night** saves the shift as NIGHT. The other colours are display only. |
+| Break | Partial | Stored as working hours per day. Break = shift length minus working hours. |
+| Past days' "came in" (trend, calendar) | Partial | A person who worked from home **and** was late or half-day is counted twice, because the trend API has no per-day checked-in total. Today is exact. |
+| Weekly off on the calendar | Partial | The design greys out Sundays. The numbers already leave out each person's own week-offs (the API does that), but other week-off days still show as working days. |
+| HR without the face-log permission | Partial | The Face tab shows its empty state. The design has no "no access" state for it. |
+| Geofencing | Kept | Not in the design's section bar. Still at `/hrms/attendance/geofencing`, reachable from search (⌘K). See §1. |
+| Old pages (`Attendance.tsx`, `AttendanceAnalytics.tsx`, `ShiftsAndOt.tsx` and their parts) | Removed | Replaced by the designed page. Manual entry, Muster roll, Geofencing and `/me/shift-change` are untouched. |

@@ -10,11 +10,13 @@ import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const [file, outDir, ...only] = process.argv.slice(2)
+const [file, outDir, ...rest] = process.argv.slice(2)
 if (!file || !outDir) {
-  console.error('usage: capture-prototype.mjs <bundle.html> <outDir> [route ...]')
+  console.error('usage: capture-prototype.mjs <bundle.html> <outDir> [--mobile] [route ...]')
   process.exit(2)
 }
+const mobile = rest.includes('--mobile')
+const only = rest.filter((a) => a !== '--mobile')
 
 const ROUTES = only.length ? only : [
   '/dashboard',
@@ -40,7 +42,7 @@ const ROUTES = only.length ? only : [
   '/hrms/employees',
 ]
 
-const VIEWPORTS = { desktop: { width: 1440, height: 900 } }
+const VIEWPORTS = mobile ? { mobile: { width: 390, height: 844 } } : { desktop: { width: 1440, height: 900 } }
 const url = pathToFileURL(resolve(file)).href
 mkdirSync(outDir, { recursive: true })
 

@@ -15,6 +15,7 @@ import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
 import { istToday, istHour, addDays, dt, fmtShort, fmtLong, MON } from '@/design/dc/dates'
 import { useCompanies } from '../api/useOrg'
 import { useTeamDashboard, useAttendanceTrend, useCorrectionApprovals } from '../api/useAttendance'
+import { dayBuckets, trendBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
 import { useLeaveOverview } from '../api/useLeave'
 import { useHeadcountReport } from '../api/useReports'
 import { useActivityFeed, activityActor } from '../api/useActivity'
@@ -141,24 +142,14 @@ export function AdminDashboardContainer() {
 
   // ── view data (shapes follow the design's sample data) ──────────────────────
   const data = useMemo(() => {
-    const counts = team.data?.counts
-    const staff = team.data?.staffStatuses ?? []
-    const checkedIn = staff.filter((s) => !!s.checkInAt).length
-    const total = team.data ? staff.length : directory.data?.totalElements ?? 0
-    const c = counts
-      ? {
-          total, present: checkedIn, regular: counts.present, late: counts.late, halfDay: counts.halfDay, wfh: counts.workFromHome,
-          onLeave: counts.onLeave, notMarked: counts.notMarked, absent: counts.absent, earlyOut: counts.earlyCheckout,
-          other: Math.max(0, total - checkedIn - counts.onLeave - counts.absent),
-        }
+    // One bucket per person, the same numbers as Attendance & Time (see attendanceBuckets.ts).
+    const total = team.data ? team.data.staffStatuses.length : directory.data?.totalElements ?? 0
+    const c = team.data
+      ? dayBuckets(team.data, today)
       : { total, present: 0, regular: 0, late: 0, halfDay: 0, wfh: 0, onLeave: 0, notMarked: 0, absent: 0, earlyOut: 0, other: 0 }
-    const daily: Record<string, any> = {}
-    for (const r of trend.data ?? []) {
-      const present = r.present + r.late + r.halfDay + r.workFromHome
-      const t = present + r.notMarked
-      daily[r.date] = { total: t, present, regular: r.present, late: r.late, absent: r.absent, wfh: r.workFromHome, halfDay: r.halfDay, onLeave: r.onLeave, notMarked: r.notMarked, earlyOut: 0, other: Math.max(0, t - present - r.onLeave - r.absent) }
-    }
-    if (counts) daily[sel] = c
+    const daily: Record<string, DayBuckets> = {}
+    for (const r of trend.data ?? []) daily[r.date] = trendBuckets(r, today)
+    if (team.data) daily[sel] = c
 
     const st = stats.data
     const payrollMonths = new Map<string, number>()

@@ -219,7 +219,7 @@ export function useMonthlyStats(
   })
 }
 
-export function useAttendanceHistory(year?: number, month?: number) {
+export function useAttendanceHistory(year?: number, month?: number, options?: { enabled?: boolean }) {
   const params = new URLSearchParams()
   if (year) params.set('year', String(year))
   if (month) params.set('month', String(month))
@@ -227,6 +227,7 @@ export function useAttendanceHistory(year?: number, month?: number) {
     queryKey: ['hrms', 'attendance', 'history', year, month],
     queryFn: () => apiJson<DayRecordResponse[]>(`/v1/attendance/history?${params}`),
     staleTime: 30_000,
+    enabled: options?.enabled ?? true,
   })
 }
 

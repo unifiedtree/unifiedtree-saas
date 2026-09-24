@@ -52,7 +52,8 @@ const TemplateDetail = React.lazy(() => import('@/modules/hrms/onboarding/Templa
 const Instances = React.lazy(() => import('@/modules/hrms/onboarding/Instances').then(m => ({ default: m.Instances })))
 const InstanceDetail = React.lazy(() => import('@/modules/hrms/onboarding/InstanceDetail').then(m => ({ default: m.InstanceDetail })))
 const Employees = React.lazy(() => import('@/modules/hrms/Employees').then(m => ({ default: m.Employees })))
-const Attendance = React.lazy(() => import('@/modules/hrms/Attendance').then(m => ({ default: m.Attendance })))
+// Attendance & Time (Analytics · Daily Tracking · Shifts & Overtime) — one designed page, three routes.
+const AttendanceModule = React.lazy(() => import('@/modules/hrms/attendance/AttendanceContainer').then(m => ({ default: m.AttendanceContainer })))
 const GeofenceZones = React.lazy(() => import('@/modules/hrms/attendance/GeofenceZones').then(m => ({ default: m.GeofenceZones })))
 const Leave = React.lazy(() => import('@/modules/hrms/Leave').then(m => ({ default: m.Leave })))
 const OrgSetup = React.lazy(() => import('@/modules/hrms/organization/OrgSetup').then(m => ({ default: m.OrgSetup })))
@@ -70,7 +71,6 @@ const ExitCenter = React.lazy(() => import('@/modules/hrms/exit/ExitCenter').the
 const Hiring = React.lazy(() => import('@/modules/hrms/Hiring').then(m => ({ default: m.Hiring })))
 const Performance = React.lazy(() => import('@/modules/hrms/Performance').then(m => ({ default: m.Performance })))
 const WorkforceAnalytics = React.lazy(() => import('@/modules/hrms/analytics/WorkforceAnalytics').then(m => ({ default: m.WorkforceAnalytics })))
-const AttendanceAnalytics = React.lazy(() => import('@/modules/hrms/analytics/AttendanceAnalytics').then(m => ({ default: m.AttendanceAnalytics })))
 const PayrollDashboard = React.lazy(() => import('@/modules/hrms/payroll/PayrollDashboard').then(m => ({ default: m.PayrollDashboard })))
 const SalaryStructureAdmin = React.lazy(() => import('@/modules/hrms/payroll/SalaryStructureAdmin').then(m => ({ default: m.SalaryStructureAdmin })))
 const MusterRoll = React.lazy(() => import('@/modules/hrms/attendance/MusterRoll').then(m => ({ default: m.MusterRoll })))
@@ -85,7 +85,6 @@ const Policies = React.lazy(() => import('@/modules/hrms/Policies').then(m => ({
 const Pli = React.lazy(() => import('@/modules/hrms/Pli').then(m => ({ default: m.Pli })))
 const Integrations = React.lazy(() => import('@/modules/hrms/Integrations').then(m => ({ default: m.Integrations })))
 const NotificationTemplates = React.lazy(() => import('@/modules/hrms/NotificationTemplates').then(m => ({ default: m.NotificationTemplates })))
-const ShiftsAndOt = React.lazy(() => import('@/modules/hrms/attendance/ShiftsAndOt').then(m => ({ default: m.ShiftsAndOt })))
 const PayrollSettings = React.lazy(() => import('@/modules/hrms/payroll/PayrollSettings').then(m => ({ default: m.PayrollSettings })))
 const SalaryComponents = React.lazy(() => import('@/modules/hrms/payroll/SalaryComponents').then(m => ({ default: m.SalaryComponents })))
 const MySalaryStructure = React.lazy(() => import('@/modules/hrms/payroll/MySalaryStructure').then(m => ({ default: m.MySalaryStructure })))
@@ -342,7 +341,7 @@ export default function App() {
           path="/hrms/attendance"
           element={
             <RouteGuard anyOf={[P.HRMS_ESS_READ, P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_CHECKIN_SELF]}>
-              <ModuleGate moduleKey="hrms"><Attendance /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><AttendanceModule /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -424,7 +423,7 @@ export default function App() {
           path="/hrms/att-analytics"
           element={
             <RouteGuard anyOf={[P.HRMS_REPORT_ATTENDANCE, 'attendance.team.read']}>
-              <ModuleGate moduleKey="hrms"><AttendanceAnalytics /></ModuleGate>
+              <ModuleGate moduleKey="hrms"><AttendanceModule /></ModuleGate>
             </RouteGuard>
           }
         />
@@ -567,8 +566,8 @@ export default function App() {
         <Route
           path="/hrms/shifts"
           element={
-            <RouteGuard anyOf={['attendance.team.read', P.HRMS_EMPLOYEE_READ]}>
-              <ModuleGate moduleKey="hrms"><ShiftsAndOt /></ModuleGate>
+            <RouteGuard anyOf={['attendance.team.read', P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_CHECKIN_SELF]}>
+              <ModuleGate moduleKey="hrms"><AttendanceModule /></ModuleGate>
             </RouteGuard>
           }
         />
