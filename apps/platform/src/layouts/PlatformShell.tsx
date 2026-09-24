@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Users, Calendar, Clock, Building2, ClipboardList,
-  Settings, LogOut, Menu, ChevronRight, ChevronDown,
-  UserCircle2, ShieldAlert, FileBarChart2, FileText, Bell, Search,
+  Settings, LogOut, ChevronDown,
+  UserCircle2, ShieldAlert, FileBarChart2, FileText, Bell,
   TrendingUp, CreditCard, Package, ShoppingCart, HelpCircle, Briefcase,
-  UserCheck, Star, Receipt, DollarSign, Lock, MapPin,
+  UserCheck, Star, Receipt, DollarSign, MapPin,
   Database, Target, Wallet, Plug, Award, Shield, AlertTriangle,
-  LayoutGrid, ArrowLeft, Command,
+  LayoutGrid, ArrowLeft,
   Image as ImageIcon, Banknote, UserPlus} from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
@@ -19,6 +19,12 @@ import { useDisplayName } from '@/shared/hooks/useDisplayName'
 import { formatDistanceToNow } from 'date-fns'
 // Canonical admin-roles SSOT — do NOT redeclare locally. See useRoles.ts.
 import { ADMIN_ROLES as CANONICAL_ADMIN_ROLES } from '@/shared/hooks/useRoles'
+import { dashIcon } from '@/design/dc/icons'
+import {
+  DesignRail, DesignHeader, DesignSubNav, DesignMobileHeader, DesignMobileNav, DesignTooltip,
+  HeaderSearch, HeaderIconButton, HeaderBellButton, HeaderProfileButton, HeaderDivider,
+  type RailEntry, type SubNavEntry, type MobileNavEntry,
+} from '@/design/shell/ShellChrome'
 
 // The sidebar/rail collapse preference was removed (2026-08-22). It reclaimed
 // no space — the desktop rail is a fixed w-[96px] and the mobile drawer a fixed
@@ -272,17 +278,14 @@ const SETTINGS_NAV: NavItemDef[] = [
 const NON_HRMS = MODULE_ITEMS.filter(m => m.module && m.module !== 'hrms')
 const HRMS_GROUPS = MODULE_ITEMS.filter(m => m.module === 'hrms')
 
-const ROW_BASE = 'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150'
-const ROW_IDLE = 'text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
-const ROW_ACTIVE = 'bg-[var(--accent-bg)] text-[var(--accent-fg-strong)]'
 
 /** One-word labels for the Keka-style icon rail — the full names don't fit
  *  under an icon. Falls back to the first word of the nav label. */
 const RAIL_LABELS: Record<string, string> = {
   dashboard: 'Dashboard', myworkspace: 'Me', myteam: 'Team',
-  company: 'Company', master: 'Master', attendance: 'Time', leave: 'Leave',
-  recruit: 'Hire', 'payroll-hr': 'Payroll', expense: 'Expense', ess: 'Me',
-  performance: 'Perform', compliance: 'Comply', reports: 'Reports', exit: 'Exit',
+  company: 'Company', master: 'Master', attendance: 'Attendance', leave: 'Leave',
+  recruit: 'Hiring', 'payroll-hr': 'Payroll', expense: 'Expenses', ess: 'Me',
+  performance: 'Performance', compliance: 'Compliance', reports: 'Reports', exit: 'Exit',
   hrsettings: 'HR Setup',
   's-profile': 'Profile', 's-branding': 'Brand', 's-security': 'Security',
   's-notifications': 'Alerts', 's-billing': 'Billing', 's-integrations': 'Connect',
@@ -306,15 +309,20 @@ const RAIL_LABELS: Record<string, string> = {
  * the workspace name in tiny white text under it instead: always legible, never
  * distorted, and it doubles as the way back to the launcher (/modules).
  */
-const RAIL_BG = 'linear-gradient(180deg, #090D16 0%, #0C1525 50%, #052E22 100%)'
-const HEADER_BG = 'linear-gradient(90deg, #090D16 0%, #0B192C 40%, #0F6E56 100%)'
+/** Rail icons from the design's icon set (Claude Design prototype). Keys not
+ *  listed fall back to the item's own lucide icon. */
+const RAIL_ICONS: Record<string, string> = {
+  dashboard: 'dashboard', myworkspace: 'home', myteam: 'users',
+  company: 'building', master: 'database', attendance: 'clock', leave: 'calendar',
+  recruit: 'userPlus', 'payroll-hr': 'creditCard', expense: 'receipt', ess: 'userCheck',
+  performance: 'target', compliance: 'shield', reports: 'fileText', exit: 'logOut',
+  hrsettings: 'settings',
+}
+/** Groups that start a new rail block (a thin divider above them), per the design. */
+const RAIL_DIVIDERS = new Set(['company', 'attendance', 'payroll-hr', 'performance'])
 
 function matchPath(pathname: string, p?: string) {
   return !!p && (pathname === p || pathname.startsWith(p + '/'))
-}
-
-function ActiveBar({ show }: { show: boolean }) {
-  return <span aria-hidden className={clsx('absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--accent-solid)] transition-opacity duration-150', show ? 'opacity-100' : 'opacity-0')} />
 }
 
 function useDismiss(open: boolean, onClose: () => void) {
@@ -333,7 +341,6 @@ export function PlatformShell() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
-  const [switcherOpen, setSwitcherOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
@@ -344,14 +351,7 @@ export function PlatformShell() {
   // re-render when a new module activates, and the app-switcher would
   // keep showing a locked pill until an unrelated re-render triggers.
   const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
-  // The shell chrome carries no logo — the workspace NAME is the identity here,
-  // because an uploaded logo is whatever shape the customer gave us and none of
-  // them survive an 86px rail cell. tenantName comes from the auth store, which
-  // is populated at login. The uploaded logo still appears where it has room
-  // and belongs: the login page and Settings > Branding.
-  const tenantName = useLocalAuthStore(s => s.tenant?.name)
   const hasModule = (k: string) => activeModules.includes(k)
-  const tenant = useSdkStore(s => s.tenant)
   const permissions = useSdkStore(s => s.permissions)
   const userRoles: string[] = user?.roles ?? []
   const primaryRole = (ROLE_PRIORITY as readonly string[]).find(r => userRoles.includes(r)) ?? null
@@ -370,20 +370,13 @@ export function PlatformShell() {
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  useEffect(() => { setProfileOpen(false); setNotifOpen(false); setMobileOpen(false); setSwitcherOpen(false); setSearchOpen(false) }, [location.pathname])
+  useEffect(() => { setProfileOpen(false); setNotifOpen(false); setMobileOpen(false); setSearchOpen(false) }, [location.pathname])
 
   // Canonical ADMIN_ROLES from useRoles. The previous local list dropped
   // OWNER + ADMIN and pulled HR_MANAGER in, so an OWNER-only principal was
   // treated as non-admin (no Settings tile, blocked from admin fallbacks)
   // while an HR_MANAGER got admin-only affordances they weren't meant to see.
   const isAdmin = userRoles.some(r => (CANONICAL_ADMIN_ROLES as readonly string[]).includes(r)) || permissions.has('*')
-  const subdomain = tenant?.slug ?? ''
-
-  const openEditWorkspace = (moduleKey: string) => {
-    const websiteUrl = import.meta.env.VITE_WEBSITE_URL || 'https://unifiedtree.com'
-    window.open(`${websiteUrl}/edit-workspace?ws=${encodeURIComponent(subdomain)}&email=${encodeURIComponent(user?.email ?? '')}&add=${encodeURIComponent(moduleKey)}`, '_blank', 'noopener')
-  }
-
   // UNION check against every role the JWT carries — the earlier version
   // gated on `primaryRole` alone, which HID Employee Self Service from an
   // HR_MANAGER/admin who was ALSO an employee (their higher-priority role
@@ -410,18 +403,11 @@ export function PlatformShell() {
   })()
   const isLauncher = scope === 'launcher'
 
-  // Current-app label + icon (for the sidebar header)
-  const appMeta: { label: string; icon: React.ReactNode } = (() => {
-    if (scope === 'admin') return { label: 'Settings', icon: <Settings size={14} /> }
-    if (scope === 'hrms') return { label: 'HRMS', icon: <LayoutDashboard size={14} /> }
-    const m = NON_HRMS.find(x => x.module === scope)
-    return { label: m?.label ?? 'App', icon: m ? React.cloneElement(m.icon as React.ReactElement, { size: 14 }) : <LayoutGrid size={14} /> }
-  })()
-
   // Scoped navigation (only the current app's items)
   const scoped: { flat: NavItemDef[]; groups: NavItemDef[] } = (() => {
-    if (scope === 'admin') return { flat: SETTINGS_NAV.filter(isVisible), groups: [] }
-    if (scope === 'hrms') {
+    // Settings pages keep the HRMS rail (the gear lights up and the settings
+    // pages become section tabs) — Claude Design prototype.
+    if (scope === 'hrms' || scope === 'admin') {
       const groups = HRMS_GROUPS.map(m => ({ ...m, children: m.children?.filter(isVisible) })).filter(m => (m.children ? m.children.length > 0 : true))
       return { flat: NAV_ITEMS.filter(isVisible), groups }
     }
@@ -433,16 +419,9 @@ export function PlatformShell() {
     return { flat, groups: [] }
   })()
 
-  const [openModules, setOpenModules] = useState<string[]>(() => {
-    const active = HRMS_GROUPS.find(m => m.children?.some(c => location.pathname.startsWith(c.path)))
-    return active ? [active.key] : []
-  })
-  const toggleModule = (key: string) => setOpenModules(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
-
   const profileRef = useDismiss(profileOpen, () => setProfileOpen(false))
   const headerProfileRef = useDismiss(profileOpen, () => setProfileOpen(false))
   const notifRef = useDismiss(notifOpen, () => setNotifOpen(false))
-  const switcherRef = useDismiss(switcherOpen, () => setSwitcherOpen(false))
 
   // ─── Icon-rail model: top-level sections only ───────────────────────────────
   // Groups collapse to a single icon; their children become the in-page tab row
@@ -548,112 +527,6 @@ export function PlatformShell() {
   // disagree during hydration. See useDisplayName for the fallback chain.
   const { fullName, initials } = useDisplayName()
 
-  // ─── App-switcher (Odoo-style grid popover) ─────────────────────────────────
-  const SWITCHER_APPS = [
-    { key: 'hrms', label: 'HRMS', icon: <LayoutGrid size={17} />, home: '/dashboard', owned: hasModule('hrms') },
-    ...NON_HRMS.map(m => ({ key: m.module!, label: m.label, icon: React.cloneElement(m.icon as React.ReactElement, { size: 17 }), home: m.children?.[0]?.path ?? m.path ?? '/', owned: hasModule(m.module!) })),
-    ...(isAdmin ? [{ key: 'admin', label: 'Settings', icon: <Settings size={17} />, home: '/settings', owned: true }] : []),
-  ]
-  const openApp = (key: string, home: string, owned: boolean) => {
-    setSwitcherOpen(false)
-    if (owned) navigate(home)
-    else if (isAdmin) openEditWorkspace(key)
-  }
-
-  const AppSwitcher = () => (
-    <div className="relative" ref={switcherRef}>
-      <button onClick={() => setSwitcherOpen(v => !v)} title="Switch app" className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]">
-        <LayoutGrid size={18} />
-      </button>
-      <AnimatePresence>
-        {switcherOpen && (
-          <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute left-0 top-11 z-dropdown w-[300px] overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-3.5 py-2.5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">Apps</p>
-              <button onClick={() => { navigate('/modules'); setSwitcherOpen(false) }} className="text-xs font-medium text-[var(--text-link)] hover:underline">Browse all</button>
-            </div>
-            <div className="grid grid-cols-3 gap-1 p-2">
-              {SWITCHER_APPS.map(app => {
-                const active = app.key === scope
-                return (
-                  <button key={app.key} onClick={() => openApp(app.key, app.home, app.owned)}
-                    className={clsx('flex flex-col items-center gap-1.5 rounded-lg p-2.5 text-center transition-colors', active ? 'bg-[var(--accent-bg)]' : 'hover:bg-[var(--bg-subtle)]')}>
-                    <span className={clsx('relative flex h-9 w-9 items-center justify-center rounded-lg', app.owned ? 'bg-[var(--accent-bg)] text-[var(--accent-fg)]' : 'bg-[var(--bg-subtle)] text-[var(--text-tertiary)]')}>
-                      {app.icon}
-                      {!app.owned && <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--bg-surface)] text-[var(--text-tertiary)] ring-1 ring-[var(--border-default)]"><Lock size={8} /></span>}
-                    </span>
-                    <span className={clsx('text-[11px] font-medium leading-tight', app.owned ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]')}>{app.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-
-  /* The drawer's identity, same rule as the desktop chrome: the workspace name,
-     not a logo. Doubles as the way back to the launcher. */
-  const WorkspaceMark = () => (
-    <button
-      onClick={() => navigate('/modules')}
-      className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-0.5 transition-colors hover:bg-[var(--bg-subtle)]"
-      title="Back to apps"
-    >
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-solid)] text-white">
-        <LayoutGrid size={15} />
-      </span>
-      <span className="min-w-0 truncate text-[14.5px] font-bold tracking-[-0.01em] text-[var(--text-primary)]">
-        {tenantName || 'Workspace'}
-      </span>
-    </button>
-  )
-
-  // ─── Nav renderers ──────────────────────────────────────────────────────────
-  const renderFlat = (item: NavItemDef) => (
-    <NavLink key={item.key} to={item.path!} end={['/dashboard', '/me', '/team', '/settings'].includes(item.path!)}
-      className={({ isActive }) => clsx(ROW_BASE, isActive ? ROW_ACTIVE : ROW_IDLE)}>
-      {({ isActive }) => (<>
-        <ActiveBar show={isActive} />
-        <span className={clsx('shrink-0', isActive ? 'text-[var(--accent-fg)]' : 'text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]')}>{item.icon}</span>
-        <span>{item.label}</span>
-      </>)}
-    </NavLink>
-  )
-
-  const renderGroup = (item: NavItemDef) => {
-    const isOpen = openModules.includes(item.key)
-    const hasActiveChild = item.children!.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
-    return (
-      <div key={item.key}>
-        <button onClick={() => toggleModule(item.key)} className={clsx(ROW_BASE, 'w-full', hasActiveChild ? 'text-[var(--text-primary)]' : ROW_IDLE)}>
-          <span className={clsx('shrink-0', hasActiveChild ? 'text-[var(--accent-fg)]' : 'text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)]')}>{item.icon}</span>
-          <span className="flex-1 text-left">{item.label}</span>
-          <ChevronRight size={14} className={clsx('text-[var(--text-tertiary)] transition-transform duration-200', isOpen && 'rotate-90')} />
-        </button>
-        <AnimatePresence initial={false}>
-          {isOpen && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="overflow-hidden">
-              <div className="ml-[22px] mb-1 mt-0.5 space-y-0.5 border-l border-[var(--border-default)] pl-3">
-                {item.children!.map(child => (
-                  <NavLink key={child.path + child.label} to={child.path} end
-                    className={({ isActive }) => clsx('group flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] transition-colors', isActive ? 'font-semibold text-[var(--accent-fg-strong)]' : 'font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)]')}>
-                    {({ isActive }) => (<>
-                      <span className={clsx('h-1.5 w-1.5 shrink-0 rounded-full transition-colors', isActive ? 'bg-[var(--accent-solid)]' : 'bg-[var(--border-strong)] group-hover:bg-[var(--text-tertiary)]')} />
-                      <span className="truncate">{child.label}</span>
-                    </>)}
-                  </NavLink>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    )
-  }
-
   const profileMenu = (
     <>
       <div className="border-b border-[var(--border-subtle)] px-3.5 py-3">
@@ -671,46 +544,6 @@ export function PlatformShell() {
         <button onClick={logout} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--status-error-fg)] hover:bg-[var(--status-error-bg)]"><LogOut size={16} /> Sign out</button>
       </div>
     </>
-  )
-
-  // ─── Sidebar ────────────────────────────────────────────────────────────────
-  const sidebarContent = (
-    <div className="flex h-full flex-col border-r border-[var(--border-default)] bg-[var(--bg-surface)]">
-      <div className="flex h-16 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
-        <WorkspaceMark />
-        <AppSwitcher />
-      </div>
-
-      <div className="flex items-center gap-2 px-4 pb-1 pt-3">
-        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--accent-bg)] text-[var(--accent-fg)]">{appMeta.icon}</span>
-        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">{appMeta.label}</span>
-      </div>
-
-      <nav className="scrollbar-hide flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
-        {scoped.flat.map(renderFlat)}
-        {scoped.groups.length > 0 && scoped.flat.length > 0 && <div className="my-2 h-px bg-[var(--border-subtle)]" />}
-        {scoped.groups.map(renderGroup)}
-      </nav>
-
-      <div className="relative border-t border-[var(--border-subtle)] p-3" ref={profileRef}>
-        <AnimatePresence>
-          {profileOpen && (
-            <motion.div initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.98 }} transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute bottom-[72px] left-3 right-3 z-dropdown overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
-              {profileMenu}
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <button onClick={() => setProfileOpen(v => !v)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-2 text-left transition-colors hover:bg-[var(--bg-subtle)]">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-bg)] text-sm font-semibold text-[var(--accent-fg-strong)]">{initials}</span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold text-[var(--text-primary)]">{fullName}</span>
-            {roleBadgeText && <span className="block truncate text-[11px] text-[var(--text-tertiary)]">{roleBadgeText}</span>}
-          </span>
-          <ChevronDown size={15} className={clsx('shrink-0 text-[var(--text-tertiary)] transition-transform', profileOpen && 'rotate-180')} />
-        </button>
-      </div>
-    </div>
   )
 
   const searchModal = (
@@ -758,141 +591,115 @@ export function PlatformShell() {
     )
   }
 
-  // ─── App mode: dark-green icon rail + green header w/ in-header sub-tabs ────
-  //
-  // The sidebar carries ONLY top-level sections (icon over a tiny label); a
-  // section's sub-options render as pills in the header's LEFT side, so the
-  // rail never expands. Active rail item = Keka-style lighter block
-  // (rounded-xl, bg-white/[0.14], white icon+label); everything else white/60.
-  const workspaceInitial = (tenantName?.trim()?.[0] ?? 'W').toUpperCase()
-  const activeRailItem = railItems.find(i => i.active)
-  const sectionLabel = activeRailItem?.fullLabel ?? appMeta.label
-  // Settings pins to the rail's bottom the way the reference pins Help/Settings.
-  // Pure rendering split — railItems derivation above is untouched.
-  const pinnedRail = railItems.filter(i => i.key === 'hrsettings')
-  const mainRail = railItems.filter(i => i.key !== 'hrsettings')
+  // ─── App mode: the Claude Design chrome (icon rail + green top bar) ────────
+  // Only top-level sections live in the rail; a section's pages render as the
+  // white tab row under the top bar. Settings pages keep the HRMS rail, light
+  // up the gear, and list the settings pages as tabs.
+  // One lit rail item at a time. When several match (an employee's "My Workspace"
+  // link and Self-service group both own /me), prefer the group whose pages show
+  // as tabs.
+  const litKey = (railItems.find(i => i.active && i.children && i.children.length > 1) ?? railItems.find(i => i.active))?.key
+  const railEntry = (item: (typeof railItems)[number]): RailEntry => ({
+    key: item.key,
+    label: item.label,
+    title: item.fullLabel,
+    icon: RAIL_ICONS[item.key] ? dashIcon(RAIL_ICONS[item.key], 20) : React.cloneElement(item.icon as React.ReactElement, { size: 20 }),
+    active: scope !== 'admin' && item.key === litKey,
+    divider: RAIL_DIVIDERS.has(item.key),
+    onClick: () => navigate(item.target),
+  })
+  const railTop = railItems.filter(i => i.key !== 'hrsettings').map(railEntry)
+  const railBottom = railItems.filter(i => i.key === 'hrsettings').map(railEntry)
 
-  const renderRailItem = (item: (typeof railItems)[number]) => (
-    <button
-      key={item.key}
-      onClick={() => navigate(item.target)}
-      title={item.fullLabel}
-      className={clsx(
-        'flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 transition-colors duration-150',
-        item.active
-          ? 'bg-white/[0.14] text-white'
-          : 'text-white/60 hover:bg-white/[0.06] hover:text-white',
+  const settingsTabs = SETTINGS_NAV.filter(isVisible).filter(i => i.path)
+  const sectionTabs: { label: string; items: SubNavEntry[] } | null = (() => {
+    if (scope === 'admin') {
+      return {
+        label: 'Settings sections',
+        // /settings itself opens on the Profile section, so Profile is the active tab there.
+        items: settingsTabs.map(t => ({ label: t.label, path: t.path!, active: matchPath(location.pathname, t.path) || (location.pathname === '/settings' && t.key === 's-profile'), onClick: () => navigate(t.path!) })),
+      }
+    }
+    const active = railItems.find(i => i.active && i.children && i.children.length > 0)
+    if (!active?.children) return null
+    const seen = new Set<string>()
+    const kids = active.children.filter(c => { if (seen.has(c.path)) return false; seen.add(c.path); return true })
+    if (kids.length < 2) return null
+    // Longest matching path wins, so /hrms/documents/pending does not also light up /hrms/documents.
+    const best = kids.filter(c => matchPath(location.pathname, c.path)).sort((a, b) => b.path.length - a.path.length)[0]
+    return {
+      label: `${active.fullLabel} sections`,
+      items: kids.map(c => ({ label: c.label, path: c.path, active: c === best, onClick: () => navigate(c.path) })),
+    }
+  })()
+
+  const mobileItems: MobileNavEntry[] = [
+    ...railItems.map(i => ({
+      key: i.key,
+      label: i.fullLabel,
+      icon: RAIL_ICONS[i.key] ? dashIcon(RAIL_ICONS[i.key], 18) : React.cloneElement(i.icon as React.ReactElement, { size: 18 }),
+      active: scope !== 'admin' && i.key === litKey,
+      onClick: () => navigate(i.target),
+    })),
+    ...(isAdmin ? [{ key: 'settings', label: 'Settings', icon: dashIcon('settings', 18), active: scope === 'admin', onClick: () => navigate('/settings') }] : []),
+  ]
+
+  const profileDropdown = (
+    <AnimatePresence>
+      {profileOpen && (
+        <motion.div initial={{ opacity: 0, y: 6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }} transition={{ duration: 0.15 }} className="absolute right-0 top-[110%] z-dropdown w-56 overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
+          {profileMenu}
+        </motion.div>
       )}
-    >
-      <span>{item.icon}</span>
-      <span className="text-[10px] font-semibold leading-none tracking-tight">{item.label}</span>
-    </button>
+    </AnimatePresence>
   )
-
-  // ─── NEW SIDEBAR RENDER LOGIC matching hrms-dashboard.png ───
-  // We extract specific child routes from MODULE_ITEMS to form the exact groups.
-  const allModules = MODULE_ITEMS.flatMap(m => m.children || [])
-
-  /** Row style for the dark desktop aside — one definition shared by the
-   *  Dashboard link and the flat nav items so a row can never drift between
-   *  them. Group children use their own denser variant inline. */
-  const railLink = ({ isActive }: { isActive: boolean }) => clsx(
-    'flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors',
-    isActive ? 'bg-[#0F6E56] text-white shadow-sm' : 'text-white/70 hover:bg-white/10 hover:text-white',
-  )
-
 
   return (
     <div className="company-workspace flex h-screen overflow-hidden font-sans text-[var(--text-primary)]">
       <a href="#workspace-content" className="workspace-skip-link">Skip to workspace</a>
-      <aside className="workspace-rail hidden md:flex" aria-label="Workspace sidebar">
-        <NavLink to="/dashboard" className="workspace-brand" aria-label="UnifiedTree home">
-          <span className="workspace-brand-mark">ut<span>&bull;</span></span>
-          <span className="text-[9px] tracking-wide">UnifiedTree</span>
-        </NavLink>
-        <nav aria-label="Main navigation" className="flex-1 space-y-1 px-2 py-3">
-          {railItems.map(item => (
-            <NavLink key={item.key} to={item.target} title={item.fullLabel}
-              aria-current={item.active ? 'page' : undefined}
-              className={clsx('workspace-rail-link', item.active && 'is-active')}>
-              {item.icon}<span>{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-        {scope !== 'admin' && isAdmin && (
-          <NavLink to="/settings" className="workspace-rail-link mx-2 mb-3" title="Company settings">
-            <Settings size={18} /><span>Company settings</span>
-          </NavLink>
-        )}
-      </aside>
+      <DesignRail top={railTop} bottom={railBottom} onHome={() => navigate('/dashboard')} />
 
-      {/* Mobile drawer ... */}
-      <AnimatePresence>
-        {mobileOpen && (<>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMobileOpen(false)} className="fixed inset-0 z-modal-backdrop bg-black/40 backdrop-blur-sm md:hidden" />
-          <motion.aside initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', damping: 26, stiffness: 240 }} className="fixed inset-y-0 left-0 z-modal w-[272px] md:hidden">{sidebarContent}</motion.aside>
-        </>)}
-      </AnimatePresence>
+      {mobileOpen && <DesignMobileNav items={mobileItems} onClose={() => setMobileOpen(false)} />}
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {/* White Top Header */}
-        <header className="workspace-header z-sticky flex h-[60px] shrink-0 items-center justify-between gap-3 px-4 sm:px-6">
-          <button onClick={() => setMobileOpen(true)} className="-ml-1 rounded-lg p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] md:hidden" aria-label="Open menu"><Menu size={20} /></button>
-
-          <div className="flex min-w-0 flex-1 items-center gap-5">
-             <span className="hidden max-w-48 truncate text-sm font-semibold text-white lg:block">{tenantName || 'My company'}</span>
-             <button onClick={() => setSearchOpen(true)} className="hidden h-10 w-full max-w-[520px] items-center gap-2.5 rounded-xl bg-[var(--bg-subtle)] px-3 text-left transition-colors hover:bg-[var(--bg-default)] sm:flex">
-                <Search size={16} className="shrink-0 text-[var(--text-tertiary)]" />
-                <span className="flex-1 truncate text-[13px] font-medium text-[var(--text-tertiary)]">Search employees, leaves, reports, settings...</span>
-                <kbd className="hidden items-center gap-0.5 rounded-md border border-[var(--border-default)] bg-white px-1.5 py-0.5 text-[10px] font-bold text-[var(--text-tertiary)] shadow-sm lg:inline-flex"><Command size={10} /> K</kbd>
-             </button>
-             <button onClick={() => setSearchOpen(true)} className="rounded-lg p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] sm:hidden" aria-label="Search"><Search size={18} /></button>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-4">
-            {isAdmin && <button onClick={() => navigate('/settings')} aria-label="Company settings" className="text-white/85 hover:text-white transition-colors hidden sm:block">
-               <Settings size={18} />
-            </button>}
-            <button onClick={() => navigate('/modules')} aria-label="Workspace modules" className="text-white/85 hover:text-white transition-colors hidden sm:block">
-               <LayoutGrid size={18} />
-            </button>
-
+        <DesignHeader
+          search={<HeaderSearch onOpen={() => setSearchOpen(true)} />}
+          right={<>
+            {isAdmin && (
+              <HeaderIconButton label="Settings" active={scope === 'admin'} onClick={() => navigate('/settings')}>
+                {dashIcon('settings', 19)}
+              </HeaderIconButton>
+            )}
+            <HeaderIconButton label="All apps" onClick={() => navigate('/modules')}>{dashIcon('grid', 19)}</HeaderIconButton>
             <div className="relative" ref={notifRef}>
               <ShellNotificationBell open={notifOpen} onToggle={() => setNotifOpen(v => !v)} onNavigate={(to) => { setNotifOpen(false); navigate(to) }} />
             </div>
-
-            {/* Avatar block perfectly matching the image */}
-            <div className="relative border-l border-[var(--border-subtle)] pl-4 ml-1" ref={headerProfileRef}>
-              <button onClick={() => setProfileOpen(v => !v)} className="flex items-center gap-2.5 rounded-xl transition-colors hover:bg-[var(--bg-subtle)] px-2 py-1" aria-label="Account">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#059669] text-sm font-bold text-white shadow-sm">{initials}</span>
-                <div className="hidden text-left sm:block">
-                   <div className="text-[13px] font-semibold text-white leading-tight">{fullName}</div>
-                   <div className="text-[11px] font-medium text-white/80 leading-tight">{roleBadgeText || 'Employee'}</div>
-                </div>
-              </button>
-              <AnimatePresence>
-                {profileOpen && (
-                  <motion.div initial={{ opacity: 0, y: 6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }} transition={{ duration: 0.15 }} className="absolute right-0 top-[110%] z-dropdown w-56 overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] shadow-lg">
-                    {profileMenu}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+            <HeaderDivider />
+            <div className="relative" ref={headerProfileRef}>
+              <HeaderProfileButton initials={initials} name={fullName} role={roleBadgeText || 'Employee'} expanded={profileOpen} onClick={() => setProfileOpen(v => !v)} />
+              {profileDropdown}
             </div>
-          </div>
-        </header>
-
-        {railItems.some(item => item.active && item.children?.length) && (
-          <nav aria-label="Module navigation" className="workspace-module-nav">
-            {Array.from(new Map(railItems.filter(item => item.active).flatMap(item => item.children ?? []).map(child => [child.path, child])).values()).map(child => (
-              <NavLink key={child.path} to={child.path} className={({ isActive }) => clsx('workspace-module-link', isActive && 'is-active')}>
-                {child.label}
-              </NavLink>
-            ))}
-          </nav>
-        )}
+          </>}
+        />
+        <DesignMobileHeader
+          onMenu={() => setMobileOpen(true)}
+          onSearch={() => setSearchOpen(true)}
+          bell={<div className="relative"><ShellNotificationBell mobile open={notifOpen} onToggle={() => setNotifOpen(v => !v)} onNavigate={(to) => { setNotifOpen(false); navigate(to) }} /></div>}
+          avatar={
+            <div className="relative" ref={profileRef}>
+              <button type="button" aria-label="Profile" onClick={() => setProfileOpen(v => !v)}
+                style={{ width: '44px', height: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '0', background: 'transparent', cursor: 'pointer' }}>
+                <span style={{ width: '32px', height: '32px', borderRadius: '999px', background: '#0a5240', boxShadow: '0 0 0 2px rgba(255,255,255,.3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: '#fff' }}>{initials}</span>
+              </button>
+              {profileDropdown}
+            </div>
+          }
+        />
+        {sectionTabs && <DesignSubNav label={sectionTabs.label} items={sectionTabs.items} />}
         <div id="workspace-content" tabIndex={-1} className="workspace-content flex-1 overflow-auto"><Outlet /></div>
       </main>
       {searchModal}
+      <DesignTooltip />
     </div>
   )
 }
@@ -912,10 +719,12 @@ function ShellNotificationBell({
   open,
   onToggle,
   onNavigate,
+  mobile,
 }: {
   open: boolean
   onToggle: () => void
   onNavigate: (to: string) => void
+  mobile?: boolean
 }) {
   const notifications = useNotificationStore((s) => s.notifications)
   const loading = useNotificationStore((s) => s.loading)
@@ -940,18 +749,8 @@ function ShellNotificationBell({
 
   return (
     <>
-      <button
-        onClick={onToggle}
-        className="relative rounded-lg p-2 text-white/85 transition-colors hover:bg-white/10 hover:text-white"
-        aria-label="Notifications"
-      >
-        <Bell size={18} />
-        {/* Dot is now truthful — only visible when there is at least one
-            unread notification. Ringed with the header's green so it pops. */}
-        {unreadCount > 0 && (
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#F97316] ring-2 ring-[#059669]" />
-        )}
-      </button>
+      {/* The dot is truthful — shown only when something is unread. */}
+      <HeaderBellButton unread={unreadCount > 0} onClick={onToggle} mobile={mobile} />
       <AnimatePresence>
         {open && (
           <motion.div
