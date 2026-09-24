@@ -229,7 +229,39 @@ public class EmployeeController {
     @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
     public ResponseEntity<PageResponse<EmployeeSummaryResponse>> listByDepartment(
             @PathVariable UUID departmentId,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            @AuthenticationPrincipal Jwt jwt) {
+        // A DEPT_MANAGER may only list a department they lead or belong to.
+        // Without this the endpoint returned every department's roster
+        // (names, emails, probation status) to any manager. Uses a raw JDBC
+        // check to avoid dragging the workforce repo into this module.
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean isAdminLike = auth != null && auth.getAuthorities().stream().anyMatch(ga -> {
+            String a = ga.getAuthority();
+            return "ROLE_HR_MANAGER".equals(a) || "ROLE_COMPANY_ADMIN".equals(a)
+                    || "ROLE_OWNER".equals(a) || "ROLE_ADMIN".equals(a) || "ROLE_SUPER_ADMIN".equals(a);
+        });
+        if (!isAdminLike && jdbcTemplate != null) {
+            UUID actor = extractEmployeeId(jwt);
+            try {
+                Boolean allowed = jdbcTemplate.queryForObject(
+                        "SELECT EXISTS ("
+                                + " SELECT 1 FROM hrms.departments d "
+                                + " LEFT JOIN hrms.employees e ON e.id = ? "
+                                + " WHERE d.id = ? AND (d.department_head_employee_id = ? OR e.department_id = d.id)"
+                                + ")",
+                        Boolean.class, actor, departmentId, actor);
+                if (!Boolean.TRUE.equals(allowed)) {
+                    throw new org.springframework.security.access.AccessDeniedException(
+                            "You can list only your own team's departments.");
+                }
+            } catch (org.springframework.security.access.AccessDeniedException ade) {
+                throw ade;
+            } catch (Exception ex) {
+                log.warn("dept-scope lookup failed for {}: {}", departmentId, ex.getMessage());
+                throw new org.springframework.security.access.AccessDeniedException("dept-scope check failed");
+            }
+        }
         return ResponseEntity.ok(employeeService.listByDepartment(departmentId, pageable));
     }
 

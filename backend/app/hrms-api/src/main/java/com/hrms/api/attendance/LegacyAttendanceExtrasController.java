@@ -65,6 +65,8 @@ public class LegacyAttendanceExtrasController {
     private final GeoValidationService geoValidationService;
     private final AttendanceContextResolver contextResolver;
     private final EmployeeRepository employeeRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrms.leave.repository.WfhRequestRepository wfhRequestRepository;
     private final WorkforceDepartmentRepository departmentRepository;
 
     public LegacyAttendanceExtrasController(AttendanceService attendanceService,
@@ -86,6 +88,15 @@ public class LegacyAttendanceExtrasController {
             @Valid @RequestBody GeoValidateRequest request,
             @AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
+        // On an approved-WFH day the /checkin path already accepts a punch;
+        // this pre-flight check used to say "outside the punch zone" anyway,
+        // so an employee working from home could not open the camera and
+        // couldn't punch at all. Mirror /checkin's rule here.
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        if (wfhRequestRepository.hasApprovedOn(employeeId, today)) {
+            return ResponseEntity.ok(new GeoValidateResponse(true, null, null, 0.0,
+                    "Approved WFH today — you can punch from anywhere."));
+        }
         AttendanceContextResolver.Context ctx = contextResolver.resolve(employeeId);
         return ResponseEntity.ok(geoValidationService.validate(
                 new GeoValidateRequest(employeeId, request.latitude(), request.longitude()),

@@ -417,6 +417,13 @@ public class InvitationService {
             .orElseThrow(() -> new BusinessRuleException("User not found", "USER_NOT_FOUND"));
 
         creds.setPasswordHash(passwordService.hash(newPassword));
+        // Activate the account if it was still inactive — an invited employee
+        // who used the reset link (instead of the accept-invite link) would
+        // otherwise still hit "Account is inactive" on the next login. Also
+        // clear any temporary lock from too many earlier failed attempts.
+        if (!creds.isActive()) creds.setActive(true);
+        creds.setFailedLoginCount(0);
+        creds.setLockedUntil(null);
         credRepo.save(creds);
 
         markTokenUsed(rt.id());

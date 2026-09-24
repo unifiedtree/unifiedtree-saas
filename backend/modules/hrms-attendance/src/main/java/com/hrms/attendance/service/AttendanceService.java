@@ -487,6 +487,58 @@ public class AttendanceService {
     }
 
     /**
+     * Bulk version of {@link #resolveWeeklyOffSet} for the team dashboard: one
+     * query for a list of employees. Missing rows fall back to Sat+Sun. Used to
+     * decide whether an employee is "not marked" today or simply on their
+     * weekly off. Empty input → empty result.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<UUID, java.util.Set<Integer>> weeklyOffSetsFor(java.util.List<UUID> employeeIds) {
+        java.util.Map<UUID, java.util.Set<Integer>> out = new java.util.HashMap<>();
+        if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) return out;
+        java.util.Set<Integer> fallback = new java.util.HashSet<>(java.util.Arrays.asList(6, 7));
+        for (UUID id : employeeIds) out.put(id, fallback);
+        String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
+        try {
+            jdbcTemplate.query(
+                    "SELECT id, weekly_off_days FROM hrms.employees WHERE id IN (" + inClause + ")",
+                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                        UUID id = (UUID) rs.getObject("id");
+                        String csv = rs.getString("weekly_off_days");
+                        if (csv == null || csv.isBlank()) return;
+                        java.util.Set<Integer> set = new java.util.HashSet<>();
+                        for (String tok : csv.split(",")) {
+                            try {
+                                int d = Integer.parseInt(tok.trim());
+                                if (d >= 1 && d <= 7) set.add(d);
+                            } catch (NumberFormatException ignored) { /* skip junk */ }
+                        }
+                        if (!set.isEmpty()) out.put(id, set);
+                    },
+                    employeeIds.toArray());
+        } catch (Exception ex) { /* keep the fallback map */ }
+        return out;
+    }
+
+    /** Bulk joining-date lookup — the team dashboard filters out future hires. */
+    @Transactional(readOnly = true)
+    public java.util.Map<UUID, LocalDate> joiningDatesFor(java.util.List<UUID> employeeIds) {
+        java.util.Map<UUID, LocalDate> out = new java.util.HashMap<>();
+        if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) return out;
+        String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
+        try {
+            jdbcTemplate.query(
+                    "SELECT id, date_of_joining FROM hrms.employees WHERE id IN (" + inClause + ")",
+                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                        java.sql.Date d = rs.getDate("date_of_joining");
+                        if (d != null) out.put((UUID) rs.getObject("id"), d.toLocalDate());
+                    },
+                    employeeIds.toArray());
+        } catch (Exception ex) { /* empty map */ }
+        return out;
+    }
+
+    /**
      * Dates within [start,end] that the employee is on APPROVED leave. Read via
      * JdbcTemplate (leave lives in another module/schema) so an approved-leave
      * day shows as ON_LEAVE on the calendar/summary instead of red ABSENT.

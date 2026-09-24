@@ -287,7 +287,22 @@ public class AttendanceController {
             @RequestParam(required = false) UUID departmentId,
             @AuthenticationPrincipal Jwt jwt) {
         LocalDate selectedDate = date != null ? date : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
-        List<Employee> employees = scopedEmployees(jwt, departmentId);
+        List<Employee> rosterAll = scopedEmployees(jwt, departmentId);
+        // Exclude anyone who joined after the date (a 1-Oct hire is not
+        // "absent" on 24 Sep) or whose weekly off falls on the date (Sat/Sun
+        // fallback if the employee has no explicit weekly_off_days).
+        List<UUID> rosterAllIds = rosterAll.stream().map(Employee::getId).toList();
+        java.util.Map<UUID, LocalDate> joins = attendanceService.joiningDatesFor(rosterAllIds);
+        java.util.Map<UUID, java.util.Set<Integer>> weekOffs = attendanceService.weeklyOffSetsFor(rosterAllIds);
+        int dow = selectedDate.getDayOfWeek().getValue();
+        List<Employee> employees = rosterAll.stream()
+                .filter(emp -> {
+                    LocalDate joined = joins.get(emp.getId());
+                    if (joined != null && joined.isAfter(selectedDate)) return false;
+                    java.util.Set<Integer> off = weekOffs.get(emp.getId());
+                    return off == null || !off.contains(dow);
+                })
+                .toList();
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         List<AttendanceRecord> records = attendanceService.getRecordsForEmployeesOnDate(
                 employeeIds, selectedDate);
@@ -521,16 +536,22 @@ public class AttendanceController {
                 .toList());
     }
 
-    @Operation(summary = "Manager/Admin manual attendance entry or override")
+    @Operation(summary = "HR/Admin manual attendance entry or override")
     @PostMapping("/manual-entry")
-    @PreAuthorize("hasAuthority('attendance.regularization.approve')")
+    @PreAuthorize("hasAuthority('attendance.workforce.admin')")
     public ResponseEntity<AttendanceDto> manualEntry(
             @Valid @RequestBody ManualAttendanceRequest request,
             @AuthenticationPrincipal Jwt jwt) {
+        // Even with the permission, you cannot rewrite your OWN attendance.
+        UUID actor = extractEmployeeId(jwt);
+        if (actor != null && actor.equals(request.employeeId())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "You cannot record manual attendance for yourself.");
+        }
         AttendanceContextResolver.Context target = contextResolver.resolve(request.employeeId());
         AttendanceDto dto = attendanceService.manualEntry(
                 request,
-                extractEmployeeId(jwt),
+                actor,
                 com.hrms.core.tenant.TenantContext.getTenantId(),
                 target.companyId(),
                 target.departmentId(),

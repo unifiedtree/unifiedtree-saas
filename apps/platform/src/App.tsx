@@ -310,7 +310,11 @@ export default function App() {
         <Route
           path="/hrms/employees/:id"
           element={
-            <RouteGuard anyOf={[P.HRMS_EMPLOYEE_READ]}>
+            // Also allow a manager to open a direct report's profile: the
+            // backend already scopes /employees/{id} to HR/admin OR the caller
+            // being the reporting manager. Without ATTENDANCE_TEAM_READ here,
+            // clicking a name on the Team roster hit "Access Restricted".
+            <RouteGuard anyOf={[P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_TEAM_READ]}>
               <ModuleGate moduleKey="hrms"><EmployeeDetail /></ModuleGate>
             </RouteGuard>
           }

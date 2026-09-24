@@ -84,7 +84,7 @@ public class ShiftController {
 
     @Operation(summary = "Create a shift definition")
     @PostMapping
-    @PreAuthorize("hasAuthority('attendance.regularization.approve')")
+    @PreAuthorize("hasAuthority('attendance.workforce.admin')")
     public ResponseEntity<ShiftPolicyResponse> create(@RequestParam("companyId") UUID companyId,
                                                        @Valid @RequestBody ShiftPolicyRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED).body(shiftService.createShift(companyId, req));
@@ -92,7 +92,7 @@ public class ShiftController {
 
     @Operation(summary = "Update a shift definition")
     @PutMapping("/{shiftId}")
-    @PreAuthorize("hasAuthority('attendance.regularization.approve')")
+    @PreAuthorize("hasAuthority('attendance.workforce.admin')")
     public ResponseEntity<ShiftPolicyResponse> update(@PathVariable UUID shiftId,
                                                       @Valid @RequestBody ShiftPolicyRequest req) {
         return ResponseEntity.ok(shiftService.updateShift(shiftId, req));
@@ -100,7 +100,7 @@ public class ShiftController {
 
     @Operation(summary = "Soft-delete a shift definition (409 SHIFT_IN_USE if any employee is still assigned)")
     @DeleteMapping("/{shiftId}")
-    @PreAuthorize("hasAuthority('attendance.regularization.approve')")
+    @PreAuthorize("hasAuthority('attendance.workforce.admin')")
     public ResponseEntity<Void> delete(@PathVariable UUID shiftId) {
         shiftService.deleteShift(shiftId);
         return ResponseEntity.noContent().build();
@@ -115,7 +115,7 @@ public class ShiftController {
 
     @Operation(summary = "Assign (or reassign) an employee to a shift")
     @PostMapping("/employee/{employeeId}")
-    @PreAuthorize("hasAuthority('attendance.regularization.approve')")
+    @PreAuthorize("hasAuthority('attendance.workforce.admin')")
     public ResponseEntity<EmployeeShiftResponse> assign(@PathVariable UUID employeeId,
                                                         @RequestBody AssignShiftRequest req) {
         return ResponseEntity.ok(shiftService.assignShift(employeeId, req));

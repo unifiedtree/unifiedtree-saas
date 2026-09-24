@@ -176,7 +176,11 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'reports', label: 'Reports & Analytics', icon: <FileBarChart2 size={18} />, module: 'hrms',
     children: [
-      { label: 'Reports Center', path: '/hrms/reports', icon: <FileBarChart2 size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_FIN_META] },
+      // Reports endpoints require hrms.report.* which a plain DEPT_MANAGER doesn't
+      // hold — that used to leave a manager clicking through to an Access
+      // Restricted page. Show only when at least one report permission is held.
+      { label: 'Reports Center', path: '/hrms/reports', icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN,
+        visibleWithAnyPermission: ['hrms.report.headcount', 'hrms.report.attrition', 'hrms.report.attendance', 'hrms.report.leave', 'hrms.report.diversity'] },
       { label: 'Workforce Analytics', path: '/hrms/workforce-analytics', icon: <TrendingUp size={15} />, visibleForRoles: R_ADMIN },
     ],
   },
@@ -843,9 +847,9 @@ export function PlatformShell() {
           </div>
 
           <div className="flex shrink-0 items-center gap-4">
-            <button onClick={() => navigate('/settings')} aria-label="Company settings" className="text-white/85 hover:text-white transition-colors hidden sm:block">
+            {isAdmin && <button onClick={() => navigate('/settings')} aria-label="Company settings" className="text-white/85 hover:text-white transition-colors hidden sm:block">
                <Settings size={18} />
-            </button>
+            </button>}
             <button onClick={() => navigate('/modules')} aria-label="Workspace modules" className="text-white/85 hover:text-white transition-colors hidden sm:block">
                <LayoutGrid size={18} />
             </button>

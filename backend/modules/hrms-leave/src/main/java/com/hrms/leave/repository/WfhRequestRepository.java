@@ -17,6 +17,14 @@ import java.util.UUID;
 @Repository
 public interface WfhRequestRepository extends JpaRepository<WfhRequest, UUID> {
 
+    /** True when this employee has an APPROVED WFH covering {@code date}. */
+    @org.springframework.data.jpa.repository.Query(
+        "select count(w) > 0 from WfhRequest w "
+      + "where w.employeeId = :employeeId and w.status = com.hrms.core.enums.ApprovalStatus.APPROVED "
+      + "  and w.fromDate <= :date and w.toDate >= :date")
+    boolean hasApprovedOn(@org.springframework.data.repository.query.Param("employeeId") UUID employeeId,
+                          @org.springframework.data.repository.query.Param("date") java.time.LocalDate date);
+
     Page<WfhRequest> findByEmployeeIdOrderByFromDateDesc(UUID employeeId, Pageable pageable);
 
     Page<WfhRequest> findByApproverIdAndStatus(UUID approverId, ApprovalStatus status, Pageable pageable);
