@@ -9,7 +9,7 @@
 import React, { useState } from 'react'
 import type { useWorkforceEmployee } from '../../api/useWorkforce'
 import { Info } from 'lucide-react'
-import { SectionState, SubSection } from './shared'
+import { SectionState, SubSection, WsEmpty } from './shared'
 import type {
   EmployeeAddress, EmployeeIdentityResponse, EmployeeBankAccountResponse,
   EmployeeEducation, EmployeeExperience, EmployeeDependent, EmergencyContact,
@@ -61,7 +61,7 @@ function BankTab({ employeeId }: { employeeId: string }) {
   }
 
   if (isLoading) return <TableSkeleton rows={2} cols={4} />
-  if (error)     return <EmptyState icon={XCircle} title="Error" description="Failed to load data" action={{ label: 'Retry', onClick: () => refetch() }} />
+  if (error)     return <WsEmpty icon={XCircle} tone="red" title="Couldn’t load this section" hint="The request failed. The rest of the profile is unaffected." action={<HrButton size="sm" variant="ghost" onClick={() => refetch()}>Try again</HrButton>} />
 
   return (
     <>
@@ -72,11 +72,11 @@ function BankTab({ employeeId }: { employeeId: string }) {
       </Can>
 
       {data.length === 0 ? (
-        <EmptyState icon={FileText} title="No bank accounts" description="Add a bank account for salary credit." />
+        <WsEmpty icon={FileText} title="No bank accounts" hint="Add a bank account for salary credit." />
       ) : (
         <div className="space-y-2">
           {(data as EmployeeBankAccountResponse[]).map((acc) => (
-            <div key={acc.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
+            <div key={acc.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
               <div className="space-y-0.5">
                 <p className="text-sm font-medium text-text-primary">{acc.accountHolderName}</p>
                 <p className="text-xs text-text-secondary">{acc.bankName} {acc.branchName ? `· ${acc.branchName}` : ''}</p>
@@ -176,7 +176,7 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
       </div>
 
       {!structure ? (
-        <EmptyState icon={FileText} title="No salary structure" description="Define this employee's salary structure to enable payroll." />
+        <WsEmpty icon={FileText} title="No salary structure" hint="Define this employee's salary structure to enable payroll." />
       ) : (
         <>
           {/* 2026-09-10: this tab showed CTC / Monthly / Tax regime / PF status
@@ -185,10 +185,10 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
               computed by the payroll engine, so show the same four money cards
               the Salary Structure page does. */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Annual CTC</p><p className="text-lg font-bold text-text-primary">{inr(structure.ctcAnnual)}</p><p className="text-xs text-text-tertiary">{inr(structure.ctcMonthly)} / month</p></div>
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Gross / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.grossMonthly ?? structure.ctcMonthly)}</p></div>
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Deductions / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.totalDeductions ?? 0)}</p></div>
-            <div className="ut-card ut-card-sm p-3"><p className="text-xs text-text-secondary">Net pay / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.netMonthly ?? structure.ctcMonthly)}</p></div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}><p className="text-xs text-text-secondary">Annual CTC</p><p className="text-lg font-bold text-text-primary">{inr(structure.ctcAnnual)}</p><p className="text-xs text-text-tertiary">{inr(structure.ctcMonthly)} / month</p></div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}><p className="text-xs text-text-secondary">Gross / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.grossMonthly ?? structure.ctcMonthly)}</p></div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}><p className="text-xs text-text-secondary">Deductions / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.totalDeductions ?? 0)}</p></div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}><p className="text-xs text-text-secondary">Net pay / mo</p><p className="text-lg font-bold text-text-primary">{inr(structure.netMonthly ?? structure.ctcMonthly)}</p></div>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
             <span>Tax regime: <span className="font-semibold text-text-primary">{structure.taxRegime}</span></span>
@@ -247,7 +247,7 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
             </label>
             {ctcComponents.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-border">
-                <p className="text-xs font-bold text-text-secondary uppercase tracking-wider">Monthly component amounts</p>
+                <p className="text-[13px] font-bold text-text-primary">Monthly component amounts</p>
                 {ctcComponents.map(c => (
                   <Field key={c.id} label={c.name}>
                     <Input type="number" value={lines[c.id] ?? ''} onChange={(e) => setLines(p => ({ ...p, [c.id]: e.target.value }))} placeholder="0" />
@@ -288,7 +288,7 @@ export function EmployeePayroll({ emp }: {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-3">
       {canReadSalary && (
         <SubSection title="Salary structure" hint="Current structure and its revision history.">
           <SalaryTab employeeId={emp.id} companyId={emp.companyId} />
@@ -304,7 +304,7 @@ export function EmployeePayroll({ emp }: {
           takes its employee id from the JWT, and GET /v1/payroll/runs has no
           employeeId filter — so listing this employee's payslips would mean one
           request per payroll run. */}
-      <div className="ut-card p-4 flex gap-3">
+      <div className="flex gap-3" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px' }}>
         <Info size={15} className="text-text-tertiary shrink-0 mt-0.5" />
         <div>
           <p className="text-sm font-semibold text-text-primary">Payslip history isn’t shown here yet</p>

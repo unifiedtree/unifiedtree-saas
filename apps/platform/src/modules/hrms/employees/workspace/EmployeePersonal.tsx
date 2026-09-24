@@ -13,7 +13,7 @@
 
 import React, { useState } from 'react'
 import { format } from 'date-fns'
-import { SectionState, SubSection, InfoRow } from './shared'
+import { SectionState, SubSection, InfoRow, WsEmpty, Facts } from './shared'
 import type {
   EmployeeAddress, EmployeeIdentityResponse, EmployeeBankAccountResponse,
   EmployeeEducation, EmployeeExperience, EmployeeDependent, EmergencyContact,
@@ -63,37 +63,23 @@ function ContactTab({ employeeId, emp }: { employeeId: string; emp: NonNullable<
   }
 
   if (isLoading) return <TableSkeleton rows={3} cols={4} />
-  if (error) return <EmptyState icon={XCircle} title="Error" description="Failed to load data" action={{ label: 'Retry', onClick: () => refetch() }} />
+  if (error) return <WsEmpty icon={XCircle} tone="red" title="Couldn’t load this section" hint="The request failed. The rest of the profile is unaffected." action={<HrButton size="sm" variant="ghost" onClick={() => refetch()}>Try again</HrButton>} />
 
   return (
     <>
-      {/* Contact details from employee record */}
-      <div className="ut-card grid sm:grid-cols-2 gap-3 mb-5 p-4">
-        <div>
-          <p className="text-xs text-text-secondary mb-0.5">Work Email</p>
-          <p className="text-sm text-text-primary">{emp.email}</p>
-        </div>
-        {emp.phone && (
-          <div>
-            <p className="text-xs text-text-secondary mb-0.5">Phone</p>
-            <p className="text-sm text-text-primary">{emp.phone}</p>
-          </div>
-        )}
-      </div>
-
       <div className="flex items-center justify-between mb-3">
-        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Addresses</h4>
+        <h4 className="text-[13px] font-bold text-text-primary">Addresses</h4>
         <Can code={P.HRMS_EMPLOYEE_PROFILE_WRITE}>
           <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setOpen(true)}>Add Address</Button>
         </Can>
       </div>
 
       {data.length === 0 ? (
-        <EmptyState icon={FileText} title="No addresses" description="Add a permanent, current, or office address." />
+        <WsEmpty icon={FileText} title="No addresses" hint="Add a permanent, current, or office address." />
       ) : (
         <div className="space-y-2">
           {data.map((addr) => (
-            <div key={addr.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
+            <div key={addr.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
               <div>
                 <div className="mb-1"><HrStatusPill tone="info">{addr.addressType}</HrStatusPill></div>
                 <p className="text-sm text-text-primary">
@@ -175,13 +161,13 @@ function IdentityTab({ employeeId }: { employeeId: string }) {
   }
 
   if (isLoading) return <TableSkeleton rows={6} cols={2} />
-  if (error)     return <EmptyState icon={XCircle} title="Error" description="Failed to load data" action={{ label: 'Retry', onClick: () => refetch() }} />
+  if (error)     return <WsEmpty icon={XCircle} tone="red" title="Couldn’t load this section" hint="The request failed. The rest of the profile is unaffected." action={<HrButton size="sm" variant="ghost" onClick={() => refetch()}>Try again</HrButton>} />
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="max-w-lg space-y-4">
       {identity && (
-        <div className="ut-card space-y-3 p-4 mb-4">
-          <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Current Values</h4>
+        <div className="space-y-3 mb-4" style={{ padding: 14, borderRadius: 12, background: '#f8fafc' }}>
+          <h4 className="text-[13px] font-bold text-text-primary">Current Values</h4>
           {identity.pan && (
             <PiiField label="PAN" masked={maskPan(identity.pan)} full={identity.pan} show={showPan} onToggle={() => setShowPan((v) => !v)} />
           )}
@@ -239,7 +225,7 @@ function EducationTab({ employeeId }: { employeeId: string }) {
   }
 
   if (isLoading) return <TableSkeleton rows={3} cols={3} />
-  if (error)     return <EmptyState icon={XCircle} title="Error" description="Failed to load data" action={{ label: 'Retry', onClick: () => refetch() }} />
+  if (error)     return <WsEmpty icon={XCircle} tone="red" title="Couldn’t load this section" hint="The request failed. The rest of the profile is unaffected." action={<HrButton size="sm" variant="ghost" onClick={() => refetch()}>Try again</HrButton>} />
 
   return (
     <>
@@ -250,11 +236,11 @@ function EducationTab({ employeeId }: { employeeId: string }) {
       </Can>
 
       {data.length === 0 ? (
-        <EmptyState icon={FileText} title="No education records" description="Add degrees and certifications." />
+        <WsEmpty icon={FileText} title="No education records" hint="Add degrees and certifications." />
       ) : (
         <div className="space-y-2">
           {(data as EmployeeEducation[]).map((edu) => (
-            <div key={edu.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
+            <div key={edu.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{edu.degree}{edu.fieldOfStudy ? ` · ${edu.fieldOfStudy}` : ''}</p>
@@ -322,7 +308,7 @@ function ExperienceTab({ employeeId }: { employeeId: string }) {
   }
 
   if (isLoading) return <TableSkeleton rows={3} cols={3} />
-  if (error)     return <EmptyState icon={XCircle} title="Error" description="Failed to load data" action={{ label: 'Retry', onClick: () => refetch() }} />
+  if (error)     return <WsEmpty icon={XCircle} tone="red" title="Couldn’t load this section" hint="The request failed. The rest of the profile is unaffected." action={<HrButton size="sm" variant="ghost" onClick={() => refetch()}>Try again</HrButton>} />
 
   return (
     <>
@@ -333,11 +319,11 @@ function ExperienceTab({ employeeId }: { employeeId: string }) {
       </Can>
 
       {data.length === 0 ? (
-        <EmptyState icon={FileText} title="No experience records" description="Add previous work experience." />
+        <WsEmpty icon={FileText} title="No experience records" hint="Add previous work experience." />
       ) : (
         <div className="space-y-2">
           {(data as EmployeeExperience[]).map((exp) => (
-            <div key={exp.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
+            <div key={exp.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{exp.companyName}</p>
@@ -407,7 +393,7 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
   }
 
   if (isLoading) return <TableSkeleton rows={3} cols={3} />
-  if (error)     return <EmptyState icon={XCircle} title="Error" description="Failed to load data" action={{ label: 'Retry', onClick: () => refetch() }} />
+  if (error)     return <WsEmpty icon={XCircle} tone="red" title="Couldn’t load this section" hint="The request failed. The rest of the profile is unaffected." action={<HrButton size="sm" variant="ghost" onClick={() => refetch()}>Try again</HrButton>} />
 
   return (
     <>
@@ -418,11 +404,11 @@ function DependentsTab({ employeeId }: { employeeId: string }) {
       </Can>
 
       {data.length === 0 ? (
-        <EmptyState icon={FileText} title="No dependents" description="Add family members or dependents." />
+        <WsEmpty icon={FileText} title="No dependents" hint="Add family members or dependents." />
       ) : (
         <div className="space-y-2">
           {(data as EmployeeDependent[]).map((dep) => (
-            <div key={dep.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
+            <div key={dep.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{dep.name}</p>
@@ -495,7 +481,7 @@ function EmergencyTab({ employeeId }: { employeeId: string }) {
   }
 
   if (isLoading) return <TableSkeleton rows={2} cols={3} />
-  if (error)     return <EmptyState icon={XCircle} title="Error" description="Failed to load data" action={{ label: 'Retry', onClick: () => refetch() }} />
+  if (error)     return <WsEmpty icon={XCircle} tone="red" title="Couldn’t load this section" hint="The request failed. The rest of the profile is unaffected." action={<HrButton size="sm" variant="ghost" onClick={() => refetch()}>Try again</HrButton>} />
 
   return (
     <>
@@ -506,11 +492,11 @@ function EmergencyTab({ employeeId }: { employeeId: string }) {
       </Can>
 
       {data.length === 0 ? (
-        <EmptyState icon={FileText} title="No emergency contacts" description="Add at least one emergency contact." />
+        <WsEmpty icon={FileText} title="No emergency contacts" hint="Add at least one emergency contact." />
       ) : (
         <div className="space-y-2">
           {(data as EmergencyContact[]).map((c) => (
-            <div key={c.id} className="ut-card ut-card-sm flex items-start justify-between p-3">
+            <div key={c.id} className="flex items-start justify-between" style={{ padding: '10px 12px', borderRadius: 10, background: '#f8fafc' }}>
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-text-primary">{c.name}</p>
@@ -571,7 +557,7 @@ export function EmployeePersonal({ emp }: {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-3">
       {canReadPii && (
         <SubSection title="Contact & addresses">
           {/* Date of birth and gender live here rather than on the Overview.
@@ -579,7 +565,7 @@ export function EmployeePersonal({ emp }: {
               dropped them — while EmployeeForm still WRITES both, so an admin
               could set a DOB and never read it back. Personal is their right
               home: they are profile facts, not operational state. */}
-          <div className="ut-card grid sm:grid-cols-2 gap-x-6 p-4 mb-3">
+          <div className="mb-3"><Facts>
             <InfoRow icon={Mail} label="Work email" value={emp.email} />
             <InfoRow icon={Phone} label="Phone" value={emp.phone} />
             <InfoRow
@@ -590,7 +576,7 @@ export function EmployeePersonal({ emp }: {
                 : undefined}
             />
             <InfoRow icon={UserIcon} label="Gender" value={emp.gender?.replace(/_/g, ' ')} />
-          </div>
+          </Facts></div>
           <ContactTab employeeId={emp.id} emp={emp} />
         </SubSection>
       )}

@@ -6,7 +6,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Clock } from 'lucide-react'
 import { useEmployeeShift } from '../../api/useShiftPolicies'
-import { SectionState, SubSection } from './shared'
+import { SectionState, SubSection, Facts } from './shared'
 import type { EmploymentType } from '../../api/useWorkforce'
 import {
   InfoRow, WorkForm, workSchema,
@@ -74,32 +74,22 @@ function WorkTab({ emp }: { emp: NonNullable<ReturnType<typeof useWorkforceEmplo
   return (
     <>
       {/* Read-only summary */}
-      <div className="space-y-3 mb-4">
-        <div className="ut-card grid sm:grid-cols-2 gap-3 p-4">
+      <div className="flex flex-col gap-2.5 mb-3">
+        <Facts>
           <InfoRow icon={Briefcase} label="Department"    value={department?.name} />
           <InfoRow icon={Briefcase} label="Designation"   value={designation?.title} />
           <InfoRow icon={MapPin}    label="Branch"        value={branch?.name} />
-          <InfoRow icon={Briefcase} label="Employment Type" value={emp.employmentType?.replace('_', ' ')} />
-          {canReadSalary && emp.ctcAnnual && (
-            <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0 col-span-2">
-              <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-                <span className="text-xs text-text-secondary">₹</span>
-              </div>
-              <div>
-                <p className="text-xs text-text-secondary">CTC (Annual)</p>
-                <p className="text-sm text-text-primary">₹{emp.ctcAnnual.toLocaleString('en-IN')}</p>
-              </div>
-            </div>
-          )}
-        </div>
+          <InfoRow icon={Briefcase} label="Employment type" value={emp.employmentType?.replace('_', ' ')} />
+          {canReadSalary && emp.ctcAnnual ? <InfoRow label="CTC (annual)" value={`₹${emp.ctcAnnual.toLocaleString('en-IN')}`} /> : null}
+        </Facts>
 
         {/* Date milestones — read-only, set via lifecycle mutations */}
-        <div className="ut-card grid sm:grid-cols-2 gap-3 p-4">
-          <InfoRow icon={Calendar} label="Joining Date"        value={emp.dateOfJoining      ? format(new Date(emp.dateOfJoining),      'd MMM yyyy') : undefined} />
-          <InfoRow icon={Calendar} label="Confirmation Date"   value={emp.confirmationDate   ? format(new Date(emp.confirmationDate),   'd MMM yyyy') : undefined} />
-          <InfoRow icon={Calendar} label="Probation End"       value={emp.probationEndDate   ? format(new Date(emp.probationEndDate),   'd MMM yyyy') : undefined} />
-          <InfoRow icon={Calendar} label="Last Working Day"    value={emp.lastWorkingDay     ? format(new Date(emp.lastWorkingDay),     'd MMM yyyy') : undefined} />
-        </div>
+        <Facts>
+          <InfoRow icon={Calendar} label="Joining date"        value={emp.dateOfJoining      ? format(new Date(emp.dateOfJoining),      'd MMM yyyy') : undefined} />
+          <InfoRow icon={Calendar} label="Confirmation date"   value={emp.confirmationDate   ? format(new Date(emp.confirmationDate),   'd MMM yyyy') : undefined} />
+          <InfoRow icon={Calendar} label="Probation end"       value={emp.probationEndDate   ? format(new Date(emp.probationEndDate),   'd MMM yyyy') : undefined} />
+          <InfoRow icon={Calendar} label="Last working day"    value={emp.lastWorkingDay     ? format(new Date(emp.lastWorkingDay),     'd MMM yyyy') : undefined} />
+        </Facts>
       </div>
 
       <Can code={P.HRMS_EMPLOYEE_WRITE}>
@@ -173,13 +163,13 @@ export function EmployeeJob({ emp }: {
   const shift = useEmployeeShift(emp.id, { enabled: canReadAttendance })
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-3">
       <SubSection title="Employment details">
         <WorkTab emp={emp} />
       </SubSection>
 
       <SubSection title="Reporting line">
-        <div className="ut-card p-4">
+        <div>
           {!emp.reportingManagerId ? (
             <p className="text-sm text-text-secondary">
               No reporting manager set. Approvals that route to a manager will fall back to
@@ -219,22 +209,15 @@ export function EmployeeJob({ emp }: {
             isEmpty={!shift.isLoading && !shift.error && !shift.data?.shiftPolicyId}
             emptyIcon={Clock}
             emptyTitle="No shift assigned"
-            emptyHint="Assign a shift from Attendance → Shifts & OT."
+            emptyHint="Use Change shift at the top of this page to assign one."
             onRetry={() => shift.refetch()}
             skeleton={<CardSkeleton />}
           >
-            <div className="ut-card p-4 flex flex-wrap gap-x-8 gap-y-2">
-              <div>
-                <p className="text-xs text-text-secondary">Shift</p>
-                <p className="text-sm font-semibold text-text-primary">{shift.data?.shiftName}</p>
-              </div>
-              <div>
-                <p className="text-xs text-text-secondary">Timing</p>
-                <p className="text-sm text-text-primary">
-                  {shift.data?.startTime ?? '—'} → {shift.data?.endTime ?? '—'}
-                </p>
-              </div>
-            </div>
+            <Facts>
+              <InfoRow label="Shift" value={shift.data?.shiftName || '—'} />
+              <InfoRow label="Timing" value={`${shift.data?.startTime?.slice(0, 5) ?? '—'} – ${shift.data?.endTime?.slice(0, 5) ?? '—'}`} />
+              {shift.data?.upcomingShiftName ? <InfoRow label="Next shift" value={`${shift.data.upcomingShiftName} from ${shift.data.upcomingEffectiveFrom ?? ''}`} /> : null}
+            </Facts>
           </SectionState>
         </SubSection>
       )}

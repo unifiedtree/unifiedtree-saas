@@ -236,3 +236,43 @@ Also fixed along the way:
 - The shell's section tabs are real links again, so they can be opened in a new tab.
 - The HR dashboard's "View reports" permission check no longer calls hooks conditionally.
 - The directory-export test's column check no longer flags "Designation".
+
+## 7. Employee workspace (`/hrms/employees/:id`): done
+
+Design: `docs/Designs/UnifiedTree Employee Workspace (offline).html`, component `EmployeeBodyOffline`. The design drew:
+- the record header, actions menu, probation banner and the 11 tabs
+- the Overview tab
+- the Change shift and Edit employee drawers, and the lifecycle dialogs
+
+Its other tabs were placeholders ("designed in part N of 4"). Per the brief, they now use the same style.
+
+How it's built:
+- `scripts/design-build.mjs` also reads this export. The view is `src/design/dc/EmployeeWorkspace.view.tsx` (generated) and the logic is `EmployeeWorkspace.tsx`.
+- `src/modules/hrms/employees/EmployeeDetail.tsx` loads the record and everything the header and Overview show, and maps each action to its API.
+- The other tabs are the existing sections (Personal, Job, Attendance, Payroll, Documents, Letters, Performance, Exit) inside the design's frame. Their shared pieces in `workspace/shared.tsx` now draw the design's section card, grey fact tiles and quiet empty, error and no-access states.
+- The design's own side rail and top bar aren't used; the app keeps its shell, and the shell's sub-tabs are hidden on this page (the design has only "← Back").
+
+Checked live:
+- `e2e/recovery/live-design-workspace.mjs`, 22/22. A throw-away employee: header, banner, edit (saves), extend, confirm, start notice (with the required-date check), cancel notice, change shift, and every tab. Removed from the local database afterwards.
+- Also: `live-employee-exit` and `live-onboarding` pass. The exit test now uses the Actions menu.
+
+| Item | Status | Detail |
+|---|---|---|
+| Header, status, meta line, Back | Done | Real name, code, status (the design's tones), company · department · joined. |
+| Actions menu and probation banner | Done | Confirm, extend, start notice, cancel notice, mark exited, per status. Only people who can edit employees see them. |
+| Change shift | Done | The real shift list and the current (and upcoming) shift. A future date schedules the change. Gated on `attendance.workforce.admin`, the permission the endpoint checks; the old button checked a different one. |
+| Edit employee (Basic / Financial) | Done | Saves only changed fields. Department, designation, branch and type are lists. The bank account and PAN aren't sent back, so "leave blank to keep" applies. **All fields…** opens the full employee form for everything else. |
+| Tax regime (Edit → Financial) | Changed | It lives on each salary structure, so the field is off and says so. |
+| Account card | Done | Uses the invitation status: active with last sign-in, invitation sent (with date) and **Resend**, or **Send invitation**. |
+| Face enrollment | Done | Shows whether the person is enrolled; **Reset** calls the admin reset. |
+| Needs attention, At a glance | Done | Same rules as before (probation within 30 days, notice, no salary structure, no shift, finished days absent this week). Tiles open their tab. |
+| Onboarding record | Done | Real details, assets, policies and checklists. Rejected documents show a red pill. Only people who can edit employees can read it (the endpoint's rule). |
+| Leave and Expenses tabs | Needs backend | Shown, as in the design, with a note and a link to the Leave or Expense centre. The API only returns leave and claims for the signed-in person. It needs `GET /v1/leave/employees/{id}/balances` / `…/requests` and `GET /v1/expense/employees/{id}/claims`. |
+| Goals tile | Partial | Counts all goals and KPIs; the API has no "active" filter. |
+| Onboarding "Offer accepted / Hiring manager / Recruiter / Source / Buddy" | Needs backend | The saved record doesn't hold these; the real saved details are shown instead. |
+| Old Overview section | Removed | Replaced by the design's Overview. |
+
+**Bugs found on this page:**
+- *Fixed:* The week strip called today "Absent" before the day was over; it now reads "Not marked yet". Days before a person's first punch now read "Not tracked", not "Upcoming".
+- *Fixed:* The absent count on Overview no longer includes today.
+- *Needs backend:* The weekly summary itself (`AttendanceService.getWeeklySummary`) still returns `ABSENT` for today with no punch. It should be neutral until the day ends.

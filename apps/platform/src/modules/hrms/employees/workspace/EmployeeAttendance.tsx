@@ -18,6 +18,7 @@
  * rather than "no attendance".
  */
 
+import { istToday } from '@/design/dc/dates'
 import React, { useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Clock, CalendarDays, TrendingUp, LogIn } from 'lucide-react'
@@ -65,7 +66,7 @@ function Metric({ icon: Icon, label, value, hint }: {
   icon: React.ElementType; label: string; value: string; hint?: string
 }) {
   return (
-    <div className="ut-card p-4">
+    <div style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}>
       <div className="flex items-center gap-2 text-text-secondary">
         <Icon size={14} />
         <span className="text-xs font-semibold">{label}</span>
@@ -80,14 +81,18 @@ function WeekStrip({ days }: { days: WeeklyDayResponse[] }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
       {days.map((d) => (
-        <div key={d.date} className="ut-card p-3">
+        <div key={d.date} style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}>
           <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide">
             {(() => { try { return format(parseISO(d.date), 'EEE d MMM') } catch { return d.date } })()}
           </p>
           <div className="mt-1.5">
-            <HrStatusPill tone={DAY_TONE[d.status] ?? 'gray'}>
-              {DAY_LABEL[d.status] ?? d.status}
-            </HrStatusPill>
+            {/* A day isn't absent until it's over: today with no punch reads "Not marked yet", and days
+                before this person's first punch aren't counted ("Not tracked"). */}
+            {(() => {
+              const today = istToday(), pending = d.date === today && (d.status === 'ABSENT' || d.status === 'UPCOMING')
+              const label = pending ? 'Not marked yet' : d.status === 'UPCOMING' && d.date < today ? 'Not tracked' : DAY_LABEL[d.status] ?? d.status
+              return <HrStatusPill tone={pending ? 'gray' : DAY_TONE[d.status] ?? 'gray'}>{label}</HrStatusPill>
+            })()}
           </div>
           <p className="mt-2 text-sm font-bold text-text-primary">{d.hours ? fmtHours(d.hours) : '—'}</p>
           {(d.checkInTime || d.checkOutTime) && (
@@ -134,7 +139,7 @@ export function EmployeeAttendance({ employeeId }: { employeeId: string }) {
   const w = week.data
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-3">
       <SubSection
         title="This week"
         hint="Week offs, holidays and approved leave are applied by the attendance service."
@@ -176,11 +181,11 @@ export function EmployeeAttendance({ employeeId }: { employeeId: string }) {
           isEmpty={!shift.isLoading && !shift.error && !shift.data?.shiftPolicyId}
           emptyIcon={Clock}
           emptyTitle="No shift assigned"
-          emptyHint="Assign a shift from Attendance → Shifts & OT so lateness and overtime can be measured."
+          emptyHint="Use Change shift at the top of this page so lateness and overtime can be measured."
           onRetry={() => shift.refetch()}
           skeleton={<CardSkeleton />}
         >
-          <div className="ut-card p-4 flex flex-wrap items-center gap-x-8 gap-y-2">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2" style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}>
             <div>
               <p className="text-xs text-text-secondary">Shift</p>
               <p className="text-sm font-semibold text-text-primary">{shift.data?.shiftName}</p>

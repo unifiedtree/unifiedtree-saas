@@ -10,7 +10,7 @@
 import React, { useState } from 'react'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { Info } from 'lucide-react'
-import { SectionState } from './shared'
+import { SectionState, WsEmpty } from './shared'
 import type { GeneratedLetterDto } from '../../letters/api/useLetters'
 import { Button, Field, Input, TableSkeleton, CardSkeleton } from '@unifiedtree/ui-kit'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
@@ -58,7 +58,7 @@ function GeneratedLettersList({ employeeId }: { employeeId: string }) {
       {error ? <div role="alert"><p>{error.message}</p><HrButton onClick={() => refetch()}>Retry</HrButton></div> : isLoading ? (
         <CardSkeleton />
       ) : letters.length === 0 ? (
-        <EmptyState icon={FileText} title="No letters generated" description="Generate an offer, appointment, or experience letter for this employee." />
+        <WsEmpty icon={FileText} title="No letters generated" hint="Generate an offer, appointment, or experience letter for this employee." />
       ) : (
         <DataTable
           columns={[

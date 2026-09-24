@@ -156,31 +156,44 @@ export function maskPassport(passport: string) {
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
-export function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value?: string }) {
+/**
+ * One fact as the Employee Workspace design draws it: a soft grey tile, small
+ * label over the value. Place several in <Facts> (the design's tile grid).
+ * `icon` is accepted for existing callers; the design doesn't show one.
+ */
+export function InfoRow({ label, value }: { icon?: React.ElementType; label: string; value?: string }) {
   if (!value) return null
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
-      <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center flex-shrink-0">
-        <Icon size={13} className="text-text-secondary" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-text-secondary">{label}</p>
-        <p className="text-sm text-text-primary truncate">{value}</p>
-      </div>
+    <div style={{ minWidth: 0, padding: '8px 10px', borderRadius: 10, background: '#f8fafc' }}>
+      <div style={{ fontSize: 11.5, fontWeight: 600, color: '#64748b' }}>{label}</div>
+      <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 2, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={value}>{value}</div>
     </div>
   )
 }
 
-export function SectionCard({ title, action, className, children }: { title: string; action?: React.ReactNode; className?: string; children: React.ReactNode }) {
+/** The design's fact-tile grid (auto-fills tiles of 170px and up). */
+export function Facts({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: '10px 16px' }}>{children}</div>
+}
+
+/** A white section card with the design's header (15px title, 12.5px sub, action on the right). */
+export function WsCard({ title, hint, action, children, flush }: { title: string; hint?: string; action?: React.ReactNode; children: React.ReactNode; flush?: boolean }) {
   return (
-    <div className={className ? `ut-card p-4 ${className}` : 'ut-card p-4'}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{title}</h3>
+    <section style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', fontFamily: "'Plus Jakarta Sans',Inter,sans-serif" }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 16px', borderBottom: flush ? '1px solid #f1f5f9' : undefined }}>
+        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{title}</div>
+          {hint && <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 1 }}>{hint}</div>}
+        </div>
         {action}
       </div>
-      {children}
-    </div>
+      <div style={{ padding: flush ? 0 : '0 16px 14px' }}>{children}</div>
+    </section>
   )
+}
+
+export function SectionCard({ title, action, children }: { title: string; action?: React.ReactNode; className?: string; children: React.ReactNode }) {
+  return <WsCard title={title} action={action}>{children}</WsCard>
 }
 
 export function ActionModal({
@@ -365,27 +378,28 @@ export function SectionState({
   if (error) {
     const status = (error as { status?: number })?.status
     if (status === 403) {
-      return (
-        <EmptyState
-          icon={EyeOff}
-          title={forbiddenTitle}
-          description={forbiddenHint ?? 'Your role doesn’t cover this employee’s record for this section.'}
-        />
-      )
+      return <WsEmpty icon={EyeOff} title={forbiddenTitle} hint={forbiddenHint ?? 'Your role doesn’t cover this employee’s record for this section.'} />
     }
-    return (
-      <EmptyState
-        icon={AlertTriangle}
-        title="Couldn’t load this section"
-        description={(error as Error)?.message || 'The request failed. The rest of the profile is unaffected.'}
-        action={onRetry ? { label: 'Try again', onClick: onRetry } : undefined}
-      />
-    )
+    return <WsEmpty icon={AlertTriangle} tone="red" title="Couldn’t load this section" hint={(error as Error)?.message || 'The request failed. The rest of the profile is unaffected.'} action={onRetry ? <HrButton size="sm" variant="ghost" onClick={onRetry}>Try again</HrButton> : undefined} />
   }
 
-  if (isEmpty) return <EmptyState icon={emptyIcon} title={emptyTitle} description={emptyHint ?? ''} />
+  if (isEmpty) return <WsEmpty icon={emptyIcon} title={emptyTitle} hint={emptyHint} />
 
   return <>{children}</>
+}
+
+/** An empty / error / no-access line that sits inside a section card, in the design's quiet style. */
+export function WsEmpty({ icon: Icon = FileText, title, hint, action, tone }: { icon?: LucideIcon; title: string; hint?: string; action?: React.ReactNode; tone?: 'red' }) {
+  return (
+    <div role={tone === 'red' ? 'alert' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '12px 14px', borderRadius: 12, background: tone === 'red' ? '#fff1f2' : '#f8fafc', border: `1px dashed ${tone === 'red' ? '#fecdd3' : '#cbd5e1'}` }}>
+      <span style={{ width: 34, height: 34, borderRadius: 10, background: '#fff', color: tone === 'red' ? '#e11d48' : '#64748b', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={16} /></span>
+      <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>{title}</div>
+        {hint && <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 1 }}>{hint}</div>}
+      </div>
+      {action}
+    </div>
+  )
 }
 
 /** Heading for a block inside a stacked section (Personal, Payroll, …). */
@@ -395,16 +409,5 @@ export function SubSection({ title, hint, action, children }: {
   action?: React.ReactNode
   children: React.ReactNode
 }) {
-  return (
-    <section className="space-y-3">
-      <div className="flex items-end justify-between gap-3 flex-wrap">
-        <div>
-          <h3 className="text-sm font-bold text-text-primary">{title}</h3>
-          {hint && <p className="text-xs text-text-tertiary mt-0.5">{hint}</p>}
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
-  )
+  return <WsCard title={title} hint={hint} action={action}>{children}</WsCard>
 }

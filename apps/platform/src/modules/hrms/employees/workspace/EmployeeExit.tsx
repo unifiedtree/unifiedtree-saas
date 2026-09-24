@@ -75,9 +75,9 @@ export function EmployeeExit({ emp }: { emp: Emp }) {
     : null
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-3">
       <SubSection title="Current standing">
-        <div className="ut-card p-4 space-y-3">
+        <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <HrStatusPill tone={PILL_TONE[info.tone] ?? 'gray'}>{info.label}</HrStatusPill>
             {onNotice && lastDay && (
@@ -104,7 +104,7 @@ export function EmployeeExit({ emp }: { emp: Emp }) {
       </SubSection>
 
       <SubSection title="Lifecycle" hint="Dates recorded against this employment.">
-        <div className="ut-card p-4">
+        <div>
           <ol className="space-y-3">
             <Milestone label="Joined" date={joined} done={!!emp.dateOfJoining} />
             <Milestone
@@ -124,9 +124,9 @@ export function EmployeeExit({ emp }: { emp: Emp }) {
       </SubSection>
 
       {(onNotice || separated) && <SubSection title="Separation details" action={canEdit && <HrButton size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit separation details</HrButton>}>
-        <div className="ut-card p-4"><p className="text-xs font-semibold text-text-secondary">Reason</p><p className="mt-2 whitespace-pre-wrap text-sm text-text-primary">{emp.exitReason || 'No reason recorded.'}</p></div>
+        <div style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}><p className="text-xs font-semibold text-text-secondary">Reason</p><p className="mt-2 whitespace-pre-wrap text-sm text-text-primary">{emp.exitReason || 'No reason recorded.'}</p></div>
       </SubSection>}
-      {canReadSettlement && (onNotice || separated) && <div className="ut-card p-4 text-sm">
+      {canReadSettlement && (onNotice || separated) && <div className="text-sm" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px' }}>
         <p className="font-semibold">Full &amp; final settlement</p><p className="mt-1 text-text-secondary">Review final salary, leave encashment and outstanding recoveries.</p>
         <Link to="/hrms/fnf" className="mt-3 inline-block font-semibold text-primary underline">Open full &amp; final settlements</Link>
       </div>}

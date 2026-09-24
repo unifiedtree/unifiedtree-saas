@@ -332,7 +332,7 @@ const OWN_SECTION_BAR = new Set([
   '/hrms/employees', '/hrms/organization', '/hrms/policies', '/hrms/payroll/components',
 ])
 /** A payroll run's own page (/hrms/payroll/runs/:id) sits under the same section bar. */
-const ownsSectionBar = (path: string) => OWN_SECTION_BAR.has(path) || /^\/hrms\/payroll\/runs\/[^/]+$/.test(path) || /^\/hrms\/master(\/|$)/.test(path)
+const ownsSectionBar = (path: string) => OWN_SECTION_BAR.has(path) || /^\/hrms\/payroll\/runs\/[^/]+$/.test(path) || /^\/hrms\/master(\/|$)/.test(path) || /^\/hrms\/employees\/[^/]+$/.test(path)
 
 function matchPath(pathname: string, p?: string) {
   return !!p && (pathname === p || pathname.startsWith(p + '/'))

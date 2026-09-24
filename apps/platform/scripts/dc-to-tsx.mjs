@@ -129,7 +129,7 @@ const EVENT_MAP = { onclick: 'onClick', onchange: 'onChange', oninput: 'onInput'
 const NUMERIC = new Set(['tabIndex', 'rows', 'cols', 'maxLength', 'minLength', 'colSpan', 'rowSpan', 'span', 'size', 'aria-valuemin', 'aria-valuemax', 'aria-valuenow', 'aria-level', 'aria-setsize', 'aria-posinset', 'aria-rowcount', 'aria-colcount', 'aria-rowindex', 'aria-colindex'])
 const DS_SOURCES = {
   HrButton: 'hr', HrStatusPill: 'hr', HrAvatar: 'hr', HrPageHeader: 'hr', HrDrawer: 'hr', HrSelect: 'hr', HrTabs: 'hr', TableCard: 'hr', HrStatCard: 'hr', FilterBar: 'hr', HrTabPanel: 'hr',
-  DataTable: 'DataTable', EmptyState: 'EmptyState', SkeletonBlock: 'SkeletonCard', HrPagination: 'HrPagination',
+  DataTable: 'DataTable', EmptyState: 'EmptyState', SkeletonBlock: 'SkeletonCard', SkeletonCardGrid: 'SkeletonCard', SkeletonRow: 'SkeletonCard', HrPagination: 'HrPagination',
   Modal: 'ui-kit', Label: 'ui-kit', Badge: 'ui-kit', Button: 'ui-kit', Input: 'ui-kit', Field: 'ui-kit',
   UTPortal: 'runtime',
 }
@@ -328,7 +328,7 @@ for (const c of used) (byMod[DS_SOURCES[c] || 'unknown'] ||= []).push(c)
 if (byMod.hr) imports.push(`import { ${byMod.hr.sort().join(', ')} } from '@/shared/components/hr'`)
 if (byMod.DataTable) imports.push("import { DataTable } from '@/shared/components/DataTable'")
 if (byMod.EmptyState) imports.push("import { EmptyState } from '@/shared/components/EmptyState'")
-if (byMod.SkeletonCard) imports.push("import { SkeletonBlock } from '@/shared/components/SkeletonCard'")
+if (byMod.SkeletonCard) imports.push(`import { ${[...byMod.SkeletonCard].sort().join(', ')} } from '@/shared/components/SkeletonCard'`)
 if (byMod.HrPagination) imports.push("import { HrPagination } from '@/shared/components/HrPagination'")
 if (byMod['ui-kit']) imports.push(`import { ${byMod['ui-kit'].sort().join(', ')} } from '@unifiedtree/ui-kit'`)
 const rt = ['arr', 'css', 'txt', 'hostPos'].filter((f) => (f === 'arr' ? usesArr : f === 'css' ? usesCss : f === 'txt' ? usesText : usesHost))

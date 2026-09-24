@@ -16,18 +16,25 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const EXPORT = resolve(here, '../../../docs/Designs/UnifiedTree HRMS Prototype.html')
+const WORKSPACE_EXPORT = resolve(here, '../../../docs/Designs/UnifiedTree Employee Workspace (offline).html')
 const OUT = resolve(here, '../src/design/dc')
 
 // ── unpack ───────────────────────────────────────────────────────────────────
-const src = readFileSync(EXPORT, 'utf8')
-const grab = (type) => { const open = `<script type="${type}">`; const a = src.indexOf(open); const b = src.indexOf('</script>', a); return src.slice(a + open.length, b) }
-const manifest = JSON.parse(grab('__bundler/manifest'))
-const ext = JSON.parse(grab('__bundler/ext_resources'))
-const template = JSON.parse(grab('__bundler/template'))
-const text = (uuid) => { const e = manifest[uuid]; let b = Buffer.from(e.data, 'base64'); if (e.compressed) b = gunzipSync(b); return b.toString('utf8') }
-const components = {}
-for (const e of ext) if (e.id.endsWith('.dc.html')) components[e.id.replace('./', '').replace('.dc.html', '')] = text(e.uuid)
-components.HrmsPrototype = template
+function unpack(file) {
+  const src = readFileSync(file, 'utf8')
+  const grab = (type) => { const open = `<script type="${type}">`; const a = src.indexOf(open); const b = src.indexOf('</script>', a); return src.slice(a + open.length, b) }
+  const manifest = JSON.parse(grab('__bundler/manifest'))
+  const ext = JSON.parse(grab('__bundler/ext_resources'))
+  const text = (uuid) => { const e = manifest[uuid]; let b = Buffer.from(e.data, 'base64'); if (e.compressed) b = gunzipSync(b); return b.toString('utf8') }
+  const out = {}
+  for (const e of ext) if (e.id.endsWith('.dc.html')) out[e.id.replace('./', '').replace('.dc.html', '')] = text(e.uuid)
+  return { components: out, template: JSON.parse(grab('__bundler/template')) }
+}
+const hrms = unpack(EXPORT)
+const components = { ...hrms.components, HrmsPrototype: hrms.template }
+// The Employee Workspace export (record page with tabs) ships one component, EmployeeBodyOffline.
+const ws = unpack(WORKSPACE_EXPORT)
+Object.assign(components, ws.components)
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const body = (html) => html.slice(html.indexOf('<x-dc>') + 6, html.lastIndexOf('</x-dc>'))
@@ -71,6 +78,19 @@ function sequence(s, token, keys, fmt) {
 // ── derived components + patches ─────────────────────────────────────────────
 const CARDS = ['trend', 'today', 'dept', 'performers', 'onboarding', 'hiring', 'projects', 'payroll', 'activity', 'notices', 'milestones', 'probations']
 const DERIVED = {
+  // The Employee Workspace export's page body; the app names it for what it is.
+  EmployeeWorkspace() {
+    let t = components.EmployeeBodyOffline
+    // Actions only for the people who may take them (each maps to the permission its endpoint checks).
+    t = wrapIf(t, 'on-click="{{ openShift }}"', 'canShift')
+    t = wrapIf(t, 'on-click="{{ openEdit }}"', 'canEdit')
+    t = wrapIf(t, 'on-click="{{ mConfirm }}"', 'canLifecycle')
+    t = wrapIf(t, 'on-click="{{ mExtend }}"', 'canLifecycle')
+    t = wrapIf(t, 'on-click="{{ mNotice }}"', 'canLifecycle')
+    t = wrapIf(t, 'on-click="{{ invite }}"', 'canInvite')
+    t = wrapIf(t, 'on-click="{{ askReset }}"', 'canFace')
+    return t
+  },
   // The dashboard lives inside the prototype's app template; pull out its
   // section, the mobile calendar sheet and the notice form.
   AdminDashboard() {
@@ -95,6 +115,37 @@ const DERIVED = {
 }
 // Prototype literals (fixed demo dates) replaced by real values the logic supplies.
 const LITERALS = {
+  // Employee Workspace: the sample person → the real record; states the design didn't draw.
+  EmployeeWorkspace: [
+    ['name="Aarav Menon" seed="{{ zero }}"', 'name="{{ name }}" seed="{{ seed }}"'],
+    ['>EMP-0142</span>', '>{{ code }}</span>'],
+    ['>Acme Technologies · Engineering · Joined 18 Sep 2026</div>', '>{{ metaLine }}</div>'],
+    ['>Senior Engineer</div><div style="font-size:12.5px;color:#64748b">Engineering · Mumbai HQ</div>', '>{{ jobTitle }}</div><div style="font-size:12.5px;color:#64748b">{{ jobSub }}</div>'],
+    ['<div style="zoom:.85"><x-import component-from-global-scope="UnifiedTree.HrAvatar" name="Priya Nair" sub="Engineering Manager" seed="{{ one }}" hint-size="160px,36px"></x-import></div>', '<sc-if value="{{ hasMgr }}"><div style="zoom:.85"><x-import component-from-global-scope="UnifiedTree.HrAvatar" name="{{ mgrName }}" sub="{{ mgrSub }}" seed="{{ mgrSeed }}" hint-size="160px,36px"></x-import></div></sc-if><sc-if value="{{ noMgr }}"><div style="font-size:13.5px;font-weight:600;margin-top:2px">—</div></sc-if>'],
+    ['aarav.menon@acme.in · signed in today 09:12', '{{ accActiveSub }}'],
+    ['<div style="flex:1 1 140px;font-size:13px;font-weight:600">Face enrollment</div>', '<div style="flex:1 1 140px;font-size:13px;font-weight:600">Face enrollment<div style="font-size:12px;font-weight:500;color:#64748b">{{ faceSub }}</div></div>'],
+    ['<span style="font-size:12.5px;font-weight:700;color:#0f6e56;white-space:nowrap">{{ n.cta }} ›</span></div></sc-for></div>', '<span style="font-size:12.5px;font-weight:700;color:#0f6e56;white-space:nowrap">{{ n.cta }} ›</span></div></sc-for><sc-if value="{{ noAtt }}"><div style="padding:10px 16px;border-top:1px solid #f8fafc;font-size:13px;color:#64748b">Nothing needs attention right now.</div></sc-if></div>'],
+    // The onboarding record is only readable by people who can edit employees, and may not exist.
+    ['<div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:12px">\n<div><div style="font-size:15px;font-weight:700">Onboarding record</div><div style="font-size:12.5px;color:#64748b">Captured when Aarav was hired · 18 Sep 2026</div></div>', '<sc-if value="{{ showOnb }}"><div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:12px">\n<div><div style="font-size:15px;font-weight:700">Onboarding record</div><div style="font-size:12.5px;color:#64748b">{{ onbSub }}</div></div><sc-if value="{{ onbNote }}"><div style="font-size:13px;color:#64748b">{{ onbNoteText }}</div></sc-if>'],
+    ['<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px 16px"><sc-for list="{{ onb }}" as="f" hint-placeholder-count="6"><div><div style="font-size:11.5px;font-weight:600;color:#64748b">{{ f.l }}</div><div style="font-weight:600;margin-top:1px">{{ f.v }}</div></div></sc-for></div>', '<sc-if value="{{ hasOnb }}"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px 16px"><sc-for list="{{ onb }}" as="f" hint-placeholder-count="6"><div><div style="font-size:11.5px;font-weight:600;color:#64748b">{{ f.l }}</div><div style="font-weight:600;margin-top:1px">{{ f.v }}</div></div></sc-for></div></sc-if>'],
+    ['<div><div style="font-size:13px;font-weight:700;margin-bottom:6px">Recorded asset issues</div>', '<sc-if value="{{ hasAssets }}"><div><div style="font-size:13px;font-weight:700;margin-bottom:6px">Recorded asset issues</div>'],
+    ['key-field="id" hint-size="100%,190px"></x-import></x-import></div>', 'key-field="id" hint-size="100%,190px"></x-import></x-import></div></sc-if>'],
+    ['<div><div style="font-size:13px;font-weight:700;margin-bottom:6px">Policies selected for the hire</div>', '<sc-if value="{{ hasPolicies }}"><div><div style="font-size:13px;font-weight:700;margin-bottom:6px">Policies selected for the hire</div>'],
+    ['{{ p }}</span></sc-for></div></div>', '{{ p }}</span></sc-for></div></div></sc-if>'],
+    ['<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px"><sc-for list="{{ checklists }}"', '<sc-if value="{{ hasChecklists }}"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px"><sc-for list="{{ checklists }}"'],
+    ['{{ r.s }}</x-import></div></sc-for></div></sc-for></div>\n</div>\n</div></x-import></sc-if>', '{{ r.s }}</x-import></div></sc-for></div></sc-for></div></sc-if>\n</div></sc-if>\n</div></x-import></sc-if>'],
+    // Every other tab: its real content; the dashed card stays for tabs the backend can't fill yet.
+    ['<div style="background:#fff;border:1.5px dashed #cbd5e1;border-radius:14px;padding:18px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px"><div style="flex:1 1 260px"><div style="font-size:15px;font-weight:700">{{ otherLabel }}</div><div style="font-size:13px;color:#64748b;margin-top:2px">{{ otherNote }}</div></div><x-import component-from-global-scope="UnifiedTree.HrButton" size="sm" variant="ghost" on-click="{{ toOverview }}" hint-size="130px,32px">Back to Overview</x-import></div>', '<sc-if value="{{ otherPlaceholder }}"><div style="background:#fff;border:1.5px dashed #cbd5e1;border-radius:14px;padding:18px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px"><div style="flex:1 1 260px"><div style="font-size:15px;font-weight:700">{{ otherLabel }}</div><div style="font-size:13px;color:#64748b;margin-top:2px">{{ otherNote }}</div></div><x-import component-from-global-scope="UnifiedTree.HrButton" size="sm" variant="ghost" on-click="{{ otherAction }}" hint-size="130px,32px">{{ otherCta }}</x-import></div></sc-if>{{ otherContent }}'],
+    ['>General Shift · 09:00 – 18:00</div>', '>{{ curShift }}</div><sc-if value="{{ hasUpcoming }}"><div style="font-size:12.5px;color:#64748b;margin-top:2px">{{ upcoming }}</div></sc-if>'],
+    ['min="2026-09-18"', 'min="{{ effMin }}"'],
+    ['<x-import component-from-global-scope="UnifiedTree.Input" type="{{ f.type }}" default-value="{{ f.v }}" placeholder="{{ f.ph }}" hint-size="100%,40px"></x-import></div></sc-for>', '<sc-if value="{{ f.isSelect }}"><x-import component-from-global-scope="UnifiedTree.HrSelect" value="{{ f.v }}" options="{{ f.opts }}" on-change="{{ f.onSel }}" hint-size="100%,40px"></x-import></sc-if><sc-if value="{{ f.isInput }}"><x-import component-from-global-scope="UnifiedTree.Input" type="{{ f.type }}" value="{{ f.v }}" placeholder="{{ f.ph }}" disabled="{{ f.off }}" on-change="{{ f.on }}" hint-size="100%,40px"></x-import></sc-if><sc-if value="{{ f.hasErr }}"><div style="font-size:12.5px;font-weight:600;color:#be123c">{{ f.err }}</div></sc-if><sc-if value="{{ f.hasHint }}"><div style="font-size:12px;color:#64748b">{{ f.hint }}</div></sc-if></div></sc-for>'],
+    ['variant="{{ mVariant }}" on-click="{{ mOk }}"', 'variant="{{ mVariant }}" disabled="{{ mBusy }}" on-click="{{ mOk }}"'],
+    ['<span style="color:#34d399;font-weight:800;margin-right:8px">✓</span>{{ toast }}', '<sc-if value="{{ toastOk }}"><span style="color:#34d399;font-weight:800;margin-right:8px">✓</span></sc-if><sc-if value="{{ toastErr }}"><span style="color:#fb7185;font-weight:800;margin-right:8px">!</span></sc-if>{{ toast }}'],
+    // Card titles are headings for screen readers (the design drew them as styled divs; same look).
+    ['<div><div style="font-size:15px;font-weight:700">Onboarding record</div>', '<div><h2 style="margin:0;font-size:15px;font-weight:700">Onboarding record</h2>'],
+    ['<div style="font-size:15px;font-weight:700">Account</div>', '<h2 style="margin:0;font-size:15px;font-weight:700">Account</h2>'],
+    ['<div style="padding:11px 16px;font-size:14px;font-weight:700;border-bottom:1px solid #f1f5f9">Needs attention', '<div role="heading" aria-level="2" style="padding:11px 16px;font-size:14px;font-weight:700;border-bottom:1px solid #f1f5f9">Needs attention'],
+  ],
   AttCalendar: [['September 2026', '{{ monthLabel }}']],
   AttendancePage: [['September 2026', '{{ monthLabel }}']],
   ShiftOvertime: [['Overtime · September 2026', 'Overtime · {{ monthLabel }}']],
@@ -211,7 +262,7 @@ const POST = {}
 // ── build ────────────────────────────────────────────────────────────────────
 const wanted = process.argv.slice(2)
 // PlaceholderPage is the prototype's stand-in for screens that weren't designed; the app keeps its own pages there.
-const SKIP = new Set(['HrmsPrototype', 'PlaceholderPage'])
+const SKIP = new Set(['HrmsPrototype', 'PlaceholderPage', 'EmployeeBodyOffline'])
 const all = [...Object.keys(components).filter((n) => !SKIP.has(n)), ...Object.keys(DERIVED)]
 const list = wanted.length ? wanted : all
 const work = mkdtempSync(join(tmpdir(), 'design-build-'))

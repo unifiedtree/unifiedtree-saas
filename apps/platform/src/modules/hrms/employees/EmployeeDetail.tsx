@@ -1,467 +1,322 @@
-import { EmployeeShiftAction } from '../attendance/EmployeeShiftAction'
-import { attendanceDate } from '../attendance/date'
-import { OnboardingRecord } from '../onboarding/OnboardingRecord'
 /**
- * Employee workspace — the page every employee reference lands on.
+ * Employee workspace — the page every employee reference lands on
+ * (/hrms/employees/:id, from the directory, ⌘K search and every name link).
  *
- * Reached from the Workforce Directory, from ⌘K people search, and from any
- * /hrms/employees/:id link. Milestone 5A turned it from eleven tabs of profile
- * fields into an operational workspace: one place to read an employee's state
- * and reach the work that concerns them.
+ * Built to the Claude Design export docs/Designs/UnifiedTree Employee Workspace
+ * (offline).html: the view is src/design/dc/EmployeeWorkspace.view.tsx (generated)
+ * and its logic src/design/dc/EmployeeWorkspace.tsx. This file loads the real
+ * record and everything the header and Overview show, maps each action to its
+ * API, and puts each section's real content in the design's frame. Nothing is
+ * invented: a value the API doesn't have shows a dash, and the Leave and Expenses
+ * tabs say why they're empty (docs/Designs/STATIC-UI-TO-BUILD.md §7).
  *
- * This file ORCHESTRATES. It owns the identity header, the lifecycle actions
- * (confirm / extend probation / notice / exit) and the tab routing; each tab's
- * content lives in ./workspace and belongs to its own domain. That split is the
- * point — before 5A everything was here, and "here" was 1,672 lines.
- *
- * Tab state lives in the URL (?tab=), so a colleague can be sent straight to
- * someone's attendance and a refresh keeps your place. Local state could do
- * neither.
+ * The tab lives in the URL (?tab=, replaced, so Back leaves the page rather than
+ * stepping through tabs).
  */
-
-import React, { useState } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Edit3, UserCheck, AlertTriangle, LogOut, Mail, Phone, Briefcase, Building2, Calendar, XCircle, FileText } from 'lucide-react'
-import { format } from 'date-fns'
-import { CardSkeleton } from '@unifiedtree/ui-kit'
-import { EmptyState } from '@/shared/components/EmptyState'
-import { HrTabs, HrTabPanel, HrStatusPill } from '@/shared/components/hr'
-import { Can, P, usePermission } from '@unifiedtree/sdk'
-import { toast } from 'sonner'
+import { useMemo, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { P, usePermission } from '@unifiedtree/sdk'
+import { apiJson } from '@/core/api/client'
+import { DesignFrame } from '@/design/dc/DesignFrame'
+import { EmployeeWorkspace, type WorkspaceData, type WsStatus, type WsField } from '@/design/dc/EmployeeWorkspace'
+import { istToday } from '@/design/dc/dates'
 import {
-  useWorkforceEmployee, useConfirmEmployee, useStartNotice, useExitEmployee, useCancelNotice,
+  useWorkforceEmployee, useConfirmEmployee, useStartNotice, useExitEmployee, useCancelNotice, useEmployeesByIds, useUpdateWorkforceEmployee,
+  type UpdateWorkforceEmployeePayload, type EmploymentType,
 } from '../api/useWorkforce'
 import { useExtendProbation } from '../api/useProbation'
-import { useCompanies, useDepartments, useDesignations, useBranches } from '../api/useOrg'
+import { useCompanies, useDepartments, useDesignations, useBranches, useEmploymentTypes, assignEmployeeShift } from '../api/useOrg'
+import { useEmployeeWeeklySummary } from '../api/useAttendance'
+import { useEmployeeShift, useShiftPolicies } from '../api/useShiftPolicies'
+import { useEmployeeStructure } from '../api/usePayroll'
+import { useEmployeeDocuments } from '../api/useDocument'
+import { useEmployeeKpis } from '../api/usePerformance'
+import type { OnboardingRecordData } from '../onboarding/OnboardingRecord'
+import { sendInvite, resendInvite } from './api/useInvitation'
+import { resetFaceEnrollment } from './api/useFaceAdmin'
 import { EmployeeForm } from './EmployeeForm'
-import {
-  ActionModal, InfoRow, PILL_TONE, STATUS_STYLE,
-} from './workspace/shared'
-import { EmployeeOverview } from './workspace/EmployeeOverview'
 import { EmployeePersonal } from './workspace/EmployeePersonal'
 import { EmployeeJob } from './workspace/EmployeeJob'
 import { EmployeeAttendance } from './workspace/EmployeeAttendance'
 import { EmployeePayroll } from './workspace/EmployeePayroll'
-import { EmployeeDocuments } from './workspace/EmployeeDocuments'
+import { EmployeeDocuments, EMPLOYEE_DOCUMENTS_PAGE_SIZE } from './workspace/EmployeeDocuments'
 import { EmployeeLetters } from './workspace/EmployeeLetters'
 import { EmployeePerformance } from './workspace/EmployeePerformance'
 import { EmployeeExit } from './workspace/EmployeeExit'
 
-/**
- * The workspace tabs.
- *
- * Deliberately NOT the eleven from the target sketch. Leave and Expenses are
- * absent because no API returns either for anyone but the signed-in user —
- * /v1/leave/my/balances and /v1/expense/my both read the employee id from the
- * JWT, so a Leave tab here could only ever show the *viewer's* leave or scan
- * the whole workspace and filter in the browser. A tab that cannot be filled
- * honestly is worse than no tab: it teaches the reader that this employee has
- * no leave. The Overview names both gaps in one line instead, and the milestone
- * report carries the endpoints that would close them.
- */
-const TAB_KEYS = [
-  'overview', 'personal', 'job', 'attendance',
-  'payroll', 'documents', 'letters', 'performance', 'exit',
-] as const
-type TabKey = typeof TAB_KEYS[number]
+const STATUS: Record<string, WsStatus> = { ACTIVE: 'Active', PROBATION: 'Probation', NOTICE_PERIOD: 'Notice period', SUSPENDED: 'Suspended', EXITED: 'Exited', TERMINATED: 'Terminated' }
+const TYPE_LABEL: Record<string, string> = { FULL_TIME: 'Full time', PART_TIME: 'Part time', INTERN: 'Intern', CONTRACT: 'Contract', CONSULTANT: 'Consultant' }
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const fmt = (s?: string | null) => { if (!s) return '—'; const d = new Date(s.length === 10 ? s + 'T12:00:00' : s); return isNaN(+d) ? '—' : `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}` }
+const days = (s: string, today: string) => Math.round((new Date(s + 'T12:00:00').getTime() - new Date(today + 'T12:00:00').getTime()) / 86_400_000)
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
+const inr = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN')
+const hrs = (h?: number) => { if (h == null) return '—'; const a = Math.floor(h), m = Math.round((h - a) * 60); return m ? `${a}h ${m}m` : `${a}h` }
+const seedOf = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 8 }
+const humanize = (k: string) => k.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase())
+const hm = (t?: string | null) => (t ? t.slice(0, 5) : '')
 
-export const EmployeeDetail: React.FC = () => {
-  // Tab lives in the URL so the section is linkable and survives a refresh.
-  //
-  // `replace`, deliberately: this is a detail page reached from the directory
-  // or from ⌘K search, and Back should return the user THERE. Pushing a history
-  // entry per tab would mean someone who glanced at four tabs has to press Back
-  // four times to get out, which reads as a broken button. The cost is that
-  // Back does not step between tabs — the right trade for a leaf page.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const tabParam = searchParams.get('tab') as TabKey | null
-  const activeTab: TabKey = tabParam && (TAB_KEYS as readonly string[]).includes(tabParam)
-    ? tabParam
-    : 'overview'
-  const setActiveTab = (key: string) => {
-    const next = new URLSearchParams(searchParams)
-    if (key === 'overview') next.delete('tab')
-    else next.set('tab', key)
-    setSearchParams(next, { replace: true })
-  }
-  const { id } = useParams<{ id: string }>()
+const TABS = ['overview', 'personal', 'job', 'attendance', 'payroll', 'leave', 'expenses', 'documents', 'letters', 'performance', 'exit'] as const
+
+export function EmployeeDetail() {
+  const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const qc = useQueryClient()
+  const [params, setParams] = useSearchParams()
+  const today = istToday()
+  const [fullForm, setFullForm] = useState(false)
 
-  const { data: emp, isLoading, error: empError } = useWorkforceEmployee(id)
-  const { data: companies    = [] } = useCompanies()
-  const { data: departments  = [] } = useDepartments(emp?.companyId ?? '')
-  const { data: designations = [] } = useDesignations(emp?.companyId ?? '')
-  const { data: branches     = [] } = useBranches(emp?.companyId ?? '')
+  // ── permissions (the codes each endpoint checks) ──
+  const canWrite = usePermission(P.HRMS_EMPLOYEE_WRITE), canInvite = usePermission(P.HRMS_EMPLOYEE_INVITE)
+  const canFace = usePermission('attendance.face.admin.reset'), canShift = usePermission('attendance.workforce.admin')
+  const canPii = usePermission(P.HRMS_EMPLOYEE_PROFILE_READ), canIdentity = usePermission(P.HRMS_EMPLOYEE_IDENTITY_READ)
+  const canAttendance = usePermission('attendance.team.read'), canSalary = usePermission(P.PAYROLL_STRUCTURE_READ), canBank = usePermission(P.HRMS_EMPLOYEE_BANK_READ)
+  const canDocs = usePermission('hrms.document.read'), canLetters = usePermission(P.HRMS_LETTERS_READ)
+  const canPerf = usePermission('hrms.performance.read'), canSkills = usePermission('hrms.learning.skill.read')
 
-  const confirmMutation = useConfirmEmployee()
-  const noticeMutation  = useStartNotice()
-  const exitMutation    = useExitEmployee()
-  const cancelNoticeMutation = useCancelNotice()
+  // ── data ──
+  const empQ = useWorkforceEmployee(id)
+  const emp = empQ.data
+  const co = emp?.companyId ?? ''
+  const { data: companies = [] } = useCompanies()
+  const { data: departments = [] } = useDepartments(co)
+  const { data: designations = [] } = useDesignations(co)
+  const { data: branches = [] } = useBranches(co)
+  const { data: types = [] } = useEmploymentTypes(canWrite ? co : '')
+  const { data: shiftList = [] } = useShiftPolicies(canShift ? co : '')
+  const { data: managers } = useEmployeesByIds(emp?.reportingManagerId ? [emp.reportingManagerId] : [])
+  const week = useEmployeeWeeklySummary(id, undefined, { enabled: canAttendance && !!emp })
+  const shift = useEmployeeShift(id, { enabled: (canAttendance || canShift) && !!emp })
+  const structure = useEmployeeStructure(canSalary && emp ? id : '')
+  const documents = useEmployeeDocuments(id, 0, canDocs && !!emp, EMPLOYEE_DOCUMENTS_PAGE_SIZE)
+  const kpis = useEmployeeKpis(id, { enabled: canPerf && !!emp })
+  const invitation = useQuery({
+    queryKey: ['hrms', 'employee', id, 'invitation-status'],
+    queryFn: () => apiJson<{ activated?: boolean; invitedAt?: string; lastLoginAt?: string }>(`/v1/employees/${id}/invitation-status`),
+    enabled: !!emp, retry: false,
+  })
+  const onboarding = useQuery({
+    queryKey: ['hrms', 'onboarding-record', id],
+    queryFn: () => apiJson<OnboardingRecordData>(`/v1/hrms/employees/${id}/onboarding-record`),
+    enabled: canWrite && !!emp, retry: false,
+  })
 
-  const canReadIdentity = usePermission(P.HRMS_EMPLOYEE_IDENTITY_READ)
-  const canReadBank     = usePermission(P.HRMS_EMPLOYEE_BANK_READ)
-  const canReadSalary   = usePermission(P.PAYROLL_STRUCTURE_READ)
-  // Contact / Education / Experience / Dependents / Emergency all show a
-  // co-worker's private profile — gate the tab surface itself so a peer with
-  // only hrms.employee.read (DEPT_MANAGER, viewer HR) sees an Overview-only
-  // shell instead of full PII.
-  const canReadPii      = usePermission(P.HRMS_EMPLOYEE_PROFILE_READ)
-  const canManageOnboardingRecord = usePermission(P.HRMS_EMPLOYEE_WRITE)
-  // Raw codes, matching what the backend endpoints actually declare. The SDK's
-  // HRMS_EMPLOYEE_DOCUMENT_READ constant ('hrms.employee.document.read') is not
-  // checked by any controller — DocumentController declares 'hrms.document.read'.
-  const canReadAttendance  = usePermission('attendance.team.read')
-  const canReadDocuments   = usePermission('hrms.document.read')
-  const canReadLetters     = usePermission(P.HRMS_LETTERS_READ)
-  const canReadPerformance = usePermission('hrms.performance.read')
-  const canReadSkills      = usePermission('hrms.learning.skill.read')
+  const confirmM = useConfirmEmployee(), noticeM = useStartNotice(), exitM = useExitEmployee(), cancelM = useCancelNotice()
+  const extendM = useExtendProbation(), updateM = useUpdateWorkforceEmployee()
 
-  const extendMutation = useExtendProbation()
-  const [showEdit,     setShowEdit]     = useState(false)
-  const [modal,        setModal]        = useState<'confirm' | 'notice' | 'exit' | 'extend' | 'cancel-notice' | null>(null)
-  const [confirmDate,  setConfirmDate]  = useState(new Date().toISOString().split('T')[0])
-  const [noticeStart,  setNoticeStart]  = useState(new Date().toISOString().split('T')[0])
-  const [lastDay,      setLastDay]      = useState('')
-  const [reason,       setReason]       = useState('')
-  const [extendDate,   setExtendDate]   = useState('')
+  const tabParam = params.get('tab') || 'overview'
+  const tab = (TABS as readonly string[]).includes(tabParam) ? tabParam : 'overview'
+  const setTab = (k: string) => { const n = new URLSearchParams(params); if (k === 'overview') n.delete('tab'); else n.set('tab', k); setParams(n, { replace: true }) }
+  const back = () => (window.history.length > 1 ? navigate(-1) : navigate('/hrms/employees'))
 
-  if (isLoading) {
-    return (
-      <div className="p-6 space-y-4">
-        <CardSkeleton />
-      </div>
-    )
-  }
+  const data: WorkspaceData = useMemo(() => {
+    const base = {
+      onRetry: () => { void empQ.refetch() }, onBack: back, today,
+    }
+    if (empQ.isLoading || !emp) {
+      return {
+        ...base, state: empQ.isLoading ? 'loading' : empQ.error ? ((empQ.error as { status?: number }).status === 404 ? 'missing' : 'failed') : 'missing',
+      } as unknown as WorkspaceData
+    }
+    const name = [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(' ') || emp.employeeCode
+    const first = emp.firstName || name
+    const st = STATUS[emp.employmentStatus || 'ACTIVE'] || 'Active'
+    const company = companies.find((c) => c.id === emp.companyId), dept = departments.find((d) => d.id === emp.departmentId)
+    const desig = designations.find((d) => d.id === emp.designationId), branch = branches.find((b) => b.id === emp.branchId)
+    const separated = st === 'Exited' || st === 'Terminated'
 
-  if (empError) {
-    return (
-      <div className="p-6">
-        <EmptyState icon={XCircle} title="Failed to load employee" description={(empError as Error).message} action={{ label: 'Retry', onClick: () => navigate(0) }} />
-      </div>
-    )
-  }
+    // Probation banner (only while on probation)
+    let probation: WorkspaceData['probation'] = null
+    if (st === 'Probation') {
+      if (!emp.probationEndDate) probation = { title: 'Probation end date not set', sub: 'Set a date so the confirmation reminder runs on time' }
+      else {
+        const d = days(emp.probationEndDate, today)
+        probation = d >= 0
+          ? { title: `Probation ends in ${plural(d, 'day')} · ${fmt(emp.probationEndDate)}`, sub: 'Confirm or extend before the end date' }
+          : { title: 'Probation period has ended', sub: `It ended on ${fmt(emp.probationEndDate)} — confirm, extend or begin exit` }
+      }
+    }
 
-  if (!emp) {
-    return (
-      <div className="p-6">
-        <EmptyState icon={FileText} title="Employee not found" description="Check the details and try again." action={{ label: 'Back to employees', onClick: () => navigate('/hrms/employees') }} />
-      </div>
-    )
-  }
+    // Needs attention — the same rules the workspace always used, each opening where it's fixed.
+    const w = week.data, absent = w?.days?.filter((x) => x.status === 'ABSENT' && x.date < today).length ?? 0, late = w?.days?.filter((x) => x.status === 'LATE').length ?? 0
+    const attention: WorkspaceData['attention'] = []
+    if (st === 'Probation' && emp.probationEndDate) {
+      const d = days(emp.probationEndDate, today)
+      if (d <= 30) attention.push({ tone: 'amber', title: d < 0 ? `Probation ended ${plural(-d, 'day')} ago and isn’t confirmed yet` : `Probation ends in ${plural(d, 'day')}`, cta: 'Review lifecycle', onClick: () => setTab('exit') })
+    }
+    if (st === 'Notice period') attention.push({ tone: 'orange', title: emp.lastWorkingDay ? (days(emp.lastWorkingDay, today) >= 0 ? `Serving notice — last working day in ${plural(days(emp.lastWorkingDay, today), 'day')}` : 'Notice period has passed its last working day') : 'Serving notice', cta: 'Open exit', onClick: () => setTab('exit') })
+    if (canSalary && !structure.isLoading && !structure.error && !structure.data && !separated) attention.push({ tone: 'red', title: 'No salary structure — this employee cannot be included in a payroll run.', cta: 'Set up payroll', onClick: () => setTab('payroll') })
+    if ((canAttendance || canShift) && !shift.isLoading && !shift.error && !shift.data?.shiftPolicyId && !separated) attention.push({ tone: 'amber', title: 'No shift assigned — lateness and overtime can’t be measured.', cta: 'Open attendance', onClick: () => setTab('attendance') })
+    if (absent > 0) attention.push({ tone: 'amber', title: `${plural(absent, 'unmarked/absent day')} this week.`, cta: 'See attendance', onClick: () => setTab('attendance') })
 
-  const fullName   = [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(' ')
-  // `firstName` was dereferenced directly (`emp.firstName[0]`). The `?? ''`
-  // guarded only an out-of-range INDEX, not a null/undefined firstName — so an
-  // employee record with no first name threw inside render and took the whole
-  // profile page down via the error boundary. Same bug class, and same fix, as
-  // HrAvatar on 2026-09-10: optional-chain every access and fall back to '?'
-  // rather than trusting the server's shape.
-  const initials   = ((emp.firstName?.[0] ?? '') + (emp.lastName?.[0] ?? emp.firstName?.[1] ?? '')) || '?'
-  const statusInfo = STATUS_STYLE[emp.employmentStatus ?? ''] ?? { label: emp.employmentStatus ?? '—', tone: 'default' as const }
+    const docTotal = documents.data?.totalElements
+    const glance: WorkspaceData['glance'] = [
+      { l: 'This week', v: canAttendance ? (w ? hrs(w.totalHours) : '…') : '—', s: canAttendance ? (w ? `${w.presentDays} present${late ? ` · ${late} late` : ''}` : '') : 'No access', onClick: () => setTab('attendance') },
+      { l: 'Salary structure', v: canSalary ? (structure.data ? inr(Number(structure.data.ctcAnnual || 0)) : structure.isLoading ? '…' : '—') : '—', s: canSalary ? (structure.data?.effectiveFrom ? `Effective ${fmt(structure.data.effectiveFrom)}` : structure.isLoading ? '' : 'Not set up') : 'No access', onClick: () => setTab('payroll') },
+      { l: 'Documents', v: canDocs ? (docTotal != null ? String(docTotal) : '…') : '—', s: canDocs ? 'on record' : 'No access', onClick: () => setTab('documents') },
+      { l: 'Goals', v: canPerf ? (kpis.data ? String(kpis.data.total) : '…') : '—', s: canPerf ? 'goals & KPIs' : 'No access', onClick: () => setTab('performance') },
+    ]
 
-  const openSeparationAction = (action: 'notice' | 'exit') => {
-    setNoticeStart(emp.noticeStartDate || attendanceDate())
-    setLastDay(emp.lastWorkingDay || '')
-    setReason(emp.exitReason || '')
-    setModal(action)
-  }
+    // Onboarding record (people who can edit employees only — the endpoint's rule)
+    const rec = onboarding.data
+    const recEmpty = !rec || !Object.keys(rec).length
+    const onb: WorkspaceData['onboarding'] = {
+      show: canWrite, sub: `Captured when ${first} was hired · ${fmt(emp.dateOfJoining)}`,
+      note: onboarding.isLoading ? 'Loading…' : onboarding.error ? 'The onboarding record couldn’t be loaded.' : recEmpty ? 'No onboarding record was saved for this hire.' : '',
+      fields: Object.entries(rec?.details ?? {}).filter(([, v]) => v).map(([k, v]) => ({ l: humanize(k), v: String(v) })),
+      assets: (rec?.assets ?? []).map((a, i) => ({ id: String(i), type: a.type, model: a.model, serial: a.serial, on: fmt(a.issuedOn) })),
+      policies: rec?.selectedPolicies ?? [],
+      checklists: [
+        rec?.joiningChecklist && Object.keys(rec.joiningChecklist).length ? { title: 'Joining checklist', rows: Object.entries(rec.joiningChecklist).map(([k, ok]) => ({ l: humanize(k), s: ok ? 'Confirmed' : 'Pending', t: ok ? 'ok' : 'warn' })) } : null,
+        rec?.documentChecklist && Object.keys(rec.documentChecklist).length ? { title: 'Document verification checklist', rows: Object.entries(rec.documentChecklist).map(([k, d]) => ({ l: `${humanize(k)}${d.fileName ? ' · ' + d.fileName : ''}`, s: d.status === 'VERIFIED' ? 'Confirmed' : d.status === 'REJECTED' ? 'Rejected' : 'Pending', t: d.status === 'VERIFIED' ? 'ok' : d.status === 'REJECTED' ? 'red' : 'warn' })) } : null,
+      ].filter(Boolean) as WorkspaceData['onboarding']['checklists'],
+    }
 
-  const handleConfirm = async () => {
-    try {
-      await confirmMutation.mutateAsync({ id: emp.id, confirmationDate: confirmDate })
-      toast.success('Employee confirmed')
-      setModal(null)
-    } catch { toast.error('Failed to confirm employee') }
-  }
+    // Account
+    const inv = invitation.data
+    const active = !!(inv?.activated ?? emp.hasAccount)
+    const account: WorkspaceData['account'] = active
+      ? { active: true, activeSub: `${emp.email || 'No email'} · ${inv?.lastLoginAt ? 'last signed in ' + fmt(inv.lastLoginAt) : 'hasn’t signed in yet'}`, title: '', sub: '', cta: '', primary: false, onInvite: async () => '' }
+      : {
+        active: false, activeSub: '',
+        title: inv?.invitedAt ? 'Invitation sent' : 'No login account yet',
+        sub: inv?.invitedAt ? `${emp.email} · sent ${fmt(inv.invitedAt)}` : `${first} can’t sign in until invited`,
+        cta: inv?.invitedAt ? 'Resend' : 'Send invitation', primary: !inv?.invitedAt,
+        onInvite: async () => {
+          if (!emp.email) throw new Error('Add a work email before sending an invitation')
+          if (inv?.invitedAt) await resendInvite(emp.id); else await sendInvite(emp.id)
+          await qc.invalidateQueries({ queryKey: ['hrms', 'employee', id, 'invitation-status'] })
+          return `Invitation sent to ${emp.email}`
+        },
+      }
 
-  const handleNotice = async () => {
-    if (!lastDay) { toast.error('Last working day is required'); return }
-    if (!noticeStart || lastDay < noticeStart) { toast.error('Last working day must be on or after the notice start date'); return }
-    try {
-      await noticeMutation.mutateAsync({ id: emp.id, noticeStart, lastWorkingDay: lastDay, reason: reason || undefined })
-      toast.success('Notice period started')
-      setModal(null)
-    } catch { toast.error('Failed to start notice') }
-  }
+    // Shift drawer
+    const s = shift.data
+    const shiftLabel = (n?: string | null, a?: string | null, b?: string | null) => (n ? `${n}${a ? ` · ${hm(a)} – ${hm(b)}` : ''}` : 'No shift assigned')
+    const shiftD: WorkspaceData['shift'] = {
+      current: shiftLabel(s?.shiftName, s?.startTime, s?.endTime),
+      upcoming: s?.upcomingShiftName ? `Changes to ${s.upcomingShiftName} from ${fmt(s.upcomingEffectiveFrom)}` : '',
+      options: shiftList.map((p) => ({ value: p.id, label: shiftLabel(p.name, p.startTime, p.endTime) })),
+      effMin: today,
+      onSave: async (shiftId, from) => {
+        await assignEmployeeShift(emp.id, shiftId, from > today ? from : undefined)
+        await qc.invalidateQueries({ queryKey: ['shifts'] })
+        const nm = shiftList.find((p) => p.id === shiftId)?.name || 'the new shift'
+        return `${name} moves to ${nm}${from > today ? ' from ' + fmt(from) : ' from today'}`
+      },
+    }
 
-  const handleExit = async () => {
-    if (!lastDay) { toast.error('Last working day is required'); return }
-    try {
-      await exitMutation.mutateAsync({ id: emp.id, lastWorkingDay: lastDay, reason: reason || undefined })
-      toast.success('Employee exited')
-      setModal(null)
-    } catch { toast.error('Failed to exit employee') }
-  }
+    // Edit drawer
+    const typeOpts = (types.length ? types.filter((t) => t.code && TYPE_LABEL[t.code]).map((t) => ({ value: t.code!, label: t.name })) : Object.entries(TYPE_LABEL).map(([value, label]) => ({ value, label })))
+    const withCur = (opts: { value: string; label: string }[], cur?: string | null) => (cur && !opts.some((o) => o.value === cur) ? [...opts, { value: cur, label: TYPE_LABEL[cur] || cur }] : opts)
+    const basic: WsField[] = [
+      { key: 'firstName', l: 'First name', v: emp.firstName || '', req: true },
+      { key: 'lastName', l: 'Last name', v: emp.lastName || '' },
+      { key: 'email', l: 'Work email', v: emp.email || '', type: 'email', check: (v) => (/^\S+@\S+\.\S+$/.test(v) ? '' : 'Enter a valid email address') },
+      { key: 'phone', l: 'Mobile', v: emp.phone || '', ph: '+91 98450 12345', check: (v) => (/^[+\d][\d\s-]{6,19}$/.test(v) ? '' : 'Enter a valid phone number') },
+      { key: 'departmentId', l: 'Department', v: emp.departmentId || '', opts: departments.filter((d) => d.active !== false).map((d) => ({ value: d.id, label: d.name })) },
+      { key: 'designationId', l: 'Designation', v: emp.designationId || '', opts: designations.filter((d) => d.active !== false).map((d) => ({ value: d.id, label: d.title })) },
+      { key: 'branchId', l: 'Branch', v: emp.branchId || '', opts: branches.filter((b) => b.active !== false).map((b) => ({ value: b.id, label: b.name })) },
+      { key: 'employmentType', l: 'Employment type', v: emp.employmentType || '', opts: withCur(typeOpts, emp.employmentType) },
+      { key: 'dateOfJoining', l: 'Date of joining', v: emp.dateOfJoining || '', type: 'date' },
+    ]
+    const financial: WsField[] = [
+      { key: 'ctcAnnual', l: 'Annual CTC (₹)', v: emp.ctcAnnual != null ? String(emp.ctcAnnual) : '', type: 'number', ph: 'Leave blank to keep the current CTC', check: (v) => (Number(v) > 0 ? '' : 'Enter an amount above 0') },
+      { key: 'bankAccountNumber', l: 'Bank account number', v: '', ph: emp.bankAccountNumber ? `Leave blank to keep ${emp.bankAccountNumber}` : '12–18 digits', check: (v) => (/^\d{9,18}$/.test(v.replace(/\s/g, '')) ? '' : 'Use 9 to 18 digits') },
+      { key: 'bankIfsc', l: 'IFSC', v: emp.bankIfsc || '', ph: 'SBIN0001234', check: (v) => (/^[A-Z]{4}0[A-Z0-9]{6}$/.test(v.toUpperCase()) ? '' : 'Format: SBIN0001234') },
+      { key: 'panNumber', l: 'PAN', v: '', ph: 'Leave blank to keep the PAN on record', check: (v) => (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v.toUpperCase()) ? '' : 'Format: ABCDE1234F') },
+      { key: 'uanNumber', l: 'UAN', v: emp.uan || '', ph: '12 digits', check: (v) => (/^\d{12}$/.test(v) ? '' : 'UAN has 12 digits') },
+      { key: 'taxRegime', l: 'Tax regime', v: '', off: true, ph: 'Set on the salary structure', hint: 'The tax regime lives on each salary structure (Payroll tab).' },
+    ]
+    const edit: WorkspaceData['edit'] = {
+      basic, financial, onFullForm: () => setFullForm(true),
+      onSave: async (v) => {
+        const patch: UpdateWorkforceEmployeePayload = {}
+        for (const f of basic) { const nv = (v[f.key] ?? '').trim(); if (nv !== (f.v ?? '')) (patch as any)[f.key] = nv }
+        if (patch.employmentType) patch.employmentType = patch.employmentType as EmploymentType
+        const ctc = (v.ctcAnnual ?? '').trim(); if (ctc && ctc !== financial[0].v) patch.ctcAnnual = Number(ctc)
+        const acct = (v.bankAccountNumber ?? '').replace(/\s/g, ''); if (acct) patch.bankAccountNumber = acct
+        const ifsc = (v.bankIfsc ?? '').trim().toUpperCase(); if (ifsc && ifsc !== financial[2].v) patch.bankIfsc = ifsc
+        const pan = (v.panNumber ?? '').trim().toUpperCase(); if (pan) patch.panNumber = pan
+        const uan = (v.uanNumber ?? '').trim(); if (uan && uan !== financial[4].v) patch.uanNumber = uan
+        if (!Object.keys(patch).length) return 'No changes to save'
+        await updateM.mutateAsync({ id: emp.id, data: patch })
+        return 'Employee details saved'
+      },
+    }
 
-  const handleCancelNotice = async () => {
-    try {
-      await cancelNoticeMutation.mutateAsync(emp.id)
-      toast.success('Notice withdrawn — employee is active again')
-      setModal(null)
-    } catch (e) { toast.error((e as Error).message || 'Failed to cancel notice') }
-  }
+    const L = emp.lastWorkingDay || ''
+    const lifecycle: WorkspaceData['lifecycle'] = {
+      defaults: { noticeStart: emp.noticeStartDate || today, lwd: L, reason: emp.exitReason || '', extendTo: emp.probationEndDate || '' },
+      onConfirm: async (date) => { await confirmM.mutateAsync({ id: emp.id, confirmationDate: date }); return `${name} confirmed from ${fmt(date)}` },
+      onExtend: async (date) => { await extendM.mutateAsync({ employeeId: emp.id, newEndDate: date }); await empQ.refetch(); return `Probation extended to ${fmt(date)}` },
+      onNotice: async (start, lwd, reason) => { await noticeM.mutateAsync({ id: emp.id, noticeStart: start, lastWorkingDay: lwd, reason: reason || undefined }); return `Notice started · last working day ${fmt(lwd)}` },
+      onExit: async (lwd, reason) => { await exitM.mutateAsync({ id: emp.id, lastWorkingDay: lwd, reason: reason || undefined }); return `${name} marked as exited · ${fmt(lwd)}` },
+      onCancel: async () => { await cancelM.mutateAsync(emp.id); return `Notice cancelled — ${name} is active again` },
+    }
 
-  const handleExtend = async () => {
-    if (!extendDate) { toast.error('New probation end date is required'); return }
-    try {
-      await extendMutation.mutateAsync({ employeeId: emp.id, newEndDate: extendDate })
-      toast.success('Probation extended')
-      setModal(null)
-    } catch (e) { toast.error((e as Error).message || 'Failed to extend probation') }
-  }
+    // Tabs: each shows when the viewer can read something in it (every section re-checks its own
+    // permission, and every endpoint enforces its own). Leave and Expenses have no per-employee API.
+    const tabs = [
+      { key: 'overview', label: 'Overview' },
+      ...(canPii || canIdentity ? [{ key: 'personal', label: 'Personal' }] : []),
+      { key: 'job', label: 'Job' },
+      ...(canAttendance ? [{ key: 'attendance', label: 'Attendance' }] : []),
+      ...(canSalary || canBank ? [{ key: 'payroll', label: 'Payroll' }] : []),
+      { key: 'leave', label: 'Leave' },
+      { key: 'expenses', label: 'Expenses' },
+      ...(canDocs ? [{ key: 'documents', label: 'Documents', badge: docTotal || undefined }] : []),
+      ...(canLetters ? [{ key: 'letters', label: 'Letters' }] : []),
+      ...(canPerf || canSkills ? [{ key: 'performance', label: 'Performance' }] : []),
+      { key: 'exit', label: 'Exit' },
+    ]
+    const visibleTab = tabs.some((t) => t.key === tab) ? tab : 'overview'
+    const GAP: Record<string, { label: string; note: string; cta: string; path: string }> = {
+      leave: { label: 'Leave', note: `Leave balances and requests are only served for the signed-in person today, so ${first}’s can’t be shown here yet. Requests waiting for you are in the Leave centre.`, cta: 'Open Leave', path: '/hrms/leave' },
+      expenses: { label: 'Expenses', note: `Expense claims are only served for the signed-in person today, so ${first}’s can’t be listed here yet. Claims waiting for approval are in the Expense centre.`, cta: 'Open Expenses', path: '/hrms/expenses' },
+    }
+    const gap = GAP[visibleTab]
+    const content = visibleTab === 'personal' ? <EmployeePersonal emp={emp} />
+      : visibleTab === 'job' ? <EmployeeJob emp={emp} />
+        : visibleTab === 'attendance' ? <EmployeeAttendance employeeId={emp.id} />
+          : visibleTab === 'payroll' ? <EmployeePayroll emp={emp} />
+            : visibleTab === 'documents' ? <EmployeeDocuments employeeId={emp.id} />
+              : visibleTab === 'letters' ? <EmployeeLetters employeeId={emp.id} />
+                : visibleTab === 'performance' ? <EmployeePerformance employeeId={emp.id} />
+                  : visibleTab === 'exit' ? <EmployeeExit emp={emp} /> : null
+    const mgr = managers?.[0]
+    const mgrDesig = mgr && designations.find((d) => d.id === mgr.designationId)
 
-  const probationDays = emp.probationEndDate
-    ? Math.ceil((new Date(emp.probationEndDate).getTime() - Date.now()) / 86_400_000)
-    : null
-
-  // Tabs are hidden only when the caller could not read ANY of the section's
-  // content. This is presentation, not authorization: every section re-checks
-  // its own permission and every endpoint enforces its own, so revealing a tab
-  // by hand-editing ?tab= shows a permission state, not data.
-  const tabs = [
-    { key: 'overview', label: 'Overview' },
-    ...(canReadPii || canReadIdentity ? [{ key: 'personal', label: 'Personal' }] : []),
-    { key: 'job', label: 'Job' },
-    ...(canReadAttendance ? [{ key: 'attendance', label: 'Attendance' }] : []),
-    ...(canReadSalary || canReadBank ? [{ key: 'payroll', label: 'Payroll' }] : []),
-    ...(canReadDocuments ? [{ key: 'documents', label: 'Documents' }] : []),
-    ...(canReadLetters ? [{ key: 'letters', label: 'Letters' }] : []),
-    ...(canReadPerformance || canReadSkills ? [{ key: 'performance', label: 'Performance' }] : []),
-    { key: 'exit', label: 'Exit' },
-  ]
+    return {
+      ...base, state: 'ready', name, code: emp.employeeCode, seed: seedOf(emp.id),
+      metaLine: [company?.name, dept?.name, emp.dateOfJoining ? `Joined ${fmt(emp.dateOfJoining)}` : ''].filter(Boolean).join(' · '),
+      status: st, probation, tabs, tab: visibleTab, onTab: setTab, otherContent: content,
+      otherPlaceholder: gap ? { label: gap.label, note: gap.note, cta: gap.cta, onClick: () => navigate(gap.path) } : null,
+      jobTitle: desig?.title || 'No designation', jobSub: [dept?.name || 'No department', branch?.name].filter(Boolean).join(' · '),
+      facts: [
+        { l: 'Company', v: company?.name || '—' }, { l: 'Employment type', v: TYPE_LABEL[emp.employmentType || ''] || emp.employmentType || '—' },
+        { l: 'Joined', v: fmt(emp.dateOfJoining) }, { l: 'Branch', v: branch?.name || '—' },
+        st === 'Probation' ? { l: 'Probation ends', v: fmt(emp.probationEndDate) } : { l: 'Confirmation', v: emp.confirmationDate ? `Confirmed on ${fmt(emp.confirmationDate)}` : '—' },
+        { l: 'Last working day', v: fmt(emp.lastWorkingDay) },
+      ],
+      mgr: mgr ? { name: [mgr.firstName, mgr.lastName].filter(Boolean).join(' '), sub: mgrDesig?.title || mgr.employeeCode, seed: seedOf(mgr.id), onOpen: () => navigate(`/hrms/employees/${mgr.id}`) } : null,
+      account, face: {
+        sub: emp.faceEnrolled ? 'Enrolled' : 'Not enrolled',
+        onReset: async () => { await resetFaceEnrollment(emp.id); await empQ.refetch(); return 'Face enrollment reset — the employee can enroll again from the mobile app' },
+      },
+      attention, glance, onboarding: onb,
+      can: { shift: canShift, edit: canWrite, lifecycle: canWrite, invite: canInvite && !active, face: canFace },
+      shift: shiftD, edit, lifecycle,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emp, empQ.isLoading, empQ.error, companies, departments, designations, branches, types, shiftList, managers, week.data, shift.data, shift.isLoading, shift.error, structure.data, structure.isLoading, structure.error, documents.data, kpis.data, invitation.data, onboarding.data, onboarding.isLoading, onboarding.error, tab, today, canWrite, canInvite, canFace, canShift, canPii, canIdentity, canAttendance, canSalary, canBank, canDocs, canLetters, canPerf, canSkills])
 
   return (
-    <div className="space-y-5">
-      {/* Back nav */}
-      {/* Reached from the directory, from ⌘K search, or from a shared link.
-          Going "back to Employees" is right for the first and wrong for the
-          others, so step back through history when there IS history and fall
-          back to the directory only on a cold open. */}
-      <button
-        onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/hrms/employees'))}
-        className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
-      >
-        <ArrowLeft size={15} /> Back
-      </button>
-
-      {/* Profile card */}
-      <div className="ut-card ut-card-lg p-5">
-        <div className="flex items-start gap-4">
-          <div className="w-16 h-16 bg-gradient-to-br from-[#059669] to-[#047857] rounded-2xl flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
-            {initials.toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <h1 className="text-lg font-bold text-text-primary">{fullName}</h1>
-                <p className="text-text-secondary text-sm">{emp.employeeCode}</p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <HrStatusPill tone={PILL_TONE[statusInfo.tone] ?? 'gray'}>{statusInfo.label}</HrStatusPill>
-                {/* Every other lifecycle action on this page is wrapped in
-                    <Can HRMS_EMPLOYEE_WRITE>; this one was missed. The route
-                    only needs employee.read, so a read-only viewer filled the
-                    whole edit wizard and got a 403 on Save (2026-09-08 audit). */}
-                <EmployeeShiftAction employeeId={emp.id} companyId={emp.companyId} name={fullName} />
-                <Can code={P.HRMS_EMPLOYEE_WRITE}>
-                  <button
-                    onClick={() => setShowEdit(true)}
-                    aria-label="Edit employee"
-                    title="Edit employee"
-                    className="p-2 bg-white hover:bg-surface-2 text-text-primary rounded-xl transition-colors">
-                    <Edit3 size={14} />
-                  </button>
-                </Can>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-4 mt-2">
-              {companies.find((c) => c.id === emp.companyId) && (
-                <span className="text-xs text-text-secondary">
-                  <Building2 size={10} className="inline mr-1" />
-                  {companies.find((c) => c.id === emp.companyId)!.name}
-                </span>
-              )}
-              {departments.find((d) => d.id === emp.departmentId) && (
-                <span className="text-xs text-text-secondary">
-                  <Briefcase size={10} className="inline mr-1" />
-                  {departments.find((d) => d.id === emp.departmentId)!.name}
-                </span>
-              )}
-              {emp.dateOfJoining && (
-                <span className="text-xs text-text-secondary">
-                  <Calendar size={10} className="inline mr-1" />
-                  Joined {format(new Date(emp.dateOfJoining), 'd MMM yyyy')}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Lifecycle actions */}
-        <Can code={P.HRMS_EMPLOYEE_WRITE}>
-          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
-            {emp.employmentStatus === 'PROBATION' && (
-              <button onClick={() => setModal('confirm')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-medium transition-colors">
-                <UserCheck size={13} /> Confirm Probation
-              </button>
-            )}
-            {emp.employmentStatus === 'ACTIVE' && (
-              <button onClick={() => openSeparationAction('notice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-medium transition-colors">
-                <AlertTriangle size={13} /> Start Notice
-              </button>
-            )}
-            {emp.employmentStatus === 'NOTICE_PERIOD' && (
-              <button onClick={() => setModal('cancel-notice')} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-medium transition-colors">
-                <UserCheck size={13} /> Cancel Notice
-              </button>
-            )}
-            {emp.employmentStatus === 'NOTICE_PERIOD' && (
-              <button onClick={() => openSeparationAction('exit')} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg text-xs font-medium transition-colors">
-                <LogOut size={13} /> Mark Exited
-              </button>
-            )}
-          </div>
-        </Can>
-      </div>
-
-      {/* Probation banner */}
-      {emp.employmentStatus === 'PROBATION' && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
-              <Calendar size={17} className="text-amber-600" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-amber-900">
-                {emp.probationEndDate
-                  ? probationDays != null && probationDays >= 0
-                    ? `Probation ends in ${probationDays} day${probationDays === 1 ? '' : 's'}`
-                    : 'Probation period has ended'
-                  : 'Probation end date not set'}
-              </p>
-              {emp.probationEndDate && (
-                <p className="text-xs text-amber-700 mt-0.5">{format(new Date(emp.probationEndDate), 'd MMMM yyyy')}</p>
-              )}
-            </div>
-          </div>
-          <Can code={P.HRMS_EMPLOYEE_WRITE}>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setModal('confirm')} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors">
-                Confirm as permanent
-              </button>
-              <button onClick={() => { setExtendDate(emp.probationEndDate ?? ''); setModal('extend') }} className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-bold transition-colors">
-                Extend
-              </button>
-              <button onClick={() => openSeparationAction('notice')} className="px-3 py-1.5 rounded-lg bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition-colors">
-                Begin exit
-              </button>
-            </div>
-          </Can>
-        </div>
-      )}
-
-      {/* Workspace tabs */}
-      <HrTabs
-        active={activeTab}
-        onChange={setActiveTab}
-        tabs={tabs}
-      />
-      <div className="mt-4">
-        {activeTab === 'overview' && (
-          <HrTabPanel tabKey="overview">
-            <EmployeeOverview emp={emp} onOpenTab={setActiveTab} />
-            {canManageOnboardingRecord && <OnboardingRecord employeeId={emp.id} />}
-          </HrTabPanel>
-        )}
-        {activeTab === 'personal' && (
-          <HrTabPanel tabKey="personal"><EmployeePersonal emp={emp} /></HrTabPanel>
-        )}
-        {activeTab === 'job' && (
-          <HrTabPanel tabKey="job"><EmployeeJob emp={emp} /></HrTabPanel>
-        )}
-        {activeTab === 'attendance' && (
-          <HrTabPanel tabKey="attendance"><EmployeeAttendance employeeId={emp.id} /></HrTabPanel>
-        )}
-        {activeTab === 'payroll' && (
-          <HrTabPanel tabKey="payroll"><EmployeePayroll emp={emp} /></HrTabPanel>
-        )}
-        {activeTab === 'documents' && (
-          <HrTabPanel tabKey="documents"><EmployeeDocuments employeeId={emp.id} /></HrTabPanel>
-        )}
-        {activeTab === 'letters' && (
-          <HrTabPanel tabKey="letters"><EmployeeLetters employeeId={emp.id} /></HrTabPanel>
-        )}
-        {activeTab === 'performance' && (
-          <HrTabPanel tabKey="performance"><EmployeePerformance employeeId={emp.id} /></HrTabPanel>
-        )}
-        {activeTab === 'exit' && (
-          <HrTabPanel tabKey="exit"><EmployeeExit emp={emp} /></HrTabPanel>
-        )}
-      </div>
-
-      {/* Lifecycle modals */}
-      {modal === 'confirm' && (
-        <ActionModal title="Confirm Probation" description="Set the confirmation date for this employee." confirm="Confirm Employee" onConfirm={handleConfirm} onClose={() => setModal(null)} isLoading={confirmMutation.isPending}>
-          <div>
-            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Confirmation Date</label>
-            <input type="date" value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary" />
-          </div>
-        </ActionModal>
-      )}
-
-      {modal === 'extend' && (
-        <ActionModal title="Extend Probation" description="Set a new probation end date for this employee." confirm="Extend Probation" onConfirm={handleExtend} onClose={() => setModal(null)} isLoading={extendMutation.isPending}>
-          <div>
-            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">New Probation End Date *</label>
-            <input type="date" value={extendDate} onChange={(e) => setExtendDate(e.target.value)} className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary" />
-          </div>
-        </ActionModal>
-      )}
-
-      {modal === 'notice' && (
-        <ActionModal title="Start Notice Period" description="Record the employee's resignation and notice period." confirm="Start Notice" onConfirm={handleNotice} onClose={() => setModal(null)} isLoading={noticeMutation.isPending}>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Notice Start Date</label>
-              <input type="date" value={noticeStart} onChange={(e) => setNoticeStart(e.target.value)} className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary" />
-            </div>
-            <div>
-              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Last Working Day *</label>
-              <input type="date" value={lastDay} onChange={(e) => setLastDay(e.target.value)} className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary" />
-            </div>
-            <div>
-              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Reason</label>
-              <input maxLength={100} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary" />
-            </div>
-          </div>
-        </ActionModal>
-      )}
-
-      {modal === 'exit' && (
-        <ActionModal title="Mark Employee as Exited" description="Record the employee's final exit from the organisation." confirm="Mark Exited" onConfirm={handleExit} onClose={() => setModal(null)} isLoading={exitMutation.isPending}>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Last Working Day *</label>
-              <input type="date" value={lastDay} onChange={(e) => setLastDay(e.target.value)} className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary" />
-            </div>
-            <div>
-              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Exit Reason</label>
-              <input maxLength={100} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" className="w-full bg-white border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary" />
-            </div>
-          </div>
-        </ActionModal>
-      )}
-
-      {modal === 'cancel-notice' && (
-        <ActionModal title="Cancel Notice Period" description="Withdraw the resignation and set this employee back to Active." confirm="Cancel Notice" onConfirm={handleCancelNotice} onClose={() => setModal(null)} isLoading={cancelNoticeMutation.isPending}>
-          <p className="text-sm text-text-secondary">
-            {fullName} will return to <span className="font-semibold text-text-primary">Active</span> employment, and their notice start &amp; last working day will be cleared. You can start a new notice period later if needed.
-          </p>
-        </ActionModal>
-      )}
-
-      {showEdit && <EmployeeForm employee={emp} onClose={() => setShowEdit(false)} />}
-    </div>
+    <DesignFrame>
+      <EmployeeWorkspace data={data} />
+      {fullForm && emp && <EmployeeForm employee={emp} onClose={() => { setFullForm(false); void empQ.refetch() }} />}
+    </DesignFrame>
   )
 }
+

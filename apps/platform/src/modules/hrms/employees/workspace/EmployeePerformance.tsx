@@ -68,7 +68,7 @@ export function EmployeePerformance({ employeeId }: { employeeId: string }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-3">
       {canReadPerformance && (
         <SubSection title="Goals & KPIs" hint="What this employee is currently measured on.">
           <SectionState
@@ -129,7 +129,7 @@ export function EmployeePerformance({ employeeId }: { employeeId: string }) {
           >
             <div className="flex flex-wrap gap-2">
               {skillRows.map((s) => (
-                <div key={s.id} className="ut-card px-3 py-2 flex items-center gap-2.5">
+                <div key={s.id} className="flex items-center gap-2.5" style={{ padding: '8px 12px', borderRadius: 10, background: '#f8fafc' }}>
                   <div>
                     <p className="text-sm font-medium text-text-primary">{s.skillName}</p>
                     {s.certified && s.certificationName && (
@@ -160,7 +160,7 @@ export function EmployeePerformance({ employeeId }: { employeeId: string }) {
 
       {/* Stated, not hidden: the reader needs to know this section is partial,
           otherwise "no reviews shown" reads as "never reviewed". */}
-      <div className="ut-card p-4 flex gap-3">
+      <div className="flex gap-3" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px' }}>
         <Info size={15} className="text-text-tertiary shrink-0 mt-0.5" />
         <div>
           <p className="text-sm font-semibold text-text-primary">Review history isn’t shown here yet</p>
