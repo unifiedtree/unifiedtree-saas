@@ -147,6 +147,8 @@ public class OnboardingService {
 
     @Transactional(readOnly = true)
     public List<java.util.Map<String,Object>> assetHistory(UUID assetId) {
+        // An unknown asset is a 404, not an empty history that looks like "never assigned".
+        if (!assetRepository.existsById(assetId)) throw new ResourceNotFoundException("OnboardingAsset", assetId);
         return jdbc.queryForList("""
                 SELECT a.id,a.employee_id AS "employeeId",concat_ws(' ',e.first_name,e.last_name) AS "employeeName",
                   a.assigned_at AS "assignedAt",a.returned_at AS "returnedAt",a.return_notes AS notes

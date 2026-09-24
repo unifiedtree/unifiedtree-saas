@@ -23,6 +23,8 @@ export interface AuditEventDto {
   traceId: string | null
   module: string | null
   summary: string | null
+  /** Display name resolved server-side from the actor's user id. */
+  actorName?: string | null
 }
 
 export interface AuditPageResponse {
@@ -50,9 +52,9 @@ export function activityLabel(event: AuditEventDto): string {
     : action
 }
 
-/** Who did it. Falls back to the raw id, then to "System" for job-driven events. */
+/** Who did it: name, then email; never a raw user id. "System" for job-driven events. */
 export function activityActor(event: AuditEventDto): string {
-  return event.actorEmail || event.actorUserId || 'System'
+  return event.actorName || event.actorEmail || (event.actorUserId ? 'A user' : 'System')
 }
 
 /**

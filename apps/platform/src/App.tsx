@@ -318,7 +318,9 @@ export default function App() {
         <Route
           path="/hrms/organization"
           element={
-            <RouteGuard anyOf={[P.HRMS_DEPARTMENT_READ, P.HRMS_BRANCH_READ]}>
+            // A setup page: every employee holds department.read (for their own
+            // lookups), which let them open it and hit 403s on the Branches tab.
+            <RouteGuard anyOf={[P.HRMS_DEPARTMENT_WRITE, P.HRMS_BRANCH_WRITE, P.HRMS_DESIGNATION_WRITE]}>
               <ModuleGate moduleKey="hrms"><OrgSetup /></ModuleGate>
             </RouteGuard>
           }

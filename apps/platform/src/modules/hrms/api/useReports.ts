@@ -84,14 +84,14 @@ export function useAttritionReport(companyId: string | null, from: string, to: s
   })
 }
 
-export function useAttendanceSummaryReport(companyId: string | null, from: string, to: string) {
+export function useAttendanceSummaryReport(companyId: string | null, from: string, to: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['hrms', 'reports', 'attendance-summary', companyId, from, to],
     queryFn: () => {
       const params = new URLSearchParams({ companyId: companyId!, from, to })
       return apiJson<AttendanceSummaryRow[]>(`/v1/reports/attendance-summary?${params}`)
     },
-    enabled: !!companyId && !!from && !!to,
+    enabled: !!companyId && !!from && !!to && (opts?.enabled ?? true),
     staleTime: 60_000,
   })
 }

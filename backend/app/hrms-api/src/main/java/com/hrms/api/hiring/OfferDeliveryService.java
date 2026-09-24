@@ -151,6 +151,8 @@ public class OfferDeliveryService {
     }
 
     public List<OfferEmailAttemptStore.Attempt> attempts(UUID offerId) {
+        // An unknown offer is a 404, not an empty history that looks like "never emailed".
+        if (!offers.existsById(offerId)) throw new ResourceNotFoundException("HiringOffer", offerId);
         return attempts.list(offerId);
     }
 

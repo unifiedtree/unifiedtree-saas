@@ -152,7 +152,7 @@ export const AuditLogs: React.FC = () => {
                 {events.map((row) => (
                   <tr key={row.id} onClick={() => setSelected(row)} className="cursor-pointer">
                     <td className="whitespace-nowrap text-xs text-text-secondary">{formatDistanceToNow(new Date(row.occurredAt), { addSuffix: true })}</td>
-                    <td className="text-text-primary">{row.actorEmail ?? row.actorUserId ?? '—'}</td>
+                    <td className="text-text-primary">{row.actorName ?? row.actorEmail ?? (row.actorUserId ? 'A user' : 'System')}</td>
                     <td><HrStatusPill tone={actionTone(row.action)}>{row.action}</HrStatusPill></td>
                     <td className="hidden md:table-cell text-text-secondary">
                       {row.resourceType ?? '—'}
@@ -185,7 +185,7 @@ function EventDetail({ event }: { event: AuditEventDto }) {
   const fields: Array<{ label: string; value: React.ReactNode }> = [
     { label: 'Event ID',    value: <span className="hr-mono break-all">{event.id}</span> },
     { label: 'Timestamp',   value: new Date(event.occurredAt).toLocaleString() },
-    { label: 'Actor',       value: event.actorEmail ?? event.actorUserId ?? '—' },
+    { label: 'Actor',       value: [event.actorName, event.actorEmail].filter(Boolean).join(' · ') || event.actorUserId || 'System' },
     { label: 'Action',      value: <HrStatusPill tone={actionTone(event.action)}>{event.action}</HrStatusPill> },
     { label: 'Resource',    value: event.resourceType ?? '—' },
     { label: 'Resource ID', value: event.resourceId ? <span className="hr-mono break-all">{event.resourceId}</span> : '—' },

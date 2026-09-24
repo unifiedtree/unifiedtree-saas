@@ -30,9 +30,11 @@ public class AuditController {
     );
 
     private final AuditService auditService;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
-    public AuditController(AuditService auditService) {
+    public AuditController(AuditService auditService, org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.auditService = auditService;
+        this.jdbc = jdbc;
     }
 
     @GetMapping
@@ -69,20 +71,48 @@ public class AuditController {
                 pageable
         );
 
-        List<AuditEventDto> data = result.getContent().stream()
+        List<AuditEvent> events = result.getContent().stream()
                 .filter(e -> action == null || action.equalsIgnoreCase(e.getAction()))
-                .map(this::toDto)
+                .toList();
+        // Events store only the actor's user id; resolve names/emails once per
+        // page so the feed says who did it instead of printing a raw UUID.
+        java.util.Map<UUID, String[]> actors = actorDetails(events.stream()
+                .map(AuditEvent::getActorUserId).filter(java.util.Objects::nonNull).distinct().toList());
+        List<AuditEventDto> data = events.stream()
+                .map(e -> toDto(e, actors.get(e.getActorUserId())))
                 .toList();
 
         return new AuditPageResponse(data, new PageMeta(page, effectiveSize, result.getTotalElements()));
     }
 
-    private AuditEventDto toDto(AuditEvent e) {
+    /** user id -> {display name, email}, read under the caller's tenant (RLS). Empty on any failure. */
+    private java.util.Map<UUID, String[]> actorDetails(List<UUID> userIds) {
+        if (userIds.isEmpty()) return java.util.Map.of();
+        try {
+            String in = String.join(",", java.util.Collections.nCopies(userIds.size(), "?"));
+            java.util.Map<UUID, String[]> out = new java.util.HashMap<>();
+            // display_name is often blank; fall back to the linked employee's name.
+            jdbc.query("SELECT c.id, COALESCE(NULLIF(btrim(c.display_name), ''), "
+                            + "NULLIF(btrim(concat_ws(' ', e.first_name, e.last_name)), '')) AS name, c.email "
+                            + "FROM auth.user_credentials c "
+                            + "LEFT JOIN hrms.employees e ON e.id = c.employee_id AND e.tenant_id = c.tenant_id "
+                            + "WHERE c.id IN (" + in + ")",
+                    rs -> { out.put(rs.getObject("id", UUID.class), new String[] { rs.getString("name"), rs.getString("email") }); },
+                    userIds.toArray());
+            return out;
+        } catch (RuntimeException e) {
+            return java.util.Map.of();
+        }
+    }
+
+    private AuditEventDto toDto(AuditEvent e, String[] actor) {
+        String name = actor != null && actor[0] != null && !actor[0].isBlank() ? actor[0] : null;
+        String email = e.getActorEmail() != null ? e.getActorEmail() : (actor != null ? actor[1] : null);
         return new AuditEventDto(
                 e.getId() != null ? e.getId().toString() : null,
                 e.getOccurredAt() != null ? e.getOccurredAt().toString() : null,
                 e.getActorUserId() != null ? e.getActorUserId().toString() : null,
-                e.getActorEmail(),
+                email,
                 e.getEntityType(),
                 e.getEntityId() != null ? e.getEntityId().toString() : null,
                 e.getAction(),
@@ -91,7 +121,8 @@ public class AuditController {
                 e.getActorUserAgent(),
                 e.getCorrelationId(),
                 e.getModule(),
-                e.getSummary()
+                e.getSummary(),
+                name
         );
     }
 
@@ -136,7 +167,9 @@ public class AuditController {
              * clients must fall back to composing a label from
              * {@code action} + {@code resourceType}.
              */
-            String summary) {}
+            String summary,
+            /** The actor's display name, resolved from their user id. Null for system events. */
+            String actorName) {}
 
     public record PageMeta(int page, int size, long total) {}
 

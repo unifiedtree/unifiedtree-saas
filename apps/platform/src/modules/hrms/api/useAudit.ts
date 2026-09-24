@@ -8,6 +8,8 @@ export interface AuditEventDto {
   occurredAt: string
   actorUserId: string
   actorEmail?: string | null
+  /** Display name resolved server-side from actorUserId. */
+  actorName?: string | null
   resourceType?: string | null
   resourceId?: string | null
   action: string

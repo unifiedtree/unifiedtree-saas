@@ -366,7 +366,11 @@ export const ShiftsAndOt: React.FC = () => {
   const now = new Date()
   const from = format(startOfMonth(now), 'yyyy-MM-dd')
   const to = format(endOfMonth(now), 'yyyy-MM-dd')
-  const { data: summary = [], isLoading: otLoading } = useAttendanceSummaryReport(activeCompany || null, from, to)
+  // The monthly OT figures come from the attendance report (hrms.report.attendance).
+  // Managers don't hold it, so they got a 403 and a blank "0h" tile; show the
+  // company-wide OT numbers only to those who can read them.
+  const canSeeOtReport = usePermission(P.HRMS_REPORT_ATTENDANCE)
+  const { data: summary = [], isLoading: otLoading } = useAttendanceSummaryReport(activeCompany || null, from, to, { enabled: canSeeOtReport })
 
   const otRows = useMemo(
     () => [...summary]
@@ -446,10 +450,10 @@ export const ShiftsAndOt: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className={`grid grid-cols-2 gap-3 ${canSeeOtReport ? 'sm:grid-cols-3' : ''}`}>
         <HrStatCard icon={<Clock size={18} />} color="blue" value={shifts.length} label="Shifts Defined" loading={shiftsLoading} />
         <HrStatCard icon={<Moon size={18} />} color="green" value={nightShifts} label="Night Shifts" loading={shiftsLoading} />
-        <HrStatCard icon={<Timer size={18} />} color="orange" value={`${totalOtHours}h`} label="Overtime (This Month)" loading={otLoading} />
+        {canSeeOtReport && <HrStatCard icon={<Timer size={18} />} color="orange" value={`${totalOtHours}h`} label="Overtime (This Month)" loading={otLoading} />}
       </div>
 
 
@@ -534,7 +538,7 @@ export const ShiftsAndOt: React.FC = () => {
       <div className="space-y-6">
       {/* Overtime this month */}
       <OvertimeApprovals />
-      <div>
+      {canSeeOtReport && <div>
         <h3 className="mb-2 text-sm font-bold text-text-primary">Overtime — {format(now, 'MMMM yyyy')}</h3>
         <TableCard>
           <table className="hr-table">
@@ -560,7 +564,7 @@ export const ShiftsAndOt: React.FC = () => {
             </tbody>
           </table>
         </TableCard>
-      </div>
+      </div>}
       </div>
           </HrTabPanel>
         )}

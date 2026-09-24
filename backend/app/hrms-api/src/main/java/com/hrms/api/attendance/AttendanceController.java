@@ -295,8 +295,18 @@ public class AttendanceController {
         // One bulk lookup for the shift in force on the date; its end feeds both
         // the per-row earlyCheckout flag and the aggregate countSummary tile,
         // its name/start/grace feed the per-row "late by" columns.
-        Map<UUID, AttendanceService.ShiftWindow> shiftByEmployee =
-                attendanceService.getShiftWindowsForEmployees(employeeIds, selectedDate);
+        Map<UUID, AttendanceService.ShiftWindow> shiftLookup;
+        try {
+            shiftLookup = attendanceService.getShiftWindowsForEmployees(employeeIds, selectedDate);
+        } catch (RuntimeException e) {
+            // Shift details only enrich the roster (late-by, early checkout). A
+            // failure there must not take down the whole team dashboard, which
+            // the mobile manager home screen also loads.
+            org.slf4j.LoggerFactory.getLogger(AttendanceController.class)
+                    .warn("Team dashboard: shift lookup failed for {} on {}: {}", employeeIds.size(), selectedDate, e.getMessage());
+            shiftLookup = Map.of();
+        }
+        Map<UUID, AttendanceService.ShiftWindow> shiftByEmployee = shiftLookup;
         Map<UUID, java.time.Instant> shiftEndByEmployee = shiftByEmployee.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().expectedEnd()));
 
