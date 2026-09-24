@@ -177,6 +177,26 @@ export function useCreateBranch() {
   })
 }
 
+/** PUT /v1/hrms/branches/{id} — partial update; only the fields sent change. */
+export function useUpdateBranch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; name?: string; code?: string; addressLine?: string; city?: string; state?: string; country?: string; pincode?: string; isHeadquarters?: boolean; isActive?: boolean }) =>
+      apiJson<Branch>(`/v1/hrms/branches/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'branches'] }),
+  })
+}
+
+/** PUT /v1/hrms/branches/{id}/geofence — the branch's attendance boundary (needs org.geofence.write). */
+export function useSaveBranchGeofence() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; latitude: number; longitude: number; radiusMeters: number; enforced: boolean }) =>
+      apiJson<Branch>(`/v1/hrms/branches/${id}/geofence`, { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'branches'] }),
+  })
+}
+
 export function useArchiveBranch() {
   const qc = useQueryClient()
   return useMutation({

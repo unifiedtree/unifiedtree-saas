@@ -1,0 +1,122 @@
+// Real-data container for the redesigned Companies & Branches page
+// (design/dc/CompaniesPage). Saves go through the existing workforce endpoints.
+import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
+import { usePermission, P } from '@unifiedtree/sdk'
+import { CompaniesPage } from '@/design/dc/CompaniesPage'
+import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
+import {
+  useCompanies, useBranches, useCreateCompany, useUpdateCompany, useArchiveCompany,
+  useCreateBranch, useUpdateBranch, useSaveBranchGeofence, useArchiveBranch,
+} from '../api/useOrg'
+import { useHrConfig, useUpdateHrConfig } from '../api/useSettings'
+
+const errText = (e: unknown) => (e as Error)?.message || 'Please try again.'
+
+export function CompaniesPageContainer() {
+  const navigate = useNavigate()
+  const mobile = useIsMobile()
+  const canEdit = usePermission(P.ORG_COMPANY_WRITE)
+  const canGeofence = usePermission('org.geofence.write' as any)
+
+  const companiesQ = useCompanies()
+  const branchesQ = useBranches()
+  const [picked, setPicked] = useState<string | undefined>()
+  const companiesRaw = useMemo(() => companiesQ.data ?? [], [companiesQ.data])
+  const selectedId = picked && companiesRaw.some((c) => c.id === picked) ? picked : companiesRaw[0]?.id
+  const hrConfig = useHrConfig(selectedId)
+
+  const createCompany = useCreateCompany()
+  const updateCompany = useUpdateCompany()
+  const archiveCompany = useArchiveCompany()
+  const createBranch = useCreateBranch()
+  const updateBranch = useUpdateBranch()
+  const saveGeofence = useSaveBranchGeofence()
+  const archiveBranch = useArchiveBranch()
+  const updateHrConfig = useUpdateHrConfig()
+
+  const companies = useMemo(() => companiesRaw.map((c) => ({
+    id: c.id, name: c.name, legal: c.legalName || '', industry: c.industry || '', currency: c.currency || 'INR', country: c.country || 'India',
+    desc: '', cin: c.registrationNumber || '', pan: c.panNumber || '', gstin: c.gstin || '', employees: c.employeeCount ?? 0,
+    status: c.active === false ? 'INACTIVE' : 'ACTIVE',
+  })), [companiesRaw])
+
+  const branches = useMemo(() => (branchesQ.data ?? []).map((b) => ({
+    id: b.id, companyId: b.companyId, name: b.name, code: b.code || '', city: b.city || '', state: b.state || '', country: b.country || 'India',
+    employees: b.employeeCount ?? 0, hq: !!b.headquarters, status: b.active === false ? 'INACTIVE' : 'ACTIVE',
+    geo: { on: !!b.geoFenceEnforced, lat: b.latitude ?? '', lng: b.longitude ?? '', radius: b.geoFenceRadiusMeters || 100 },
+  })), [branchesQ.data])
+
+  const cfg = hrConfig.data
+  const format = cfg ? { prefix: cfg.employeeCodePrefix || 'EMP', next: String(cfg.employeeCodeNextNumber ?? 1).padStart(cfg.employeeCodePadding ?? 4, '0') } : null
+
+  const state = companiesQ.isLoading ? 'loading' : companiesQ.isError ? 'error' : companies.length === 0 ? 'empty' : 'live'
+
+  return (
+    <DesignFrame>
+      <CompaniesPage
+        state={state}
+        mobile={mobile}
+        canEdit={canEdit}
+        companies={companies}
+        branches={branches}
+        branchesLoading={branchesQ.isLoading}
+        branchesError={branchesQ.isError}
+        companyId={selectedId}
+        format={format}
+        onPickCompany={setPicked}
+        onNavigate={(path: string) => navigate(path)}
+        onRetry={() => { companiesQ.refetch(); branchesQ.refetch() }}
+        onSaveCompany={async (c: any) => {
+          // Send every field as typed ("" clears it): the update endpoint skips nulls, so undefined would keep the old value.
+          const body = { name: c.name, legalName: c.legal ?? '', industry: c.industry ?? '', currency: c.currency, country: c.country, registrationNumber: c.cin ?? '', panNumber: c.pan ?? '', gstin: c.gstin ?? '' }
+          try {
+            if (c.id) { await updateCompany.mutateAsync({ id: c.id, ...body }); toast.success('Company updated') } else {
+              const created = await createCompany.mutateAsync(body)
+              if (created?.id) setPicked(created.id)
+              toast.success(`${c.name} created`)
+            }
+            return true
+          } catch (e) { toast.error('Could not save the company', { description: errText(e) }); return false }
+        }}
+        onSaveFormat={async (co: any, f: { prefix: string; next: string }) => {
+          if (!co?.id) return false
+          try {
+            await updateHrConfig.mutateAsync({ companyId: co.id, body: { employeeCodePrefix: f.prefix, employeeCodeNextNumber: Number(f.next), employeeCodePadding: f.next.length } })
+            toast.success(`Employee ID format saved · next is ${f.prefix}-${f.next}`)
+            return true
+          } catch (e) { toast.error('Could not save the employee ID format', { description: errText(e) }); return false }
+        }}
+        onSaveBranch={async (b: any, currentHq: any) => {
+          try {
+            const fields = { name: b.name, code: b.code || undefined, city: b.city, state: b.state, country: b.country, isHeadquarters: !!b.hq }
+            let id: string = b.id
+            if (id) await updateBranch.mutateAsync({ id, ...fields })
+            else id = (await createBranch.mutateAsync({ companyId: b.companyId, ...fields })).id
+            // One headquarters per company: the previous one steps down.
+            if (b.hq && currentHq && currentHq.id !== id) await updateBranch.mutateAsync({ id: currentHq.id, isHeadquarters: false })
+            const g = b.geo || {}
+            const hasPin = g.lat !== '' && g.lng !== '' && g.lat != null && g.lng != null
+            if (hasPin) {
+              if (canGeofence) await saveGeofence.mutateAsync({ id, latitude: Number(g.lat), longitude: Number(g.lng), radiusMeters: Number(g.radius) || 100, enforced: !!g.on })
+              else toast.message('Branch saved without its attendance area', { description: "Your role can't change geofences." })
+            }
+            toast.success(b.id ? 'Branch updated' : `${b.name} created`)
+            return true
+          } catch (e) { toast.error('Could not save the branch', { description: errText(e) }); return false }
+        }}
+        onArchive={async (kind: 'branch' | 'company', id: string) => {
+          try {
+            if (kind === 'branch') { await archiveBranch.mutateAsync(id); toast.success('Branch archived') } else {
+              await archiveCompany.mutateAsync(id)
+              if (id === selectedId) setPicked(undefined)
+              toast.success('Company archived')
+            }
+            return true
+          } catch (e) { toast.error(kind === 'branch' ? 'Could not archive the branch' : 'Could not archive the company', { description: errText(e) }); return false }
+        }}
+      />
+    </DesignFrame>
+  )
+}

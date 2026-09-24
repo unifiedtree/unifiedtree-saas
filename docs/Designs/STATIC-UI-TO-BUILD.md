@@ -46,3 +46,21 @@ Checked live: `e2e/recovery/live-design-dashboard.mjs`, 12/12 (calendar, past-da
 | Seats tile | Partial | Shown only to billing admins (Owner, Super Admin, Company Admin), and once the seats data has loaded. |
 | Sections the viewer has no permission for | Partial | They show an empty state. The design's rule is to hide them. This only affects admin roles missing a specific permission. |
 | Chart colours | Decision | The prototype's default "tones" palette (multi-colour) is used. The prototype also has an "emerald only" option, which is one switch (`chartPalette="emerald"`) if you prefer it. |
+
+## 3. Companies & Branches (`/hrms/companies`): done
+
+Checked live: `e2e/recovery/live-design-companies.mjs`, 10/10 (create a branch with a geofence, edit it and make it HQ, archive it, edit and restore the company, save the employee-ID format, no page errors, no failed API calls).
+
+| Item | Status | Detail |
+|---|---|---|
+| Company picker, company card, statutory info, next employee ID | Done | Real company data plus the employee-ID format from HR configuration. |
+| Add / edit company, save ID format | Done | Existing company and HR-configuration endpoints. Edits send every field as typed, so clearing a field (e.g. GSTIN) now saves the clear. |
+| Branch cards/table, search and status/city filters | Done | Real branches. |
+| Create / edit branch (4-step drawer), map pin, geofence | Done | Edit uses the existing `PUT /v1/hrms/branches/{id}` endpoint (it had no web hook before). The geofence saves through `PUT /v1/hrms/branches/{id}/geofence`. |
+| Mark as headquarters | Done | The previous headquarters is switched off in the same save, matching the design's "Replaces X as the headquarters". **Backend follow-up:** enforce one HQ per company on the server so the two updates can't diverge. |
+| Archive company / branch | Done | Confirmation dialog as designed. Archive is soft (employees keep their assignment). |
+| Company description ("Product engineering and IT services.") | Needs backend | Companies have no description field. The card shows the design's own fallback, "No description yet." |
+| Geofence without `org.geofence.write` | Partial | The branch still saves; the attendance area stays unchanged and the user is told why. |
+| "Inactive" status filter | Partial | Archived branches aren't returned by the API, so this filter only shows branches marked inactive, not archived ones. |
+| Employees links (company and branch) | Done | The Workforce Directory now opens pre-filtered from `?companyId=`, `?branchId=` and `?departmentId=` links. |
+| Organization Setup's Companies / Branches tabs (`/hrms/organization`) | Kept | Still there, untouched. This page and those tabs manage the same records. |

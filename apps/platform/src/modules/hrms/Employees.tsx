@@ -79,6 +79,14 @@ export const Employees: React.FC = () => {
       setStatus(requested)
       setPage(0)
     }
+    // Drill-downs (dashboard, Companies & Branches) open the directory already
+    // filtered to a company, branch or department.
+    const company = searchParams.get('companyId')
+    if (company) setCompanyId(company)
+    const branch = searchParams.get('branchId')
+    if (branch) { setBranchId(branch); setPage(0) }
+    const department = searchParams.get('departmentId')
+    if (department) { setDepartmentId(department); setPage(0) }
   }, [searchParams])
   useEffect(() => {
     if (searchParams.get('add') === '1') {
