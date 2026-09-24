@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { ArrowRight, CheckCircle2 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { usePermission, P } from '@unifiedtree/sdk'
@@ -32,6 +32,8 @@ export function usePendingShiftRequestCount(enabled: boolean) {
 }
 
 const fullName = (e: WorkforceEmployee) => [e.firstName, e.lastName].filter(Boolean).join(' ')
+const isoToday = () => format(new Date(), 'yyyy-MM-dd')
+const longDate = (iso: string) => format(parseISO(iso), 'd MMM yyyy')
 
 /**
  * HR/manager queue for employee shift-change requests (filed at /me/shift-change).
@@ -49,7 +51,7 @@ export function ShiftRequestApprovals({ companyId }: { companyId: string }) {
 
   return <section className="ut-card overflow-hidden" aria-label="Shift change requests">
     <div className="border-b border-border-default p-5"><h2 className="font-semibold">Shift change requests</h2>
-      <p className="mt-1 text-sm text-text-secondary">Review employee requests. Approval assigns the requested shift from today; rejection leaves the current shift in place.</p></div>
+      <p className="mt-1 text-sm text-text-secondary">Review employee requests. An approved change starts on the date the employee asked for. A request still pending after that date is rejected automatically, and the employee can apply again.</p></div>
     {query.isPending ? <div className="space-y-3 p-5" role="status" aria-label="Loading requests…">
         {[0, 1].map(i => <div key={i} className="h-24 w-full animate-pulse rounded-lg bg-bg-base" />)}
       </div>
@@ -99,16 +101,24 @@ function RequestCard({ request, companyId, canReadEmployee, employee, employeesP
   const current = request.currentShiftName || 'Not assigned'
   const requested = request.requestedShiftName || 'Shift details unavailable'
   const deciding = decision.isPending ? (decision.variables?.approved ? 'approve' : 'reject') : null
+  // An approved change starts on the employee's date; a request from an older
+  // app build has none and starts on the day it is approved. One whose date
+  // has passed has expired and can't be approved (the queue normally drops
+  // it; this covers a card left open past midnight).
+  const today = isoToday()
+  const asked = request.requestedEffectiveDate ?? null
+  const expired = !!asked && asked < today
 
   async function decide(approved: boolean) {
     try {
-      await decision.mutateAsync({ id: request.id, approved, comment: note.trim() || undefined })
+      const saved = await decision.mutateAsync({ id: request.id, approved, comment: note.trim() || undefined })
       const who = employee ? fullName(employee) : 'The employee'
-      toast(approved ? `${who} moves to ${requested} from today` : `Shift request rejected — ${who} stays on ${current}`, 'success')
+      const from = saved?.appliedEffectiveDate ?? asked ?? today
+      toast(approved ? `${who} moves to ${requested} from ${longDate(from)}` : `Shift request rejected — ${who} stays on ${current}`, 'success')
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Could not save the decision', 'error')
-      // A 422 SHIFT_CHANGE_NOT_PENDING means someone else already decided it —
-      // refresh so the stale card drops instead of waiting for the 30s poll.
+      // A 422 SHIFT_CHANGE_NOT_PENDING / SHIFT_CHANGE_EXPIRED means the card is
+      // stale — refresh so it drops instead of waiting for the 30s poll.
       client.invalidateQueries({ queryKey: ['shifts', 'requests', 'pending'] })
     }
   }
@@ -129,11 +139,16 @@ function RequestCard({ request, companyId, canReadEmployee, employee, employeesP
       <div><p className="text-xs text-text-secondary">Requested shift</p><p className="mt-1 font-medium">{requested}</p>
         {timing(request.requestedShiftPolicyId) && <p className="text-xs text-text-secondary">{timing(request.requestedShiftPolicyId)}</p>}</div>
     </div>
+    <p className="mb-2 text-sm">
+      {expired && asked ? <><strong>Start date passed: </strong>{longDate(asked)}. This request has expired and is rejected automatically.</>
+        : asked ? <><strong>Starts on: </strong>{longDate(asked)}</>
+        : <><strong>Starts on: </strong>the day you approve (sent from an older app version, without a date)</>}
+    </p>
     <p className="text-sm"><strong>Reason: </strong>{request.reason || 'No reason provided'}</p>
     <div className="mt-4 flex flex-wrap items-end gap-3">
       <label className="min-w-48 flex-1 text-xs text-text-secondary">Decision note (optional)<input className="ut-input mt-1" value={note} maxLength={1000} onChange={e => setNote(e.target.value)} /></label>
       <HrButton variant="ghost" disabled={decision.isPending} onClick={() => decide(false)}>{deciding === 'reject' ? 'Rejecting…' : 'Reject'}</HrButton>
-      <HrButton disabled={decision.isPending} onClick={() => decide(true)}>{deciding === 'approve' ? 'Approving…' : 'Approve change'}</HrButton>
+      <HrButton disabled={decision.isPending || expired} onClick={() => decide(true)}>{deciding === 'approve' ? 'Approving…' : 'Approve change'}</HrButton>
     </div>
   </article>
 }

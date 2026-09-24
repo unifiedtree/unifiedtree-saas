@@ -12,6 +12,10 @@ export interface ShiftRequest {
   status: string
   createdAt: string
   decisionNote?: string
+  /** Start date the employee asked for (yyyy-MM-dd); null on requests from older app builds. */
+  requestedEffectiveDate?: string | null
+  /** Date the new shift starts (yyyy-MM-dd); set on approval. */
+  appliedEffectiveDate?: string | null
 }
 
 export function usePendingShiftRequests() {

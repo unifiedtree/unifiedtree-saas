@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
+import { addYears, format, parseISO } from 'date-fns'
 import { ArrowLeft, Clock } from 'lucide-react'
 import { apiJson } from '@/core/api/client'
 import { HrPageHeader, HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
@@ -15,9 +15,9 @@ import { HrPageHeader, HrButton, HrStatusPill, type PillTone } from '@/shared/co
  *   POST /v1/shifts/change-requests            → CreateShiftChangeRequest
  *   GET  /v1/shifts/change-requests/my         → ShiftChangeRequestResponse[]
  *
- * The backend CreateShiftChangeRequest DTO accepts { requestedShiftPolicyId, reason }.
- * We also send `effectiveDate` in the body per the parity spec — Jackson ignores
- * unknown fields, so this is forward-compatible when the backend adds the column.
+ * The request carries { requestedShiftPolicyId, effectiveDate, reason }. Once
+ * approved, the new shift starts on effectiveDate. A request still pending
+ * after that date is rejected automatically and the employee applies again.
  */
 
 interface MeResponse {
@@ -41,6 +41,10 @@ interface CurrentShift {
   shiftName?: string
   startTime?: string
   endTime?: string
+  /** A change HR already scheduled to start after today. */
+  upcomingShiftPolicyId?: string | null
+  upcomingShiftName?: string | null
+  upcomingEffectiveFrom?: string | null
 }
 
 interface ChangeRequest {
@@ -54,6 +58,10 @@ interface ChangeRequest {
   decisionNote?: string
   decidedAt?: string
   createdAt: string
+  /** Null when the request was rejected automatically (expired). */
+  approverId?: string | null
+  requestedEffectiveDate?: string | null
+  appliedEffectiveDate?: string | null
 }
 
 const STATUS_TONE: Record<string, PillTone> = {
@@ -74,6 +82,10 @@ const tomorrowIso = () => {
   return format(d, 'yyyy-MM-dd')
 }
 
+const todayIso = () => format(new Date(), 'yyyy-MM-dd')
+const yearAheadIso = () => format(addYears(new Date(), 1), 'yyyy-MM-dd')
+const longDate = (iso: string) => format(parseISO(iso), 'd MMM yyyy')
+
 const REASON_MIN = 10
 const REASON_MAX = 500
 
@@ -82,7 +94,8 @@ export const ShiftChangeRequest: React.FC = () => {
   const qc = useQueryClient()
 
   const [requestedShiftId, setRequestedShiftId] = useState('')
-  const [effectiveDate, setEffectiveDate] = useState(tomorrowIso())
+  // null until the employee picks a date; the default depends on the shift data.
+  const [pickedDate, setPickedDate] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -117,9 +130,20 @@ export const ShiftChangeRequest: React.FC = () => {
   const currentShiftName = current.data?.shiftName
   const currentShiftRange = formatShiftRange(current.data?.startTime, current.data?.endTime)
 
+  // A change HR already scheduled blocks earlier start dates (the server
+  // refuses them), and from that date on it is the shift being replaced.
+  const today = todayIso()
+  const upcomingFrom = current.data?.upcomingEffectiveFrom ?? null
+  const scheduledChange = upcomingFrom && upcomingFrom > today ? upcomingFrom : null
+  const minDate = scheduledChange ?? today
+  const maxDate = yearAheadIso()
+  const tomorrow = tomorrowIso()
+  const effectiveDate = pickedDate ?? (minDate > tomorrow ? minDate : tomorrow)
+  const baselineShiftId = scheduledChange ? current.data?.upcomingShiftPolicyId ?? undefined : currentShiftId
+
   const availableShifts = useMemo(
-    () => (shifts.data ?? []).filter((s) => s.id !== currentShiftId),
-    [shifts.data, currentShiftId],
+    () => (shifts.data ?? []).filter((s) => s.id !== baselineShiftId),
+    [shifts.data, baselineShiftId],
   )
 
   const hasPending = (myRequests.data ?? []).some((r) => r.status === 'PENDING')
@@ -138,7 +162,7 @@ export const ShiftChangeRequest: React.FC = () => {
       qc.invalidateQueries({ queryKey: ['shifts', 'change-requests'] })
       setRequestedShiftId('')
       setReason('')
-      setEffectiveDate(tomorrowIso())
+      setPickedDate(null)
       setError(null)
     },
     onError: (err: unknown) => {
@@ -149,11 +173,14 @@ export const ShiftChangeRequest: React.FC = () => {
 
   const validate = (): string | null => {
     if (!requestedShiftId) return 'Please select a shift to switch to.'
-    if (requestedShiftId === currentShiftId) return 'Requested shift must be different from your current shift.'
+    if (requestedShiftId === baselineShiftId) return 'Requested shift must be different from your current shift.'
     if (!effectiveDate) return 'Please pick an effective date.'
-    // Compare as ISO dates in local timezone: reject anything before today.
-    const today = format(new Date(), 'yyyy-MM-dd')
+    // ISO dates compare as strings (local timezone).
     if (effectiveDate < today) return 'Effective date cannot be in the past.'
+    if (scheduledChange && effectiveDate < scheduledChange) {
+      return `Your shift is already scheduled to change on ${longDate(scheduledChange)}. Choose that date or a later one.`
+    }
+    if (effectiveDate > maxDate) return 'Effective date must be within the next 12 months.'
     const trimmed = reason.trim()
     if (trimmed.length < REASON_MIN) return `Reason must be at least ${REASON_MIN} characters.`
     if (trimmed.length > REASON_MAX) return `Reason must be at most ${REASON_MAX} characters.`
@@ -195,6 +222,11 @@ export const ShiftChangeRequest: React.FC = () => {
             {currentShiftName ? `${currentShiftName}${currentShiftRange ? ` · ${currentShiftRange}` : ''}` : 'Default (unassigned)'}
           </p>
         </div>
+        {scheduledChange && (
+          <p className="mt-2 text-xs text-text-secondary">
+            Scheduled: {current.data?.upcomingShiftName ?? 'another shift'} from {longDate(scheduledChange)}
+          </p>
+        )}
       </div>
 
       {/* Pending banner */}
@@ -239,13 +271,17 @@ export const ShiftChangeRequest: React.FC = () => {
               id="scr-date"
               type="date"
               required
-              min={format(new Date(), 'yyyy-MM-dd')}
+              min={minDate}
+              max={maxDate}
               value={effectiveDate}
-              onChange={(e) => setEffectiveDate(e.target.value)}
+              onChange={(e) => setPickedDate(e.target.value)}
               disabled={disableForm}
               className="w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#059669] focus:outline-none disabled:bg-bg-base disabled:text-text-tertiary"
             />
-            <p className="mt-1 text-xs text-text-tertiary">Defaults to tomorrow. Cannot be in the past.</p>
+            <p className="mt-1 text-xs text-text-tertiary">
+              Your new shift starts on this date once approved. If it isn't approved by then, the request
+              expires and you can send a new one.
+            </p>
           </div>
 
           <div>
@@ -312,6 +348,13 @@ export const ShiftChangeRequest: React.FC = () => {
                     {r.currentShiftName && (
                       <p className="mt-0.5 text-xs text-text-secondary">From {r.currentShiftName}</p>
                     )}
+                    {r.status === 'APPROVED' && r.appliedEffectiveDate ? (
+                      <p className="mt-0.5 text-xs text-text-secondary">Starts {longDate(r.appliedEffectiveDate)}</p>
+                    ) : r.requestedEffectiveDate ? (
+                      <p className="mt-0.5 text-xs text-text-secondary">
+                        Requested start {longDate(r.requestedEffectiveDate)}
+                      </p>
+                    ) : null}
                     <p className="mt-0.5 text-xs text-text-tertiary">
                       Submitted {format(new Date(r.createdAt), 'd MMM yyyy')}
                     </p>
@@ -320,7 +363,7 @@ export const ShiftChangeRequest: React.FC = () => {
                 </div>
                 {r.reason && <p className="mt-2 text-xs italic text-text-secondary">"{r.reason}"</p>}
                 {r.decisionNote && (
-                  <p className="mt-1 text-xs text-text-secondary">HR: {r.decisionNote}</p>
+                  <p className="mt-1 text-xs text-text-secondary">{r.approverId ? `HR: ${r.decisionNote}` : r.decisionNote}</p>
                 )}
               </li>
             ))}
