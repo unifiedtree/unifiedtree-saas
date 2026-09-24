@@ -78,6 +78,7 @@ const ManualEntry = React.lazy(() => import('@/modules/hrms/attendance/ManualEnt
 const WorkTimeSettings = React.lazy(() => import('@/modules/hrms/organization/WorkTimeSettings').then(m => ({ default: m.WorkTimeSettings })))
 const BankDisbursement = React.lazy(() => import('@/modules/hrms/payroll/BankDisbursement').then(m => ({ default: m.BankDisbursement })))
 const DocumentVault = React.lazy(() => import('@/modules/hrms/DocumentVault').then(m => ({ default: m.DocumentVault })))
+const PendingDocuments = React.lazy(() => import('@/pages/PendingDocuments').then(m => ({ default: m.PendingDocuments })))
 const Learning = React.lazy(() => import('@/modules/hrms/Learning').then(m => ({ default: m.Learning })))
 const Compliance = React.lazy(() => import('@/modules/hrms/Compliance').then(m => ({ default: m.Compliance })))
 const Policies = React.lazy(() => import('@/modules/hrms/Policies').then(m => ({ default: m.Policies })))
@@ -492,6 +493,26 @@ export default function App() {
           element={
             <RouteGuard anyOf={['hrms.document.read.self', 'hrms.document.read', 'hrms.document.write', 'hrms.letters.template.read']}>
               <ModuleGate moduleKey="hrms"><DocumentVault /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        {/* HR "documents to review" queue. Two paths for the SAME screen —
+            the notification listener emitted `/documents/pending` in production
+            bells before this page existed, and we keep that link alive so old
+            notifications still open something instead of 404-ing. */}
+        <Route
+          path="/hrms/documents/pending"
+          element={
+            <RouteGuard anyOf={['hrms.document.verify']}>
+              <ModuleGate moduleKey="hrms"><PendingDocuments /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/documents/pending"
+          element={
+            <RouteGuard anyOf={['hrms.document.verify']}>
+              <ModuleGate moduleKey="hrms"><PendingDocuments /></ModuleGate>
             </RouteGuard>
           }
         />

@@ -22,6 +22,7 @@ import { useCompanies } from './api/useOrg'
 import { useRequisitions } from './api/useHiring'
 import { useLeaveOverview } from './api/useLeave'
 import { useTeamDashboard, useAttendanceTrend, useCorrectionApprovals } from './api/useAttendance'
+import { usePendingDocumentQueue } from './api/useDocument'
 import { useActivityFeed, activityLabel, activityActor } from './api/useActivity'
 import { useHeadcountReport } from './api/useReports'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
@@ -76,7 +77,10 @@ export const CompanyAdminDashboard: React.FC = () => {
   const canReadTeamAttendance = usePermission(P.ATTENDANCE_TEAM_READ)
   const canReadAudit          = usePermission(P.AUDIT_READ)
   const canApproveCorrections = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
+  const canVerifyDocuments = usePermission('hrms.document.verify' as unknown as Parameters<typeof usePermission>[0])
   const corrections = useCorrectionApprovals('PENDING', { enabled: canApproveCorrections, size: 1 })
+  const pendingDocsQuery = usePendingDocumentQueue(canVerifyDocuments)
+  const pendingDocsCount = pendingDocsQuery.data?.length ?? 0
 
   const canWriteEmployee = usePermission(P.HRMS_EMPLOYEE_WRITE)
   const canManageOrg     = usePermission(P.ORG_COMPANY_WRITE)
@@ -370,6 +374,13 @@ export const CompanyAdminDashboard: React.FC = () => {
       {canReadTeamAttendance && <Card title="Attendance follow-up"><p className="text-sm">Review today's attendance exceptions and open the employee list behind each count.</p><HrButton className="mt-3" onClick={() => navigate(`/hrms/attendance?tab=team&date=${todayIso}`)}>Review attendance</HrButton></Card>}
       {canApproveCorrections && <Card title="Correction requests">{queryState(corrections.isPending, corrections.isError, corrections.refetch, false, <p className="text-lg font-semibold">{corrections.data?.totalElements ?? 0} awaiting review</p>)}<HrButton className="mt-3" onClick={() => navigate('/hrms/attendance?tab=corrections')}>Review requests</HrButton></Card>}
       {canApproveLeaves && <Card title="Leave approvals"><p className="text-lg font-semibold">{leaveOverviewQuery.isLoading ? 'Loading...' : leaveOverviewQuery.isError ? 'Unable to load approvals' : `${pendingApprovals} awaiting review`}</p><HrButton className="mt-3" onClick={() => navigate('/hrms/leave')}>Open leave approvals</HrButton></Card>}
+      {canVerifyDocuments && <Card title="Documents to review">
+        <p className="text-lg font-semibold">
+          {pendingDocsQuery.isLoading ? 'Loading…' : pendingDocsQuery.isError ? 'Unable to load' : `${pendingDocsCount} document${pendingDocsCount === 1 ? '' : 's'} pending`}
+        </p>
+        <p className="text-xs text-text-secondary mt-1">Employees uploaded these — verify or reject each with a reason.</p>
+        <HrButton className="mt-3" onClick={() => navigate('/hrms/documents/pending')}>Review documents</HrButton>
+      </Card>}
     </div></section>
   </div>
 }

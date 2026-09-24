@@ -16,6 +16,7 @@ import { useCompanies } from './api/useOrg'
 import { useLeaveOverview } from './api/useLeave'
 import { usePendingWfhApprovals } from './api/useWfh'
 import { useCorrectionApprovals } from './api/useAttendance'
+import { usePendingDocumentQueue } from './api/useDocument'
 import { usePendingShiftRequests } from './api/useShiftRequests'
 import { usePendingExpenseApprovals } from './api/useExpense'
 import { usePendingAdvanceApprovals } from './api/useAdvance'
@@ -220,6 +221,8 @@ const RoleDashboard: React.FC = () => {
   const canApproveWfh = usePermission(P.WFH_APPROVE)
   const canApproveExpense = usePermission('hrms.expense.claim.approve')
   const canApproveAdvance = usePermission('hrms.advance.approve')
+  const canVerifyDocuments = usePermission('hrms.document.verify')
+  const pendingDocsQuery = usePendingDocumentQueue(canVerifyDocuments)
   const wfhApprovalsQuery = usePendingWfhApprovals(0, 1)
   const correctionApprovalsQuery = useCorrectionApprovals('PENDING', { enabled: canApproveCorrections, page: 0, size: 1 })
   const shiftRequestsQuery = usePendingShiftRequests()
@@ -268,8 +271,9 @@ const RoleDashboard: React.FC = () => {
     (canApproveCorrections ? (correctionApprovalsQuery.data?.totalElements ?? 0) : 0) +
     ((shiftRequestsQuery.data?.length ?? 0)) +
     (canApproveExpense ? (expenseApprovalsQuery.data?.totalElements ?? 0) : 0) +
-    (canApproveAdvance ? (advanceApprovalsQuery.data?.totalElements ?? 0) : 0)
-  const canApproveAny = canApproveLeaves || canApproveWfh || canApproveCorrections || canApproveExpense || canApproveAdvance
+    (canApproveAdvance ? (advanceApprovalsQuery.data?.totalElements ?? 0) : 0) +
+    (canVerifyDocuments ? (pendingDocsQuery.data?.length ?? 0) : 0)
+  const canApproveAny = canApproveLeaves || canApproveWfh || canApproveCorrections || canApproveExpense || canApproveAdvance || canVerifyDocuments
   const pendingCount = canApproveAny ? approverPendingCount : myPendingRequests
   const anyPendingError = leaveOverviewQuery.isError
     || (canApproveWfh && wfhApprovalsQuery.isError)

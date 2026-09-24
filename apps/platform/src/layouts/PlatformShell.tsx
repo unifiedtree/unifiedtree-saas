@@ -123,6 +123,9 @@ const MODULE_ITEMS: NavItemDef[] = [
       { label: 'Generated Letters', path: '/hrms/letters/generated', icon: <FileText size={15} />, visibleForRoles: R_HR },
       { label: 'Letter Distributions', path: '/hrms/letters/distributions', icon: <FileText size={15} />, visibleForRoles: R_HR },
       { label: 'Employee Vault', path: '/hrms/documents', icon: <FileText size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.letters.template.read'] },
+      // "Documents to review" — the HR queue that lands every pending upload
+      // in one place instead of forcing them to open each employee separately.
+      { label: 'Docs to Review', path: '/hrms/documents/pending', icon: <FileText size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.document.verify'] },
     ],
   },
   {
