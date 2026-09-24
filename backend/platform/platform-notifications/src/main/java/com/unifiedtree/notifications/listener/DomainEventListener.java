@@ -15,6 +15,9 @@ import com.unifiedtree.notifications.events.AdvanceRequestSubmittedEvent;
 import com.unifiedtree.notifications.events.ExpenseClaimDecidedEvent;
 import com.unifiedtree.notifications.events.ExpenseClaimSubmittedEvent;
 import com.unifiedtree.notifications.events.OvertimeDecidedEvent;
+import com.unifiedtree.notifications.events.DocumentUploadedEvent;
+import com.unifiedtree.notifications.events.DocumentVerifiedEvent;
+import com.unifiedtree.notifications.events.DocumentRejectedEvent;
 import com.unifiedtree.notifications.events.WfhCancelledEvent;
 import com.unifiedtree.notifications.events.WfhDecidedEvent;
 import com.unifiedtree.notifications.events.WfhRequestSubmittedEvent;
@@ -632,6 +635,60 @@ public class DomainEventListener {
             service.create(e.tenantId(), e.employeeId(), type, title, body, data);
         } catch (Exception ex) {
             log.warn("Failed to publish OVERTIME decision notification for {}: {}", e.overtimeId(), ex.getMessage());
+        }
+    }
+
+    // ─── Document verification ─────────────────────────────────────────────
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onDocumentUploaded(DocumentUploadedEvent e) {
+        try {
+            UUID hr = firstEmployeeWithRole(e.tenantId(), HR_MANAGER);
+            if (hr == null) hr = firstEmployeeWithRole(e.tenantId(), SUPER_ADMIN);
+            if (hr == null) return;
+            String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
+            String body = "%s uploaded their %s. Please review.".formatted(who,
+                    firstOrElse(e.documentTypeName(), "document"));
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.DOCUMENT_UPLOADED.name());
+            data.put("documentId", e.documentId().toString());
+            data.put("employeeId", e.employeeId().toString());
+            data.put("route", "/documents/pending");
+            service.create(e.tenantId(), hr, AppNotificationType.DOCUMENT_UPLOADED,
+                    "New document to verify", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish DOCUMENT_UPLOADED notification for {}: {}", e.documentId(), ex.getMessage());
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onDocumentVerified(DocumentVerifiedEvent e) {
+        try {
+            String body = "Your %s has been verified by HR.".formatted(firstOrElse(e.documentTypeName(), "document"));
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.DOCUMENT_VERIFIED.name());
+            data.put("documentId", e.documentId().toString());
+            data.put("route", "/profile");
+            service.create(e.tenantId(), e.employeeId(), AppNotificationType.DOCUMENT_VERIFIED,
+                    "Document verified", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish DOCUMENT_VERIFIED notification for {}: {}", e.documentId(), ex.getMessage());
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onDocumentRejected(DocumentRejectedEvent e) {
+        try {
+            String body = "Your %s was rejected.%s Please re-upload.".formatted(
+                    firstOrElse(e.documentTypeName(), "document"),
+                    e.reason() != null && !e.reason().isBlank() ? " Reason: " + e.reason() : "");
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.DOCUMENT_REJECTED.name());
+            data.put("documentId", e.documentId().toString());
+            data.put("route", "/profile");
+            service.create(e.tenantId(), e.employeeId(), AppNotificationType.DOCUMENT_REJECTED,
+                    "Document needs re-upload", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish DOCUMENT_REJECTED notification for {}: {}", e.documentId(), ex.getMessage());
         }
     }
 

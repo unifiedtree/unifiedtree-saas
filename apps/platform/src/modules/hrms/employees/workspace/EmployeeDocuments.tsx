@@ -14,13 +14,20 @@
  */
 
 import React, { useState } from 'react'
+import { toast } from 'sonner'
 import { format } from 'date-fns'
-import { FileText, ExternalLink } from 'lucide-react'
+import { FileText, ExternalLink, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { useNavigate } from 'react-router-dom'
 import { TableCard, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
-import { useEmployeeDocuments, type DocumentCategory } from '../../api/useDocument'
+import {
+  useEmployeeDocuments,
+  useVerifyDocument,
+  useRejectDocument,
+  type DocumentCategory,
+  type EmployeeDocumentV2,
+} from '../../api/useDocument'
 import { SectionState, SubSection } from './shared'
 
 const CATEGORY_TONE: Record<string, PillTone> = {
@@ -56,6 +63,9 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
   // users who can read it. DocumentVault uses the same raw code.
   const canRead = usePermission('hrms.document.read')
   const canWrite = usePermission('hrms.document.write')
+  const canVerify = usePermission('hrms.document.verify' as unknown as Parameters<typeof usePermission>[0])
+  const verify = useVerifyDocument()
+  const reject = useRejectDocument()
 
   const { data, isLoading, error, refetch } = useEmployeeDocuments(
     employeeId, page, canRead, EMPLOYEE_DOCUMENTS_PAGE_SIZE,
@@ -103,16 +113,22 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
         })}>
           <table className="hr-table">
             <thead>
-              <tr><th>Title</th><th>Category</th><th>Issued</th><th>Expires</th><th /></tr>
+              <tr><th>Title</th><th>Category</th><th>Issued</th><th>Expires</th><th>Verification</th><th /></tr>
             </thead>
             <tbody>
-              {docs.map((d) => {
+              {(docs as EmployeeDocumentV2[]).map((d) => {
                 const exp = expiryState(d.expiryDate)
+                const status = d.verificationStatus || 'PENDING'
                 return (
                   <tr key={d.id}>
                     <td>
-                      <span className="text-text-primary font-medium">{d.title}</span>
+                      <span className="text-text-primary font-medium">{d.documentTypeName || d.title}</span>
                       {d.notes && <span className="block text-xs text-text-tertiary truncate max-w-xs">{d.notes}</span>}
+                      {d.rejectionReason && (
+                        <span className="mt-1 block rounded bg-red-50 px-2 py-1 text-[11px] text-red-700">
+                          Rejected: {d.rejectionReason}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <HrStatusPill tone={CATEGORY_TONE[d.category as DocumentCategory] ?? 'gray'}>
@@ -129,16 +145,70 @@ export function EmployeeDocuments({ employeeId }: { employeeId: string }) {
                       ) : '—'}
                     </td>
                     <td>
-                      {d.fileUrl ? (
-                        <a
-                          href={d.fileUrl}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#059669] transition-colors"
-                        >
-                          Open <ExternalLink size={11} />
-                        </a>
-                      ) : <span className="text-text-tertiary text-xs">No file</span>}
+                      {status === 'VERIFIED' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                          <CheckCircle2 size={11} /> Verified
+                        </span>
+                      ) : status === 'REJECTED' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                          <XCircle size={11} /> Rejected
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                          <Clock size={11} /> Pending
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        {d.fileUrl && (
+                          <a
+                            href={d.fileUrl}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#059669] transition-colors"
+                          >
+                            Open <ExternalLink size={11} />
+                          </a>
+                        )}
+                        {canVerify && status !== 'VERIFIED' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              verify.mutate(d.id, {
+                                onSuccess: () => toast.success('Verified'),
+                                onError: (err) => toast.error('Verify failed', { description: (err as Error).message }),
+                              })
+                            }}
+                            disabled={verify.isPending}
+                            className="rounded-md p-1 text-emerald-700 hover:bg-emerald-50"
+                            title="Mark verified"
+                          >
+                            <CheckCircle2 size={14} />
+                          </button>
+                        )}
+                        {canVerify && status !== 'REJECTED' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const reason = prompt('Reason for rejection?')
+                              if (!reason || reason.trim().length < 3) return
+                              reject.mutate(
+                                { id: d.id, reason: reason.trim() },
+                                {
+                                  onSuccess: () => toast.success('Rejected — employee has been notified'),
+                                  onError: (err) => toast.error('Reject failed', { description: (err as Error).message }),
+                                },
+                              )
+                            }}
+                            disabled={reject.isPending}
+                            className="rounded-md p-1 text-red-600 hover:bg-red-50"
+                            title="Reject"
+                          >
+                            <XCircle size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )

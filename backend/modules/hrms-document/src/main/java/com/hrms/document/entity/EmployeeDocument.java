@@ -49,4 +49,29 @@ public class EmployeeDocument extends BaseEntity {
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    // ── V143.7 typed documents + verification workflow ──────────────────────
+    @Column(name = "document_type_id")
+    private UUID documentTypeId;
+
+    @Column(name = "verification_status", length = 20, nullable = false)
+    private String verificationStatus = "PENDING";
+
+    @Column(name = "verified_by")
+    private UUID verifiedBy;
+
+    @Column(name = "verified_at")
+    private java.time.Instant verifiedAt;
+
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
+
+    @Column(name = "original_filename", length = 300)
+    private String originalFilename;
+
+    @Column(name = "file_size_bytes")
+    private Long fileSizeBytes;
+
+    @Column(name = "content_type", length = 100)
+    private String contentType;
 }

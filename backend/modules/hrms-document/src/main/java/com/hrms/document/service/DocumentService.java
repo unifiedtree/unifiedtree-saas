@@ -33,6 +33,19 @@ public class DocumentService {
      */
     @Transactional
     public DocumentResponse createDocument(UUID employeeId, UUID companyId, DocumentRequest request) {
+        return createDocument(employeeId, companyId, request, null, null, null, null, "PENDING");
+    }
+
+    /**
+     * V143.7 overload: called by DocumentUploadController with the typed
+     * upload metadata so document_type_id + verification_status + file metadata
+     * are persisted together.
+     */
+    @Transactional
+    public DocumentResponse createDocument(UUID employeeId, UUID companyId, DocumentRequest request,
+                                           UUID documentTypeId, String originalFilename,
+                                           Long fileSizeBytes, String contentType,
+                                           String verificationStatus) {
         UUID tenantId = TenantContext.getTenantId();
 
         EmployeeDocument document = new EmployeeDocument();
@@ -45,11 +58,44 @@ public class DocumentService {
         document.setIssuedDate(request.issuedDate());
         document.setExpiryDate(request.expiryDate());
         document.setNotes(request.notes());
+        document.setDocumentTypeId(documentTypeId);
+        document.setOriginalFilename(originalFilename);
+        document.setFileSizeBytes(fileSizeBytes);
+        document.setContentType(contentType);
+        document.setVerificationStatus(verificationStatus == null ? "PENDING" : verificationStatus);
         document = documentRepository.save(document);
 
-        log.info("Employee document stored id={} employee={} category={}",
-                document.getId(), employeeId, request.category());
+        log.info("Employee document stored id={} employee={} category={} typeId={} status={}",
+                document.getId(), employeeId, request.category(), documentTypeId, document.getVerificationStatus());
         return toResponse(document);
+    }
+
+    /** Verify a pending document (HR/admin action). Idempotent. */
+    @Transactional
+    public DocumentResponse verifyDocument(UUID documentId, UUID verifierEmployeeId) {
+        EmployeeDocument doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("EmployeeDocument", documentId));
+        doc.setVerificationStatus("VERIFIED");
+        doc.setVerifiedBy(verifierEmployeeId);
+        doc.setVerifiedAt(java.time.Instant.now());
+        doc.setRejectionReason(null);
+        doc = documentRepository.save(doc);
+        log.info("Employee document verified id={} employee={} verifier={}", documentId, doc.getEmployeeId(), verifierEmployeeId);
+        return toResponse(doc);
+    }
+
+    /** Reject a pending document with a required reason. */
+    @Transactional
+    public DocumentResponse rejectDocument(UUID documentId, UUID verifierEmployeeId, String reason) {
+        EmployeeDocument doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("EmployeeDocument", documentId));
+        doc.setVerificationStatus("REJECTED");
+        doc.setVerifiedBy(verifierEmployeeId);
+        doc.setVerifiedAt(java.time.Instant.now());
+        doc.setRejectionReason(reason);
+        doc = documentRepository.save(doc);
+        log.info("Employee document rejected id={} employee={} verifier={} reason={}", documentId, doc.getEmployeeId(), verifierEmployeeId, reason);
+        return toResponse(doc);
     }
 
     @Transactional(readOnly = true)
@@ -82,6 +128,9 @@ public class DocumentService {
         return new DocumentResponse(
                 d.getId(), d.getEmployeeId(), null, null, d.getCompanyId(),
                 d.getTitle(), d.getCategory(), d.getFileUrl(),
-                d.getIssuedDate(), d.getExpiryDate(), d.getNotes(), d.getCreatedAt());
+                d.getIssuedDate(), d.getExpiryDate(), d.getNotes(), d.getCreatedAt(),
+                d.getDocumentTypeId(), null, null,
+                d.getVerificationStatus(), d.getVerifiedBy(), d.getVerifiedAt(),
+                d.getRejectionReason(), d.getOriginalFilename(), d.getFileSizeBytes(), d.getContentType());
     }
 }

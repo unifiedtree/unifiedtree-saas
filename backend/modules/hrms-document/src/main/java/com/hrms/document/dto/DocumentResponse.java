@@ -18,5 +18,16 @@ public record DocumentResponse(
         LocalDate issuedDate,
         LocalDate expiryDate,
         String notes,
-        Instant createdAt
+        Instant createdAt,
+        // ── V143.7 typed + verification fields (nullable for legacy rows) ──
+        UUID documentTypeId,
+        String documentTypeCode,
+        String documentTypeName,
+        String verificationStatus,
+        UUID verifiedBy,
+        Instant verifiedAt,
+        String rejectionReason,
+        String originalFilename,
+        Long fileSizeBytes,
+        String contentType
 ) {}

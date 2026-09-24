@@ -7,8 +7,9 @@ import { getAccessToken } from '@unifiedtree/sdk'
 import { useAuthStore } from '@/core/auth/authStore'
 import { apiJson, API_BASE_URL } from '@/core/api/client'
 import { HrPageHeader, HrButton, HrStatusPill } from '@/shared/components/hr'
+import { DocumentTypesTab } from './SettingsDocumentTypes'
 
-type TabKey = 'profile' | 'branding' | 'security' | 'notifications' | 'billing' | 'integrations' | 'danger'
+type TabKey = 'profile' | 'branding' | 'security' | 'notifications' | 'billing' | 'integrations' | 'documents' | 'danger'
 
 // The settings *navigation* now lives in the app shell (workspace-scoped);
 // this page just renders the section named in the URL (/settings/:tab).
@@ -19,6 +20,7 @@ const TAB_META: Record<TabKey, { label: string; desc: string }> = {
   notifications: { label: 'Notifications',  desc: 'Email and in-app notification preferences.' },
   billing:       { label: 'Billing & Plan', desc: 'Your subscription, plan and invoices.' },
   integrations:  { label: 'Integrations',   desc: 'Connect external tools and services.' },
+  documents:     { label: 'Document Types', desc: 'Which documents employees must upload, and the rules for each.' },
   danger:        { label: 'Danger Zone',    desc: 'Irreversible, workspace-wide actions.' },
 }
 const VALID_TABS = Object.keys(TAB_META) as TabKey[]
@@ -801,6 +803,7 @@ export const Settings: React.FC<{ tab?: TabKey }> = ({ tab: tabProp }) => {
     notifications: <NotificationsTab />,
     billing: <BillingTab />,
     integrations: <IntegrationsTab />,
+    documents: <DocumentTypesTab />,
     danger: <DangerTab />,
   }
 
