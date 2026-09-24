@@ -382,6 +382,11 @@ public class AttendanceController {
 
         List<Employee> employees = scopedEmployees(jwt, departmentId);
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
+        // Per-day roster: exclude employees who joined after the day, or whose
+        // weekly off falls on that day. Same rule the KPI tiles use, so tile
+        // and chart never disagree.
+        java.util.Map<UUID, LocalDate> trendJoins = attendanceService.joiningDatesFor(employeeIds);
+        java.util.Map<UUID, java.util.Set<Integer>> trendOffs = attendanceService.weeklyOffSetsFor(employeeIds);
 
         List<AttendanceRecord> records = employeeIds.isEmpty()
                 ? List.of()
@@ -408,7 +413,17 @@ public class AttendanceController {
         for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
             List<AttendanceRecord> dayRecords = recordsByDate.getOrDefault(day, List.of());
             Set<UUID> onLeaveIds = leaveByDate.getOrDefault(day, Set.of());
-            series.add(dailyCounts(day, employees.size(), dayRecords, onLeaveIds));
+            int dayDow = day.getDayOfWeek().getValue();
+            LocalDate dayFinal = day;
+            int rosterForDay = (int) employees.stream()
+                    .filter(emp -> {
+                        LocalDate joined = trendJoins.get(emp.getId());
+                        if (joined != null && joined.isAfter(dayFinal)) return false;
+                        java.util.Set<Integer> off = trendOffs.get(emp.getId());
+                        return off == null || !off.contains(dayDow);
+                    })
+                    .count();
+            series.add(dailyCounts(day, rosterForDay, dayRecords, onLeaveIds));
         }
         return ResponseEntity.ok(series);
     }

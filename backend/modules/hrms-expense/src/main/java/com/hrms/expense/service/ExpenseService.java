@@ -37,6 +37,8 @@ public class ExpenseService {
     private final ExpenseClaimRepository claimRepository;
     private final ExpenseItemRepository itemRepository;
     private final com.hrms.expense.repository.ExpensePolicyRepository policyRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     public ExpenseService(ExpenseClaimRepository claimRepository,
                           ExpenseItemRepository itemRepository,
@@ -44,6 +46,12 @@ public class ExpenseService {
         this.claimRepository = claimRepository;
         this.itemRepository = itemRepository;
         this.policyRepository = policyRepository;
+    }
+
+    private void publishSafely(Object event) {
+        if (eventPublisher == null) return;
+        try { eventPublisher.publishEvent(event); }
+        catch (Exception ex) { log.warn("Failed to publish {}: {}", event.getClass().getSimpleName(), ex.getMessage()); }
     }
 
 
@@ -120,6 +128,8 @@ public class ExpenseService {
         itemRepository.saveAll(items);
 
         log.info("Expense claim submitted id={} employee={} total={}", claimId, employeeId, total);
+        publishSafely(new com.unifiedtree.notifications.events.ExpenseClaimSubmittedEvent(
+                claimId, employeeId, approverId, tenantId, claim.getTitle(), total, claim.getCurrency()));
         return toResponse(claim, items);
     }
 
@@ -178,6 +188,9 @@ public class ExpenseService {
         claim.setApproverComment(decision.comment());
         claim = claimRepository.save(claim);
         log.info("Expense claim {} decided status={} by approver={}", claimId, claim.getStatus(), approverId);
+        publishSafely(new com.unifiedtree.notifications.events.ExpenseClaimDecidedEvent(
+                claimId, claim.getEmployeeId(), claim.getTenantId(), decision.approved(),
+                claim.getTitle(), claim.getTotalAmount(), claim.getCurrency(), decision.comment()));
         return toResponse(claim, itemRepository.findByClaimIdOrderByExpenseDateAsc(claimId));
     }
 

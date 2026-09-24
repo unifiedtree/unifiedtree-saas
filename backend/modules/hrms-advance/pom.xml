@@ -24,6 +24,12 @@
             <artifactId>hrms-core</artifactId>
         </dependency>
 
+        <!-- Notification events (in-process fanout to notif.notifications) -->
+        <dependency>
+            <groupId>com.unifiedtree</groupId>
+            <artifactId>platform-notifications</artifactId>
+        </dependency>
+
         <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

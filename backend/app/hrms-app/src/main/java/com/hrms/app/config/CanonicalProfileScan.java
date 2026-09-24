@@ -143,6 +143,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "com.hrms.api.platform.maintenance",
         "com.hrms.api.modulereq",
         "com.hrms.api.access",
+        "com.hrms.api.me",
         "com.hrms.api.probation",
         "com.hrms.api.payroll",
         "com.hrms.api.expense",

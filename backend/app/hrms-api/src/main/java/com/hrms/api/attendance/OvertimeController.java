@@ -19,6 +19,8 @@ public class OvertimeController {
  private final TeamEmployeeScope scope;
  private final JdbcTemplate jdbc;
  private final NamedParameterJdbcTemplate named;
+ @org.springframework.beans.factory.annotation.Autowired(required=false)
+ private org.springframework.context.ApplicationEventPublisher eventPublisher;
  public OvertimeController(TeamEmployeeScope scope,JdbcTemplate jdbc,NamedParameterJdbcTemplate named) {this.scope=scope;this.jdbc=jdbc;this.named=named;}
  public record Decision(@Size(max=1000) String note) {}
  @GetMapping
@@ -67,6 +69,14 @@ public class OvertimeController {
    VALUES(?,?,?,?,?,?,?) ON CONFLICT(record_id) DO UPDATE SET status=excluded.status,reviewed_minutes=excluded.reviewed_minutes,
     decided_by=excluded.decided_by,note=excluded.note,decided_at=now()
    """,tenant,id,status,minutes,actor,input.note(),rows.getFirst().get("attendance_date"));
+  if (eventPublisher != null) {
+   try {
+    java.sql.Date d = (java.sql.Date) rows.getFirst().get("attendance_date");
+    eventPublisher.publishEvent(new com.unifiedtree.notifications.events.OvertimeDecidedEvent(
+        id, employee, tenant, "APPROVED".equals(status),
+        d != null ? d.toLocalDate() : null, minutes, input.note()));
+   } catch (Exception ex) { /* best-effort */ }
+  }
   return Map.of("status",status);
  }
 }

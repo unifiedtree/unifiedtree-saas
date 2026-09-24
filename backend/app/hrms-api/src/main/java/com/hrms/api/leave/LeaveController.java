@@ -121,6 +121,12 @@ public class LeaveController {
                         "APPROVER_INVALID");
             }
         }
+        // Redirect through any active delegation the resolved approver has set up:
+        // "I'm on leave, my approvals go to Alice". Uses today rather than the
+        // leave's start date so a Monday-approval delegation still covers a
+        // request submitted today for next month.
+        approverId = approverFallbackResolver.redirectIfDelegated(
+                approverId, java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(leaveService.applyLeave(
                         employeeId,

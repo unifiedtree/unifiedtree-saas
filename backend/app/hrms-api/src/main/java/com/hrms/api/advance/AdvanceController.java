@@ -82,6 +82,9 @@ public class AdvanceController {
             }
             approverId = fallback;
         }
+        // Redirect through any active delegation the approver has set up.
+        approverId = approverFallback.redirectIfDelegated(
+                approverId, java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(enrichOne(advanceService.requestAdvance(employeeId, companyId, request, approverId)));
     }

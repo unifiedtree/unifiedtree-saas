@@ -38,6 +38,40 @@ public class ApproverFallbackResolver {
         return Optional.ofNullable(firstEmployeeWithRole(tenantId, SUPER_ADMIN));
     }
 
+    /**
+     * Redirect through any active delegation. A submit for approver X on the
+     * given date returns X's active delegate if one exists — the "I'm on
+     * leave, my approvals go to Alice" flow. Chains are followed but capped at
+     * three hops (an operator can accidentally build a cycle; three is enough
+     * for realistic cover-for-the-cover cases and stops runaway lookups).
+     * Falls back to the original id on any error.
+     */
+    public UUID redirectIfDelegated(UUID approverEmployeeId, java.time.LocalDate onDate) {
+        if (approverEmployeeId == null || onDate == null) return approverEmployeeId;
+        UUID current = approverEmployeeId;
+        java.util.Set<UUID> visited = new java.util.HashSet<>();
+        for (int hop = 0; hop < 3; hop++) {
+            if (!visited.add(current)) return current;
+            UUID next;
+            try {
+                next = jdbc.query("""
+                        SELECT delegate_id
+                          FROM platform.approver_delegations
+                         WHERE delegator_id = ?
+                           AND from_date <= ? AND to_date >= ?
+                         ORDER BY created_at DESC
+                         LIMIT 1
+                        """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null,
+                        current, java.sql.Date.valueOf(onDate), java.sql.Date.valueOf(onDate));
+            } catch (Exception ex) {
+                return current;
+            }
+            if (next == null) return current;
+            current = next;
+        }
+        return current;
+    }
+
     private UUID firstEmployeeWithRole(UUID tenantId, UUID roleId) {
         return jdbc.query("""
             SELECT uc.employee_id

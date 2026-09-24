@@ -42,6 +42,8 @@ import java.util.stream.Collectors;
 public class ExpenseController {
 
     private final ExpenseService expenseService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrms.api.leave.ApproverFallbackResolver delegationResolver;
     private final ExpensePolicyService policyService;
     private final EmployeeRepository employeeRepository;
 
@@ -79,6 +81,11 @@ public class ExpenseController {
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
         UUID companyId = request.companyId() != null ? request.companyId() : employee.getCompanyId();
         UUID approverId = employee.getManagerId();
+        // Redirect through any active delegation the approver has set up.
+        if (approverId != null && delegationResolver != null) {
+            approverId = delegationResolver.redirectIfDelegated(
+                    approverId, java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(enrichOne(expenseService.submitClaim(employeeId, companyId, request, approverId)));
     }

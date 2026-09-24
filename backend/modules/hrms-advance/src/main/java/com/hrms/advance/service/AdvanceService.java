@@ -31,6 +31,14 @@ public class AdvanceService {
 
     private final AdvanceRequestRepository advanceRepository;
     private final JdbcTemplate jdbc;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
+    private void publishSafely(Object event) {
+        if (eventPublisher == null) return;
+        try { eventPublisher.publishEvent(event); }
+        catch (Exception ex) { log.warn("Failed to publish {}: {}", event.getClass().getSimpleName(), ex.getMessage()); }
+    }
 
     public AdvanceService(AdvanceRequestRepository advanceRepository, JdbcTemplate jdbc) {
         this.advanceRepository = advanceRepository;
@@ -68,6 +76,8 @@ public class AdvanceService {
 
         log.info("Advance request raised id={} employee={} amount={} months={}",
                 advance.getId(), employeeId, request.amount(), request.repaymentMonths());
+        publishSafely(new com.unifiedtree.notifications.events.AdvanceRequestSubmittedEvent(
+                advance.getId(), employeeId, approverId, tenantId, request.amount()));
         return toResponse(advance);
     }
 
@@ -123,6 +133,9 @@ public class AdvanceService {
         advance.setApproverComment(decision.comment());
         advance = advanceRepository.save(advance);
         log.info("Advance request {} decided status={} by approver={}", requestId, advance.getStatus(), approverId);
+        publishSafely(new com.unifiedtree.notifications.events.AdvanceRequestDecidedEvent(
+                requestId, advance.getEmployeeId(), advance.getTenantId(), decision.approved(),
+                advance.getAmount(), decision.comment()));
         return toResponse(advance);
     }
 

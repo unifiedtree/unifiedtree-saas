@@ -10,6 +10,11 @@ import com.unifiedtree.notifications.events.LeaveRequestCancelledEvent;
 import com.unifiedtree.notifications.events.LeaveRequestSubmittedEvent;
 import com.unifiedtree.notifications.events.ShiftChangeDecidedEvent;
 import com.unifiedtree.notifications.events.ShiftChangeSubmittedEvent;
+import com.unifiedtree.notifications.events.AdvanceRequestDecidedEvent;
+import com.unifiedtree.notifications.events.AdvanceRequestSubmittedEvent;
+import com.unifiedtree.notifications.events.ExpenseClaimDecidedEvent;
+import com.unifiedtree.notifications.events.ExpenseClaimSubmittedEvent;
+import com.unifiedtree.notifications.events.OvertimeDecidedEvent;
 import com.unifiedtree.notifications.events.WfhCancelledEvent;
 import com.unifiedtree.notifications.events.WfhDecidedEvent;
 import com.unifiedtree.notifications.events.WfhRequestSubmittedEvent;
@@ -524,5 +529,119 @@ public class DomainEventListener {
 
     private UUID firstEmployeeWithRole(UUID tenantId, UUID roleId) {
         return lookup.firstEmployeeWithRole(tenantId, roleId);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Expense / advance / overtime — approver + requester notifications.
+    // Same fallbackExecution=true pattern as leave/WFH so the handler runs
+    // even without an active transaction synchronization at publish time.
+    // ────────────────────────────────────────────────────────────────────────
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onExpenseSubmitted(ExpenseClaimSubmittedEvent e) {
+        if (e.approverId() == null) return;
+        try {
+            String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
+            String body = "%s submitted an expense claim%s: %s.".formatted(who,
+                    e.amount() != null ? " for " + money(e.currency(), e.amount()) : "",
+                    e.title() != null ? e.title() : "claim");
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.EXPENSE_SUBMITTED.name());
+            data.put("expenseClaimId", e.claimId().toString());
+            data.put("route", ROUTE_APPROVALS);
+            service.create(e.tenantId(), e.approverId(), AppNotificationType.EXPENSE_SUBMITTED,
+                    "New expense claim to review", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish EXPENSE_SUBMITTED notification for {}: {}", e.claimId(), ex.getMessage());
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onExpenseDecided(ExpenseClaimDecidedEvent e) {
+        try {
+            AppNotificationType type = e.approved() ? AppNotificationType.EXPENSE_APPROVED : AppNotificationType.EXPENSE_REJECTED;
+            String title = e.approved() ? "Expense claim approved" : "Expense claim rejected";
+            String what = e.title() != null ? e.title() : "your expense claim";
+            String amt = e.amount() != null ? " (" + money(e.currency(), e.amount()) + ")" : "";
+            String body = e.approved()
+                    ? "Your claim %s%s was approved.".formatted(what, amt)
+                    : "Your claim %s%s was rejected.%s".formatted(what, amt,
+                            e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", type.name());
+            data.put("expenseClaimId", e.claimId().toString());
+            data.put("route", "/my-claims");
+            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+            markSubmissionReadSafely(e.claimId());
+        } catch (Exception ex) {
+            log.warn("Failed to publish EXPENSE decision notification for {}: {}", e.claimId(), ex.getMessage());
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onAdvanceSubmitted(AdvanceRequestSubmittedEvent e) {
+        if (e.approverId() == null) return;
+        try {
+            String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
+            String body = "%s requested a salary advance of %s.".formatted(who, money("INR", e.amount()));
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.ADVANCE_SUBMITTED.name());
+            data.put("advanceRequestId", e.advanceId().toString());
+            data.put("route", ROUTE_APPROVALS);
+            service.create(e.tenantId(), e.approverId(), AppNotificationType.ADVANCE_SUBMITTED,
+                    "New advance request to review", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish ADVANCE_SUBMITTED notification for {}: {}", e.advanceId(), ex.getMessage());
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onAdvanceDecided(AdvanceRequestDecidedEvent e) {
+        try {
+            AppNotificationType type = e.approved() ? AppNotificationType.ADVANCE_APPROVED : AppNotificationType.ADVANCE_REJECTED;
+            String title = e.approved() ? "Advance request approved" : "Advance request rejected";
+            String body = e.approved()
+                    ? "Your advance request of %s was approved.".formatted(money("INR", e.amount()))
+                    : "Your advance request of %s was rejected.%s".formatted(money("INR", e.amount()),
+                            e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", type.name());
+            data.put("advanceRequestId", e.advanceId().toString());
+            data.put("route", "/my-advances");
+            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+            markSubmissionReadSafely(e.advanceId());
+        } catch (Exception ex) {
+            log.warn("Failed to publish ADVANCE decision notification for {}: {}", e.advanceId(), ex.getMessage());
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onOvertimeDecided(OvertimeDecidedEvent e) {
+        try {
+            AppNotificationType type = e.approved() ? AppNotificationType.OVERTIME_APPROVED : AppNotificationType.OVERTIME_REJECTED;
+            String title = e.approved() ? "Overtime approved" : "Overtime rejected";
+            String hours = "%.1fh".formatted(e.minutes() / 60.0);
+            String body = e.approved()
+                    ? "Your overtime of %s on %s was approved. Recorded, not paid.".formatted(hours, fmt(e.onDate()))
+                    : "Your overtime of %s on %s was rejected.%s".formatted(hours, fmt(e.onDate()),
+                            e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", type.name());
+            data.put("overtimeId", e.overtimeId().toString());
+            data.put("route", "/attendance");
+            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish OVERTIME decision notification for {}: {}", e.overtimeId(), ex.getMessage());
+        }
+    }
+
+    private static String money(String currency, java.math.BigDecimal amount) {
+        String symbol = currency == null || currency.isBlank() || "INR".equalsIgnoreCase(currency) ? "₹"
+                : currency + " ";
+        return symbol + (amount != null ? amount.stripTrailingZeros().toPlainString() : "0");
+    }
+
+    private static String firstOrElse(String v, String fallback) {
+        return v != null && !v.isBlank() ? v : fallback;
     }
 }
