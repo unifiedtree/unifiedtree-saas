@@ -96,17 +96,33 @@ public final class ShiftDtos {
 
     // ── Shift-change requests (employee → HR approve) ────────────────────────
 
-    /** Employee submits a request to move to {@code requestedShiftPolicyId}. */
+    /**
+     * Employee submits a request to move to {@code requestedShiftPolicyId} from
+     * {@code effectiveDate} (today or later), with a reason of 10–500
+     * characters. {@code effectiveDate} is optional only because app builds
+     * from before the date field omit it; such a request starts on the day it
+     * is approved.
+     */
     public record CreateShiftChangeRequest(
             UUID requestedShiftPolicyId,
-            String reason) {}
+            String reason,
+            LocalDate effectiveDate) {}
 
-    /** HR/manager decides a request. */
+    /**
+     * HR/manager decides a request. An approved request starts on the
+     * employee's date; a request still pending after that date has expired
+     * and cannot be approved.
+     */
     public record ShiftChangeDecisionRequest(
             boolean approved,
             String comment) {}
 
-    /** A shift-change request row (employeeName resolved client-side, like leave/WFH). */
+    /**
+     * A shift-change request row (employeeName resolved client-side, like
+     * leave/WFH). {@code requestedEffectiveDate} is what the employee asked
+     * for (null on old requests); {@code appliedEffectiveDate} is when the new
+     * shift actually starts (set on approval).
+     */
     public record ShiftChangeRequestResponse(
             UUID id,
             UUID employeeId,
@@ -119,5 +135,7 @@ public final class ShiftDtos {
             UUID approverId,
             String decisionNote,
             Instant decidedAt,
-            Instant createdAt) {}
+            Instant createdAt,
+            LocalDate requestedEffectiveDate,
+            LocalDate appliedEffectiveDate) {}
 }

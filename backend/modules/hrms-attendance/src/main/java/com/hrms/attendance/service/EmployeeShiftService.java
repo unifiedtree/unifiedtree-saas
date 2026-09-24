@@ -224,6 +224,28 @@ public class EmployeeShiftService {
         return toEmployeeResponse(employeeId, inForce, policy, upcoming, upcomingPolicy);
     }
 
+    /** The shift policy in force for {@code employeeId} on {@code date}, or null when none is. */
+    @Transactional(readOnly = true)
+    public UUID shiftPolicyIdOn(UUID employeeId, LocalDate date) {
+        return assignmentRepo.findEffectiveOn(employeeId, date).stream()
+                .findFirst()
+                .map(EmployeeShiftAssignment::getShiftPolicyId)
+                .orElse(null);
+    }
+
+    /**
+     * Start date of the first assignment beginning after {@code date}, or null.
+     * {@link #assignShift} cannot place a new assignment before one of these
+     * (SHIFT_DATE_INVALID), so callers that take a date from a person check
+     * this first and can say which date is blocking.
+     */
+    @Transactional(readOnly = true)
+    public LocalDate nextAssignmentStartAfter(UUID employeeId, LocalDate date) {
+        return assignmentRepo.findFirstByEmployeeIdAndEffectiveFromAfterOrderByEffectiveFromAsc(employeeId, date)
+                .map(EmployeeShiftAssignment::getEffectiveFrom)
+                .orElse(null);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /**

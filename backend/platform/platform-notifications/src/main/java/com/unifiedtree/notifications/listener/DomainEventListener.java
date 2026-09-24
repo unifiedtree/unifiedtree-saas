@@ -356,8 +356,10 @@ public class DomainEventListener {
             }
             String employeeName = resolveEmployeeName(e.employeeId(), e.tenantId());
             String shift = e.requestedShiftName() != null ? e.requestedShiftName() : "a different shift";
-            String body = "%s requested to move to the %s shift.".formatted(
-                    employeeName != null ? employeeName : "An employee", shift);
+            String who = employeeName != null ? employeeName : "An employee";
+            String body = e.effectiveDate() != null
+                    ? "%s requested to move to the %s shift from %s.".formatted(who, shift, fmt(e.effectiveDate()))
+                    : "%s requested to move to the %s shift.".formatted(who, shift);
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.SHIFT_CHANGE_SUBMITTED.name());
             data.put("shiftChangeRequestId", e.requestId().toString());
@@ -384,10 +386,15 @@ public class DomainEventListener {
                     : AppNotificationType.SHIFT_CHANGE_REJECTED;
             String title = e.approved() ? "Shift change approved" : "Shift change rejected";
             String shift = e.requestedShiftName() != null ? e.requestedShiftName() : "the requested shift";
-            String body = e.approved()
-                    ? "Your shift has been changed to %s.".formatted(shift)
-                    : "Your request to move to %s was rejected.%s".formatted(shift,
-                            e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
+            String body;
+            if (!e.approved()) {
+                body = "Your request to move to %s was rejected.%s".formatted(shift,
+                        e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
+            } else if (e.effectiveDate() == null) {
+                body = "Your shift has been changed to %s.".formatted(shift);
+            } else {
+                body = "Your shift changes to %s from %s.".formatted(shift, fmt(e.effectiveDate()));
+            }
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("shiftChangeRequestId", e.requestId().toString());

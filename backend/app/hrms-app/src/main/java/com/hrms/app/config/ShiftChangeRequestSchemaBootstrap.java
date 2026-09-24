@@ -50,9 +50,14 @@ public class ShiftChangeRequestSchemaBootstrap {
                 decision_note             TEXT,
                 decided_at                TIMESTAMPTZ,
                 created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+                updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+                requested_effective_date  DATE,
+                applied_effective_date    DATE
             )
             """, "create shift_change_requests");
+        // Existing tables get the two date columns (and the one-pending index)
+        // from V143 — the runtime role does not own the table, so it cannot
+        // ALTER it here.
         exec("CREATE INDEX IF NOT EXISTS idx_scr_tenant_status "
                 + "ON attendance.shift_change_requests (tenant_id, status)", "idx_scr_tenant_status");
         exec("CREATE INDEX IF NOT EXISTS idx_scr_employee "
