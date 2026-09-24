@@ -21,7 +21,8 @@ import {
  * take effect immediately — every employee's "My documents" section refetches
  * on next open.
  */
-export const DocumentTypesTab: React.FC = () => {
+/** `bare`: drop the intro card (a settings section supplies the intro). */
+export const DocumentTypesTab: React.FC<{ bare?: boolean }> = ({ bare }) => {
   const canWrite = usePermission('hrms.document.type.write' as unknown as keyof typeof P)
   const types = useDocumentTypes(/* includeInactive */ true)
   const [editing, setEditing] = useState<Partial<DocumentType> | null>(null)
@@ -29,13 +30,13 @@ export const DocumentTypesTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="ut-card ut-card-sm p-4">
+      {!bare && <div className="ut-card ut-card-sm p-4">
         <p className="text-xs text-text-secondary">
           These are the documents an employee sees on their profile. Mark a type
           as Required to make it a mandatory upload for every employee. HR
           verifies each upload after it lands.
         </p>
-      </div>
+      </div>}
 
       {canWrite && !adding && !editing && (
         <button

@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { toast } from 'sonner'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { Camera, Loader2, Mail, Phone, MapPin, UserX } from 'lucide-react'
 import { usePermission, P } from '@unifiedtree/sdk'
-import { HrPageHeader, HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { DesignFrame } from '@/design/dc/DesignFrame'
+import { SettingsPage, SettingsSection, SettingsGrid, SettingsInput, SettingsValue, SettingsToggleRow, SettingsNote, useSettingsToast, type SettingsNavItem } from '@/design/settings/SettingsKit'
 import { SkeletonBlock } from '@/shared/components/SkeletonCard'
 import { EmptyState } from '@/shared/components/EmptyState'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
@@ -99,6 +100,13 @@ export const Profile: React.FC = () => {
   const update = useUpdateCurrentUser()
   const upload = useUploadAvatar()
   const { fullName, initials } = useDisplayName()
+  // The design's dark toasts, with the sonner-style calls this page already makes.
+  const { toast: note, show, dismiss } = useSettingsToast()
+  const toast = {
+    success: (t: string) => show('ok', t),
+    error: (t: string, o?: { description?: string }) => show('error', t, o?.description),
+    info: (t: string, o?: { description?: string }) => show('ok', t, o?.description),
+  }
 
   // Employment details come from the user's linked employee row. Accounts with
   // no employee record (platform admins) skip the fetch and get an empty state
@@ -216,301 +224,113 @@ export const Profile: React.FC = () => {
       draft.pushEnabled !== (user.notificationPreferences?.pushEnabled ?? true)
     )
   })()
+  const changeCount = !user || !draft ? 0 : [
+    draft.displayName.trim() !== (user.displayName ?? [user.firstName, user.lastName].filter(Boolean).join(' ')).trim(),
+    (draft.phone || '').trim() !== (user.phone ?? '').trim(),
+    draft.emailEnabled !== (user.notificationPreferences?.emailEnabled ?? true),
+    draft.pushEnabled !== (user.notificationPreferences?.pushEnabled ?? true),
+  ].filter(Boolean).length
+  const nameError = draft && !draft.displayName.trim() ? 'Enter the name to show' : undefined
+  const phoneError = draft && draft.phone.trim() && !/^\+?[\d\s()-]{7,20}$/.test(draft.phone.trim()) ? 'Enter a phone number (digits, spaces, + and - only)' : undefined
+  const errorCount = (nameError ? 1 : 0) + (phoneError ? 1 : 0)
+  const discard = () => user && setDraft({
+    displayName: user.displayName ?? [user.firstName, user.lastName].filter(Boolean).join(' '),
+    phone: user.phone ?? '',
+    emailEnabled: user.notificationPreferences?.emailEnabled ?? true,
+    pushEnabled: user.notificationPreferences?.pushEnabled ?? true,
+  })
+
+  const nav: SettingsNavItem[] = [
+    { key: 'me', label: 'Photo & contact', state: 'none' },
+    { key: 'employment', label: 'Employment', state: 'none' },
+    { key: 'details', label: 'Personal details', state: 'none', errors: errorCount },
+    { key: 'delegation', label: 'Approval delegation', state: 'none' },
+    { key: 'documents', label: 'My documents', state: 'none' },
+    { key: 'notifications', label: 'Notifications', state: draft?.emailEnabled || draft?.pushEnabled ? 'on' : 'off' },
+  ]
+  const joined = emp?.dateOfJoining ? format(new Date(`${emp.dateOfJoining}T00:00:00`), 'd MMM yyyy') : undefined
 
   return (
-    <div className="animate-fade-in mx-auto max-w-4xl p-6 sm:p-8">
-      <HrPageHeader
-        crumb="My Account"
-        title="Profile"
-        subtitle="Your personal details, avatar and notification preferences."
-      />
-
-      <div className="ut-card ut-card-lg p-6 sm:p-8">
-        {isLoading && !user ? (
-          <ProfileSkeleton />
-        ) : isError || !user ? (
-          <div className="rounded-xl border border-[#FCA5A5] bg-[#FEF2F2] p-5 text-sm text-[#B91C1C]">
-            <p className="font-semibold">Couldn't load your profile</p>
-            <p className="mt-1">This is usually a transient network problem.</p>
-            <button
-              onClick={() => refetch()}
-              className="mt-3 rounded-lg border border-[#FCA5A5] px-3 py-1.5 text-xs font-medium hover:bg-[#FEE2E2]"
-            >
-              Try again
-            </button>
-          </div>
-        ) : (
+    <DesignFrame>
+      <SettingsPage
+        crumb="My Account" title="Profile" subtitle="Your personal details, avatar and notification preferences."
+        nav={nav} access="edit" status={isLoading && !user ? 'loading' : isError || !user ? 'error' : 'live'} onRetry={() => { void refetch() }} entity="your profile"
+        dirty={dirty} changeCount={changeCount} errorCount={errorCount}
+        onGoToError={() => document.getElementById('st-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        saving={update.isPending} onSave={() => { if (!errorCount) onSave() }} onDiscard={discard} toast={note} onDismissToast={dismiss}>
+        {user && (
           <>
             {/* Hidden file input drives the "Change photo" button. */}
-            <input
-              ref={inputRef}
-              type="file"
-              accept={ACCEPTED_TYPES}
-              className="hidden"
-              onChange={(e) => onFilePicked(e.target.files?.[0])}
-            />
+            <input ref={inputRef} type="file" accept={ACCEPTED_TYPES} className="hidden" onChange={(e) => onFilePicked(e.target.files?.[0])} />
 
-            {/* ── Profile Grid ────────────────────────────────────────────────── */}
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-              {/* Left Col: Avatar & Info */}
-              <div className="md:col-span-1 rounded-2xl border border-border-default bg-bg-base p-6 text-center shadow-sm">
-                <div className="relative mx-auto mb-4 h-24 w-24">
-                  <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#059669] to-[#047857]">
-                    {user.avatarUrl ? (
-                      <img
-                        src={user.avatarUrl}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                      />
-                    ) : (
-                      <span className="text-2xl font-bold text-white select-none">{initials}</span>
-                    )}
+            <SettingsSection id="me" icon="userCheck" title={fullName} summary={[emp?.jobTitle, user.email].filter(Boolean).join(' · ')}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20 }}>
+                <div style={{ position: 'relative', width: 88, height: 88, flex: '0 0 auto' }}>
+                  <div style={{ width: '100%', height: '100%', borderRadius: 999, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#059669,#047857)' }}>
+                    {user.avatarUrl
+                      ? <img src={user.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                      : <span style={{ fontSize: 26, fontWeight: 700, color: '#fff', userSelect: 'none' }}>{initials}</span>}
                   </div>
-                  {upload.isPending && (
-                    <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm">
-                      <Loader2 size={18} className="animate-spin text-white" />
-                    </div>
-                  )}
+                  {upload.isPending && <div style={{ position: 'absolute', inset: 0, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.4)' }}><Loader2 size={18} className="animate-spin text-white" /></div>}
                 </div>
-                <h3 className="text-lg font-bold text-text-primary">{fullName}</h3>
-                {emp?.jobTitle && <p className="text-sm text-text-secondary mb-3">{emp.jobTitle}</p>}
-
-                {statusPill && <HrStatusPill tone={statusPill.tone}>{statusPill.label}</HrStatusPill>}
-
-                <div className="mt-5 border-t border-border-default pt-4 text-left text-sm text-text-secondary space-y-3">
-                  <div className="flex items-center gap-2 break-all">
-                    <Mail size={14} className="shrink-0 text-text-tertiary" /> {user.email}
-                  </div>
-                  {user.phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone size={14} className="shrink-0 text-text-tertiary" /> {user.phone}
-                    </div>
-                  )}
-                  {emp?.workLocation && (
-                    <div className="flex items-center gap-2">
-                      <MapPin size={14} className="shrink-0 text-text-tertiary" /> {emp.workLocation}
-                    </div>
-                  )}
+                <div style={{ flex: '1 1 220px', minWidth: 0, display: 'grid', gap: 8, fontSize: 13.5, color: '#475569' }}>
+                  {statusPill && <span><HrStatusPill tone={statusPill.tone}>{statusPill.label}</HrStatusPill></span>}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, wordBreak: 'break-all' }}><Mail size={14} className="shrink-0 text-text-tertiary" />{user.email}</span>
+                  {user.phone && <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Phone size={14} className="shrink-0 text-text-tertiary" />{user.phone}</span>}
+                  {emp?.workLocation && <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><MapPin size={14} className="shrink-0 text-text-tertiary" />{emp.workLocation}</span>}
                 </div>
-
-                <div className="mt-5 flex justify-center">
-                  <HrButton size="sm" onClick={chooseFile} disabled={upload.isPending}>
-                    <Camera size={14} className="mr-1.5" />
-                    {upload.isPending ? 'Uploading…' : 'Change photo'}
-                  </HrButton>
-                </div>
+                <HrButton variant="ghost" onClick={chooseFile} disabled={upload.isPending}>
+                  <Camera size={14} className="mr-1.5" />{upload.isPending ? 'Uploading…' : 'Change photo'}
+                </HrButton>
               </div>
+              <SettingsNote>JPG, PNG, WebP, HEIC or GIF, up to 5 MB. Your photo changes as soon as it uploads.</SettingsNote>
+            </SettingsSection>
 
-              {/* Right Col: Employment — GET /v1/employees/me. The old bank card
-                  is gone: it only ever showed placeholder values. */}
-              <div className="md:col-span-2 rounded-2xl border border-border-default bg-bg-base p-6 shadow-sm">
-                <h3 className="mb-4 border-b border-border-default pb-3 text-sm font-semibold text-text-primary">
-                  Employment
-                </h3>
-                {!employeeLinked ? (
-                  <EmptyState
-                    icon={UserX}
-                    title="No employee record linked to this login"
-                    description="Employment details appear here once HR links your account to an employee record."
-                  />
-                ) : employee.isLoading ? (
-                  <div className="grid grid-cols-2 gap-y-4 gap-x-6" role="status" aria-label="Loading employment details">
-                    {[...Array(4)].map((_, i) => <SkeletonBlock key={i} className="h-10" />)}
-                  </div>
-                ) : employee.isError || !emp ? (
-                  <div className="rounded-xl border border-[#FCA5A5] bg-[#FEF2F2] p-4 text-sm text-[#B91C1C]">
-                    <p className="font-semibold">Couldn't load your employment details</p>
-                    <button
-                      onClick={() => employee.refetch()}
-                      className="mt-3 rounded-lg border border-[#FCA5A5] px-3 py-1.5 text-xs font-medium hover:bg-[#FEE2E2]"
-                    >
-                      Try again
-                    </button>
-                  </div>
-                ) : (
-                  <dl className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
-                    <InfoItem label="Employee ID" value={emp.employeeCode} />
-                    <InfoItem
-                      label="Date of joining"
-                      value={emp.dateOfJoining ? format(new Date(`${emp.dateOfJoining}T00:00:00`), 'd MMM yyyy') : undefined}
-                    />
-                    <InfoItem
-                      label="Employment type"
-                      value={emp.employmentType ? EMPLOYMENT_TYPE_LABEL[emp.employmentType] ?? emp.employmentType : undefined}
-                    />
-                    {(!emp.departmentId || departmentName) && <InfoItem label="Department" value={departmentName} />}
-                    {(!emp.managerId || managerName) && <InfoItem label="Reporting manager" value={managerName} />}
-                  </dl>
-                )}
-              </div>
-            </div>
+            <SettingsSection id="employment" icon="briefcase" title="Employment" summary={!employeeLinked ? 'No employee record linked to this login' : emp ? [emp.employeeCode, joined && `joined ${joined}`].filter(Boolean).join(' · ') : 'From your employee record'}>
+              {!employeeLinked ? (
+                <EmptyState icon={UserX} title="No employee record linked to this login" description="Employment details appear here once HR links your account to an employee record." />
+              ) : employee.isLoading ? (
+                <div role="status" aria-label="Loading employment details"><SettingsGrid>{[...Array(4)].map((_, i) => <SkeletonBlock key={i} className="h-10" />)}</SettingsGrid></div>
+              ) : employee.isError || !emp ? (
+                <SettingsNote tone="amber">Couldn’t load your employment details. <button type="button" onClick={() => employee.refetch()} style={{ padding: 0, border: 0, background: 'none', font: 'inherit', fontWeight: 700, color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}>Try again</button></SettingsNote>
+              ) : (
+                <SettingsGrid>
+                  <SettingsValue label="Employee ID" value={emp.employeeCode || '—'} />
+                  <SettingsValue label="Date of joining" value={joined || '—'} />
+                  <SettingsValue label="Employment type" value={emp.employmentType ? EMPLOYMENT_TYPE_LABEL[emp.employmentType] ?? emp.employmentType : '—'} />
+                  {(!emp.departmentId || departmentName) && <SettingsValue label="Department" value={departmentName || '—'} />}
+                  {(!emp.managerId || managerName) && <SettingsValue label="Reporting manager" value={managerName || '—'} />}
+                </SettingsGrid>
+              )}
+            </SettingsSection>
 
-            <div className="my-8 h-px bg-border-subtle" />
+            <SettingsSection id="details" icon="pencil" title="Personal details" summary="How your name appears, and a phone number for account recovery">
+              <SettingsGrid min={220}>
+                <SettingsInput label="Display name" value={draft?.displayName ?? ''} onChange={(v) => setDraft((d) => d && ({ ...d, displayName: v }))} placeholder="How your name appears" error={nameError} maxLength={120} />
+                <SettingsInput label="Contact phone" value={draft?.phone ?? ''} onChange={(v) => setDraft((d) => d && ({ ...d, phone: v }))} placeholder="+91 98xxxxxxxx" hint="Used for account recovery only." error={phoneError} maxLength={20} />
+                <SettingsValue label="Email address" value={user.email} />
+              </SettingsGrid>
+              <SettingsNote>Your sign-in email can’t be changed here. Ask your admin if it needs to change.</SettingsNote>
+            </SettingsSection>
 
-            {/* ── Personal settings ─────────────────────────────────────── */}
-            <section>
-              <h3 className="mb-4 text-sm font-semibold text-text-primary">Personal settings</h3>
-              <div className="grid grid-cols-1 gap-x-4 gap-y-5 md:grid-cols-2">
-                <Field label="Display name">
-                  <input
-                    type="text"
-                    value={draft?.displayName ?? ''}
-                    onChange={(e) => setDraft(d => d && ({ ...d, displayName: e.target.value }))}
-                    placeholder="How your name appears"
-                    className="w-full rounded-xl border border-border-default bg-white px-4 py-2.5 text-sm text-text-primary outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/12"
-                  />
-                </Field>
-                <Field label="Contact phone" hint="Used for account recovery only.">
-                  <input
-                    type="tel"
-                    value={draft?.phone ?? ''}
-                    onChange={(e) => setDraft(d => d && ({ ...d, phone: e.target.value }))}
-                    placeholder="+91 98xxxxxxxx"
-                    className="w-full rounded-xl border border-border-default bg-white px-4 py-2.5 text-sm text-text-primary outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/12"
-                  />
-                </Field>
-                <Field label="Email address" hint="Change your email from the Security page.">
-                  <input
-                    type="email"
-                    value={user.email}
-                    readOnly
-                    className="w-full cursor-default rounded-xl border border-border-default bg-[#F8FAFC] px-4 py-2.5 text-sm text-text-secondary"
-                  />
-                </Field>
-              </div>
-            </section>
+            <SettingsSection id="delegation" icon="users" title="Approval delegation" summary="Route your approvals to someone else while you’re away. Only requests submitted during the window move.">
+              <DelegationCard bare />
+            </SettingsSection>
 
-            <div className="my-8 h-px bg-border-subtle" />
+            <SettingsSection id="documents" icon="fileText" title="My documents" summary="Upload your government IDs and other documents. HR verifies each one.">
+              <MyDocumentsCard bare />
+            </SettingsSection>
 
-            {/* ── Approval delegation ─────────────────────────────────── */}
-            <DelegationCard />
-
-            <div className="my-8 h-px bg-border-subtle" />
-
-            {/* ── My documents ────────────────────────────────────────── */}
-            <MyDocumentsCard />
-
-            <div className="my-8 h-px bg-border-subtle" />
-
-            {/* ── Notification preferences ──────────────────────────────── */}
-            <section>
-              <h3 className="mb-1 text-sm font-semibold text-text-primary">Notification preferences</h3>
-              <p className="mb-4 text-xs text-text-secondary">
-                Choose how we reach you. See Settings → Notifications for the full per-event list.
-              </p>
-              <div className="space-y-3">
-                <PrefRow
-                  label="Email notifications"
-                  desc="Approvals, payroll receipts, security alerts."
-                  enabled={draft?.emailEnabled ?? true}
-                  onChange={(v) => setDraft(d => d && ({ ...d, emailEnabled: v }))}
-                />
-                <PrefRow
-                  label="Push notifications"
-                  desc="In-app and mobile push for real-time events."
-                  enabled={draft?.pushEnabled ?? true}
-                  onChange={(v) => setDraft(d => d && ({ ...d, pushEnabled: v }))}
-                />
-              </div>
-            </section>
-
-            <div className="mt-8 flex justify-end gap-2 border-t border-border-subtle pt-6">
-              <button
-                type="button"
-                disabled={!dirty || update.isPending}
-                onClick={() => user && setDraft({
-                  displayName: user.displayName ?? [user.firstName, user.lastName].filter(Boolean).join(' '),
-                  phone: user.phone ?? '',
-                  emailEnabled: user.notificationPreferences?.emailEnabled ?? true,
-                  pushEnabled: user.notificationPreferences?.pushEnabled ?? true,
-                })}
-                className="rounded-lg border border-border-default bg-white px-4 py-2 text-sm font-medium text-text-secondary hover:bg-bg-subtle disabled:opacity-40"
-              >
-                Discard
-              </button>
-              <HrButton onClick={onSave} disabled={!dirty || update.isPending}>
-                {update.isPending ? 'Saving…' : 'Save changes'}
-              </HrButton>
-            </div>
+            <SettingsSection id="notifications" icon="bell" title="Notifications" summary={`Email ${draft?.emailEnabled ? 'on' : 'off'} · push ${draft?.pushEnabled ? 'on' : 'off'}`}>
+              <SettingsToggleRow label="Email notifications" detail="Approvals, payroll receipts, security alerts." on={draft?.emailEnabled ?? true} onToggle={() => setDraft((d) => d && ({ ...d, emailEnabled: !d.emailEnabled }))} />
+              <SettingsToggleRow label="Push notifications" detail="In-app and mobile push for real-time events." on={draft?.pushEnabled ?? true} onToggle={() => setDraft((d) => d && ({ ...d, pushEnabled: !d.pushEnabled }))} />
+              <SettingsNote tone="amber">Your choice is saved to your account, but emails and alerts don’t check it yet. Approvals and account emails still reach you.</SettingsNote>
+            </SettingsSection>
           </>
         )}
-      </div>
-    </div>
+      </SettingsPage>
+    </DesignFrame>
   )
 }
-
-/** Small labelled field wrapper — kept private so the layout stays consistent. */
-const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode }> = ({ label, hint, children }) => (
-  <div>
-    <label className="mb-1.5 block text-[13px] font-semibold text-text-tertiary">{label}</label>
-    {children}
-    {hint && <p className="mt-1 text-[11px] text-text-tertiary">{hint}</p>}
-  </div>
-)
-
-/** One read-only label/value pair in the Employment card; "—" when unset. */
-const InfoItem: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
-  <div>
-    <dt className="text-xs text-text-tertiary mb-0.5">{label}</dt>
-    <dd className="font-medium text-text-primary">{value || '—'}</dd>
-  </div>
-)
-
-/** A single toggle row (label + description + switch), matching Settings.tsx's
- *  Toggle look so the whole platform speaks with one voice. */
-const PrefRow: React.FC<{
-  label: string
-  desc: string
-  enabled: boolean
-  onChange: (v: boolean) => void
-}> = ({ label, desc, enabled, onChange }) => (
-  <div className="ut-card ut-card-sm flex items-center justify-between p-4">
-    <div>
-      <p className="text-sm font-medium text-text-primary">{label}</p>
-      <p className="mt-0.5 text-xs text-text-secondary">{desc}</p>
-    </div>
-    <button
-      type="button"
-      onClick={() => onChange(!enabled)}
-      aria-pressed={enabled}
-      aria-label={label}
-      className={
-        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors ' +
-        (enabled ? 'bg-[#059669]' : 'border border-border-default bg-bg-base')
-      }
-    >
-      <span
-        className={
-          'inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ' +
-          (enabled ? 'translate-x-5' : 'translate-x-1')
-        }
-      />
-    </button>
-  </div>
-)
-
-/** Skeleton state shown while /v1/users/me is loading. */
-const ProfileSkeleton: React.FC = () => (
-  <div className="space-y-8" role="status" aria-label="Loading profile">
-    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
-      <SkeletonBlock className="h-32 w-32 rounded-full" />
-      <div className="flex-1 space-y-3">
-        <SkeletonBlock className="h-4 w-40" />
-        <SkeletonBlock className="h-3 w-64 max-w-full" />
-        <SkeletonBlock className="h-9 w-32 rounded-lg" />
-      </div>
-    </div>
-    <div className="grid grid-cols-1 gap-x-4 gap-y-5 md:grid-cols-2">
-      <SkeletonBlock className="h-16" />
-      <SkeletonBlock className="h-16" />
-      <SkeletonBlock className="h-16" />
-    </div>
-    <div className="space-y-3">
-      <SkeletonBlock className="h-16" />
-      <SkeletonBlock className="h-16" />
-    </div>
-  </div>
-)
 
 export default Profile

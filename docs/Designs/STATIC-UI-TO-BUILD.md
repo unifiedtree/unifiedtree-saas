@@ -277,7 +277,7 @@ Checked live:
 - *Fixed:* The absent count on Overview no longer includes today.
 - *Needs backend:* The weekly summary itself (`AttendanceService.getWeeklySummary`) still returns `ABSENT` for today with no punch. It should be neutral until the day ends.
 
-## 8. Settings pages: the Payroll Settings pattern (`/hrms/payroll/settings`, `/hrms/settings`, `/hrms/settings/work-time`)
+## 8. Settings pages: the Payroll Settings pattern (`/hrms/payroll/settings`, `/hrms/settings`, `/hrms/settings/work-time`, `/profile`, `/settings/*`)
 
 Design: `docs/Designs/UnifiedTree Payroll Settings.html` (`PaySettings.dc.html`). The live Payroll Settings page already matched it. The brief says every settings page should follow it, so the pattern is now a shared kit.
 
@@ -327,4 +327,19 @@ How it's built:
 | Late arrival (company grace, automatic deduction) | Saved, not applied | Late comes from each shift's start plus the shift's own grace, or 09:30 with no shift. Loss of pay for late marks comes from Payroll Settings → late-mark threshold (`PayrollRunService`). *Needs:* either wire these in or remove them. |
 | Attendance rules (geofencing on mobile, work from home) | Saved, not applied | Blocking check-ins outside the zone is one server-wide setting (`hrms.attendance.geofence-enforce`, on in production). Work-from-home requests depend only on the `wfh.request.self` permission. *Needs:* read these per company in `AttendanceController.checkIn` and `WfhController`. |
 | Fiscal year | Saved, not applied | Shown and saved, but nothing reads this copy. The company record has its own fiscal-year field (Companies page, `hrms.companies.fiscal_year_start`). *Needs:* keep one of the two. |
-| Other settings pages (Profile, Workspace Settings: branding, security, notifications, billing, integrations, danger zone) | Next | They'll move to the same kit. |
+| Profile (`/profile`) | Done | Photo and contact, Employment, Personal details, Approval delegation, My documents and Notifications, each as a section card. Name and phone save through the unsaved bar, with checks: the name can't be blank and the phone allows digits, spaces, + and - only. The photo uploads on its own. A `#st-<section>` link opens at that section. |
+| Profile → notification switches (email, push) | Saved, not applied | Saved to `auth.user_credentials.notification_preferences`, but nothing that sends email or alerts reads them. The page says so. *Needs:* the senders check them. |
+| Workspace Settings → Profile (`/settings/profile`) | Read-only | No endpoint updates the account or the workspace, so it shows values and an email address to contact, as before. |
+| Workspace Settings → Branding | Done | Logo upload, replace and open, with the same server checks and messages. |
+| Workspace Settings → Security | Partly | Password reset email works. **Two-factor** and **Active sessions** show "Coming soon". *Needs:* TOTP enrolment (the `is_mfa_enabled` flag exists; enrolment doesn't), and a session list with sign-out. |
+| Workspace Settings → Notifications | Coming soon | Lists what reaches admins today. Email and in-app choices show "Coming soon". *Needs:* a per-user preferences endpoint and senders that read it. |
+| Workspace Settings → Billing & Plan | Done / Coming soon | The plan comes from `/v1/workspace/plan/current`. **Invoices** shows "Coming soon" and needs Razorpay's invoice API. Locally, the demo workspace has no `platform.account_workspaces` row, so this endpoint answers 403 and the page shows its load-error note. That's a gap in the test data, not a code bug. |
+| Workspace Settings → Integrations | Coming soon | Slack, GitHub, Jira, Zapier, Stripe and Salesforce each show "Coming soon"; none is built. |
+| Workspace Settings → Document types | Done | The existing add, edit and deactivate list, inside a section card. |
+| Workspace Settings → Danger zone | By request | Export, reset and delete each open an email to the team, which confirms before acting. *Needs:* real endpoints with a typed-name confirmation. |
+
+Checked live: `e2e/recovery/live-design-settings.mjs`, 38/38:
+- **Profile:** the phone saves to the database and is put back afterwards; a bad phone blocks the save; Discard works; section links work.
+- **Workspace Settings:** every tab renders its sections. Security has two "Coming soon" sections. Danger zone links are email links only.
+- **Phone width:** no sideways scroll.
+- **Reader:** their own profile works, and the danger zone stays closed.

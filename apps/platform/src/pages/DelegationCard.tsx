@@ -36,7 +36,8 @@ interface DelegationDto {
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
-export const DelegationCard: React.FC = () => {
+/** `bare`: drop the card's own heading and intro (a settings section supplies them). */
+export const DelegationCard: React.FC<{ bare?: boolean }> = ({ bare }) => {
   const qc = useQueryClient()
   const list = useQuery({
     queryKey: ['me', 'delegation'],
@@ -57,8 +58,8 @@ export const DelegationCard: React.FC = () => {
 
   return (
     <section>
-      <div className="mb-1 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-text-primary">Approval delegation</h3>
+      <div className={bare ? 'mb-3 flex items-center justify-end' : 'mb-1 flex items-center justify-between'}>
+        {!bare && <h3 className="text-sm font-semibold text-text-primary">Approval delegation</h3>}
         {!showForm && (
           <button
             type="button"
@@ -69,10 +70,10 @@ export const DelegationCard: React.FC = () => {
           </button>
         )}
       </div>
-      <p className="mb-4 text-xs text-text-secondary">
+      {!bare && <p className="mb-4 text-xs text-text-secondary">
         Route your approvals to someone else while you're away. Only requests
         submitted during the window move; anything already assigned to you stays put.
-      </p>
+      </p>}
 
       {showForm && (
         <DelegationForm

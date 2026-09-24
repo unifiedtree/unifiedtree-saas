@@ -82,6 +82,23 @@ export function SettingsPage({
     ;(sc || window).addEventListener('scroll', onScroll, { passive: true })
     return () => { (sc || window).removeEventListener('scroll', onScroll); if (raf) cancelAnimationFrame(raf) }
   }, [keys, offset])
+  // A link to "#st-<section>" (from another page) opens at that section once it's drawn.
+  useEffect(() => {
+    if (!live) return
+    let t: ReturnType<typeof setTimeout> | undefined
+    const go = () => {
+      const h = window.location.hash.slice(1)
+      if (!h.startsWith('st-')) return
+      clearTimeout(t)
+      t = setTimeout(() => {
+        const el = document.getElementById(h), sc = scrollerOf(rootRef.current)
+        if (el && sc) { lockUntil.current = Date.now() + 900; setActive(h.slice(3)); sc.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - offset) }) }
+      }, 60)
+    }
+    go()
+    window.addEventListener('hashchange', go)
+    return () => { clearTimeout(t); window.removeEventListener('hashchange', go) }
+  }, [live]) // eslint-disable-line react-hooks/exhaustive-deps
   // Closing or reloading the tab with unsaved changes asks first.
   useEffect(() => {
     if (!dirty) return

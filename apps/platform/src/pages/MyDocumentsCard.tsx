@@ -21,7 +21,8 @@ import {
  * Rejected). Required types are pinned to the top so onboarding docs never
  * get missed.
  */
-export const MyDocumentsCard: React.FC = () => {
+/** `bare`: drop the card's own heading and intro (a settings section supplies them). */
+export const MyDocumentsCard: React.FC<{ bare?: boolean }> = ({ bare }) => {
   const types = useDocumentTypes()
   const mine = useMyDocuments(0, 200) // pull all, filter client-side per card
 
@@ -42,10 +43,12 @@ export const MyDocumentsCard: React.FC = () => {
 
   return (
     <section>
-      <h3 className="mb-1 text-sm font-semibold text-text-primary">My documents</h3>
-      <p className="mb-4 text-xs text-text-secondary">
-        Upload your government IDs and other documents here. HR will verify each one.
-      </p>
+      {!bare && <>
+        <h3 className="mb-1 text-sm font-semibold text-text-primary">My documents</h3>
+        <p className="mb-4 text-xs text-text-secondary">
+          Upload your government IDs and other documents here. HR will verify each one.
+        </p>
+      </>}
       {types.isLoading || mine.isLoading ? (
         <p className="text-xs text-text-tertiary">Loading…</p>
       ) : (types.isError || mine.isError) ? (
