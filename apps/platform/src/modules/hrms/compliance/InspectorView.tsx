@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format, endOfMonth } from 'date-fns'
 import { HrButton } from '@/shared/components/hr'
+import { API_BASE_URL } from '@/core/api/client'
 import { inspectorCsv } from './inspectorCsv'
 interface View {
   inspectorName: string
@@ -9,6 +10,21 @@ interface View {
   expiresAt: string
   documents: { id: string; title: string; sizeBytes: number }[]
   events: { id: string; title: string; date: string; status: string; category?: string }[]
+}
+// The link opens on the workspace's own host (<tenant>.unifiedtree.com), which
+// only serves the web app, so these calls must go to the API host itself — a
+// relative /api path there returns the app's HTML, not data.
+const INSPECTOR_VIEW_URL = `${API_BASE_URL}/v1/public/inspector-view`
+const INSPECTOR_DOCUMENT_URL = `${API_BASE_URL}/v1/public/inspector-view/document`
+
+/** The server's error message when the reply is JSON; null for anything else (e.g. an HTML error page). */
+async function errorMessage(response: Response): Promise<string | null> {
+  try {
+    const body = await response.json()
+    return typeof body?.message === 'string' && body.message ? body.message : null
+  } catch {
+    return null
+  }
 }
 export default function InspectorView() {
   const [token] = useState(() => window.location.hash.slice(1))
@@ -21,7 +37,7 @@ export default function InspectorView() {
     retry: false,
     gcTime: 0,
     queryFn: async () => {
-      const response = await fetch('/api/v1/public/inspector-view', {
+      const response = await fetch(INSPECTOR_VIEW_URL, {
         method: 'POST',
         credentials: 'omit',
         headers: { 'Content-Type': 'application/json' },
@@ -31,10 +47,9 @@ export default function InspectorView() {
           to: format(endOfMonth(new Date(`${month}-01T12:00:00`)), 'yyyy-MM-dd'),
         }),
       })
-      const body = await response.json()
       if (!response.ok)
-        throw new Error(body.message || 'This inspection link is invalid, expired or revoked.')
-      return body as View
+        throw new Error((await errorMessage(response)) || 'This inspection link is invalid, expired or revoked.')
+      return (await response.json()) as View
     },
     enabled: !!token && /^\d{4}-\d{2}$/.test(month),
   })
@@ -42,16 +57,14 @@ export default function InspectorView() {
     setDownloading(true)
     setExportError('')
     try {
-      const response = await fetch('/api/v1/public/inspector-view/document', {
+      const response = await fetch(INSPECTOR_DOCUMENT_URL, {
         method: 'POST',
         credentials: 'omit',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, id }),
       })
-      if (!response.ok) {
-        const body = await response.json()
-        throw new Error(body.message || 'Document access is no longer available')
-      }
+      if (!response.ok)
+        throw new Error((await errorMessage(response)) || 'Document access is no longer available')
       const url = URL.createObjectURL(await response.blob())
       const anchor = document.createElement('a')
       anchor.href = url
