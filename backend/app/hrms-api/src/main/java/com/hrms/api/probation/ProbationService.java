@@ -240,7 +240,8 @@ public class ProbationService {
                 }
                 recipientIds.add(c.getKey());
                 try {
-                    mailService.send(EmailMessage.simple(to, email.subject(), email.html()));
+                    mailService.send(EmailMessage.simple(to, email.subject(), email.html())
+                            .withFromName("your workspace".equals(tenantName) ? "HR Team" : tenantName));
                 } catch (Exception e) {
                     log.warn("Probation email to {} failed: {}", to, e.getMessage());
                 }

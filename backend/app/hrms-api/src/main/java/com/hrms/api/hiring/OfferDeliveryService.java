@@ -165,7 +165,9 @@ public class OfferDeliveryService {
         }
         UUID attemptId = attempts.start(id, email, actor);
         EmailMessage message = new EmailMessage(email, offer.getCandidateName(), subject, body, null, List.of(),
-                List.of(new EmailMessage.Attachment("offer-" + id + ".pdf", "application/pdf", attachment)));
+                List.of(new EmailMessage.Attachment("offer-" + id + ".pdf", "application/pdf", attachment)))
+                // White label: the offer comes from the company, not the software vendor.
+                .withFromName(company.getName());
         return new Prepared(null, attemptId, message);
     }
 

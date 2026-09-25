@@ -16,6 +16,7 @@ import { clsx } from 'clsx'
 import { GlobalSearch, type SearchPage } from '@/shared/components/GlobalSearch'
 import { useNotificationStore } from '@/core/notifications/notificationStore'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
+import { usePageTitle } from '@/core/tenant/workspaceBranding'
 import { formatDistanceToNow } from 'date-fns'
 // Canonical admin-roles SSOT — do NOT redeclare locally. See useRoles.ts.
 import { ADMIN_ROLES as CANONICAL_ADMIN_ROLES } from '@/shared/hooks/useRoles'
@@ -55,7 +56,7 @@ const ROLE_LABELS: Record<PlatformRole | string, string> = {
 }
 
 interface NavChild { label: string; path: string; icon: React.ReactNode; visibleForRoles?: string[]; visibleWithAnyPermission?: string[]; /** Other routes that belong to this section. */ also?: string[] }
-interface NavItemDef { key: string; label: string; icon: React.ReactNode; path?: string; module?: string; visibleForRoles?: string[]; children?: NavChild[] }
+interface NavItemDef { key: string; label: string; icon: React.ReactNode; path?: string; module?: string; visibleForRoles?: string[]; visibleWithAnyPermission?: string[]; children?: NavChild[] }
 
 // ─── Top-level nav (the HRMS app's flat links) ────────────────────────────────
 const NAV_ITEMS: NavItemDef[] = [
@@ -268,7 +269,7 @@ const PLATFORM_ITEMS: NavItemDef[] = [
 // is super-admin only. Each maps to a route the shell drives.
 const SETTINGS_NAV: NavItemDef[] = [
   { key: 's-profile', label: 'Profile', icon: <UserCircle2 size={18} />, path: '/profile' },
-  { key: 's-branding', label: 'Branding', icon: <ImageIcon size={18} />, path: '/settings/branding', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
+  { key: 's-branding', label: 'Branding', icon: <ImageIcon size={18} />, path: '/settings/branding', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'], visibleWithAnyPermission: ['settings.branding.write'] },
   { key: 's-security', label: 'Security', icon: <Shield size={18} />, path: '/settings/security' },
   // Notifications is deliberately open — every role can manage their OWN
   // notification preferences, so no visibleForRoles filter here.
@@ -538,6 +539,16 @@ export function PlatformShell() {
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userRoles.join('|'), activeModules.join('|'), permissions])
+
+  // Browser tab: "<Page> - <Workspace>" (white label; see useBrandingHead).
+  // The page name is the nav label with the longest path matching this route.
+  const pageLabel = React.useMemo(() => {
+    const best = searchPages
+      .filter(p => matchPath(location.pathname, p.path.split('?')[0]))
+      .sort((a, b) => b.path.length - a.path.length)[0]
+    return best?.label ?? null
+  }, [searchPages, location.pathname])
+  usePageTitle(pageLabel)
 
   // views all land on /hrms/compliance) — dedupe by path or every duplicate
   // tab would render "active" at once.

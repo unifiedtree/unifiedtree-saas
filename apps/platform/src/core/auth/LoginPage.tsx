@@ -6,6 +6,8 @@ import { ArrowRight, Camera, Eye, EyeOff } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { apiJson, AuthResponse, currentSubdomain, WorkspaceStatus } from '@/core/api/client'
 import { markWelcomeIntent } from '@/core/auth/WelcomeSplash'
+import { usePageTitle, useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
+import { MonogramTile } from '@/shared/components/WorkspaceMark'
 
 /** Workspace slugs are lowercase alphanumeric + hyphens, like a DNS label. */
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/
@@ -26,8 +28,9 @@ function workspaceLoginUrl(slug: string): string {
  * Login — a single centred card on a radiant emerald field.
  *
  * The card leads with the WORKSPACE's own logo (Settings → Branding), falling
- * back to a "Your logo" placeholder, so every tenant's sign-in feels like
- * theirs — UnifiedTree keeps its "Powered by" footer credit. All auth
+ * back to its monogram and name, so every tenant's sign-in is theirs alone
+ * (white label: no vendor name, logo or links on a workspace host; the
+ * "Powered by" credit shows only on the bare platform host). All auth
  * logic (workspace-status resolution, canonical login, the no-subdomain
  * workspace-picker step) is unchanged from the previous layout.
  */
@@ -46,12 +49,12 @@ export const LoginPage: React.FC = () => {
 
   const subdomain = useMemo(() => currentSubdomain(), [])
   const needsWorkspace = !subdomain
-  const workspaceLabel = useMemo(() => {
-    if (!subdomain) return 'Workspace login'
-    const host = window.location.hostname.toLowerCase()
-    if (host.endsWith('.localhost')) return `${subdomain}.localhost`
-    return `${subdomain}.unifiedtree.com`
-  }, [subdomain])
+  // The workspace's name and logo (public lookup by subdomain: name and
+  // images only). White label: nothing of the vendor's on this page.
+  const brand = useWorkspaceBranding()
+  const brandImage = brand.logoUrl || brand.markUrl
+  const [failedImage, setFailedImage] = useState<string | null>(null)
+  usePageTitle('Sign in')
 
   useEffect(() => {
     if (subdomain) {
@@ -162,12 +165,19 @@ export const LoginPage: React.FC = () => {
             "Your logo" placeholder (the striped texture is a small inside-the-
             placeholder cue, kept at a whisper of emerald). */}
         <div className="flex items-center justify-center pb-6">
-          {workspaceStatus?.logoUrl ? (
+          {!needsWorkspace && brandImage && failedImage !== brandImage ? (
             <img
-              src={workspaceStatus.logoUrl}
-              alt={workspaceStatus.tenantName || 'Unified Tree'}
+              src={brandImage}
+              alt={brand.workspaceName ? `${brand.workspaceName} logo` : ''}
               className="max-h-12 w-auto max-w-[220px] object-contain"
+              onError={() => setFailedImage(brandImage)}
             />
+          ) : !needsWorkspace && brand.workspaceName ? (
+            /* No uploaded logo: the workspace's monogram and name (white label). */
+            <div className="flex h-12 max-w-full items-center justify-center gap-3">
+              <MonogramTile letter={brand.monogram} size={44} />
+              <span className="truncate text-xl font-black tracking-tight text-gray-900">{brand.workspaceName}</span>
+            </div>
           ) : (
             <div
               className="flex h-12 w-full max-w-[220px] items-center justify-center gap-2 rounded-lg"
@@ -177,7 +187,7 @@ export const LoginPage: React.FC = () => {
               }}
             >
               <Camera size={18} strokeWidth={2} className="text-[#047857]/55" aria-hidden />
-              <span className="select-none text-sm font-semibold text-[#047857]/55">Your logo</span>
+              <span className="select-none text-sm font-semibold text-[#047857]/55">{needsWorkspace ? 'Your logo' : ''}</span>
             </div>
           )}
         </div>
@@ -289,28 +299,31 @@ export const LoginPage: React.FC = () => {
               {loading ? 'Logging in…' : 'Log in'}
             </button>
 
-            <p className="pt-1 text-center">
-              <a
-                href="https://unifiedtree.com/signup"
-                className="text-[13.5px] font-medium text-[var(--text-link)] hover:underline"
-              >
-                Don&apos;t have an account?
-              </a>
+            {/* White label: a workspace's sign-in page carries no vendor links.
+                People get an account from their own admin. */}
+            <p className="pt-1 text-center text-[13px] font-medium text-gray-500">
+              No account yet? Ask your administrator to invite you.
             </p>
           </form>
         )}
 
-        <div className="mt-8 h-px bg-gray-100" />
-        <p className="pt-5 text-center text-[13px] font-medium text-gray-500">
-          Powered by{' '}
-          <a href="https://unifiedtree.com" className="font-bold text-emerald-600 hover:underline">
-            UnifiedTree
-          </a>
-        </p>
+        {/* The platform's credit shows only on the bare platform host (no
+            workspace); inside a workspace the page is entirely theirs. */}
+        {needsWorkspace && (
+          <>
+            <div className="mt-8 h-px bg-gray-100" />
+            <p className="pt-5 text-center text-[13px] font-medium text-gray-500">
+              Powered by{' '}
+              <a href="https://unifiedtree.com" className="font-bold text-emerald-600 hover:underline">
+                UnifiedTree
+              </a>
+            </p>
+          </>
+        )}
 
         {/* Which workspace this sign-in belongs to — small, under the card frame */}
-        {!needsWorkspace && (
-          <p className="pt-2 text-center text-[12px] font-medium text-gray-400">{workspaceLabel}</p>
+        {!needsWorkspace && brandImage && brand.workspaceName && (
+          <p className="pt-5 text-center text-[12px] font-medium text-gray-400">{brand.workspaceName}</p>
         )}
       </motion.div>
     </main>

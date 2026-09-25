@@ -2,9 +2,10 @@
 // the Claude Design prototype HrmsPrototype.dc.html. Every style value below is
 // copied from the design; behaviour (routing, roles, search, notifications,
 // profile menu) is supplied by PlatformShell.
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { dashIcon } from '../dc/icons'
 import { preloadPath } from '@/shared/routing/lazyPage'
+import { useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
 import './shell.css'
 
 export const CHROME_FONT = 'Inter,-apple-system,sans-serif'
@@ -41,23 +42,38 @@ function RailButton({ n }: { n: RailEntry }) {
   )
 }
 
+/**
+ * The workspace's mark in the logo slot (white label: never the vendor's).
+ * Its uploaded square mark (or wide logo) when there is one; otherwise its
+ * monogram, the first letter of the workspace name, drawn in the slot's
+ * original type, size and colours.
+ */
 export function BrandMark({ size = 23, dot = 8 }: { size?: number; dot?: number }) {
+  const b = useWorkspaceBranding()
+  const [failed, setFailed] = useState<string | null>(null)
+  const src = b.markUrl || b.logoUrl
+  if (src && failed !== src) {
+    const h = Math.round(size * 1.3)
+    return <img src={src} alt="" aria-hidden="true" onError={() => setFailed(src)}
+      style={{ height: `${h}px`, width: 'auto', maxWidth: b.markUrl ? `${h}px` : `${Math.round(h * 2.4)}px`, objectFit: 'contain', display: 'block' }} />
+  }
   return (
     <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: '2px', fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: 800, fontSize: `${size}px`, letterSpacing: '-.05em', lineHeight: '.9', color: '#fff' }}>
-      ut
+      {b.monogram}
       <i style={{ width: `${dot}px`, height: `${dot}px`, borderRadius: '999px', background: '#6ee7b7', display: 'inline-block', marginBottom: '3px' }} />
     </span>
   )
 }
 
 export function DesignRail({ top, bottom, onHome }: { top: RailEntry[]; bottom: RailEntry[]; onHome: () => void }) {
+  const { workspaceName } = useWorkspaceBranding()
   return (
     <nav aria-label="Primary" className="hidden md:flex"
       style={{ width: '88px', flexShrink: 0, height: '100vh', background: '#0c5a45', flexDirection: 'column', alignItems: 'center', zIndex: 40, boxShadow: 'inset -1px 0 0 rgba(255,255,255,.08)', fontFamily: CHROME_FONT }}>
-      <button type="button" onClick={onHome} aria-label="UnifiedTree home" title="Dashboard"
+      <button type="button" onClick={onHome} aria-label={workspaceName ? `${workspaceName} home` : 'Home'} title={workspaceName ? `${workspaceName} · Dashboard` : 'Dashboard'}
         style={{ height: '64px', width: '100%', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px', background: 'none', border: '0', borderBottom: '1px solid rgba(255,255,255,.1)', cursor: 'pointer', color: '#fff', fontFamily: 'inherit' }}>
         <BrandMark />
-        <span style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,.85)' }}>UnifiedTree</span>
+        <span style={{ maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,.85)' }}>{workspaceName ?? ''}</span>
       </button>
       <div className="ds-rail-scroll" style={{ flex: '1', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '10px 0', overflowY: 'auto', minHeight: 0 }}>
         {top.map((n) => (

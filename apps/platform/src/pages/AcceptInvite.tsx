@@ -4,6 +4,8 @@ import { Eye, EyeOff, Lock } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { acceptInvite } from '@/modules/hrms/employees/api/useInvitation'
+import { WorkspaceWordmark } from '@/shared/components/WorkspaceMark'
+import { usePageTitle } from '@/core/tenant/workspaceBranding'
 
 function strengthLabel(pw: string): { label: string; color: string; width: string } {
   if (pw.length === 0) return { label: '', color: 'bg-slate-200', width: 'w-0' }
@@ -19,6 +21,7 @@ export const AcceptInvite: React.FC = () => {
   const navigate = useNavigate()
   const loginWithCredentials = useSdkStore(s => s.loginWithCredentials)
   const token = searchParams.get('token') ?? ''
+  usePageTitle('Set your password')
 
   const [password, setPassword]   = useState('')
   const [confirm, setConfirm]     = useState('')
@@ -78,12 +81,7 @@ export const AcceptInvite: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="ut-card ut-card-lg w-full max-w-[420px] p-10 relative z-10"
       >
-        <div className="flex items-center gap-2.5 mb-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#059669]">
-            <span className="text-xl font-black text-white">U</span>
-          </div>
-          <span className="text-xl font-black tracking-tight text-slate-900">UnifiedTree</span>
-        </div>
+        <WorkspaceWordmark />
 
         {done ? (
           <div className="text-center py-8">

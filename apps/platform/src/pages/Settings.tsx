@@ -3,18 +3,18 @@
 // app shell; this page renders the tab named in the URL as section cards with
 // the design's "On this page" list. What isn't built yet is shown as "Coming
 // soon" rather than as controls that pretend to work (notes on each tab below).
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Check, Image as ImageIcon, Upload } from 'lucide-react'
-import { getAccessToken } from '@unifiedtree/sdk'
+import { Check } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/authStore'
-import { apiJson, API_BASE_URL } from '@/core/api/client'
+import { apiJson } from '@/core/api/client'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
 import { SkeletonBlock } from '@/shared/components/SkeletonCard'
 import { DesignFrame } from '@/design/dc/DesignFrame'
 import { SettingsPage, SettingsSection, SettingsGrid, SettingsValue, SettingsNote, useSettingsToast, type SettingsNavItem } from '@/design/settings/SettingsKit'
 import { DocumentTypesTab } from './SettingsDocumentTypes'
 import { NotificationChoiceSections, useNotificationChoices, type NotificationChoicesState } from './NotificationChoices'
+import { BrandingTab } from './branding/BrandingTab'
 
 type TabKey = 'profile' | 'branding' | 'security' | 'notifications' | 'billing' | 'integrations' | 'documents' | 'danger'
 type Show = (kind: 'ok' | 'error', title: string, msg?: string) => void
@@ -49,7 +49,7 @@ const INTEGRATIONS = [
 /** The "On this page" list for each tab (sections are fixed per tab). */
 const NAV: Record<TabKey, SettingsNavItem[]> = {
   profile: [{ key: 'account', label: 'Your account', state: 'none' }, { key: 'org', label: 'Organisation', state: 'none' }],
-  branding: [{ key: 'logo', label: 'Workspace logo', state: 'none' }],
+  branding: [{ key: 'logo', label: 'Workspace logo', state: 'none' }, { key: 'editor', label: 'Upload and edit', state: 'none' }],
   security: [{ key: 'password', label: 'Password', state: 'on' }, { key: 'twofa', label: 'Two-factor', state: 'soon' }, { key: 'sessions', label: 'Active sessions', state: 'soon' }],
   notifications: [{ key: 'today', label: 'What reaches you', state: 'none' }, { key: 'email', label: 'Email choices', state: 'on' }, { key: 'inapp', label: 'In-app choices', state: 'on' }, { key: 'push', label: 'Phone push choices', state: 'on' }],
   billing: [{ key: 'plan', label: 'Your plan', state: 'none' }, { key: 'invoices', label: 'Invoices', state: 'soon' }],
@@ -81,115 +81,9 @@ const ProfileTab: React.FC = () => {
         {/* No Save: no endpoint updates an account or a workspace profile
             (TenantController exposes no update mapping). A "Saved!" tick over
             a save that didn't happen is worse than no button. */}
-        <SettingsNote>These details are read-only for now. To change your name or company details, email <a href="mailto:unifiedtree@gmail.com" style={{ color: '#047857', fontWeight: 600 }}>unifiedtree@gmail.com</a>. Your own display name and phone are on <Link to="/profile" style={{ color: '#047857', fontWeight: 600 }}>your profile</Link>.</SettingsNote>
+        <SettingsNote>These details are read-only for now. To change your name or company details, <a href="mailto:unifiedtree@gmail.com" style={{ color: '#047857', fontWeight: 600 }}>email our support team</a>. Your own display name and phone are on <Link to="/profile" style={{ color: '#047857', fontWeight: 600 }}>your profile</Link>.</SettingsNote>
       </SettingsSection>
     </>
-  )
-}
-
-/**
- * Human sentences for the HTTP status codes a logo upload / GET can return.
- * Users should never see "HTTP 401". Anything not mapped falls back to a
- * generic "please try again".
- */
-function humanErrorFor(status: number, body?: string): { title: string; description: string } {
-  const serverMessage = (() => {
-    if (!body) return ''
-    try { return (JSON.parse(body) as { message?: string }).message ?? '' } catch { return '' }
-  })()
-  switch (status) {
-    case 0: return { title: 'Could not reach the server', description: 'Check your internet connection and try again.' }
-    case 401: return { title: 'Your session has expired', description: 'Please sign in again to change the logo.' }
-    case 402: return { title: 'Your subscription has ended', description: 'You can view branding, but to change it please renew your subscription from Manage plan.' }
-    case 403: return { title: 'You don’t have permission for this', description: 'Only workspace admins can change the logo. Ask your admin to update it.' }
-    case 413: return { title: 'That image is too large', description: 'Pick a file 2 MB or smaller.' }
-    case 415: return { title: 'That file type isn’t supported', description: serverMessage || 'Upload a PNG, JPEG, GIF, WebP or AVIF image.' }
-    case 429: return { title: 'Too many uploads in a row', description: 'Please wait a minute and try again.' }
-    default:
-      if (status >= 500) return { title: 'Something went wrong on our end', description: 'We’re on it. Please try again in a minute.' }
-      return { title: 'Upload failed', description: serverMessage || 'Please try again. If it keeps failing, contact your admin.' }
-  }
-}
-
-/**
- * Branding: the workspace admin uploads their company logo. It replaces the
- * default logo on the sign-in page (via workspace-status) and in the app
- * header (via tenant.logoUrl). The server allows PNG / JPEG / WebP / GIF /
- * AVIF up to 2 MB, sniffs magic bytes and blocks SVG; `accept` is only a hint.
- */
-const BrandingTab: React.FC<{ show: Show }> = ({ show }) => {
-  // Never read `token` off the zustand store: it's set once at login and goes
-  // stale when the SDK rotates it. getAccessToken() is what apiJson uses.
-  const tenant = useAuthStore((s) => s.tenant)
-  const refreshTenant = useAuthStore((s) => s.refreshTenant)
-  const [logoUrl, setLogoUrl] = useState<string | null>(tenant?.logoUrl ?? null)
-  const [uploading, setUploading] = useState(false)
-  // GET /branding answering 402/403 disables Upload with the reason.
-  const [loadBlocked, setLoadBlocked] = useState<{ status: number } | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => { setLogoUrl(tenant?.logoUrl ?? null) }, [tenant?.logoUrl])
-  // Fresh URL from the server rather than an up-to-an-hour-old store copy.
-  useEffect(() => {
-    let cancelled = false
-    apiJson<{ logoUrl: string | null }>('/v1/workspace/branding')
-      .then((res) => { if (!cancelled) setLogoUrl(res.logoUrl ?? null) })
-      .catch((err) => {
-        if (cancelled) return
-        const status = (err as { status?: number })?.status ?? 0
-        if (status === 402 || status === 403) setLoadBlocked({ status })
-      })
-    return () => { cancelled = true }
-  }, [])
-
-  const onFile = async (file: File | undefined) => {
-    if (!file) return
-    if (file.size > 2 * 1024 * 1024) { const m = humanErrorFor(413); show('error', m.title, m.description); return }
-    setUploading(true)
-    try {
-      // fetch, not apiJson: this travels as multipart/form-data. Token read at
-      // request time; credentials so the refresh cookie rides cross-origin.
-      const form = new FormData()
-      form.append('file', file)
-      let resp: Response
-      try {
-        const bearer = getAccessToken()
-        resp = await fetch(`${API_BASE_URL}/v1/workspace/branding/logo`, { method: 'POST', credentials: 'include', headers: bearer ? { Authorization: `Bearer ${bearer}` } : {}, body: form })
-      } catch { const m = humanErrorFor(0); show('error', m.title, m.description); return }
-      if (!resp.ok) { const body = await resp.text().catch(() => ''); const m = humanErrorFor(resp.status, body); show('error', m.title, m.description); return }
-      const res = await resp.json() as { logoUrl: string | null }
-      setLogoUrl(res.logoUrl ?? null)
-      try { await refreshTenant() } catch { /* best-effort: the header swaps on next load */ }
-      show('ok', 'Logo updated', 'Other open browsers may need a refresh to show it.')
-    } finally {
-      setUploading(false)
-      if (inputRef.current) inputRef.current.value = ''
-    }
-  }
-  const blocked = loadBlocked ? humanErrorFor(loadBlocked.status) : null
-
-  return (
-    <SettingsSection id="logo" icon="building" title="Workspace logo" summary={logoUrl ? 'Custom logo set · shown on the sign-in page and in the app header' : 'No custom logo yet · the UnifiedTree logo is shown'}>
-      <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
-      {blocked && <SettingsNote tone="amber"><strong>{blocked.title}.</strong> {blocked.description}</SettingsNote>}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20 }}>
-        <div style={{ flex: '0 0 auto', width: 96, height: 96, borderRadius: 14, border: '1px dashed #cbd5e1', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {logoUrl
-            ? <img src={logoUrl} alt="Current workspace logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: 8 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-            : <ImageIcon size={28} className="text-slate-400" />}
-        </div>
-        <div style={{ flex: '1 1 240px', minWidth: 0, display: 'grid', gap: 10 }}>
-          <span style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.5 }}>PNG, JPEG, GIF, WebP or AVIF, up to 2 MB. Wide logos work best; the header shows it 28 px tall.</span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <HrButton onClick={() => inputRef.current?.click()} disabled={uploading || !!loadBlocked}>
-              <Upload size={14} className="mr-1.5" />{uploading ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}
-            </HrButton>
-            {logoUrl && <HrButton variant="ghost" onClick={() => window.open(logoUrl, '_blank', 'noopener')}>Open image</HrButton>}
-          </div>
-        </div>
-      </div>
-      <SettingsNote>The logo’s address is public so browsers can show it on the sign-in page without signing in. Don’t put anything private in it.</SettingsNote>
-    </SettingsSection>
   )
 }
 

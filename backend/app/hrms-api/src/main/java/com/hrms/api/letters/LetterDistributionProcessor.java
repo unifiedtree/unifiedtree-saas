@@ -139,7 +139,8 @@ public class LetterDistributionProcessor {
                     safeFirst(emp) + ", you have a new document", buildEmailHtml(job, emp));
             String subject = job.getSubjectOverride() != null && !job.getSubjectOverride().isBlank()
                     ? job.getSubjectOverride() : email.subject();
-            emailService.send(r.getEmail(), null, subject, email.html(), pdf, buildFilename(templateName, emp));
+            emailService.send(r.getEmail(), null, subject, email.html(), pdf, buildFilename(templateName, emp),
+                    generationService.senderNameFor(gen.companyId()));
             r.setGeneratedLetterId(gen.id());
             r.setSendStatus("SENT");
             r.setSentAt(Instant.now());

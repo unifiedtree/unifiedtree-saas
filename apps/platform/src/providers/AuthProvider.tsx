@@ -12,6 +12,7 @@ import {
 } from '@/core/auth/WelcomeSplash'
 import type { User, Tenant } from '@/types'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
+import { useBrandingHead } from '@/core/tenant/workspaceBranding'
 
 function toOldUser(sdkUser: AuthUser, permCodes: string[]): User {
   return {
@@ -139,6 +140,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // cold hydrate — the client asked for the FULL name near the splash animation
   // so we hand it fullName ("Chakri Chikkala"), not just the first word.
   const { fullName } = useDisplayName()
+
+  // White label: the browser tab shows "<Page> - <Workspace>" and the
+  // workspace's own icon, never the vendor's (workspaceBranding.ts).
+  useBrandingHead()
 
   return (
     <>

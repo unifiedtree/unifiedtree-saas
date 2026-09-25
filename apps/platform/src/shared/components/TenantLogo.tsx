@@ -1,5 +1,6 @@
 import React from 'react'
-import { useTenantBranding } from '@/core/tenant/useTenantBranding'
+import { useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
+import { MonogramTile } from '@/shared/components/WorkspaceMark'
 
 interface TenantLogoProps {
   /** Class applied to the rendered <img>. Callers own sizing. */
@@ -9,33 +10,16 @@ interface TenantLogoProps {
 }
 
 /**
- * Renders the workspace's uploaded logo (Settings → Branding) with the
- * UnifiedTree default as a fallback. Shared by every "chrome" surface — the
- * launcher header, the collapsed rail, the sidebar Logo button — so every
- * spot that shows brand shows the same brand.
- *
- * Login page does NOT use this component — it has its own placeholder chip
- * for unbranded workspaces ("Your logo" repeating stripe) and needs the
- * workspaceStatus response for auth flow anyway. Both paths ultimately read
- * from the same `/v1/public/workspace-status` endpoint (see
- * `useTenantBranding`), so behaviour matches even with two rendering
- * strategies.
+ * The workspace's uploaded logo (Settings → Branding). With none, or if the
+ * image fails to load, the workspace monogram: never the vendor's logo
+ * (white label).
  */
 export const TenantLogo: React.FC<TenantLogoProps> = ({ className, wrapperClassName }) => {
-  const { logoUrl, tenantName } = useTenantBranding()
-  const img = (
-    <img
-      src={logoUrl || '/UnifiedTreeLogo.png'}
-      alt={tenantName || 'Unified Tree'}
-      className={className}
-      onError={(e) => {
-        // Broken tenant logo (moved / expired R2 URL) — fall back to the
-        // UnifiedTree default rather than the browser's broken-image glyph.
-        const el = e.target as HTMLImageElement
-        if (el.src.endsWith('/UnifiedTreeLogo.png')) return
-        el.src = '/UnifiedTreeLogo.png'
-      }}
-    />
-  )
-  return wrapperClassName ? <span className={wrapperClassName}>{img}</span> : img
+  const b = useWorkspaceBranding()
+  const [failed, setFailed] = React.useState<string | null>(null)
+  const src = b.logoUrl || b.markUrl
+  const inner = src && failed !== src
+    ? <img src={src} alt={b.workspaceName ? `${b.workspaceName} logo` : ''} className={className} onError={() => setFailed(src)} />
+    : <MonogramTile letter={b.monogram} size={32} />
+  return wrapperClassName ? <span className={wrapperClassName}>{inner}</span> : inner
 }

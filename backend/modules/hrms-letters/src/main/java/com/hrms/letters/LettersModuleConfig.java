@@ -24,7 +24,7 @@ public class LettersModuleConfig {
                 fromEmail = "noreply@unifiedtree.io";
             }
             if (fromName == null || fromName.isBlank()) {
-                fromName = "UnifiedTree HRMS";
+                fromName = "HR Team";
             }
         }
     }

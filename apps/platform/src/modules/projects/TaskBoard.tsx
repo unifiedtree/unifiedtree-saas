@@ -23,23 +23,23 @@ const COLUMNS: { key: Column; label: string; color: string }[] = [
 
 const INITIAL_TASKS: Record<Column, Task[]> = {
   TODO: [
-    { id: 't1', title: 'Design new onboarding wizard', description: 'Create 5-step wizard UI', priority: 'HIGH', assignee: 'Sophie Martin', project: 'UnifiedTree v2.0', dueDate: '2025-01-30' },
-    { id: 't2', title: 'Write API documentation', description: 'OpenAPI spec for v2 endpoints', priority: 'MEDIUM', assignee: 'David Kim', project: 'UnifiedTree v2.0' },
+    { id: 't1', title: 'Design new onboarding wizard', description: 'Create 5-step wizard UI', priority: 'HIGH', assignee: 'Sophie Martin', project: 'Website v2.0', dueDate: '2025-01-30' },
+    { id: 't2', title: 'Write API documentation', description: 'OpenAPI spec for v2 endpoints', priority: 'MEDIUM', assignee: 'David Kim', project: 'Website v2.0' },
     { id: 't3', title: 'Set up CI/CD pipeline', priority: 'HIGH', assignee: 'Liam Murphy', project: 'Mobile App', dueDate: '2025-01-25' },
   ],
   IN_PROGRESS: [
-    { id: 't4', title: 'Build HRMS payroll module', description: 'Gross/Net calculation logic', priority: 'CRITICAL', assignee: 'Carlos Rivera', project: 'UnifiedTree v2.0', dueDate: '2025-01-22' },
+    { id: 't4', title: 'Build HRMS payroll module', description: 'Gross/Net calculation logic', priority: 'CRITICAL', assignee: 'Carlos Rivera', project: 'Website v2.0', dueDate: '2025-01-22' },
     { id: 't5', title: 'Integrate Stripe payments', priority: 'HIGH', assignee: 'Raj Mehta', project: 'Customer Portal', dueDate: '2025-01-28' },
     { id: 't6', title: 'Mobile login screen', priority: 'MEDIUM', assignee: 'Sophie Martin', project: 'Mobile App' },
   ],
   REVIEW: [
-    { id: 't7', title: 'Code review: Auth refactor', priority: 'HIGH', assignee: 'Alex Morgan', project: 'UnifiedTree v2.0' },
+    { id: 't7', title: 'Code review: Auth refactor', priority: 'HIGH', assignee: 'Alex Morgan', project: 'Website v2.0' },
     { id: 't8', title: 'QA: Leave management flow', description: 'Test all edge cases', priority: 'MEDIUM', assignee: 'Sarah Chen', project: 'HRMS Self-Service' },
   ],
   DONE: [
     { id: 't9', title: 'Security audit completion', priority: 'CRITICAL', assignee: 'Alex Morgan', project: 'Security Audit', dueDate: '2025-01-10' },
-    { id: 't10', title: 'Database index optimization', priority: 'HIGH', assignee: 'David Kim', project: 'UnifiedTree v2.0' },
-    { id: 't11', title: 'Deploy staging environment', priority: 'MEDIUM', assignee: 'Liam Murphy', project: 'UnifiedTree v2.0' },
+    { id: 't10', title: 'Database index optimization', priority: 'HIGH', assignee: 'David Kim', project: 'Website v2.0' },
+    { id: 't11', title: 'Deploy staging environment', priority: 'MEDIUM', assignee: 'Liam Murphy', project: 'Website v2.0' },
   ],
 }
 

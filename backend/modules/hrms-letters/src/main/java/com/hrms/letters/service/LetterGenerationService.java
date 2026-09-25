@@ -49,6 +49,8 @@ public class LetterGenerationService {
     private final LetterEmailService         emailService;
     /** Words the email with the company's "letters.letter" template when one is active (optional). */
     private final ObjectProvider<LetterEmailComposer> emailComposer;
+    /** Optional: the app's letterhead (logo + company name) for letter PDFs and the email From name. */
+    private LetterheadDecorator              letterhead;
 
     public LetterGenerationService(
             LetterTemplateRepository templateRepo,
@@ -73,6 +75,11 @@ public class LetterGenerationService {
         this.storageService  = storageService;
         this.emailService    = emailService;
         this.emailComposer   = emailComposer;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setLetterhead(LetterheadDecorator letterhead) {
+        this.letterhead = letterhead;
     }
 
     @Transactional
@@ -105,7 +112,12 @@ public class LetterGenerationService {
         String renderedSubject = mergeFieldResolver.resolve(template.getSubject(), ctx);
         String renderedBody    = mergeFieldResolver.resolve(template.getBodyHtml(), ctx);
 
-        byte[] pdfBytes = pdfRenderer.render(renderedBody);
+        // White label: the PDF opens with the workspace's own letterhead
+        // (logo + company name) when the app provides one.
+        String companyName = company != null ? company.getName() : null;
+        byte[] pdfBytes = pdfRenderer.render(letterhead != null
+                ? letterhead.decorate(renderedBody, TenantContext.getTenantId(), companyName)
+                : renderedBody);
 
         GeneratedLetter letter = new GeneratedLetter();
         letter.setCompanyId(employee.getCompanyId());
@@ -251,6 +263,17 @@ public class LetterGenerationService {
         return storageService.load(letter.getPdfPath());
     }
 
+    /**
+     * The From name for a letter email: the company's name (white label, never
+     * the vendor's), else the workspace name; null lets the mail default apply
+     * only when the app provides no letterhead at all.
+     */
+    public String senderNameFor(UUID companyId) {
+        String company = companyId == null ? null
+                : companyRepo.findById(companyId).map(Company::getName).orElse(null);
+        return letterhead != null ? letterhead.senderName(TenantContext.getTenantId(), company) : company;
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private void sendLetterInternal(GeneratedLetter letter, String toEmail, String ccEmail, byte[] pdfBytes) {
@@ -269,7 +292,8 @@ public class LetterGenerationService {
                 log.warn("Letter email template not applied for letter {}: {}", letter.getId(), e.getMessage());
             }
         }
-        emailService.send(toEmail, ccEmail, subject, html, pdfBytes, filename);
+        emailService.send(toEmail, ccEmail, subject, html, pdfBytes, filename,
+                senderNameFor(letter.getCompanyId()));
         letter.setStatus("SENT");
         letter.setSentAt(Instant.now());
         letter.setSentToEmail(toEmail);

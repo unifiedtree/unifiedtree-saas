@@ -140,6 +140,11 @@ public class CanonicalProdSecurityConfig {
                     "/v1/public/inspector-view/document",
                     "/v1/public/subdomains/check",
                     "/v1/public/workspace-status",
+                    // White-label branding for pre-sign-in screens: workspace
+                    // name + logo/mark by subdomain, and the images themselves
+                    // (PublicBrandingController). Returns nothing else.
+                    "/v1/public/workspace-branding",
+                    "/v1/public/workspace-branding/*/*",
                     // "/v1/public/module-request" REMOVED from permitAll
                     // 2026-08-14 (Bundle B4 D4). Anonymous access here was a
                     // tenant-poisoning surface: any caller could POST an
