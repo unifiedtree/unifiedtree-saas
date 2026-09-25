@@ -230,15 +230,24 @@ public class PayrollService {
     @Transactional
     public void createComponent(UUID tenantId, CreateComponentRequest req) {
         bindTenant(tenantId);
-        jdbc.update("""
+        // Codes are one per workspace, compared as the UI shows them (upper case).
+        // ON CONFLICT DO NOTHING used to answer 201 for a duplicate that was never
+        // saved; now the caller is told.
+        String code = req.code() == null ? null : req.code().trim().toUpperCase(Locale.ROOT);
+        int inserted = jdbc.update("""
             INSERT INTO payroll.salary_components
                 (tenant_id, code, name, category, is_statutory, is_taxable, computation_type, percent_value, display_order)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (tenant_id, code) DO NOTHING
             """,
-            tenantId, req.code(), req.name(), req.category(),
+            tenantId, code, req.name(), req.category(),
             Boolean.TRUE.equals(req.isStatutory()), req.isTaxable() == null || req.isTaxable(),
             req.computationType(), req.percentValue(), req.displayOrder() == null ? 100 : req.displayOrder());
+        if (inserted == 0) {
+            throw new com.hrms.core.exception.HrmsException(
+                    "A salary component with code '" + code + "' already exists",
+                    org.springframework.http.HttpStatus.CONFLICT, "COMPONENT_CODE_EXISTS");
+        }
     }
 
     @Transactional

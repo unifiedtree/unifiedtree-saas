@@ -195,9 +195,10 @@ public class LeaveService {
                     "INSUFFICIENT_NOTICE");
         }
 
-        // Calculate working days (exclude weekends and holidays)
+        // Calculate working days (exclude the company's weekly off days and its holidays)
         Set<LocalDate> holidays = fetchHolidayDates(companyId, startDate, endDate);
-        double totalDays = calculateWorkingDays(startDate, endDate, request.duration(), holidays);
+        Set<Integer> offDays = resolveOffDays(companyId);
+        double totalDays = calculateWorkingDays(startDate, endDate, request.duration(), holidays, offDays);
 
         if (totalDays <= 0) {
             throw new BusinessRuleException("Leave request contains no working days", "NO_WORKING_DAYS");
@@ -841,7 +842,46 @@ public class LeaveService {
 
     // ---- Private helpers ----
 
+    /**
+     * The company's weekly off days (ISO 1=Mon .. 7=Sun) from HR Configuration
+     * (settings.hr_configuration.weekend_days), the same setting the leave form
+     * previews with. Saturday and Sunday when the company hasn't set any.
+     */
+    private Set<Integer> resolveOffDays(UUID companyId) {
+        if (companyId != null) {
+            Integer[] days = jdbcTemplate.query(
+                    "SELECT weekend_days FROM settings.hr_configuration WHERE company_id = ?",
+                    rs -> {
+                        if (!rs.next()) return null;
+                        java.sql.Array a = rs.getArray(1);
+                        return a == null ? null : (Integer[]) a.getArray();
+                    },
+                    companyId);
+            if (days != null && days.length > 0) {
+                Set<Integer> out = new java.util.HashSet<>();
+                for (Integer d : days) if (d != null && d >= 1 && d <= 7) out.add(d);
+                if (!out.isEmpty()) return out;
+            }
+        }
+        return Set.of(DayOfWeek.SATURDAY.getValue(), DayOfWeek.SUNDAY.getValue());
+    }
+
     private Set<LocalDate> fetchHolidayDates(UUID companyId, LocalDate startDate, LocalDate endDate) {
+        Set<LocalDate> dates = new java.util.HashSet<>(fetchLegacyHolidayDates(companyId, startDate, endDate));
+        // Holidays are managed in Settings -> Holidays (settings.holiday_calendar);
+        // attendance and payroll read that table too. The leave module's own
+        // holiday table is kept for anything recorded there before.
+        if (companyId != null) {
+            jdbcTemplate.query(
+                    "SELECT holiday_date FROM settings.holiday_calendar "
+                            + "WHERE company_id = ? AND is_active = TRUE AND holiday_date BETWEEN ? AND ?",
+                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> dates.add(rs.getDate("holiday_date").toLocalDate()),
+                    companyId, java.sql.Date.valueOf(startDate), java.sql.Date.valueOf(endDate));
+        }
+        return dates;
+    }
+
+    private Set<LocalDate> fetchLegacyHolidayDates(UUID companyId, LocalDate startDate, LocalDate endDate) {
         int startYear = startDate.getYear();
         int endYear = endDate.getYear();
 
@@ -868,9 +908,9 @@ public class LeaveService {
 
     private double calculateWorkingDays(LocalDate startDate, LocalDate endDate,
                                         com.hrms.leave.enums.LeaveDuration duration,
-                                        Set<LocalDate> holidays) {
+                                        Set<LocalDate> holidays, Set<Integer> offDays) {
         long workingDays = startDate.datesUntil(endDate.plusDays(1))
-                .filter(date -> !isWeekend(date))
+                .filter(date -> !offDays.contains(date.getDayOfWeek().getValue()))
                 .filter(date -> !holidays.contains(date))
                 .count();
 
@@ -879,7 +919,7 @@ public class LeaveService {
         // is a config mistake worth flagging so the applicant fixes their
         // date rather than seeing the generic NO_WORKING_DAYS message.
         if (workingDays == 0) {
-            boolean startIsNonWorking = isWeekend(startDate) || holidays.contains(startDate);
+            boolean startIsNonWorking = offDays.contains(startDate.getDayOfWeek().getValue()) || holidays.contains(startDate);
             if (startIsNonWorking) {
                 throw new BusinessRuleException(
                         "Leave cannot start on a weekend or holiday (" + startDate + ").",
@@ -895,11 +935,6 @@ public class LeaveService {
         }
 
         return (double) workingDays;
-    }
-
-    private boolean isWeekend(LocalDate date) {
-        DayOfWeek day = date.getDayOfWeek();
-        return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
     }
 
     /**

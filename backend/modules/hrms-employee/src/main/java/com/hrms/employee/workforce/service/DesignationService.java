@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -18,13 +19,16 @@ import java.util.UUID;
 public class DesignationService {
 
     private final DesignationRepository repository;
+    private final LiveHeadcount headcount;
 
-    public DesignationService(DesignationRepository repository) {
+    public DesignationService(DesignationRepository repository, LiveHeadcount headcount) {
         this.repository = repository;
+        this.headcount = headcount;
     }
 
     @Transactional(readOnly = true)
     public List<DesignationResponse> listForCompany(UUID companyId, UUID departmentFilter) {
+        Map<UUID, Integer> counts = headcount.byColumn("designation_id");
         // Always include company-wide designations (no department set); when a
         // department is selected, ALSO include that department's designations.
         // Filtering strictly on department_id hid null-department ("global")
@@ -36,7 +40,7 @@ public class DesignationService {
                 : rows.stream()
                         .filter(d -> d.getDepartmentId() == null || departmentFilter.equals(d.getDepartmentId()))
                         .toList();
-        return filtered.stream().map(this::toResponse).toList();
+        return filtered.stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
     }
 
     /**
@@ -89,9 +93,14 @@ public class DesignationService {
     }
 
     private DesignationResponse toResponse(Designation d) {
+        return toResponse(d, headcount.countFor("designation_id", d.getId()));
+    }
+
+    /** {@code employees}: people working there now (see LiveHeadcount), not the never-updated cached column. */
+    private DesignationResponse toResponse(Designation d, int employees) {
         return new DesignationResponse(
                 d.getId(), d.getCompanyId(), d.getTitle(), d.getGrade(),
                 d.getDepartmentId(), d.getReportsToDesignationId(),
-                d.getJobResponsibilities(), d.getHeadcountCached(), d.isActive());
+                d.getJobResponsibilities(), employees, d.isActive());
     }
 }

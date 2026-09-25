@@ -36,11 +36,11 @@ import { SectionState, SubSection } from './shared'
 /** Server-side day classifications from WeeklyDayResponse.status. */
 const DAY_TONE: Record<string, PillTone> = {
   ON_TIME: 'green', LATE: 'warn', WEEKEND: 'gray', HOLIDAY: 'purple',
-  ON_LEAVE: 'info', ABSENT: 'red', UPCOMING: 'gray',
+  ON_LEAVE: 'info', ABSENT: 'red', UPCOMING: 'gray', NOT_MARKED: 'gray',
 }
 const DAY_LABEL: Record<string, string> = {
   ON_TIME: 'On time', LATE: 'Late', WEEKEND: 'Week off', HOLIDAY: 'Holiday',
-  ON_LEAVE: 'On leave', ABSENT: 'Absent', UPCOMING: 'Upcoming',
+  ON_LEAVE: 'On leave', ABSENT: 'Absent', UPCOMING: 'Upcoming', NOT_MARKED: 'Not tracked',
 }
 
 const RECORD_TONE: Record<string, PillTone> = {
@@ -89,8 +89,9 @@ function WeekStrip({ days }: { days: WeeklyDayResponse[] }) {
             {/* A day isn't absent until it's over: today with no punch reads "Not marked yet", and days
                 before this person's first punch aren't counted ("Not tracked"). */}
             {(() => {
-              const today = istToday(), pending = d.date === today && (d.status === 'ABSENT' || d.status === 'UPCOMING')
-              const label = pending ? 'Not marked yet' : d.status === 'UPCOMING' && d.date < today ? 'Not tracked' : DAY_LABEL[d.status] ?? d.status
+              // NOT_MARKED is the server's word for both; older servers sent ABSENT / UPCOMING here.
+              const today = istToday(), pending = d.date === today && (d.status === 'NOT_MARKED' || d.status === 'ABSENT' || d.status === 'UPCOMING')
+              const label = pending ? 'Not marked yet' : (d.status === 'UPCOMING' || d.status === 'NOT_MARKED') && d.date < today ? 'Not tracked' : DAY_LABEL[d.status] ?? d.status
               return <HrStatusPill tone={pending ? 'gray' : DAY_TONE[d.status] ?? 'gray'}>{label}</HrStatusPill>
             })()}
           </div>

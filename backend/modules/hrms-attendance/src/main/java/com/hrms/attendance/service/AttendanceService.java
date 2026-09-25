@@ -653,7 +653,8 @@ public class AttendanceService {
                 holidayDays++;
             } else if (leaveDays.contains(cursor)) {
                 // on approved leave — neither present nor absent
-            } else {
+            } else if (!cursor.equals(today)) {
+                // Today isn't an absence until it's over: no punch yet just means not marked.
                 absentDays++;
             }
             cursor = cursor.plusDays(1);
@@ -713,7 +714,8 @@ public class AttendanceService {
                     result.add(new DayRecordResponse(cursor.toString(), "HOLIDAY", null, null, null));
                 } else if (!beforeJoining && leaveDays.contains(cursor)) {
                     result.add(new DayRecordResponse(cursor.toString(), "ON_LEAVE", null, null, null));
-                } else if (!cursor.isAfter(today) && !beforeJoining) {
+                } else if (cursor.isBefore(today) && !beforeJoining) {
+                    // Today with no punch yet is left out (not an absence until the day ends).
                     result.add(new DayRecordResponse(cursor.toString(), "ABSENT", null, null, null));
                 }
                 // future working days, and weekdays before the join date: omit
@@ -779,8 +781,15 @@ public class AttendanceService {
             // the mobile can style neutrally without hijacking the real WEEKEND
             // label (which now genuinely only marks the employee's configured
             // week-off days).
-            if (day.isAfter(today) || (joining != null && day.isBefore(joining))) {
+            if (day.isAfter(today)) {
                 days.add(new WeeklyDayResponse(day.toString(), 0, "UPCOMING", null, null, null));
+                continue;
+            }
+            // Before this person's attendance starts there's nothing to judge:
+            // NOT_MARKED (an existing status) rather than UPCOMING, which
+            // wrongly read as a future day.
+            if (joining != null && day.isBefore(joining)) {
+                days.add(new WeeklyDayResponse(day.toString(), 0, "NOT_MARKED", null, null, null));
                 continue;
             }
 
@@ -805,6 +814,9 @@ public class AttendanceService {
                 days.add(new WeeklyDayResponse(day.toString(), 0, "HOLIDAY", null, null, null));
             } else if (leaveDays.contains(day)) {
                 days.add(new WeeklyDayResponse(day.toString(), 0, "ON_LEAVE", null, null, null));
+            } else if (day.equals(today)) {
+                // No punch yet today: not an absence until the day is over.
+                days.add(new WeeklyDayResponse(day.toString(), 0, "NOT_MARKED", null, null, null));
             } else {
                 days.add(new WeeklyDayResponse(day.toString(), 0, "ABSENT", null, null, null));
             }

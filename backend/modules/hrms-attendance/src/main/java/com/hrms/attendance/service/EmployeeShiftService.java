@@ -61,12 +61,14 @@ public class EmployeeShiftService {
             throw new BusinessRuleException("companyId is required", "COMPANY_REQUIRED");
         }
         List<ShiftPolicy> policies = policyRepo.findByCompanyIdAndActiveTrue(companyId);
-        // Seed any missing standard shifts (not just when the list is empty).
-        // A tenant that only has the legacy "Standard 9-6" should still get the
-        // new "General 9-5" default so the admin has it available to assign.
-        boolean added = seedMissingDefaults(companyId, policies);
-        if (added) {
-            policies = policyRepo.findByCompanyIdAndActiveTrue(companyId);
+        // The standard shifts are seeded once, for a company that has never had
+        // any. Seeding whenever a default name was missing from the ACTIVE list
+        // brought back every default an admin archived or renamed, on the next
+        // read by anyone.
+        if (policies.isEmpty() && policyRepo.countByCompanyId(companyId) == 0) {
+            if (seedMissingDefaults(companyId, policies)) {
+                policies = policyRepo.findByCompanyIdAndActiveTrue(companyId);
+            }
         }
         return policies.stream()
                 .sorted((a, b) -> nullsafe(a.getStartTime()).compareTo(nullsafe(b.getStartTime())))

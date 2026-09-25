@@ -9,4 +9,7 @@ import java.util.UUID;
 public interface ShiftPolicyRepository extends JpaRepository<ShiftPolicy, UUID> {
 
     List<ShiftPolicy> findByCompanyIdAndActiveTrue(UUID companyId);
+
+    /** Every shift the company ever had, archived ones included. */
+    long countByCompanyId(UUID companyId);
 }

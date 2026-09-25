@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -18,15 +19,18 @@ import java.util.UUID;
 public class CompanyService {
 
     private final WorkforceCompanyRepository repository;
+    private final LiveHeadcount headcount;
 
-    public CompanyService(WorkforceCompanyRepository repository) {
+    public CompanyService(WorkforceCompanyRepository repository, LiveHeadcount headcount) {
         this.repository = repository;
+        this.headcount = headcount;
     }
 
     @Transactional(readOnly = true)
     public List<CompanyResponse> list() {
+        Map<UUID, Integer> counts = headcount.byColumn("company_id");
         return repository.findAllByActiveTrueOrderByNameAsc()
-                .stream().map(this::toResponse).toList();
+                .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
     }
 
     @Transactional(readOnly = true)
@@ -100,10 +104,15 @@ public class CompanyService {
     }
 
     private CompanyResponse toResponse(Company c) {
+        return toResponse(c, headcount.countFor("company_id", c.getId()));
+    }
+
+    /** {@code employees}: people working there now (see LiveHeadcount), not the never-updated cached column. */
+    private CompanyResponse toResponse(Company c, int employees) {
         return new CompanyResponse(
                 c.getId(), c.getName(), c.getLegalName(), c.getRegistrationNumber(),
                 c.getPanNumber(), c.getGstin(), c.getIndustry(),
                 c.getCountry(), c.getTimezone(), c.getCurrency(), c.getFiscalYearStart(),
-                c.getLogoUrl(), c.getEmployeeCountCached(), c.isActive());
+                c.getLogoUrl(), employees, c.isActive());
     }
 }

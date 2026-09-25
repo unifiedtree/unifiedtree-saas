@@ -428,3 +428,22 @@ How it's built:
 | Headcount CSV | Changed | Now also has a `department_id` column. |
 
 **Still to do in the backend batch:** the headcount query briefly carried gender counts too. They were removed so gender stays behind the diversity permission, and that goes live with the next backend rebuild.
+
+## 10. Backend fixes batch (25 Sep): done
+
+Found while redesigning the pages above. Fixed in the backend, running locally, and pushed to main. Checked with `e2e/recovery/live-backend-fixes.mjs` (9/9); everything it changes is put back. The Master (41/41), Workspace (22/22) and Reports (56/56) tests still pass on the rebuilt server.
+
+| # | Bug | Fix |
+|---|---|---|
+| 1 | The weekly summary called **today "Absent"** before the person had punched in. Days before their attendance started were "Upcoming". The monthly stats and history counted today as an absence too. | Today with no punch is `NOT_MARKED`, and so are days before attendance started (an existing status, so the mobile app doesn't see a new value). The monthly absent count and score skip today, and the history leaves today out. The web week strip reads "Not marked yet" / "Not tracked". |
+| 2 | **Leave counted Saturday and Sunday as off for every company**, and **never excluded company holidays**: it read `leave_mgmt.holiday_calendars`, while Settings → Holidays writes `settings.holiday_calendar`. The leave form previewed with the company's days, so the days deducted could differ from the preview. | Leave uses the company's weekly off days (HR Configuration; Sat+Sun if unset) and the Settings holidays (plus anything in the old table). New employees' weekly offs also start from the company setting instead of a fixed "6,7". |
+| 3 | The **classifications list** was gated on role names (HR_MANAGER / COMPANY_ADMIN / SUPER_ADMIN): Roles & Permissions had no effect, and OWNER/ADMIN were shut out. `/employees/by-ids` also let DEPT_MANAGER read any employee record by id, although managers had `hrms.employee.read` removed (V112). | Both now check `hrms.employee.read`. **Check the mobile app:** if it calls `/employees/by-ids` as a manager, it now gets 403. |
+| 4 | Adding a salary component with an **existing code answered "201 Created" but saved nothing**. | 409 "A salary component with code 'X' already exists". Codes are trimmed and upper-cased. |
+| 5 | Reading the shift list **re-created any default shift** (General / Morning / Afternoon / Night) that an admin had archived or renamed, and any employee's read could do it. | Defaults are seeded once, for a company that has never had a shift. Archived and renamed shifts stay as they are. |
+| 6 | **Employee counts** on companies, branches, departments and designations came from cached columns nothing ever updated: 1 for the rows created at signup, 0 for everything later. | Counted live (active, probation and notice). The Companies page now shows real numbers. Contractor and classification counts can't be counted (employees aren't linked to them) and are left as they were. |
+| 7 | Reports (see §9): headcount, attrition and diversity counted the wrong people. | Fixed. The gender columns briefly added to headcount were removed so gender stays behind the diversity permission. |
+
+**Still open (noted, not changed):**
+- *Payroll* also treats Saturday and Sunday as off for everyone (`PayrollRunService`, lines 966 and 985). Changing how pay is calculated needs a decision first, so it's left as is.
+- The alternate `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) has the same "today is absent" and Sat/Sun rules.
+- A company that had only the old "Standard 9-6" shift no longer gets "General" added automatically. It can be added in Shift Rules.

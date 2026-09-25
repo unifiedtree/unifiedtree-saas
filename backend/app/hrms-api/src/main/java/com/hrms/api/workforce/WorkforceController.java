@@ -410,7 +410,9 @@ public class WorkforceController {
      * only the ids that are actually needed.
      */
     @GetMapping("/employees/by-ids")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN','DEPT_MANAGER') or hasAuthority('hrms.employee.read')")
+    // Permission only, like /employees: the role list let DEPT_MANAGER read any
+    // employee record by id although that role no longer holds hrms.employee.read (V112).
+    @PreAuthorize("hasAuthority('hrms.employee.read')")
     public List<WorkforceEmployeeResponse> employeesByIds(@RequestParam("ids") List<UUID> ids) {
         return employees.byIds(ids);
     }
@@ -497,7 +499,9 @@ public class WorkforceController {
 
     // -- Classification rules ------------------------------------------------
     @GetMapping("/classifications")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
+    // The read counterpart of the hrms.employee.write its create/delete siblings
+    // check; role names ignored Roles & Permissions and shut out OWNER/ADMIN.
+    @PreAuthorize("hasAuthority('hrms.employee.read')")
     public List<ClassificationRuleResponse> listClassifications(@RequestParam UUID companyId) {
         return classifications.listForCompany(companyId);
     }

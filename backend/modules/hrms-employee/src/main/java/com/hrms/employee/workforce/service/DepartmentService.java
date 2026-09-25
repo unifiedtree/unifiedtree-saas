@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service("workforceDepartmentService")
@@ -17,15 +18,18 @@ import java.util.UUID;
 public class DepartmentService {
 
     private final WorkforceDepartmentRepository repository;
+    private final LiveHeadcount headcount;
 
-    public DepartmentService(WorkforceDepartmentRepository repository) {
+    public DepartmentService(WorkforceDepartmentRepository repository, LiveHeadcount headcount) {
         this.repository = repository;
+        this.headcount = headcount;
     }
 
     @Transactional(readOnly = true)
     public List<DepartmentResponse> listForCompany(UUID companyId) {
+        Map<UUID, Integer> counts = headcount.byColumn("department_id");
         return repository.findAllByCompanyIdAndActiveTrueOrderByNameAsc(companyId)
-                .stream().map(this::toResponse).toList();
+                .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
     }
 
     /**
@@ -150,10 +154,15 @@ public class DepartmentService {
     }
 
     private DepartmentResponse toResponse(Department d) {
+        return toResponse(d, headcount.countFor("department_id", d.getId()));
+    }
+
+    /** {@code employees}: people working there now (see LiveHeadcount), not the never-updated cached column. */
+    private DepartmentResponse toResponse(Department d, int employees) {
         return new DepartmentResponse(
                 d.getId(), d.getCompanyId(), d.getName(), d.getCode(),
                 d.getParentDepartmentId(), d.getDepartmentHeadEmployeeId(),
                 d.getDescription(), d.getColorHex(), d.getIconKey(),
-                d.getEmployeeCountCached(), d.isActive());
+                employees, d.isActive());
     }
 }

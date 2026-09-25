@@ -357,9 +357,10 @@ public class WorkforceEmployeeService {
         // are left null rather than guessed at; HR sets it on the profile.
         if (resolvedBranchId == null) resolvedBranchId = soleActiveBranchOf(req.companyId());
         e.setBranchId(resolvedBranchId);
-        // Weekly off days CSV (ISO 1=Mon..7=Sun). Default Sat+Sun when unset.
+        // Weekly off days CSV (ISO 1=Mon..7=Sun). When unset, start from the
+        // company's weekly off days (HR Configuration), else Sat+Sun.
         e.setWeeklyOffDays((req.weeklyOffDays() == null || req.weeklyOffDays().isBlank())
-                ? "6,7" : req.weeklyOffDays().trim());
+                ? companyOffDaysCsv(req.companyId()) : req.weeklyOffDays().trim());
         // Reporting manager: explicit value wins; otherwise auto-derive from the
         // selected department's head. The client no longer ships a chip picker;
         // the rule "you report to the head of your department" is canonical.
@@ -519,6 +520,15 @@ public class WorkforceEmployeeService {
     // from settings.hr_configuration and atomically increments the counter.
     // Runs inside the surrounding @Transactional so a downstream failure in
     // create() rolls back the counter bump too — no gaps under load.
+    /** The company's weekly off days from HR Configuration as "6,7"; Sat+Sun if it has none. */
+    private String companyOffDaysCsv(UUID companyId) {
+        if (companyId == null) return "6,7";
+        String csv = jdbc.query(
+                "SELECT array_to_string(weekend_days, ',') FROM settings.hr_configuration WHERE company_id = ?",
+                rs -> rs.next() ? rs.getString(1) : null, companyId);
+        return csv == null || csv.isBlank() ? "6,7" : csv;
+    }
+
     private String generateEmployeeCode(UUID companyId) {
         Map<String, Object> row = incrementAndFetch(companyId);
         if (row == null) {

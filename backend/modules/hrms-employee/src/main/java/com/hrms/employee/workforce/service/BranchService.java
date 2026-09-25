@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service("workforceBranchService")
@@ -18,21 +19,25 @@ import java.util.UUID;
 public class BranchService {
 
     private final WorkforceBranchRepository repository;
+    private final LiveHeadcount headcount;
 
-    public BranchService(WorkforceBranchRepository repository) {
+    public BranchService(WorkforceBranchRepository repository, LiveHeadcount headcount) {
         this.repository = repository;
+        this.headcount = headcount;
     }
 
     @Transactional(readOnly = true)
     public List<BranchResponse> listForCompany(UUID companyId) {
+        Map<UUID, Integer> counts = headcount.byColumn("branch_id");
         return repository.findAllByCompanyIdAndActiveTrueOrderByNameAsc(companyId)
-                .stream().map(this::toResponse).toList();
+                .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
     }
 
     @Transactional(readOnly = true)
     public List<BranchResponse> listAll() {
+        Map<UUID, Integer> counts = headcount.byColumn("branch_id");
         return repository.findAllByActiveTrueOrderByNameAsc()
-                .stream().map(this::toResponse).toList();
+                .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
     }
 
     public BranchResponse create(CreateBranchRequest req) {
@@ -91,12 +96,17 @@ public class BranchService {
     }
 
     private BranchResponse toResponse(Branch b) {
+        return toResponse(b, headcount.countFor("branch_id", b.getId()));
+    }
+
+    /** {@code employees}: people working there now (see LiveHeadcount), not the never-updated cached column. */
+    private BranchResponse toResponse(Branch b, int employees) {
         return new BranchResponse(
                 b.getId(), b.getCompanyId(), b.getName(), b.getCode(),
                 b.getAddressLine(), b.getCity(), b.getState(), b.getCountry(), b.getPincode(),
                 b.getLatitude(), b.getLongitude(),
                 b.getGeoFenceRadiusMeters(), b.isGeoFenceEnforced(),
-                b.getManagerEmployeeId(), b.getEmployeeCountCached(),
+                b.getManagerEmployeeId(), employees,
                 b.isHeadquarters(), b.isActive());
     }
 }

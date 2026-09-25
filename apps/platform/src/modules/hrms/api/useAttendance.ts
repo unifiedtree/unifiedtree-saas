@@ -152,7 +152,7 @@ export interface AttendanceRecordResponse {
 export interface WeeklyDayResponse {
   date: string
   hours: number
-  /** ON_TIME | LATE | WEEKEND | HOLIDAY | ON_LEAVE | ABSENT | UPCOMING */
+  /** ON_TIME | LATE | WEEKEND | HOLIDAY | ON_LEAVE | ABSENT | UPCOMING (future) | NOT_MARKED (today with no punch yet, or before attendance started) */
   status: string
   checkInTime?: string
   checkOutTime?: string
