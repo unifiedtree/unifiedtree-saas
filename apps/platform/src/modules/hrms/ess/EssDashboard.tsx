@@ -1,237 +1,98 @@
-import { AttendanceHistory } from './AttendanceHistory'
-import { TimeEntries } from './TimeEntries'
-import React from 'react'
+// My workspace (/me, /hrms/ess): an employee's landing page, in the design
+// language of the redesigned modules (design/module/ModuleKit). This month's
+// attendance, leave at a glance, the self-service requests, attendance history
+// and daily time entries. Every shortcut shows only when its page would open
+// for this person (the same permissions as the routes in App.tsx).
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, ClipboardList, CheckCircle, Clock, Home, Repeat, Wallet } from 'lucide-react'
-import { format } from 'date-fns'
 import { P, useAnyPermission, usePermission, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore } from '@/core/auth/authStore'
-import { HrStatCard, HrStatusPill, type PillTone } from '@/shared/components/hr'
-import { CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { dashIcon } from '@/design/dc/icons'
+import { ModulePage, StatRow, Panel, State, Row, Facts, Note, days, range, CARD } from '@/design/module/ModuleKit'
 import { useMonthlyStats } from '../api/useAttendance'
 import { useMyBalances, useMyLeaves } from '../api/useLeave'
+import { AttendanceHistory } from './AttendanceHistory'
+import { TimeEntries } from './TimeEntries'
 
-const LEAVE_TONE: Record<string, PillTone> = {
-  APPROVED: 'ok', PENDING: 'warn', REJECTED: 'red', CANCELLED: 'gray', PENDING_L2: 'purple',
+const LEAVE: Record<string, [string, PillTone]> = { APPROVED: ['Approved', 'ok'], PENDING: ['Pending', 'warn'], REJECTED: ['Rejected', 'red'], CANCELLED: ['Cancelled', 'gray'], PENDING_L2: ['Awaiting HR', 'purple'] }
+
+function Shortcut({ icon, title, sub, cta, onClick }: { icon: string; title: string; sub: string; cta: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="ut-row-hover"
+      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: 0, borderBottom: '1px solid #f1f5f9', background: 'transparent', font: 'inherit', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+      <span aria-hidden="true" style={{ flex: '0 0 auto', width: 36, height: 36, borderRadius: 11, background: '#ecfdf5', border: '1px solid #d1fae5', color: '#0f6e56', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{dashIcon(icon, 17)}</span>
+      <span style={{ flex: 1, minWidth: 0, display: 'grid', gap: 2 }}><strong style={{ fontSize: 14 }}>{title}</strong><span style={{ fontSize: 12.5, color: '#64748b' }}>{sub}</span></span>
+      <span style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 700, color: '#0f6e56' }}>{cta}{dashIcon('arrowRight', 14)}</span>
+    </button>
+  )
 }
 
-export const EssDashboard: React.FC = () => {
+export function EssDashboard() {
   const navigate = useNavigate()
-  const user = useSdkStore((state) => state.user)
-  // Each shortcut below is shown only when the viewer can actually open its
-  // destination — same permission lists as the RouteGuards in App.tsx — so a
-  // plain employee is never sent to a NoAccess screen from their own workspace.
-  const canOpenLeave = useAnyPermission([P.HRMS_LEAVE_READ, P.HRMS_ESS_READ, P.LEAVE_REQUEST_SELF])
-  const canOpenOnboarding = useAnyPermission([P.HRMS_ONBOARDING_INSTANCE_READ, P.HRMS_ONBOARDING_TASK_COMPLETE, 'hrms.onboarding.asset.read'])
-  // /me/salary is also behind ModuleGate "payroll" — hide the link when the
-  // tenant has no payroll module rather than linking to the upsell screen.
-  const payrollActive = useAuthStore((s) => s.tenant?.activeModules.includes('payroll') ?? false)
-  const canViewSalary = usePermission(P.PAYROLL_STRUCTURE_READ_SELF) && payrollActive
-
-  // Punching is mobile-only — the web ESS dashboard no longer shows a check-in/out
-  // widget. useCheckIn/useCheckOut remain in ../api/useAttendance for mobile clients.
-  const {
-    data: monthStats,
-    isLoading: monthStatsLoading,
-    error: monthStatsError,
-    refetch: refetchMonthStats,
-  } = useMonthlyStats()
-  const {
-    data: balances = [],
-    isLoading: balancesLoading,
-    error: balancesError,
-    refetch: refetchBalances,
-  } = useMyBalances()
-  const { data: myLeaves } = useMyLeaves(0)
-
-  const recentLeaves = (myLeaves?.content ?? []).slice(0, 3)
-  const pendingLeaves = (myLeaves?.content ?? []).filter((l) => l.status === 'PENDING').length
-  const hour = new Date().getHours()
-  const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+  const user = useSdkStore((s) => s.user)
+  const canLeave = useAnyPermission([P.HRMS_LEAVE_READ, P.HRMS_ESS_READ, P.LEAVE_REQUEST_SELF])
+  const canOnboarding = useAnyPermission([P.HRMS_ONBOARDING_INSTANCE_READ, P.HRMS_ONBOARDING_TASK_COMPLETE, 'hrms.onboarding.asset.read'])
+  // /me/salary and /me/payslips also sit behind the payroll module.
+  const payroll = useAuthStore((s) => s.tenant?.activeModules.includes('payroll') ?? false)
+  const canSalary = usePermission(P.PAYROLL_STRUCTURE_READ_SELF) && payroll
+  const canPayslips = usePermission(P.PAYROLL_PAYSLIP_READ_SELF) && payroll
+  const canWfh = useAnyPermission(['wfh.request.self', P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF])
+  const canShift = useAnyPermission([P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF])
+  const stats = useMonthlyStats()
+  const bal = useMyBalances()
+  const mine = useMyLeaves(0)
+  const recent = (mine.data?.content ?? []).slice(0, 4)
+  const pending = (mine.data?.content ?? []).filter((l) => l.status === 'PENDING' || l.status === 'PENDING_L2').length
+  const hour = new Date().getHours(), greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const m = stats.data
+  const open = () => navigate('/hrms/attendance')
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-8">
-      {/* Greeting */}
-      <div className="rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] p-5">
-        <p className="text-sm text-[#064E3B]">Good {greeting},</p>
-        <h1 className="mt-0.5 text-2xl font-bold text-text-primary">{user?.firstName ?? 'Employee'} {user?.lastName ?? ''}</h1>
-        <p className="mt-1 text-sm text-text-secondary">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
+    <ModulePage crumb="My workspace" title={`${greeting}, ${user?.firstName || 'there'}`} subtitle={today}
+      actions={canLeave ? <HrButton onClick={() => navigate('/hrms/leave?tab=apply')}>{dashIcon('plus', 15)} Apply for leave</HrButton> : undefined}>
+      <div style={{ display: 'grid', gap: 12 }}>
+        <h2 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: 16, fontWeight: 800 }}>This month</h2>
+        {stats.isLoading ? <State kind="loading" height={96} />
+          : stats.error ? <State kind="error" title="Couldn’t load this month’s attendance" description="Check your connection and try again." onRetry={() => stats.refetch()} />
+            : m ? <StatRow min={150} tiles={[
+              { icon: 'checkCircle', color: 'green', label: 'Present', value: String(m.presentDays), sub: 'days with a punch', onClick: open },
+              { icon: 'circleX', color: 'red', label: 'Absent', value: String(m.absentDays), sub: 'working days missed', onClick: open },
+              { icon: 'clock', color: 'orange', label: 'Late', value: String(m.lateDays), sub: 'after shift start + grace', onClick: open },
+              { icon: 'sunrise', color: 'blue', label: 'On time', value: String(m.onTimeDays), sub: 'within your shift', onClick: open },
+              { icon: 'target', color: 'teal', label: 'Score', value: `${m.attendanceScore}%`, sub: 'present of working days', onClick: open },
+            ]} /> : null}
       </div>
 
-      {/* Monthly stats — explicit loading + error states so a network hiccup
-          doesn't leave the employee looking at a blank card wondering whether
-          the day counted or the page broke. */}
-      <div>
-        <h2 className="mb-3 text-sm font-semibold text-text-primary">This Month</h2>
-        {monthStatsLoading ? (
-          <CardSkeleton />
-        ) : monthStatsError ? (
-          <EmptyState
-            variant="error"
-            title="Couldn't load attendance stats"
-            description="Check your connection and retry."
-            primaryAction={{ label: 'Retry', onClick: () => refetchMonthStats() }}
-          />
-        ) : monthStats ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <HrStatCard icon={<CheckCircle size={16} />} color="green"  value={monthStats.presentDays}            label="Present" />
-            <HrStatCard icon={<Clock size={16} />}       color="red"    value={monthStats.absentDays}             label="Absent" />
-            <HrStatCard icon={<Clock size={16} />}       color="orange" value={monthStats.lateDays}               label="Late" />
-            <HrStatCard icon={<CheckCircle size={16} />} color="blue"   value={monthStats.onTimeDays}             label="On Time" />
-            <HrStatCard icon={<CheckCircle size={16} />} color="teal"   value={`${monthStats.attendanceScore}%`}  label="Score" />
-          </div>
-        ) : null}
-      </div>
-
-      {/* Leave balances — same loading/error treatment as the stats block. */}
-      <div className="ut-card p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-text-primary">Leave Balances</h2>
-          {canOpenLeave && (
-            <button onClick={() => navigate('/hrms/leave?tab=apply')} className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]">
-              Apply leave <ArrowRight size={12} />
-            </button>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,380px),1fr))', gap: 16, alignItems: 'start' }}>
+        <Panel title="Leave" sub={pending ? `${pending} ${pending === 1 ? 'request is' : 'requests are'} waiting for approval` : 'Your balance this year'}
+          aside={canLeave ? <HrButton size="sm" variant="ghost" onClick={() => navigate('/hrms/leave')}>Open leave</HrButton> : undefined}>
+          {bal.isLoading ? <State kind="loading" height={80} />
+            : bal.error ? <State kind="error" title="Couldn’t load your leave balance" onRetry={() => bal.refetch()} />
+              : (bal.data ?? []).length === 0 ? <Note>No leave types have been set up for you yet. Ask HR to add them.</Note>
+                : <Facts min={140} items={(bal.data ?? []).slice(0, 6).map((b) => ({ k: b.leaveTypeName, v: `${days(b.available)} left` }))} />}
+          {recent.length > 0 && (
+            <div style={{ ...CARD, overflow: 'hidden', boxShadow: 'none' }}>
+              {recent.map((l) => { const [lab, tone] = LEAVE[l.status] || [l.status, 'gray' as PillTone]; return <Row key={l.id} title={`${l.leaveTypeName || 'Leave'} · ${range(l.startDate, l.endDate)}`} meta={days(Number(l.totalDays))} trail={<HrStatusPill tone={tone}>{lab}</HrStatusPill>} /> })}
+            </div>
           )}
-        </div>
-        {balancesLoading ? (
-          <CardSkeleton />
-        ) : balancesError ? (
-          <EmptyState
-            variant="error"
-            title="Couldn't load leave balances"
-            primaryAction={{ label: 'Retry', onClick: () => refetchBalances() }}
-          />
-        ) : balances.length === 0 ? (
-          <p className="text-xs text-text-tertiary">
-            No leave types have been assigned to you yet. Contact HR to set up your balances.
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {balances.slice(0, 6).map((b) => (
-              <div key={b.id} className="rounded-xl bg-bg-base p-3">
-                <p className="truncate text-xs text-text-secondary">{b.leaveTypeName}</p>
-                <p className="mt-0.5 text-lg font-bold text-text-primary">{b.available.toFixed(1)}</p>
-                <p className="text-xs text-text-tertiary">of {b.totalEntitlement.toFixed(1)} days</p>
-              </div>
-            ))}
+        </Panel>
+        <div style={{ ...CARD, overflow: 'hidden' }}>
+          <div style={{ padding: '18px 20px 12px', display: 'grid', gap: 2, borderBottom: '1px solid #f1f5f9' }}>
+            <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: 16, fontWeight: 700 }}>Requests and records</h3>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>Things you can ask for or look up yourself</p>
           </div>
-        )}
-      </div>
-
-      {/* Salary structure shortcut — /me/salary has no sidebar entry. */}
-      {canViewSalary && (
-        <div className="ut-card ut-card-sm p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
-                <Wallet size={15} className="text-[#059669]" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-text-primary">My Salary</p>
-                <p className="text-xs text-text-secondary">See your current salary structure and components</p>
-              </div>
-            </div>
-            <button
-              onClick={() => navigate('/me/salary')}
-              className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
-            >
-              View salary <ArrowRight size={12} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Onboarding tasks shortcut */}
-      {canOpenOnboarding && (
-        <div className="ut-card ut-card-sm p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
-                <ClipboardList size={15} className="text-[#059669]" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-text-primary">Onboarding Tasks</p>
-                <p className="text-xs text-text-secondary">View your onboarding checklist</p>
-              </div>
-            </div>
-            <button
-              onClick={() => navigate('/hrms/onboarding/instances')}
-              className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
-            >
-              Open <ArrowRight size={12} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Employee self-service shortcuts — mirror the mobile app's "Apply WFH"
-          and "Shift Change" so desk employees can raise these from a laptop
-          without a phone. Kept as two adjacent cards to preserve the existing
-          spacing rhythm; teammate can restyle into a single row/grid later. */}
-      <div className="ut-card ut-card-sm p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
-              <Home size={15} className="text-[#059669]" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-text-primary">Work From Home</p>
-              <p className="text-xs text-text-secondary">Request approval to work from home</p>
-            </div>
-          </div>
-          <button
-            onClick={() => navigate('/me/wfh')}
-            className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
-          >
-            Request WFH <ArrowRight size={12} />
-          </button>
+            {canWfh && <Shortcut icon="home" title="Work from home" sub="Ask to work from home on some days" cta="Request" onClick={() => navigate('/me/wfh')} />}
+            {canShift && <Shortcut icon="swap" title="Shift change" sub="Ask HR to move you to another shift" cta="Request" onClick={() => navigate('/me/shift-change')} />}
+            {canPayslips && <Shortcut icon="receipt" title="Payslips" sub="Download your monthly payslips" cta="Open" onClick={() => navigate('/me/payslips')} />}
+            {canSalary && <Shortcut icon="rupee" title="Salary" sub="Your salary structure and components" cta="View" onClick={() => navigate('/me/salary')} />}
+            {canOnboarding && <Shortcut icon="clipboard" title="Onboarding tasks" sub="Your onboarding checklist" cta="Open" onClick={() => navigate('/hrms/onboarding/instances')} />}
+            <Shortcut icon="userCheck" title="Profile" sub="Your photo, contact details and documents" cta="Open" onClick={() => navigate('/profile')} />
         </div>
       </div>
-
-      <div className="ut-card ut-card-sm p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ECFDF5]">
-              <Repeat size={15} className="text-[#059669]" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-text-primary">Shift Change</p>
-              <p className="text-xs text-text-secondary">Ask HR to move you to a different shift</p>
-            </div>
-          </div>
-          <button
-            onClick={() => navigate('/me/shift-change')}
-            className="flex items-center gap-1 text-xs font-semibold text-[#047857] hover:text-[#064E3B]"
-          >
-            Request Shift Change <ArrowRight size={12} />
-          </button>
-        </div>
-      </div>
-
-      {/* Recent leave requests */}
-      {recentLeaves.length > 0 && (
-        <div className="ut-card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-border-default px-4 py-3">
-            <h2 className="text-sm font-semibold text-text-primary">Recent Leave Requests</h2>
-            {pendingLeaves > 0 && <HrStatusPill tone="warn">{pendingLeaves} pending</HrStatusPill>}
-          </div>
-          {recentLeaves.map((leave) => (
-            <div key={leave.id} className="flex items-center justify-between border-b border-border-default/40 px-4 py-3 last:border-0">
-              <div>
-                <p className="text-sm text-text-primary">{leave.leaveTypeName ?? 'Leave'}</p>
-                <p className="mt-0.5 text-xs text-text-secondary">
-                  {format(new Date(leave.startDate), 'd MMM')} – {format(new Date(leave.endDate), 'd MMM')} · {leave.totalDays}d
-                </p>
-              </div>
-              <HrStatusPill tone={LEAVE_TONE[leave.status] ?? 'gray'}>{leave.status}</HrStatusPill>
-            </div>
-          ))}
-        </div>
-      )}
 
       <AttendanceHistory />
       <TimeEntries />
-
-    </div>
+    </ModulePage>
   )
 }

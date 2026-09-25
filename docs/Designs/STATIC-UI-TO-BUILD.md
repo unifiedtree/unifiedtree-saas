@@ -473,3 +473,15 @@ The same classes of components means these pages match the designed ones and eac
 - **Bug fixed:** the leave form and leave calendar compared the API's ISO weekdays (Sat = 6, Sun = 7) with JavaScript's `getDay()` (Sun = 0). Sunday counted as a working day in the preview, and the calendar greyed out only Saturday. A shared `jsWeekendDays` now converts them.
 - **Navigation fixed:** employees had no Leave entry (the Leave group is for approvers), and "Me" appeared twice. There is now one "Me" with Overview, Attendance, Leave, Payslips, Salary, Work from home and Shift change as tabs. The last three were reachable only through links before.
 - **Checked live:** `e2e/recovery/live-design-leave.mjs`, 11/11. The employee's nav and views are right; a Fri–Mon request previews and saves 2 days; the owner approves it from its card; the employee cancels through the dialog; no refused calls. The request and balance are put back afterwards.
+
+### 11.2 My workspace (`/me`, `/me/payslips`, `/me/salary`, `/me/wfh`, `/me/shift-change`): done
+All five are on the module kit, as tabs under the employee's one "Me" rail item.
+- **Overview:**
+  - this month's attendance as stat tiles (each opens Attendance)
+  - leave balances and recent requests
+  - a "Requests and records" list (work from home, shift change, payslips, salary, onboarding, profile), each shown only when its page would open for the person
+  - attendance history and daily time entries, restyled
+- **Payslips:** this year's take-home, gross and deductions as tiles, then one row per month with status and PDF. *Needs backend:* there's no API for an employee's own payslip lines (only the list and the PDF), so the breakdown is only in the PDF. `GET /v1/payroll/payslips/me/{runId}` would allow showing it in the design's payslip drawer.
+- **Salary:** CTC, gross, deductions and take-home tiles, the tax regime and PF, then earnings and deductions tables (monthly and yearly).
+- **Work from home:** request form with the same rules as the mobile app. A panel explains what an approved day changes (check in from anywhere, marked WFH). Cancel asks first.
+- **Shift change:** current and scheduled shift as fact tiles, the request form, and past requests with HR's notes. Same rules as before.

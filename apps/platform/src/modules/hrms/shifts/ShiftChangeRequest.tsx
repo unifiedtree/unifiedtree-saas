@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { addYears, format, parseISO } from 'date-fns'
-import { ArrowLeft, Clock } from 'lucide-react'
 import { apiJson } from '@/core/api/client'
-import { HrPageHeader, HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { Field, Input } from '@unifiedtree/ui-kit'
+import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { ModulePage, Panel, Facts, Note, SubHeading, State, RowList, Row } from '@/design/module/ModuleKit'
 
 /**
  * Employee-facing shift-change request (web mirror of Attendance_App/app/shift-change.tsx).
@@ -90,7 +90,6 @@ const REASON_MIN = 10
 const REASON_MAX = 500
 
 export const ShiftChangeRequest: React.FC = () => {
-  const navigate = useNavigate()
   const qc = useQueryClient()
 
   const [requestedShiftId, setRequestedShiftId] = useState('')
@@ -199,178 +198,61 @@ export const ShiftChangeRequest: React.FC = () => {
   }
 
   const disableForm = hasPending || availableShifts.length === 0 || !myId || !companyId
+  const pendingReq = (myRequests.data ?? []).find((r) => r.status === 'PENDING')
+  const statusLabel = (s: string) => (s === 'PENDING' ? 'Pending' : s === 'APPROVED' ? 'Approved' : s === 'REJECTED' ? 'Rejected' : s === 'CANCELLED' ? 'Cancelled' : s)
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
-      <HrPageHeader
-        crumb="Employee Self-Service"
-        title="Request a Shift Change"
-        subtitle="Ask HR to move you to a different shift. HR will review and approve or reject."
-        actions={
-          <HrButton variant="ghost" size="sm" onClick={() => navigate('/me')}>
-            <ArrowLeft size={14} /> Back
-          </HrButton>
-        }
-      />
-
-      {/* Current shift (read-only) */}
-      <div className="ut-card ut-card-sm p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">Current shift</p>
-        <div className="mt-1 flex items-center gap-2">
-          <Clock size={16} className="text-text-tertiary" />
-          <p className="text-base font-semibold text-text-primary">
-            {currentShiftName ? `${currentShiftName}${currentShiftRange ? ` · ${currentShiftRange}` : ''}` : 'Default (unassigned)'}
-          </p>
-        </div>
-        {scheduledChange && (
-          <p className="mt-2 text-xs text-text-secondary">
-            Scheduled: {current.data?.upcomingShiftName ?? 'another shift'} from {longDate(scheduledChange)}
-          </p>
+    <ModulePage crumb="My workspace" title="Shift change" subtitle="Ask HR to move you to a different shift. They approve or reject it, and you’re notified.">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,340px),1fr))', gap: 16, alignItems: 'start' }}>
+        <Panel title="Your shift" sub={current.isLoading ? 'Loading…' : undefined}>
+          <Facts items={[
+            { k: 'Now', v: currentShiftName ? `${currentShiftName}${currentShiftRange ? ` · ${currentShiftRange}` : ''}` : 'Default (not assigned)' },
+            ...(scheduledChange ? [{ k: 'Scheduled', v: `${current.data?.upcomingShiftName ?? 'Another shift'} from ${longDate(scheduledChange)}` }] : []),
+          ]} min={200} />
+          {hasPending && pendingReq && <Note tone="amber">{`You asked for ${pendingReq.requestedShiftName ?? 'another shift'} on ${longDate(pendingReq.createdAt.slice(0, 10))}. Wait for HR to decide before sending another request.`}</Note>}
+        </Panel>
+        {!hasPending && (
+          <Panel title="New request" sub="The new shift starts on the date you choose once HR approves it.">
+            <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 14 }}>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Shift you want *</span>
+                <HrSelect value={requestedShiftId} onChange={setRequestedShiftId} disabled={disableForm || shifts.isLoading} placeholder={shifts.isLoading ? 'Loading…' : 'Choose a shift'}
+                  options={availableShifts.map((s) => ({ value: s.id, label: `${s.name}${s.startTime ? ` · ${formatShiftRange(s.startTime, s.endTime)}` : ''}` }))} />
+                {availableShifts.length === 0 && shifts.isSuccess && <span style={{ fontSize: 12.5, color: '#64748b' }}>There are no other shifts to move to.</span>}
+              </div>
+              <div style={{ maxWidth: 220 }}><Field label="Starting from *"><Input type="date" min={minDate} max={maxDate} value={effectiveDate} disabled={disableForm} onChange={(e: any) => setPickedDate(e.target.value)} /></Field></div>
+              <Note>If HR hasn’t approved it by that date, the request expires and you can send a new one.</Note>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: '#334155' }}>Reason *<span style={{ fontWeight: 500, color: '#94a3b8' }}>{reason.trim().length}/{REASON_MAX}</span></span>
+                <textarea rows={3} maxLength={REASON_MAX} value={reason} disabled={disableForm} onChange={(e) => setReason(e.target.value)} placeholder="At least 10 characters"
+                  style={{ font: 'inherit', fontSize: 14, padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 10, outline: 'none', resize: 'vertical' }} />
+              </label>
+              {error && <Note tone="red">{error}</Note>}
+              {submit.isSuccess && <Note tone="green">Request sent. HR will review it and you’ll be notified.</Note>}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4, borderTop: '1px solid #f1f5f9' }}>
+                <HrButton type="submit" disabled={disableForm || submit.isPending}>{submit.isPending ? 'Sending…' : 'Send request to HR'}</HrButton>
+              </div>
+            </form>
+          </Panel>
         )}
       </div>
-
-      {/* Pending banner */}
-      {hasPending && (
-        <div className="rounded-2xl border border-[#FBBF24] bg-[#FFFBEB] p-4 text-sm text-[#78350F]">
-          You already have a pending shift-change request. Please wait for HR to decide before sending another.
-        </div>
-      )}
-
-      {/* Form */}
-      {!hasPending && (
-        <form onSubmit={handleSubmit} className="ut-card ut-card-lg space-y-4 p-4 sm:p-6">
-          <div>
-            <label htmlFor="scr-shift" className="mb-1 block text-[13px] font-semibold text-text-primary">
-              Requested shift <span className="text-[#DC2626]">*</span>
-            </label>
-            <select
-              id="scr-shift"
-              required
-              value={requestedShiftId}
-              onChange={(e) => setRequestedShiftId(e.target.value)}
-              disabled={disableForm || shifts.isLoading}
-              className="w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#059669] focus:outline-none disabled:bg-bg-base disabled:text-text-tertiary"
-            >
-              <option value="">— Select a shift —</option>
-              {availableShifts.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}{s.startTime ? ` · ${formatShiftRange(s.startTime, s.endTime)}` : ''}
-                </option>
-              ))}
-            </select>
-            {availableShifts.length === 0 && shifts.isSuccess && (
-              <p className="mt-1 text-xs text-text-tertiary">No other shifts available to switch to.</p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="scr-date" className="mb-1 block text-[13px] font-semibold text-text-primary">
-              Effective from <span className="text-[#DC2626]">*</span>
-            </label>
-            <input
-              id="scr-date"
-              type="date"
-              required
-              min={minDate}
-              max={maxDate}
-              value={effectiveDate}
-              onChange={(e) => setPickedDate(e.target.value)}
-              disabled={disableForm}
-              className="w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#059669] focus:outline-none disabled:bg-bg-base disabled:text-text-tertiary"
-            />
-            <p className="mt-1 text-xs text-text-tertiary">
-              Your new shift starts on this date once approved. If it isn't approved by then, the request
-              expires and you can send a new one.
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="scr-reason" className="mb-1 block text-[13px] font-semibold text-text-primary">
-              Reason <span className="text-[#DC2626]">*</span>
-            </label>
-            <textarea
-              id="scr-reason"
-              required
-              rows={4}
-              minLength={REASON_MIN}
-              maxLength={REASON_MAX}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              disabled={disableForm}
-              placeholder="Why do you want to change shift?"
-              className="w-full resize-y rounded-lg border border-border-default bg-white px-3 py-2 text-sm focus:border-[#059669] focus:outline-none disabled:bg-bg-base disabled:text-text-tertiary"
-            />
-            <div className="mt-1 flex items-center justify-between text-xs text-text-tertiary">
-              <span>Minimum {REASON_MIN} characters.</span>
-              <span>{reason.trim().length}/{REASON_MAX}</span>
-            </div>
-          </div>
-
-          {error && (
-            <div className="rounded-lg border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-2 text-sm text-[#991B1B]">
-              {error}
-            </div>
-          )}
-
-          {submit.isSuccess && (
-            <div className="rounded-lg border border-[#6EE7B7] bg-[#ECFDF5] px-3 py-2 text-sm text-[#065F46]">
-              Request sent. HR will review and notify you.
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <HrButton type="button" variant="ghost" onClick={() => navigate('/me')} disabled={submit.isPending}>
-              Cancel
-            </HrButton>
-            <HrButton type="submit" variant="primary" disabled={disableForm || submit.isPending}>
-              {submit.isPending ? 'Sending…' : 'Send request to HR'}
-            </HrButton>
-          </div>
-        </form>
-      )}
-
-      {/* Past requests */}
-      <div className="ut-card">
-        <div className="border-b border-border-default px-4 py-3">
-          <h2 className="text-sm font-semibold text-text-primary">My shift-change requests</h2>
-        </div>
-        {(myRequests.data ?? []).length === 0 ? (
-          <p className="px-4 py-6 text-sm text-text-tertiary">Your shift-change requests will appear here.</p>
-        ) : (
-          <ul className="divide-y divide-border-default/40">
-            {(myRequests.data ?? []).map((r) => (
-              <li key={r.id} className="px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-text-primary">
-                      {r.requestedShiftName ?? 'Shift'}
-                    </p>
-                    {r.currentShiftName && (
-                      <p className="mt-0.5 text-xs text-text-secondary">From {r.currentShiftName}</p>
-                    )}
-                    {r.status === 'APPROVED' && r.appliedEffectiveDate ? (
-                      <p className="mt-0.5 text-xs text-text-secondary">Starts {longDate(r.appliedEffectiveDate)}</p>
-                    ) : r.requestedEffectiveDate ? (
-                      <p className="mt-0.5 text-xs text-text-secondary">
-                        Requested start {longDate(r.requestedEffectiveDate)}
-                      </p>
-                    ) : null}
-                    <p className="mt-0.5 text-xs text-text-tertiary">
-                      Submitted {format(new Date(r.createdAt), 'd MMM yyyy')}
-                    </p>
-                  </div>
-                  <HrStatusPill tone={STATUS_TONE[r.status] ?? 'gray'}>{r.status}</HrStatusPill>
-                </div>
-                {r.reason && <p className="mt-2 text-xs italic text-text-secondary">"{r.reason}"</p>}
-                {r.decisionNote && (
-                  <p className="mt-1 text-xs text-text-secondary">{r.approverId ? `HR: ${r.decisionNote}` : r.decisionNote}</p>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+      <div style={{ display: 'grid', gap: 12 }}>
+        <SubHeading>Your requests</SubHeading>
+        {myRequests.isLoading ? <State kind="loading" />
+          : myRequests.error ? <State kind="error" title="Couldn’t load your requests" onRetry={() => myRequests.refetch()} />
+            : (myRequests.data ?? []).length === 0 ? <State kind="empty" icon="swap" title="No shift-change requests yet" description="Requests you send appear here with HR’s decision." />
+              : (
+                <RowList>
+                  {(myRequests.data ?? []).map((r) => (
+                    <Row key={r.id} title={`${r.currentShiftName ? `${r.currentShiftName} → ` : ''}${r.requestedShiftName ?? 'Shift'}`}
+                      meta={[r.status === 'APPROVED' && r.appliedEffectiveDate ? `Starts ${longDate(r.appliedEffectiveDate)}` : r.requestedEffectiveDate ? `Asked to start ${longDate(r.requestedEffectiveDate)}` : null, `sent ${longDate(r.createdAt.slice(0, 10))}`].filter(Boolean).join(' · ')}
+                      note={r.decisionNote ? (r.approverId ? `HR: “${r.decisionNote}”` : r.decisionNote) : r.reason ? `“${r.reason}”` : undefined}
+                      trail={<HrStatusPill tone={STATUS_TONE[r.status] ?? 'gray'}>{statusLabel(r.status)}</HrStatusPill>} />
+                  ))}
+                </RowList>
+              )}
       </div>
-    </div>
+    </ModulePage>
   )
 }
 

@@ -1,89 +1,64 @@
-import React from 'react'
+// My payslips (/me/payslips) in the module kit's style: this year's totals,
+// then one row per payroll month with the PDF once the month is locked.
+// There's no API for an employee's own payslip lines (only the list and the
+// PDF), so the breakdown lives in the PDF.
 import { useNavigate } from 'react-router-dom'
-import { Download, Wallet } from 'lucide-react'
 import { P, usePermission } from '@unifiedtree/sdk'
-import { CardSkeleton } from '@unifiedtree/ui-kit'
-import { EmptyState } from '@/shared/components/EmptyState'
-import { DataTable } from '@/shared/components/DataTable'
-import { FileText } from 'lucide-react'
-import { HrPageHeader, HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
-import { useToast } from '@/shared/hooks/useToast'
+import { HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { dashIcon } from '@/design/dc/icons'
+import { ModulePage, StatRow, State, RowList, Row, SubHeading, Note, useDesignToast } from '@/design/module/ModuleKit'
 import { useMyPayslips, downloadMyPayslipPdf, inr2, type MyPayslip } from '../api/usePayrollRuns'
 
-const PAYSLIP_TONE: Record<MyPayslip['status'], PillTone> = {
-  DRAFT: 'gray',
-  PROCESSING: 'info',
-  LOCKED: 'ok',
-  PAID: 'ok',
-  CANCELLED: 'red',
-}
+const STATUS: Record<MyPayslip['status'], [string, PillTone]> = { DRAFT: ['Being prepared', 'gray'], PROCESSING: ['Being prepared', 'info'], LOCKED: ['Final', 'ok'], PAID: ['Paid', 'ok'], CANCELLED: ['Cancelled', 'red'] }
+const ready = (s: MyPayslip['status']) => s === 'LOCKED' || s === 'PAID'
 
-/**
- * "22 / 30" or just "22" when there's no LOP. Never renders a bare 0 in the
- * LOP slot — that reads as "zero paid" which is wrong.
- */
-function fmtDays(paid: number | null | undefined, lop: number | null | undefined): React.ReactNode {
-  if (paid == null) return <span className="text-text-tertiary">—</span>
-  const paidStr = Number(paid).toFixed(0)
-  if (lop == null || Number(lop) === 0) return paidStr
-  return <>{paidStr}<span className="text-text-tertiary"> / {Number(lop).toFixed(0)}</span></>
-}
-
-export const EmployeePayslips: React.FC = () => {
-  const { toast } = useToast()
+export function EmployeePayslips() {
   const navigate = useNavigate()
-  // Same permission the /me/salary RouteGuard checks (App.tsx).
-  const canViewSalary = usePermission(P.PAYROLL_STRUCTURE_READ_SELF)
-  const { data = [], isLoading } = useMyPayslips()
-
-  if (isLoading) return <div className="max-w-3xl mx-auto p-6 sm:p-8"><CardSkeleton /></div>
-
+  const canSalary = usePermission(P.PAYROLL_STRUCTURE_READ_SELF)
+  const q = useMyPayslips()
+  const { show, node } = useDesignToast()
+  const rows = [...(q.data ?? [])].sort((a, b) => (b.periodYear ?? 0) - (a.periodYear ?? 0) || (b.periodMonth ?? 0) - (a.periodMonth ?? 0))
+  const year = new Date().getFullYear()
+  const thisYear = rows.filter((r) => r.periodYear === year && ready(r.status))
+  const latest = rows.find((r) => ready(r.status))
+  const sum = (k: 'netPay' | 'gross' | 'totalDeductions') => thisYear.reduce((a, r) => a + Number(r[k] ?? 0), 0)
+  const pdf = async (r: MyPayslip) => { try { await downloadMyPayslipPdf(r.runId); show(`Payslip for ${r.period} downloaded`) } catch (e) { show('Couldn’t download the payslip', true, (e as Error).message) } }
   return (
-    <div className="max-w-3xl mx-auto p-6 sm:p-8">
-      <HrPageHeader
-        crumb="Payroll"
-        title="My Payslips"
-        subtitle="Download payslips for finalized payroll periods."
-        actions={canViewSalary ? (
-          <HrButton variant="ghost" size="sm" onClick={() => navigate('/me/salary')}>
-            <Wallet size={15} /> My salary structure
-          </HrButton>
-        ) : undefined}
-      />
-
-      {data.length === 0 ? (
-        <EmptyState icon={FileText} title="No payslips yet" description="Payslips appear here once payroll is locked for a period." />
-      ) : (
-        <TableCard>
-          <DataTable
-            columns={[
-              { key: 'period', header: 'Month / Year', render: (r) => <span className="font-semibold text-text-primary">{r.period}</span> },
-              { key: 'paidDays', header: 'Paid Days', render: (r) => <div className="text-right tabular-nums">{r.paidDays == null ? <span className="text-text-tertiary">—</span> : fmtDays(r.paidDays, r.lopDays)}</div> },
-              { key: 'gross', header: 'Gross Earnings', render: (r) => <div className="text-right tabular-nums">{r.gross == null ? <span className="text-text-tertiary">—</span> : inr2(r.gross)}</div> },
-              { key: 'deductions', header: 'Total Deductions', render: (r) => <div className="text-right tabular-nums">{r.totalDeductions == null ? <span className="text-text-tertiary">—</span> : inr2(r.totalDeductions)}</div> },
-              { key: 'netPay', header: 'Net Paid', render: (r) => <div className="text-right tabular-nums font-bold text-[#059669]">{inr2(r.netPay)}</div> },
-              { key: 'status', header: 'Status', render: (r) => <HrStatusPill tone={PAYSLIP_TONE[r.status]}>{r.status}</HrStatusPill> },
-              { key: 'action', header: '', render: (r) => (
-                <div className="text-right w-full flex justify-end">
-                  {(r.status === 'LOCKED' || r.status === 'PAID') ? (
-                    <HrButton
-                      variant="ghost"
-                      size="sm"
-                      onClick={async () => {
-                        try { await downloadMyPayslipPdf(r.runId) } catch (e) { toast((e as Error).message, 'error') }
-                      }}
-                    >
-                      <Download size={15} /> PDF
-                    </HrButton>
-                  ) : <span className="text-xs text-text-tertiary">Not ready</span>}
-                </div>
-              )}
-            ]}
-            data={data}
-            keyField="runId"
-          />
-        </TableCard>
-      )}
-    </div>
+    <ModulePage crumb="My workspace" title="Payslips" subtitle="Your pay for each month, once payroll is final."
+      actions={canSalary ? <HrButton variant="ghost" onClick={() => navigate('/me/salary')}>{dashIcon('rupee', 15)} Salary structure</HrButton> : undefined}>
+      {q.isLoading ? <State kind="loading" height={120} />
+        : q.error ? <State kind="error" title="Couldn’t load your payslips" description={(q.error as Error).message} onRetry={() => q.refetch()} />
+          : rows.length === 0 ? <State kind="empty" icon="receipt" title="No payslips yet" description="A payslip appears here once payroll is final for a month." />
+            : (
+              <div style={{ display: 'grid', gap: 16 }}>
+                <StatRow tiles={[
+                  { icon: 'rupee', color: 'green', label: 'Latest take-home', value: latest ? inr2(latest.netPay) : '—', sub: latest ? latest.period : 'No final payslip yet', onClick: latest ? () => pdf(latest) : undefined },
+                  { icon: 'chart', color: 'blue', label: `Take-home in ${year}`, value: inr2(sum('netPay')), sub: `${thisYear.length} ${thisYear.length === 1 ? 'month' : 'months'}` },
+                  { icon: 'banknote', color: 'teal', label: `Gross in ${year}`, value: inr2(sum('gross')), sub: 'Before deductions' },
+                  { icon: 'receipt', color: 'orange', label: `Deductions in ${year}`, value: inr2(sum('totalDeductions')), sub: 'PF, ESI, tax and others' },
+                ]} />
+                <SubHeading>Every month</SubHeading>
+                <RowList>
+                  {rows.map((r) => {
+                    const [lab, tone] = STATUS[r.status] || [r.status, 'gray' as PillTone]
+                    const paid = r.paidDays == null ? null : `${Number(r.paidDays).toFixed(0)} paid days${r.lopDays ? ` · ${Number(r.lopDays).toFixed(0)} unpaid` : ''}`
+                    return (
+                      <Row key={r.runId}
+                        lead={<span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 11, background: '#ecfdf5', border: '1px solid #d1fae5', color: '#0f6e56', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{dashIcon('receipt', 17)}</span>}
+                        title={r.period}
+                        meta={[paid, r.gross == null ? null : `Gross ${inr2(r.gross)}`, r.totalDeductions == null ? null : `Deductions ${inr2(r.totalDeductions)}`].filter(Boolean).join(' · ')}
+                        trail={<>
+                          <strong style={{ fontSize: 15, color: '#0f6e56', fontVariantNumeric: 'tabular-nums' }}>{inr2(r.netPay)}</strong>
+                          <HrStatusPill tone={tone}>{lab}</HrStatusPill>
+                          {ready(r.status) ? <HrButton size="sm" variant="ghost" onClick={() => pdf(r)}>{dashIcon('download', 14)} PDF</HrButton> : <span style={{ fontSize: 12, color: '#94a3b8' }}>PDF when final</span>}
+                        </>} />
+                    )
+                  })}
+                </RowList>
+                <Note>Totals count final and paid months only. Your full breakdown (every earning and deduction) is in each month’s PDF.</Note>
+              </div>
+            )}
+      {node}
+    </ModulePage>
   )
 }
