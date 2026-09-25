@@ -110,7 +110,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 1250; /* above HrDrawer (1000) and modals (500), below toasts (1300+) */
+  z-index: 10001; /* a short-lived picker: above HrDrawer (1000), modals (500) and the confirm dialog (9999) */
   pointer-events: auto; /* a Radix modal sets pointer-events:none on <body> */
   box-sizing: border-box;
   width: 340px;
@@ -412,7 +412,7 @@
 .utc-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1249;
+  z-index: 10000;
   pointer-events: auto;
   background: rgba(15, 23, 42, .42);
   animation: utc-fade .18s ease;
