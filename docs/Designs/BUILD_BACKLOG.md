@@ -144,18 +144,10 @@ Priorities:
 ## P2: polish
 
 - **Dashboard** (§2)
-  - Record names in the activity feed (the audit API returns only the type and id).
-  - Department on top performers.
-  - Clicking a department bar filters the directory (headcount rows need the department id; the API now returns `department_id`, so wire it).
   - Milestones "View all" filters.
-  - Month filter on payroll runs.
   - A notices pager.
 - **Geofencing**: show and restore deactivated zones (the list API returns active zones only).
 - **Integrations**: real connections (OAuth, keys, sync). Today it's a register only, and the page says so.
-- **Letters**: one "Letters" hub instead of three routes.
-- **Old gaps that are low risk**
-  - `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) still has the old "today is absent" and Sat/Sun rules.
-  - Documents RLS isn't FORCEd on `document_mgmt` tables (safe while the app connects as `ut_app`).
 
 ---
 

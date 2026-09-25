@@ -35,12 +35,12 @@ Checked live: `e2e/recovery/live-design-dashboard.mjs`, 12/12 (calendar, past-da
 | Chart axes | Done | The prototype had fixed axes (0–120 people, ₹42L–₹50L). They now scale to the real numbers. |
 | Projects & Productivity card | Kept | The design shows a summary card. **Manage projects →** opens the existing project and task manager in a side panel, because `/projects` is still a placeholder and this is the only place to change task status. |
 | Archiving a notice | Kept | Asks for confirmation first, as the old card did. The prototype archived immediately. |
-| Activity feed: record name ("… for **Rahul Verma**") | Needs backend | `/v1/audit/events` returns the resource type and id but not its name. Each row shows the actor and the action, and links to Audit Logs rather than the record. |
-| Top performers: department line | Needs backend | `/v1/admin/dashboard/performers` has no department. Only the review count is shown. |
-| Dept Distribution: click a bar to filter the directory | Needs backend | `/v1/reports/headcount` rows have the department name but no id, so the click opens the unfiltered directory. |
+| Activity feed: record name ("… for **Rahul Verma**") | Done (w2i) | `/v1/audit/events` now returns `resourceName` (employee, letter distribution, distribution recipient) and `resourceParentId`. The row names the record when the summary doesn't already, and a distribution opens its own page; anything else still opens Audit Logs. Also fixed: the endpoint answered 500 when every event on a page was a system event. |
+| Top performers: department line | Done (w2i) | `/v1/admin/dashboard/performers` returns each person's `department`; the card reads "Engineering · 3 completed reviews". |
+| Dept Distribution: click a bar to filter the directory | Done (w2i) | The headcount rows' `department_id` is passed through, so a bar opens the directory filtered to that department ("Unassigned" opens the whole directory). |
 | Milestones "View all →" (birthdays, anniversaries, retirements) | Needs backend | Opens `/hrms/employees?filter=birthday` etc., but the directory has no such filters yet. |
-| Payroll chart: click a month | Needs backend | Opens `/hrms/payroll/runs?month=YYYY-MM`. The runs page doesn't filter by month yet. |
-| Hiring stage rows → `/hrms/hiring?tab=candidates&stage=…` | To verify | Check the Hiring page applies the `stage` filter. |
+| Payroll chart: click a month | Done (w2i) | A month's bar opens that month's run (`/hrms/payroll/runs/{id}`) instead of a runs list that had no month filter. |
+| Hiring stage rows | Done (w2i) | Checked: they didn't work (`tab=candidates` isn't a Hiring view and the pipeline showed one role at a time). New `GET /v1/hiring/candidates?companyId=&stage=` and an "All roles" option in the pipeline; stage rows, "Interviews" and "Candidates" open `?tab=pipeline&role=all&stage=…`, scrolled to that stage. "Open roles" opens Requisitions. |
 | Company notices | Partial | Shows the latest 5, as in the design ("5 per page"). There's no pager, so older notices aren't reachable from the dashboard. |
 | Date calendar colours | Partial | The trend API caps at 31 days, so only the last month is coloured. Early departures for past days show 0 (the trend API doesn't return them). Today's figures are exact. |
 | Today's Absence / Not Marked, donut, "exceptions" | Changed | Same one-bucket-per-person numbers as Attendance & Time (`attendance/attendanceBuckets.ts`). Today, someone with no punch and no leave is **Not Marked**, and Absence stays 0 until the day is over. The donut and the exceptions count no longer count them twice (the API's "not marked" also contains the absent and people on leave). |
@@ -103,7 +103,7 @@ Checked live: `e2e/recovery/live-design-attendance.mjs`, 26/26. As HR it checks 
 | Shift colour | Partial | Not stored: it's worked out from the start time, and night shifts are the moon. Picking **Night** saves the shift as NIGHT. The other colours are display only. |
 | Break | Partial | Stored as working hours per day. Break = shift length minus working hours. |
 | Past days' "came in" (trend, calendar) | Partial | A person who worked from home **and** was late or half-day is counted twice, because the trend API has no per-day checked-in total. Today is exact. |
-| Weekly off on the calendar | Partial | The design greys out Sundays. The numbers already leave out each person's own week-offs (the API does that), but other week-off days still show as working days. |
+| Weekly off on the calendar | Done (w2i) | The calendar greys the company's weekly offs from HR Configuration (Sat + Sun when unset), not just Sunday, and "working days so far" skips them too. The day panel names the day ("Saturday is a weekly off"). |
 | HR without the face-log permission | Partial | The Face tab shows its empty state. The design has no "no access" state for it. |
 | Geofencing | Kept | Not in the design's section bar. Still at `/hrms/attendance/geofencing`, reachable from search (⌘K). See §1. |
 | Old pages (`Attendance.tsx`, `AttendanceAnalytics.tsx`, `ShiftsAndOt.tsx` and their parts) | Removed | Replaced by the designed page. Manual entry, Muster roll, Geofencing and `/me/shift-change` are untouched. |
@@ -279,7 +279,7 @@ Checked live:
 | Needs attention, At a glance | Done | Same rules as before (probation within 30 days, notice, no salary structure, no shift, finished days absent this week). Tiles open their tab. |
 | Onboarding record | Done | Real details, assets, policies and checklists. Rejected documents show a red pill. Only people who can edit employees can read it (the endpoint's rule). |
 | Leave and Expenses tabs | Needs backend | Shown, as in the design, with a note and a link to the Leave or Expense centre. The API only returns leave and claims for the signed-in person. It needs `GET /v1/leave/employees/{id}/balances` / `…/requests` and `GET /v1/expense/employees/{id}/claims`. |
-| Goals tile | Partial | Counts all goals and KPIs; the API has no "active" filter. |
+| Goals tile | Done (w2i) | Counts open goals and KPIs (active or at risk); "open · N in all" when some are completed or dropped. |
 | Onboarding "Offer accepted / Hiring manager / Recruiter / Source / Buddy" | Needs backend | The saved record doesn't hold these; the real saved details are shown instead. |
 | Old Overview section | Removed | Replaced by the design's Overview. |
 
@@ -445,7 +445,7 @@ Found while redesigning the pages above. Fixed in the backend, running locally, 
 
 **Still open (noted, not changed):**
 - *Payroll* also treats Saturday and Sunday as off for everyone (`PayrollRunService`, lines 966 and 985). Changing how pay is calculated needs a decision first, so it's left as is.
-- The alternate `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) has the same "today is absent" and Sat/Sun rules.
+- ~~The alternate `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) has the same "today is absent" and Sat/Sun rules.~~ **Done (w2i):** both services share `AttendanceCalendar`. Weekly offs are the person's own, else the company's (HR Configuration), else Sat + Sun (the live service now falls back to the company too). Today with no punch is `NOT_MARKED`, days before attendance started aren't absences, holidays and approved leave count as before, and late is after the shift start plus grace. Tests: `AttendanceCalendarTest`, `CanonicalAttendanceRulesTest`.
 - A company that had only the old "Standard 9-6" shift no longer gets "General" added automatically. It can be added in Shift Rules.
 
 ## 11. Full redesign: the module kit, then module by module
@@ -701,13 +701,20 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Generated letters showed an 8-character UUID when the employee code was missing. A letter showed "Generated By" and "Template ID" as UUID fragments. All of these are removed.
   - A distribution that failed to load showed a skeleton forever. It now shows an error with Try again.
   - Failed deletes and retries now show the server's reason.
-- **Checked (security):** the review queue's SQL has no tenant filter. It relies on row-level security, which applies because the app connects as `ut_app`, not the table owner, so there's no leak. RLS isn't forced on `document_mgmt` tables, so this would break if the app ever connected as the owner. Noted, not changed.
+- **Checked (security):** the review queue's SQL has no tenant filter. It relies on row-level security, which applies because the app connects as `ut_app`, not the table owner, so there's no leak. **Done (w2i):** `V143_28` forces RLS on both `document_mgmt` tables, so it holds even for a session connected as the owner.
 - **Static / to build:**
   - Documents can't be edited after they're stored. The only fix is to delete and add again.
   - There's no bulk upload.
-  - The Letters pages are separate routes linked from the Hiring sub-navigation; there's no single "Letters" hub.
+  - ~~The Letters pages are separate routes linked from the Hiring sub-navigation; there's no single "Letters" hub.~~ **Done (w2i):** see "Letters hub" below.
 - **Fixed (tests):** `letters-admin-live.mjs` left its template and letter behind. It now removes them.
 - **Checked live:** `live-design-documents.mjs` 19/19 (HR adds by link → employee sees it → HR deletes; pending card, View file, reject with reason, verify; every letters page; with cleanup) and `letters-admin-live.mjs` (passes).
+- **Letters hub (w2i): done.** `/hrms/letters` is one page on the module kit with four views:
+  - **Templates** (`hrms.letters.template.read`), **Generated letters** (`hrms.letters.read`), **Distributions** (`hrms.letters.distribute` or `hrms.letters.read`) and **My letters** (`hrms.letters.read.self`).
+  - The old routes keep working and open their view: `/hrms/letters/templates`, `/generated`, `/distributions`, plus `/my`. Someone who can only read their own letters and follows an old `/generated` link lands on My letters, as before.
+  - The header button follows the view: Create template, Generate letter (also opened by an employee's "Generate" link, `?employeeId=`), New distribution.
+  - An employee sees only My letters, titled "My letters". They reach it from **Me → Letters** and a "Letters" shortcut on My workspace (neither existed).
+  - The sidebar has one "Letters" entry instead of three. Distributions now page past 20 jobs.
+  - `live-design-documents.mjs` was updated for the hub's view tabs (not run here).
 
 ### 11.14 HR setup: Policies (for non-admins), Notification templates and Integrations: done
 - **Policies (`/hrms/policies`):**
@@ -802,3 +809,11 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Nothing shows the per-employee performance directory; the endpoint works and is now scoped.
   - Employees can't see their KPI's progress history, only current against target.
   - A review doesn't show the reviewee's KPIs while it's being written.
+
+### 11.18 Leftovers batch (w2i, 25 Sep): done
+- **Letters hub** (§11.13), **CanonicalAttendanceService parity** (§10), **document tables' RLS forced** (§11.13, `V143_28`).
+- **Dashboard** (§2): record names in the activity feed, departments on top performers, department bars filter the directory, payroll months open their run, hiring stage counts open an "All roles" pipeline.
+- **Attendance calendar** (§4): the company's weekly offs are greyed, not just Sunday.
+- **Employee workspace** (§7): the Goals tile counts open goals only.
+- **Checked:** `e2e/recovery/live-w2i.mjs` (API-level, no browser; written, not run here). It calls every endpoint above as owner, HR, finance, manager and employee, checks the database, the refusals (403) and the day rules, and removes or restores what it touches. Unit tests: `AttendanceCalendarTest`, `CanonicalAttendanceRulesTest`, `AuditResourceNameTest`, `HiringAllCandidatesTest`, and `lettersView.test.ts` (vitest).
+- **Still open from the leftovers** (not in any wave-1/wave-2 task): milestones "View all" filters and the notices pager (§2), the trend API's 31-day cap on the dashboard calendar (§2), archived branches in the "Inactive" filter (§3), face-event names and kiosk (§4), the onboarding record's hiring details (§7), dragging candidates and interview scheduling (§11.7), deactivated geofence zones (§11.12, waits on the Geofencing decision), real integrations (§11.14).
