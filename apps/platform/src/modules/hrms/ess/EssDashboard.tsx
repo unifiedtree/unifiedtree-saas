@@ -38,6 +38,7 @@ export function EssDashboard() {
   const canPayslips = usePermission(P.PAYROLL_PAYSLIP_READ_SELF) && payroll
   const canWfh = useAnyPermission(['wfh.request.self', P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF])
   const canShift = useAnyPermission([P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF])
+  const canLetters = usePermission(P.HRMS_LETTERS_READ_SELF)
   const stats = useMonthlyStats()
   const bal = useMyBalances()
   const mine = useMyLeaves(0)
@@ -87,6 +88,7 @@ export function EssDashboard() {
             {canPayslips && <Shortcut icon="receipt" title="Payslips" sub="Download your monthly payslips" cta="Open" onClick={() => navigate('/me/payslips')} />}
             {canSalary && <Shortcut icon="rupee" title="Salary" sub="Your salary structure and components" cta="View" onClick={() => navigate('/me/salary')} />}
             {canOnboarding && <Shortcut icon="clipboard" title="Onboarding tasks" sub="Your onboarding checklist" cta="Open" onClick={() => navigate('/hrms/onboarding/instances')} />}
+            {canLetters && <Shortcut icon="fileText" title="Letters" sub="Offer, appointment and other letters HR has issued to you" cta="Open" onClick={() => navigate('/hrms/letters/my')} />}
             <Shortcut icon="userCheck" title="Profile" sub="Your photo, contact details and documents" cta="Open" onClick={() => navigate('/profile')} />
         </div>
       </div>

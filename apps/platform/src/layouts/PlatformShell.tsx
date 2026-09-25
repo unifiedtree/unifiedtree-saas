@@ -129,9 +129,8 @@ const MODULE_ITEMS: NavItemDef[] = [
     children: [
       { label: 'Hiring Pipeline', path: '/hrms/hiring', icon: <UserCheck size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.hiring.offer.read', 'hrms.hiring.read'] },
       { label: 'Onboarding & Assets', path: '/hrms/onboarding/instances', icon: <ClipboardList size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.onboarding.asset.read'] },
-      { label: 'Letter Templates', path: '/hrms/letters/templates', icon: <FileText size={15} />, visibleForRoles: R_HR },
-      { label: 'Generated Letters', path: '/hrms/letters/generated', icon: <FileText size={15} />, visibleForRoles: R_HR },
-      { label: 'Letter Distributions', path: '/hrms/letters/distributions', icon: <FileText size={15} />, visibleForRoles: R_HR },
+      // One Letters hub (templates, generated letters, distributions); its old routes open its views.
+      { label: 'Letters', path: '/hrms/letters', icon: <FileText size={15} />, visibleForRoles: R_HR },
       { label: 'Employee Vault', path: '/hrms/documents', icon: <FileText size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.letters.template.read'] },
       // "Documents to review" — the HR queue that lands every pending upload
       // in one place instead of forcing them to open each employee separately.
@@ -172,6 +171,7 @@ const MODULE_ITEMS: NavItemDef[] = [
       { label: 'Salary', path: '/me/salary', icon: <Wallet size={15} />, visibleForRoles: R_ESS },
       { label: 'Work from home', path: '/me/wfh', icon: <Home size={15} />, visibleForRoles: R_ESS },
       { label: 'Shift change', path: '/me/shift-change', icon: <Clock size={15} />, visibleForRoles: R_ESS },
+      { label: 'Letters', path: '/hrms/letters/my', icon: <FileText size={15} />, visibleForRoles: R_ESS, also: ['/hrms/letters'] },
       { label: 'Team Attendance', path: '/team', icon: <Users size={15} />, visibleForRoles: ['DEPT_MANAGER'] },
     ],
   },

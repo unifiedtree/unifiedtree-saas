@@ -4,7 +4,7 @@ import { Plus, FileText, Edit3, Trash2, ChevronLeft, ChevronRight } from 'lucide
 import { useToast } from '@/shared/hooks/useToast'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
-import { ModulePage, State, SubHeading, dmy } from '@/design/module/ModuleKit'
+import { State, SubHeading, dmy } from '@/design/module/ModuleKit'
 import { useLetterTemplates, useDeleteTemplate } from './api/useLetters'
 import type { LetterTemplateDto, LetterType } from './api/useLetters'
 
@@ -62,7 +62,8 @@ function DeleteCell({ id, name }: { id: string; name: string }) {
   )
 }
 
-export const LetterTemplates: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
+/** The template list with its paging. Used by the Letters hub and by Documents → Letter templates. */
+export function LetterTemplatesList() {
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
 
@@ -73,10 +74,8 @@ export const LetterTemplates: React.FC<{ embedded?: boolean }> = ({ embedded = f
   const hasPagination = totalElements > 20
 
   const canCreate = usePermission(P.HRMS_LETTERS_TEMPLATE_CREATE)
-  const createBtn = canCreate ? <HrButton size={embedded ? 'sm' : undefined} onClick={() => navigate('/hrms/letters/templates/new')}><Plus size={15} /> Create template</HrButton> : undefined
-  const body = (
+  return (
     <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-      {embedded && <SubHeading aside={createBtn}>Letter templates</SubHeading>}
       {isLoading ? (
         <State kind="loading" height={220} />
       ) : error ? (
@@ -161,10 +160,16 @@ export const LetterTemplates: React.FC<{ embedded?: boolean }> = ({ embedded = f
       )}
     </div>
   )
-  if (embedded) return body
+}
+
+/** Letter templates inside another page (Documents): a heading with the create button, then the list. */
+export function LetterTemplates() {
+  const navigate = useNavigate()
+  const canCreate = usePermission(P.HRMS_LETTERS_TEMPLATE_CREATE)
   return (
-    <ModulePage crumb="Letters" title="Letter templates" subtitle="Reusable letters with merge fields, like {{employee.fullName}}." actions={createBtn}>
-      {body}
-    </ModulePage>
+    <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+      <SubHeading aside={canCreate ? <HrButton size="sm" onClick={() => navigate('/hrms/letters/templates/new')}><Plus size={15} /> Create template</HrButton> : undefined}>Letter templates</SubHeading>
+      <LetterTemplatesList />
+    </div>
   )
 }
