@@ -16,6 +16,10 @@ export interface ShiftRequest {
   requestedEffectiveDate?: string | null
   /** Date the new shift starts (yyyy-MM-dd); set on approval. */
   appliedEffectiveDate?: string | null
+  /** When it was approved or rejected. */
+  decidedAt?: string | null
+  /** Who decided it; null while pending and for requests that expired on their own. */
+  approverName?: string | null
 }
 
 export function usePendingShiftRequests(opts?: { enabled?: boolean }) {
@@ -25,6 +29,19 @@ export function usePendingShiftRequests(opts?: { enabled?: boolean }) {
     refetchInterval: 30_000,
     // The endpoint needs attendance.regularization.approve; callers that
     // render for everyone pass enabled:false for people without it.
+    enabled: opts?.enabled ?? true,
+  })
+}
+
+/**
+ * Requests approved or rejected in the last `days` days, newest decision first
+ * (GET /v1/shifts/change-requests/decided). Same permission as the pending list;
+ * a manager gets their own team's only.
+ */
+export function useDecidedShiftRequests(days = 30, opts?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['shifts', 'requests', 'decided', days],
+    queryFn: () => apiJson<ShiftRequest[]>(`/v1/shifts/change-requests/decided?days=${days}`),
     enabled: opts?.enabled ?? true,
   })
 }

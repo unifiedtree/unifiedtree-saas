@@ -99,14 +99,6 @@ Priorities:
 - Run "Pay date" / "Working days" and activity names.
 - Per-component totals for runs over 60 people.
 
-**Attendance** (§4)
-- Overtime details (shift end, left at, reason).
-- Shift requests "Already decided" list for HR.
-- Change-shift note.
-- `/v1/team/schedule` with `shiftPolicyId` and `since`.
-- Face events with the kiosk / device.
-- Per-day checked-in totals for past days (removes the WFH + late double count).
-
 **Reports** (§9)
 - Server-side PDF export (direct download, scheduled emails).
 - A server export log (who downloaded what, when).

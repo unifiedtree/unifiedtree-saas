@@ -156,3 +156,35 @@ export function useEmployeeShift(
     retry: false,
   })
 }
+
+// ── One employee's shift history ─────────────────────────────────────────────
+//
+// GET /v1/shifts/employee/{employeeId}/history (ShiftController, V143.25): every
+// assignment, newest first, with who made it and the note they left (the note
+// typed in the Change-shift drawer, or the reason on an approved shift change
+// request). Readable by the employee themself, anyone who assigns shifts
+// (attendance.workforce.admin), and a manager for their own team; anyone else
+// gets 403.
+
+export interface ShiftHistoryItem {
+  id: string
+  shiftPolicyId: string
+  shiftName?: string | null
+  startTime?: string | null
+  endTime?: string | null
+  effectiveFrom: string
+  /** Null for the open-ended (current or scheduled) assignment. */
+  effectiveTo?: string | null
+  note?: string | null
+  setBy?: string | null
+  setAt?: string | null
+}
+
+export function useEmployeeShiftHistory(employeeId: string | undefined, opts?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['shifts', 'employee', employeeId, 'history'],
+    queryFn: () => apiJson<ShiftHistoryItem[]>(`/v1/shifts/employee/${employeeId}/history`),
+    enabled: (opts?.enabled ?? true) && !!employeeId,
+    retry: false,
+  })
+}

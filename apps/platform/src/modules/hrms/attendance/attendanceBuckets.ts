@@ -21,6 +21,8 @@ export interface DayBuckets {
   absent: number
   earlyOut: number
   other: number
+  /** The day is a weekly off for everyone in scope (from the trend API; unknown on older servers). */
+  weeklyOff?: boolean
 }
 
 /** A day's roster from GET /v1/attendance/dashboard. Nobody is absent until the day is over. */
@@ -44,14 +46,43 @@ export function dayBuckets(resp: TeamDashboardResponse, today: string): DayBucke
 /**
  * A day from GET /v1/attendance/dashboard/trend. People on leave without a punch
  * are notMarked − absent; the API's absent (no punch, no leave) is "not marked
- * yet" until the day is over. A person who worked from home and was also late or
- * half-day is counted in both (the API has no per-day checked-in total). Early
- * departures aren't in the trend.
+ * yet" until the day is over. "Came in" is the API's per-day checked-in total, so
+ * someone who worked from home and was also late or half-day counts once, as a
+ * late / half-day (the WFH bucket is the on-time home workers). Servers older
+ * than V143.25 don't send that total; their days fall back to adding the buckets
+ * up, which counts that person twice. Early departures aren't in the trend.
  */
 export function trendBuckets(r: DailyAttendanceCounts, today: string): DayBuckets {
-  const present = r.present + r.late + r.halfDay + r.workFromHome, leave = Math.max(0, r.notMarked - r.absent), over = r.date < today
+  const exact = typeof r.checkedIn === 'number'
+  const wfh = exact ? r.workFromHomeOnTime ?? Math.max(0, r.checkedIn! - r.present - r.late - r.halfDay) : r.workFromHome
+  const present = exact ? r.checkedIn! : r.present + r.late + r.halfDay + r.workFromHome
+  const leave = Math.max(0, r.notMarked - r.absent), over = r.date < today
   return {
-    total: present + leave + r.absent, present, regular: r.present, late: r.late, halfDay: r.halfDay, wfh: r.workFromHome,
+    total: present + leave + r.absent, present, regular: r.present, late: r.late, halfDay: r.halfDay, wfh,
     onLeave: leave, notMarked: over ? 0 : r.absent, absent: over ? r.absent : 0, earlyOut: 0, other: 0,
+    ...(typeof r.weeklyOffDay === 'boolean' ? { weeklyOff: r.weeklyOffDay } : {}),
   }
+}
+
+/**
+ * Weekdays (0 = Sunday … 6 = Saturday) that were a weekly off for everyone on
+ * every day seen, for days the trend doesn't cover. Sunday when nothing is known
+ * (no trend yet, or an older server).
+ */
+export function offWeekdays(daily: Record<string, DayBuckets>): number[] {
+  const seen = new Map<number, boolean>()
+  for (const [iso, d] of Object.entries(daily)) {
+    if (typeof d.weeklyOff !== 'boolean') continue
+    const wd = new Date(iso + 'T00:00:00').getDay()
+    seen.set(wd, (seen.get(wd) ?? true) && d.weeklyOff)
+  }
+  if (!seen.size) return [0]
+  return [...seen].filter(([, off]) => off).map(([wd]) => wd).sort()
+}
+
+/** Whether a day is a weekly off: the trend's answer for that day, else the weekday pattern. */
+export function isWeeklyOff(iso: string, daily: Record<string, DayBuckets>, offDays: number[]): boolean {
+  const d = daily[iso]
+  if (d && typeof d.weeklyOff === 'boolean') return d.weeklyOff
+  return offDays.includes(new Date(iso + 'T00:00:00').getDay())
 }
