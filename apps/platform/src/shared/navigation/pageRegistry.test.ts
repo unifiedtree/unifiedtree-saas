@@ -107,6 +107,18 @@ describe('menu and search access (permission-only)', () => {
     expect(ids(ctx(['*'], { adminRole: true, planAdmin: true })).has('leave:apply')).toBe(false)
   })
 
+  it('My Attendance is not offered to admin roles (the Attendance page hides it); staff keep it', () => {
+    for (const perms of [EMPLOYEE, DEPT_MANAGER, HR_MANAGER]) {
+      const seen = ids(ctx(perms))
+      expect(seen.has('me-attendance')).toBe(true)
+      expect(seen.has('att-daily:my')).toBe(true)
+    }
+    const admin = ids(ctx(['*'], { adminRole: true, planAdmin: true }))
+    expect(admin.has('me-attendance')).toBe(false)
+    expect(admin.has('att-daily:my')).toBe(false)
+    expect(admin.has('att-daily:team')).toBe(true)
+  })
+
   it('an area opens the first page the person may open', () => {
     expect(firstOpenIn('attendance', visibleEntries(ctx(HR_MANAGER)))?.path).toBe('/hrms/att-analytics')
     expect(firstOpenIn('attendance', visibleEntries(ctx(EMPLOYEE)))?.path).toBe('/hrms/attendance')
