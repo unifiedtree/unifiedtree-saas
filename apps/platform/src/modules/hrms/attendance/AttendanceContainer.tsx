@@ -23,7 +23,7 @@ import { dayBuckets, trendBuckets, type DayBuckets } from './attendanceBuckets'
 import { useFaceEvents, useFaceEnrollments } from './face/useFacePunchLogs'
 import { useShiftPolicies, useCreateShiftPolicy, useUpdateShiftPolicy, useDeleteShiftPolicy, type ShiftPolicy } from '../api/useShiftPolicies'
 import { usePendingShiftRequests, useDecideShiftRequest, type ShiftRequest } from '../api/useShiftRequests'
-import { useHolidays } from '../api/useSettings'
+import { useHolidays, useWeekendDays, jsWeekendDays } from '../api/useSettings'
 import { useAttendanceSummaryReport, useLateMarksReport } from '../api/useReports'
 import type { PageResponse, WorkforceEmployee } from '../api/useWorkforce'
 
@@ -111,6 +111,8 @@ export function AttendanceContainer() {
   const trend = useAttendanceTrend(monthStart, today, undefined, canTeam && section === 'analytics')
   const sources = useAttendanceSources(today, undefined, canTeam && section === 'analytics')
   const holidays = useHolidays(companyId, y)
+  // The company's weekly offs (HR Configuration), so the calendar greys the real days off, not just Sunday.
+  const weekend = useWeekendDays(companyId || undefined)
   const summary = useAttendanceSummaryReport(canReport ? companyId || null : null, monthStart, today, { enabled: section === 'analytics' })
   const lateMarks = useLateMarksReport(canReport && section === 'analytics' ? companyId || null : null, monthStart, today)
   const face = useFaceEvents(undefined, canFace)
@@ -197,8 +199,9 @@ export function AttendanceContainer() {
     if (teamToday.data) daily[today] = dayBuckets(teamToday.data, today)
     const hol = (holidays.data ?? []).filter((h) => h.active !== false).map((h) => ({ date: h.holidayDate, name: h.holidayName }))
     const holSet = new Set(hol.map((h) => h.date))
+    const offDays = jsWeekendDays(weekend.data?.weekendDays)
     let workingDays = 0
-    for (let d = monthStart; d <= today; d = addDays(d, 1)) if (new Date(d + 'T00:00:00').getDay() !== 0 && !holSet.has(d)) workingDays++
+    for (let d = monthStart; d <= today; d = addDays(d, 1)) if (!offDays.has(new Date(d + 'T00:00:00').getDay()) && !holSet.has(d)) workingDays++
     const lateBy = new Map<string, { id: string; code: string; name: string; dept: string; n: number }>()
     for (const r of lateMarks.data ?? []) {
       const cur = lateBy.get(r.employee_code) || { id: idByCode.get(r.employee_code) || '', code: r.employee_code, name: r.employee_name, dept: r.department || '—', n: 0 }
@@ -208,7 +211,7 @@ export function AttendanceContainer() {
     const graces = [...new Set((policies.data ?? []).map((sp) => sp.gracePeriodMinutes ?? 0))]
     const reportLink = `/hrms/reports/attendance-summary?${new URLSearchParams({ ...(companyId ? { company: companyId } : {}), from: monthStart, to: today })}`
     const ov = {
-      today, counts: todayCounts, graceMin: graces.length === 1 ? graces[0] : null, daily, holidays: hol, workingDays, reportLink,
+      today, counts: todayCounts, graceMin: graces.length === 1 ? graces[0] : null, daily, holidays: hol, offDays: [...offDays], workingDays, reportLink,
       sources: (sources.data?.sources ?? []).filter((s) => s.count > 0).map((s) => ({ label: sourceOf(s.method)[0], icon: sourceOf(s.method)[1], n: s.count })),
       lateMarks: [...lateBy.values()].sort((a, b) => b.n - a.n).slice(0, 5),
       summary: (summary.data ?? []).map((r) => ({
@@ -311,7 +314,7 @@ export function AttendanceContainer() {
       shifts: shiftList, roster, ot: otRows, otSummary: [...otBy.values()], otRange: `1–${Number(today.slice(8, 10))} ${MON[m - 1]}`,
       sreq: sreqRows, myReq: myReqRows, myShift: myShift.data?.shiftPolicyId || null, mySince: myShift.data?.effectiveFrom ? fmtShort(myShift.data.effectiveFrom) : '',
     }
-  }, [team.data, teamToday.data, trend.data, sources.data, holidays.data, summary.data, lateMarks.data, face.data, enrollments.data, directory.data,
+  }, [team.data, teamToday.data, trend.data, sources.data, holidays.data, weekend.data, summary.data, lateMarks.data, face.data, enrollments.data, directory.data,
     approvals.data, approved.data, rejected.data, myCorr.data, monthStats.data, history.data, policies.data, schedule.data, myShift.data,
     overtime.data, sreq.data, myReq.data, companyId, monthStart, today, date, y, m])
 

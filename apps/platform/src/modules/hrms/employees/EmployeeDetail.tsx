@@ -151,11 +151,13 @@ export function EmployeeDetail() {
     if (absent > 0) attention.push({ tone: 'amber', title: `${plural(absent, 'unmarked/absent day')} this week.`, cta: 'See attendance', onClick: () => setTab('attendance') })
 
     const docTotal = documents.data?.totalElements
+    const openGoals = (kpis.data?.items ?? []).filter((k) => k.status === 'ACTIVE' || k.status === 'AT_RISK').length
     const glance: WorkspaceData['glance'] = [
       { l: 'This week', v: canAttendance ? (w ? hrs(w.totalHours) : '…') : '—', s: canAttendance ? (w ? `${w.presentDays} present${late ? ` · ${late} late` : ''}` : '') : 'No access', onClick: () => setTab('attendance') },
       { l: 'Salary structure', v: canSalary ? (structure.data ? inr(Number(structure.data.ctcAnnual || 0)) : structure.isLoading ? '…' : '—') : '—', s: canSalary ? (structure.data?.effectiveFrom ? `Effective ${fmt(structure.data.effectiveFrom)}` : structure.isLoading ? '' : 'Not set up') : 'No access', onClick: () => setTab('payroll') },
       { l: 'Documents', v: canDocs ? (docTotal != null ? String(docTotal) : '…') : '—', s: canDocs ? 'on record' : 'No access', onClick: () => setTab('documents') },
-      { l: 'Goals', v: canPerf ? (kpis.data ? String(kpis.data.total) : '…') : '—', s: canPerf ? 'goals & KPIs' : 'No access', onClick: () => setTab('performance') },
+      // Open = still being worked on (active or at risk); completed and dropped ones are history.
+      { l: 'Goals', v: canPerf ? (kpis.data ? String(openGoals) : '…') : '—', s: canPerf ? (kpis.data && kpis.data.total > openGoals ? `open · ${kpis.data.total} in all` : 'open goals & KPIs') : 'No access', onClick: () => setTab('performance') },
     ]
 
     // Onboarding record (people who can edit employees only — the endpoint's rule)
