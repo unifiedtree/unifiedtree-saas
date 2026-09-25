@@ -5,7 +5,7 @@ import {
   LayoutDashboard, BarChart3, Users, TrendingUp, FileText, CreditCard,
   Package, ShoppingCart, Briefcase, HelpCircle, Settings, Shield, Bell,
   Folder, ChevronDown, ChevronRight, ChevronLeft, Lock, DollarSign,
-  ClipboardList, Building2, UserCheck, Calendar, Star, Receipt, MapPin,
+  ClipboardList, Building2, UserCheck, Calendar, Star, Receipt,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { P } from '@unifiedtree/sdk'
@@ -45,7 +45,6 @@ const MODULE_ITEMS: NavItemDef[] = [
     children: [
       { label: 'Employees', path: '/hrms/employees', icon: <UserCheck size={15} />, anyPerm: [P.HRMS_EMPLOYEE_READ] },
       { label: 'Attendance', path: '/hrms/attendance', icon: <Calendar size={15} />, anyPerm: [P.HRMS_ESS_READ, P.HRMS_EMPLOYEE_READ, P.ATTENDANCE_CHECKIN_SELF] },
-      { label: 'Geofencing', path: '/hrms/attendance/geofencing', icon: <MapPin size={15} />, anyPerm: [P.ORG_GEOFENCE_WRITE, P.ATTENDANCE_TEAM_READ] },
       { label: 'Leave', path: '/hrms/leave', icon: <ClipboardList size={15} />, anyPerm: [P.HRMS_LEAVE_READ, P.HRMS_ESS_READ, P.LEAVE_REQUEST_SELF] },
       { label: 'Payroll', path: '/hrms/payroll', icon: <CreditCard size={15} />, anyPerm: [P.PAYROLL_SETTINGS_READ, P.PAYROLL_RUNS_READ, P.PAYROLL_COMPONENTS_READ] },
     ],
