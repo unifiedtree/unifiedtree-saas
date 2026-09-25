@@ -217,6 +217,8 @@ public final class WorkforceDtos {
             LocalDate lastWorkingDay,
             @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
             String exitReason,
+            // V143.13: resignation / termination / ... (null = not recorded).
+            WorkforceEmployee.ExitType exitType,
             // QA-FIX (2026-08-13 reverify R2): ctcAnnual is blanked to null in the
             // list projection (via toListResponse) to prevent salary-scraping of the
             // whole workforce. Jackson NON_NULL omits the KEY entirely when value is
@@ -417,7 +419,9 @@ public final class WorkforceDtos {
             String bankIfsc,
             BigDecimal monthlySalary,
             String salaryFrequency,
-            String weeklyOffDays
+            String weeklyOffDays,
+            // V143.13: correct the recorded exit type from the separation editor.
+            WorkforceEmployee.ExitType exitType
     ) { }
 
     /**

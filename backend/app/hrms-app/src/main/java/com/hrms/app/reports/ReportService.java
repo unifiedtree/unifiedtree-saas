@@ -66,15 +66,19 @@ public class ReportService {
         // trend line has no gaps. An exit is a person whose status is EXITED,
         // TERMINATED or RESIGNED, dated by last_working_day (the workforce exit
         // flow leaves date_of_termination NULL). People still serving notice
-        // are not exits yet, even with a last working day set. The workforce
-        // flow marks everyone EXITED, so "resignations" only counts the legacy
-        // RESIGNED status and other_exits holds the rest. headcount is who was
+        // are not exits yet, even with a last working day set. The split reads
+        // the exit type HR records on the exit flow (V143.13): RESIGNATION is a
+        // resignation, TERMINATION a termination, every other type (and exits
+        // recorded before the type existed) is "other". The legacy RESIGNED /
+        // TERMINATED statuses still count when no type is recorded. headcount is who was
         // employed at the month's end (or today, for the current month);
         // attrition_pct is exits over the month's average headcount.
         String sql = """
                 WITH people AS (
                     SELECT e.date_of_joining AS joined,
-                           e.employment_status AS status,
+                           COALESCE(e.exit_type,
+                                    CASE e.employment_status WHEN 'RESIGNED' THEN 'RESIGNATION'
+                                                             WHEN 'TERMINATED' THEN 'TERMINATION' END) AS exit_type,
                            CASE WHEN e.employment_status IN ('EXITED', 'TERMINATED', 'RESIGNED')
                                 THEN COALESCE(e.last_working_day, e.date_of_termination) END AS left_on
                     FROM hrms.employees e
@@ -86,9 +90,11 @@ public class ReportService {
                 ), agg AS (
                     SELECT mo.m_start,
                            COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end)                                AS exits,
-                           COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end AND p.status = 'RESIGNED')      AS resignations,
-                           COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end AND p.status = 'TERMINATED')    AS terminations,
-                           COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end AND p.status = 'EXITED')        AS other_exits,
+                           COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end AND p.exit_type = 'RESIGNATION') AS resignations,
+                           COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end AND p.exit_type = 'TERMINATION') AS terminations,
+                           COUNT(*) FILTER (WHERE p.left_on BETWEEN mo.m_start AND mo.m_end
+                                              AND p.exit_type IS DISTINCT FROM 'RESIGNATION'
+                                              AND p.exit_type IS DISTINCT FROM 'TERMINATION')                    AS other_exits,
                            COUNT(*) FILTER (WHERE p.joined <  mo.m_start AND (p.left_on IS NULL OR p.left_on >= mo.m_start)) AS opening,
                            COUNT(*) FILTER (WHERE p.joined <= mo.m_end   AND (p.left_on IS NULL OR p.left_on >  mo.m_end))   AS closing
                     FROM months mo

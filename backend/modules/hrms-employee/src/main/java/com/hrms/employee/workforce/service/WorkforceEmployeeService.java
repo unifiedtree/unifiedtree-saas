@@ -434,6 +434,7 @@ public class WorkforceEmployeeService {
         if (req.noticeStartDate()  != null) e.setNoticeStartDate(req.noticeStartDate());
         if (req.lastWorkingDay()   != null) e.setLastWorkingDay(req.lastWorkingDay());
         if (req.exitReason()       != null) e.setExitReason(req.exitReason());
+        if (req.exitType()         != null) e.setExitType(req.exitType());
         if (req.ctcAnnual()        != null) e.setCtcAnnual(req.ctcAnnual());
         if (req.profilePhotoUrl()  != null) e.setProfilePhotoUrl(req.profilePhotoUrl());
         // B2 FIX (audit 2026-08-15): apply the seven fields the update form
@@ -467,22 +468,40 @@ public class WorkforceEmployeeService {
 
     // -- Start notice -------------------------------------------------------
     public WorkforceEmployeeResponse startNotice(UUID id, java.time.LocalDate noticeStart, java.time.LocalDate lastWorkingDay, String reason) {
+        return startNotice(id, noticeStart, lastWorkingDay, reason, null);
+    }
+
+    /** V143.13: the notice also records why the person is leaving (null keeps what is recorded). */
+    public WorkforceEmployeeResponse startNotice(UUID id, java.time.LocalDate noticeStart, java.time.LocalDate lastWorkingDay,
+                                                 String reason, WorkforceEmployee.ExitType exitType) {
         WorkforceEmployee e = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee " + id + " not found"));
         e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.NOTICE_PERIOD);
         e.setNoticeStartDate(noticeStart);
         e.setLastWorkingDay(lastWorkingDay);
         e.setExitReason(reason);
+        if (exitType != null) e.setExitType(exitType);
         return toResponse(repository.save(e));
     }
 
     // -- Exit ---------------------------------------------------------------
     public WorkforceEmployeeResponse exit(UUID id, java.time.LocalDate lastWorkingDay, String reason) {
+        return exit(id, lastWorkingDay, reason, null);
+    }
+
+    /**
+     * V143.13: mark exited with the exit type. A null type keeps the one recorded
+     * when the notice started; the status stays EXITED for every type (the
+     * attrition report splits on the type, not the status).
+     */
+    public WorkforceEmployeeResponse exit(UUID id, java.time.LocalDate lastWorkingDay, String reason,
+                                          WorkforceEmployee.ExitType exitType) {
         WorkforceEmployee e = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee " + id + " not found"));
         e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.EXITED);
         e.setLastWorkingDay(lastWorkingDay);
         e.setExitReason(reason);
+        if (exitType != null) e.setExitType(exitType);
         return toResponse(repository.save(e));
     }
 
@@ -498,6 +517,7 @@ public class WorkforceEmployeeService {
         e.setNoticeStartDate(null);
         e.setLastWorkingDay(null);
         e.setExitReason(null);
+        e.setExitType(null);
         return toResponse(repository.save(e));
     }
 
@@ -614,6 +634,7 @@ public class WorkforceEmployeeService {
                 e.getEmploymentType(), e.getEmploymentStatus(),
                 e.getDateOfJoining(), e.getProbationEndDate(),
                 e.getConfirmationDate(), e.getNoticeStartDate(), e.getLastWorkingDay(), e.getExitReason(),
+                e.getExitType(),
                 ctc,
                 e.getPfUan(), e.getEsiNumber(),
                 e.getBankBranchName(),
@@ -693,6 +714,7 @@ public class WorkforceEmployeeService {
                 e.getEmploymentType(), e.getEmploymentStatus(),
                 e.getDateOfJoining(), e.getProbationEndDate(),
                 e.getConfirmationDate(), e.getNoticeStartDate(), e.getLastWorkingDay(), null /* exit reason is detail-only */,
+                e.getExitType() /* not sensitive: the Exit centre lists it */,
                 null /* ctcAnnual — redacted in list responses */,
                 null /* uan */, null /* esi */,
                 null /* bankBranchName — PII-adjacent, redacted in list */,
