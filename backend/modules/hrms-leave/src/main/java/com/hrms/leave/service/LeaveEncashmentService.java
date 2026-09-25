@@ -395,14 +395,27 @@ public class LeaveEncashmentService {
                 """, r.days(), r.employeeId(), r.leaveTypeId(), r.year());
     }
 
-    /** One day's pay: the current monthly Basic ÷ 30, or null without a salary structure. */
+    /**
+     * One day's pay: the current monthly Basic ÷ 30, or null without a salary
+     * structure. A structure with no earning lines is paid entirely as Basic by
+     * payroll (PayrollCalc.resolvePay), so its monthly CTC is the Basic here too;
+     * without that, such a person's encashment was never priced and never paid.
+     */
     BigDecimal perDayRate(UUID employeeId) {
         List<BigDecimal> basic = jdbc.query("""
-                SELECT esc.monthly_amount
+                SELECT COALESCE(
+                         (SELECT esc.monthly_amount
+                            FROM payroll.employee_structure_components esc
+                            JOIN payroll.salary_components c ON c.id = esc.component_id
+                           WHERE esc.structure_id = s.id AND c.code = 'BASIC'
+                           LIMIT 1),
+                         CASE WHEN NOT EXISTS (
+                                  SELECT 1 FROM payroll.employee_structure_components esc
+                                    JOIN payroll.salary_components c ON c.id = esc.component_id
+                                   WHERE esc.structure_id = s.id AND c.category IN ('EARNING', 'REIMBURSEMENT'))
+                              THEN s.ctc_monthly END)
                   FROM payroll.employee_salary_structures s
-                  JOIN payroll.employee_structure_components esc ON esc.structure_id = s.id
-                  JOIN payroll.salary_components c ON c.id = esc.component_id
-                 WHERE s.employee_id = ? AND s.is_current IS TRUE AND c.code = 'BASIC'
+                 WHERE s.employee_id = ? AND s.is_current IS TRUE
                  LIMIT 1
                 """, (rs, i) -> rs.getBigDecimal(1), employeeId);
         return rateFromBasic(basic.isEmpty() ? null : basic.get(0));

@@ -170,14 +170,8 @@ public class HiringController {
         return ResponseEntity.ok(hiringService.getCandidates(id));
     }
 
-    @Operation(summary = "List candidates across every requisition, optionally for one company and stage")
-    @GetMapping("/candidates")
-    @PreAuthorize("hasAuthority('hrms.hiring.read')")
-    public ResponseEntity<List<CandidateResponse>> listAllCandidates(
-            @RequestParam(required = false) UUID companyId,
-            @RequestParam(required = false) com.hrms.hiring.enums.CandidateStage stage) {
-        return ResponseEntity.ok(hiringService.getCandidatesAcrossRequisitions(companyId, stage));
-    }
+    // GET /v1/hiring/candidates (every role, optional company / stage) is served by
+    // InterviewController (w2a), whose cards also carry the interview summary.
 
     @Operation(summary = "Advance a candidate to a new pipeline stage")
     @PutMapping("/candidates/{id}/stage")

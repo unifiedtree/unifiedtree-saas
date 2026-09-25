@@ -41,6 +41,8 @@ public class MfaChallengeTokens {
 
     private final SecretKey key;
 
+    // Two constructors (the other is for tests): Spring must be told which one to use.
+    @org.springframework.beans.factory.annotation.Autowired
     public MfaChallengeTokens(JwtService jwt) {
         this.key = deriveKey(jwt.signingKey().getEncoded());
     }
