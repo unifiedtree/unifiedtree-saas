@@ -246,17 +246,21 @@ async function policies({ added, changed }: Diff, env: SyncEnv) {
 // ── payroll configuration ────────────────────────────────────────────────────
 async function components({ added, changed, removed }: Diff) {
   const pct = (r: Rec) => r.method === 'pct_basic' || r.method === 'pct_gross'
+  // A fixed component's own monthly amount (payroll applies it); none when empty or ₹0.
+  const amount = (r: Rec) => (r.method === 'fixed' && !r.managed && Number(r.val) > 0 ? Number(r.val) : null)
   for (const r of added) {
     await apiJson('/v1/payroll/components', json('POST', {
       code: String(r.code).trim().toUpperCase(), name: String(r.name).trim(), category: COMP_CAT_CODE[r.cat], isStatutory: false, isTaxable: r.taxable !== 'No',
       computationType: COMP_METHOD_CODE[r.method] || 'FIXED', percentValue: pct(r) ? Number(r.val) : null, displayOrder: 100,
+      amount: amount(r), showOnPayslip: r.payslip !== false, isActive: r.status !== 'Inactive',
     }))
   }
   await each(changed, async ([o, r]) => {
-    if (!changedAny(o, r, ['name', 'cat', 'method', 'val', 'taxable'])) return
+    if (!changedAny(o, r, ['name', 'cat', 'method', 'val', 'taxable', 'payslip', 'status'])) return
     await apiJson(`/v1/payroll/components/${r._key}`, json('PUT', {
       code: r._raw?.code || r.code, name: String(r.name).trim(), category: COMP_CAT_CODE[r.cat], isStatutory: !!r._raw?.isStatutory, isTaxable: r.taxable !== 'No',
       computationType: COMP_METHOD_CODE[r.method] || r._raw?.computationType, percentValue: pct(r) ? Number(r.val) : r._raw?.percentValue ?? null, displayOrder: r._raw?.displayOrder ?? 100,
+      amount: amount(r), showOnPayslip: r.payslip !== false, isActive: r.status !== 'Inactive',
     }))
   }, 'components')
   await each(removed, (r) => apiJson(`/v1/payroll/components/${r._key}`, json('DELETE')), 'components')

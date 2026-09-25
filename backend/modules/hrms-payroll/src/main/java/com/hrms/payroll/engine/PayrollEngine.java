@@ -18,7 +18,8 @@ import java.util.List;
  * <p>Determinism is a hard guarantee: {@code compute(in)} called twice with the
  * same input returns an {@code equals}-identical {@link PayrollResult} (records
  * give structural equality and the line order is fixed: earnings in input order,
- * then PF employee, PF employer, ESI employee, ESI employer, PT).
+ * then flat earnings, PF employee, PF employer, ESI employee, ESI employer, PT, LWF,
+ * then flat deductions).
  *
  * <h2>Rules (encoded exactly)</h2>
  * <ol>
@@ -103,9 +104,38 @@ public final class PayrollEngine {
         List<PayslipLine> lines,
         List<String> warnings) {}
 
+    /**
+     * A flat monthly amount that is never pro-rated: an approved performance
+     * incentive, or a fixed-amount deduction component.
+     */
+    public record FlatLine(ComponentDef component, BigDecimal amount) {}
+
+    /**
+     * What payroll adds on top of the salary structure.
+     * <ul>
+     *   <li>{@code flatEarnings}: paid in full (not pro-rated for loss-of-pay
+     *       days) and kept out of the PF and ESI wage base.</li>
+     *   <li>{@code flatDeductions}: deducted in full.</li>
+     *   <li>{@code lwfEmployee} / {@code lwfEmployer}: the Labour Welfare Fund
+     *       contributions for this month, or null when LWF isn't due.</li>
+     * </ul>
+     */
+    public record Extras(List<FlatLine> flatEarnings, List<FlatLine> flatDeductions,
+                         BigDecimal lwfEmployee, BigDecimal lwfEmployer) {
+        public static final Extras NONE = new Extras(List.of(), List.of(), null, null);
+    }
+
+    public static final String LWF_EMPLOYEE = "LWF_EMPLOYEE";
+    public static final String LWF_EMPLOYER = "LWF_EMPLOYER";
+
     // ── Calculation ──────────────────────────────────────────────────────────
 
     public static PayrollResult compute(PayrollEngineInput in) {
+        return compute(in, Extras.NONE);
+    }
+
+    public static PayrollResult compute(PayrollEngineInput in, Extras extras) {
+        Extras ex = extras == null ? Extras.NONE : extras;
         BigDecimal paidDays = in.lop().paidDays();           // 1dp from LopCalculator
         BigDecimal totalDays = new BigDecimal(in.lop().totalCalendar());
 
@@ -130,6 +160,17 @@ public final class PayrollEngine {
             }
         }
         gross = gross.setScale(SCALE, RM);
+        // ESI is charged on the structure's pro-rated gross; flat earnings
+        // (incentives) are added to pay after that base is fixed.
+        BigDecimal esiBase = gross;
+        for (FlatLine fl : ex.flatEarnings()) {
+            if (fl.amount() == null || fl.amount().signum() <= 0) continue;
+            ComponentDef c = fl.component();
+            BigDecimal amt = fl.amount().setScale(SCALE, RM);
+            lines.add(new PayslipLine(c.code(), c.name(), c.category(), amt, c.displayOrder()));
+            if (isGross(c.category())) gross = gross.add(amt);
+        }
+        gross = gross.setScale(SCALE, RM);
 
         StatutoryConfig st = in.statutory();
         EmployeeStructureCfg emp = in.employee();
@@ -150,8 +191,8 @@ public final class PayrollEngine {
         if (st.esiEnabled() && emp.esiApplicable()) {
             BigDecimal ceiling = st.esiWageCeiling() == null ? ZERO : st.esiWageCeiling();
             if (fullGross.compareTo(ceiling) <= 0) {
-                BigDecimal esiEmp = percent(gross, st.esiEmployeePercent());
-                BigDecimal esiEr  = percent(gross, st.esiEmployerPercent());
+                BigDecimal esiEmp = percent(esiBase, st.esiEmployeePercent());
+                BigDecimal esiEr  = percent(esiBase, st.esiEmployerPercent());
                 lines.add(new PayslipLine(ESI_EMPLOYEE, "ESI (Employee)", CAT_DEDUCTION, esiEmp, 70));
                 lines.add(new PayslipLine(ESI_EMPLOYER, "ESI (Employer)", CAT_EMPLOYER, esiEr, 80));
             } else {
@@ -164,6 +205,28 @@ public final class PayrollEngine {
         if (st.ptEnabled() && st.ptAmount() != null && st.ptAmount().signum() > 0) {
             lines.add(new PayslipLine(PT, "Professional Tax", CAT_DEDUCTION,
                 st.ptAmount().setScale(SCALE, RM), 90));
+        }
+
+        // ── 4b. Labour Welfare Fund (flat, only in the months it's due) ──────
+        // LWF and fixed deductions come out of wages paid: someone with no pay
+        // for the period (a whole month unpaid, or joining after it) owes
+        // neither, and must not end up with negative net pay (which halts the
+        // whole run).
+        boolean paidThisPeriod = gross.signum() > 0;
+        if (paidThisPeriod && ex.lwfEmployee() != null && ex.lwfEmployee().signum() > 0) {
+            lines.add(new PayslipLine(LWF_EMPLOYEE, "Labour Welfare Fund (Employee)", CAT_DEDUCTION,
+                ex.lwfEmployee().setScale(SCALE, RM), 95));
+        }
+        if (paidThisPeriod && ex.lwfEmployer() != null && ex.lwfEmployer().signum() > 0) {
+            lines.add(new PayslipLine(LWF_EMPLOYER, "Labour Welfare Fund (Employer)", CAT_EMPLOYER,
+                ex.lwfEmployer().setScale(SCALE, RM), 96));
+        }
+
+        // ── 4c. Fixed-amount deductions (flat, never pro-rated) ──────────────
+        for (FlatLine fl : ex.flatDeductions()) {
+            if (!paidThisPeriod || fl.amount() == null || fl.amount().signum() <= 0) continue;
+            ComponentDef c = fl.component();
+            lines.add(new PayslipLine(c.code(), c.name(), CAT_DEDUCTION, fl.amount().setScale(SCALE, RM), c.displayOrder()));
         }
 
         // ── 5. Totals ────────────────────────────────────────────────────────

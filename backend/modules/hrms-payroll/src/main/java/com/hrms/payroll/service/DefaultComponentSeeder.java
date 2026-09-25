@@ -36,6 +36,12 @@ public class DefaultComponentSeeder {
         // for the run's period. Auto-seeded here so every tenant has the code
         // available the moment AdvanceRecoveryService.applyForMonth writes.
         {"ADVANCE_RECOVERY",  "Advance Recovery",          "DEDUCTION",              false, false, "FIXED",            null, 100},
+        // V143_11 (2026-09-25): approved PLI awards are paid through payroll as
+        // one earnings line, and Labour Welfare Fund is deducted in the months
+        // Payroll Settings name. Seeded here so a new workspace has them too.
+        {"PLI_INCENTIVE",     "Performance incentive",     "EARNING",                false, true,  "FORMULA",          null,  45},
+        {"LWF_EMPLOYEE",      "Labour Welfare Fund (Employee)", "DEDUCTION",         true,  false, "STATUTORY",        null,  95},
+        {"LWF_EMPLOYER",      "Labour Welfare Fund (Employer)", "EMPLOYER_CONTRIBUTION", true, false, "STATUTORY",      null,  96},
     };
 
     /** Returns the number of components after seeding (always 9 for a fresh tenant). */

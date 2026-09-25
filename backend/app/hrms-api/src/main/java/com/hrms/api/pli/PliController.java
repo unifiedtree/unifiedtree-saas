@@ -41,11 +41,14 @@ public class PliController {
 
     private final PliService pliService;
     private final EmployeeRepository employeeRepository;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public PliController(PliService pliService,
-                         EmployeeRepository employeeRepository) {
+                         EmployeeRepository employeeRepository,
+                         org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.pliService = pliService;
         this.employeeRepository = employeeRepository;
+        this.jdbc = jdbc;
     }
 
     @Operation(summary = "List PLI targets")
@@ -126,7 +129,11 @@ public class PliController {
     public ResponseEntity<PageResponse<PliAwardResponse>> myAwards(
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(pliService.getMyAwards(extractEmployeeId(jwt), pageable));
+        PageResponse<PliAwardResponse> page = pliService.getMyAwards(extractEmployeeId(jwt), pageable);
+        Map<UUID, String> runs = runLabels(page.content());
+        return ResponseEntity.ok(new PageResponse<>(
+                page.content().stream().map(r -> withRun(r, r.employeeName(), r.employeeCode(), runs)).toList(),
+                page.page(), page.size(), page.totalElements(), page.totalPages(), page.last()));
     }
 
     // ─── Awardee identity enrichment ─────────────────────────────────────────
@@ -144,8 +151,9 @@ public class PliController {
                 ? Map.of()
                 : employeeRepository.findAllById(employeeIds).stream()
                         .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
+        Map<UUID, String> runs = runLabels(page.content());
         List<PliAwardResponse> enriched = page.content().stream()
-                .map(r -> enrich(r, employeeMap.get(r.employeeId())))
+                .map(r -> enrich(r, employeeMap.get(r.employeeId()), runs))
                 .toList();
         return new PageResponse<>(enriched, page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last());
@@ -155,18 +163,44 @@ public class PliController {
         Employee employee = r.employeeId() == null
                 ? null
                 : employeeRepository.findById(r.employeeId()).orElse(null);
-        return enrich(r, employee);
+        return enrich(r, employee, runLabels(List.of(r)));
     }
 
-    private PliAwardResponse enrich(PliAwardResponse r, Employee employee) {
+    private PliAwardResponse enrich(PliAwardResponse r, Employee employee, Map<UUID, String> runs) {
         String employeeName = employee != null
                 ? (employee.getFirstName() + " " + (employee.getLastName() == null ? "" : employee.getLastName())).trim()
                 : null;
         String employeeCode = employee != null ? employee.getEmployeeCode() : null;
+        return withRun(r, employeeName, employeeCode, runs);
+    }
+
+    private static PliAwardResponse withRun(PliAwardResponse r, String employeeName, String employeeCode,
+                                            Map<UUID, String> runs) {
         return new PliAwardResponse(
                 r.id(), r.employeeId(), employeeName, employeeCode, r.companyId(),
                 r.planName(), r.period(), r.amount(), r.ratingBasis(),
-                r.status(), r.notes(), r.createdAt());
+                r.status(), r.notes(), r.createdAt(),
+                r.approvedAt(), r.payrollRunId(),
+                r.payrollRunId() == null ? null : runs.get(r.payrollRunId()), r.paidAt());
+    }
+
+    /**
+     * "Sep 2026" for every payroll run that pays one of these awards (awards
+     * are paid through payroll since V143.11). Read on the request thread, so
+     * the tenant's row-level security applies.
+     */
+    private Map<UUID, String> runLabels(List<PliAwardResponse> awards) {
+        List<UUID> ids = awards.stream().map(PliAwardResponse::payrollRunId).filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        Map<UUID, String> out = new java.util.HashMap<>();
+        String in = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        jdbc.query("SELECT id, period_month, period_year FROM payroll.runs WHERE id IN (" + in + ")",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> out.put(rs.getObject("id", UUID.class),
+                        java.time.Month.of(rs.getInt("period_month"))
+                                .getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH)
+                                + " " + rs.getInt("period_year")),
+                ids.toArray());
+        return out;
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

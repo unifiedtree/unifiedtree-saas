@@ -1,7 +1,7 @@
 // Production-Linked Incentive — ported from the design component PayPli.dc.html.
 // Rows are this month's PLI targets (GET /v1/pli/targets). Editing saves the
 // target (PUT /v1/pli/targets/{id}); "Set monthly targets" writes next month's.
-// PLI isn't added to payroll by this backend; bonuses are paid as awards.
+// Approved PLI awards are paid through payroll as a "Performance incentive" line.
 import { createElement } from 'react'
 import { DCLogic, dc } from './dc-runtime'
 import { PayPliView } from './PayPli.view'
@@ -58,8 +58,9 @@ export class PayPli extends DCLogic {
     return {
       isLoading, isError, isEmpty, live, isDesktop: !p.mobile, isMobile: !!p.mobile, rows, columns, openRow: (r: any) => r.onEdit(), totalLabel: inr(total), paidPeople,
       monthName: p.monthName || '', targetsDesc: `Targets for ${p.nextMonthLabel || 'next month'}. Bonuses are paid when a team meets its target.`,
-      pliLead: 'PLI isn’t added to payroll yet — bonuses are paid out as awards. This month:', pliLink: 'Manage awards →',
-      openRun: () => p.onAwards && p.onAwards(), runTip: 'Opens PLI awards', runLabel: '',
+      // Approved awards are paid through payroll (client decision, 25 Sep 2026).
+      pliLead: 'Approved PLI awards are added to payroll as “Performance incentive” and paid with salaries. This month:', pliLink: 'Manage awards →',
+      openRun: () => p.onAwards && p.onAwards(), runTip: 'Opens PLI awards: propose and approve them here; the next payroll run pays them', runLabel: '',
       search: { value: s.q, onChange: (v: string) => this.setState({ q: v }), placeholder: 'Search teams…' },
       actions: createElement(HrButton, { variant: 'ghost', size: 'sm', onClick: exportCsv, disabled: rows.length === 0, 'data-tip': 'Downloads this list (Excel)' } as any, dashIcon('download', 14), ' Export'),
       editOpen: !!er, eTitle: er ? `Edit PLI · ${er.team}` : '', closeEdit, fTarget: s.fTarget, fActual: s.fActual, fPer: s.fPer,

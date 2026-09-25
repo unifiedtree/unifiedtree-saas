@@ -136,21 +136,21 @@ Checked live: `e2e/recovery/live-design-payroll.mjs`, 29/29. It covers:
 | **Mark as paid** / **Confirm transfer** | Changed | Both ask for the bank reference (UTR). The API needs it to mark a transfer paid, and confirming also closes the run. |
 | Bank files | Changed | The API makes **one** file per run from the company's default bank profile (the design showed one per bank). Reopening cancels that file first, because the API won't reopen a run that has a live file. |
 | **Bank profiles** button (Bank Disbursement header) | Kept | Profiles aren't in the design but are needed to make files. The button opens the existing full page at `/hrms/bank-disbursement/setup`. |
-| PLI banner | Changed | The design said PLI is added to net pay automatically. This backend doesn't do that, so the banner says bonuses are paid out as awards, and **Manage awards →** opens the existing awards manager (create, approve, pay). |
+| PLI banner | Done (w1b, 25 Sep) | Decided with the client: approved PLI awards are paid through payroll. Processing a run adds every approved, unpaid award (approved by the end of the period) as one "Performance incentive" earnings line, paid in full and outside the PF/ESI base. Locking marks the awards paid with the run id, reopening reverts them, and the separate award action ("Paid outside payroll") refuses an award a run holds, so nothing is paid twice. The banner says so; **Manage awards →** opens the awards manager, which shows each award's payroll month. |
 | Advances statuses and actions | Changed | The API's statuses map to Pending approval / Approved · to pay out / Active deduction / Repaid / Closed / Rejected. **Issue advance** sends a request for the signed-in person (see below). |
 | Salary drawer | Changed | A new structure uses the design's split: Basic 50%, HRA 40% of basic, ₹1,600 conveyance from ₹20,000, special allowance the rest. Editing an existing structure scales that person's own split, so a custom split is never overwritten. The preview uses the real PF, ESI and PT settings. There is no ₹10,000 minimum, because that isn't a rule in the system. |
 | Dashboard "Total payroll cost" | Changed | The gross of this month's run, so it matches the chart and the runs list. The KPI endpoint's figure also includes employer contributions. |
 | Employees without the admin view | Kept | `/hrms/pli` and `/hrms/advances` still show their own self-service pages (My Incentives; My Advances / Request). |
 | "TDS this month" tile | Needs backend | Payroll doesn't calculate TDS. The tile shows a dash and says so. |
-| Statutory dues | Partial | Comes from Compliance → Statutory Filings, a ledger filled in by hand. It isn't computed from payroll. |
-| Pay breakdown by component | Partial | Added up from the payslips for runs of up to 60 people. Bigger runs show totals only, pending a per-component totals endpoint. |
-| Run details "Pay date" / "Working days", activity names | Needs backend | The API doesn't keep them, so they show a dash. Activity lines show the time only. |
+| Statutory dues | Done (w1b) | PF, ESI, PT and LWF per month are added up from locked and paid runs (`GET /v1/payroll/statutory-dues`). PF and ESI are due on the 15th of the next month; PT and LWF say "as your state requires" unless the ledger has a date. Compliance → Statutory Filings stays the filing record: a due disappears once a filing of that type and month is recorded there. TDS and gratuity still come from the ledger. |
+| Pay breakdown by component | Done (w1b) | `GET /v1/payroll/runs/{id}/component-totals` adds up every payslip line on the server, for any run size. |
+| Run details "Pay date" / "Working days", activity names | Done (w1b) | Runs store the planned pay date (the processing day in the month the period ends) and working days (the company's work week minus holidays). Activity lines name who created, processed, locked and paid the run. Runs from before V143_11 show a dash for working days until they're processed again. |
 | Salary Structure **Export** | Needs backend | There's no endpoint that lists every structure. The button is off, marked "Coming soon". |
 | **Bulk revise CTC** | Needs backend | The form shows. **Apply revision** is off and marked "Coming soon". |
 | **Issue advance** for someone else | Needs backend | Advances are self-service in the API. The form requests one for yourself; for anyone else it explains that. |
 | Advance "Loan type" | Partial | The API has no loan types, so the request's reason is shown. The first deduction is always the month after payout (API rule). |
-| PLI people and "Bonus per person" | Partial | Headcount is known for employee or department targets. For others the amount is the whole pool. PLI isn't paid through payroll. |
-| Payroll cycle days, processing day, LWF, PF/ESI codes | Partial | Saved, but not used by payroll yet: runs cover the calendar month. The cycle card's switch stays on (the API has no switch for it). |
+| PLI people and "Bonus per person" | Partial | Headcount is known for employee or department targets. For others the amount is the whole pool. The pool is a target; what payroll pays are the approved awards. |
+| Payroll cycle days, processing day, LWF, PF/ESI codes | Done (w1b) | Runs follow the cycle start day (1 = calendar month; on the 26th the September run covers 26 Aug – 25 Sep, and the end day follows the start day). The processing day sets the pay date. LWF is deducted in the months chosen on the LWF card (June and December by default; also December only or every month), with the employer share recorded. PF/ESI codes show on Statutory Settings. The cycle card's switch stays on (the API has no switch for it). |
 | Payroll register | Partial | A PDF (the design said Excel), available for locked and paid runs. The run's Employees tab exports a CSV. |
 | Old pages (`PayrollDashboard`, `PayrollRuns`, `PayrollRunDetail`, `SalaryStructureAdmin`, `SalaryOverview`, `PayrollSettings`, `Payroll.tsx`) | Removed | Replaced by the designed page. `/me/payslips`, `/me/salary`, `/hrms/payroll/components` and `/hrms/fnf` are untouched. |
 
@@ -164,6 +164,8 @@ Checked live: `e2e/recovery/live-design-payroll.mjs`, 29/29. It covers:
   - The Bank page also opens on a chosen run (`?run=`); a run's page links to its own file.
 - *Payslip that can't load.* The drawer stayed blank forever. It now shows a skeleton while loading, and "Couldn’t load this payslip" with **Try again** on error.
 - Checked live: `live-payroll-access.mjs` was rewritten for the redesigned pages. All 6 steps pass: reopen with a reason, exclusions named and blocked, fix and rebuild, pay, the payslip outage, and a missing run. The test now removes its run, bank file, bank profile and fixture employee afterwards.
+
+**Payroll core (w1b, 25 Sep): the payroll items above marked "Done (w1b)".** Migration `V143_11__payroll_core.sql` (no new permissions). Pay is worked out with each employee's own weekly off (else the company's, else Sat+Sun) over the configured pay cycle; approved PLI awards, LWF in its months and fixed-amount components are part of the run. Rules are unit-tested (`PayrollCalcTest`, `PayrollEngineExtrasTest`, `PliPayrollNoDoublePayTest`); the API is checked by `e2e/recovery/live-w1b.mjs` (a Jun 2031 test run, removed afterwards).
 
 ## 6. Master data (`/hrms/master`, `/hrms/employees`, `/hrms/organization`, `/hrms/policies`, `/hrms/payroll/components`, `/hrms/master/*`): done
 
@@ -216,8 +218,8 @@ Checked live:
 | Shift Rules | Partial | Name, type, times, grace, hours and overtime rate are saved. Shift code, flexible core hours and per-shift weekly offs aren't stored ("Coming soon"). **Duplicate** opens a filled "Add shift" form, because shifts can't be parked as inactive. Overtime copy says the rate is recorded, not paid, which is the business rule. An overnight shift is saved as a Night shift. |
 | Leave Rules | Partial | Name, code, category, quota (must be more than 0), paid and carry-forward cap are saved. Accrual shows "Credited upfront", which is what the balance job does. Monthly/quarterly accrual, encashment and per-classification "Applies to" aren't in the API ("Coming soon"). The year-end carry-forward move isn't automated; the tip says so. |
 | Policy Documents | Partial | Publish, save as draft, edit, new version (a new draft), archive and restore all work. **Remind**, **Email everyone when published** and optional acknowledgement aren't in the API ("Coming soon"). **Discard draft** archives the draft, because policies can't be deleted. |
-| Salary Components | Partial | Add, edit and delete (for components that aren't built-in or in use) work. Computation shows the backend's types: Fixed, % of Basic, % of Gross, Formula, Statutory. Statutory lines show the real PF/ESI rates. Fixed amounts, "Partly exempt", **Show on payslip** and **Deactivate** aren't in the API ("Coming soon"). The CTC card shows the split new salary structures use. |
-| Statutory Settings | Partial | The switches save the payroll settings (the same ones as Payroll Settings). PT shows the configured state's real slabs. **LWF is saved but payroll doesn't deduct it** (the card says so). PT and LWF registration numbers and PF admin charges aren't stored, so they show a dash. |
+| Salary Components | Partial | Add, edit and delete (for components that aren't built-in or in use) work. Computation shows the backend's types: Fixed, % of Basic, % of Gross, Formula, Statutory. Statutory lines show the real PF/ESI rates. Done in w1b: a fixed component's **monthly amount** (paid to everyone whose structure doesn't list it, pro-rated; a deduction is taken in full unless the structure sets its own), **Show on payslip** (hidden lines print as one "Other earnings/deductions" line on payslips and the PDF) and **Deactivate** (with a warning; skipped from the next run; built-in components stay on). "Partly exempt" is still "Coming soon". The CTC card shows the split new salary structures use. |
+| Statutory Settings | Partial | The switches save the payroll settings (the same ones as Payroll Settings). PT shows the configured state's real slabs. LWF is deducted by payroll in the chosen months (w1b); the card shows them and its linked components. PT and LWF registration numbers and PF admin charges aren't stored, so they show a dash. |
 | Companies | Partial | The head office comes from the branch marked HQ. TAN and "since" aren't stored ("Coming soon" on the form). |
 | Branches | Changed | Only "Head office" is recorded as a type, so every other branch shows "Branch". Plant, warehouse and other types are "Coming soon". Deactivated branches leave the list (the API lists active ones only). |
 | Departments | Partial | Rename, code, icon, head and archive work. A department can't be moved under another after it's created (no API). |
@@ -231,11 +233,7 @@ Checked live:
   - Licence expiry, service, deployment sites and worker counts (`active_workers_count` is never written).
   - A link from contract workers to agencies.
 - Classifications API: `GET` is gated by role name (Owner/Admin get 403), and there's no update endpoint.
-- Components:
-  - Can't be deactivated (`is_active` isn't updatable).
-  - No fixed amounts: `percent_value` is `NUMERIC(6,3)`.
-  - No "show on payslip" flag.
-  - `POST` silently ignores a duplicate code.
+- Components: done in w1b (switch off, fixed `amount`, `show_on_payslip`; duplicates were already 409).
 - Leave types: accrual frequency and encashable exist in the database but not in the API; there is no year-end carry-forward job; `annualEntitlement` must be more than 0.
 - Shifts:
   - `GET /v1/shifts` re-creates the four default shifts on every read, so deleting one of them is undone.
@@ -243,7 +241,7 @@ Checked live:
 - Departments: no endpoint to change the parent; `branchIds` on create is ignored.
 - Policies: no delete, no reminders, no email on publish.
 - Cached counts (company, branch and department `employeeCount`, designation `headcount`) are never maintained.
-- Payroll: LWF, cycle days and PF/ESI establishment codes are stored but not used by runs.
+- Payroll: LWF, cycle days and PF/ESI establishment codes: done in w1b.
 
 Also fixed along the way:
 - The shell's section tabs are real links again, so they can be opened in a new tab.
@@ -446,7 +444,7 @@ Found while redesigning the pages above. Fixed in the backend, running locally, 
 | 7 | Reports (see §9): headcount, attrition and diversity counted the wrong people. | Fixed. The gender columns briefly added to headcount were removed so gender stays behind the diversity permission. |
 
 **Still open (noted, not changed):**
-- *Payroll* also treats Saturday and Sunday as off for everyone (`PayrollRunService`, lines 966 and 985). Changing how pay is calculated needs a decision first, so it's left as is.
+- *Payroll* treating Saturday and Sunday as off for everyone: done in w1b after the client decided (D1). Each employee's own weekly off, else the company's, else Sat+Sun, and holidays from Settings plus the old leave table, as leave and attendance count them.
 - The alternate `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) has the same "today is absent" and Sat/Sun rules.
 - A company that had only the old "Standard 9-6" shift no longer gets "General" added automatically. It can be added in Shift Rules.
 
@@ -483,7 +481,7 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - leave balances and recent requests
   - a "Requests and records" list (work from home, shift change, payslips, salary, onboarding, profile), each shown only when its page would open for the person
   - attendance history and daily time entries, restyled
-- **Payslips:** this year's take-home, gross and deductions as tiles, then one row per month with status and PDF. *Needs backend:* there's no API for an employee's own payslip lines (only the list and the PDF), so the breakdown is only in the PDF. `GET /v1/payroll/payslips/me/{runId}` would allow showing it in the design's payslip drawer.
+- **Payslips:** this year's take-home, gross and deductions as tiles, then one row per month with status and PDF. Done in w1b: a final month opens the design's payslip drawer with the employee's own lines (`GET /v1/payroll/payslips/me/{runId}`; 404 for any run without a payslip for them).
 - **Salary:** CTC, gross, deductions and take-home tiles, the tax regime and PF, then earnings and deductions tables (monthly and yearly).
 - **Work from home:** request form with the same rules as the mobile app. A panel explains what an approved day changes (check in from anywhere, marked WFH). Cancel asks first.
 - **Shift change:** current and scheduled shift as fact tiles, the request form, and past requests with HR's notes. Same rules as before.

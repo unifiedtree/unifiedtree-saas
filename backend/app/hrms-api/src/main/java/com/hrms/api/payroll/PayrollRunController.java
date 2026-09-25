@@ -78,6 +78,23 @@ public class PayrollRunController {
         return service.listSkippedEmployees(TenantContext.getTenantId(), id);
     }
 
+    /** Totals per salary component across the run's payslips (any run size). */
+    @GetMapping("/runs/{id}/component-totals")
+    @PreAuthorize("hasAuthority('payroll.runs.read')")
+    public List<PayrollRunService.ComponentTotalDto> componentTotals(@PathVariable UUID id) {
+        return service.componentTotals(TenantContext.getTenantId(), id);
+    }
+
+    /**
+     * PF, ESI, PT and LWF owed per month, added up from locked and paid runs,
+     * with the matching Compliance → Statutory Filings entry when there is one.
+     */
+    @GetMapping("/statutory-dues")
+    @PreAuthorize("hasAuthority('payroll.runs.read')")
+    public List<PayrollRunService.StatutoryDueDto> statutoryDues(@RequestParam(defaultValue = "3") int months) {
+        return service.statutoryDues(TenantContext.getTenantId(), months);
+    }
+
     @PostMapping("/runs/{id}/process")
     @PreAuthorize("hasAuthority('payroll.runs.manage')")
     public PayrollRunService.RunDto process(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
@@ -130,6 +147,17 @@ public class PayrollRunController {
         return service.listMyPayslips(TenantContext.getTenantId(), employeeId(jwt));
     }
 
+    /**
+     * The caller's own payslip lines for one locked or paid run. Always the
+     * caller's own: another person's run, or a run with no payslip for the
+     * caller, is a 404.
+     */
+    @GetMapping("/payslips/me/{runId}")
+    @PreAuthorize("hasAuthority('payroll.payslip.read.self')")
+    public PayrollRunService.PayslipDto myPayslip(@PathVariable UUID runId, @AuthenticationPrincipal Jwt jwt) {
+        return service.getMyPayslip(TenantContext.getTenantId(), ownEmployeeId(jwt), runId);
+    }
+
     @GetMapping("/payslips/me/{runId}.pdf")
     @PreAuthorize("hasAuthority('payroll.payslip.read.self')")
     public ResponseEntity<byte[]> myPayslipPdf(@PathVariable UUID runId, @AuthenticationPrincipal Jwt jwt) {
@@ -149,6 +177,16 @@ public class PayrollRunController {
     private static UUID employeeId(Jwt jwt) {
         String employeeId = jwt.getClaimAsString("employee_id");
         return employeeId != null ? UUID.fromString(employeeId) : UUID.fromString(jwt.getSubject());
+    }
+
+    /** The caller's employee id from the token; null for an account with no employee record. */
+    private static UUID ownEmployeeId(Jwt jwt) {
+        String employeeId = jwt.getClaimAsString("employee_id");
+        try {
+            return employeeId == null || employeeId.isBlank() ? null : UUID.fromString(employeeId);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private static UUID actorId(Jwt jwt) {

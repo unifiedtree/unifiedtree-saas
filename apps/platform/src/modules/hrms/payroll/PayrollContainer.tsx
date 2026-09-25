@@ -27,7 +27,7 @@ import type { BankData, BankBatch } from '@/design/dc/PayBank'
 import { useCompanies, type Department } from '../api/useOrg'
 import {
   useRuns, useRun, useRunEmployees, useRunSkipped, useEligibleEmployees, useRunPayslip, useCreateRun, useProcessRun, useLockRun, useReopenRun,
-  downloadPayslipPdf, type PayrollRun, type EligibleEmployee,
+  downloadPayslipPdf, type PayrollRun, type EligibleEmployee, type ComponentTotal, type StatutoryDue,
 } from '../api/usePayrollRuns'
 import type { EmployeeSalaryStructure, SalaryComponent, PtSlab, PayrollDashboardKpis } from '../api/usePayroll'
 import { downloadBatchFile, type DisbursementBatch, type BankProfile, type BatchDetail } from '../api/useDisbursement'
@@ -116,6 +116,8 @@ export function PayrollContainer() {
   const kpisQ = useQuery({ queryKey: ['hrms', 'payroll', 'dashboard', 'kpis'], queryFn: () => apiJson<PayrollDashboardKpis>('/v1/payroll/dashboard/kpis'), enabled: canRuns && section === 'dashboard', staleTime: 60_000 })
   const allBatchesQ = useQuery({ queryKey: ['hrms', 'payroll', 'disbursement-batches', 'list', {}], queryFn: () => apiJson<DisbursementBatch[]>('/v1/payroll/disbursement/batches'), enabled: canDisbRead && ['dashboard', 'bank'].includes(section), staleTime: 15_000 })
   const filingsQ = useQuery({ queryKey: ['hrms', 'compliance', 'filings', undefined, 0, 50], queryFn: () => apiJson<Page<StatutoryFiling>>('/v1/compliance/filings?page=0&size=50'), enabled: canCompliance && section === 'dashboard', staleTime: 30_000 })
+  // PF / ESI / PT / LWF owed, added up from locked and paid runs (the filings ledger stays the filing record).
+  const duesQ = useQuery({ queryKey: ['hrms', 'payroll', 'statutory-dues', 3], queryFn: () => apiJson<StatutoryDue[]>('/v1/payroll/statutory-dues?months=3'), enabled: canRuns && section === 'dashboard', staleTime: 60_000 })
   const dashEligibleQ = useEligibleEmployees(thisMonthRun?.id || '', section === 'dashboard' && thisMonthRun?.status === 'DRAFT')
 
   // ── Runs + run page ──
@@ -131,18 +133,12 @@ export function PayrollContainer() {
   const slipQ = useRunPayslip(runId, slipEmp)
   const skippedIds = (skippedQ.data ?? []).map((k) => k.employeeId)
   const skippedStructQs = useQueries({ queries: skippedIds.map((id) => ({ queryKey: ['hrms', 'payroll', 'structure', 'employee', id], queryFn: () => apiJson<EmployeeSalaryStructure | null>(`/v1/payroll/structures/employee/${id}`).catch(() => null), enabled: canStruct })) })
-  // Per-component totals: the API has none for a run, so small runs add up their payslips.
+  // Per-component totals for the whole run, added up by the server (any run size).
   const runEmps = runEmpsQ.data ?? []
   const totalsQ = useQuery({
-    queryKey: ['hrms', 'payroll', 'runs', 'detail', runId, 'component-totals', run?.processedAt, runEmps.length],
-    queryFn: async () => {
-      const slips = await Promise.all(runEmps.map((e) => apiJson<{ earnings: { name: string; amount: number }[]; deductions: { name: string; amount: number }[] }>(`/v1/payroll/runs/${runId}/employees/${e.employeeId}/payslip`)))
-      const add = (m: Map<string, number>, lines: { name: string; amount: number }[]) => lines.forEach((l) => m.set(l.name, (m.get(l.name) || 0) + num(l.amount)))
-      const earn = new Map<string, number>(), ded = new Map<string, number>()
-      slips.forEach((s) => { add(earn, s.earnings || []); add(ded, s.deductions || []) })
-      return { earnings: [...earn.entries()], deductions: [...ded.entries()] }
-    },
-    enabled: !!run && run.status !== 'DRAFT' && runEmps.length > 0 && runEmps.length <= 60,
+    queryKey: ['hrms', 'payroll', 'runs', 'detail', runId, 'component-totals', run?.processedAt],
+    queryFn: () => apiJson<ComponentTotal[]>(`/v1/payroll/runs/${runId}/component-totals`),
+    enabled: canRuns && !!run && run.status !== 'DRAFT',
     staleTime: 300_000,
   })
   const activeAdvQ = useQuery({ queryKey: ['hrms', 'advance', 'company', 0, 'DISBURSED', 100], queryFn: () => apiJson<Page<AdvanceRequest>>('/v1/advance/requests?page=0&size=100&status=DISBURSED'), enabled: canAdvRead && (!!run || section === 'advances'), staleTime: 60_000 })
@@ -226,17 +222,32 @@ export function PayrollContainer() {
     for (const r of runs) if (r.status !== 'DRAFT' && r.status !== 'CANCELLED') grossBy.set(byPeriod(r), (grossBy.get(byPeriod(r)) || 0) + num(r.totalGross))
     const bars = Array.from({ length: 6 }, (_, i) => { const d = new Date(y, m - 1 - (5 - i), 1); return { m: MON[d.getMonth()], value: grossBy.get(d.getFullYear() * 100 + d.getMonth() + 1) || 0 } })
     const paidAt = new Map((allBatchesQ.data ?? []).filter((b) => b.status === 'PAID').map((b) => [b.runId, b.paidAt]))
-    const LBL: Record<string, string> = { TDS: 'Income tax (TDS)', PF: 'Provident fund (PF)', ESI: 'ESI', PT: 'Professional tax', GRATUITY: 'Gratuity', OTHER: 'Other filing' }
+    const LBL: Record<string, string> = { TDS: 'Income tax (TDS)', PF: 'Provident fund (PF)', ESI: 'ESI', PT: 'Professional tax', LWF: 'Labour welfare fund (LWF)', GRATUITY: 'Gratuity', OTHER: 'Other filing' }
+    // Statutory dues: PF / ESI / PT / LWF worked out from locked and paid runs,
+    // unless the Compliance filings ledger already records them as filed. Other
+    // filings (TDS, gratuity…) still come from the ledger.
+    const monthOf = (p: string) => `${MON[Number(p.slice(5, 7)) - 1]} ${p.slice(0, 4)}`
+    const computedDues = (duesQ.data ?? []).filter((d) => d.filingStatus !== 'FILED' && d.filingStatus !== 'LATE').map((d) => {
+      const due = d.filingDueDate || d.dueDate || ''
+      return {
+        sort: due || '9999-12-31', what: LBL[d.scheme] || d.scheme, when: due ? fmtShort(due) : 'as your state requires', amount: num(d.total),
+        note: [monthOf(d.period), companies.length > 1 ? d.companyName || '' : '', due && due < today ? 'overdue' : ''].filter(Boolean).join(' · '),
+      }
+    })
+    // Ledger entries a computed due already stands for are not listed twice; any
+    // other open entry (TDS, gratuity, or a PF/ESI/PT month payroll didn't run) still shows.
+    const matched = new Set((duesQ.data ?? []).map((d) => d.filingId).filter(Boolean))
+    const ledgerDues = (filingsQ.data?.content ?? []).filter((f) => f.status === 'DUE' && !matched.has(f.id))
+      .map((f) => ({ sort: f.dueDate, what: LBL[f.filingType] || f.filingType, when: fmtShort(f.dueDate), amount: f.amount ? num(f.amount) : null, note: [f.period, f.dueDate < today ? 'overdue' : ''].filter(Boolean).join(' · ') }))
     const data: PayDashData = {
       companyName, monthLabel: `${MON[m - 1]} ${y}`, monthShort: MON[m - 1],
       current: cur ? { id: cur.id, label: runLabel(cur), short: MON[cur.periodMonth - 1], status: STATUS[cur.status] || 'draft', net: cur.status === 'DRAFT' ? null : num(cur.totalNet), gross: cur.status === 'DRAFT' ? null : num(cur.totalGross), employees: cur.status === 'DRAFT' ? null : cur.employeeCount, eligible: dashEligibleQ.data ? dashEligibleQ.data.length : null, bankFile: (allBatchesQ.data ?? []).some((b) => b.runId === cur.id && (b.status === 'DRAFT' || b.status === 'POSTED')) } : null,
       prevGross: prev ? num(prev.totalGross) : null, pendingDisb: kpisQ.data ? kpisQ.data.pendingDisbursals : null, bars,
-      dues: (filingsQ.data?.content ?? []).filter((f) => f.status === 'DUE' || f.status === 'LATE').sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 3)
-        .map((f) => ({ what: LBL[f.filingType] || f.filingType, when: fmtShort(f.dueDate), amount: f.amount ? num(f.amount) : null, note: [f.period, f.status === 'LATE' ? 'overdue' : ''].filter(Boolean).join(' · ') })),
+      dues: [...computedDues, ...ledgerDues].sort((a, b) => a.sort.localeCompare(b.sort)).slice(0, 3).map(({ sort: _s, ...d }) => d),
       recent: sorted.filter((r) => r.status === 'PAID' && r.id !== cur?.id).slice(0, 3).map((r) => ({ id: r.id, label: runLabel(r), employees: r.employeeCount, paidOn: dayOf(paidAt.get(r.id)), net: num(r.totalNet) })),
       hasRuns: runs.length > 0,
     }
-    px.PayDashboard = { state: stateOf(runsQ), data, onRetry: () => { runsQ.refetch(); kpisQ.refetch() } }
+    px.PayDashboard = { state: stateOf(runsQ), data, onRetry: () => { runsQ.refetch(); kpisQ.refetch(); duesQ.refetch() } }
   }
   if (section === 'runs' && !runId) {
     px.PayRuns = {
@@ -260,13 +271,24 @@ export function PayrollContainer() {
     const stamps = { created: run ? stamp(run.createdAt) : '', processed: run?.processedAt ? stamp(run.processedAt) : '', locked: run?.lockedAt ? stamp(run.lockedAt) : '', paid: paidBatch?.paidAt ? stamp(paidBatch.paidAt) : run?.status === 'PAID' ? 'Paid' : '' }
     const log: { what: string; who: string; when: string; kind: 'done' | 'warn' | 'info' }[] = []
     if (run) {
-      log.push({ what: `Run created for ${runLabel(run)}`, who: '', when: stamps.created, kind: 'info' })
-      if (run.processedAt) log.push({ what: `Processed · ${run.employeeCount} payslips calculated${run.skippedEmployeeCount ? `, ${run.skippedEmployeeCount} skipped` : ''}`, who: '', when: stamps.processed, kind: run.skippedEmployeeCount ? 'warn' : 'done' })
-      if (run.lockedAt) log.push({ what: 'Locked · payslips are final', who: '', when: stamps.locked, kind: 'done' })
+      log.push({ what: `Run created for ${runLabel(run)}`, who: run.createdByName || '', when: stamps.created, kind: 'info' })
+      if (run.processedAt) log.push({ what: `Processed · ${run.employeeCount} payslips calculated${run.skippedEmployeeCount ? `, ${run.skippedEmployeeCount} skipped` : ''}`, who: run.processedByName || '', when: stamps.processed, kind: run.skippedEmployeeCount ? 'warn' : 'done' })
+      if (run.lockedAt) log.push({ what: 'Locked · payslips are final', who: run.lockedByName || '', when: stamps.locked, kind: 'done' })
       if (batch || paidBatch) log.push({ what: `Bank file generated · ${(batch || paidBatch)!.batchReference}`, who: '', when: stamp((batch || paidBatch)!.createdAt), kind: 'done' })
-      if (paidBatch) log.push({ what: `Marked as paid · reference ${paidBatch.paymentReference || '—'}`, who: '', when: stamps.paid, kind: 'done' })
+      if (paidBatch) log.push({ what: `Marked as paid · reference ${paidBatch.paymentReference || '—'}`, who: run.paidByName || '', when: stamps.paid, kind: 'done' })
     }
-    const totals = totalsQ.data
+    // The server's per-component totals: earnings (and reimbursements) and deductions.
+    const tl = totalsQ.data
+    const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`
+    const pliLine = tl?.find((t) => t.code === 'PLI_INCENTIVE') || null
+    const totals = tl ? {
+      earnings: tl.filter((t) => t.category === 'EARNING' || t.category === 'REIMBURSEMENT').map((t) => [t.name, num(t.amount), t.code === 'PLI_INCENTIVE' ? `Approved PLI awards · ${people(t.employees)}` : undefined] as [string, number, string?]),
+      deductions: tl.filter((t) => t.category === 'DEDUCTION').map((t) => [t.name, num(t.amount)] as [string, number]),
+    } : null
+    const inrShort = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
+    const pliDetail = status === 'draft' ? 'Approved PLI awards are added as “Performance incentive” when you process.'
+      : !tl ? 'Adding up this run’s incentives…' : pliLine ? `${inrShort(num(pliLine.amount))} for ${people(pliLine.employees)} · paid with salaries` : 'No approved PLI awards were due for this run'
+    const periodDays = run ? Math.round((Date.parse(run.periodEnd) - Date.parse(run.periodStart)) / 86_400_000) + 1 : 0
     const data: RunPageData | undefined = run ? {
       run: { id: run.id, label: runLabel(run), company: run.companyName, period: periodText(run), status, fileTag: `${run.periodYear}-${String(run.periodMonth).padStart(2, '0')}`, employees: run.employeeCount, gross: num(run.totalGross), ded: num(run.totalDeductions), net: num(run.totalNet), eligible: eligibleQ.data ? eligibleQ.data.length : null, stamps },
       skipped, fixedIds, bankProfile: profile ? profile.profileName : null,
@@ -277,19 +299,20 @@ export function PayrollContainer() {
         gross: num(run.totalGross), ded: num(run.totalDeductions), net: num(run.totalNet), employees: run.employeeCount, period: periodText(run),
         checks: [
           { key: 'att', icon: 'calendarCheck', title: `Attendance for ${monthName}`, detail: status === 'draft' ? 'Loss-of-pay days are worked out from attendance when you process.' : lopDays ? `${lopDays} loss-of-pay ${lopDays === 1 ? 'day' : 'days'} across ${lop.length} ${lop.length === 1 ? 'person' : 'people'}` : 'No loss-of-pay days', warn: false, cta: 'Daily Tracking', path: '/hrms/attendance?tab=team' },
-          { key: 'pli', icon: 'target', title: 'Production-linked incentive', detail: 'Not added to payroll yet — PLI bonuses are paid out as awards.', warn: false, cta: 'PLI', path: '/hrms/pli' },
+          { key: 'pli', icon: 'target', title: 'Production-linked incentive', detail: pliDetail, warn: false, cta: 'PLI', path: '/hrms/pli' },
           { key: 'adv', icon: 'receipt', title: 'Advance & loan recoveries', detail: adv.length ? adv.slice(0, 2).map((a) => `${a.employeeName || 'Employee'} · ${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(num(a.monthlyDeduction))} a month`).join(' · ') + (adv.length > 2 ? ` · ${adv.length - 2} more` : '') : canAdvRead ? 'No active recoveries' : 'Recoveries are deducted when you process', warn: false, cta: 'Advances', path: '/hrms/advances' },
           { key: 'sal', icon: 'fileText', title: 'Salary structures', detail: skipped.length ? `${skipped.length} ${skipped.length === 1 ? 'employee has' : 'employees have'} no salary structure and will be skipped` : 'Everyone in this run has a salary structure', warn: skipped.length > 0, cta: 'Salary Structure', path: '/hrms/salary-structure' },
         ],
-        // Pay date and working days aren't kept by the API: a dash, not "Not yet".
-        details: [['Period', periodText(run)], ['Pay date', '—'], ['Company', run.companyName], ['Employees', `${status === 'draft' ? eligibleQ.data?.length ?? '' : run.employeeCount}${skipped.length ? ` · ${skipped.length} skipped` : ''}`], ['Working days', '—'], ['Created', stamps.created], ['Processed', stamps.processed], ['Locked', stamps.locked], ['Paid', stamps.paid]],
+        // Pay date: the processing day from Payroll Settings. Working days: the
+        // company's work week minus holidays (a dash for runs from before these were kept).
+        details: [['Period', periodText(run)], ['Pay date', run.payDate ? fmtShort(run.payDate) : '—'], ['Company', run.companyName], ['Employees', `${status === 'draft' ? eligibleQ.data?.length ?? '' : run.employeeCount}${skipped.length ? ` · ${skipped.length} skipped` : ''}`], ['Working days', run.workingDays != null ? `${run.workingDays} of ${periodDays} days` : '—'], ['Created', stamps.created], ['Processed', stamps.processed], ['Locked', stamps.locked], ['Paid', stamps.paid]],
         batch: batch ? { bank: profile?.id === batch.bankProfileId ? profile.profileName : 'Bank file', count: batch.beneficiaryCount, amount: num(batch.totalAmount), status: batch.status } : null,
         onDownloadBatch: batch ? () => downloadBatchFile(batch.id, `${batch.batchReference}.csv`).then(() => { qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'disbursement-batches'] }); toast.success('Bank file downloaded · upload it to your bank') }, failed('Could not download the file')) : undefined,
         log: log.reverse(),
       },
       slip: slipQ.data ? {
         name: slipQ.data.employeeName, code: slipQ.data.employeeCode, role: slipQ.data.designation || 'Employee', dept: (() => { const w = empById.get(slipQ.data!.employeeId); return w?.departmentId ? deptName.get(w.departmentId) || '—' : '—' })(),
-        paidDays: slipQ.data.paidDays ?? null, workingDays: null, lop: slipQ.data.lopDays ?? null, pan: slipQ.data.panMasked || null, bank: slipQ.data.bankMasked || null,
+        paidDays: slipQ.data.paidDays ?? null, workingDays: slipQ.data.totalDays ?? null, lop: slipQ.data.lopDays ?? null, pan: slipQ.data.panMasked || null, bank: slipQ.data.bankMasked || null,
         earnings: slipQ.data.earnings.map((l) => [l.name, num(l.amount)] as [string, number]), deductions: slipQ.data.deductions.map((l) => [l.name, num(l.amount)] as [string, number]),
         gross: num(slipQ.data.gross), ded: num(slipQ.data.totalDeductions), net: num(slipQ.data.netPay),
       } as Payslip : null,

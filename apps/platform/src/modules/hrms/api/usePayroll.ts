@@ -25,6 +25,8 @@ export interface PayrollSettings {
   payrollCycleStartDay: number
   payrollCycleEndDay: number
   salaryProcessingDay: number
+  /** Months (1-12) whose runs deduct LWF. */
+  lwfDeductionMonths?: number[]
 }
 
 export interface SalaryComponent {
@@ -39,6 +41,10 @@ export interface SalaryComponent {
   displayOrder: number
   isSystem: boolean
   isActive: boolean
+  /** A fixed component's monthly amount, paid or deducted by payroll. */
+  amount?: number | null
+  /** False: printed inside "Other earnings / deductions" on payslips. */
+  showOnPayslip?: boolean
 }
 
 export interface StructureLine {
