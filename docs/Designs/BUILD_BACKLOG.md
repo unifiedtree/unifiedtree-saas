@@ -81,10 +81,7 @@ Priorities:
 - Contractors: update and restore endpoints; licence expiry, service, deployment sites, worker count; link contract workers to agencies.
 - Classifications API: permission-based `GET` and an update endpoint.
 - Salary components: deactivate, fixed amounts (`percent_value` is `NUMERIC(6,3)`), "show on payslip".
-- Leave types: accrual frequency and encashment in the API; a year-end carry-forward job.
-- Shifts: shift code, flexible core hours, weekly offs per shift.
 - Departments: change parent; honour `branchIds` on create.
-- Policies: delete, reminders, email on publish, optional acknowledgement.
 - Companies: TAN, "since", description.
 - Branch types (plant, warehouse…).
 
