@@ -500,3 +500,16 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
 - **Fixed:** a new expense line's default date was the UTC date (yesterday before 05:30 IST).
 - **Static, noted:** receipts can't be attached to claims yet. The line items have a Receipt column but there's no upload; the Submit form now says so. *Needs:* receipt upload on expense items.
 - **Checked live:** `e2e/recovery/live-design-expenses.mjs`, 11/11. The employee sees only their views and submits a claim; the owner opens its line items, approves it and marks it reimbursed; batches and policies render. The claim is removed afterwards.
+
+### 11.4 Resignation & exit (`/hrms/exit`) and Full & final (`/hrms/fnf`): done
+- **Resignation & exit:** on the module kit: stat tiles (each opens its list), view tabs with the on-notice count, and quiet states. The notice, withdraw, mark-exited and F&F hand-off behave as before.
+- **Full & final:** on the module kit.
+  - **Views:** Pending approval, Pending payment, Settled, All, and Create settlement.
+  - **Default view:** someone who can record payments but not approve now starts on **Pending payment**. Before, they started on Pending approval, where approved settlements never appear.
+  - **Settlement drawer:** earnings, deductions and net payable as fact tiles.
+  - **Create:** form panels.
+- **Fixed:** the kit's error state used the design's fixed "Unable to load this section." and dropped the server's reason. It now shows the real message.
+- **Checked live:**
+  - `live-exit-center` 12/12 and `live-employee-exit` pass.
+  - `live-fnf-tabs` 27/27. Updated because the view tabs are pressed-state buttons, not ARIA tabs, and a zero count shows no badge.
+  - `live-fnf-admin` passes all three steps. This was the open failure: the payer was looking for the approved settlement under Pending approval.

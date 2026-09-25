@@ -53,7 +53,10 @@ const pageErrors = [], failedApi = []
 page.on('pageerror', (e) => pageErrors.push(String(e).split('\n')[0]))
 page.on('console', (m) => { if (m.type() === 'error') pageErrors.push('console: ' + m.text().slice(0, 160)) })
 page.on('response', (r) => { if (r.url().includes('/api/') && r.status() >= 400) failedApi.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`) })
-const tabBadge = async (name) => (await page.getByRole('tab', { name, exact: false }).first().innerText()).replace(name, '').trim()
+// The design's view tabs are toggle buttons in a labelled group (aria-pressed), not ARIA tabs.
+const view = (name, group = 'Settlement views') => page.locator(`[aria-label="${group}"]`).getByRole('button', { name: new RegExp('^' + name) })
+// A zero count shows no badge in the design, so read it as 0.
+const tabBadge = async (name) => (await view(name).first().innerText()).replace(name, '').trim() || '0'
 const tableRows = () => page.locator('table tbody tr')
 try {
   await call(`/v1/hrms/employees/${fixture.id}/notice?${new URLSearchParams({ noticeStart: today, lastWorkingDay: today })}`, { method: 'POST' })
@@ -74,8 +77,8 @@ try {
   const beforeCounts = countBy(before.content)
   await page.goto(base + '/hrms/fnf')
   await page.getByRole('heading', { name: 'Full & final settlements' }).waitFor({ timeout: 30_000 })
-  for (const name of ['Pending approval', 'Pending payment', 'Settled', 'All', 'Create settlement']) check(`tab "${name}" renders`, (await page.getByRole('tab', { name }).count()) === 1)
-  check('default tab is Pending approval', (await page.getByRole('tab', { name: 'Pending approval' }).getAttribute('aria-selected')) === 'true')
+  for (const name of ['Pending approval', 'Pending payment', 'Settled', 'All', 'Create settlement']) check(`tab "${name}" renders`, (await view(name).count()) === 1)
+  check('default tab is Pending approval', (await view('Pending approval').getAttribute('aria-pressed')) === 'true')
   await page.locator('table').first().waitFor({ timeout: 15_000 })
   await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), null, { timeout: 15_000 }).catch(() => {})
   if (before.totalPages <= 1) {
@@ -86,20 +89,20 @@ try {
   } else {
     check('multi-page ledger hides page-only badges', (await tabBadge('Settled')) === '', 'ledger spans several pages')
   }
-  await page.getByRole('tab', { name: 'Settled' }).click()
+  await view('Settled').click()
   await page.waitForURL((u) => u.searchParams.get('tab') === 'settled')
   const settledRows = beforeCounts.PAID ? await tableRows().count() : 0
   check('Settled tab lists only PAID settlements', beforeCounts.PAID ? settledRows === beforeCounts.PAID && (await tableRows().filter({ hasText: /processed|approved|cancelled/ }).count()) === 0 : (await page.getByText('No settlements have been paid yet').count()) > 0, `${settledRows} rows vs ${beforeCounts.PAID}`)
-  await page.getByRole('tab', { name: 'All' }).click()
+  await view('All').click()
   await page.waitForURL((u) => u.searchParams.get('tab') === 'all')
   check('All tab lists every row of the page', (await tableRows().count()) === before.content.length, `${await tableRows().count()} vs ${before.content.length}`)
-  await page.getByRole('tab', { name: 'Pending payment' }).click()
+  await view('Pending payment').click()
   check('Pending payment tab shows APPROVED rows or its empty state', beforeCounts.APPROVED ? (await tableRows().count()) === beforeCounts.APPROVED : (await page.getByText('No approved settlements are waiting for payment').count()) > 0)
 
   // 2. Exit page hand-off: the exited row's F&F button deep-links into Create settlement.
   await page.goto(base + '/hrms/exit')
   await page.getByRole('heading', { name: 'Resignation & exit' }).waitFor({ timeout: 30_000 })
-  await page.getByRole('tab', { name: 'Exited' }).click()
+  await view('Exited', 'Exit views').click()
   await page.getByPlaceholder('Search name, code, email…').fill(fixtureName)
   const exitRow = page.getByRole('row').filter({ hasText: fixtureName })
   await exitRow.waitFor({ timeout: 15_000 })
@@ -108,11 +111,12 @@ try {
   const notice = await call('/v1/hrms/employees?status=NOTICE_PERIOD&page=0&size=1')
   await exitRow.getByRole('link').filter({ hasText: 'F&F' }).click()
   await page.waitForURL((u) => u.pathname === '/hrms/fnf' && u.searchParams.get('employeeId') === fixture.id)
-  check('Create settlement tab is selected from the link', (await page.getByRole('tab', { name: 'Create settlement' }).getAttribute('aria-selected')) === 'true')
+  check('Create settlement tab is selected from the link', (await view('Create settlement').getAttribute('aria-pressed')) === 'true')
   const banner = page.getByText(`Selected: ${fixtureName} (${fixture.employeeCode})`)
   await banner.waitFor({ timeout: 15_000 })
   check('linked leaver is preselected', true, `${fixtureName} (${fixture.employeeCode})`)
   check('picker narrowed to the leaver\'s status and code', (await page.getByLabel('Exit status').inputValue()) === 'EXITED' && (await page.getByLabel('Find employee').inputValue()) === fixture.employeeCode)
+  await page.locator('button[aria-pressed="true"]').filter({ hasText: fixture.employeeCode }).first().waitFor({ timeout: 15_000 }).catch(() => {})
   check('preselected row is pressed in the picker', (await page.locator('button[aria-pressed="true"]').filter({ hasText: fixture.employeeCode }).count()) === 1)
 
   // 3. Process a settlement for the preselected leaver; it must land under Pending approval.
@@ -133,7 +137,7 @@ try {
   await page.getByRole('row').filter({ hasText: fixtureName }).waitFor({ timeout: 15_000 })
   check('new settlement is listed under Pending approval', true)
   if (after.totalPages <= 1) check('Pending approval badge follows the API', (await tabBadge('Pending approval')) === String(countBy(after.content).PROCESSED), `${await tabBadge('Pending approval')} vs ${countBy(after.content).PROCESSED}`)
-  await page.getByRole('tab', { name: 'Settled' }).click()
+  await view('Settled').click()
   check('new settlement is not listed under Settled', (await page.getByRole('row').filter({ hasText: fixtureName }).count()) === 0)
 
   // 4. A non-separated employee id is refused with an explanation, not preselected.

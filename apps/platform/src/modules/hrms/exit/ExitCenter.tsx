@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { differenceInCalendarDays, format } from 'date-fns'
 import { LogOut, UserMinus, Wallet } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
-import { HrAvatar, HrButton, HrDrawer, HrPageHeader, HrStatCard, HrStatusPill, HrTabs, TableCard, type PillTone } from '@/shared/components/hr'
+import { HrAvatar, HrButton, HrDrawer, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { ModulePage, Views, StatRow, State } from '@/design/module/ModuleKit'
 import { DataTable, type Column } from '@/shared/components/DataTable'
 import { EmptyState } from '@/shared/components/EmptyState'
 import { hrPaginationFooter } from '@/shared/components/HrPagination'
@@ -117,7 +118,7 @@ export function ExitCenter() {
     },
   ]
 
-  if (!canRead) return <p className="ut-card p-6 text-text-secondary">You do not have access to employee exits.</p>
+  if (!canRead) return <ModulePage crumb="Employee exit" title="Resignation & exit"><State kind="empty" icon="lock" title="No access to employee exits" description="Ask an admin if you need to see who is leaving." /></ModulePage>
 
   const rows = list.data?.content ?? []
   const emptyMessage = tab === 'NOTICE_PERIOD'
@@ -125,21 +126,18 @@ export function ExitCenter() {
     : search ? 'No leavers match this search.' : tab === 'EXITED' ? 'No exited employees yet.' : 'No terminated employees.'
 
   return (
-    <div className="space-y-5">
-      <HrPageHeader
-        crumb="Employee exit"
-        title="Resignation & exit"
-        subtitle="Everyone serving notice, with their last working day and what happens next. Settlements are prepared under Full & Final."
-        actions={canWrite ? <HrButton onClick={() => setStarting(true)}><LogOut size={16} /> Start notice</HrButton> : undefined}
-      />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <HrStatCard icon={<LogOut size={18} />} color="orange" value={counts.data?.notice ?? '—'} label="On notice" loading={counts.isPending} onClick={() => switchTab('NOTICE_PERIOD')} />
-        <HrStatCard icon={<UserMinus size={18} />} color="red" value={counts.data?.exited ?? '—'} label="Exited" loading={counts.isPending} onClick={() => switchTab('EXITED')} />
-        <HrStatCard icon={<UserMinus size={18} />} color="red" value={counts.data?.terminated ?? '—'} label="Terminated" loading={counts.isPending} onClick={() => switchTab('TERMINATED')} />
-      </div>
-      <HrTabs tabs={TABS} active={tab} onChange={key => switchTab(key as TabKey)} />
+    <ModulePage crumb="Employee exit" title="Resignation & exit"
+      subtitle="Everyone serving notice, with their last working day and what happens next. Settlements are prepared under Full & Final."
+      actions={canWrite ? <HrButton onClick={() => setStarting(true)}><LogOut size={16} /> Start notice</HrButton> : undefined}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+      {counts.isPending ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        { icon: 'logOut', color: 'orange', label: 'On notice', value: String(counts.data?.notice ?? '—'), sub: 'Serving their notice period', onClick: () => switchTab('NOTICE_PERIOD') },
+        { icon: 'userMinus', color: 'red', label: 'Exited', value: String(counts.data?.exited ?? '—'), sub: 'Left the company', onClick: () => switchTab('EXITED') },
+        { icon: 'userX', color: 'red', label: 'Terminated', value: String(counts.data?.terminated ?? '—'), sub: 'Employment ended by the company', onClick: () => switchTab('TERMINATED') },
+      ]} />}
+      <Views items={TABS.map((t) => ({ key: t.key, label: t.label, count: t.key === 'NOTICE_PERIOD' ? counts.data?.notice || undefined : undefined }))} active={tab} onChange={key => switchTab(key as TabKey)} label="Exit views" />
       {list.isError ? (
-        <div role="alert" className="ut-card p-6"><p className="font-semibold">Unable to load employees.</p><p className="mt-1 text-sm text-text-secondary">{list.error instanceof Error ? list.error.message : 'Please try again.'}</p><HrButton className="mt-4" variant="ghost" onClick={() => list.refetch()}>Try again</HrButton></div>
+        <State kind="error" title="Couldn’t load employees" description={list.error instanceof Error ? list.error.message : 'Please try again.'} onRetry={() => list.refetch()} />
       ) : (
         <TableCard
           search={{ value: search, onChange: v => { setSearch(v); setPage(0) }, placeholder: 'Search name, code, email…' }}
@@ -153,9 +151,10 @@ export function ExitCenter() {
           )}
         </TableCard>
       )}
+      </div>
       {starting && <StartNoticeDrawer onClose={() => setStarting(false)} onDone={() => { setStarting(false); switchTab('NOTICE_PERIOD') }} />}
       {editing && <SeparationDrawer emp={editing} onClose={() => setEditing(null)} />}
-    </div>
+    </ModulePage>
   )
 }
 

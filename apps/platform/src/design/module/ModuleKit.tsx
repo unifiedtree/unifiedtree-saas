@@ -6,7 +6,7 @@
 // (Leave, Expenses, Hiring…) are assembled from these parts so every page
 // speaks the same visual language as the designed ones.
 import { createElement as h, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { HrAvatar, HrPageHeader, HrStatusPill } from '@/shared/components/hr'
+import { HrAvatar, HrButton, HrPageHeader, HrStatusPill } from '@/shared/components/hr'
 import { DesignFrame } from '@/design/dc/DesignFrame'
 import { SubTabs } from '@/design/dc/SubTabs'
 import { StatTile } from '@/design/dc/StatTile'
@@ -94,6 +94,15 @@ export function SubHeading({ children, aside }: { children: ReactNode; aside?: R
 
 /** Loading, error or empty, in the design's quiet style. */
 export function State({ kind, title, description, onRetry, icon, height }: { kind: 'loading' | 'error' | 'empty'; title?: string; description?: string; onRetry?: () => void; icon?: string; height?: number }) {
+  // The design's SectionState error has fixed wording; ours says what failed and why (the server's message).
+  if (kind === 'error') return (
+    <div role="alert" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 16px', textAlign: 'center', ...CARD, fontFamily: FONT }}>
+      <span aria-hidden="true" style={{ display: 'inline-flex', width: 36, height: 36, borderRadius: 999, background: '#fff1f2', color: '#be123c', alignItems: 'center', justifyContent: 'center' }}>{dashIcon('circleX', 18)}</span>
+      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{title || 'Unable to load this section.'}</p>
+      {description && <p style={{ margin: 0, maxWidth: 460, fontSize: 13, lineHeight: 1.5, color: '#64748b' }}>{description}</p>}
+      {onRetry && h(HrButton as any, { variant: 'ghost', size: 'sm', onClick: onRetry }, 'Try again')}
+    </div>
+  )
   return h(SectionState as any, { kind, title, description, retry: onRetry, icon, height })
 }
 

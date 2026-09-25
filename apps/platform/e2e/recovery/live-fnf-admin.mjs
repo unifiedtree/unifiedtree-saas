@@ -58,7 +58,7 @@ try {
   await expect(drawer.getByText('cancelled', { exact: true })).toBeVisible()
   assert.equal((await request(`/v1/fnf/settlements/${first.id}`)).status, 'CANCELLED')
   await drawer.getByRole('button', { name: 'Close panel', exact: true }).click()
-  await page.getByRole('tab', { name: 'Create settlement', exact: true }).click()
+  await page.locator('[aria-label="Settlement views"]').getByRole('button', { name: /^Create settlement/ }).click()
   await page.getByLabel('Find employee', { exact: true }).fill(employee.employeeCode)
   await page.getByRole('button', { name: new RegExp(name) }).click()
   await page.getByLabel('Component 1 label', { exact: true }).fill('Final salary')
@@ -115,7 +115,8 @@ try {
   await drawer.getByRole('button', { name: 'Close panel', exact: true }).click()
   const listRoute = '**/v1/fnf/settlements?*'
   await page.route(listRoute, route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Local verification: settlement list unavailable' }) }))
-  await page.reload()
+  // The "All" view, so the paid settlement is listed once the outage clears.
+  await page.goto(ui + '/hrms/fnf?tab=all')
   await expect(page.getByRole('alert')).toContainText('Local verification: settlement list unavailable', { timeout: 15000 })
   await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible()
   await expect(page.getByText('No settlements yet.', { exact: false })).toHaveCount(0)
