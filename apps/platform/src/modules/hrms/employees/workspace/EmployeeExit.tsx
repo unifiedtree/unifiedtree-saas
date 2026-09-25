@@ -24,7 +24,7 @@ import { CalendarCheck, LogOut } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrDrawer, HrStatusPill } from '@/shared/components/hr'
 import { useToast } from '@/shared/hooks/useToast'
-import { useUpdateWorkforceEmployee, type useWorkforceEmployee } from '../../api/useWorkforce'
+import { useUpdateWorkforceEmployee, EXIT_TYPES, exitTypeLabel, type ExitType, type useWorkforceEmployee } from '../../api/useWorkforce'
 import { STATUS_STYLE, PILL_TONE, SubSection } from './shared'
 
 type Emp = NonNullable<ReturnType<typeof useWorkforceEmployee>['data']>
@@ -124,7 +124,10 @@ export function EmployeeExit({ emp }: { emp: Emp }) {
       </SubSection>
 
       {(onNotice || separated) && <SubSection title="Separation details" action={canEdit && <HrButton size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit separation details</HrButton>}>
-        <div style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}><p className="text-xs font-semibold text-text-secondary">Reason</p><p className="mt-2 whitespace-pre-wrap text-sm text-text-primary">{emp.exitReason || 'No reason recorded.'}</p></div>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}><p className="text-xs font-semibold text-text-secondary">Exit type</p><p className="mt-2 text-sm text-text-primary">{exitTypeLabel(emp.exitType)}</p></div>
+          <div style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc' }}><p className="text-xs font-semibold text-text-secondary">Reason</p><p className="mt-2 whitespace-pre-wrap text-sm text-text-primary">{emp.exitReason || 'No reason recorded.'}</p></div>
+        </div>
       </SubSection>}
       {canReadSettlement && (onNotice || separated) && <div className="text-sm" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px' }}>
         <p className="font-semibold">Full &amp; final settlement</p><p className="mt-1 text-text-secondary">Review final salary, leave encashment and outstanding recoveries.</p>
@@ -154,16 +157,21 @@ function SeparationEditor({ emp, onClose }: { emp: Emp; onClose: () => void }) {
   const [noticeStart, setNoticeStart] = useState(emp.noticeStartDate || '')
   const [lastDay, setLastDay] = useState(emp.lastWorkingDay || '')
   const [reason, setReason] = useState(emp.exitReason || '')
+  const [exitType, setExitType] = useState<ExitType | ''>(emp.exitType || '')
   const requiresNoticeStart = emp.employmentStatus === 'NOTICE_PERIOD' || Boolean(emp.noticeStartDate)
   const invalidOrder = Boolean(noticeStart && lastDay && lastDay < noticeStart)
   const save = async () => {
     try {
-      await update.mutateAsync({ id: emp.id, data: { noticeStartDate: noticeStart || undefined, lastWorkingDay: lastDay, exitReason: reason.trim() } })
+      await update.mutateAsync({ id: emp.id, data: { noticeStartDate: noticeStart || undefined, lastWorkingDay: lastDay, exitReason: reason.trim(), exitType: exitType || undefined } })
       toast('Separation details saved', 'success'); onClose()
     } catch { /* Keep input visible and display the server error. */ }
   }
   return <HrDrawer title="Edit separation details" onClose={() => { if (!update.isPending) onClose() }} footer={<><HrButton variant="ghost" disabled={update.isPending} onClick={onClose}>Cancel</HrButton><HrButton disabled={!lastDay || (requiresNoticeStart && !noticeStart) || invalidOrder || update.isPending} onClick={save}>{update.isPending ? 'Saving…' : 'Save separation details'}</HrButton></>}>
-    <div className="space-y-5"><p className="text-sm text-text-secondary">Correct the dates and reason recorded for this employee.</p>
+    <div className="space-y-5"><p className="text-sm text-text-secondary">Correct the dates, exit type and reason recorded for this employee.</p>
+      <label className="block text-sm font-medium">Exit type<select className="ut-select mt-2" value={exitType} onChange={e => setExitType(e.target.value as ExitType)}>
+        {!exitType && <option value="">Not recorded</option>}
+        {EXIT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+      </select><span className="mt-1 block text-xs font-normal text-text-secondary">The attrition report counts this exit as resigned, terminated or other from it.</span></label>
       <label className="block text-sm font-medium">Notice start date<input type="date" className="ut-input mt-2" value={noticeStart} onChange={e => setNoticeStart(e.target.value)} required={requiresNoticeStart} max={lastDay || undefined} /></label>
       <label className="block text-sm font-medium">Last working day<input type="date" className="ut-input mt-2" value={lastDay} onChange={e => setLastDay(e.target.value)} required min={noticeStart || undefined} /></label>
       <div><label htmlFor="separation-reason" className="block text-sm font-medium">Separation reason</label><textarea id="separation-reason" className="ut-input mt-2" value={reason} maxLength={100} rows={3} onChange={e => setReason(e.target.value)} /></div>

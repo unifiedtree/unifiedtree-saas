@@ -500,7 +500,9 @@ public class WorkforceEmployeeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Employee " + id + " not found"));
         e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.EXITED);
         e.setLastWorkingDay(lastWorkingDay);
-        e.setExitReason(reason);
+        // The Exit centre's list rows carry no reason, so marking exited from there
+        // sent none and wiped the one recorded with the notice. Keep it unless given.
+        if (reason != null && !reason.isBlank()) e.setExitReason(reason);
         if (exitType != null) e.setExitType(exitType);
         return toResponse(repository.save(e));
     }

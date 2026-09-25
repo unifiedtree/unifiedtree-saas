@@ -35,11 +35,13 @@ export interface WorkspaceData {
   shift: { current: string; upcoming: string; options: { value: string; label: string }[]; effMin: string; onSave: (shiftId: string, from: string) => Promise<string> }
   edit: { basic: WsField[]; financial: WsField[]; onSave: (values: Record<string, string>) => Promise<string>; onFullForm: () => void }
   lifecycle: {
-    defaults: { noticeStart: string; lwd: string; reason: string; extendTo: string }
+    defaults: { noticeStart: string; lwd: string; reason: string; extendTo: string; exitType: string }
+    /** Why the person is leaving (Resignation, Termination, …): recorded on notice and exit, read by the attrition report. */
+    exitTypes: { value: string; label: string }[]
     onConfirm: (date: string) => Promise<string>
     onExtend: (date: string) => Promise<string>
-    onNotice: (start: string, lwd: string, reason: string) => Promise<string>
-    onExit: (lwd: string, reason: string) => Promise<string>
+    onNotice: (start: string, lwd: string, reason: string, exitType: string) => Promise<string>
+    onExit: (lwd: string, reason: string, exitType: string) => Promise<string>
     onCancel: () => Promise<string>
   }
 }
@@ -53,7 +55,7 @@ const EMPTY: Omit<WorkspaceData, 'state' | 'onRetry' | 'onBack' | 'today'> = {
   attention: [], glance: [], onboarding: { show: false, sub: '', note: '', fields: [], assets: [], policies: [], checklists: [] },
   can: { shift: false, edit: false, lifecycle: false, invite: false, face: false },
   shift: { current: '', upcoming: '', options: [], effMin: '', onSave: none }, edit: { basic: [], financial: [], onSave: none, onFullForm: () => {} },
-  lifecycle: { defaults: { noticeStart: '', lwd: '', reason: '', extendTo: '' }, onConfirm: none, onExtend: none, onNotice: none, onExit: none, onCancel: none },
+  lifecycle: { defaults: { noticeStart: '', lwd: '', reason: '', extendTo: '', exitType: '' }, exitTypes: [], onConfirm: none, onExtend: none, onNotice: none, onExit: none, onCancel: none },
 }
 const TONE: Record<string, string> = { Active: 'ok', Probation: 'warn', 'Notice period': 'orange', Suspended: 'purple', Exited: 'gray', Terminated: 'red' }
 const ACTIONS: Record<string, [string, string][]> = {
@@ -64,7 +66,7 @@ const ACTIONS: Record<string, [string, string][]> = {
 const errText = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
 
 export class EmployeeWorkspace extends DCLogic<{ data: WorkspaceData }> {
-  state: any = { modal: null, drawer: null, step: 1, menu: false, resetAsk: false, toast: null, toastErr: false, busy: false, tried: false, form: {}, errs: {}, newShift: '', eff: '', conf: '', ext: '', nStart: '', lwd: '', reason: '', xLwd: '', xReason: '' }
+  state: any = { modal: null, drawer: null, step: 1, menu: false, resetAsk: false, toast: null, toastErr: false, busy: false, tried: false, form: {}, errs: {}, newShift: '', eff: '', conf: '', ext: '', nStart: '', lwd: '', reason: '', xLwd: '', xReason: '', nType: '', xType: '' }
   private _m: HTMLElement | null = null
   private _md = (e: MouseEvent) => { if (this.state.menu && this._m && !this._m.contains(e.target as Node)) this.setState({ menu: false }) }
   private _t: ReturnType<typeof setTimeout> | undefined
@@ -81,7 +83,8 @@ export class EmployeeWorkspace extends DCLogic<{ data: WorkspaceData }> {
 
   openModal(kind: string) {
     const D = { ...EMPTY, ...this.props.data }, L = D.lifecycle.defaults
-    this.setState({ menu: false, modal: kind, tried: false, conf: D.today, ext: L.extendTo, nStart: L.noticeStart, lwd: L.lwd, reason: L.reason, xLwd: L.lwd || D.today, xReason: L.reason })
+    const firstType = D.lifecycle.exitTypes[0]?.value || ''
+    this.setState({ menu: false, modal: kind, tried: false, conf: D.today, ext: L.extendTo, nStart: L.noticeStart, lwd: L.lwd, reason: L.reason, xLwd: L.lwd || D.today, xReason: L.reason, nType: L.exitType || firstType, xType: L.exitType || firstType })
   }
   openEdit() {
     const D = { ...EMPTY, ...this.props.data }, form: Record<string, string> = {}
@@ -107,20 +110,22 @@ export class EmployeeWorkspace extends DCLogic<{ data: WorkspaceData }> {
       confirm: ['Confirm Probation', `${D.name} becomes a permanent employee from the confirmation date.`, 'Confirm probation', 'primary'],
       extend: ['Extend Probation', `Pick the new date ${D.name.split(' ')[0]}’s probation runs until.`, 'Extend probation', 'primary'],
       notice: ['Start Notice Period', 'Record the resignation and the notice period.', 'Start notice', 'primary'],
-      exit: ['Mark Employee as Exited', 'Their login is disabled after the last working day.', 'Mark exited', 'danger'],
+      exit: ['Mark Employee as Exited', 'Their login is disabled after the last working day. Check the exit type: it decides how this exit is counted in the attrition report.', 'Mark exited', 'danger'],
       cancel: ['Cancel Notice Period', 'The employee becomes active again.', 'Cancel notice', 'primary'],
     }
     const mk: string = S.modal || 'confirm', m = MD[mk]
     const lwdBad = !!S.lwd && S.lwd < S.nStart, lwdMissing = S.tried && !S.lwd
     const extMissing = S.tried && !S.ext, xMissing = S.tried && !S.xLwd
-    const F = (l: string, k: string, type?: string, o?: object) => Object.assign({ l, type: type || 'date', v: S[k], on: (e: any) => this.setState({ [k]: e.target.value }), max: undefined, ph: '', hasErr: false, err: '', hasHint: false, hint: '' }, o || {})
+    const F = (l: string, k: string, type?: string, o?: object) => Object.assign({ l, type: type || 'date', v: S[k], on: (e: any) => this.setState({ [k]: e.target.value }), max: undefined, ph: '', hasErr: false, err: '', hasHint: false, hint: '', isInput: true, isSelect: false, opts: [], onSel: () => {} }, o || {})
+    // Exit type: a list, recorded with the notice and the exit; the attrition report splits on it.
+    const T = (k: string) => F('Exit type *', k, 'text', { isInput: false, isSelect: true, opts: L.exitTypes, onSel: (v: string) => this.setState({ [k]: v }), hasHint: true, hint: 'Shown in the attrition report as resigned, terminated or other.' })
     const mFields = mk === 'confirm' ? [F('Confirmation date', 'conf')]
       : mk === 'extend' ? [F('New probation end date *', 'ext', 'date', { hasErr: extMissing, err: 'New probation end date is required' })]
-        : mk === 'notice' ? [F('Notice start date', 'nStart'), F('Last working day *', 'lwd', 'date', { hasErr: !!(lwdBad || lwdMissing), err: lwdBad ? 'Last working day must be on or after the notice start' : 'Last working day is required' }), F('Reason', 'reason', 'text', { max: 100, ph: 'Optional', hasHint: true, hint: (S.reason || '').length + ' / 100' })]
-          : mk === 'exit' ? [F('Last working day *', 'xLwd', 'date', { hasErr: xMissing, err: 'Last working day is required' }), F('Exit reason', 'xReason', 'text', { ph: 'Optional', max: 100 })] : []
+        : mk === 'notice' ? [T('nType'), F('Notice start date', 'nStart'), F('Last working day *', 'lwd', 'date', { hasErr: !!(lwdBad || lwdMissing), err: lwdBad ? 'Last working day must be on or after the notice start' : 'Last working day is required' }), F('Reason', 'reason', 'text', { max: 100, ph: 'Optional', hasHint: true, hint: (S.reason || '').length + ' / 100' })]
+          : mk === 'exit' ? [T('xType'), F('Last working day *', 'xLwd', 'date', { hasErr: xMissing, err: 'Last working day is required' }), F('Exit reason', 'xReason', 'text', { ph: 'Optional', max: 100 })] : []
     const mOk = () => {
       if ((mk === 'notice' && (!S.lwd || lwdBad)) || (mk === 'extend' && !S.ext) || (mk === 'exit' && !S.xLwd)) { this.setState({ tried: true }); return }
-      const call = { confirm: () => L.onConfirm(S.conf), extend: () => L.onExtend(S.ext), notice: () => L.onNotice(S.nStart, S.lwd, S.reason), exit: () => L.onExit(S.xLwd, S.xReason), cancel: () => L.onCancel() }[mk as 'confirm']
+      const call = { confirm: () => L.onConfirm(S.conf), extend: () => L.onExtend(S.ext), notice: () => L.onNotice(S.nStart, S.lwd, S.reason, S.nType), exit: () => L.onExit(S.xLwd, S.xReason, S.xType), cancel: () => L.onCancel() }[mk as 'confirm']
       this.run(call, () => this.setState({ modal: null, tried: false }))
     }
 

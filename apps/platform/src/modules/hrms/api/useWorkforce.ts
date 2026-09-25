@@ -5,6 +5,18 @@ import { apiJson } from '@/core/api/client'
 export type EmploymentStatus = 'PROBATION' | 'ACTIVE' | 'NOTICE_PERIOD' | 'SUSPENDED' | 'EXITED' | 'TERMINATED'
 export type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN' | 'CONSULTANT'
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY'
+/** Why someone left. Must match WorkforceEmployee.ExitType / ck_employees_exit_type (V143.13). */
+export type ExitType = 'RESIGNATION' | 'TERMINATION' | 'RETIREMENT' | 'END_OF_CONTRACT' | 'ABSCONDING' | 'DEATH' | 'OTHER'
+export const EXIT_TYPES: { value: ExitType; label: string }[] = [
+  { value: 'RESIGNATION', label: 'Resignation' },
+  { value: 'TERMINATION', label: 'Termination' },
+  { value: 'RETIREMENT', label: 'Retirement' },
+  { value: 'END_OF_CONTRACT', label: 'End of contract' },
+  { value: 'ABSCONDING', label: 'Absconding' },
+  { value: 'DEATH', label: 'Death' },
+  { value: 'OTHER', label: 'Other' },
+]
+export const exitTypeLabel = (t?: string | null) => EXIT_TYPES.find((x) => x.value === t)?.label ?? (t ? t : 'Not recorded')
 
 export interface WorkforceEmployee {
   id: string
@@ -29,6 +41,8 @@ export interface WorkforceEmployee {
   noticeStartDate?: string
   lastWorkingDay?: string
   exitReason?: string
+  /** V143.13: resignation / termination / … (null when not recorded). */
+  exitType?: ExitType | null
   ctcAnnual?: number
   // ── Fields the backend has always returned but this type never declared ──
   //
@@ -136,6 +150,7 @@ export interface UpdateWorkforceEmployeePayload {
   noticeStartDate?: string
   lastWorkingDay?: string
   exitReason?: string
+  exitType?: ExitType
   firstName?: string
   middleName?: string
   lastName?: string
@@ -298,9 +313,10 @@ export function useConfirmEmployee() {
 export function useStartNotice() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, noticeStart, lastWorkingDay, reason }: { id: string; noticeStart: string; lastWorkingDay: string; reason?: string }) => {
+    mutationFn: ({ id, noticeStart, lastWorkingDay, reason, exitType }: { id: string; noticeStart: string; lastWorkingDay: string; reason?: string; exitType?: ExitType }) => {
       const params = new URLSearchParams({ noticeStart, lastWorkingDay })
       if (reason) params.set('reason', reason)
+      if (exitType) params.set('exitType', exitType)
       return apiJson<WorkforceEmployee>(`/v1/hrms/employees/${id}/notice?${params}`, { method: 'POST' })
     },
     onSuccess: (_result, { id }) => {
@@ -317,9 +333,10 @@ export function useStartNotice() {
 export function useExitEmployee() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, lastWorkingDay, reason }: { id: string; lastWorkingDay: string; reason?: string }) => {
+    mutationFn: ({ id, lastWorkingDay, reason, exitType }: { id: string; lastWorkingDay: string; reason?: string; exitType?: ExitType }) => {
       const params = new URLSearchParams({ lastWorkingDay })
       if (reason) params.set('reason', reason)
+      if (exitType) params.set('exitType', exitType)
       return apiJson<WorkforceEmployee>(`/v1/hrms/employees/${id}/exit?${params}`, { method: 'POST' })
     },
     onSuccess: (_result, { id }) => {
