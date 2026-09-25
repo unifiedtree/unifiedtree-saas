@@ -239,12 +239,14 @@ INSERT INTO rbac.permissions (code, display_name, module, description) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- HR, plus OWNER and SUPER_ADMIN, which must hold every permission
--- (OwnerPermissionInvariantCheck refuses to start the app otherwise). The same
--- roles that configure leave types and give the final (L2) leave approval.
+-- (OwnerPermissionInvariantCheck refuses to start the app otherwise), and
+-- ADMIN, which since V143.18 holds everything OWNER holds except buying
+-- modules and the danger-zone settings. The same roles that configure leave
+-- types and give the final (L2) leave approval.
 INSERT INTO rbac.role_permissions (role_id, permission_code)
 SELECT r.id, p.code
   FROM rbac.roles r
  CROSS JOIN (VALUES ('hrms.leave.encash.approve'), ('hrms.leave.yearend.run')) AS p(code)
  WHERE r.tenant_id IS NULL
-   AND r.code IN ('OWNER', 'SUPER_ADMIN', 'HR_MANAGER')
+   AND r.code IN ('OWNER', 'SUPER_ADMIN', 'ADMIN', 'HR_MANAGER')
 ON CONFLICT DO NOTHING;

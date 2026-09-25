@@ -71,4 +71,13 @@ class PolicyDeleteAndDistributionTest {
                 new PolicyRequest(null, "Leave policy", "HR", "Text", "v1", null, null, null, null, 91)));
         assertEquals("POLICY_REMIND_DAYS_INVALID", e.getErrorCode());
     }
+
+    @Test void aPolicyForReadingOnlyNeverNeedsAnAcknowledgement() {
+        HrPolicy readOnly = policy(PolicyStatus.ACTIVE);
+        readOnly.setAcknowledgementRequired(false);
+        assertFalse(service.needsAcknowledgment(readOnly.getId(), UUID.randomUUID()));
+
+        HrPolicy asked = policy(PolicyStatus.ACTIVE);
+        assertTrue(service.needsAcknowledgment(asked.getId(), UUID.randomUUID()));
+    }
 }

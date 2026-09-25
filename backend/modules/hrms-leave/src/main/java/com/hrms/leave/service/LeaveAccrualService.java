@@ -45,8 +45,8 @@ public class LeaveAccrualService {
     private static final Logger log = LoggerFactory.getLogger(LeaveAccrualService.class);
     public static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final int PAGE = 200;
-    /** Employees whose balances are kept: working, on probation or serving notice. */
-    private static final String LIVE = "e.is_active = TRUE AND e.employment_status IN ('ACTIVE','PROBATION','NOTICE_PERIOD')";
+    /** Employees whose balances are kept: working, on probation, serving notice or on long leave. */
+    private static final String LIVE = "e.is_active = TRUE AND e.employment_status IN ('ACTIVE','PROBATION','NOTICE_PERIOD','ON_LEAVE')";
 
     private final JdbcTemplate jdbc;
 

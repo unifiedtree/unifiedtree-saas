@@ -54,7 +54,7 @@ try {
   // ── permissions ──────────────────────────────────────────────────────────
   for (const code of ['hrms.leave.encash.approve', 'hrms.leave.yearend.run']) {
     const roles = sql(`select string_agg(r.code, ',' order by r.code) from rbac.role_permissions rp join rbac.roles r on r.id = rp.role_id where r.tenant_id is null and rp.permission_code = '${code}'`)
-    check(`perm ${code}: OWNER, SUPER_ADMIN and HR_MANAGER hold it, with a description`, roles === 'HR_MANAGER,OWNER,SUPER_ADMIN' && sql(`select length(description) > 40 from rbac.permissions where code = '${code}'`) === 't', roles)
+    check(`perm ${code}: OWNER, SUPER_ADMIN, ADMIN and HR_MANAGER hold it, with a description`, roles === 'ADMIN,HR_MANAGER,OWNER,SUPER_ADMIN' && sql(`select length(description) > 40 from rbac.permissions where code = '${code}'`) === 't', roles)
   }
   check('HR token carries both new permissions', hrm.perms.includes('hrms.leave.encash.approve') && hrm.perms.includes('hrms.leave.yearend.run'))
 

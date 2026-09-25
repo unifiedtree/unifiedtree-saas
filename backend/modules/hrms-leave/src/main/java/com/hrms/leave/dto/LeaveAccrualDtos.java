@@ -72,7 +72,7 @@ public final class LeaveAccrualDtos {
     /** Employee (or HR) asks to cash in unused days of an encashable leave type. */
     public record EncashmentCreateRequest(UUID leaveTypeId, BigDecimal days, String reason) {}
 
-    public record EncashmentDecisionRequest(boolean approved, String note) {}
+    public record EncashmentDecisionRequest(Boolean approved, String note) {}
 
     /** What one person can still encash of one leave type this year. */
     public record EncashmentOption(

@@ -41,8 +41,8 @@ import java.util.concurrent.TimeUnit;
  * at most once per policy version (a unique index); a manual reminder skips
  * anyone reminded in the last 24 hours.
  *
- * <p>Recipients are the workspace's live employees (active, on probation or
- * serving notice), the same people the policy page counts. Messages are signed
+ * <p>Recipients are the workspace's live employees (active, on probation,
+ * serving notice or on long leave), the same people the policy page counts. Messages are signed
  * with the company's name.
  */
 @Service
@@ -51,7 +51,7 @@ public class PolicyNoticeService {
     private static final Logger log = LoggerFactory.getLogger(PolicyNoticeService.class);
     private static final int BATCH = 25;
     private static final int MAX_ATTEMPTS = 3;
-    static final String LIVE = "e.is_active = TRUE AND e.employment_status IN ('ACTIVE','PROBATION','NOTICE_PERIOD')";
+    static final String LIVE = "e.is_active = TRUE AND e.employment_status IN ('ACTIVE','PROBATION','NOTICE_PERIOD','ON_LEAVE')";
     /** Has this employee acknowledged the policy's current version? */
     private static final String ACKED = """
             EXISTS (SELECT 1 FROM policy_mgmt.policy_acknowledgements a

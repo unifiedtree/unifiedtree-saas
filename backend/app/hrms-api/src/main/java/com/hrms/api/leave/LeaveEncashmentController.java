@@ -110,8 +110,12 @@ public class LeaveEncashmentController {
     public ResponseEntity<EncashmentResponse> decide(@PathVariable UUID id,
                                                      @RequestBody EncashmentDecisionRequest decision,
                                                      @AuthenticationPrincipal Jwt jwt) {
+        // An empty body must not quietly reject the request: the decision is required.
+        if (decision == null || decision.approved() == null) {
+            throw new com.hrms.core.exception.BusinessRuleException("Say whether the encashment is approved.", "ENCASH_DECISION_REQUIRED");
+        }
         return ResponseEntity.ok(encashments.decide(id, LeaveYearEndController.employeeId(jwt),
-                decision != null && decision.approved(), decision == null ? null : decision.note()));
+                decision.approved(), decision.note()));
     }
 
     @Operation(summary = "Approved encashments waiting for the next payroll run")

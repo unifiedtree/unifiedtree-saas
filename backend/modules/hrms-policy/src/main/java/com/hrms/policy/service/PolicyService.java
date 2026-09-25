@@ -235,6 +235,8 @@ public class PolicyService {
     public boolean needsAcknowledgment(UUID policyId, UUID employeeId) {
         HrPolicy policy = policyRepository.findById(policyId)
                 .orElseThrow(() -> new ResourceNotFoundException("HrPolicy", policyId));
+        // V143.23: a policy published for reading only never needs an acknowledgement.
+        if (!policy.isAcknowledgementRequired()) return false;
         String currentVersion = policy.getPolicyVersion();
         return ackRepository.findByEmployeeId(employeeId).stream()
                 .filter(a -> a.getPolicyId().equals(policy.getId()))
