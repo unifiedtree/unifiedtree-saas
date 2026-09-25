@@ -31,6 +31,65 @@ export interface AssignableRole {
   displayName: string
   module: string
   moduleActive: boolean
+  description?: string | null
+  systemRole?: boolean
+  /** Highest risk among the role's permissions. */
+  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  /** Whether the signed-in admin may give this role (levels: only what you hold; owner-only for critical). */
+  canGrant?: boolean
+  grantBlockedReason?: string | null
+  permissionCount?: number
+}
+
+export type OverrideEffect = 'GRANT' | 'DENY'
+
+export interface PermissionOverride {
+  permissionCode: string
+  displayName: string
+  module: string
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  warning: string | null
+  effect: OverrideEffect
+  reason: string
+  grantedBy: string | null
+  grantedByEmail: string | null
+  createdAt: string
+  expiresAt: string | null
+  expired: boolean
+}
+
+export interface EffectivePermission {
+  code: string
+  displayName: string
+  module: string
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  /** e.g. "Role: HR Manager", "Every employee", "Extra permission (given to this person)" */
+  sources: string[]
+}
+
+/** GET /v1/workspace/users/{id}/permissions */
+export interface UserPermissionsView {
+  userId: string
+  email: string
+  targetIsOwner: boolean
+  roles: { roleCode: string; displayName: string }[]
+  overrides: PermissionOverride[]
+  effective: EffectivePermission[]
+  /** What their roles would give but an override takes away. */
+  removed: EffectivePermission[]
+  canEdit: boolean
+  editBlockedReason: string | null
+  canChangeRoles: boolean
+  rolesBlockedReason: string | null
+  /** Permission codes the signed-in admin may give. */
+  grantable: string[]
+}
+
+export interface OverrideInput {
+  permissionCode: string
+  effect: OverrideEffect
+  reason: string
+  expiresAt: string | null
 }
 
 export interface InviteWorkspaceUserRequest {
@@ -68,7 +127,10 @@ export function useAssignRole() {
         method: 'POST',
         body: JSON.stringify({ roleCode }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: USERS_KEY }),
+    onSuccess: (_d, { userId }) => {
+      qc.invalidateQueries({ queryKey: USERS_KEY })
+      qc.invalidateQueries({ queryKey: ['rbac', 'workspace', 'user-permissions', userId] })
+    },
   })
 }
 
@@ -77,7 +139,35 @@ export function useRevokeRole() {
   return useMutation({
     mutationFn: ({ userId, roleCode }: { userId: string; roleCode: string }) =>
       apiJson<void>(`/v1/workspace/users/${userId}/roles/${roleCode}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: USERS_KEY }),
+    onSuccess: (_d, { userId }) => {
+      qc.invalidateQueries({ queryKey: USERS_KEY })
+      qc.invalidateQueries({ queryKey: ['rbac', 'workspace', 'user-permissions', userId] })
+    },
+  })
+}
+
+/** One person's roles, effective permissions (with where each comes from) and individual overrides. */
+export function useUserPermissions(userId: string | null) {
+  return useQuery({
+    queryKey: ['rbac', 'workspace', 'user-permissions', userId],
+    queryFn: () => apiJson<UserPermissionsView>(`/v1/workspace/users/${userId}/permissions`),
+    enabled: !!userId,
+  })
+}
+
+/** Replace one person's individual overrides (the server applies the levels rules and audits it). */
+export function useSaveUserPermissions(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ overrides, acknowledgeRisk }: { overrides: OverrideInput[]; acknowledgeRisk: boolean }) =>
+      apiJson<UserPermissionsView>(`/v1/workspace/users/${userId}/permissions`, {
+        method: 'PUT',
+        body: JSON.stringify({ overrides, acknowledgeRisk }),
+      }),
+    onSuccess: (data) => {
+      qc.setQueryData(['rbac', 'workspace', 'user-permissions', userId], data)
+      qc.invalidateQueries({ queryKey: USERS_KEY })
+    },
   })
 }
 

@@ -1,24 +1,28 @@
 import React, { useState, useMemo } from 'react'
 import { Shield, Search, X, UserCog, Plus, KeyRound, Copy, Pencil, Trash2 } from 'lucide-react'
-import { DataTable, Badge, Drawer, Button } from '@unifiedtree/ui-kit'
+import { DataTable, Badge, Drawer, Button, Modal } from '@unifiedtree/ui-kit'
 import type { Column } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
-import { HrButton } from '@/shared/components/hr'
+import { HrButton, HrStatusPill } from '@/shared/components/hr'
 import { ModulePage, Views, useView, StatRow, State, Note } from '@/design/module/ModuleKit'
 import {
   useRoles, usePermissionsCatalogue, useRolePermissions, useSetRolePermissions,
   useUserRoles, useGrantRole, useRevokeRole,
-  useCreateRole, useUpdateRole, useDeleteRole,
+  useCreateRole, useUpdateRole, useDeleteRole, useDuplicateRole,
+  RISK_LABEL, RISK_TONE, isRisky,
 } from '@/modules/rbac/api/useRbac'
 import type { RbacRole, RbacPermission } from '@/modules/rbac/api/useRbac'
-import { useWorkspaceUsers, workspaceUserDisplayName } from '@/modules/rbac/api/useWorkspaceAccess'
+import { useWorkspaceUsers, useAssignableRoles, workspaceUserDisplayName } from '@/modules/rbac/api/useWorkspaceAccess'
 
 type RoleEditorState = { mode: 'create' | 'edit' | 'clone'; role?: RbacRole }
 
-// Privileged roles that must NOT be grantable via the Assignments surface — mirrors
-// the backend WorkspaceAccessService.EXCLUDED_ROLES / RbacService.NON_ASSIGNABLE_ROLE_CODES.
-const NON_ASSIGNABLE_ROLE_CODES = new Set(['SUPER_ADMIN', 'OWNER', 'ADMIN', 'MANAGER', 'PLATFORM_SUPER_ADMIN'])
+/** "Senior manager" → "SENIOR_MANAGER" (the same rule the server uses when no code is given). */
+const codeFromName = (name: string) => {
+  const c = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+  return (c && /^[A-Z]/.test(c) ? c : c ? `ROLE_${c}` : '').slice(0, 50)
+}
+const errorText = (e: unknown) => (e as { message?: string })?.message || 'Please try again.'
 
 // ── Permission Drawer ──────────────────────────────────────────────────────────
 
@@ -72,15 +76,26 @@ function PermissionsDrawer({
     })
   }
 
-  const handleSave = () => {
-    if (readOnly) return
-    setPerms.mutate(Array.from(selected), {
+  // Adding a HIGH / CRITICAL permission to a role gives it to everyone who holds
+  // the role, so the warnings are shown and confirmed first (the server insists).
+  const [confirmRisky, setConfirmRisky] = useState<RbacPermission[] | null>(null)
+  const byCode = useMemo(() => new Map(permissions.map((p) => [p.code, p])), [permissions])
+  const save = (acknowledgeRisk: boolean) => {
+    setPerms.mutate({ codes: Array.from(selected), acknowledgeRisk }, {
       onSuccess: () => {
         toast.success(`Permissions updated — ${selected.size} granted to ${role.displayName}`)
+        setConfirmRisky(null)
         onClose()
       },
-      onError: () => toast.error('Failed to update permissions'),
+      onError: (e) => { setConfirmRisky(null); toast.error('Couldn’t update the permissions', { description: errorText(e) }) },
     })
+  }
+  const handleSave = () => {
+    if (readOnly) return
+    const added = Array.from(selected).filter((c) => !currentPerms?.includes(c))
+    const risky = added.map((c) => byCode.get(c)).filter((p): p is RbacPermission => !!p && isRisky(p.riskLevel))
+    if (risky.length) { setConfirmRisky(risky); return }
+    save(false)
   }
 
   const isDirty = initialised && (
@@ -147,7 +162,12 @@ function PermissionsDrawer({
                         onChange={(e) => toggle(p.code, e.target.checked)}
                       />
                       <div className="min-w-0">
-                        <p className="text-sm text-text-primary">{p.displayName}</p>
+                        <p className="text-sm text-text-primary">
+                          {p.displayName}
+                          {p.riskLevel && p.riskLevel !== 'LOW' && <span className="ml-2"><HrStatusPill tone={RISK_TONE[p.riskLevel]}>{RISK_LABEL[p.riskLevel]}</HrStatusPill></span>}
+                        </p>
+                        {p.description && <p className="text-xs text-text-secondary">{p.description}</p>}
+                        {isRisky(p.riskLevel) && p.warning && <p className="text-xs text-text-tertiary">{p.warning}</p>}
                         <p className="font-mono text-xs text-text-tertiary">{p.code}</p>
                       </div>
                     </label>
@@ -172,6 +192,20 @@ function PermissionsDrawer({
           </Button>}
         </div>
       </div>
+      {confirmRisky && (
+        <Modal open onOpenChange={(o) => { if (!o) setConfirmRisky(null) }} title="Add high-risk permissions?"
+          description={`Everyone who holds ${role.displayName} gets these. Please read before confirming.`} size="sm">
+          <div className="space-y-2">
+            {confirmRisky.map((p) => (
+              <Note key={p.code} tone={p.riskLevel === 'CRITICAL' ? 'red' : 'amber'}><strong>{p.displayName}</strong> ({RISK_LABEL[p.riskLevel]}): {p.warning ?? p.description}</Note>
+            ))}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button size="sm" variant="ghost" onClick={() => setConfirmRisky(null)}>Cancel</Button>
+              <Button size="sm" variant="danger" loading={setPerms.isPending} onClick={() => save(true)}>Yes, add them</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Drawer>
   )
 }
@@ -185,6 +219,10 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
   const { data: userRoles, isLoading: userRolesLoading } = useUserRoles(selectedUserId)
   const grant = useGrantRole()
   const revoke = useRevokeRole()
+  // Which roles the signed-in admin may give (levels: only what you hold,
+  // critical ones and Owner / Super admin only by the owner).
+  const { data: assignable = [] } = useAssignableRoles()
+  const assignableByCode = useMemo(() => new Map(assignable.map((a) => [a.roleCode, a])), [assignable])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -196,7 +234,9 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
 
   const selectedUser = users.find((u) => u.userId === selectedUserId)
   const assignedRoleIds = new Set((userRoles?.roles ?? []).map((r) => r.id))
-  const availableRoles = roles.filter((r) => !assignedRoleIds.has(r.id) && !NON_ASSIGNABLE_ROLE_CODES.has(r.code))
+  // Platform roles and the legacy MANAGER role are never offered; the server has the final say on the rest.
+  const availableRoles = roles.filter((r) => !assignedRoleIds.has(r.id)
+    && (assignable.length ? assignableByCode.has(r.code) : r.code !== 'PLATFORM_SUPER_ADMIN' && r.code !== 'MANAGER'))
   const busy = grant.isPending || revoke.isPending
 
   const handleGrant = (roleId: string) => {
@@ -304,12 +344,18 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
                 <option value="">
                   {availableRoles.length === 0 ? 'All roles already assigned' : 'Select a role to grant…'}
                 </option>
-                {availableRoles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.displayName} {r.systemRole ? '(system)' : '(tenant)'}
-                  </option>
-                ))}
+                {availableRoles.map((r) => {
+                  const a = assignableByCode.get(r.code)
+                  return (
+                    <option key={r.id} value={r.id} disabled={a?.canGrant === false} title={a?.grantBlockedReason ?? undefined}>
+                      {r.displayName} {r.systemRole ? '(built-in)' : '(custom)'}{a?.canGrant === false ? ' — you can’t give this' : ''}
+                    </option>
+                  )
+                })}
               </select>
+              {availableRoles.some((r) => assignableByCode.get(r.code)?.canGrant === false) && (
+                <p className="mt-1.5 text-xs text-text-tertiary">Greyed-out roles include permissions you don’t hold, or can only be given by the workspace owner.</p>
+              )}
             </section>
 
             {/* Effective permissions */}
@@ -338,46 +384,46 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
 
 // ── Role editor (create / edit / clone) ─────────────────────────────────────────
 
-function RoleEditorModal({ state, onClose }: { state: RoleEditorState; onClose: () => void }) {
+function RoleEditorModal({ state, onClose, onCreated }: { state: RoleEditorState; onClose: () => void; onCreated: (role: RbacRole) => void }) {
   const { mode, role } = state
   const isCreate = mode === 'create' || mode === 'clone'
   const create = useCreateRole()
+  const duplicate = useDuplicateRole()
   const update = useUpdateRole()
 
-  const [code, setCode] = useState(mode === 'clone' && role ? `${role.code}_COPY` : '')
   const [displayName, setDisplayName] = useState(
-    mode === 'edit' && role ? role.displayName : mode === 'clone' && role ? `${role.displayName} (Copy)` : '',
+    mode === 'edit' && role ? role.displayName : mode === 'clone' && role ? `${role.displayName} (copy)` : '',
   )
-  const [description, setDescription] = useState(mode === 'edit' && role ? role.description ?? '' : '')
+  // The code follows the name until someone types their own.
+  const [code, setCode] = useState(mode === 'clone' && role ? codeFromName(`${role.displayName} copy`) : '')
+  const [codeEdited, setCodeEdited] = useState(false)
+  const [description, setDescription] = useState(mode === 'edit' && role ? role.description ?? '' : mode === 'clone' && role ? role.description ?? '' : '')
 
-  const busy = create.isPending || update.isPending
-  const title = mode === 'create' ? 'New role' : mode === 'clone' ? `Clone “${role?.displayName}”` : `Edit “${role?.displayName}”`
+  const busy = create.isPending || update.isPending || duplicate.isPending
+  const title = mode === 'create' ? 'New role' : mode === 'clone' ? `Duplicate “${role?.displayName}”` : `Edit “${role?.displayName}”`
 
   const submit = () => {
     if (isCreate) {
       if (!code.trim() || !displayName.trim()) { toast.error('Role code and name are required'); return }
-      create.mutate(
-        {
-          code: code.trim().toUpperCase().replace(/\s+/g, '_'),
-          displayName: displayName.trim(),
-          description: description.trim() || undefined,
-          cloneFromRoleId: mode === 'clone' ? role?.id : undefined,
+      const body = { code: codeFromName(code), displayName: displayName.trim(), description: description.trim() || undefined }
+      const done = {
+        onSuccess: (created: RbacRole) => {
+          toast.success(mode === 'clone' ? `${created.displayName} created from ${role?.displayName}` : 'Role created',
+            { description: 'Now choose what this role can do.' })
+          onClose()
+          onCreated(created)
         },
-        {
-          onSuccess: () => { toast.success(mode === 'clone' ? 'Role cloned' : 'Role created'); onClose() },
-          onError: (e: unknown) => {
-            const msg = (e as { message?: string })?.message ?? ''
-            toast.error(msg.includes('ROLE_CODE_DUPLICATE') ? 'That role code already exists in this workspace' : 'Failed to create role')
-          },
-        },
-      )
+        onError: (e: unknown) => toast.error(mode === 'clone' ? 'Couldn’t duplicate the role' : 'Couldn’t create the role', { description: errorText(e) }),
+      }
+      if (mode === 'clone' && role) duplicate.mutate({ roleId: role.id, ...body }, done)
+      else create.mutate(body, done)
     } else {
       if (!displayName.trim()) { toast.error('Name is required'); return }
       update.mutate(
         { roleId: role!.id, displayName: displayName.trim(), description: description.trim() || undefined },
         {
           onSuccess: () => { toast.success('Role updated'); onClose() },
-          onError: () => toast.error('Failed to update role'),
+          onError: (e) => toast.error('Couldn’t update the role', { description: errorText(e) }),
         },
       )
     }
@@ -391,18 +437,18 @@ function RoleEditorModal({ state, onClose }: { state: RoleEditorState; onClose: 
             <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Role code <span className="text-danger">*</span></label>
             <input
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => { setCode(e.target.value); setCodeEdited(true) }}
               placeholder="e.g. REGIONAL_HR"
               className="ut-input"
             />
-            <p className="mt-1 text-xs text-text-tertiary">Uppercase identifier, unique within your workspace. Spaces become underscores.</p>
+            <p className="mt-1 text-xs text-text-tertiary">Uppercase identifier, unique within your workspace. Spaces become underscores. It can’t be a built-in role’s code.</p>
           </div>
         )}
         <div>
           <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Display name <span className="text-danger">*</span></label>
           <input
             value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
+            onChange={(e) => { setDisplayName(e.target.value); if (isCreate && !codeEdited) setCode(codeFromName(e.target.value)) }}
             placeholder="e.g. Regional HR"
             className="ut-input"
           />
@@ -419,7 +465,7 @@ function RoleEditorModal({ state, onClose }: { state: RoleEditorState; onClose: 
         </div>
         {mode === 'clone' && role && (
           <p className="rounded-lg bg-slate-50 border border-border-default px-3 py-2 text-xs text-text-secondary">
-            Permissions will be copied from <span className="font-medium text-text-primary">{role.displayName}</span>. You can adjust them afterward via “Edit permissions”.
+            Every permission of <span className="font-medium text-text-primary">{role.displayName}</span> is copied into the new role, and its permissions open next so you can add or remove some. {role.displayName} itself doesn’t change. You can only copy permissions you hold yourself.
           </p>
         )}
         <div className="flex justify-end gap-2 border-t border-border-default pt-4">
@@ -433,6 +479,8 @@ function RoleEditorModal({ state, onClose }: { state: RoleEditorState; onClose: 
 
 function DeleteRoleConfirm({ role, onClose }: { role: RbacRole; onClose: () => void }) {
   const del = useDeleteRole()
+  const { data: users } = useWorkspaceUsers()
+  const holders = users?.filter((u) => u.roles.some((r) => r.roleCode === role.code)) ?? null
   return (
     <Drawer open onOpenChange={(o) => { if (!o) onClose() }} title={`Delete “${role.displayName}”?`}>
       <div className="space-y-4">
@@ -440,6 +488,12 @@ function DeleteRoleConfirm({ role, onClose }: { role: RbacRole; onClose: () => v
           This permanently deletes the <span className="font-mono text-xs">{role.code}</span> role, its permission set,
           and removes it from every user who currently holds it. This cannot be undone.
         </p>
+        {holders && holders.length > 0 && (
+          <Note tone="amber">
+            {holders.length === 1 ? '1 person holds' : `${holders.length} people hold`} this role ({holders.slice(0, 5).map((u) => workspaceUserDisplayName(u)).join(', ')}{holders.length > 5 ? '…' : ''}).
+            They lose everything it gives them unless another role gives it too.
+          </Note>
+        )}
         <div className="flex justify-end gap-2 border-t border-border-default pt-4">
           <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button
@@ -448,7 +502,7 @@ function DeleteRoleConfirm({ role, onClose }: { role: RbacRole; onClose: () => v
             onClick={() =>
               del.mutate(role.id, {
                 onSuccess: () => { toast.success('Role deleted'); onClose() },
-                onError: () => toast.error('Failed to delete role'),
+                onError: (e) => toast.error('Couldn’t delete the role', { description: errorText(e) }),
               })
             }
             className="bg-red-600 hover:bg-red-700"
@@ -525,8 +579,8 @@ export const Roles: React.FC = () => {
             </button>
             <button
               type="button"
-              aria-label={`Clone ${row.displayName}`}
-              title="Clone"
+              aria-label={`Duplicate ${row.displayName}`}
+              title="Duplicate role"
               onClick={(e) => { e.stopPropagation(); setEditorState({ mode: 'clone', role: row }) }}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
             >
@@ -582,11 +636,19 @@ export const Roles: React.FC = () => {
     },
     {
       key: 'description',
-      header: 'Description',
+      header: 'What it lets someone do',
       cell: (row) => (
-        <span className="text-xs text-text-tertiary">{row.description ?? '—'}</span>
+        <span className="text-xs text-text-secondary">
+          {row.description ?? '—'}
+          {isRisky(row.riskLevel) && row.warning && <span className="block text-text-tertiary">{row.warning}</span>}
+        </span>
       ),
       hideBelow: 'lg',
+    },
+    {
+      key: 'riskLevel',
+      header: 'Risk',
+      cell: (row) => row.riskLevel ? <HrStatusPill tone={RISK_TONE[row.riskLevel]}>{RISK_LABEL[row.riskLevel]}</HrStatusPill> : null,
     },
   ]
 
@@ -598,7 +660,7 @@ export const Roles: React.FC = () => {
   const filteredPerms = useMemo(() => {
     const q = permSearch.trim().toLowerCase()
     return permissions.filter((p) => (!moduleFilter || p.module === moduleFilter)
-      && (!q || p.code.toLowerCase().includes(q) || (p.displayName ?? '').toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q)))
+      && (!q || p.code.toLowerCase().includes(q) || (p.displayName ?? '').toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q) || (p.riskLevel ?? '').toLowerCase() === q))
   }, [permissions, moduleFilter, permSearch])
   const systemCount = roles.filter((r) => r.systemRole).length
 
@@ -621,7 +683,7 @@ export const Roles: React.FC = () => {
       {/* ── Roles ──────────────────────────────────────────────────────── */}
       {activeTab === 'roles' && (
         <div style={{ display: 'grid', gap: 12 }}>
-          <Note>Click a role to see its permissions. Built-in roles can be cloned into a custom role you can change.</Note>
+          <Note>Click a role to see its permissions. Built-in roles can’t be changed: use “Duplicate role” to make a custom copy (for example a “Senior manager” from Dept Manager) and add or remove permissions. You can only give permissions you hold; critical ones only the workspace owner can give. Every change is recorded in the audit log.</Note>
           {rolesLoading ? (
             <State kind="loading" height={220} />
           ) : rolesError ? (
@@ -707,7 +769,7 @@ export const Roles: React.FC = () => {
       )}
 
       {editorState && (
-        <RoleEditorModal state={editorState} onClose={() => setEditorState(null)} />
+        <RoleEditorModal state={editorState} onClose={() => setEditorState(null)} onCreated={(r) => setDrawerRole(r)} />
       )}
 
       {deleteTarget && (

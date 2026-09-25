@@ -110,24 +110,29 @@ export const InviteWorkspaceUserModal: React.FC<Props> = ({ open, onClose }) => 
                     {MODULE_LABEL[moduleKey] ?? moduleKey}
                   </p>
                   <div className="space-y-1">
-                    {moduleRoles.map(role => (
-                      <label
-                        key={role.roleCode}
-                        className={clsx(
-                          'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm',
-                          active ? 'cursor-pointer hover:bg-slate-50 text-slate-800' : 'opacity-60 text-slate-400',
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          disabled={!active}
-                          checked={selected.has(role.roleCode)}
-                          onChange={() => toggleRole(role.roleCode)}
-                          className="h-4 w-4 rounded accent-[#059669]"
-                        />
-                        {role.displayName}
-                      </label>
-                    ))}
+                    {moduleRoles.map(role => {
+                      // Levels: you can only invite someone into a role you could give them.
+                      const allowed = active && role.canGrant !== false
+                      return (
+                        <label
+                          key={role.roleCode}
+                          title={role.canGrant === false ? role.grantBlockedReason ?? undefined : undefined}
+                          className={clsx(
+                            'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm',
+                            allowed ? 'cursor-pointer hover:bg-slate-50 text-slate-800' : 'opacity-60 text-slate-400',
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={!allowed}
+                            checked={selected.has(role.roleCode)}
+                            onChange={() => toggleRole(role.roleCode)}
+                            className="h-4 w-4 rounded accent-[#059669]"
+                          />
+                          {role.displayName}
+                        </label>
+                      )
+                    })}
                   </div>
                   {!active && (
                     <p className="text-xs text-slate-500 pl-2.5 pt-0.5">
