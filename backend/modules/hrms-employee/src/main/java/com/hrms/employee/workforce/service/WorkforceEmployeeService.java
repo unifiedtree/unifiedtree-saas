@@ -453,7 +453,9 @@ public class WorkforceEmployeeService {
         e.setActive(true);
         // Flush now: callers in the same transaction (the Users & access invite)
         // read the new row with plain JDBC, which never triggers a JPA flush.
-        return toResponse(repository.saveAndFlush(e));
+        WorkforceEmployee saved = repository.saveAndFlush(e);
+        syncJobTitle(saved.getId());
+        return toResponse(saved);
     }
 
     // -- Update -------------------------------------------------------------
@@ -510,7 +512,25 @@ public class WorkforceEmployeeService {
         if (req.salaryFrequency()  != null) e.setSalaryFrequency(req.salaryFrequency());
         if (req.weeklyOffDays()    != null) e.setWeeklyOffDays(req.weeklyOffDays().trim());
 
-        return toResponse(repository.save(e));
+        WorkforceEmployee saved = repository.saveAndFlush(e);
+        if (req.designationId() != null) syncJobTitle(saved.getId());
+        return toResponse(saved);
+    }
+
+    /**
+     * hrms.employees.job_title is not mapped on WorkforceEmployee, but the
+     * attendance staff lists, the ESS home, employee search and letter
+     * {{employee.designation}} all read it. Keep it equal to the designation's
+     * title so an employee made or edited here never shows a blank role.
+     */
+    private void syncJobTitle(UUID employeeId) {
+        jdbc.update("""
+            UPDATE hrms.employees e
+               SET job_title = d.title
+              FROM hrms.designations d
+             WHERE e.id = ? AND d.id = e.designation_id
+               AND e.job_title IS DISTINCT FROM d.title
+            """, employeeId);
     }
 
     // -- Confirm / Probation end --------------------------------------------

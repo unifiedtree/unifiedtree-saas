@@ -61,18 +61,27 @@ public class DocumentUploadController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('hrms.document.write')")
     public DocumentResponse upload(@RequestPart("file") MultipartFile file,
-                                   @Valid @RequestPart("metadata") Metadata metadata) throws IOException {
+                                   @Valid @RequestPart("metadata") Metadata metadata,
+                                   @AuthenticationPrincipal Jwt jwt) throws IOException {
         var employee = employees.findById(metadata.employeeId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Employee not found"));
         DocumentType type = metadata.documentTypeId() == null ? null : requireType(metadata.documentTypeId());
         validateFile(file, type);
         if (metadata.expiryDate() != null && metadata.issuedDate() != null && metadata.expiryDate().isBefore(metadata.issuedDate()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Expiry date cannot precede issue date");
-        return storeAndPersist(employee.getId(), employee.getCompanyId(), file,
+        DocumentResponse saved = storeAndPersist(employee.getId(), employee.getCompanyId(), file,
                 metadata.title(), metadata.category(), metadata.issuedDate(), metadata.expiryDate(),
                 metadata.notes(), type,
                 // HR upload lands verified (they are the source of truth).
                 "VERIFIED");
+        // Record who verified it and when, as a verify from the review queue does.
+        // An owner login may have no employee record: the time is still stamped.
+        String uploaderEmployee = jwt == null ? null : jwt.getClaimAsString("employee_id");
+        jdbc.update("UPDATE document_mgmt.employee_documents SET verified_by = ?, verified_at = now() "
+                  + "WHERE id = ? AND tenant_id = ?",
+                uploaderEmployee == null ? null : UUID.fromString(uploaderEmployee),
+                saved.id(), TenantContext.getTenantId());
+        return documents.getDocument(saved.id());
     }
 
     /** Employee uploads a document for themselves. Lands PENDING for HR verification. */
