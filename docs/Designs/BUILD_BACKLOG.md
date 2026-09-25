@@ -37,17 +37,6 @@ Priorities:
 - Retirement age: a "retirement due" list or alert.
 - *Done when:* each switch changes behaviour, and the page's "saved, not applied" notes are gone.
 
-**P0-3 Notification templates are used** (§11.14)
-- *Now:* stored in `notiftemplate_mgmt.notification_templates`; senders use built-in text.
-- *Build:* in the mail and in-app senders, look up the company's active template by `event_key` + channel, render `{{placeholders}}`, and fall back to the built-in text.
-- *Also:* publish the list of event keys the senders use, so admins know what to type.
-- *Done when:* editing a template changes the email or in-app text; the amber note is removed.
-
-**P0-4 Notification preferences are honoured** (§8)
-- *Now:* Profile and Workspace switches are saved to `auth.user_credentials.notification_preferences` but ignored.
-- *Build:* senders check them.
-- *Done when:* switching email off stops emails for that user.
-
 **P0-5 File uploads that are placeholders**
 - Expense receipts (§11.3): upload on expense items (same R2 storage as documents); show and download from the claim.
 - Regularization proof (§4): upload and store its URL as `attachmentUrl`; show it on the approval card.
@@ -115,7 +104,6 @@ Priorities:
 
 **Workspace settings** (§8)
 - Two-factor (TOTP enrolment; `is_mfa_enabled` exists) and the active sessions list.
-- Per-user notification preferences endpoint (see P0-4).
 - Invoices (Razorpay).
 - Danger-zone endpoints (export, reset, delete, with a typed-name confirmation).
 - Account and workspace profile update.
