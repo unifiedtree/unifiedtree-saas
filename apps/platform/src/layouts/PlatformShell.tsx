@@ -15,6 +15,7 @@ import {
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { clsx } from 'clsx'
 import { GlobalSearch } from '@/shared/components/GlobalSearch'
+import { TopBarSearch } from '@/shared/components/TopBarSearch'
 import { accessState } from '@/shared/navigation/access'
 import { menuRule } from '@/shared/navigation/pageRegistry'
 import { useAccessContext } from '@/shared/navigation/useAccess'
@@ -28,7 +29,7 @@ import { PageSkeleton } from '@/shared/components/PageSkeleton'
 import { preloadPath, preloadPathsWhenIdle } from '@/shared/routing/lazyPage'
 import {
   DesignRail, DesignHeader, DesignSubNav, DesignMobileHeader, DesignMobileNav, DesignTooltip,
-  HeaderSearch, HeaderIconButton, HeaderBellButton, HeaderProfileButton, HeaderDivider,
+  HeaderIconButton, HeaderBellButton, HeaderProfileButton, HeaderDivider,
   type RailEntry, type SubNavEntry, type MobileNavEntry,
 } from '@/design/shell/ShellChrome'
 
@@ -405,6 +406,9 @@ export function PlatformShell() {
   const [profileOpen, setProfileOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  // "Advanced search" (the ⌘K palette) opened from the top bar starts with what was typed there.
+  const [advancedQuery, setAdvancedQuery] = useState('')
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const logout = useSdkStore(s => s.logout)
@@ -417,7 +421,7 @@ export function PlatformShell() {
   // ⌘K global search
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(v => !v) }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setAdvancedQuery(''); setSearchOpen(v => !v) }
       // Escape closes the palette. Handled HERE rather than inside
       // GlobalSearch so it works wherever focus happens to be — the panel was
       // previously dismissable only by clicking the backdrop, which is not
@@ -590,17 +594,26 @@ export function PlatformShell() {
     </>
   )
 
+  const openAdvanced = (query: string) => { setAdvancedQuery(query); setSearchOpen(true) }
+  // The ⌘K palette, now "Advanced search": actions, recent items and "/" path navigation.
   const searchModal = (
     <AnimatePresence>
       {searchOpen && (
         <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[12vh]">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSearchOpen(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <motion.div initial={{ opacity: 0, scale: 0.96, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: -10 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="ut-card ut-card-lg relative w-full max-w-2xl overflow-hidden">
-            <GlobalSearch onSelect={(res) => { openInApp(navigate, res.path); setSearchOpen(false) }} />
+          <motion.div role="dialog" aria-label="Advanced search" data-testid="advanced-search" initial={{ opacity: 0, scale: 0.96, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: -10 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="ut-card ut-card-lg relative w-full max-w-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-[#e2e8f0] bg-[#f8fafc] px-[18px] py-2 text-[11px] font-bold uppercase tracking-[.06em] text-[#94a3b8]">
+              <span>Advanced search</span>
+              <span className="normal-case tracking-normal font-medium">Pages, actions, people and “/” paths</span>
+            </div>
+            <GlobalSearch initialQuery={advancedQuery} onSelect={(res) => { openInApp(navigate, res.path); setSearchOpen(false) }} />
           </motion.div>
         </div>
       )}
     </AnimatePresence>
+  )
+  const mobileSearch = mobileSearchOpen && (
+    <TopBarSearch variant="sheet" onClose={() => setMobileSearchOpen(false)} onOpen={(path) => openInApp(navigate, path)} onAdvanced={openAdvanced} />
   )
 
   // ─── Launcher mode: header floats transparent over the page's gradient ─────
@@ -710,7 +723,7 @@ export function PlatformShell() {
 
       <main className="flex min-w-0 flex-1 flex-col">
         <DesignHeader
-          search={<HeaderSearch onOpen={() => setSearchOpen(true)} />}
+          search={<TopBarSearch onOpen={(path) => openInApp(navigate, path)} onAdvanced={openAdvanced} />}
           right={<>
             {canSettings && (
               <HeaderIconButton label="Settings" active={scope === 'admin'} onClick={() => navigate('/settings')}>
@@ -730,7 +743,7 @@ export function PlatformShell() {
         />
         <DesignMobileHeader
           onMenu={() => setMobileOpen(true)}
-          onSearch={() => setSearchOpen(true)}
+          onSearch={() => setMobileSearchOpen(true)}
           bell={<div className="relative" ref={notifAnchor('mobile')}><ShellNotificationBell mobile open={notifOpen} onToggle={() => setNotifOpen(v => !v)} onNavigate={(to) => { setNotifOpen(false); navigate(to) }} /></div>}
           avatar={
             <div className="relative" ref={profileAnchor('mobile')}>
@@ -752,6 +765,7 @@ export function PlatformShell() {
         </div>
       </main>
       {searchModal}
+      {mobileSearch}
       <DesignTooltip />
     </div>
   )

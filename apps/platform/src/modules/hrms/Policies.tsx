@@ -499,7 +499,8 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
   const { data, isLoading } = usePolicies(page, 'ACTIVE')
   const { data: myAcks = [] } = useMyAcknowledgements()
   const acknowledge = useAcknowledgePolicy()
-  const [openId, setOpenId] = useState<string | null>(null)
+  // ?policy=<id> (the top bar's search) opens that policy.
+  const [openId, setOpenId] = useState<string | null>(() => new URLSearchParams(window.location.search).get('policy'))
 
   const policies = useMemo(() => data?.content ?? [], [data])
   const totalElements = data?.totalElements ?? 0

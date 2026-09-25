@@ -44,6 +44,8 @@ export interface SearchResult extends Searchable {
 
 interface GlobalSearchProps {
   onSelect?: (result: SearchResult) => void
+  /** Text to start with (the top bar's "Advanced search" carries over what was typed there). */
+  initialQuery?: string
 }
 
 type GroupKey = 'recent' | 'suggested' | 'goto' | 'page' | 'action' | 'employee'
@@ -102,8 +104,8 @@ function Highlight({ text, ranges }: { text: string; ranges: Range[] }) {
 
 const PERSON_PATH = /^\/hrms\/employees\/[0-9a-fA-F-]{8,}$/
 
-export function GlobalSearch({ onSelect }: GlobalSearchProps) {
-  const [query, setQuery] = useState('')
+export function GlobalSearch({ onSelect, initialQuery }: GlobalSearchProps) {
+  const [query, setQuery] = useState(initialQuery ?? '')
   const [cursor, setCursor] = useState(0)
   const debouncedQuery = useDebounce(query, 150)
   const listRef = useRef<HTMLDivElement>(null)

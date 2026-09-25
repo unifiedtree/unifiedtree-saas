@@ -11,7 +11,8 @@ import { inr } from './PayslipDrawer'
 export interface RunEmployeeRow { id: string; code: string; name: string; role: string; dept: string; paidDays: number; lop: number; gross: number; net: number }
 
 export class PayrollEmployees extends DCLogic {
-  state: any = { q: '', dept: '', page: 0, size: 10 }
+  // ?q= (the top bar's search links a payslip here by employee code) starts the list searched.
+  state: any = { q: new URLSearchParams(window.location.search).get('q') || '', dept: '', page: 0, size: 10 }
   renderVals() {
     const p = this.props, s = this.state, mobile = !!p.mobile, open = p.onOpen || (() => {})
     const step = p.step || 'draft', busy = !!p.busy, isDraft = step === 'draft' && !busy
