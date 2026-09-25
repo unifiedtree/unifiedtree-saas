@@ -1,7 +1,7 @@
 // Real-data container for the redesigned Company Admin Dashboard
 // (design/dc/AdminDashboard). Every number comes from an existing endpoint;
 // each dashboard section gets its own loading / empty / error state.
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -50,6 +50,10 @@ function relTime(iso: string | null): string {
 }
 const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }).toLowerCase() : '')
 const humanise = (t: string) => { const w = t.replace(/[._-]+/g, ' ').trim().toLowerCase(); return w }
+/** "CREATE" → "created", so the feed reads "Asha created report schedule …". */
+const VERB: Record<string, string> = { create: 'created', update: 'updated', delete: 'deleted', approve: 'approved', reject: 'rejected', export: 'exported', submit: 'submitted', cancel: 'cancelled', login: 'signed in', logout: 'signed out' }
+const verb = (a: string) => VERB[humanise(a)] || humanise(a)
+const NOTICES_PER_PAGE = 5
 
 export function AdminDashboardContainer() {
   const navigate = useNavigate()
@@ -61,6 +65,7 @@ export function AdminDashboardContainer() {
   const sel = date || today
   const [projectsOpen, setProjectsOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [noticePage, setNoticePage] = useState(0)
 
   // ── permissions ────────────────────────────────────────────────────────────
   const canReadEmployees = usePermission(P.HRMS_EMPLOYEE_READ)
@@ -100,13 +105,16 @@ export function AdminDashboardContainer() {
   const seats = useSeatsUsage({ enabled: canBilling })
   const holidays = useHolidays(companyId ?? '', Number(today.slice(0, 4)))
   const headcount = useHeadcountReport(canReadEmployees && canExport ? (companyId ?? null) : null)
-  const performers = useQuery({ queryKey: ['admin-dashboard', 'performers', companyId], queryFn: () => apiJson<{ id: string; name: string; rating: number; reviews: number }[]>(`/v1/admin/dashboard/performers?companyId=${companyId}`), enabled: canReadPerformance && !!companyId })
+  const performers = useQuery({ queryKey: ['admin-dashboard', 'performers', companyId], queryFn: () => apiJson<{ id: string; name: string; department?: string | null; rating: number; reviews: number }[]>(`/v1/admin/dashboard/performers?companyId=${companyId}`), enabled: canReadPerformance && !!companyId })
   const onboarding = useQuery({ queryKey: ['admin-dashboard', 'onboarding', companyId], queryFn: () => apiJson<{ id: string; name: string; status: string; completed: number; total: number }[]>(`/v1/admin/dashboard/onboarding?companyId=${companyId}`), enabled: canReadOnboarding && !!companyId })
   const hiring = useQuery({ queryKey: ['admin-dashboard', 'hiring', companyId], queryFn: () => apiJson<{ openJobs: number; stages: { stage: string; count: number }[] }>(`/v1/admin/dashboard/hiring?companyId=${companyId}`), enabled: canReadHiring && !!companyId })
   const projects = useQuery({ queryKey: ['hrms', 'projects', companyId], queryFn: () => apiJson<Project[]>(`/v1/hrms/projects?companyId=${companyId}`), enabled: canReadProjects && !!companyId })
   const runs = useRuns({ companyId }, { enabled: hasPayroll && !!companyId })
   const activity = useActivityFeed(5, canAudit)
-  const notices = useQuery({ queryKey: ['dashboard', 'notices', companyId, 0], queryFn: () => apiJson<{ content: Notice[]; totalElements: number }>(`/v1/admin/dashboard/notices?companyId=${companyId}&page=0&size=5`), enabled: canReadCompany && !!companyId })
+  const notices = useQuery({ queryKey: ['dashboard', 'notices', companyId, noticePage], queryFn: () => apiJson<{ content: Notice[]; totalElements: number }>(`/v1/admin/dashboard/notices?companyId=${companyId}&page=${noticePage}&size=${NOTICES_PER_PAGE}`), enabled: canReadCompany && !!companyId })
+  // Archiving the last notice on a page steps back to the page before.
+  const noticePages = Math.max(1, Math.ceil((notices.data?.totalElements ?? 0) / NOTICES_PER_PAGE))
+  useEffect(() => { if (notices.data && noticePage > 0 && noticePage >= noticePages) setNoticePage(noticePages - 1) }, [notices.data, noticePage, noticePages])
   const milestones = useMilestones({ birthdayDays: 14, anniversaryDays: 31, retirementMonths: 6 })
   const probations = useUpcomingProbations(30, canReadEmployees)
   const corrections = useCorrectionApprovals('PENDING', { enabled: canApproveCorrections, size: 1 })
@@ -181,8 +189,9 @@ export function AdminDashboardContainer() {
       alerts: alerts.data ?? [],
       seats: seats.data ? { used: seats.data.current, purchased: seats.data.purchased } : { used: 0, purchased: 0 },
       holidays: (holidays.data ?? []).filter((h) => h.active !== false).map((h) => ({ date: h.holidayDate, name: h.holidayName })),
-      departments: (headcount.data ?? []).map((r) => ({ name: r.department ?? 'Unassigned', active: Number(r.active ?? 0) })).filter((d) => d.active > 0),
-      performers: (performers.data ?? []).map((x) => ({ id: x.id, name: x.name, dept: '', reviews: x.reviews, rating: x.rating })),
+      // id opens the directory on that department; people without one open with departmentId=none.
+      departments: (headcount.data ?? []).map((r) => ({ id: r.department_id ?? null, name: r.department ?? 'No department', active: Number(r.active ?? 0) })).filter((d) => d.active > 0),
+      performers: (performers.data ?? []).map((x) => ({ id: x.id, name: x.name, dept: x.department || '', reviews: x.reviews, rating: x.rating })),
       onboarding: (onboarding.data ?? []).map((o) => ({ ...o, statusLabel: o.status === 'IN_PROGRESS' ? 'In progress' : o.status.charAt(0) + o.status.slice(1).toLowerCase().replace(/_/g, ' ') })),
       hiring: hiring.data ? { openJobs: hiring.data.openJobs, stages: hiring.data.stages.map((x) => ({ ...x, label: STAGE_LABEL[x.stage] || x.stage })) } : { openJobs: 0, stages: [] },
       projects: { active: pj.filter((x) => x.status === 'ACTIVE').length, completedTasks: done, openTasks: Math.max(0, all - done), completion: all ? Math.round((done / all) * 100) : 0 },
@@ -190,8 +199,11 @@ export function AdminDashboardContainer() {
       activity: (activity.data?.data ?? []).map((e) => {
         const act = (e.action || '').toLowerCase()
         const type = /approv/.test(act) ? 'approve' : /regulari|correct/.test(act) ? 'regularize' : /payroll|lock|process/.test(act) || (e.module || '').includes('payroll') ? 'payroll' : /onboard/.test(act) ? 'onboard' : 'update'
-        const words = e.summary?.trim() || `${humanise(e.action || 'updated')}${e.resourceType ? ' ' + humanise(e.resourceType) : ''}`
-        return { id: e.id, type, actor: activityActor(e), action: words, record: '', path: '/audit-logs', rel: relTime(e.occurredAt), time: clock(e.occurredAt) }
+        // The record the event is about ("… for Rahul Verma"): resolved server-side, opening its own page when it has one.
+        const record = e.resourceName?.trim() || ''
+        const summary = e.summary?.trim() || ''
+        const words = summary || `${verb(e.action || 'update')}${e.resourceType ? ' ' + humanise(e.resourceType) : ''}`
+        return { id: e.id, type, actor: activityActor(e), action: words, record: summary && record && summary.includes(record) ? '' : record, path: e.resourcePath || '/audit-logs', rel: relTime(e.occurredAt), time: clock(e.occurredAt) }
       }),
       notices: (notices.data?.content ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body, published: fmtShort(n.createdAt.slice(0, 10)), until: n.expiresOn ? fmtShort(n.expiresOn) : null, expiryIso: n.expiresOn || '' })),
       noticeTotal: notices.data?.totalElements,
@@ -263,6 +275,9 @@ export function AdminDashboardContainer() {
         })()}
         onNavigate={onNavigate}
         onExportHeadcount={exportHeadcount}
+        noticePage={noticePage}
+        noticePages={noticePages}
+        onNoticePage={setNoticePage}
         onSaveNotice={async (n: { id?: string | null; title: string; body: string; expiry: string | null }) => {
           try {
             await noticeMutation.mutateAsync(n)

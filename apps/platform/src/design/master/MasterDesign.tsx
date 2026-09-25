@@ -226,9 +226,9 @@ const ftNotice=(db.classes.find(c=>c.code==='FULL_TIME')||db.classes[0]||{}).not
 const [lwd,setLwd]=React.useState(new Date(TODAY.getTime()+ftNotice*864e5).toISOString().slice(0,10));
 const E=db.employees;const n=s=>E.filter(e=>e.status===s).length;const hc=d.headcount;
 const ids=dept?[dept].concat(db.depts.filter(x=>x.parent===dept).map(x=>x.id)):null;const ql=q.trim().toLowerCase();
-const rows=sortRows(E.filter(e=>(!status||e.status===status)&&(!ids||ids.includes(e.dept))&&(!branch||e.branch===branch)&&(!type||e.type===type)&&(!ql||(e.name+' '+e.code+' '+(e.email||'')+' '+M.desig[e.desig].name).toLowerCase().includes(ql))),sort,(e,k)=>k==='name'?e.name:k==='joined'?e.joined:k==='dept'?M.dept[e.dept].name:e.code);
-const ps=+t.pageSize||10;const P=usePaged(rows,ps,[status,dept,branch,type,ql,sort.k,sort.d]);
-const any=!!(status||dept||branch||type||ql);const clear=()=>{setStatus('');setDept('');setBranch('');setType('');setQ('')};
+const rows=sortRows(E.filter(e=>(!status||e.status===status)&&(!ids||(dept==='__none'?!e.dept:ids.includes(e.dept)))&&(!ax.milestone.value||!!(ax.milestone.ids&&ax.milestone.ids.has(e.id)))&&(!branch||e.branch===branch)&&(!type||e.type===type)&&(!ql||(e.name+' '+e.code+' '+(e.email||'')+' '+M.desig[e.desig].name).toLowerCase().includes(ql))),sort,(e,k)=>k==='name'?e.name:k==='joined'?e.joined:k==='dept'?M.dept[e.dept].name:e.code);
+const ps=+t.pageSize||10;const P=usePaged(rows,ps,[status,dept,branch,type,ql,sort.k,sort.d,ax.milestone.value,ax.milestone.ids]);
+const any=!!(status||dept||branch||type||ql||ax.milestone.value);const clear=()=>{setStatus('');setDept('');setBranch('');setType('');setQ('');ax.milestone.set('')};
 const spark=[...Array(12)].map((_,i)=>{const iso=new Date(TODAY.getFullYear(),TODAY.getMonth()-10+i,0).toISOString().slice(0,10);return E.filter(e=>e.joined<=iso&&!(e.exitOn&&e.exitOn<=iso)).length});
 spark[11]=hc;
 const YR=TODAY_ISO.slice(0,4);const joinedYr=E.filter(e=>e.joined>=YR+'-01-01').length;const exitedYr=E.filter(e=>e.status==='Exited'&&(e.exitOn||'')>=YR+'-01-01').length;
@@ -249,10 +249,11 @@ return <>
 </div>
 <div className="card tcard">
 <div className="tbar"><TSearch value={q} onChange={setQ} placeholder="Search name, code, email or role…"/>
-<Dropdown label="Department" all="All departments" value={dept} options={deptOptions(db)} onChange={setDept} search icon="layers"/>
+<Dropdown label="Department" all="All departments" value={dept} options={deptOptions(db).concat([{v:'__none',l:'No department',sub:'People without one'}])} onChange={setDept} search icon="layers"/>
 <Dropdown label="Branch" all="All branches" value={branch} options={db.branches.map(b=>({v:b.id,l:b.name,sub:b.city}))} onChange={setBranch} icon="map-pin"/>
 <Dropdown label="Type" all="All types" value={type} options={Array.from(new Set(['Full-time','Part-time','Intern'].concat(E.map(e=>e.type)))).map(x=>({v:x,l:x,t:TYPE_TONE[x]}))} onChange={setType}/>
 <Dropdown label="Status" all="All statuses" value={status} options={Array.from(new Set(['Active','Probation','On notice','Exited'].concat(E.map(e=>e.status)))).map(x=>({v:x,l:x,t:STATUS_TONE[x],sub:String(n(x))}))} onChange={setStatus}/>
+<Dropdown label="Milestone" all="All people" value={ax.milestone.value} options={ax.milestone.options} onChange={ax.milestone.set} icon="calendar"/>
 {any&&<button className="btn sm ghost" onClick={clear}><Icon name="x" size={15}/>Clear</button>}<span className="sp"></span><span className="meta">{rows.length} of {E.length}</span></div>
 {rows.length?<div className="twrap"><table className="t"><thead><tr><th className="cbx"><input type="checkbox" className={'cb'+(someOn&&!allOn?' mixed':'')} checked={allOn} onChange={togglePage} aria-label="Select this page"/></th><SortTh k="name" sort={sort} setSort={setSort}>Employee</SortTh><SortTh k="code" sort={sort} setSort={setSort}>Code</SortTh><SortTh k="dept" sort={sort} setSort={setSort}>Department</SortTh><th>Type</th><th>Status</th><SortTh k="joined" sort={sort} setSort={setSort}>Joined</SortTh><th className="act"></th></tr></thead>
 <tbody>{P.slice.map(e=>{const dp=M.dept[e.dept],br=M.branch[e.branch],on=sel.includes(e.id),leaving=e.status==='Exited'||e.status==='On notice';return <tr key={e.id} className={'click'+(on?' sel':'')+(e.status==='Exited'?' off':'')} onClick={()=>setView(e.id)}>

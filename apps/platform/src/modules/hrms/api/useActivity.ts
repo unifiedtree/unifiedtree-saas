@@ -25,6 +25,10 @@ export interface AuditEventDto {
   summary: string | null
   /** Display name resolved server-side from the actor's user id. */
   actorName?: string | null
+  /** The record's display name ("Rahul Verma", "Sep 2026 payroll"), when the server can resolve it. */
+  resourceName?: string | null
+  /** The app route that opens the record, when it has one. */
+  resourcePath?: string | null
 }
 
 export interface AuditPageResponse {
