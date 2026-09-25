@@ -250,6 +250,16 @@ server:
   # Bind graceful shutdown to the SIGTERM the orchestrator sends. Pairs with
   # spring.lifecycle.timeout-per-shutdown-phase above.
   shutdown: graceful
+  # Every permission the signed-in person holds is baked into the JWT, so an
+  # owner's token is ~6.8 KB (190 codes on 2026-09-25, up from 158 that morning).
+  # With cookies and normal browser headers a request then runs past Tomcat's
+  # 8 KB default, and Tomcat answers 400 from the HTTP parser — BEFORE the CORS
+  # filter adds its headers. The browser therefore reported "No
+  # 'Access-Control-Allow-Origin' header is present" and the whole app looked
+  # broken, but only for owners and admins: employees carry 32 codes (1.6 KB)
+  # and never crossed the line. 64 KB leaves room as permissions keep growing.
+  # (Long term the token should carry a reference, not 190 permission codes.)
+  max-http-request-header-size: ${SERVER_MAX_HTTP_REQUEST_HEADER_SIZE:64KB}
   tomcat:
     # After an upload over the multipart limit is refused, Tomcat reads and
     # discards up to this much of the rest of the body so the browser receives
