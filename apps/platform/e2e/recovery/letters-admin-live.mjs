@@ -1,6 +1,8 @@
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
 import { mkdirSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 
 const api = 'http://127.0.0.1:8080/api', base = 'http://demo.localhost:3002'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', company = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
@@ -24,7 +26,7 @@ try {
   await page.locator('button[type=submit]').click()
   await page.waitForURL(url => !url.pathname.includes('login'))
   await page.goto(base + '/hrms/letters/generated')
-  await page.getByRole('button', { name: 'Generate Letter', exact: true }).click()
+  await page.getByRole('button', { name: 'Generate letter', exact: true }).click()
   const drawer = page.getByRole('dialog')
   await drawer.getByRole('button').filter({ hasText: name }).click()
   await drawer.getByLabel('Find employee').fill('reader@unifiedtree.demo')
@@ -42,16 +44,20 @@ try {
   await download.saveAs('test-results/recovery/letter-generated-live.pdf')
   assert.equal(readFileSync('test-results/recovery/letter-generated-live.pdf').subarray(0, 5).toString(), '%PDF-')
   await page.screenshot({ path: 'test-results/recovery/letter-detail-live.png', fullPage: true })
-  await page.getByRole('button', { name: 'Generated Letters', exact: true }).click()
+  await page.getByRole('button', { name: '← All letters', exact: true }).click()
   const row = page.getByRole('row').filter({ has: page.locator(`[title="Browser employment confirmation ${name}"]`) })
   await expect(row.getByText('Reader User', { exact: true })).toBeVisible()
   console.log('PASS: template selection, server employee search, generate without send, named employee list/detail, real PDF browser download')
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: 'Generate Letter', exact: true }).click()
+  await page.getByRole('button', { name: 'Generate letter', exact: true }).click()
   await expect.poll(() => page.getByRole('heading', { name: 'Generate letter', exact: true }).evaluate(element => element.getBoundingClientRect().left)).toBeLessThan(40)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
   await page.screenshot({ path: 'test-results/recovery/letter-generate-mobile-live.png', fullPage: true })
   expect(errors).toEqual([])
   expect(failures).toEqual([])
   console.log(`PASS: mobile generation drawer, zero feature API/browser errors; ${probes.length} expected signed-out refresh probes`)
-} catch (error) { console.error((await page.locator('body').innerText()).slice(-4000), failures); await page.screenshot({ path: 'test-results/recovery/letters-failure.png', fullPage: true }); throw error } finally { await browser.close() }
+} catch (error) { console.error((await page.locator('body').innerText()).slice(-4000), failures); await page.screenshot({ path: 'test-results/recovery/letters-failure.png', fullPage: true }); throw error } finally {
+  await browser.close()
+  // Fixtures: this run's template and the letter generated from it.
+  try { sql(`delete from letters.generated where template_id in (select id from letters.templates where name='${name}')`); sql(`delete from letters.templates where name='${name}'`); console.log('cleanup: removed the QA template and letter') } catch (e) { console.log('cleanup:', String(e).split(String.fromCharCode(10))[0]) }
+}

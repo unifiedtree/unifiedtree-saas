@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, FileText, Download, Eye, ChevronLeft, ChevronRight } from 'lucide-react'
-import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { Can, P, usePermission } from '@unifiedtree/sdk'
-import { TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
-import { HrPageHeader, HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { ModulePage, State, stamp } from '@/design/module/ModuleKit'
 import {
   useGeneratedLetters,
   useMyLetters,
@@ -60,29 +59,15 @@ export const GeneratedLetters: React.FC = () => {
   const totalPages = data?.totalPages ?? 1
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
-      <HrPageHeader
-        crumb="Recruitment & Onboarding"
-        title="Generated Letters"
-        subtitle={`${total} letter${total !== 1 ? 's' : ''} total`}
-        actions={
-          <Can code={P.HRMS_LETTERS_GENERATE}>
-            <HrButton onClick={() => setGenerateOpen(true)}><Plus size={15} /> Generate Letter</HrButton>
-          </Can>
-        }
-      />
-
+    <ModulePage crumb="Letters" title={canReadAll ? 'Generated letters' : 'My letters'}
+      subtitle={data ? `${total} ${total === 1 ? 'letter' : 'letters'}${canReadAll ? '' : ' issued to you'}` : undefined}
+      actions={<Can code={P.HRMS_LETTERS_GENERATE}><HrButton onClick={() => setGenerateOpen(true)}><Plus size={15} /> Generate letter</HrButton></Can>}>
       {isLoading ? (
-        <TableSkeleton />
+        <State kind="loading" height={220} />
       ) : error ? (
-        <EmptyState
-          variant="error"
-          title="Failed to load letters"
-          description={(error as Error).message}
-          primaryAction={{ label: 'Retry', onClick: () => refetch() }}
-        />
+        <State kind="error" title="Couldn’t load letters" description={(error as Error).message} onRetry={() => refetch()} />
       ) : letters.length === 0 ? (
-        <EmptyState variant="first-run" title="No letters generated yet" description="Use the Generate Letter button to create one." />
+        <State kind="empty" icon="fileText" title={canReadAll ? 'No letters generated yet' : 'No letters yet'} description={canReadAll ? 'Use “Generate letter” to create one from a template.' : 'Letters HR issues to you (offer, appointment, experience…) appear here.'} />
       ) : (
         <TableCard
           footer={total > 0 ? (
@@ -109,7 +94,6 @@ export const GeneratedLetters: React.FC = () => {
             </thead>
             <tbody>
               {letters.map((letter) => {
-                const shortEmpId = letter.employeeId.slice(0, 8) + '…'
                 const subject = letter.subject.length > 60 ? letter.subject.slice(0, 60) + '…' : letter.subject
                 return (
                   <tr key={letter.id}>
@@ -118,12 +102,12 @@ export const GeneratedLetters: React.FC = () => {
                         <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#ECFDF5]">
                           <FileText size={13} className="text-[#059669]" />
                         </div>
-                        <div><p className="font-semibold text-text-primary">{letter.employeeName || letter.generationContext?.['employee.fullName'] || 'Employee record unavailable'}</p><p className="mt-0.5 text-xs text-text-secondary">{letter.employeeCode || letter.generationContext?.['employee.code'] || shortEmpId}</p></div>
+                        <div><p className="font-semibold text-text-primary">{letter.employeeName || letter.generationContext?.['employee.fullName'] || 'Employee record unavailable'}</p>{(letter.employeeCode || letter.generationContext?.['employee.code']) && <p className="mt-0.5 text-xs text-text-secondary">{letter.employeeCode || letter.generationContext?.['employee.code']}</p>}</div>
                       </div>
                     </td>
                     <td className="hidden sm:table-cell"><HrStatusPill tone={TYPE_TONE[letter.type] ?? 'gray'}>{TYPE_LABEL[letter.type] ?? letter.type}</HrStatusPill></td>
                     <td className="hidden md:table-cell max-w-[240px] text-text-secondary"><span title={letter.subject}>{subject}</span></td>
-                    <td className="hidden lg:table-cell whitespace-nowrap text-text-secondary">{format(new Date(letter.createdAt), 'd MMM yyyy, HH:mm')}</td>
+                    <td className="hidden lg:table-cell whitespace-nowrap text-text-secondary">{stamp(letter.createdAt)}</td>
                     <td><HrStatusPill tone={STATUS_TONE[letter.status] ?? 'gray'}>{STATUS_LABEL[letter.status] ?? letter.status}</HrStatusPill></td>
                     <td>
                       <div className="flex items-center justify-end gap-1">
@@ -150,6 +134,6 @@ export const GeneratedLetters: React.FC = () => {
       {generateOpen && (
         <GenerateLetterDrawer onClose={closeGenerate} initialEmployeeId={employeeIdParam} />
       )}
-    </div>
+    </ModulePage>
   )
 }

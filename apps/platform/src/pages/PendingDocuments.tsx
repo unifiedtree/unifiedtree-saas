@@ -1,219 +1,78 @@
+// Documents to review (/hrms/documents/pending, and /documents/pending for old
+// bell links), on the module kit. Every document employees uploaded that is
+// waiting for HR (GET /v1/document/pending, hrms.document.verify).
+// "View file" fetches the document (which returns a signed link) because the
+// queue itself carries no link. Reject needs a reason the employee is shown.
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { toast } from 'sonner'
-import { format } from 'date-fns'
-import { CheckCircle2, ExternalLink, XCircle, Clock, RefreshCw, Inbox } from 'lucide-react'
-import { HrPageHeader, HrButton } from '@/shared/components/hr'
-import {
-  usePendingDocumentQueue,
-  useVerifyDocument,
-  useRejectDocument,
-} from '@/modules/hrms/api/useDocument'
+import { HrButton } from '@/shared/components/hr'
+import { apiJson } from '@/core/api/client'
+import { ModulePage, State, DecisionCard, Note, useDesignToast, stamp } from '@/design/module/ModuleKit'
+import { fileSize } from '@/shared/export/fileExport'
+import { usePendingDocumentQueue, useVerifyDocument, useRejectDocument, type EmployeeDocument } from '@/modules/hrms/api/useDocument'
 
-/**
- * HR / admin queue of every PENDING employee document across the tenant.
- *
- * Backend: `GET /v1/document/pending` (gated on hrms.document.verify).
- * Verify writes {@link useVerifyDocument}; reject writes {@link useRejectDocument}
- * with a required rejection reason. Both invalidate the queue so the row leaves
- * the table on success.
- *
- * The bell notification produced by `DomainEventListener.onDocumentUploaded`
- * deep-links here (`data.route = "/documents/pending"`, which the router mounts
- * at both `/documents/pending` and `/hrms/documents/pending`).
- */
 export const PendingDocuments: React.FC = () => {
-  const { data: rows, isLoading, isError, refetch } = usePendingDocumentQueue()
+  const { data: rows = [], isLoading, isError, error, refetch, isFetching } = usePendingDocumentQueue()
   const verify = useVerifyDocument()
   const reject = useRejectDocument()
+  const { show, node } = useDesignToast()
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
-
-  const count = rows?.length || 0
-
+  const [opening, setOpening] = useState<string | null>(null)
+  const open = async (id: string) => {
+    // Open the tab synchronously so pop-up blockers allow it, then point it at the signed link.
+    const win = window.open('', '_blank')
+    setOpening(id)
+    try {
+      const doc = await apiJson<EmployeeDocument>(`/v1/document/documents/${id}`)
+      if (doc.fileUrl) { if (win) win.location.href = doc.fileUrl; else window.open(doc.fileUrl, '_blank') }
+      else { win?.close(); show('This file can’t be opened here', true, 'Document storage isn’t set up on this server.') }
+    } catch (e) { win?.close(); show('Couldn’t open the file', true, (e as Error)?.message) } finally { setOpening(null) }
+  }
+  const onVerify = async (id: string) => {
+    try { await verify.mutateAsync(id); show('Verified') } catch (e) { show('Couldn’t verify it', true, (e as Error)?.message) }
+  }
+  const onReject = async (id: string) => {
+    try { await reject.mutateAsync({ id, reason: reason.trim() }); show('Rejected; the employee has been told why'); setRejectingId(null); setReason('') } catch (e) { show('Couldn’t reject it', true, (e as Error)?.message) }
+  }
   return (
-    <div className="animate-fade-in mx-auto max-w-6xl p-6 sm:p-8">
-      <HrPageHeader
-        crumb="HR"
-        title="Documents pending review"
-        subtitle="Every document your employees have uploaded and are waiting for you to verify."
-        actions={
-          <HrButton size="sm" variant="ghost" onClick={() => refetch()}>
-            <RefreshCw size={14} className="mr-1" /> Refresh
-          </HrButton>
-        }
-      />
-
-      <div className="ut-card ut-card-lg overflow-hidden">
-        {isLoading ? (
-          <p className="p-6 text-sm text-text-tertiary">Loading pending documents…</p>
-        ) : isError ? (
-          <p className="p-6 text-sm text-red-600">
-            Couldn't load the queue. You may not have permission to verify documents — ask an admin.
-          </p>
-        ) : count === 0 ? (
-          <div className="p-10 text-center">
-            <Inbox size={40} className="mx-auto text-text-tertiary" />
-            <p className="mt-3 text-sm font-semibold text-text-primary">All caught up</p>
-            <p className="mt-1 text-xs text-text-tertiary">
-              No documents are waiting for review right now.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <div className="border-b border-border-subtle bg-bg-subtle px-4 py-2 text-xs font-semibold text-text-secondary">
-              {count} document{count === 1 ? '' : 's'} pending
-            </div>
-            <table className="w-full text-sm">
-              <thead className="bg-bg-subtle text-left text-xs text-text-secondary">
-                <tr>
-                  <th className="px-4 py-2 font-semibold">Employee</th>
-                  <th className="px-4 py-2 font-semibold">Document</th>
-                  <th className="px-4 py-2 font-semibold">Type</th>
-                  <th className="px-4 py-2 font-semibold">Uploaded</th>
-                  <th className="px-4 py-2 font-semibold">Status</th>
-                  <th className="px-4 py-2 font-semibold text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows!.map((r) => (
-                  <React.Fragment key={r.id}>
-                    <tr className="border-t border-border-subtle hover:bg-bg-subtle/40">
-                      <td className="px-4 py-3">
-                        <Link
-                          to={`/hrms/employees/${r.employeeId}`}
-                          className="font-medium text-text-primary hover:text-[#047857]"
-                        >
-                          {r.employeeName || r.employeeId.slice(0, 8)}
-                        </Link>
-                        {r.employeeCode && (
-                          <div className="text-[11px] text-text-tertiary">{r.employeeCode}</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-medium text-text-primary">{r.title}</span>
-                        {r.originalFilename && (
-                          <div className="text-[11px] text-text-tertiary">
-                            {r.originalFilename}
-                            {r.fileSizeBytes ? ` · ${formatSize(r.fileSizeBytes)}` : ''}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-text-secondary">
-                        {r.documentTypeName || <span className="text-text-tertiary">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-text-secondary">
-                        {format(new Date(r.createdAt), 'd MMM, h:mm a')}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                          <Clock size={11} /> Pending
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Link
-                            to={`/hrms/employees/${r.employeeId}?tab=documents`}
-                            className="rounded-md p-1 text-text-tertiary hover:bg-bg-subtle hover:text-text-primary"
-                            title="Open in employee profile"
-                          >
-                            <ExternalLink size={14} />
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              verify.mutate(r.id, {
-                                onSuccess: () => toast.success('Verified'),
-                                onError: (err) =>
-                                  toast.error('Verify failed', { description: (err as Error).message }),
-                              })
-                            }
-                            disabled={verify.isPending}
-                            className="rounded-md p-1 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
-                            title="Verify"
-                          >
-                            <CheckCircle2 size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRejectingId(r.id === rejectingId ? null : r.id)
-                              setReason('')
-                            }}
-                            className="rounded-md p-1 text-red-600 hover:bg-red-50"
-                            title="Reject"
-                          >
-                            <XCircle size={16} />
-                          </button>
+    <ModulePage crumb="Documents" title="Documents to review" subtitle="What employees uploaded themselves, waiting for you to check it."
+      actions={<HrButton variant="ghost" onClick={() => refetch()} disabled={isFetching}>{isFetching ? 'Refreshing…' : 'Refresh'}</HrButton>}>
+      <div style={{ display: 'grid', gap: 12, minWidth: 0 }}>
+        {isLoading ? <State kind="loading" height={220} />
+          : isError ? <State kind="error" title="Couldn’t load the queue" description={(error as Error)?.message} onRetry={() => refetch()} />
+            : rows.length === 0 ? <State kind="empty" icon="checkCircle" title="All caught up" description="No documents are waiting for review." />
+              : <>
+                <Note>{`${rows.length} ${rows.length === 1 ? 'document is' : 'documents are'} waiting. Open each file before you verify it.`}</Note>
+                {rows.map((r) => (
+                  <DecisionCard key={r.id} name={r.employeeName || 'Employee'} sub={r.employeeCode} status={['Waiting for review', 'warn']}
+                    facts={[
+                      { k: 'Document', v: r.title },
+                      { k: 'Type', v: r.documentTypeName || 'Other' },
+                      { k: 'File', v: r.originalFilename ? `${r.originalFilename}${r.fileSizeBytes ? ` · ${fileSize(r.fileSizeBytes)}` : ''}` : '—' },
+                    ]}
+                    raised={stamp(r.createdAt)}
+                    details={rejectingId === r.id ? (
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <label className="text-[13px] font-semibold text-text-secondary" htmlFor={`rej-${r.id}`}>Why it’s rejected (shown to the employee)</label>
+                        <input id={`rej-${r.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. The photo is blurry, please upload it again" className="ut-input" autoFocus />
+                        <div className="flex flex-wrap gap-2">
+                          <HrButton size="sm" variant="danger" disabled={reason.trim().length < 3 || reject.isPending} onClick={() => onReject(r.id)}>{reject.isPending ? 'Rejecting…' : 'Reject and tell them'}</HrButton>
+                          <HrButton size="sm" variant="ghost" onClick={() => { setRejectingId(null); setReason('') }}>Cancel</HrButton>
                         </div>
-                      </td>
-                    </tr>
-                    {rejectingId === r.id && (
-                      <tr className="border-t border-border-subtle bg-red-50/30">
-                        <td colSpan={6} className="px-4 py-3">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                            <div className="flex-1">
-                              <label className="mb-1 block text-[11px] font-semibold uppercase text-text-tertiary">
-                                Reason for rejection (min 3 chars, shown to the employee)
-                              </label>
-                              <input
-                                type="text"
-                                value={reason}
-                                onChange={(e) => setReason(e.target.value)}
-                                placeholder="e.g. Photo is blurry, please re-upload"
-                                className="w-full rounded-xl border border-border-default bg-white px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-4 focus:ring-red-100"
-                                autoFocus
-                              />
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setRejectingId(null)}
-                                className="rounded-lg border border-border-default bg-white px-3 py-2 text-xs font-medium text-text-secondary hover:bg-bg-subtle"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="button"
-                                disabled={reason.trim().length < 3 || reject.isPending}
-                                onClick={() => {
-                                  reject.mutate(
-                                    { id: r.id, reason: reason.trim() },
-                                    {
-                                      onSuccess: () => {
-                                        toast.success('Rejected — employee has been notified')
-                                        setRejectingId(null)
-                                        setReason('')
-                                      },
-                                      onError: (err) =>
-                                        toast.error('Reject failed', { description: (err as Error).message }),
-                                    },
-                                  )
-                                }}
-                                className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-40"
-                              >
-                                {reject.isPending ? 'Rejecting…' : 'Reject and notify'}
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                      </div>
+                    ) : <Link to={`/hrms/employees/${r.employeeId}?tab=documents`} className="text-[13px] font-semibold text-accent-fg hover:underline">Open their documents →</Link>}
+                    actions={<>
+                      <HrButton size="sm" variant="ghost" disabled={opening === r.id} onClick={() => open(r.id)}>{opening === r.id ? 'Opening…' : 'View file'}</HrButton>
+                      {rejectingId !== r.id && <HrButton size="sm" variant="ghost" onClick={() => { setRejectingId(r.id); setReason('') }}>Reject</HrButton>}
+                      <HrButton size="sm" disabled={verify.isPending} onClick={() => onVerify(r.id)}>Verify</HrButton>
+                    </>} />
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              </>}
       </div>
-    </div>
+      {node}
+    </ModulePage>
   )
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export default PendingDocuments

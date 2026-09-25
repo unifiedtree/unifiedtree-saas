@@ -1,11 +1,10 @@
 import React from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, RefreshCw, Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { useToast } from '@/shared/hooks/useToast'
 import { Can, P } from '@unifiedtree/sdk'
-import { CardSkeleton } from '@unifiedtree/ui-kit'
-import { format } from 'date-fns'
-import { HrPageHeader, HrStatCard, HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
+import { HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
+import { ModulePage, State, StatRow, Note, stamp } from '@/design/module/ModuleKit'
 import { useDistribution, useRetryDistribution, isTerminalStatus, type RecipientSendStatus } from './api/useDistribution'
 
 const RECIP_STYLE: Record<RecipientSendStatus, { label: string; tone: PillTone }> = {
@@ -20,11 +19,17 @@ export function DistributionDetail() {
   const { jobId } = useParams<{ jobId: string }>()
   const navigate = useNavigate()
   const { toast } = useToast()
-  const { data: job, isLoading } = useDistribution(jobId)
+  const { data: job, isLoading, isError, error, refetch } = useDistribution(jobId)
   const retry = useRetryDistribution()
 
+  const back = <HrButton variant="ghost" onClick={() => navigate('/hrms/letters/distributions')}>← All distributions</HrButton>
   if (isLoading || !job) {
-    return <div className="mx-auto max-w-5xl p-6 sm:p-8"><CardSkeleton /></div>
+    return (
+      <ModulePage crumb="Letters" title="Distribution" actions={back}>
+        {isError ? <State kind="error" title="Couldn’t load this distribution" description={(error as Error)?.message} onRetry={() => refetch()} />
+          : isLoading ? <State kind="loading" height={220} /> : <State kind="empty" icon="fileText" title="Distribution not found" />}
+      </ModulePage>
+    )
   }
 
   const recipients = job.recipients ?? []
@@ -35,53 +40,26 @@ export function DistributionDetail() {
     try {
       const r = await retry.mutateAsync(job.id)
       toast(`Retrying ${r.retried} failed recipient${r.retried === 1 ? '' : 's'}`, 'success')
-    } catch {
-      toast('Retry failed', 'error')
+    } catch (e) {
+      toast((e as Error)?.message || 'Couldn’t retry', 'error')
     }
   }
 
-  const subtitle = (
-    <>
-      Created {job.createdAt ? format(new Date(job.createdAt), 'dd MMM yyyy, HH:mm') : '—'}
-      {running && (
-        <> · <span className="inline-flex items-center gap-1 text-[#047857]"><Loader2 size={12} className="animate-spin" /> live</span></>
-      )}
-    </>
-  )
+  const subtitle = `Created ${job.createdAt ? stamp(job.createdAt) : '—'}${running ? ' · still sending, this page updates by itself' : ''}`
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 p-6 sm:p-8">
-      <button onClick={() => navigate('/hrms/letters/distributions')}
-        className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary">
-        <ArrowLeft size={15} /> Distributions
-      </button>
-
-      <HrPageHeader
-        crumb="Letters"
-        title={job.title}
-        subtitle={subtitle}
-        actions={
-          job.failedCount > 0 ? (
-            <Can code={P.HRMS_LETTERS_DISTRIBUTE}>
-              <HrButton onClick={handleRetry} disabled={retry.isPending}>
-                <RefreshCw size={14} className={retry.isPending ? 'animate-spin' : ''} /> Retry Failed
-              </HrButton>
-            </Can>
-          ) : undefined
-        }
-      />
-
-      {job.customMessage && (
-        <p className="max-w-2xl whitespace-pre-wrap text-sm text-text-secondary">
-          {job.customMessage.replace(/<[^>]+>/g, '')}
-        </p>
-      )}
-
-      <div className="grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
-        <HrStatCard icon={<CheckCircle2 size={18} />} color="green" value={job.sentCount} label="Sent" />
-        <HrStatCard icon={<XCircle size={18} />} color="red" value={job.failedCount} label="Failed" />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={pending} label="Pending" />
-      </div>
+    <ModulePage crumb="Letters · Distribution" title={job.title} subtitle={subtitle}
+      actions={<>{back}{job.failedCount > 0 && (
+        <Can code={P.HRMS_LETTERS_DISTRIBUTE}>
+          <HrButton onClick={handleRetry} disabled={retry.isPending}><RefreshCw size={14} className={retry.isPending ? 'animate-spin' : ''} /> Retry failed</HrButton>
+        </Can>
+      )}</>}>
+      {job.customMessage && <Note>{job.customMessage.replace(/<[^>]+>/g, '')}</Note>}
+      <StatRow tiles={[
+        { icon: 'checkCircle', color: 'green', label: 'Sent', value: String(job.sentCount), sub: `Of ${job.totalRecipients}` },
+        { icon: 'circleX', color: 'red', label: 'Failed', value: String(job.failedCount), sub: job.failedCount ? 'Retry them from the top' : 'None' },
+        { icon: 'clock', color: 'orange', label: 'Still to send', value: String(pending), sub: running ? 'Sending now' : 'Done' },
+      ]} />
 
       <TableCard>
         <table className="hr-table">
@@ -105,7 +83,7 @@ export function DistributionDetail() {
                     <HrStatusPill tone={s.tone}>{s.label}</HrStatusPill>
                   </td>
                   <td className="text-text-secondary">
-                    {r.sentAt ? format(new Date(r.sentAt), 'dd MMM HH:mm') : '—'}
+                    {r.sentAt ? stamp(r.sentAt) : '—'}
                   </td>
                   <td className="max-w-xs truncate text-xs text-[#B91C1C]" title={r.errorMessage ?? ''}>
                     {r.errorMessage ?? ''}
@@ -116,6 +94,6 @@ export function DistributionDetail() {
           </tbody>
         </table>
       </TableCard>
-    </div>
+    </ModulePage>
   )
 }

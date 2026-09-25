@@ -2,9 +2,8 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { Can, P } from '@unifiedtree/sdk'
-import { TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
-import { format } from 'date-fns'
-import { HrPageHeader, HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { ModulePage, State, stamp } from '@/design/module/ModuleKit'
 import { useDistributions, type DistributionStatus } from './api/useDistribution'
 import { DistributionWizard } from './DistributionWizard'
 
@@ -18,28 +17,19 @@ const STATUS_TONE: Record<DistributionStatus, { label: string; tone: PillTone }>
 
 export function Distributions() {
   const navigate = useNavigate()
-  const { data, isLoading } = useDistributions()
+  const { data, isLoading, isError, error, refetch } = useDistributions()
   const [wizardOpen, setWizardOpen] = useState(false)
   const jobs = data?.content ?? []
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-6 sm:p-8">
-      <HrPageHeader
-        crumb="Recruitment & Onboarding"
-        title="Letter Distributions"
-        subtitle="Send a letter to many employees in one action"
-        actions={
-          <Can code={P.HRMS_LETTERS_DISTRIBUTE}>
-            <HrButton onClick={() => setWizardOpen(true)}><Plus size={15} /> New Distribution</HrButton>
-          </Can>
-        }
-      />
-
+    <ModulePage crumb="Letters" title="Letter distributions" subtitle="Send one letter to many people in a single action."
+      actions={<Can code={P.HRMS_LETTERS_DISTRIBUTE}><HrButton onClick={() => setWizardOpen(true)}><Plus size={15} /> New distribution</HrButton></Can>}>
       {isLoading ? (
-        <TableSkeleton />
+        <State kind="loading" height={220} />
+      ) : isError ? (
+        <State kind="error" title="Couldn’t load distributions" description={(error as Error)?.message} onRetry={() => refetch()} />
       ) : jobs.length === 0 ? (
-        <EmptyState variant="first-run" title="No distributions yet"
-          description="Send a letter (payslips, policy broadcasts…) to many employees at once." />
+        <State kind="empty" icon="fileText" title="No distributions yet" description="Send a letter, like a policy update, to many people at once." />
       ) : (
         <TableCard>
           <table className="hr-table">
@@ -53,10 +43,10 @@ export function Distributions() {
                   <tr key={j.id} onClick={() => navigate(`/hrms/letters/distributions/${j.id}`)} className="cursor-pointer">
                     <td className="font-medium text-text-primary">{j.title}</td>
                     <td className="text-text-secondary">
-                      {j.sentCount}/{j.totalRecipients} sent{j.failedCount > 0 ? ` · ${j.failedCount} failed` : ''}
+                      {`${j.sentCount} of ${j.totalRecipients} sent${j.failedCount > 0 ? ` · ${j.failedCount} failed` : ''}`}
                     </td>
                     <td><HrStatusPill tone={s.tone}>{s.label}</HrStatusPill></td>
-                    <td className="hidden sm:table-cell text-text-secondary">{j.createdAt ? format(new Date(j.createdAt), 'dd MMM yyyy, HH:mm') : '—'}</td>
+                    <td className="hidden sm:table-cell text-text-secondary">{j.createdAt ? stamp(j.createdAt) : '—'}</td>
                   </tr>
                 )
               })}
@@ -71,6 +61,6 @@ export function Distributions() {
           onCreated={(id) => { setWizardOpen(false); navigate(`/hrms/letters/distributions/${id}`) }}
         />
       )}
-    </div>
+    </ModulePage>
   )
 }

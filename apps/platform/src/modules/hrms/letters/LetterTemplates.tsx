@@ -1,11 +1,10 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, FileText, Edit3, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
-import { format } from 'date-fns'
 import { useToast } from '@/shared/hooks/useToast'
-import { Can, P } from '@unifiedtree/sdk'
-import { TableSkeleton, EmptyState } from '@unifiedtree/ui-kit'
-import { HrPageHeader, HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { Can, P, usePermission } from '@unifiedtree/sdk'
+import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { ModulePage, State, SubHeading, dmy } from '@/design/module/ModuleKit'
 import { useLetterTemplates, useDeleteTemplate } from './api/useLetters'
 import type { LetterTemplateDto, LetterType } from './api/useLetters'
 
@@ -25,8 +24,8 @@ function DeleteCell({ id, name }: { id: string; name: string }) {
     try {
       await deleteMut.mutateAsync(id)
       toast(`"${name}" deleted`, 'success')
-    } catch {
-      toast('Failed to delete template', 'error')
+    } catch (e) {
+      toast((e as Error)?.message || 'Couldn’t delete the template', 'error')
     } finally {
       setConfirming(false)
     }
@@ -73,37 +72,17 @@ export const LetterTemplates: React.FC<{ embedded?: boolean }> = ({ embedded = f
   const totalElements = data?.totalElements ?? 0
   const hasPagination = totalElements > 20
 
-  return (
-    <div className={embedded ? "space-y-6" : "mx-auto max-w-5xl space-y-6 p-6 sm:p-8"}>
-      <HrPageHeader
-        crumb="Recruitment & Onboarding"
-        title="Letter Templates"
-        subtitle="Manage reusable letter templates with merge fields"
-        actions={
-          <Can code={P.HRMS_LETTERS_TEMPLATE_CREATE}>
-            <HrButton onClick={() => navigate('/hrms/letters/templates/new')}><Plus size={15} /> Create template</HrButton>
-          </Can>
-        }
-      />
-
+  const canCreate = usePermission(P.HRMS_LETTERS_TEMPLATE_CREATE)
+  const createBtn = canCreate ? <HrButton size={embedded ? 'sm' : undefined} onClick={() => navigate('/hrms/letters/templates/new')}><Plus size={15} /> Create template</HrButton> : undefined
+  const body = (
+    <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+      {embedded && <SubHeading aside={createBtn}>Letter templates</SubHeading>}
       {isLoading ? (
-        <TableSkeleton />
+        <State kind="loading" height={220} />
       ) : error ? (
-        <EmptyState
-          variant="error"
-          title="Failed to load templates"
-          description={(error as Error).message}
-          primaryAction={{ label: 'Retry', onClick: () => refetch() }}
-        />
+        <State kind="error" title="Couldn’t load templates" description={(error as Error).message} onRetry={() => refetch()} />
       ) : templates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border-default py-20">
-          <FileText size={36} className="mb-3 text-text-tertiary" />
-          <p className="text-sm font-medium text-text-secondary">No letter templates yet</p>
-          <p className="mt-1 text-xs text-text-tertiary">Create your first template to start generating letters</p>
-          <Can code={P.HRMS_LETTERS_TEMPLATE_CREATE}>
-            <HrButton className="mt-4" onClick={() => navigate('/hrms/letters/templates/new')}><Plus size={15} /> Create template</HrButton>
-          </Can>
-        </div>
+        <State kind="empty" icon="fileText" title="No letter templates yet" description={canCreate ? 'Create a template with merge fields, then generate letters from it.' : 'Templates HR creates appear here.'} />
       ) : (
         <>
           <TableCard>
@@ -132,7 +111,7 @@ export const LetterTemplates: React.FC<{ embedded?: boolean }> = ({ embedded = f
                       </div>
                     </td>
                     <td><HrStatusPill tone={TYPE_TONE[tpl.type] ?? 'gray'}>{TYPE_LABEL[tpl.type] ?? tpl.type}</HrStatusPill></td>
-                    <td className="hidden md:table-cell text-text-secondary">{tpl.updatedAt ? format(new Date(tpl.updatedAt), 'd MMM yyyy') : '—'}</td>
+                    <td className="hidden md:table-cell text-text-secondary">{tpl.updatedAt ? dmy(tpl.updatedAt) : '—'}</td>
                     <td><HrStatusPill tone={tpl.active ? 'ok' : 'gray'}>{tpl.active ? 'Active' : 'Inactive'}</HrStatusPill></td>
                     <td>
                       <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
@@ -181,5 +160,11 @@ export const LetterTemplates: React.FC<{ embedded?: boolean }> = ({ embedded = f
         </>
       )}
     </div>
+  )
+  if (embedded) return body
+  return (
+    <ModulePage crumb="Letters" title="Letter templates" subtitle="Reusable letters with merge fields, like {{employee.fullName}}." actions={createBtn}>
+      {body}
+    </ModulePage>
   )
 }

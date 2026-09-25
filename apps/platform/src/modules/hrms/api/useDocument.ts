@@ -82,6 +82,8 @@ export interface CreateDocumentPayload {
   issuedDate?: string
   expiryDate?: string
   notes?: string
+  /** V143.7 typed upload (file uploads only): the server checks the type's formats and size. */
+  documentTypeId?: string
 }
 
 export function useCreateDocument() {

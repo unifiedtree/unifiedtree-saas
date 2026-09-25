@@ -9,7 +9,8 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies } from '@/modules/hrms/api/useOrg'
 import { useEmployeeDirectory } from '@/modules/hrms/api/useWorkforce'
-import { CardSkeleton, EmptyState } from '@unifiedtree/ui-kit'
+import { CardSkeleton } from '@unifiedtree/ui-kit'
+import { ModulePage, State } from '@/design/module/ModuleKit'
 import {
   useLetterTemplate,
   useCreateTemplate,
@@ -388,51 +389,29 @@ export const LetterTemplateEditor: React.FC = () => {
     }
   }
 
-  if (!isNew && isLoading) {
+  const backBtn = (
+    <button type="button" onClick={() => navigate('/hrms/letters/templates')}
+      className="inline-flex h-10 items-center gap-1.5 rounded-md border border-border-default bg-white px-4 text-sm font-semibold text-text-primary hover:bg-bg-base">
+      <ArrowLeft size={15} /> Templates
+    </button>
+  )
+  if (!isNew && (isLoading || error)) {
     return (
-      <div className="p-6 space-y-4">
-        <CardSkeleton />
-      </div>
-    )
-  }
-
-  if (!isNew && error) {
-    return (
-      <div className="p-6">
-        <EmptyState
-          variant="error"
-          title="Failed to load template"
-          description={(error as Error).message}
-          primaryAction={{ label: 'Back', onClick: () => navigate('/hrms/letters/templates') }}
-        />
-      </div>
+      <ModulePage crumb="Letters · Template" title="Letter template" actions={backBtn}>
+        {isLoading ? <State kind="loading" height={260} /> : <State kind="error" title="Couldn’t load the template" description={(error as Error).message} />}
+      </ModulePage>
     )
   }
 
   return (
-    <div className="p-6 animate-fade-in space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <button
-          onClick={() => navigate('/hrms/letters/templates')}
-          className="flex items-center gap-1.5 text-sm text-text-tertiary hover:text-text-primary transition-colors"
-        >
-          <ArrowLeft size={16} />
-          Templates
-        </button>
-        <h1 className="text-lg font-bold text-text-primary">
-          {isNew ? 'New template' : 'Edit template'}
-        </h1>
-        <div className="flex-1" />
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-1.5 px-4 py-2 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#059669]/30"
-        >
+    <ModulePage crumb="Letters · Template" title={isNew ? 'New letter template' : name || 'Edit template'}
+      subtitle="Write the letter once; merge fields fill in each person's details when a letter is generated."
+      actions={<>{backBtn}
+        <button type="button" onClick={handleSave} disabled={saving}
+          className="inline-flex h-10 items-center gap-1.5 rounded-md bg-[#059669] px-4 text-sm font-semibold text-white hover:bg-[#047857] disabled:opacity-50">
           {saving && <Loader2 size={13} className="animate-spin" />}
           {saving ? 'Saving…' : 'Save template'}
-        </button>
-      </div>
+        </button></>}>
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 space-y-4">
@@ -491,6 +470,6 @@ export const LetterTemplateEditor: React.FC = () => {
           <PreviewPane templateId={savedId} />
         </div>
       </div>
-    </div>
+    </ModulePage>
   )
 }
