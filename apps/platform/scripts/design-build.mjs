@@ -179,8 +179,9 @@ const LITERALS = {
   ShiftOvertime: [['Overtime · September 2026', 'Overtime · {{ monthLabel }}']],
   AttRegularization: [
     ['max="2026-09-23"', 'max="{{ todayMax }}"'],
-    // The API takes no file for a fix request yet — the picker stays, switched off and marked.
-    ['<input type="file" accept=".pdf,.jpg,.png"', '<input type="file" disabled="{{ proofOff }}" title="{{ proofTip }}" accept=".pdf,.jpg,.png"'],
+    // The proof uploads when chosen (POST /v1/attendance/corrections/attachments, V143.10);
+    // the picker is switched off only while a request is being sent.
+    ['<input type="file" accept=".pdf,.jpg,.png"', '<input type="file" disabled="{{ proofOff }}" title="{{ proofTip }}" onChange="{{ onProof }}" accept=".pdf,.jpg,.png"'],
     ['A gate log, an email or a photo. PDF or image, up to 5 MB.', '{{ proofHelp }}'],
   ],
   ShiftRequests: [['min="2026-09-24"', 'min="{{ tomorrowMin }}"']],
@@ -269,7 +270,9 @@ const PATCH = {
       return `<dc-import name="${name}"${attrs} dc-props="{{ px.${key} }}"${slash}>`
     })
     if (n !== 11) throw new Error('AttendancePage: expected 11 tab components, patched ' + n)
-    return out
+    // Daily Tracking → Review (V143.10): the attendance review list, built from
+    // the module kit by the container, sits after Regularization.
+    return replaceOnce(out, '<sc-if value="{{ tMine }}"', '<sc-if value="{{ tReview }}" hint-placeholder-val="{{ false }}">{{ reviewBlock }}</sc-if>\n<sc-if value="{{ tMine }}"')
   },
   // The server refuses a bank file while anyone in it lacks bank details
   // (BATCH_HAS_EXCLUDED_EMPLOYEES). The design had nowhere to say who, so a

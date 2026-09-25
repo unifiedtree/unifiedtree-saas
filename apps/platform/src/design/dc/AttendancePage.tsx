@@ -24,12 +24,14 @@ export class AttendancePage extends DCLogic {
     const corr: any[] = D.corr || [], face: any[] = D.face || [], shifts: any[] = D.shifts || [], roster: any[] = D.roster || [], ot: any[] = D.ot || [], sreq: any[] = D.sreq || [], myReq: any[] = D.myReq || []
     const pend = (xs: any[], k?: string, key?: string) => (live(key || '') ? xs.filter((x) => x.status === (k || 'PENDING')).length : 0)
     const nCorr = isHr ? pend(corr, 'PENDING', 'corr') : 0, nFace = pend(face, 'REVIEW', 'face'), nOt = pend(ot, 'PENDING', 'ot'), nSreq = pend(sreq, 'PENDING', 'sreq')
+    // Attendance review (V143.10): days that need a look; face checks are counted on the Face tab.
+    const canReview = isHr && !!p.canReview, nReview = canReview && live('review') ? Number(D.reviewCount) || 0 : 0
     const noShift = roster.filter((r) => !r.shift).length
     const c = D.counts || {}, rate = c.present ? Math.round((c.present / (c.present + (c.absent || 0) + (c.notMarked || 0))) * 100) : 0
     const shiftsX = shifts.map((s) => ({ ...s, people: roster.filter((r) => r.shift === s.id).length }))
     const mine = shifts.find((s) => s.id === D.myShift) || null
     const sayK = (key: string, a: string, b: string) => { const st = S[key] || 'loading'; return st === 'live' ? a : st === 'loading' ? 'Loading…' : st === 'error' ? 'Couldn’t load' : b }
-    const todo = nCorr + nFace, waiting = nOt + nSreq
+    const todo = nCorr + nFace + nReview, waiting = nOt + nSreq
     const SECS = [
       { key: 'analytics', route: '/hrms/att-analytics', label: 'Attendance Analytics', short: 'Analytics', icon: 'pieChart', desc: 'Charts, trends and monthly reports', status: sayK('ov', `${rate}% came in today`, 'No numbers yet'), alert: 0, hrOnly: true },
       { key: 'daily', route: '/hrms/attendance', label: 'Daily Tracking', short: 'Daily', icon: 'clock', desc: isHr ? 'Today’s check-ins, punches and fixes' : 'Your check-ins and fixes',
@@ -39,7 +41,7 @@ export class AttendancePage extends DCLogic {
     ].filter((s) => isHr || !s.hrOnly)
     const TABS: Record<string, any[]> = {
       analytics: [['overview', 'Overview', 'dashboard'], ['calendar', 'Calendar', 'calendarDays']],
-      daily: isHr ? [['team', 'Daily Logs', 'list'], ['face', 'Face Punch', 'scanFace', nFace], ['corrections', 'Regularization', 'pencil', nCorr], ['my', 'My Attendance', 'userCheck']] : [['my', 'My Attendance', 'userCheck'], ['corrections', 'Regularization', 'pencil']],
+      daily: isHr ? [['team', 'Daily Logs', 'list'], ['face', 'Face Punch', 'scanFace', nFace], ['corrections', 'Regularization', 'pencil', nCorr], ...(canReview ? [['review', 'Review', 'clipboard', nReview]] : []), ['my', 'My Attendance', 'userCheck']] : [['my', 'My Attendance', 'userCheck'], ['corrections', 'Regularization', 'pencil']],
       shifts: isHr ? [['schedules', 'Shift Schedules', 'clock'], ['roster', 'Roster', 'users', live('roster') ? noShift : 0], ['overtime', 'Overtime', 'timer', nOt], ['requests', 'Shift Requests', 'swap', nSreq]] : [['myshift', 'My Shift', 'calendarClock']],
     }
     let section: string = p.section || 'daily'
@@ -49,7 +51,7 @@ export class AttendancePage extends DCLogic {
     let tab = ss.tab || p.initialTab
     if (!keys.includes(tab)) tab = keys[0]
     const reset = { status: null, newKey: 0, addKey: 0, rosterFilter: null }
-    const BT: Record<string, string> = { face: 'face checks need a look', corrections: 'fixes waiting for you', roster: 'people have no shift yet', overtime: 'overtime entries waiting for you', requests: 'shift changes waiting for you' }
+    const BT: Record<string, string> = { face: 'face checks need a look', corrections: 'fixes waiting for you', review: 'days need a look', roster: 'people have no shift yet', overtime: 'overtime entries waiting for you', requests: 'shift changes waiting for you' }
     const setTab = (k: string) => { this.setState({ tab: k, ...reset }); if (p.onTab) p.onTab(sec.route, k) }
     const tabs = list.map(([k, label, icon, n]) => ({ key: k, label, icon: dashIcon(icon, 16), active: k === tab, inactive: k !== tab, hasBadge: !!n, badge: n, tip: n ? `${n} ${BT[k]}` : '', onClick: () => setTab(k) }))
     const sections = SECS.map((s) => {
@@ -67,6 +69,7 @@ export class AttendancePage extends DCLogic {
       team: 'Everyone’s check-in and check-out for the day. Tap a coloured box to see only those people, or tap a person for details.',
       face: 'Every check-in made at a face kiosk. When the camera isn’t sure it’s the right person, it asks you to take a look.',
       corrections: isHr ? 'When someone forgets to punch, they ask for a fix here. Read the reason, then approve or reject it.' : 'Forgot to punch in or out? Ask for a fix here and see what HR decided.',
+      review: 'Late arrivals past the allowance, half days, absences, early leaving, missing check-outs and check-ins outside the zone from the last 7 days. Excuse a day or change its status with a reason; the person is told.',
       my: 'Your own month at a glance. Each coloured box is one day.',
       schedules: 'The work timings your company uses. The coloured part of each bar shows when people work.',
       roster: 'Who works which shift. Tap “Change shift” to move someone to a different one.',
@@ -81,9 +84,9 @@ export class AttendancePage extends DCLogic {
     const px = {
       AttOverview: { state: S.ov, ov: D.ov, onRetry: A.retryOv },
       AttCalendar: { state: S.ov, ov: D.ov, onRetry: A.retryOv },
-      AttDailyLogs: { state: S.logs, logs: D.logs, date: p.date || '', onDate: A.onDate, onRetry: A.retryLogs, canRegularize: !!p.canRequestFix },
+      AttDailyLogs: { state: S.logs, logs: D.logs, date: p.date || '', onDate: A.onDate, onRetry: A.retryLogs, canRegularize: !!p.canRequestFix, canOverride: !!p.canOverride, onChangeStatus: A.openStatus },
       AttFacePunch: { state: S.face, events: face, onRetry: A.retryFace },
-      AttRegularization: { state: S.corr, requests: corr, mine: D.mineCorr || [], canApprove: isHr && !!p.canApproveCorr, onNew: A.newCorr, onRetry: A.retryCorr },
+      AttRegularization: { state: S.corr, requests: corr, mine: D.mineCorr || [], canApprove: isHr && !!p.canApproveCorr, onNew: A.newCorr, onRetry: A.retryCorr, onUploadProof: A.uploadProof, onOpenProof: A.openProof },
       AttMine: { state: S.month, month: D.month, onRetry: A.retryMonth },
       ShiftSchedules: { state: S.shifts, canEdit: !!p.canEditShifts, onRetry: A.retryShifts },
       ShiftRoster: { state: S.roster, canEdit: !!p.canAssign, onRetry: A.retryRoster },
@@ -104,6 +107,7 @@ export class AttendancePage extends DCLogic {
       goReport: () => go(D.reportLink || '/hrms/reports/attendance-summary'),
       addShift: () => { this.setState({ tab: 'schedules', addKey: ss.addKey + 1, newKey: 0, rosterFilter: null }); if (p.onTab) p.onTab('/hrms/shifts', 'schedules') },
       tOverview: is('analytics', 'overview'), tCalendar: is('analytics', 'calendar'), tTeam: is('daily', 'team'), tFace: is('daily', 'face'), tReg: is('daily', 'corrections'), tMine: is('daily', 'my'),
+      tReview: is('daily', 'review'), reviewBlock: is('daily', 'review') ? D.reviewBlock : null,
       tSchedules: is('shifts', 'schedules'), tRoster: is('shifts', 'roster'), tOvertime: is('shifts', 'overtime'), tRequests: is('shifts', 'requests'), tMyShift: is('shifts', 'myshift'),
       state: 'live', mobile, isHr, navFn: go, toast, openLogs,
       initialStatus: ss.status ?? p.initialStatus ?? '', date: p.date || '',

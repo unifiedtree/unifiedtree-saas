@@ -36,6 +36,8 @@ public enum AppNotificationType {
     ADVANCE_REJECTED,
     OVERTIME_APPROVED,
     OVERTIME_REJECTED,
+    /** A reviewer changed the employee's attendance status for a day (V143.10). */
+    ATTENDANCE_STATUS_CHANGED,
     DOCUMENT_UPLOADED,
     DOCUMENT_VERIFIED,
     DOCUMENT_REJECTED,

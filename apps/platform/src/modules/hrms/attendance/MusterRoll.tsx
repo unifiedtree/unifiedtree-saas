@@ -32,11 +32,21 @@ function statusMeta(status: string | undefined, today: boolean): { tone: PillTon
     case 'WORK_FROM_HOME': case 'WFH': return { tone: 'blue', label: 'Work from home' }
     case 'ABSENT': return today ? { tone: 'gray', label: 'Not marked yet' } : { tone: 'red', label: 'Absent' }
     case 'NOT_MARKED': case 'NOTMARKED': case '': return { tone: 'gray', label: today ? 'Not marked yet' : 'Not marked' }
+    case 'HOLIDAY': return { tone: 'purple', label: 'Holiday' }
+    case 'WEEKLY_OFF': return { tone: 'gray', label: 'Weekly off' }
+    case 'NOT_TRACKED': return { tone: 'gray', label: 'Not tracked' }
     default: return { tone: 'info', label: s.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) }
   }
 }
-/** A punch beats a stale ABSENT; approved leave without a punch reads as leave. */
-const rowStatus = (s: StaffStatusResponse) => { const st = (s.status ?? '').toUpperCase(); if (s.checkInAt && (st === 'ABSENT' || st === 'NOT_MARKED' || !st)) return 'PRESENT'; if (!s.checkInAt && s.onLeave) return 'ON_LEAVE'; return s.status }
+/**
+ * The day's effective status (company attendance policy + reviewers' changes,
+ * V143.10) when the server sends it; otherwise a punch beats a stale ABSENT and
+ * approved leave without a punch reads as leave.
+ */
+const rowStatus = (s: StaffStatusResponse) => {
+  if (s.effectiveStatus) return s.effectiveStatus === 'PRESENT' && s.attendanceType === 'WFH' ? 'WFH' : s.effectiveStatus
+  const st = (s.status ?? '').toUpperCase(); if (s.checkInAt && (st === 'ABSENT' || st === 'NOT_MARKED' || !st)) return 'PRESENT'; if (!s.checkInAt && s.onLeave) return 'ON_LEAVE'; return s.status
+}
 const fullName = (s: StaffStatusResponse) => s.fullName?.trim() || s.employeeCode || 'Employee'
 const fmtTime = (iso?: string) => { if (!iso) return '—'; try { return format(parseISO(iso), 'h:mm a') } catch { return '—' } }
 

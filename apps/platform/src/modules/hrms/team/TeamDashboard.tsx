@@ -68,7 +68,8 @@ export function TeamDashboard() {
                 : (
                   <RowList>
                     {people.map((s) => {
-                      const [lab, tone] = pill(s.checkInAt ? (s.status === 'LATE' ? 'LATE' : 'PRESENT') : s.onLeave ? 'ON_LEAVE' : s.status)
+                      // The effective status (company attendance policy + reviewers' changes) when the server sends it.
+                      const [lab, tone] = pill(s.effectiveStatus || (s.checkInAt ? (s.status === 'LATE' ? 'LATE' : 'PRESENT') : s.onLeave ? 'ON_LEAVE' : s.status))
                       return <Row key={s.employeeId} lead={<HrAvatar name={s.fullName ?? '—'} sub={s.jobTitle ?? s.departmentName ?? ''} />} title={`In ${time(s.checkInAt)} · Out ${time(s.checkOutAt)}`} trail={<HrStatusPill tone={tone}>{lab}</HrStatusPill>} />
                     })}
                   </RowList>

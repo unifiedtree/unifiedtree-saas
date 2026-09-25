@@ -170,7 +170,7 @@ export function AttRegularizationView({ v }: { v: any }) {
               ) : null}
               <label style={{display: "grid", gap: "6px", fontSize: "13px", fontWeight: "600"}}>
                 {"Proof (optional)"}
-                <input type="file" disabled={v.proofOff} title={v.proofTip} accept=".pdf,.jpg,.png" style={{font: "inherit", fontSize: "13px", fontWeight: "400"}} />
+                <input type="file" disabled={v.proofOff} title={v.proofTip} onChange={v.onProof} accept=".pdf,.jpg,.png" style={{font: "inherit", fontSize: "13px", fontWeight: "400"}} />
                 <span style={{fontSize: "12px", fontWeight: "400", color: "#64748b"}}>
                   {txt(v.proofHelp)}
                 </span>

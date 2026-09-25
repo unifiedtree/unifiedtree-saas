@@ -80,6 +80,14 @@ public class AttendanceController {
     private final LeaveRequestRepository leaveRequestRepository;
     @org.springframework.beans.factory.annotation.Autowired
     private ApproverScopeGuard approverScopeGuard;
+    /** Company attendance policy + manual reviews (V143.10): the day's effective status. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrms.attendance.policy.EffectiveDayStatusService effectiveDays;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AttendanceReviewService reviewService;
+    /** Per-company attendance rules (geofence on mobile) from HR Configuration. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.unifiedtree.settings.service.HrConfigurationService hrConfiguration;
 
     /** Longest window the trend endpoint will serve; longer requests are clamped. */
     private static final int MAX_TREND_DAYS = 31;
@@ -135,9 +143,12 @@ public class AttendanceController {
                 .atZone(ZoneId.of("Asia/Kolkata")).toLocalDate();
         boolean wfhDay = attendanceService.isApprovedWfhDay(employeeId, punchDate);
 
-        if (!geoValidation.withinFence() && geofenceEnforce && !wfhDay) {
+        // Blocked only when the server-wide switch AND the company's "Require
+        // geofencing on mobile" rule (HR Configuration -> Attendance rules) are on.
+        if (!geoValidation.withinFence() && geofenceEnforce && companyRequiresGeofence(ctx.companyId()) && !wfhDay) {
             throw new BusinessRuleException(
-                    geoValidation.message() != null ? geoValidation.message() : "Outside allowed attendance zone.",
+                    (geoValidation.message() != null ? geoValidation.message() : "You are outside the attendance zone.")
+                            + " Check in from inside your office zone, or ask HR for a work-from-home day.",
                     "OUTSIDE_GEOFENCE");
         }
 
@@ -162,7 +173,27 @@ public class AttendanceController {
                 // the server-clock behaviour byte-for-byte.
                 request.offlineCaptured(),
                 request.capturedAt());
+        // Accepted from outside the zone (the company doesn't require it): mark
+        // the day so it shows in the attendance review list.
+        if (!geoValidation.withinFence() && !wfhDay && reviewService != null && dto != null && dto.id() != null) {
+            try {
+                reviewService.flagOutsideGeofence(dto.id(), LocalDate.parse(dto.attendanceDate()), geoValidation.distanceMeters());
+            } catch (RuntimeException e) {
+                org.slf4j.LoggerFactory.getLogger(AttendanceController.class)
+                        .warn("Could not flag an outside-zone check-in {}: {}", dto.id(), e.getMessage());
+            }
+        }
         return ResponseEntity.ok(dto);
+    }
+
+    /** The company's "Require geofencing on mobile" rule; true (enforce) when it can't be read. */
+    private boolean companyRequiresGeofence(UUID companyId) {
+        if (hrConfiguration == null || companyId == null) return true;
+        try {
+            return hrConfiguration.getOrDefault(companyId).enforceGeofencingForMobile();
+        } catch (RuntimeException e) {
+            return true;
+        }
     }
 
     @Operation(summary = "Check out — returns updated attendance record")
@@ -337,15 +368,78 @@ public class AttendanceController {
                 : Set.copyOf(leaveRequestRepository.findEmployeeIdsOnApprovedLeave(
                         employeeIds, selectedDate));
 
+        // The day's effective status per person: the company attendance policy
+        // (grace, half-day rules, late allowance) and any reviewer's change.
+        Map<UUID, com.hrms.attendance.policy.EffectiveDay> effective = effectiveOn(employeeIds, selectedDate);
+
         List<StaffStatusResponse> staff = employees.stream()
                 .map(employee -> toStaffStatus(
                         employee, byEmployee.get(employee.getId()), departmentNames, shiftEndByEmployee,
-                        onLeaveIds.contains(employee.getId()), shiftByEmployee.get(employee.getId())))
+                        onLeaveIds.contains(employee.getId()), shiftByEmployee.get(employee.getId()),
+                        effective.get(employee.getId())))
                 .sorted(Comparator.comparing(StaffStatusResponse::fullName))
                 .toList();
 
         return ResponseEntity.ok(new TeamDashboardResponse(
-                selectedDate, countSummary(employees, records, shiftEndByEmployee, onLeaveIds), staff));
+                selectedDate,
+                effective.isEmpty()
+                        ? countSummary(employees, records, shiftEndByEmployee, onLeaveIds)
+                        : countSummaryFromRows(staff, onLeaveIds),
+                staff));
+    }
+
+    /** Effective statuses for one day; empty when the policy service isn't available. */
+    private Map<UUID, com.hrms.attendance.policy.EffectiveDay> effectiveOn(List<UUID> employeeIds, LocalDate date) {
+        if (effectiveDays == null || employeeIds.isEmpty()) return Map.of();
+        Map<UUID, com.hrms.attendance.policy.EffectiveDay> out = new HashMap<>();
+        effectiveDays.effectiveStatuses(employeeIds, date, date).forEach((id, byDate) -> {
+            com.hrms.attendance.policy.EffectiveDay d = byDate.get(date);
+            if (d != null) out.put(id, d);
+        });
+        return out;
+    }
+
+    /**
+     * The row's status in the words the mobile app already uses: ON_TIME /
+     * PRESENT / LATE / HALF_DAY for a worked day, ABSENT when a worked day was
+     * judged absent (hours rule, reviewer), otherwise NOT_MARKED (no punch).
+     */
+    static String legacyStatus(com.hrms.attendance.policy.EffectiveDay d) {
+        return switch (d.status()) {
+            case com.hrms.attendance.policy.EffectiveDay.PRESENT ->
+                    d.hasPunch() && !d.manual() && d.lateMinutes() == null ? "ON_TIME" : "PRESENT";
+            case com.hrms.attendance.policy.EffectiveDay.LATE, com.hrms.attendance.policy.EffectiveDay.HALF_DAY -> d.status();
+            case com.hrms.attendance.policy.EffectiveDay.ABSENT -> d.hasPunch() || d.manual() ? "ABSENT" : "NOT_MARKED";
+            default -> "NOT_MARKED";
+        };
+    }
+
+    /** Tiles from the rows' statuses, so a tile and its drill-down always agree. */
+    static AttendanceSummaryCounts countSummaryFromRows(List<StaffStatusResponse> rows, Set<UUID> onLeaveIds) {
+        java.util.function.Predicate<StaffStatusResponse> worked = r ->
+                "ON_TIME".equals(r.status()) || "PRESENT".equals(r.status())
+                        || "LATE".equals(r.status()) || "HALF_DAY".equals(r.status());
+        long late = rows.stream().filter(r -> "LATE".equals(r.status())).count();
+        long halfDay = rows.stream().filter(r -> "HALF_DAY".equals(r.status())).count();
+        long wfh = rows.stream().filter(worked).filter(r -> "WFH".equals(r.attendanceType())).count();
+        long present = rows.stream().filter(r -> "ON_TIME".equals(r.status()) || "PRESENT".equals(r.status()))
+                .filter(r -> !"WFH".equals(r.attendanceType())).count();
+        Set<UUID> markedIds = rows.stream().filter(worked).map(StaffStatusResponse::employeeId).collect(Collectors.toSet());
+        long onLeaveUnmarked = onLeaveIds.stream().filter(id -> !markedIds.contains(id)).count();
+        // A company holiday, a day before tracking started or a future day is
+        // nobody's "not marked" / absent.
+        long offDay = rows.stream().filter(r -> !worked.test(r) && isOffDay(r.effectiveStatus())).count();
+        long notMarked = Math.max(0, rows.size() - markedIds.size() - offDay);
+        long absent = Math.max(0, notMarked - onLeaveUnmarked);
+        long early = rows.stream().filter(StaffStatusResponse::earlyCheckout).count();
+        return new AttendanceSummaryCounts(present, onLeaveIds.size(), late, halfDay, early, wfh, notMarked, absent);
+    }
+
+    private static boolean isOffDay(String effectiveStatus) {
+        return com.hrms.attendance.policy.EffectiveDay.HOLIDAY.equals(effectiveStatus)
+                || com.hrms.attendance.policy.EffectiveDay.WEEKLY_OFF.equals(effectiveStatus)
+                || com.hrms.attendance.policy.EffectiveDay.NOT_TRACKED.equals(effectiveStatus)
+                || com.hrms.attendance.policy.EffectiveDay.UPCOMING.equals(effectiveStatus);
     }
 
     /**
@@ -409,6 +503,11 @@ public class AttendanceController {
             }
         }
 
+        // Company attendance policy + reviewers' changes (V143.10): count each
+        // person once per day from their effective status.
+        Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> effective =
+                effectiveDays == null || employeeIds.isEmpty() ? Map.of() : effectiveDays.effectiveStatuses(employeeIds, start, end);
+
         List<DailyAttendanceCounts> series = new java.util.ArrayList<>();
         for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
             List<AttendanceRecord> dayRecords = recordsByDate.getOrDefault(day, List.of());
@@ -423,6 +522,18 @@ public class AttendanceController {
                         return off == null || !off.contains(dayDow);
                     })
                     .count();
+            if (!effective.isEmpty()) {
+                List<UUID> roster = employees.stream()
+                        .filter(emp -> {
+                            LocalDate joined = trendJoins.get(emp.getId());
+                            if (joined != null && joined.isAfter(dayFinal)) return false;
+                            java.util.Set<Integer> off = trendOffs.get(emp.getId());
+                            return off == null || !off.contains(dayDow);
+                        })
+                        .map(Employee::getId).toList();
+                series.add(effectiveCounts(day, roster, effective, dayRecords));
+                continue;
+            }
             series.add(dailyCounts(day, rosterForDay, dayRecords, onLeaveIds));
         }
         return ResponseEntity.ok(series);
@@ -464,6 +575,31 @@ public class AttendanceController {
         return new DailyAttendanceCounts(
                 date, present, onLeaveIds.size(), late, halfDay, workFromHome, notMarked, absent,
                 overtimeMinutes);
+    }
+
+    /**
+     * One day's counts from effective statuses: each person lands in exactly one
+     * bucket, so present + late + half day + work from home is the number who
+     * came in. notMarked = absent (no punch, no leave) + on leave.
+     */
+    static DailyAttendanceCounts effectiveCounts(LocalDate date, List<UUID> roster,
+                                                 Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> effective,
+                                                 List<AttendanceRecord> dayRecords) {
+        long present = 0, late = 0, halfDay = 0, wfh = 0, onLeave = 0, absent = 0;
+        for (UUID id : roster) {
+            com.hrms.attendance.policy.EffectiveDay d = effective.getOrDefault(id, Map.of()).get(date);
+            if (d == null) continue;
+            switch (d.status()) {
+                case com.hrms.attendance.policy.EffectiveDay.PRESENT -> { if ("WFH".equals(d.attendanceType())) wfh++; else present++; }
+                case com.hrms.attendance.policy.EffectiveDay.LATE -> late++;
+                case com.hrms.attendance.policy.EffectiveDay.HALF_DAY -> halfDay++;
+                case com.hrms.attendance.policy.EffectiveDay.ON_LEAVE -> onLeave++;
+                case com.hrms.attendance.policy.EffectiveDay.ABSENT, com.hrms.attendance.policy.EffectiveDay.NOT_MARKED -> absent++;
+                default -> { /* holiday, weekly off, not tracked: not counted */ }
+            }
+        }
+        long overtime = dayRecords.stream().filter(r -> r.getOvertimeMinutes() != null).mapToLong(AttendanceRecord::getOvertimeMinutes).sum();
+        return new DailyAttendanceCounts(date, present, onLeave, late, halfDay, wfh, absent + onLeave, absent, overtime);
     }
 
     /** One point on the attendance trend chart. */
@@ -581,6 +717,10 @@ public class AttendanceController {
             @Valid @RequestBody CorrectionRequestRequest request,
             @AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
+        // Proof must be a file this person uploaded (or a web link from older clients).
+        String proofProblem = CorrectionProofController.attachmentProblem(
+                request.attachmentUrl(), CorrectionProofController.ownPrefix(employeeId));
+        if (proofProblem != null) throw new BusinessRuleException(proofProblem, "CORRECTION_PROOF_INVALID");
         AttendanceContextResolver.Context ctx = contextResolver.resolve(employeeId);
         return ResponseEntity.ok(attendanceService.createCorrectionRequest(
                 employeeId, ctx.companyId(), ctx.departmentId(), request));
@@ -765,12 +905,13 @@ public class AttendanceController {
                                               Map<UUID, String> departmentNames,
                                               Map<UUID, java.time.Instant> shiftEndByEmployee,
                                               boolean onLeave,
-                                              AttendanceService.ShiftWindow shift) {
-        String status = record == null || record.getCheckInAt() == null
+                                              AttendanceService.ShiftWindow shift,
+                                              com.hrms.attendance.policy.EffectiveDay eff) {
+        String status = eff != null ? legacyStatus(eff) : record == null || record.getCheckInAt() == null
                 ? "NOT_MARKED"
                 : record.getAttendanceStatus() != null ? record.getAttendanceStatus().name() : "PRESENT";
         java.time.Instant checkIn = record != null ? record.getCheckInAt() : null;
-        java.time.Instant expected = shift != null ? shift.expectedStart() : null;
+        java.time.Instant expected = shift != null ? shift.expectedStart() : eff != null ? eff.expectedStart() : null;
         return new StaffStatusResponse(
                 employee.getId(),
                 employee.getEmployeeCode(),
@@ -785,15 +926,24 @@ public class AttendanceController {
                 record != null ? record.getLocationName() : null,
                 record != null ? record.getCheckInLatitude() : null,
                 record != null ? record.getCheckInLongitude() : null,
-                isEarlyCheckout(record, shiftEndByEmployee),
+                eff != null ? eff.earlyLeave() : isEarlyCheckout(record, shiftEndByEmployee),
                 record != null && record.getAttendanceType() != null
                         ? record.getAttendanceType().name()
                         : null,
                 onLeave,
                 shift != null ? shift.shiftName() : null,
                 expected,
-                shift != null ? shift.graceMinutes() : null,
-                StaffStatusResponse.lateBy(status, checkIn, expected));
+                shift != null ? Integer.valueOf(shift.graceMinutes()) : eff != null ? eff.graceMinutes() : null,
+                eff != null ? eff.lateMinutes() : StaffStatusResponse.lateBy(status, checkIn, expected),
+                eff != null ? eff.status() : null,
+                eff != null ? eff.note() : null,
+                eff != null && eff.manual(),
+                eff != null && eff.lossOfPay(),
+                eff != null && eff.withinAllowance(),
+                eff != null && eff.outsideGeofence(),
+                eff != null && eff.punchRejected(),
+                eff != null ? eff.earlyByMinutes() : null,
+                eff != null ? eff.workedMinutes() : null);
     }
 
     // Count a set, not scalar subtraction: LATE and WFH can overlap.

@@ -34,6 +34,8 @@ export type AppNotificationType =
   | 'SHIFT_CHANGE_SUBMITTED'
   | 'SHIFT_CHANGE_APPROVED'
   | 'SHIFT_CHANGE_REJECTED'
+  // A reviewer changed or excused a day, or checked a face punch (V143.10).
+  | 'ATTENDANCE_STATUS_CHANGED'
   | 'WELCOME'
   | 'TRIAL_ENDING_SOON'
   | 'TRIAL_EXPIRED'
@@ -195,6 +197,8 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   // is role-aware and shows the right list (approvals-queue for managers,
   // history for employees).
   if (type.startsWith('CORRECTION_')) return '/hrms/attendance?tab=corrections'
+  // A reviewer changed the person's own day: their month (My Attendance).
+  if (type === 'ATTENDANCE_STATUS_CHANGED') return '/hrms/attendance?tab=my'
 
   // Shift change — employees submit + view on /me/shift-change; admins
   // work the queue from /hrms/shifts (the shifts admin page).

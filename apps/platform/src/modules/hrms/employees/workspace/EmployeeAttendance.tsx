@@ -31,16 +31,21 @@ import {
   type WeeklyDayResponse,
 } from '../../api/useAttendance'
 import { useEmployeeShift } from '../../api/useShiftPolicies'
+import { useStatusHistory, statusLabel } from '../../api/useAttendanceReview'
 import { SectionState, SubSection } from './shared'
 
 /** Server-side day classifications from WeeklyDayResponse.status. */
 const DAY_TONE: Record<string, PillTone> = {
   ON_TIME: 'green', LATE: 'warn', WEEKEND: 'gray', HOLIDAY: 'purple',
-  ON_LEAVE: 'info', ABSENT: 'red', UPCOMING: 'gray', NOT_MARKED: 'gray',
+  ON_LEAVE: 'info', ABSENT: 'red', UPCOMING: 'gray', NOT_MARKED: 'gray', HALF_DAY: 'warn',
 }
 const DAY_LABEL: Record<string, string> = {
   ON_TIME: 'On time', LATE: 'Late', WEEKEND: 'Week off', HOLIDAY: 'Holiday',
-  ON_LEAVE: 'On leave', ABSENT: 'Absent', UPCOMING: 'Upcoming', NOT_MARKED: 'Not tracked',
+  ON_LEAVE: 'On leave', ABSENT: 'Absent', UPCOMING: 'Upcoming', NOT_MARKED: 'Not tracked', HALF_DAY: 'Half day',
+}
+/** What a reviewer did to a day (attendance.day_status_reviews, V143.10). */
+const ACTION_LABEL: Record<string, string> = {
+  SET: 'Status set', EXCUSE: 'Excused', CLEAR: 'Manual status removed', FACE_REJECT: 'Face punch rejected', FACE_CONFIRM: 'Face punch confirmed',
 }
 
 const RECORD_TONE: Record<string, PillTone> = {
@@ -104,6 +109,7 @@ function WeekStrip({ days }: { days: WeeklyDayResponse[] }) {
           {d.lateByMinutes ? (
             <p className="text-[11px] text-orange-600 mt-0.5">{d.lateByMinutes}m late</p>
           ) : null}
+          {d.note ? <p className="text-[11px] text-text-tertiary mt-0.5" title={d.note}>{d.manual ? 'Changed by a reviewer' : d.note.length > 60 ? d.note.slice(0, 57) + '…' : d.note}</p> : null}
         </div>
       ))}
     </div>
@@ -121,6 +127,7 @@ export function EmployeeAttendance({ employeeId }: { employeeId: string }) {
   const week = useEmployeeWeeklySummary(employeeId, undefined, { enabled: canRead })
   const records = useEmployeeAttendanceRecords(employeeId, page, PAGE_SIZE, { enabled: canRead })
   const shift = useEmployeeShift(employeeId, { enabled: canRead })
+  const changes = useStatusHistory(employeeId, canRead)
 
   const total = records.data?.totalElements ?? 0
   const totalPages = records.data?.totalPages ?? 0
@@ -255,6 +262,41 @@ export function EmployeeAttendance({ employeeId }: { employeeId: string }) {
                     <td className="text-text-tertiary">
                       {r.regularized ? 'Regularised' : r.manualEntry ? 'Manual' : (r.checkInMethod?.replace(/_/g, ' ') ?? '—')}
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableCard>
+        </SectionState>
+      </SubSection>
+
+      <SubSection title="Status changes" hint="Days a reviewer changed or excused, and face punch checks — with who, when and why.">
+        <SectionState
+          isLoading={changes.isLoading}
+          error={changes.error}
+          isEmpty={!changes.isLoading && !changes.error && (changes.data ?? []).length === 0}
+          emptyIcon={CalendarDays}
+          emptyTitle="No changes"
+          emptyHint="Every day is as the attendance rules worked it out. Changes made in Attendance → Review show here."
+          forbiddenTitle="You don’t have access to this employee’s attendance"
+          forbiddenHint="Attendance is visible to HR, admins, and the employee’s own manager."
+          onRetry={() => changes.refetch()}
+        >
+          <TableCard>
+            <table className="hr-table">
+              <thead>
+                <tr><th>Day</th><th>Change</th><th>From</th><th>To</th><th>Reason</th><th>By</th><th>When</th></tr>
+              </thead>
+              <tbody>
+                {(changes.data ?? []).map((c) => (
+                  <tr key={c.id}>
+                    <td className="whitespace-nowrap">{(() => { try { return format(parseISO(c.date), 'd MMM yyyy') } catch { return c.date } })()}</td>
+                    <td>{ACTION_LABEL[c.action] ?? c.action}</td>
+                    <td>{statusLabel(c.fromStatus)}</td>
+                    <td><HrStatusPill tone={DAY_TONE[c.toStatus === 'PRESENT' ? 'ON_TIME' : c.toStatus ?? ''] ?? 'gray'}>{statusLabel(c.toStatus)}</HrStatusPill></td>
+                    <td className="text-text-secondary">{c.reason}</td>
+                    <td>{c.reviewerName ?? '—'}</td>
+                    <td className="whitespace-nowrap text-text-tertiary">{new Date(c.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
                   </tr>
                 ))}
               </tbody>

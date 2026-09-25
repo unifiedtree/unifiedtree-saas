@@ -18,6 +18,10 @@ const LBL: Record<string, [string, string, string, string]> = {
   ABSENT: ['Absent', 'red', 'red', 'userX'],
   HALF_DAY: ['Half day', 'late', 'orange', 'bulb'],
   EARLY_OUT: ['Left early', 'late', 'orange', 'clock'],
+  // Effective statuses from the attendance policy (V143.10) that have no tile.
+  HOLIDAY: ['Holiday', 'purple', 'purple', 'calendar'],
+  WEEKLY_OFF: ['Weekly off', 'gray', 'blue', 'calendar'],
+  NOT_TRACKED: ['Not tracked', 'gray', 'blue', 'help'],
 }
 const TILE_KEYS = ['PRESENT', 'LATE', 'WFH', 'ON_LEAVE', 'NOT_MARKED', 'ABSENT']
 /** URL statuses (from the dashboard) → this page's status keys. */
@@ -78,14 +82,17 @@ export class AttDailyLogs extends DCLogic {
         facts: [
           { k: 'Date', v: dateLabel }, { k: 'Shift', v: d0.shift }, { k: 'Check in', v: d0.in }, { k: 'Shift starts', v: d0.exp },
           { k: 'Check out', v: d0.out }, { k: 'Hours worked', v: d0.worked }, { k: 'How they punched', v: d0.src }, { k: 'Late by', v: d0.late ? `${d0.late} min` : '—' },
+          // Why the day has this status (attendance policy or a reviewer's change).
+          ...(d0.note ? [{ k: d0.manual ? 'Changed by a reviewer' : 'Why this status', v: d0.note }] : []),
         ],
       }
       : {}
     const drawerFooter = d0
       ? createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' } },
         createElement(HrButton, { onClick: () => nav('/hrms/employees/' + d0.id), 'data-tip': '→ /hrms/employees/' + d0.id } as any, 'Open full profile'),
-        createElement('div', { style: { display: 'flex', gap: 8 } },
+        createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
           p.canRegularize ? createElement(HrButton, { variant: 'ghost', onClick: () => { this.setState({ open: null }); if (p.onRegularize) p.onRegularize(d0, date) }, 'data-tip': 'Opens a fix request for this day' } as any, 'Fix this day') : null,
+          p.canOverride && p.onChangeStatus ? createElement(HrButton, { variant: 'ghost', onClick: () => { this.setState({ open: null }); p.onChangeStatus(d0, date) }, 'data-tip': 'Excuse the day or set Present, Late, Half day or Absent, with a reason' } as any, 'Change status') : null,
           createElement(HrButton, { variant: 'ghost', onClick: () => nav(`/hrms/employees/${d0.id}?tab=attendance`), 'data-tip': 'Opens this person’s attendance history' } as any, 'View history')))
       : null
     const setDay = (e: any) => { const v = (e && e.target ? e.target.value : e) || L.today; if (p.onDate) p.onDate(v) }

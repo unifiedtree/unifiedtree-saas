@@ -34,7 +34,9 @@ public class SettingsController {
     // and the employee form reads this config, so anyone who can create
     // employees or change the config may read it.
     @GetMapping("/hr-configuration")
-    @PreAuthorize("hasAnyAuthority('settings.read','settings.hrconfig.write','hrms.employee.write')")
+    // attendance.policy.manage (V143.10): people who edit the attendance policy
+    // on HR Configuration can read the page's other settings (view only).
+    @PreAuthorize("hasAnyAuthority('settings.read','settings.hrconfig.write','hrms.employee.write','attendance.policy.manage')")
     public HrConfigResponse getHrConfig(@RequestParam UUID companyId) {
         return hrConfig.getOrDefault(companyId);
     }

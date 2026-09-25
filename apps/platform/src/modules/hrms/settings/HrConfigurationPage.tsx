@@ -4,6 +4,9 @@
 // reminders), notice and retirement, the work week, late arrival, attendance
 // rules and the fiscal year. Each section says whether the system applies the
 // value or only saves it today (docs/Designs/STATIC-UI-TO-BUILD.md §8).
+// Late arrival + Attendance rules edit the company's attendance timing policy
+// (/v1/attendance/policy, attendance.policy.manage, V143.10) and the geofence /
+// work-from-home rules the server now applies.
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
@@ -15,6 +18,7 @@ import {
 import { useCompanies } from '../api/useOrg'
 import { useHrConfig, useUpdateHrConfig, type HrConfigResponse } from '../api/useSettings'
 import { useProbationConfig, useUpdateProbationConfig, useProbationReminders, useTriggerProbationScan } from '../api/useProbation'
+import { useAttendancePolicy, useSaveAttendancePolicy, type AttendancePolicy, type AllowancePeriod, type AfterAllowance } from '../api/useAttendanceReview'
 
 const DAYS = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']] as const
 const DAY_NAME: Record<number, string> = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' }
@@ -26,22 +30,32 @@ interface Form {
   probationMonths: string; reminderDays: string; autoExtend: boolean; autoExtendDays: string
   noticeDays: string; retirementAge: string
   weekStart: string; weekend: number[]
-  grace: string; autoDeduct: boolean
-  geofence: boolean; wfh: boolean
+  grace: string; start: string; halfDayLate: string; allowance: string; period: AllowancePeriod; after: AfterAllowance
+  geofence: boolean; wfh: boolean; fullDayHours: string; halfDayHours: string; earlyLeave: string
   fiscal: string
 }
 const num = (v: string) => (v === '' ? NaN : Number(v))
 const digits = (n: number) => (v: string) => v.replace(/\D/g, '').slice(0, n)
+/** Hours like "7.5": digits and one dot. */
+const hoursIn = (v: string) => v.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1').slice(0, 5)
+const AFTER: { value: AfterAllowance; label: string }[] = [
+  { value: 'KEEP_LATE', label: 'Keep it as Late' }, { value: 'HALF_DAY', label: 'Count it as a Half day' }, { value: 'LOSS_OF_PAY', label: 'Count it as loss of pay' },
+]
+const AFTER_WORD: Record<AfterAllowance, string> = { KEEP_LATE: 'late', HALF_DAY: 'a half day', LOSS_OF_PAY: 'loss of pay' }
 
-function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number; autoExtendEnabled: boolean; autoExtendDays: number } | undefined): Form {
+function formOf(c: HrConfigResponse | undefined, p: { reminderDaysBefore: number; autoExtendEnabled: boolean; autoExtendDays: number } | undefined, a: AttendancePolicy | undefined): Form {
   const pad = c?.employeeCodePadding ?? 4
   return {
     prefix: c?.employeeCodePrefix ?? 'EMP', next: String(c?.employeeCodeNextNumber ?? 1).padStart(pad, '0'),
     probationMonths: String(c?.probationPeriodMonths ?? ''), reminderDays: String(p?.reminderDaysBefore ?? ''), autoExtend: !!p?.autoExtendEnabled, autoExtendDays: String(p?.autoExtendDays ?? ''),
     noticeDays: String(c?.defaultNoticePeriodDays ?? ''), retirementAge: String(c?.retirementAge ?? ''),
     weekStart: String(c?.workweekStartDay ?? 1), weekend: Array.isArray(c?.weekendDays) && c!.weekendDays!.length ? [...c!.weekendDays!].sort() : [6, 7],
-    grace: String(c?.lateGraceMinutes ?? ''), autoDeduct: !!c?.enableLateAutoDeduction,
+    grace: String(a?.graceMinutes ?? c?.lateGraceMinutes ?? ''), start: (a?.defaultStartTime || '09:15').slice(0, 5),
+    halfDayLate: a?.halfDayLateMinutes != null ? String(a.halfDayLateMinutes) : '', allowance: String(a?.lateAllowanceCount ?? 0),
+    period: a?.lateAllowancePeriod || 'MONTH', after: a?.afterAllowanceAction || 'KEEP_LATE',
     geofence: !!c?.enforceGeofencingForMobile, wfh: !!c?.allowWorkFromHome,
+    fullDayHours: a?.fullDayMinHours != null ? String(a.fullDayMinHours) : '', halfDayHours: a?.halfDayMinHours != null ? String(a.halfDayMinHours) : '',
+    earlyLeave: String(a?.earlyLeaveMinutes ?? 0),
     fiscal: (c?.fiscalYearStart || 'APRIL').toUpperCase(),
   }
 }
@@ -50,6 +64,7 @@ export function HrConfigurationPage() {
   const location = useLocation()
   const canHrWrite = usePermission(P.SETTINGS_HRCONFIG_WRITE), canSettingsRead = usePermission(P.SETTINGS_READ)
   const canProbRead = usePermission(P.HRMS_PROBATION_CONFIG_READ), canProbWrite = usePermission(P.HRMS_PROBATION_CONFIG_UPDATE), canReminders = usePermission(P.HRMS_PROBATION_REMINDERS_READ)
+  const canPolicy = usePermission('attendance.policy.manage')
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState('')
   const co = companyId || companies[0]?.id || ''
@@ -57,15 +72,16 @@ export function HrConfigurationPage() {
   const probQ = useProbationConfig(canProbRead || canProbWrite)
   const reminders = useProbationReminders(canReminders)
   const scan = useTriggerProbationScan()
-  const saveHr = useUpdateHrConfig(), saveProb = useUpdateProbationConfig()
+  const policyQ = useAttendancePolicy(co || undefined)
+  const saveHr = useUpdateHrConfig(), saveProb = useUpdateProbationConfig(), savePolicy = useSaveAttendancePolicy()
   const { toast, show, dismiss } = useSettingsToast()
 
-  const saved = useMemo(() => formOf(hrQ.data, probQ.data), [hrQ.data, probQ.data])
+  const saved = useMemo(() => formOf(hrQ.data, probQ.data, policyQ.data), [hrQ.data, probQ.data, policyQ.data])
   const [edit, setEdit] = useState<Form | null>(null)
   const [tried, setTried] = useState(false)
   const [saving, setSaving] = useState(false)
   useEffect(() => { setEdit(null); setTried(false) }, [co])
-  const hrEdit = canHrWrite, probEdit = canProbWrite
+  const hrEdit = canHrWrite, probEdit = canProbWrite, polEdit = canPolicy && !!policyQ.data
   const f = edit || saved
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setEdit((cur) => ({ ...(cur || saved), [k]: v }))
 
@@ -77,8 +93,19 @@ export function HrConfigurationPage() {
     if (f.probationMonths !== '' && !(num(f.probationMonths) >= 0 && num(f.probationMonths) <= 24)) E.probationMonths = 'Between 0 and 24 months'
     if (f.noticeDays !== '' && !(num(f.noticeDays) >= 0 && num(f.noticeDays) <= 365)) E.noticeDays = 'Between 0 and 365 days'
     if (f.retirementAge !== '' && !(num(f.retirementAge) >= 40 && num(f.retirementAge) <= 80)) E.retirementAge = 'Between 40 and 80'
-    if (f.grace !== '' && !(num(f.grace) >= 0 && num(f.grace) <= 999)) E.grace = 'Between 0 and 999 minutes'
     if (f.weekend.length > 6) E.weekend = 'Leave at least one working day'
+  }
+  if (polEdit) {
+    if (!(num(f.grace) >= 0 && num(f.grace) <= 180)) E.grace = 'Between 0 and 180 minutes'
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(f.start)) E.start = 'Use 24-hour time, like 09:15'
+    if (f.halfDayLate !== '' && !(num(f.halfDayLate) >= 1 && num(f.halfDayLate) <= 720)) E.halfDayLate = 'Between 1 and 720 minutes, or empty'
+    else if (f.halfDayLate !== '' && num(f.halfDayLate) <= num(f.grace)) E.halfDayLate = 'Must be more than the grace period'
+    const maxAllow = f.period === 'WEEK' ? 7 : 31
+    if (!(num(f.allowance) >= 0 && num(f.allowance) <= maxAllow)) E.allowance = `Between 0 and ${maxAllow}`
+    if (f.fullDayHours !== '' && !(num(f.fullDayHours) > 0 && num(f.fullDayHours) <= 24)) E.fullDayHours = 'More than 0 and up to 24, or empty'
+    if (f.halfDayHours !== '' && !(num(f.halfDayHours) > 0 && num(f.halfDayHours) <= 24)) E.halfDayHours = 'More than 0 and up to 24, or empty'
+    else if (f.halfDayHours !== '' && f.fullDayHours !== '' && num(f.halfDayHours) >= num(f.fullDayHours)) E.halfDayHours = 'Must be less than the full-day minimum'
+    if (!(num(f.earlyLeave) >= 0 && num(f.earlyLeave) <= 600)) E.earlyLeave = 'Between 0 and 600 minutes'
   }
   if (probEdit) {
     if (!(num(f.reminderDays) >= 1 && num(f.reminderDays) <= 90)) E.reminderDays = 'Between 1 and 90 days'
@@ -88,13 +115,14 @@ export function HrConfigurationPage() {
   const dirty = !!edit && changed.length > 0
   const errKeys = Object.keys(E) as (keyof Form)[]
   const shown = (k: keyof Form) => (tried || changed.includes(k) ? E[k] : undefined)
-  const SECTION_OF: Record<string, string> = { prefix: 'ids', next: 'ids', probationMonths: 'probation', reminderDays: 'probation', autoExtendDays: 'probation', noticeDays: 'notice', retirementAge: 'notice', weekend: 'week', grace: 'late' }
+  const SECTION_OF: Record<string, string> = { prefix: 'ids', next: 'ids', probationMonths: 'probation', reminderDays: 'probation', autoExtendDays: 'probation', noticeDays: 'notice', retirementAge: 'notice', weekend: 'week', grace: 'late', start: 'late', halfDayLate: 'late', allowance: 'late', fullDayHours: 'attendance', halfDayHours: 'attendance', earlyLeave: 'attendance' }
   const secErr = (s: string) => errKeys.filter((k) => SECTION_OF[k] === s && shown(k)).length
 
   const doSave = async () => {
     if (errKeys.length) { setTried(true); const first = SECTION_OF[errKeys[0]]; document.getElementById('st-' + first)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return }
     setSaving(true)
-    const hrKeys: (keyof Form)[] = ['prefix', 'next', 'probationMonths', 'noticeDays', 'retirementAge', 'weekStart', 'weekend', 'grace', 'autoDeduct', 'geofence', 'wfh', 'fiscal']
+    const hrKeys: (keyof Form)[] = ['prefix', 'next', 'probationMonths', 'noticeDays', 'retirementAge', 'weekStart', 'weekend', 'geofence', 'wfh', 'fiscal']
+    const polKeys: (keyof Form)[] = ['grace', 'start', 'halfDayLate', 'allowance', 'period', 'after', 'fullDayHours', 'halfDayHours', 'earlyLeave']
     const probKeys: (keyof Form)[] = ['reminderDays', 'autoExtend', 'autoExtendDays']
     try {
       if (hrEdit && changed.some((k) => hrKeys.includes(k))) {
@@ -103,14 +131,24 @@ export function HrConfigurationPage() {
             employeeCodePrefix: f.prefix.toUpperCase(), employeeCodeNextNumber: Number(f.next), employeeCodePadding: f.next.length,
             probationPeriodMonths: f.probationMonths === '' ? undefined : Number(f.probationMonths), defaultNoticePeriodDays: f.noticeDays === '' ? undefined : Number(f.noticeDays),
             retirementAge: f.retirementAge === '' ? undefined : Number(f.retirementAge), workweekStartDay: Number(f.weekStart), weekendDays: f.weekend,
-            lateGraceMinutes: f.grace === '' ? undefined : Number(f.grace), enableLateAutoDeduction: f.autoDeduct, enforceGeofencingForMobile: f.geofence, allowWorkFromHome: f.wfh, fiscalYearStart: f.fiscal,
+            enforceGeofencingForMobile: f.geofence, allowWorkFromHome: f.wfh, fiscalYearStart: f.fiscal,
+          },
+        })
+      }
+      // The grace lives with the rest of the timing policy (the server keeps HR Configuration's copy in step).
+      if (polEdit && changed.some((k) => polKeys.includes(k))) {
+        await savePolicy.mutateAsync({
+          companyId: co, body: {
+            graceMinutes: Number(f.grace), defaultStartTime: f.start, halfDayLateMinutes: f.halfDayLate === '' ? null : Number(f.halfDayLate),
+            fullDayMinHours: f.fullDayHours === '' ? null : Number(f.fullDayHours), halfDayMinHours: f.halfDayHours === '' ? null : Number(f.halfDayHours),
+            earlyLeaveMinutes: Number(f.earlyLeave), lateAllowanceCount: Number(f.allowance), lateAllowancePeriod: f.period, afterAllowanceAction: f.after,
           },
         })
       }
       if (probEdit && changed.some((k) => probKeys.includes(k))) {
         await saveProb.mutateAsync({ reminderDaysBefore: Number(f.reminderDays), autoExtendEnabled: f.autoExtend, autoExtendDays: f.autoExtend ? Number(f.autoExtendDays) : Number(saved.autoExtendDays || 0) })
       }
-      await Promise.all([hrQ.refetch(), probQ.refetch()])
+      await Promise.all([hrQ.refetch(), probQ.refetch(), policyQ.refetch()])
       setEdit(null); setTried(false); show('ok', 'HR settings saved')
     } catch (e) {
       show('error', 'Couldn’t save HR settings', `${e instanceof Error && e.message ? 'Server: “' + e.message + '” ' : ''}Your changes are still here.`)
@@ -118,8 +156,8 @@ export function HrConfigurationPage() {
   }
 
   const readableHr = canHrWrite || canSettingsRead || !!hrQ.data
-  const access: 'edit' | 'view' | 'none' = hrEdit || probEdit ? 'edit' : readableHr || canProbRead ? 'view' : 'none'
-  const status: 'loading' | 'error' | 'live' = (co && hrQ.isLoading) || ((canProbRead || canProbWrite) && probQ.isLoading) ? 'loading' : hrQ.error && !hrQ.data ? 'error' : 'live'
+  const access: 'edit' | 'view' | 'none' = hrEdit || probEdit || polEdit ? 'edit' : readableHr || canProbRead ? 'view' : 'none'
+  const status: 'loading' | 'error' | 'live' = (co && (hrQ.isLoading || policyQ.isLoading)) || ((canProbRead || canProbWrite) && probQ.isLoading) ? 'loading' : hrQ.error && !hrQ.data ? 'error' : 'live'
   const preview = !E.prefix && !E.next ? `${f.prefix.toUpperCase()}-${f.next}` : '—'
   const weekendText = f.weekend.length ? f.weekend.map((d) => DAY_NAME[d]).join(' & ') : 'None'
   const nav: SettingsNavItem[] = [
@@ -127,11 +165,18 @@ export function HrConfigurationPage() {
     { key: 'probation', label: 'Probation', state: 'on', errors: secErr('probation') },
     { key: 'notice', label: 'Notice & exit', state: 'on', errors: secErr('notice') },
     { key: 'week', label: 'Work week', state: 'on', errors: secErr('week') },
-    { key: 'late', label: 'Late arrival', state: f.autoDeduct ? 'on' : 'off', errors: secErr('late') },
-    { key: 'attendance', label: 'Attendance rules', state: f.geofence || f.wfh ? 'on' : 'off' },
+    { key: 'late', label: 'Late arrival', state: 'on', errors: secErr('late') },
+    { key: 'attendance', label: 'Attendance rules', state: 'on', errors: secErr('attendance') },
     { key: 'fiscal', label: 'Fiscal year', state: 'on' },
   ]
-  const ro = !hrEdit, pro = !probEdit
+  const ro = !hrEdit, pro = !probEdit, pol = !polEdit
+  const per = f.period === 'WEEK' ? 'week' : 'month'
+  const allowN = Number(f.allowance) || 0
+  const lateSummary = `${f.grace || '0'} minutes’ grace · ${allowN ? `${allowN} late arrival${allowN === 1 ? '' : 's'} a ${per} allowed, then ${AFTER_WORD[f.after]}` : `every late arrival counts as ${AFTER_WORD[f.after]}`}`
+  const hoursSummary = [f.fullDayHours ? `${f.fullDayHours}h for a full day` : '', f.halfDayHours ? `${f.halfDayHours}h for a half day` : ''].filter(Boolean).join(' · ') || 'No minimum hours'
+  const selectBox = (label: string, value: string, onChange: (v: string) => void, options: { value: string; label: string }[], readOnly: boolean) => readOnly
+    ? <SettingsValue label={label} value={options.find((o) => o.value === value)?.label || value} />
+    : <div style={{ display: 'grid', gap: 6 }}><span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>{label}</span><HrSelect value={value} onChange={onChange} options={options} /></div>
 
   return (
     <DesignFrame>
@@ -217,18 +262,33 @@ export function HrConfigurationPage() {
           <SettingsNote tone="amber">The leave form and leave calendar treat these days as off. The server still counts leave with Saturday and Sunday off, and attendance uses each person’s own weekly offs (set on their record).</SettingsNote>
         </SettingsSection>
 
-        <SettingsSection id="late" icon="clock" title="Late arrival" summary={`${f.grace || '0'} minutes’ grace · automatic deduction ${f.autoDeduct ? 'on' : 'off'}`}>
+        <SettingsSection id="late" icon="clock" title="Late arrival" summary={lateSummary}>
           <SettingsGrid>
-            <SettingsInput label="Company grace period" value={f.grace} onChange={(v) => set('grace', digits(3)(v))} readOnly={ro} error={shown('grace')} suffix="minutes" inputMode="numeric" />
+            <SettingsInput label="Company grace period" value={f.grace} onChange={(v) => set('grace', digits(3)(v))} readOnly={pol} error={shown('grace')} suffix="minutes" inputMode="numeric" hint="A shift with its own grace (more than 0) uses that instead." />
+            <SettingsInput label="Start time without a shift" value={f.start} onChange={(v) => set('start', v.replace(/[^\d:]/g, '').slice(0, 5))} readOnly={pol} error={shown('start')} placeholder="09:15" mono hint="People with no shift are late after this time plus the grace." />
+            <SettingsInput label="Half day if later than" value={f.halfDayLate} onChange={(v) => set('halfDayLate', digits(3)(v))} readOnly={pol} error={shown('halfDayLate')} suffix="minutes" inputMode="numeric" placeholder="Off" hint="Minutes after the start time. Leave empty to turn this off." />
           </SettingsGrid>
-          <SettingsToggleRow label="Deduct late minutes automatically" detail="Turn late arrivals into pay deductions." on={f.autoDeduct} onToggle={() => set('autoDeduct', !f.autoDeduct)} readOnly={ro} />
-          <SettingsNote tone="amber">Saved, but not applied yet. A check-in is late after its shift’s start plus that shift’s own grace (Shift Rules; 09:30 when no shift is assigned). Late marks turn into loss of pay through Payroll Settings → late-mark threshold.</SettingsNote>
+          <SettingsGrid>
+            <SettingsInput label="Late arrivals allowed" value={f.allowance} onChange={(v) => set('allowance', digits(2)(v))} readOnly={pol} error={shown('allowance')} suffix={`a ${per}`} inputMode="numeric" hint="These count as present. 0 means no allowance." />
+            {selectBox('Allowance resets every', f.period, (v) => set('period', v as AllowancePeriod), [{ value: 'WEEK', label: 'Week' }, { value: 'MONTH', label: 'Month' }], pol)}
+            {selectBox('After the allowance is used', f.after, (v) => set('after', v as AfterAllowance), AFTER, pol)}
+          </SettingsGrid>
+          <SettingsNote>A check-in after the start time plus the grace is late. {allowN ? `The first ${allowN} late arrival${allowN === 1 ? '' : 's'} each ${per} count as present; after that, each one counts as ${AFTER_WORD[f.after]}.` : `Each late arrival counts as ${AFTER_WORD[f.after]}.`} Arriving later than the half-day limit is always a half day. Days a reviewer excuses (Attendance → Daily Tracking → Review) don’t use up the allowance. Applies to the roster, muster roll, dashboards and everyone’s attendance history.</SettingsNote>
+          {f.after !== 'KEEP_LATE' && <SettingsNote tone="amber">{f.after === 'LOSS_OF_PAY' ? 'Warning: late arrivals past the allowance count as a full day’s loss of pay. Payroll can deduct pay for them.' : 'Warning: late arrivals past the allowance count as half days. Payroll can deduct half a day’s pay for each one.'}</SettingsNote>}
+          {canPolicy && !policyQ.data && policyQ.isError && <SettingsNote tone="amber">The attendance policy didn’t load, so these fields can’t be changed right now. Reload the page to try again.</SettingsNote>}
+          {policyQ.data?.updatedAt && <SettingsNote>Last changed {new Date(policyQ.data.updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}{policyQ.data.updatedByName ? ` by ${policyQ.data.updatedByName}` : ''}.</SettingsNote>}
         </SettingsSection>
 
-        <SettingsSection id="attendance" icon="mapPin" title="Attendance rules" summary={`Geofencing on mobile ${f.geofence ? 'required' : 'not required'} · work from home ${f.wfh ? 'allowed' : 'not allowed'}`}>
-          <SettingsToggleRow label="Require geofencing on mobile" detail="Mobile check-ins must be inside the branch’s geofence." on={f.geofence} onToggle={() => set('geofence', !f.geofence)} readOnly={ro} />
-          <SettingsToggleRow label="Allow work from home" detail="People can request work-from-home days." on={f.wfh} onToggle={() => set('wfh', !f.wfh)} readOnly={ro} />
-          <SettingsNote tone="amber">Saved, but not applied from here yet. Whether a check-in outside the attendance zone is blocked is one server-wide setting, and anyone allowed to request work from home can do so. An approved work-from-home day lets that person check in from anywhere.</SettingsNote>
+        <SettingsSection id="attendance" icon="mapPin" title="Attendance rules" summary={`Geofencing on mobile ${f.geofence ? 'required' : 'not required'} · work from home ${f.wfh ? 'allowed' : 'not allowed'} · ${hoursSummary}`}>
+          <SettingsToggleRow label="Require geofencing on mobile" detail="Mobile check-ins outside the branch’s zone (or the person’s own zone) are refused. When off, they’re accepted and listed for review." on={f.geofence} onToggle={() => set('geofence', !f.geofence)} readOnly={ro} />
+          <SettingsToggleRow label="Allow work from home" detail="People can request work-from-home days. When off, nobody in this company can request one." on={f.wfh} onToggle={() => set('wfh', !f.wfh)} readOnly={ro} />
+          <SettingsGrid>
+            <SettingsInput label="Minimum hours for a full day" value={f.fullDayHours} onChange={(v) => set('fullDayHours', hoursIn(v))} readOnly={pol} error={shown('fullDayHours')} suffix="hours" inputMode="decimal" placeholder="Off" hint="Fewer hours between check-in and check-out is a half day." />
+            <SettingsInput label="Minimum hours for a half day" value={f.halfDayHours} onChange={(v) => set('halfDayHours', hoursIn(v))} readOnly={pol} error={shown('halfDayHours')} suffix="hours" inputMode="decimal" placeholder="Off" hint="Fewer hours is an absence. Leave empty to turn off." />
+            <SettingsInput label="Early leave after" value={f.earlyLeave} onChange={(v) => set('earlyLeave', digits(3)(v))} readOnly={pol} error={shown('earlyLeave')} suffix="minutes" inputMode="numeric" hint="Minutes before the shift ends. 0 means any time before the end." />
+          </SettingsGrid>
+          <SettingsNote>An approved work-from-home day still lets that person check in from anywhere, and requests already approved still count if you turn work from home off. Early leaving is shown for review; it doesn’t change the day by itself.</SettingsNote>
+          {(f.fullDayHours || f.halfDayHours) && <SettingsNote tone="amber">Warning: days under the minimum hours count as half days or absences, which payroll can deduct. People who forget to check out aren’t judged on hours; they show as “No check-out” for review.</SettingsNote>}
         </SettingsSection>
 
         <SettingsSection id="fiscal" icon="calendar" title="Fiscal year" summary={`Starts in ${title(f.fiscal)}`}>

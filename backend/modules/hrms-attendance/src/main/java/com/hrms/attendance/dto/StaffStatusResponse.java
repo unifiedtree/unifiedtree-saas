@@ -42,7 +42,28 @@ public record StaffStatusResponse(
         Integer graceMinutes,
         // Minutes between the scheduled start and the actual check-in, set only
         // when the record's status is LATE (grace already decided lateness).
-        Integer lateByMinutes
+        Integer lateByMinutes,
+        // ── V143.10: the day's effective status (company attendance policy +
+        // any reviewer's change). `status` above keeps the mobile app's words.
+        // PRESENT / LATE / HALF_DAY / ABSENT / NOT_MARKED / ON_LEAVE / HOLIDAY /
+        // WEEKLY_OFF / NOT_TRACKED; null when the policy service is unavailable.
+        String effectiveStatus,
+        // Plain-English reason for the effective status.
+        String statusNote,
+        // True when a reviewer set or excused the day by hand.
+        boolean statusManual,
+        // Late past the allowance and the company counts that as loss of pay.
+        boolean lossOfPay,
+        // Late, but within the company's late allowance, so it counts as present.
+        boolean withinAllowance,
+        // Checked in outside the attendance zone (allowed by the company rule).
+        boolean outsideGeofence,
+        // HR rejected the face punch ("Not them"), so it doesn't count.
+        boolean punchRejected,
+        // Minutes before the shift end the person left (early leave), else null.
+        Integer earlyByMinutes,
+        // Minutes between check-in and check-out, else null.
+        Integer workedMinutes
 ) {
     /** Minutes late for a LATE record against its scheduled start; null otherwise. */
     public static Integer lateBy(String status, Instant checkInAt, Instant expectedCheckInAt) {

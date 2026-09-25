@@ -52,6 +52,9 @@ public class WfhController {
     private final ApproverFallbackResolver approverFallbackResolver;
     @org.springframework.beans.factory.annotation.Autowired
     private com.hrms.api.attendance.ApproverScopeGuard approverScopeGuard;
+    /** Per-company "Allow work from home" rule (HR Configuration → Attendance rules). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.unifiedtree.settings.service.HrConfigurationService hrConfiguration;
 
     public WfhController(WfhService service,
                          EmployeeRepository employeeRepository,
@@ -74,6 +77,12 @@ public class WfhController {
         UUID employeeId = extractEmployeeId(jwt);
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee", employeeId));
+        if (!companyAllowsWfh(employee.getCompanyId())) {
+            throw new BusinessRuleException(
+                    "Work from home is turned off for your company, so you can't request it here. "
+                            + "Talk to HR if you need to work from home.",
+                    "WFH_NOT_ALLOWED");
+        }
 
         // Approver resolution — identical chain to LeaveController.apply so the
         // two request types route the same way. See audit P0-1: never persist
@@ -114,6 +123,16 @@ public class WfhController {
                 approverId, java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
         WfhRequestResponse created = service.apply(employeeId, request, approverId);
         return ResponseEntity.status(HttpStatus.CREATED).body(enrichOne(created));
+    }
+
+    /** The company's "Allow work from home" rule; allowed when it can't be read (the old behaviour). */
+    private boolean companyAllowsWfh(UUID companyId) {
+        if (hrConfiguration == null || companyId == null) return true;
+        try {
+            return hrConfiguration.getOrDefault(companyId).allowWorkFromHome();
+        } catch (RuntimeException e) {
+            return true;
+        }
     }
 
     @Operation(summary = "Get my WFH requests")
