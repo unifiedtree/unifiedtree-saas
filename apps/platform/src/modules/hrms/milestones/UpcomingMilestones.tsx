@@ -82,7 +82,7 @@ const Column: React.FC<ColumnProps> = ({
   const shown = all ? items : items.slice(0, MAX_ROWS)
   return (
   <div className="min-w-0 flex-1" data-milestone-list={kind}>
-    <div className="mb-1 flex items-center gap-2">
+    <div className="mb-1 flex flex-wrap items-center gap-2">
       <Icon size={14} className="shrink-0 text-primary" aria-hidden />
       <h3 className="min-w-0 truncate text-xs font-bold uppercase tracking-wide text-text-secondary">{title}</h3>
       {!isLoading && items.length > 0 && (

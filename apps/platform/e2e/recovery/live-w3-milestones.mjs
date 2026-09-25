@@ -133,6 +133,8 @@ try {
   // ── 1. API: each list follows its range ───────────────────────────────────
   const ms = async (u, q) => u.call(`/v1/hrms/milestones?${new URLSearchParams(q)}`)
   const ids = (list) => new Set((list || []).map((m) => m.employeeId))
+  /** The directory returns employee records (id), the milestones list people (employeeId). */
+  const dirIds = (list) => new Set((list || []).map((e) => e.id))
   for (const [label, r] of Object.entries(PRESETS)) {
     const b = await ms(owner, { birthdayFrom: r.from, birthdayTo: r.to })
     const want = [F.bSoon, F.bNext, F.b3, F.b6, F.bDec, F.bJan, F.bLeap].filter((f) => occurrence(f.dateOfBirth, r))
@@ -183,11 +185,11 @@ try {
   for (const [kind, list, r] of [['birthday', 'birthdays', yearEnd], ['birthday', 'birthdays', PRESETS['Next 3 months']], ['anniversary', 'anniversaries', PRESETS['Next 3 months']], ['retirement', 'retirements', PRESETS['Next 6 months']]]) {
     const d = await dir(owner, kind, r)
     const m = await ms(owner, { [`${kind}From`]: r.from, [`${kind}To`]: r.to })
-    const a = [...ids(d.json?.content)].sort().join(','), b = [...ids(m.json?.[list])].sort().join(',')
+    const a = [...dirIds(d.json?.content)].sort().join(','), b = [...ids(m.json?.[list])].sort().join(',')
     check(`View all: the directory's ${kind} filter for ${r.from}..${r.to} is the card's list`, d.status === 200 && a === b && a.length > 0, `dir=${a.split(',').length} card=${b.split(',').length}`)
   }
   const dirOld = await owner.call('/v1/hrms/employees?milestone=birthday&pageSize=200')
-  check('View all without a range keeps the 14-day window', dirOld.status === 200 && ids(dirOld.json?.content).has(F.bSoon.id) && !ids(dirOld.json?.content).has(F.b3.id))
+  check('View all without a range keeps the 14-day window', dirOld.status === 200 && dirIds(dirOld.json?.content).has(F.bSoon.id) && !dirIds(dirOld.json?.content).has(F.b3.id))
   const dirBad = await owner.call(`/v1/hrms/employees?milestone=birthday&milestoneFrom=${today}&milestoneTo=${addMonths(today, 13)}`)
   check('View all refuses a range over 12 months (422)', dirBad.status === 422, `status=${dirBad.status}`)
   const due = await owner.call(`/v1/hrms/retirements/due?from=${PRESETS['Next 3 months'].from}&to=${PRESETS['Next 3 months'].to}&companyId=${company}`)
@@ -374,11 +376,28 @@ try {
     const menu = page.getByRole('menu').last()
     const clipped = await menu.evaluate((m) => { const r = m.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.bottom - 6); return !(e && m.contains(e)) })
     check('UI employee: the range menu is not cut off by the card', !clipped)
-    await page.locator('[data-milestones-staff-card]').screenshot({ path: `${shots}/milestones-staff-1440.png` })
+    // The card and the open menu below it, in one picture.
+    const sb = await page.locator('[data-milestones-staff-card]').boundingBox(), mb = await menu.boundingBox()
+    if (sb && mb) await page.screenshot({ path: `${shots}/milestones-staff-1440.png`, clip: { x: sb.x, y: sb.y, width: sb.width, height: Math.max(sb.y + sb.height, mb.y + mb.height + 8) - sb.y } })
     await page.keyboard.press('Escape')
     check('UI employee: no page errors', errors.length === 0, errors.slice(0, 3).join(' | '))
     check('UI employee: no failed milestone calls', failed.length === 0, failed.slice(0, 5).join(' | '))
     await done('employee')
+  }
+
+  // Employee on a phone.
+  {
+    const { page, errors, done } = await session('reader@unifiedtree.demo', 390)
+    await page.goto(base + '/dashboard')
+    const staff = page.locator('[data-milestones-staff-card]')
+    await staff.waitFor({ timeout: 30_000 })
+    await settle(page)
+    await staff.scrollIntoViewIfNeeded()
+    await staff.screenshot({ path: `${shots}/milestones-staff-390.png` })
+    const sb = await staff.boundingBox()
+    check('UI employee phone: the staff card fits 390 wide', sb && sb.x >= 0 && sb.x + sb.width <= 390, JSON.stringify(sb))
+    check('UI employee phone: no page errors', errors.length === 0, errors.slice(0, 3).join(' | '))
+    await done('employee (phone)')
   }
 } catch (e) {
   check('run completed without an exception', false, String(e?.stack || e).split(/\r?\n/).slice(0, 3).join(' | '))

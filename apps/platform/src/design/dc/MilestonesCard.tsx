@@ -78,11 +78,11 @@ const TONES: Record<RangeTone, { bg: string; fg: string; border: string }> = {
   info: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe' },
   ok: { bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0' },
 }
-/** Short dates for the menu: no year when the range sits in this year. */
+/** Short dates for the menu: no year when the range sits in this year, only the end's year when it runs into the next. */
 function menuDates(r: DateRange, today: string): string {
   const dm = (iso: string) => `${dt(iso).getDate()} ${MON[dt(iso).getMonth()]}`
-  const thisYear = r.from.slice(0, 4) === today.slice(0, 4) && r.to.slice(0, 4) === today.slice(0, 4)
-  if (!thisYear) return rangeLabel(r)
+  const y = today.slice(0, 4), thisYear = r.from.slice(0, 4) === y && r.to.slice(0, 4) === y
+  if (!thisYear) return r.from.slice(0, 4) === y && r.from !== r.to ? `${dm(r.from)} – ${dm(r.to)} ${r.to.slice(0, 4)}` : rangeLabel(r)
   if (r.from === r.to) return dm(r.from)
   return r.from.slice(0, 7) === r.to.slice(0, 7) ? `${dt(r.from).getDate()} – ${dm(r.to)}` : `${dm(r.from)} – ${dm(r.to)}`
 }
@@ -142,7 +142,7 @@ export function MilestoneRangeMenu({ kind, choice, today, tone = 'ok', onChange 
       {open && (
         <div
           ref={listRef} role="menu" aria-label="Choose a date range"
-          style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 40, width: 244, maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', padding: 6, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, boxShadow: '0 18px 40px -14px rgba(15,23,42,.28), 0 2px 6px rgba(15,23,42,.06)', display: 'grid', gap: 2 }}
+          style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 40, width: 268, maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', padding: 6, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, boxShadow: '0 18px 40px -14px rgba(15,23,42,.28), 0 2px 6px rgba(15,23,42,.06)', display: 'grid', gap: 2 }}
         >
           {options.map((o) => {
             const on = o.value === choice.preset
@@ -152,7 +152,7 @@ export function MilestoneRangeMenu({ kind, choice, today, tone = 'ok', onChange 
                 key={o.value} type="button" role="menuitemradio" aria-checked={on} className="ms-opt" onClick={() => pick(o.value)}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', border: 0, borderRadius: 8, background: on ? '#ecfdf5' : 'transparent', color: on ? '#0a5240' : '#0f172a', fontFamily: 'inherit', fontSize: 13, fontWeight: on ? 700 : 500, textAlign: 'left', cursor: 'pointer' }}
               >
-                <span style={{ flex: 1, minWidth: 0 }}>{o.label}</span>
+                <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap' }}>{o.label}</span>
                 <span style={{ fontSize: 11.5, fontWeight: 500, color: '#64748b', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{dates}</span>
                 <span style={{ width: 14, display: 'inline-flex', color: '#0f6e56' }}>{on ? dashIcon('check', 14) : null}</span>
               </button>
@@ -209,7 +209,7 @@ function Column({ kind, title, icon, tone, choice, col, today, onChoice, onNavig
   const note: CSSProperties = { margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.5, color: '#64748b' }
   return (
     <div data-milestone-list={kind} style={{ minWidth: 0, background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingBottom: 10, marginBottom: 6, borderBottom: '1px solid #e2e8f0' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px', paddingBottom: 10, marginBottom: 6, borderBottom: '1px solid #e2e8f0' }}>
         <p style={{ margin: 0, minWidth: 0, display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
           <span style={{ color: '#0f6e56', display: 'inline-flex' }}>{dashIcon(icon, 15)}</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
@@ -220,7 +220,7 @@ function Column({ kind, title, icon, tone, choice, col, today, onChoice, onNavig
       {choice.preset === 'custom'
         ? <MilestoneCustomRange value={range} today={today} onChange={(r) => onChoice({ preset: 'custom', ...r })} />
         : <p data-milestone-range style={{ margin: '0 0 2px', fontSize: 11.5, color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{rangeLabel(range)}</p>}
-      <div style={{ display: 'grid', flex: 1, alignContent: 'start' }} aria-busy={col.isLoading || undefined}>
+      <div style={{ display: 'grid', flex: 1, alignContent: 'start', ...(all && rows.length > MAX_ROWS ? { maxHeight: 440, overflowY: 'auto', padding: '0 6px', margin: '0 -6px' } : {}) }} aria-busy={col.isLoading || undefined}>
         {col.isLoading ? (
           <div role="status" aria-label={`Loading ${title.toLowerCase()}`} style={{ display: 'grid', gap: 10, padding: '8px 0' }}>
             {[0, 1, 2].map((i) => <SkeletonBlock key={i} style={{ height: 32, borderRadius: 8 }} />)}
