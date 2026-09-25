@@ -46,6 +46,10 @@ export type AppNotificationType =
   // TODO(billing-ceiling): drop when the Razorpay ceiling flow retires the
   // grandfather.
   | 'BILLING_OVER_CAP'
+  // Skill self-assessment (V143.21): approver asked to decide; employee told the outcome.
+  | 'SKILL_ASSESSMENT_SUBMITTED'
+  | 'SKILL_ASSESSMENT_APPROVED'
+  | 'SKILL_ASSESSMENT_REJECTED'
   | 'GENERAL'
 
 /** Raw server DTO (see {@code NotificationDtos.NotificationDto}). */
@@ -211,6 +215,10 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   // Grandfathered over-cap warning routes to /plan where the amber banner
   // (Plan.tsx) explains the "set up autopay for the extras" action.
   if (type === 'BILLING_OVER_CAP') return '/plan'
+
+  // Skill self-assessment: approvers work the queue, employees see the outcome under My training.
+  if (type === 'SKILL_ASSESSMENT_SUBMITTED') return '/hrms/learning?view=approvals'
+  if (type === 'SKILL_ASSESSMENT_APPROVED' || type === 'SKILL_ASSESSMENT_REJECTED') return '/hrms/learning?view=my'
 
   if (type === 'WELCOME') return '/'
   // Unknown / not-yet-mapped types: land the user on their own workspace
