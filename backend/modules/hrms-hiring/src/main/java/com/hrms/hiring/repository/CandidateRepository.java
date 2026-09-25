@@ -12,6 +12,20 @@ public interface CandidateRepository extends JpaRepository<Candidate, UUID> {
 
     List<Candidate> findByRequisitionIdOrderByCreatedAtAsc(UUID requisitionId);
 
+    /**
+     * Every candidate across requisitions (the pipeline's "All roles" view and
+     * the dashboard's stage counts), optionally for one company and one stage.
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            select c from Candidate c
+             where (:companyId is null or c.requisitionId in
+                    (select r.id from JobRequisition r where r.companyId = :companyId))
+               and (:stage is null or c.stage = :stage)
+             order by c.createdAt asc
+            """)
+    List<Candidate> findAcrossRequisitions(@org.springframework.data.repository.query.Param("companyId") UUID companyId,
+                                           @org.springframework.data.repository.query.Param("stage") com.hrms.hiring.enums.CandidateStage stage);
+
     long countByRequisitionId(UUID requisitionId);
 
     /** Row lock for conversion, so two clicks cannot create two employees. */

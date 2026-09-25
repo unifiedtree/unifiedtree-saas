@@ -89,11 +89,9 @@ const Integrations = lazyPage(() => import('@/modules/hrms/Integrations').then(m
 const NotificationTemplates = lazyPage(() => import('@/modules/hrms/NotificationTemplates').then(m => ({ default: m.NotificationTemplates })))
 const MySalaryStructure = lazyPage(() => import('@/modules/hrms/payroll/MySalaryStructure').then(m => ({ default: m.MySalaryStructure })))
 const EmployeePayslips = lazyPage(() => import('@/modules/hrms/payroll/EmployeePayslips').then(m => ({ default: m.EmployeePayslips })))
-const LetterTemplates = lazyPage(() => import('@/modules/hrms/letters/LetterTemplates').then(m => ({ default: m.LetterTemplates })))
+const LettersHub = lazyPage(() => import('@/modules/hrms/letters/LettersHub').then(m => ({ default: m.LettersHub })))
 const LetterTemplateEditor = lazyPage(() => import('@/modules/hrms/letters/LetterTemplateEditor').then(m => ({ default: m.LetterTemplateEditor })))
-const GeneratedLetters = lazyPage(() => import('@/modules/hrms/letters/GeneratedLetters').then(m => ({ default: m.GeneratedLetters })))
 const GeneratedLetterDetail = lazyPage(() => import('@/modules/hrms/letters/GeneratedLetterDetail').then(m => ({ default: m.GeneratedLetterDetail })))
-const Distributions = lazyPage(() => import('@/modules/hrms/letters/Distributions').then(m => ({ default: m.Distributions })))
 const DistributionDetail = lazyPage(() => import('@/modules/hrms/letters/DistributionDetail').then(m => ({ default: m.DistributionDetail })))
 const HeadcountReport = lazyPage(() => import('@/modules/hrms/reports/HeadcountReport').then(m => ({ default: m.HeadcountReport })))
 const AttritionReport = lazyPage(() => import('@/modules/hrms/reports/AttritionReport').then(m => ({ default: m.AttritionReport })))
@@ -788,13 +786,14 @@ const ROUTE_TREE = (
             </RouteGuard>
           }
         />
+        {/* One Letters hub; /templates, /generated, /distributions and /my open its views. */}
         <Route
-          path="/hrms/letters/templates"
+          path="/hrms/letters/:view?"
           element={
-            <RouteGuard anyOf={[P.HRMS_LETTERS_TEMPLATE_READ]}>
+            <RouteGuard anyOf={[P.HRMS_LETTERS_TEMPLATE_READ, P.HRMS_LETTERS_READ, P.HRMS_LETTERS_READ_SELF, P.HRMS_LETTERS_DISTRIBUTE]}>
               <ModuleGate moduleKey="hrms">
                 <React.Suspense fallback={null}>
-                  <LetterTemplates />
+                  <LettersHub />
                 </React.Suspense>
               </ModuleGate>
             </RouteGuard>
@@ -813,36 +812,12 @@ const ROUTE_TREE = (
           }
         />
         <Route
-          path="/hrms/letters/generated"
-          element={
-            <RouteGuard anyOf={[P.HRMS_LETTERS_READ, P.HRMS_LETTERS_READ_SELF]}>
-              <ModuleGate moduleKey="hrms">
-                <React.Suspense fallback={null}>
-                  <GeneratedLetters />
-                </React.Suspense>
-              </ModuleGate>
-            </RouteGuard>
-          }
-        />
-        <Route
           path="/hrms/letters/generated/:id"
           element={
             <RouteGuard anyOf={[P.HRMS_LETTERS_READ, P.HRMS_LETTERS_READ_SELF]}>
               <ModuleGate moduleKey="hrms">
                 <React.Suspense fallback={null}>
                   <GeneratedLetterDetail />
-                </React.Suspense>
-              </ModuleGate>
-            </RouteGuard>
-          }
-        />
-        <Route
-          path="/hrms/letters/distributions"
-          element={
-            <RouteGuard anyOf={[P.HRMS_LETTERS_DISTRIBUTE, P.HRMS_LETTERS_READ]}>
-              <ModuleGate moduleKey="hrms">
-                <React.Suspense fallback={null}>
-                  <Distributions />
                 </React.Suspense>
               </ModuleGate>
             </RouteGuard>

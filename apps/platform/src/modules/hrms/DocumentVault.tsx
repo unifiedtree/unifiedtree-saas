@@ -64,7 +64,7 @@ export const DocumentVault: React.FC = () => {
         {views.length === 0 && (canWrite ? <Note>Use “Add document” to store a document on someone’s file.</Note> : <State kind="empty" icon="lock" title="No document access" description="Ask an admin if you should see documents." />)}
         {tab === 'my' && canReadSelf && <MyDocumentsTab />}
         {tab === 'all' && canRead && <AllDocumentsTab toast={show} />}
-        {tab === 'letters' && canReadTemplates && <LetterTemplates embedded />}
+        {tab === 'letters' && canReadTemplates && <LetterTemplates />}
       </div>
       {adding && <AddDocumentDrawer onClose={() => setAdding(false)} toast={show} />}
       {bulk && <BulkUploadDrawer onClose={() => setBulk(false)} toast={show} />}

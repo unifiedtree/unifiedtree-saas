@@ -1,17 +1,15 @@
-import React, { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, FileText, Download, Eye, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { FileText, Download, Eye, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
-import { Can, P, usePermission } from '@unifiedtree/sdk'
-import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
-import { ModulePage, State, stamp } from '@/design/module/ModuleKit'
+import { HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { State, stamp } from '@/design/module/ModuleKit'
 import {
   useGeneratedLetters,
   useMyLetters,
   downloadLetterPdf,
 } from './api/useLetters'
 import type { GeneratedLetterDto, LetterType, LetterStatus } from './api/useLetters'
-import { GenerateLetterDrawer } from './GenerateLetterDrawer'
 
 const TYPE_TONE: Record<LetterType, PillTone> = {
   OFFER: 'info', APPOINTMENT: 'ok', RELIEVING: 'orange', EXPERIENCE: 'purple', SALARY_REVISION: 'green', CUSTOM: 'gray',
@@ -26,48 +24,30 @@ const STATUS_LABEL: Record<LetterStatus, string> = {
   GENERATED: 'Generated', SENT: 'Sent', VIEWED: 'Viewed', SIGNED: 'Signed', VOID: 'Void',
 }
 
-export const GeneratedLetters: React.FC = () => {
+/**
+ * Generated letters as a table with paging. `mine` lists the signed-in person's
+ * own letters (/letters/my, hrms.letters.read.self); otherwise every letter in
+ * the workspace (/letters/generated, hrms.letters.read). The Letters hub picks
+ * which one, so an employee never calls the admin endpoint.
+ */
+export function GeneratedLettersList({ mine }: { mine: boolean }) {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const employeeIdParam = searchParams.get('employeeId') ?? ''
   const [page, setPage] = useState(0)
-  const [generateOpen, setGenerateOpen] = useState(false)
-
-  // Deep-link from EmployeeDetail: ?employeeId=<id> opens the modal pre-filled.
-  useEffect(() => {
-    if (employeeIdParam) setGenerateOpen(true)
-  }, [employeeIdParam])
-
-  const closeGenerate = () => {
-    setGenerateOpen(false)
-    if (employeeIdParam) {
-      searchParams.delete('employeeId')
-      setSearchParams(searchParams, { replace: true })
-    }
-  }
-
-  // Admins read the whole tenant via /letters/generated (hrms.letters.read); an
-  // EMPLOYEE (read.self only) must use /letters/my, or the admin endpoint 403s.
-  const canReadAll = usePermission(P.HRMS_LETTERS_READ)
-  const canReadSelf = usePermission(P.HRMS_LETTERS_READ_SELF)
-  const canView = canReadAll || canReadSelf
-  const adminQuery = useGeneratedLetters(page, { enabled: canReadAll })
-  const myQuery = useMyLetters(page, { enabled: !canReadAll && canReadSelf })
-  const { data, isLoading, error, refetch } = canReadAll ? adminQuery : myQuery
+  const adminQuery = useGeneratedLetters(page, { enabled: !mine })
+  const myQuery = useMyLetters(page, { enabled: mine })
+  const { data, isLoading, error, refetch } = mine ? myQuery : adminQuery
   const letters: GeneratedLetterDto[] = data?.content ?? []
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
 
   return (
-    <ModulePage crumb="Letters" title={canReadAll ? 'Generated letters' : 'My letters'}
-      subtitle={data ? `${total} ${total === 1 ? 'letter' : 'letters'}${canReadAll ? '' : ' issued to you'}` : undefined}
-      actions={<Can code={P.HRMS_LETTERS_GENERATE}><HrButton onClick={() => setGenerateOpen(true)}><Plus size={15} /> Generate letter</HrButton></Can>}>
+    <>
       {isLoading ? (
         <State kind="loading" height={220} />
       ) : error ? (
         <State kind="error" title="Couldn’t load letters" description={(error as Error).message} onRetry={() => refetch()} />
       ) : letters.length === 0 ? (
-        <State kind="empty" icon="fileText" title={canReadAll ? 'No letters generated yet' : 'No letters yet'} description={canReadAll ? 'Use “Generate letter” to create one from a template.' : 'Letters HR issues to you (offer, appointment, experience…) appear here.'} />
+        <State kind="empty" icon="fileText" title={mine ? 'No letters yet' : 'No letters generated yet'} description={mine ? 'Letters HR issues to you (offer, appointment, experience…) appear here.' : 'Use “Generate letter” to create one from a template.'} />
       ) : (
         <TableCard
           footer={total > 0 ? (
@@ -111,13 +91,11 @@ export const GeneratedLetters: React.FC = () => {
                     <td><HrStatusPill tone={STATUS_TONE[letter.status] ?? 'gray'}>{STATUS_LABEL[letter.status] ?? letter.status}</HrStatusPill></td>
                     <td>
                       <div className="flex items-center justify-end gap-1">
-                        {canView && (
-                          <button onClick={() => navigate(`/hrms/letters/generated/${letter.id}`)} title="View" className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-bg-base hover:text-text-primary">
-                            <Eye size={14} />
-                          </button>
-                        )}
+                        <button onClick={() => navigate(`/hrms/letters/generated/${letter.id}`)} title="View" aria-label="View letter" className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-bg-base hover:text-text-primary">
+                          <Eye size={14} />
+                        </button>
                         {letter.hasPdf && (
-                          <button onClick={() => downloadLetterPdf(letter.id, `letter-${letter.type.toLowerCase()}-${letter.id.slice(0, 8)}.pdf`).catch(error => toast.error(error instanceof Error ? error.message : 'Unable to download PDF'))} title="Download PDF" className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-bg-base hover:text-text-primary">
+                          <button onClick={() => downloadLetterPdf(letter.id, `letter-${letter.type.toLowerCase()}-${letter.id.slice(0, 8)}.pdf`).catch(error => toast.error(error instanceof Error ? error.message : 'Unable to download PDF'))} title="Download PDF" aria-label="Download PDF" className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-bg-base hover:text-text-primary">
                             <Download size={14} />
                           </button>
                         )}
@@ -130,10 +108,6 @@ export const GeneratedLetters: React.FC = () => {
           </table>
         </TableCard>
       )}
-
-      {generateOpen && (
-        <GenerateLetterDrawer onClose={closeGenerate} initialEmployeeId={employeeIdParam} />
-      )}
-    </ModulePage>
+    </>
   )
 }

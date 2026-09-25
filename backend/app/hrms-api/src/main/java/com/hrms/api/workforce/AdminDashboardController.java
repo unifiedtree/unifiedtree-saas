@@ -42,6 +42,7 @@ public class AdminDashboardController {
             teamFilter = " AND e.id IN (" + String.join(",", Collections.nCopies(team.size(), "?")) + ")";
             args.addAll(team);
         }
+        // department: the person's current department name (null when they have none).
         return jdbc.queryForList("""
             SELECT e.id, concat_ws(' ', e.first_name, e.last_name) AS name, d.name AS department,
                    round(avg(r.overall_rating)::numeric, 2) AS rating, count(*) AS reviews

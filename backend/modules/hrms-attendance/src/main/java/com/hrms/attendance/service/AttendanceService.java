@@ -466,30 +466,16 @@ public class AttendanceService {
     }
 
     /**
-     * The employee's weekly OFF days as ISO day numbers (1=Mon .. 7=Sun). Not
-     * everyone is off Sat+Sun — this reads the per-employee {@code
-     * weekly_off_days} CSV so present/absent/weekend is computed against THEIR
-     * schedule. Falls back to Sat+Sun ({6,7}) for null / unparseable / missing
-     * JdbcTemplate, so attendance math always has a sane week-off set.
+     * The employee's weekly OFF days as ISO day numbers (1=Mon .. 7=Sun): their
+     * own {@code weekly_off_days}, else their shift's weekly offs (V143.23), else
+     * their company's weekly offs from HR Configuration, else Sat+Sun. The company
+     * and default steps come from {@link AttendanceCalendar}, which
+     * CanonicalAttendanceService also uses.
      */
     private java.util.Set<Integer> resolveWeeklyOffSet(UUID employeeId) {
-        java.util.Set<Integer> defaults = new java.util.HashSet<>(java.util.Arrays.asList(6, 7));
-        if (jdbcTemplate == null || employeeId == null) return defaults;
-        String csv;
-        try {
-            csv = jdbcTemplate.queryForObject(
-                    "SELECT weekly_off_days FROM hrms.employees WHERE id = ?",
-                    String.class, employeeId);
-        } catch (Exception ex) {
-            return defaults;
-        }
-        if (csv == null || csv.isBlank()) {
-            // No weekly offs of their own: use their shift's (V143.23), else Sat+Sun.
-            java.util.Set<Integer> shift = shiftWeeklyOffSetsFor(java.util.List.of(employeeId), LocalDate.now(IST)).get(employeeId);
-            return shift != null ? shift : defaults;
-        }
-        java.util.Set<Integer> set = parseOffCsv(csv);
-        return set.isEmpty() ? defaults : set;
+        if (employeeId == null) return new java.util.HashSet<>(AttendanceCalendar.DEFAULT_OFF_DAYS);
+        return weeklyOffSetsFor(java.util.List.of(employeeId))
+                .getOrDefault(employeeId, new java.util.HashSet<>(AttendanceCalendar.DEFAULT_OFF_DAYS));
     }
 
     /** "6,7" → {6, 7}; junk and out-of-range values are skipped. */
@@ -542,15 +528,15 @@ public class AttendanceService {
 
     /**
      * Bulk version of {@link #resolveWeeklyOffSet} for the team dashboard: one
-     * query for a list of employees. Missing rows fall back to Sat+Sun. Used to
-     * decide whether an employee is "not marked" today or simply on their
+     * query for a list of employees (same rule; missing rows get Sat+Sun). Used
+     * to decide whether an employee is "not marked" today or simply on their
      * weekly off. Empty input → empty result.
      */
     @Transactional(readOnly = true)
     public java.util.Map<UUID, java.util.Set<Integer>> weeklyOffSetsFor(java.util.List<UUID> employeeIds) {
         java.util.Map<UUID, java.util.Set<Integer>> out = new java.util.HashMap<>();
         if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) return out;
-        java.util.Set<Integer> fallback = new java.util.HashSet<>(java.util.Arrays.asList(6, 7));
+        java.util.Set<Integer> fallback = new java.util.HashSet<>(AttendanceCalendar.DEFAULT_OFF_DAYS);
         for (UUID id : employeeIds) out.put(id, fallback);
         String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
         java.util.List<UUID> withoutOwn = new java.util.ArrayList<>(employeeIds);
@@ -564,8 +550,13 @@ public class AttendanceService {
                     },
                     employeeIds.toArray());
         } catch (Exception ex) { /* keep the fallback map */ }
-        // No weekly offs of their own: their shift's, when it has some (V143.23).
-        if (!withoutOwn.isEmpty()) out.putAll(shiftWeeklyOffSetsFor(withoutOwn, LocalDate.now(IST)));
+        if (withoutOwn.isEmpty()) return out;
+        // No weekly offs of their own: their shift's, when it has some (V143.23)...
+        java.util.Map<UUID, java.util.Set<Integer>> shift = shiftWeeklyOffSetsFor(withoutOwn, LocalDate.now(IST));
+        out.putAll(shift);
+        withoutOwn.removeAll(shift.keySet());
+        // ...else their company's weekly offs from HR Configuration, else Sat+Sun (AttendanceCalendar).
+        if (!withoutOwn.isEmpty()) out.putAll(AttendanceCalendar.weeklyOffDays(jdbcTemplate, withoutOwn));
         return out;
     }
 

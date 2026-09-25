@@ -40,9 +40,6 @@ All P0 items are done (wave 1).
 ## P2: polish
 
 - **Integrations**: real connections (OAuth, keys, sync). Today it's a register only, and the page says so.
-- **Letters**: one "Letters" hub instead of three routes.
-- **Old gaps that are low risk**
-  - `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) still has the old "today is absent" and Sat/Sun rules.
 
 ---
 

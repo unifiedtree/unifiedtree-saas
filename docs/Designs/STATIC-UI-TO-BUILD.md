@@ -41,7 +41,7 @@ Checked live: `e2e/recovery/live-design-dashboard.mjs`, 12/12 (calendar, past-da
 | Milestones "View all →" (birthdays, anniversaries, retirements) | Done | Opens `/hrms/employees?filter=birthday` (or `anniversary`, `retirement`). The directory has a Milestone filter with the card's windows (14 days, 31 days, 6 months); the people come from `/v1/hrms/employees?milestone=…`, which uses the card's own rules. |
 | Milestones → Retirements | Done (w1e) | Reads `GET /v1/hrms/retirements/due` for the company: people reaching the company's retirement age (HR Configuration) in the next 6 months. Roles without `hrms.employee.read` get the same rule through `/v1/hrms/milestones`. |
 | Export headcount | Done (w1e) | Downloads `headcount-<company>-<date>.xlsx` for the dashboard's company and selected date (`GET /v1/reports/headcount/workbook`, `hrms.report.headcount`). **Summary** sheet: company, as-of date, fiscal year, totals (total, active, probation, on notice, suspended, joined/left this month and this fiscal year) and breakdowns by department, branch, designation and employment type, plus gender with `hrms.report.diversity`. **Employees** sheet (only with `hrms.employee.read`): code, name, department, designation, branch, employment type, status, joining date, manager, work email, probation end, notice last day. Names only, no ids. Past dates are worked out from joining, confirmation, probation, notice and exit dates. Live test: `e2e/recovery/live-w1e.mjs`. |
-| Payroll chart: click a month | Done | Opens `/hrms/payroll/runs?month=YYYY-MM`; the runs page has a Month filter next to Year and opens on that month. |
+| Payroll chart: click a month | Done | Opens that month's run (`/hrms/payroll/runs/{id}`, w2i) when there is one, else `/hrms/payroll/runs?month=YYYY-MM`; the runs page has a Month filter next to Year and opens on that month (w2h). |
 | Hiring stage rows → `/hrms/hiring?tab=candidates&stage=…` | Done | The link opens the Pipeline board on **All roles** with only that stage's column, which matches the tile's company-wide count. The board has a Stage filter (All stages or one), kept in `?stage=`. (w2a, 25 Sep) |
 | Company notices | Done | 5 per page, as in the design, with Newer / Older buttons beside the count when there are more. Archiving the last notice on a page steps back a page. |
 | Date calendar colours | Partial | The trend API caps at 31 days, so only the last month is coloured. Early departures for past days show 0 (the trend API doesn't return them). Today's figures are exact. |
@@ -446,7 +446,7 @@ Found while redesigning the pages above. Fixed in the backend, running locally, 
 
 **Still open (noted, not changed):**
 - *Payroll* treating Saturday and Sunday as off for everyone: done in w1b after the client decided (D1). Each employee's own weekly off, else the company's, else Sat+Sun, and holidays from Settings plus the old leave table, as leave and attendance count them.
-- The alternate `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) has the same "today is absent" and Sat/Sun rules.
+- ~~The alternate `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) has the same "today is absent" and Sat/Sun rules.~~ **Done (w2i):** both services share `AttendanceCalendar`. Weekly offs are the person's own, else the company's (HR Configuration), else Sat + Sun (the live service now falls back to the company too). Today with no punch is `NOT_MARKED`, days before attendance started aren't absences, holidays and approved leave count as before, and late is after the shift start plus grace. Tests: `AttendanceCalendarTest`, `CanonicalAttendanceRulesTest`.
 - ~~A company that had only the old "Standard 9-6" shift no longer gets "General" added automatically.~~ Done 25 Sep (w2d): such a company gets "General" once (V143_23 for existing companies, on first read of the shift list for new ones).
 
 ## 11. Full redesign: the module kit, then module by module
@@ -724,9 +724,16 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - New workspaces get the ten default document types on their first read of the list (V143_7 only seeded the workspaces that existed); V143_13 backfills any that have none.
   - An upload over the multipart limit is a 400 "File is too large (max N MB)", not a 500.
 - **Static / to build:**
-  - The Letters pages are separate routes linked from the Hiring sub-navigation; there's no single "Letters" hub.
+  - ~~The Letters pages are separate routes linked from the Hiring sub-navigation; there's no single "Letters" hub.~~ **Done (w2i):** see "Letters hub" below.
 - **Fixed (tests):** `letters-admin-live.mjs` left its template and letter behind. It now removes them.
 - **Checked live:** `live-design-documents.mjs` 19/19 (HR adds by link → employee sees it → HR deletes; pending card, View file, reject with reason, verify; every letters page; with cleanup) and `letters-admin-live.mjs` (passes).
+- **Letters hub (w2i): done.** `/hrms/letters` is one page on the module kit with four views:
+  - **Templates** (`hrms.letters.template.read`), **Generated letters** (`hrms.letters.read`), **Distributions** (`hrms.letters.distribute` or `hrms.letters.read`) and **My letters** (`hrms.letters.read.self`).
+  - The old routes keep working and open their view: `/hrms/letters/templates`, `/generated`, `/distributions`, plus `/my`. Someone who can only read their own letters and follows an old `/generated` link lands on My letters, as before.
+  - The header button follows the view: Create template, Generate letter (also opened by an employee's "Generate" link, `?employeeId=`), New distribution.
+  - An employee sees only My letters, titled "My letters". They reach it from **Me → Letters** and a "Letters" shortcut on My workspace (neither existed).
+  - The sidebar has one "Letters" entry instead of three. Distributions now page past 20 jobs.
+  - `live-design-documents.mjs` was updated for the hub's view tabs (not run here).
 
 ### 11.14 HR setup: Policies (for non-admins), Notification templates and Integrations: done
 - **Policies (`/hrms/policies`):**
@@ -850,3 +857,11 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Unit tests: `src/shared/navigation/pageRegistry.test.ts` (11) and `src/shared/search/search.test.ts` (13) pass; backend `EmployeeSearchQueryTest` (4) passes.
   - `e2e/recovery/live-w1g.mjs` (API only, not yet run): word-by-word people search against the database, 403 for roles without the directory, each menu rule's endpoint answering exactly the roles the link shows for, each dashboard section's endpoint refusing exactly the roles it's hidden from, coming-soon modules, and a branch geofence saved by HR (refused for manager and employee) and used by the employee's punch check, then restored.
   - `live-design-attendance-admin.mjs` now checks the Geofencing redirect instead of adding a zone.
+
+### 11.19 Leftovers batch (w2i, 25 Sep): done
+- **Letters hub** (§11.13), **CanonicalAttendanceService parity** (§10), **document tables' RLS forced** (§11.13, `V143_28`).
+- **Dashboard** (§2): built alongside w2h (the merged app keeps w2h's record names with links, department filter incl. "No department", notices pager and milestone filters); from w2i it keeps the payroll bar opening that month's run (else the runs list filtered to the month) and top performers' department.
+- **Attendance calendar** (§4): superseded by w2f (the trend flags real weekly-off days). The server-side rule is merged: own weekly offs, else the shift's (w2d), else the company's (w2i, HR Configuration), else Sat+Sun.
+- **Employee workspace** (§7): the Goals tile counts open goals only.
+- **Checked:** `e2e/recovery/live-w2i.mjs` (API-level, no browser; written, not run here). It calls every endpoint above as owner, HR, finance, manager and employee, checks the database, the refusals (403) and the day rules, and removes or restores what it touches. Unit tests: `AttendanceCalendarTest`, `CanonicalAttendanceRulesTest`, `AuditResourceNameTest`, `HiringAllCandidatesTest`, and `lettersView.test.ts` (vitest).
+- **Still open from the leftovers:** the trend API's 31-day cap on the dashboard calendar (§2), real integrations (§11.14), deactivated geofence zones (retired with the Geofencing page, D3).

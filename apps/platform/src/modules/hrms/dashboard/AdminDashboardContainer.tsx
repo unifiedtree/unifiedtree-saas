@@ -169,13 +169,17 @@ export function AdminDashboardContainer() {
 
     const st = stats.data
     const payrollMonths = new Map<string, number>()
+    const monthRun = new Map<string, string>()
     for (const run of runs.data ?? []) {
       if (run.status !== 'LOCKED' && run.status !== 'PAID') continue
       const m = `${run.periodYear}-${String(run.periodMonth).padStart(2, '0')}`
       payrollMonths.set(m, (payrollMonths.get(m) || 0) + Number(run.totalGross || 0))
+      if (!monthRun.has(m)) monthRun.set(m, run.id)
     }
+    // A month's bar opens that month's run (the runs list has no month filter).
     const payroll = [...payrollMonths].sort(([a], [b]) => a.localeCompare(b)).slice(-6).map(([month, gross]) => ({
       month, gross, label: MON[Number(month.slice(5, 7)) - 1], title: `${MON[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`,
+      path: monthRun.has(month) ? `/hrms/payroll/runs/${monthRun.get(month)}` : `/hrms/payroll/runs?month=${month}`,
     }))
     const pj = projects.data ?? []
     const done = pj.reduce((n, x) => n + (x.completed || 0), 0), all = pj.reduce((n, x) => n + (x.total || 0), 0)
@@ -186,7 +190,7 @@ export function AdminDashboardContainer() {
       return { id: m.employeeId, name: m.name, dept: m.department || '', when, date }
     }
     return {
-      today, todayLabel: fmtLong(today), firstName,
+      today, todayLabel: fmtLong(today), firstName, companyId,
       greetingWord: (() => { const h = istHour(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' })(),
       counts: c, daily,
       summary: st ? {

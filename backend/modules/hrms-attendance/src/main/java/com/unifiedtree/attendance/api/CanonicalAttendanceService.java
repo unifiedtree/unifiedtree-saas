@@ -15,6 +15,7 @@ import com.unifiedtree.attendance.api.AttendanceApiDtos.MonthlyStatsResponse;
 import com.unifiedtree.attendance.api.AttendanceApiDtos.PageResponse;
 import com.unifiedtree.attendance.api.AttendanceApiDtos.WeeklyDayResponse;
 import com.unifiedtree.attendance.api.AttendanceApiDtos.WeeklySummaryResponse;
+import com.hrms.attendance.service.AttendanceCalendar;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
@@ -37,6 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -109,11 +111,12 @@ public class CanonicalAttendanceService {
         }
 
         Instant now = Instant.now();
-        String status = attendanceStatus(now);
+        LocalTime lateThreshold = lateThreshold(employee.employeeId(), today);
+        String status = attendanceStatus(now, lateThreshold);
         UUID recordId = UUID.randomUUID();
         String method = checkMethod(request.checkInMethod());
         String location = firstNonBlank(request.locationName(), employee.branchName(), "Office");
-        Integer lateBy = lateByMinutes(now);
+        Integer lateBy = lateByMinutes(now, lateThreshold);
 
         jdbc.update("""
                 INSERT INTO attendance.records (
@@ -234,6 +237,13 @@ public class CanonicalAttendanceService {
         return findToday(currentEmployee().employeeId());
     }
 
+    /**
+     * The month's counts, by the same rules as the live AttendanceService
+     * (AttendanceCalendar): the person's weekly offs (their own, else their
+     * company's, else Sat+Sun), holidays and approved leave aren't absences,
+     * days before their attendance started aren't counted, and today isn't an
+     * absence until it's over.
+     */
     @Transactional(readOnly = true)
     public MonthlyStatsResponse monthlyStats(Integer year, Integer month) {
         EmployeeContext employee = currentEmployee();
@@ -242,38 +252,49 @@ public class CanonicalAttendanceService {
         int m = month != null ? month : today.getMonthValue();
         LocalDate start = LocalDate.of(y, m, 1);
         LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
-        if (end.isAfter(today)) {
-            end = today;
-        }
 
         Map<LocalDate, AttendanceDto> records = recordsBetween(employee.employeeId(), start, end).stream()
                 .collect(Collectors.toMap(r -> LocalDate.parse(r.attendanceDate()), Function.identity(), (a, b) -> a));
+        Set<Integer> weekOffs = AttendanceCalendar.weeklyOffDays(jdbc, employee.employeeId());
+        Set<LocalDate> holidays = AttendanceCalendar.holidayDates(jdbc, employee.employeeId(), start, end);
+        Set<LocalDate> leaveDays = AttendanceCalendar.approvedLeaveDates(jdbc, employee.employeeId(), start, end);
+        LocalDate attendanceStart = AttendanceCalendar.attendanceStart(jdbc, employee.employeeId(), today);
+        LocalTime lateThreshold = lateThreshold(employee.employeeId(), today);
 
         int present = 0;
         int absent = 0;
+        int holidayDays = 0;
         int late = 0;
         int onTime = 0;
-        LocalDate cursor = start;
-        while (!cursor.isAfter(end)) {
-            if (isWeekend(cursor)) {
-                cursor = cursor.plusDays(1);
-                continue;
-            }
+        LocalDate cursor = attendanceStart.isAfter(start) ? attendanceStart : start;
+        while (!cursor.isAfter(end) && !cursor.isAfter(today)) {
             AttendanceDto rec = records.get(cursor);
-            if (rec != null && rec.checkInTime() != null) {
-                present++;
-                if ("LATE".equals(rec.attendanceStatus())) late++;
-                else onTime++;
-            } else {
-                absent++;
+            boolean punched = rec != null && rec.checkInTime() != null;
+            switch (AttendanceCalendar.classify(cursor, today, attendanceStart,
+                    weekOffs.contains(cursor.getDayOfWeek().getValue()), punched,
+                    holidays.contains(cursor), leaveDays.contains(cursor))) {
+                case PUNCHED -> {
+                    present++;
+                    if (isLate(rec, lateThreshold)) late++;
+                    else onTime++;
+                }
+                case HOLIDAY -> holidayDays++;
+                case ABSENT -> absent++;
+                default -> { /* weekly off, leave, not marked yet: neither present nor absent */ }
             }
             cursor = cursor.plusDays(1);
         }
         int working = present + absent;
         int score = working == 0 ? 100 : Math.round((float) present * 100 / working);
-        return new MonthlyStatsResponse(present, absent, 0, onTime, late, score);
+        return new MonthlyStatsResponse(present, absent, holidayDays, onTime, late, score);
     }
 
+    /**
+     * The month as calendar days, like the live AttendanceService: weekly offs
+     * are WEEKEND, holidays and approved leave are HOLIDAY / ON_LEAVE, earlier
+     * days with no punch are ABSENT, and today with no punch, future working
+     * days and days before attendance started are left out.
+     */
     @Transactional(readOnly = true)
     public List<DayRecordResponse> history(Integer year, Integer month) {
         EmployeeContext employee = currentEmployee();
@@ -285,17 +306,30 @@ public class CanonicalAttendanceService {
 
         Map<LocalDate, AttendanceDto> records = recordsBetween(employee.employeeId(), start, end).stream()
                 .collect(Collectors.toMap(r -> LocalDate.parse(r.attendanceDate()), Function.identity(), (a, b) -> a));
+        Set<Integer> weekOffs = AttendanceCalendar.weeklyOffDays(jdbc, employee.employeeId());
+        Set<LocalDate> holidays = AttendanceCalendar.holidayDates(jdbc, employee.employeeId(), start, end);
+        Set<LocalDate> leaveDays = AttendanceCalendar.approvedLeaveDates(jdbc, employee.employeeId(), start, end);
+        LocalDate attendanceStart = AttendanceCalendar.attendanceStart(jdbc, employee.employeeId(), today);
+        LocalTime lateThreshold = lateThreshold(employee.employeeId(), today);
+
         List<DayRecordResponse> out = new ArrayList<>();
         LocalDate cursor = start;
         while (!cursor.isAfter(end)) {
             AttendanceDto rec = records.get(cursor);
-            if (rec != null) {
-                out.add(new DayRecordResponse(cursor.toString(), rec.attendanceStatus(), rec.checkInTime(), rec.checkOutTime(), rec.workHours()));
-            } else if (isWeekend(cursor)) {
+            boolean beforeStart = cursor.isBefore(attendanceStart);
+            if (weekOffs.contains(cursor.getDayOfWeek().getValue())) {
                 out.add(new DayRecordResponse(cursor.toString(), "WEEKEND", null, null, null));
-            } else if (!cursor.isAfter(today)) {
+            } else if (rec != null && rec.checkInTime() != null) {
+                out.add(new DayRecordResponse(cursor.toString(), isLate(rec, lateThreshold) ? "LATE" : "PRESENT",
+                        rec.checkInTime(), rec.checkOutTime(), rec.workHours()));
+            } else if (!beforeStart && holidays.contains(cursor)) {
+                out.add(new DayRecordResponse(cursor.toString(), "HOLIDAY", null, null, null));
+            } else if (!beforeStart && leaveDays.contains(cursor)) {
+                out.add(new DayRecordResponse(cursor.toString(), "ON_LEAVE", null, null, null));
+            } else if (!beforeStart && cursor.isBefore(today)) {
                 out.add(new DayRecordResponse(cursor.toString(), "ABSENT", null, null, null));
             }
+            // today with no punch, future working days and days before attendance started: left out
             cursor = cursor.plusDays(1);
         }
         return out;
@@ -317,6 +351,13 @@ public class CanonicalAttendanceService {
         Map<LocalDate, AttendanceDto> records = recordsBetween(employee.employeeId(), monday, sunday).stream()
                 .collect(Collectors.toMap(r -> LocalDate.parse(r.attendanceDate()), Function.identity(), (a, b) -> a));
 
+        // Same day rules as the live AttendanceService (AttendanceCalendar.classify).
+        Set<Integer> weekOffs = AttendanceCalendar.weeklyOffDays(jdbc, employee.employeeId());
+        Set<LocalDate> holidays = AttendanceCalendar.holidayDates(jdbc, employee.employeeId(), monday, sunday);
+        Set<LocalDate> leaveDays = AttendanceCalendar.approvedLeaveDates(jdbc, employee.employeeId(), monday, sunday);
+        LocalDate attendanceStart = AttendanceCalendar.attendanceStart(jdbc, employee.employeeId(), today);
+        LocalTime lateThreshold = lateThreshold(employee.employeeId(), today);
+
         List<WeeklyDayResponse> days = new ArrayList<>();
         double totalHours = 0;
         double overtime = 0;
@@ -326,31 +367,35 @@ public class CanonicalAttendanceService {
         for (int i = 0; i < 7; i++) {
             LocalDate date = monday.plusDays(i);
             AttendanceDto rec = records.get(date);
-            double hours = rec != null && rec.workHours() != null ? rec.workHours() : 0;
-            String status = rec != null ? rec.attendanceStatus() : (isWeekend(date) ? "WEEKEND" : "ABSENT");
-            String checkInHm = null;
-            String checkOutHm = null;
-            Integer lateBy = null;
-            if (rec != null) {
-                checkInHm = formatHm(rec.checkInTime());
-                checkOutHm = formatHm(rec.checkOutTime());
-                lateBy = rec.lateByMinutes();
-                if (rec.checkInTime() != null) {
-                    presentDays++;
-                    LocalTime t = Instant.parse(rec.checkInTime()).atZone(IST).toLocalTime();
-                    arrivalMinutes += t.getHour() * 60L + t.getMinute();
-                    arrivalCount++;
-                }
+            boolean punched = rec != null && rec.checkInTime() != null;
+            AttendanceCalendar.DayKind kind = AttendanceCalendar.classify(date, today, attendanceStart,
+                    weekOffs.contains(date.getDayOfWeek().getValue()), punched,
+                    holidays.contains(date), leaveDays.contains(date));
+            if (kind == AttendanceCalendar.DayKind.WEEKLY_OFF) {
+                // A punch on a weekly off still shows its hours, as in the live service.
+                double h = rec != null && rec.workHours() != null ? rec.workHours() : 0;
+                days.add(new WeeklyDayResponse(date.toString(), round2(h), "WEEKEND",
+                        rec != null ? formatHm(rec.checkInTime()) : null,
+                        rec != null ? formatHm(rec.checkOutTime()) : null,
+                        rec != null ? rec.lateByMinutes() : null));
+                continue;
             }
+            if (kind != AttendanceCalendar.DayKind.PUNCHED) {
+                days.add(new WeeklyDayResponse(date.toString(), 0, weeklyStatus(kind), null, null, null));
+                continue;
+            }
+            double hours = rec.workHours() != null ? rec.workHours() : 0;
+            LocalTime t = Instant.parse(rec.checkInTime()).atZone(IST).toLocalTime();
+            presentDays++;
+            arrivalMinutes += t.getHour() * 60L + t.getMinute();
+            arrivalCount++;
             totalHours += hours;
             overtime += Math.max(0, hours - STANDARD_HOURS);
-            days.add(new WeeklyDayResponse(date.toString(), round2(hours), status,
-                    checkInHm, checkOutHm, lateBy));
+            days.add(new WeeklyDayResponse(date.toString(), round2(hours), isLate(rec, lateThreshold) ? "LATE" : "ON_TIME",
+                    formatHm(rec.checkInTime()), formatHm(rec.checkOutTime()), rec.lateByMinutes()));
         }
-        String avgArrival = arrivalCount == 0
-                ? "--"
-                : LocalTime.of((int) (arrivalMinutes / arrivalCount / 60), (int) (arrivalMinutes / arrivalCount % 60))
-                .format(DateTimeFormatter.ofPattern("HH:mm"));
+        // "09:05 AM", or null with no punch this week: the live service's format.
+        String avgArrival = arrivalCount == 0 ? null : averageArrival((int) (arrivalMinutes / arrivalCount));
         Double dailyTargetHours = lookupDailyTargetHours(employee.employeeId(), monday);
         return new WeeklySummaryResponse(round2(totalHours), round2(overtime), presentDays,
                 avgArrival, dailyTargetHours, days);
@@ -755,13 +800,13 @@ public class CanonicalAttendanceService {
         return TenantContext.requireTenantId();
     }
 
-    private String attendanceStatus(Instant checkInAt) {
-        return checkInAt.atZone(IST).toLocalTime().isAfter(LATE_THRESHOLD) ? "LATE" : "PRESENT";
+    private static String attendanceStatus(Instant checkInAt, LocalTime lateThreshold) {
+        return checkInAt.atZone(IST).toLocalTime().isAfter(lateThreshold) ? "LATE" : "PRESENT";
     }
 
-    private Integer lateByMinutes(Instant checkInAt) {
+    private static Integer lateByMinutes(Instant checkInAt, LocalTime lateThreshold) {
         LocalTime local = checkInAt.atZone(IST).toLocalTime();
-        return local.isAfter(LATE_THRESHOLD) ? (int) Duration.between(LATE_THRESHOLD, local).toMinutes() : 0;
+        return local.isAfter(lateThreshold) ? (int) Duration.between(lateThreshold, local).toMinutes() : 0;
     }
 
     private String checkMethod(String raw) {
@@ -778,8 +823,43 @@ public class CanonicalAttendanceService {
         };
     }
 
-    private static boolean isWeekend(LocalDate date) {
-        return date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY;
+    /** Minutes after midnight as "hh:mm AM/PM", the live weekly summary's average-arrival format. */
+    static String averageArrival(int avgMinutes) {
+        int h = avgMinutes / 60;
+        int m = avgMinutes % 60;
+        return h < 12
+                ? "%02d:%02d AM".formatted(h == 0 ? 12 : h, m)
+                : "%02d:%02d PM".formatted(h == 12 ? 12 : h - 12, m);
+    }
+
+    /** The weekly-summary status for a day without a punch (the live service's labels). */
+    static String weeklyStatus(AttendanceCalendar.DayKind kind) {
+        return switch (kind) {
+            case WEEKLY_OFF -> "WEEKEND";
+            case UPCOMING -> "UPCOMING";
+            case NOT_TRACKED, NOT_MARKED -> "NOT_MARKED";
+            case HOLIDAY -> "HOLIDAY";
+            case ON_LEAVE -> "ON_LEAVE";
+            case ABSENT -> "ABSENT";
+            case PUNCHED -> "ON_TIME";
+        };
+    }
+
+    /** Late means checking in after the shift's start plus its grace (09:30 with no shift), as in the live service. */
+    private static boolean isLate(AttendanceDto rec, LocalTime lateThreshold) {
+        return Instant.parse(rec.checkInTime()).atZone(IST).toLocalTime().isAfter(lateThreshold);
+    }
+
+    /** The person's shift start plus grace on that date, or 09:30 when they have no shift. */
+    private LocalTime lateThreshold(UUID employeeId, LocalDate onDate) {
+        ShiftProfile shift = lookupShiftProfile(employeeId, onDate);
+        if (shift == null || shift.scheduledStart() == null) return LATE_THRESHOLD;
+        try {
+            int grace = shift.graceMinutes() != null ? Math.max(0, shift.graceMinutes()) : 0;
+            return LocalTime.parse(shift.scheduledStart()).plusMinutes(grace);
+        } catch (RuntimeException ex) {
+            return LATE_THRESHOLD;
+        }
     }
 
     private static String firstNonBlank(String... values) {

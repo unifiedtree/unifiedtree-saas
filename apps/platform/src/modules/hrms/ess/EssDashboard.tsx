@@ -45,6 +45,7 @@ export function EssDashboard() {
   const interviews = useMyInterviews(canInterviews)
   const interviewCount = interviews.data?.length ?? 0
   const scorecardsDue = (interviews.data ?? []).filter((i) => i.started && i.scorecards.length === 0).length
+  const canLetters = usePermission(P.HRMS_LETTERS_READ_SELF)
   const stats = useMonthlyStats()
   const bal = useMyBalances()
   const mine = useMyLeaves(0)
@@ -96,6 +97,7 @@ export function EssDashboard() {
             {canOnboarding && <Shortcut icon="clipboard" title="Onboarding tasks" sub="Your onboarding checklist" cta="Open" onClick={() => navigate('/hrms/onboarding/instances')} />}
             {canAssets && <Shortcut icon="briefcase" title="My assets" sub="Company equipment handed to you" cta="View" onClick={() => navigate('/me/assets')} />}
             {canInterviews && interviewCount > 0 && <Shortcut icon="calendarClock" title="Interviews" sub={scorecardsDue ? `${scorecardsDue} ${scorecardsDue === 1 ? 'scorecard is' : 'scorecards are'} waiting for you` : `${interviewCount} ${interviewCount === 1 ? 'interview' : 'interviews'} you’re taking`} cta="Open" onClick={() => navigate('/me/interviews')} />}
+            {canLetters && <Shortcut icon="fileText" title="Letters" sub="Offer, appointment and other letters HR has issued to you" cta="Open" onClick={() => navigate('/hrms/letters/my')} />}
             <Shortcut icon="userCheck" title="Profile" sub="Your photo, contact details and documents" cta="Open" onClick={() => navigate('/profile')} />
         </div>
       </div>

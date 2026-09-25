@@ -90,7 +90,8 @@ public class AuditController {
         java.util.Map<String, AuditRecordNames.Named> records = recordNames.resolve(events.stream()
                 .map(e -> new AuditRecordNames.Ref(e.getEntityType(), e.getEntityId())).toList());
         List<AuditEventDto> data = events.stream()
-                .map(e -> toDto(e, actors.get(e.getActorUserId()),
+                // Null ids never reach get(): Map.of() (no actors on the page) throws on a null key (w2i).
+                .map(e -> toDto(e, e.getActorUserId() != null ? actors.get(e.getActorUserId()) : null,
                         e.getEntityId() == null ? null : records.get(AuditRecordNames.key(e.getEntityType(), e.getEntityId()))))
                 .toList();
 
