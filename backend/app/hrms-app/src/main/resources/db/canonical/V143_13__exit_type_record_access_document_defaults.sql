@@ -75,24 +75,36 @@ ON CONFLICT DO NOTHING;
 
 -- ── 3. Default document types for every tenant that has none ───────────────
 -- Same 10 defaults as V143.7 (and DocumentTypeDefaults, the lazy seed).
-INSERT INTO document_mgmt.document_types
-    (tenant_id, code, display_name, description, allowed_formats, max_size_mb, required, expiry_tracked, sort_order)
-SELECT t.id, d.code, d.display_name, d.description, d.allowed_formats, d.max_size_mb, d.required, d.expiry_tracked, d.sort_order
-FROM platform.tenants t
-CROSS JOIN (VALUES
-    ('AADHAAR',        'Aadhaar Card',            'Government-issued Indian ID.',                'pdf,jpg,jpeg,png', 5,  TRUE,  FALSE, 10),
-    ('PAN',            'PAN Card',                'Permanent Account Number card (required for payroll).', 'pdf,jpg,jpeg,png', 5,  TRUE,  FALSE, 20),
-    ('PASSPORT',       'Passport',                'Only if you have one — expiry is tracked.',    'pdf,jpg,jpeg,png', 5,  FALSE, TRUE,  30),
-    ('DRIVING_LICENSE','Driving License',         'Only if you have one — expiry is tracked.',    'pdf,jpg,jpeg,png', 5,  FALSE, TRUE,  40),
-    ('VOTER_ID',       'Voter ID',                'EPIC / Voter ID card.',                        'pdf,jpg,jpeg,png', 5,  FALSE, FALSE, 50),
-    ('PHOTO',          'Passport-size Photograph','Recent passport-size photo for your profile.', 'jpg,jpeg,png',     2,  TRUE,  FALSE, 60),
-    ('RESUME',         'Resume / CV',             'Your latest resume.',                           'pdf',              5,  TRUE,  FALSE, 70),
-    ('EDUCATION_CERT', 'Educational Certificate', '10th, 12th, degree or diploma certificates.', 'pdf,jpg,jpeg,png',10,  FALSE, FALSE, 80),
-    ('OFFER_LETTER',   'Offer Letter',            'Signed offer letter or appointment letter.',   'pdf',              5,  FALSE, FALSE, 90),
-    ('OTHER',          'Other',                   'Anything else HR asks you to upload.',         'pdf,jpg,jpeg,png',10, FALSE, FALSE, 100)
-) AS d(code, display_name, description, allowed_formats, max_size_mb, required, expiry_tracked, sort_order)
-WHERE NOT EXISTS (SELECT 1 FROM document_mgmt.document_types x WHERE x.tenant_id = t.id)
-ON CONFLICT (tenant_id, code) DO NOTHING;
+-- Per tenant, with app.tenant_id set for that tenant: once step 4 has FORCEd RLS
+-- on document_types, a re-run of this file by a (non-superuser) table owner
+-- would otherwise see no rows for any tenant and then fail the policy's
+-- WITH CHECK on insert. set_config(..., true) is transaction-local.
+DO $$
+DECLARE
+    t RECORD;
+BEGIN
+    FOR t IN SELECT id FROM platform.tenants LOOP
+        PERFORM set_config('app.tenant_id', t.id::text, true);
+        INSERT INTO document_mgmt.document_types
+            (tenant_id, code, display_name, description, allowed_formats, max_size_mb, required, expiry_tracked, sort_order)
+        SELECT t.id, d.code, d.display_name, d.description, d.allowed_formats, d.max_size_mb, d.required, d.expiry_tracked, d.sort_order
+        FROM (VALUES
+            ('AADHAAR',        'Aadhaar Card',            'Government-issued Indian ID.',                'pdf,jpg,jpeg,png', 5,  TRUE,  FALSE, 10),
+            ('PAN',            'PAN Card',                'Permanent Account Number card (required for payroll).', 'pdf,jpg,jpeg,png', 5,  TRUE,  FALSE, 20),
+            ('PASSPORT',       'Passport',                'Only if you have one — expiry is tracked.',    'pdf,jpg,jpeg,png', 5,  FALSE, TRUE,  30),
+            ('DRIVING_LICENSE','Driving License',         'Only if you have one — expiry is tracked.',    'pdf,jpg,jpeg,png', 5,  FALSE, TRUE,  40),
+            ('VOTER_ID',       'Voter ID',                'EPIC / Voter ID card.',                        'pdf,jpg,jpeg,png', 5,  FALSE, FALSE, 50),
+            ('PHOTO',          'Passport-size Photograph','Recent passport-size photo for your profile.', 'jpg,jpeg,png',     2,  TRUE,  FALSE, 60),
+            ('RESUME',         'Resume / CV',             'Your latest resume.',                           'pdf',              5,  TRUE,  FALSE, 70),
+            ('EDUCATION_CERT', 'Educational Certificate', '10th, 12th, degree or diploma certificates.', 'pdf,jpg,jpeg,png',10,  FALSE, FALSE, 80),
+            ('OFFER_LETTER',   'Offer Letter',            'Signed offer letter or appointment letter.',   'pdf',              5,  FALSE, FALSE, 90),
+            ('OTHER',          'Other',                   'Anything else HR asks you to upload.',         'pdf,jpg,jpeg,png',10, FALSE, FALSE, 100)
+        ) AS d(code, display_name, description, allowed_formats, max_size_mb, required, expiry_tracked, sort_order)
+        WHERE NOT EXISTS (SELECT 1 FROM document_mgmt.document_types x WHERE x.tenant_id = t.id)
+        ON CONFLICT (tenant_id, code) DO NOTHING;
+    END LOOP;
+    PERFORM set_config('app.tenant_id', '', true);
+END $$;
 
 -- ── 4. FORCE RLS on document_mgmt, only where the app role is not the owner ─
 DO $$

@@ -131,9 +131,13 @@ try {
   const before = sql(`select string_agg(id::text, ',') from document_mgmt.document_types where tenant_id='${tenant}'`)
   typesMoved = before ? before.split(',') : []
   if (typesMoved.length) sql(`update document_mgmt.document_types set tenant_id='${FAKE_TENANT}' where id in (${typesMoved.map((x) => `'${x}'`).join(',')})`)
+  // GET /my/missing seeds too (an employee's first stop may be the missing-documents card).
+  const missing = await reader.call('/v1/document/my/missing')
+  const afterMissing = Number(sql(`select count(*) from document_mgmt.document_types where tenant_id='${tenant}'`))
+  check('types: GET /my/missing seeds the 10 defaults and lists the required ones', missing.status === 200 && afterMissing === 10 && Array.isArray(missing.json) && ['AADHAAR', 'PAN'].every((c) => missing.json.some((t) => t.code === c)), `status=${missing.status} db=${afterMissing}`)
   const seededList = await reader.call('/v1/document/types')
   seededTypeIds = sql(`select coalesce(string_agg(id::text, ','), '') from document_mgmt.document_types where tenant_id='${tenant}'`).split(',').filter(Boolean)
-  check('types: a workspace with none gets the 10 defaults on first read', seededList.status === 200 && seededList.json?.length === 10 && seededTypeIds.length === 10 && ['AADHAAR', 'PAN', 'PHOTO', 'RESUME', 'OTHER'].every((c) => seededList.json.some((t) => t.code === c)), `status=${seededList.status} api=${seededList.json?.length} db=${seededTypeIds.length}`)
+  check('types: GET /types then lists the 10 defaults, seeded once', seededList.status === 200 && seededList.json?.length === 10 && seededTypeIds.length === 10 && ['AADHAAR', 'PAN', 'PHOTO', 'RESUME', 'OTHER'].every((c) => seededList.json.some((t) => t.code === c)), `status=${seededList.status} api=${seededList.json?.length} db=${seededTypeIds.length}`)
   const again = await reader.call('/v1/document/types?includeInactive=true')
   check('types: a second read seeds nothing more', again.json?.length === 10 && Number(sql(`select count(*) from document_mgmt.document_types where tenant_id='${tenant}'`)) === 10)
   sql(`delete from document_mgmt.document_types where tenant_id='${tenant}'`)

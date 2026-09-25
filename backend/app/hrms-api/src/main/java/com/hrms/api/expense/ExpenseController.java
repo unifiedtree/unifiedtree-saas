@@ -200,10 +200,14 @@ public class ExpenseController {
                 || callerHasPermission(jwt, "hrms.expense.reimbursement")
                 || (Objects.equals(raw.approverId(), me)
                     && (callerHasPermission(jwt, "hrms.expense.claim.read") || callerHasPermission(jwt, "hrms.expense.claim.approve")));
-        if (!allowed && callerHasPermission(jwt, "hrms.expense.claim.read")) {
+        // Team reach: the same department-manager permission that lists a team
+        // member's claims on their record (claim.approve), or claim.read.
+        String teamPermission = callerHasPermission(jwt, "hrms.expense.claim.approve") ? "hrms.expense.claim.approve"
+                : callerHasPermission(jwt, "hrms.expense.claim.read") ? "hrms.expense.claim.read" : null;
+        if (!allowed && teamPermission != null) {
             recordAccess.assertCanView(raw.employeeId(), jwt,
                     org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication(),
-                    EMPLOYEE_READ, "hrms.expense.claim.read");
+                    EMPLOYEE_READ, teamPermission);
             allowed = true;
         }
         if (!allowed) {
