@@ -92,6 +92,9 @@ public class AttendanceController {
     private OvertimeReasons overtimeReasons;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private FacePunchDevices facePunchDevices;
+    /** The admin dashboard's history view: people who have since left, on the days they still worked. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrms.api.workforce.DashboardHistory dashboardHistory;
 
     /** Longest window the trend endpoint will serve; longer requests are clamped. */
     private static final int MAX_TREND_DAYS = 31;
@@ -338,20 +341,27 @@ public class AttendanceController {
     public ResponseEntity<TeamDashboardResponse> dashboard(
             @RequestParam(required = false) LocalDate date,
             @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) Boolean includeLeavers,
             @AuthenticationPrincipal Jwt jwt) {
         LocalDate selectedDate = date != null ? date : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
-        List<Employee> rosterAll = scopedEmployees(jwt, departmentId);
+        // includeLeavers (the admin dashboard's history view): the team as it was
+        // on the date, so people who have left since still count on the days
+        // they worked. Off by default: every other caller sees today's team.
+        boolean history = Boolean.TRUE.equals(includeLeavers) && dashboardHistory != null;
+        List<Employee> rosterAll = history ? scopedEmployeesOn(jwt, departmentId, selectedDate, selectedDate) : scopedEmployees(jwt, departmentId);
         // Exclude anyone who joined after the date (a 1-Oct hire is not
         // "absent" on 24 Sep) or whose weekly off falls on the date (Sat/Sun
         // fallback if the employee has no explicit weekly_off_days).
         List<UUID> rosterAllIds = rosterAll.stream().map(Employee::getId).toList();
         java.util.Map<UUID, LocalDate> joins = attendanceService.joiningDatesFor(rosterAllIds);
         java.util.Map<UUID, java.util.Set<Integer>> weekOffs = attendanceService.weeklyOffSetsFor(rosterAllIds);
+        java.util.Map<UUID, LocalDate> lastDays = history ? lastDaysOf(rosterAllIds) : Map.of();
         int dow = selectedDate.getDayOfWeek().getValue();
         List<Employee> employees = rosterAll.stream()
                 .filter(emp -> {
                     LocalDate joined = joins.get(emp.getId());
                     if (joined != null && joined.isAfter(selectedDate)) return false;
+                    if (!com.hrms.api.workforce.DashboardAsOf.workedOn(lastDays.get(emp.getId()), selectedDate)) return false;
                     java.util.Set<Integer> off = weekOffs.get(emp.getId());
                     return off == null || !off.contains(dow);
                 })
@@ -484,6 +494,7 @@ public class AttendanceController {
             @RequestParam(required = false) LocalDate from,
             @RequestParam(required = false) LocalDate to,
             @RequestParam(required = false) UUID departmentId,
+            @RequestParam(required = false) Boolean includeLeavers,
             @AuthenticationPrincipal Jwt jwt) {
         LocalDate end   = to != null ? to : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         LocalDate start = from != null ? from : end.minusDays(6);
@@ -496,13 +507,17 @@ public class AttendanceController {
             start = end.minusDays(MAX_TREND_DAYS - 1L);
         }
 
-        List<Employee> employees = scopedEmployees(jwt, departmentId);
+        // includeLeavers: as on the dashboard, people who have left since count
+        // on the days they still worked (the admin dashboard's history view).
+        boolean history = Boolean.TRUE.equals(includeLeavers) && dashboardHistory != null;
+        List<Employee> employees = history ? scopedEmployeesOn(jwt, departmentId, start, end) : scopedEmployees(jwt, departmentId);
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         // Per-day roster: exclude employees who joined after the day, or whose
         // weekly off falls on that day. Same rule the KPI tiles use, so tile
         // and chart never disagree.
         java.util.Map<UUID, LocalDate> trendJoins = attendanceService.joiningDatesFor(employeeIds);
         java.util.Map<UUID, java.util.Set<Integer>> trendOffs = attendanceService.weeklyOffSetsFor(employeeIds);
+        java.util.Map<UUID, LocalDate> trendLastDays = history ? lastDaysOf(employeeIds) : Map.of();
 
         List<AttendanceRecord> records = employeeIds.isEmpty()
                 ? List.of()
@@ -540,6 +555,7 @@ public class AttendanceController {
                     .filter(emp -> {
                         LocalDate joined = trendJoins.get(emp.getId());
                         if (joined != null && joined.isAfter(dayFinal)) return false;
+                        if (!com.hrms.api.workforce.DashboardAsOf.workedOn(trendLastDays.get(emp.getId()), dayFinal)) return false;
                         java.util.Set<Integer> off = trendOffs.get(emp.getId());
                         return off == null || !off.contains(dayDow);
                     })
@@ -550,6 +566,7 @@ public class AttendanceController {
                     .filter(emp -> {
                         LocalDate joined = trendJoins.get(emp.getId());
                         if (joined != null && joined.isAfter(dayFinal)) return false;
+                        if (!com.hrms.api.workforce.DashboardAsOf.workedOn(trendLastDays.get(emp.getId()), dayFinal)) return false;
                         java.util.Set<Integer> off = trendOffs.get(emp.getId());
                         return off != null && off.contains(dayDow);
                     })
@@ -559,6 +576,7 @@ public class AttendanceController {
                         .filter(emp -> {
                             LocalDate joined = trendJoins.get(emp.getId());
                             if (joined != null && joined.isAfter(dayFinal)) return false;
+                            if (!com.hrms.api.workforce.DashboardAsOf.workedOn(trendLastDays.get(emp.getId()), dayFinal)) return false;
                             java.util.Set<Integer> off = trendOffs.get(emp.getId());
                             return off == null || !off.contains(dayDow);
                         })
@@ -926,6 +944,18 @@ public class AttendanceController {
 
     private List<Employee> scopedEmployees(Jwt jwt, UUID departmentId) {
         return new TeamEmployeeScope(employeeRepository, departmentRepository).resolve(jwt, departmentId);
+    }
+
+    /** The team over {@code from}..{@code to}: today's team plus people who have left since but still worked then. */
+    private List<Employee> scopedEmployeesOn(Jwt jwt, UUID departmentId, LocalDate from, LocalDate to) {
+        UUID tenant = com.unifiedtree.security.tenant.TenantContext.requireTenantId();
+        return new TeamEmployeeScope(employeeRepository, departmentRepository)
+                .resolve(jwt, departmentId, companyId -> dashboardHistory.formerStaff(tenant, companyId, from, to));
+    }
+
+    /** Each leaver's last working day (people still employed are absent from the map). */
+    private Map<UUID, LocalDate> lastDaysOf(List<UUID> employeeIds) {
+        return dashboardHistory.lastDays(com.unifiedtree.security.tenant.TenantContext.requireTenantId(), employeeIds);
     }
 
     // Permission-based since V143.17; these used to test role names, which the

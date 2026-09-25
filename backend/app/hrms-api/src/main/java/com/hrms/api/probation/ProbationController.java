@@ -39,7 +39,12 @@ public class ProbationController {
 
     @GetMapping("/upcoming")
     @PreAuthorize("hasAuthority('hrms.employee.read')")
-    public List<ProbationService.UpcomingProbationDto> upcoming(@RequestParam(defaultValue = "30") int days) {
+    public List<ProbationService.UpcomingProbationDto> upcoming(@RequestParam(defaultValue = "30") int days,
+                                                                @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        // A past date: the list as it stood on that day (admin dashboard history view).
+        if (date != null && date.isBefore(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")))) {
+            return service.listUpcomingOn(TenantContext.getTenantId(), days, date);
+        }
         return service.listUpcoming(TenantContext.getTenantId(), days);
     }
 
