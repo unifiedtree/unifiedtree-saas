@@ -130,7 +130,7 @@ const MODULE_ITEMS: NavItemDef[] = [
       { label: 'Hiring Pipeline', path: '/hrms/hiring', icon: <UserCheck size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.hiring.offer.read', 'hrms.hiring.read'] },
       { label: 'Onboarding & Assets', path: '/hrms/onboarding/instances', icon: <ClipboardList size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.onboarding.asset.read'] },
       // One Letters hub (templates, generated letters, distributions); its old routes open its views.
-      { label: 'Letters', path: '/hrms/letters', icon: <FileText size={15} />, visibleForRoles: R_HR },
+      { label: 'Letters', path: '/hrms/letters', icon: <FileText size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.letters.template.read', 'hrms.letters.read', 'hrms.letters.distribute'] },
       { label: 'Employee Vault', path: '/hrms/documents', icon: <FileText size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.letters.template.read'] },
       // "Documents to review" — the HR queue that lands every pending upload
       // in one place instead of forcing them to open each employee separately.
