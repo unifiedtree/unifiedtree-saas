@@ -112,7 +112,7 @@ export class CompaniesPage extends DCLogic {
     const view = mobile ? 'cards' : this.state.view
     const hasList = !isLoading && !isError && pool.length > 0
     const d = this.state.drawer
-    const drawerBranch = d && d.type === 'branch' ? (d.id ? branches.find((b) => b.id === d.id) || null : null) : null
+    const drawerBranch = d && d.type === 'branch' ? (d.id ? branches.find((b) => b.id === d.id) || archived.find((b) => b.id === d.id) || null : null) : null
     const drawerCompany = d && d.type === 'company' ? (d.id ? { ...(companies.find((c) => c.id === d.id) || {}), prefix: fmt?.prefix, next: fmt?.next } : null) : null
     const cf2 = this.state.confirm
     const addBranch = () => this.setState({ drawer: { type: 'branch', id: null } })

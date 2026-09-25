@@ -94,6 +94,11 @@ export function CompaniesPageContainer() {
           } catch (e) { toast.error('Could not save the employee ID format', { description: errText(e) }); return false }
         }}
         onSaveBranch={async (b: any) => {
+          // An archived branch can't be the headquarters (the server would keep it off).
+          if (b.id && b.status === 'INACTIVE' && b.hq) {
+            toast.error('Restore this branch first', { description: 'An archived branch can’t be the headquarters. Restore it from the Inactive filter, then mark it.' })
+            return false
+          }
           try {
             const fields = { name: b.name, code: b.code || undefined, city: b.city, state: b.state, country: b.country, isHeadquarters: !!b.hq }
             let id: string = b.id
