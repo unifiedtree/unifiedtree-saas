@@ -29,6 +29,7 @@ import {
 } from './masterData'
 import { SYNC, diff, type SyncEnv } from './masterSync'
 import { saveAndRecord } from '@/shared/export/fileExport'
+import { isValidRange, rangeLabel, type DateRange } from '@/design/dc/milestoneRange'
 
 // The generated design module is untyped JavaScript; these are the pieces used here.
 const { NAV, TopTabs, Toasts, ICONS, deriveDB } = Design as any
@@ -67,11 +68,15 @@ const MILESTONES = [
   { v: 'anniversary', l: 'Work anniversaries', sub: 'Next 31 days' },
   { v: 'retirement', l: 'Retirements', sub: 'Next 6 months' },
 ]
-/** Ids of the people with that milestone coming up, chosen by the server with the dashboard card's own rules. */
-async function loadMilestone(kind: string) {
+/**
+ * Ids of the people with that milestone coming up, chosen by the server with the dashboard card's own rules.
+ * `range`: the card's chosen dates ("View all" passes ?from=&to=) instead of the window.
+ */
+async function loadMilestone(kind: string, range: DateRange | null) {
   const ids: string[] = []
+  const span = range ? `&milestoneFrom=${range.from}&milestoneTo=${range.to}` : ''
   for (let page = 0; page < 10; page++) {
-    const r = await apiJson<PageResponse<WorkforceEmployee>>(`/v1/hrms/employees?milestone=${encodeURIComponent(kind)}&page=${page}&pageSize=200`)
+    const r = await apiJson<PageResponse<WorkforceEmployee>>(`/v1/hrms/employees?milestone=${encodeURIComponent(kind)}${span}&page=${page}&pageSize=200`)
     ids.push(...r.content.map((e) => e.id))
     if (page + 1 >= r.totalPages) break
   }
@@ -190,8 +195,15 @@ export function MasterContainer() {
   const ptCode = setQ.data?.ptStateCode || ''
   // Milestone filter (URL filter=birthday|anniversary|retirement). Changing it keeps the page's other filters.
   const milestone = MILESTONES.some((m) => m.v === params.get('filter')) ? params.get('filter') as string : ''
-  const setMilestone = useCallback((v: string) => setParams((cur) => { const n = new URLSearchParams(cur); if (v) n.set('filter', v); else n.delete('filter'); return n }, { replace: true }), [setParams])
-  const milestoneQ = useQuery({ queryKey: ['hrms', 'employees', 'milestone', milestone], queryFn: () => loadMilestone(milestone), enabled: canEmpRead && !!milestone && page === 'employees', staleTime: 60_000 })
+  // The card's chosen dates (?from=&to=, at most 12 months) replace the window; anything else is ignored.
+  const mFrom = params.get('from'), mTo = params.get('to')
+  const milestoneRange = useMemo(() => (milestone && isValidRange(mFrom, mTo) ? { from: mFrom as string, to: mTo as string } : null), [milestone, mFrom, mTo])
+  // "All people" clears the dates too, so picking a milestone again starts from its own window.
+  const setMilestone = useCallback((v: string) => setParams((cur) => { const n = new URLSearchParams(cur); if (v) n.set('filter', v); else { n.delete('filter'); n.delete('from'); n.delete('to') } return n }, { replace: true }), [setParams])
+  const milestoneOptions = useMemo(() => (milestoneRange
+    ? MILESTONES.map((m) => ({ v: m.v, l: `${m.l} · ${rangeLabel(milestoneRange)}` }))
+    : MILESTONES), [milestoneRange])
+  const milestoneQ = useQuery({ queryKey: ['hrms', 'employees', 'milestone', milestone, milestoneRange?.from ?? '', milestoneRange?.to ?? ''], queryFn: () => loadMilestone(milestone, milestoneRange), enabled: canEmpRead && !!milestone && page === 'employees', staleTime: 60_000 })
   const milestoneIds = useMemo(() => (milestoneQ.data ? new Set(milestoneQ.data) : null), [milestoneQ.data])
   const slabsQ = useQuery({ queryKey: ['hrms', 'payroll', 'pt-slabs', ptCode], queryFn: () => apiJson<PtSlab[]>(`/v1/payroll/pt-slabs/${ptCode}`), enabled: !!ptCode && canSlabs && want('statutory'), staleTime: Infinity })
 
@@ -288,7 +300,7 @@ export function MasterContainer() {
     showArchivedBranches: (on: boolean, co: string) => navigate(MASTER_ROUTES.branches + '?' + new URLSearchParams(Object.entries({ co, archived: on ? '1' : '' }).filter(([, v]) => v)).toString()),
     importEmployees: () => (canImport ? navigate('/hrms/employees/import') : show('You don’t have access to import employees', 'error')),
     openRecord: (id: string) => navigate(`/hrms/employees/${id}`),
-    milestone: { value: milestone, options: MILESTONES, set: setMilestone, ids: milestoneIds },
+    milestone: { value: milestone, options: milestoneOptions, set: setMilestone, ids: milestoneIds },
     exportEmployees: (rows: Rec[]) => {
       const nameOf = (m: Rec[]) => new Map(m.map((x) => [x.id, x.name as string]))
       const dept = nameOf(db.depts), des = nameOf(db.desigs), br = nameOf(db.branches), emp = nameOf(db.employees)

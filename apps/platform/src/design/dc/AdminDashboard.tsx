@@ -223,17 +223,8 @@ export class AdminDashboard extends DCLogic {
         createElement(HrButton, { size: 'sm', variant: 'ghost', disabled: nPage <= 0, onClick: () => p.onNoticePage && p.onNoticePage(nPage - 1), 'aria-label': 'Newer notices', style: { marginLeft: 8 } } as any, 'Newer'),
         createElement(HrButton, { size: 'sm', variant: 'ghost', disabled: nPage >= nPages - 1, onClick: () => p.onNoticePage && p.onNoticePage(nPage + 1), 'aria-label': 'Older notices', style: { marginLeft: 6 } } as any, 'Older'))
       : noticeText
-    const ms = D.milestones || { birthdays: [], anniversaries: [], retirements: [] }
-    const mcol = (title: string, icon: string, rows: any[], windowLabel: string, tone: string, filter: string) => ({
-      title, icon: ic(icon, 15), count: rows.length, window: windowLabel, tone,
-      viewTip: '→ /hrms/employees?filter=' + filter, onViewAll: () => go(`/hrms/employees?filter=${filter}`),
-      rows: rows.map((r) => ({ ...r, tip: '→ ' + `/hrms/employees/${r.id}`, onClick: () => go(`/hrms/employees/${r.id}`) })),
-    })
-    const milestoneCols = [
-      mcol('Birthdays', 'cake', ms.birthdays || [], 'Next 14 days', 'warn', 'birthday'),
-      mcol('Work anniversaries', 'award', ms.anniversaries || [], 'Next 31 days', 'info', 'anniversary'),
-      mcol('Retirements', 'star', ms.retirements || [], 'Next 6 months', 'ok', 'retirement'),
-    ]
+    // "Upcoming milestones" is its own component (MilestonesCard): it keeps each list's date range and loads its lists.
+    const milestonesCard = { today, companyId: D.companyId, canReadEmployees: !!p.canReadEmployees, onNavigate: go }
     const probations = (D.probations || []) as any[]
     const probationColumns = [
       { key: 'name', header: 'Employee', render: (r: any) => createElement(HrAvatar, { name: r.name, sub: `${r.code || ''}${r.code && r.title ? ' · ' : ''}${r.title || ''}` } as any) },
@@ -313,7 +304,7 @@ export class AdminDashboard extends DCLogic {
       activity, notices,
       noticeCountLabel: noticePager,
       canManageNotices: !!p.canManageNotices,
-      milestoneCols, probations, probationColumns, probationCount: probations.length,
+      milestonesCard, probations, probationColumns, probationCount: probations.length,
       openEmployeeRow: (r: any) => go(`/hrms/employees/${r.id}`),
       ops,
       noticeOpen: this.state.noticeOpen,

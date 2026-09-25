@@ -380,7 +380,26 @@ const PATCH = {
 }
 
 // Post-conversion edits on the generated TSX, when a markup patch can't express it.
-const POST = {}
+const POST = {
+  // "Upcoming milestones" is its own component (src/design/dc/MilestonesCard.tsx:
+  // a date range per list, kept in the card's state). The view mounts it with
+  // the props AdminDashboard.tsx supplies (v.milestonesCard). Done after
+  // conversion so the other cards' generated class names don't shift.
+  AdminDashboard(tsx) {
+    const open = '<section aria-label="Upcoming" style={{display: "grid", gap: "16px"}}>\n'
+    const a = tsx.indexOf(open)
+    if (a < 0) throw new Error('AdminDashboard: Upcoming section not found')
+    const start = a + open.length
+    const end = tsx.indexOf('{v.show?.probations ? (', start)
+    const card = tsx.slice(start, end)
+    if (end < 0 || !card.includes('{"Upcoming milestones"}') || card.includes('<section')) throw new Error('AdminDashboard: milestones card not found')
+    const pad = card.match(/^ */)[0]
+    const imp = "import { DatePicker } from './DatePicker'\n"
+    if (!tsx.includes(imp)) throw new Error('AdminDashboard: DatePicker import not found')
+    return (tsx.slice(0, start) + `${pad}<MilestonesCard {...(v.milestonesCard || {})} />\n${pad}` + tsx.slice(end))
+      .replace(imp, imp + "import { MilestonesCard } from './MilestonesCard'\n")
+  },
+}
 
 // ── build ────────────────────────────────────────────────────────────────────
 const wanted = process.argv.slice(2)

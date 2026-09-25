@@ -49,6 +49,38 @@ export interface MilestonesParams {
 /** Milestones move once a day at most — no point re-fetching on every focus. */
 const STALE_MS = 10 * 60_000
 
+/** One of the three lists. */
+export type MilestoneKind = keyof MilestonesResponse
+
+/** A chosen date range (yyyy-MM-dd), both ends included, at most 12 months. */
+export interface MilestoneRange {
+  from: string
+  to: string
+}
+
+/** The server's parameter prefix for each list's range (birthdayFrom, birthdayTo, …). */
+const RANGE_PARAM: Record<MilestoneKind, string> = { birthdays: 'birthday', anniversaries: 'anniversary', retirements: 'retirement' }
+
+/**
+ * One list over a chosen date range (the dashboard card's presets and custom
+ * range). Same endpoint and access as useMilestones; the server works out each
+ * person's date inside the range (year end, 29 February, anniversaries of at
+ * least one year). Disabled while `range` is null.
+ */
+export function useMilestonesBetween(kind: MilestoneKind, range: MilestoneRange | null, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['hrms', 'milestones', 'range', kind, range?.from ?? '', range?.to ?? ''],
+    queryFn: async (): Promise<Milestone[]> => {
+      const p = RANGE_PARAM[kind]
+      const qs = new URLSearchParams({ [`${p}From`]: range!.from, [`${p}To`]: range!.to })
+      const data = await apiJson<Partial<MilestonesResponse>>(`/v1/hrms/milestones?${qs}`)
+      return data?.[kind] ?? []
+    },
+    staleTime: STALE_MS,
+    enabled: !!range && (options?.enabled ?? true),
+  })
+}
+
 export function useMilestones(params: MilestonesParams = {}, options?: { enabled?: boolean }) {
   const { birthdayDays = 14, anniversaryDays = 31, retirementMonths = 6 } = params
   const qs = new URLSearchParams({
@@ -100,5 +132,24 @@ export function useRetirementsDue(days: number, options?: { companyId?: string; 
     queryFn: () => apiJson<RetirementDue[]>(`/v1/hrms/retirements/due?days=${days}${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ''}`),
     staleTime: STALE_MS,
     enabled: options?.enabled ?? true,
+  })
+}
+
+/**
+ * People whose retirement date falls inside a chosen range (both ends
+ * included, at most 12 months), soonest first — the card's range for people
+ * who can read employee records. Backend: GET /v1/hrms/retirements/due?from=&to=.
+ */
+export function useRetirementsBetween(range: MilestoneRange | null, options?: { companyId?: string; enabled?: boolean }) {
+  const companyId = options?.companyId
+  return useQuery({
+    queryKey: ['hrms', 'retirements', 'range', range?.from ?? '', range?.to ?? '', companyId ?? 'all'],
+    queryFn: () => {
+      const qs = new URLSearchParams({ from: range!.from, to: range!.to })
+      if (companyId) qs.set('companyId', companyId)
+      return apiJson<RetirementDue[]>(`/v1/hrms/retirements/due?${qs}`)
+    },
+    staleTime: STALE_MS,
+    enabled: !!range && (options?.enabled ?? true),
   })
 }
