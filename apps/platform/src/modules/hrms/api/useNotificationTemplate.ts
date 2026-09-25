@@ -37,7 +37,48 @@ export interface NotificationTemplatePayload {
   active?: boolean
 }
 
+/** One placeholder a template may use for an event. */
+export interface NotificationPlaceholder { name: string; description: string; link: boolean }
+
+/** Channels the senders deliver on (SMS isn't sent by anything). */
+export type NotificationDeliveryChannel = 'IN_APP' | 'PUSH' | 'EMAIL'
+
+/** An event the senders use (GET /v1/notiftemplate/events). */
+export interface NotificationEvent {
+  key: string
+  /** Older spelling accepted for the key, e.g. LEAVE_APPROVED */
+  alias: string | null
+  group: string
+  label: string
+  audience: string
+  description: string
+  channels: NotificationDeliveryChannel[]
+  /** Channels a template can be written for; empty = fixed wording */
+  templateChannels: NotificationDeliveryChannel[]
+  essential: boolean
+  external: boolean
+  placeholders: NotificationPlaceholder[]
+  /** Built-in wording per template channel (subject is the title for in-app / push) */
+  defaults: Partial<Record<NotificationDeliveryChannel, { subject: string | null; body: string | null }>>
+}
+
 // ── Queries ──────────────────────────────────────────────────────────────────
+
+export function useNotificationEvents(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'notiftemplate', 'events'],
+    queryFn: () => apiJson<NotificationEvent[]>('/v1/notiftemplate/events'),
+    staleTime: 10 * 60_000,
+    enabled,
+  })
+}
+
+/** The event a stored key refers to (canonical key or its older alias), ignoring case. */
+export function findNotificationEvent(events: NotificationEvent[] | undefined, key: string | undefined): NotificationEvent | undefined {
+  if (!events || !key) return undefined
+  const k = key.trim().toLowerCase()
+  return events.find((e) => e.key === k || (e.alias ?? '').toLowerCase() === k)
+}
 
 export function useNotificationTemplates(companyId: string | undefined, page = 0, enabled = true) {
   return useQuery({

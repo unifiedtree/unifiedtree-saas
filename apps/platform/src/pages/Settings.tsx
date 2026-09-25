@@ -14,6 +14,7 @@ import { SkeletonBlock } from '@/shared/components/SkeletonCard'
 import { DesignFrame } from '@/design/dc/DesignFrame'
 import { SettingsPage, SettingsSection, SettingsGrid, SettingsValue, SettingsNote, useSettingsToast, type SettingsNavItem } from '@/design/settings/SettingsKit'
 import { DocumentTypesTab } from './SettingsDocumentTypes'
+import { NotificationChoiceSections, useNotificationChoices, type NotificationChoicesState } from './NotificationChoices'
 
 type TabKey = 'profile' | 'branding' | 'security' | 'notifications' | 'billing' | 'integrations' | 'documents' | 'danger'
 type Show = (kind: 'ok' | 'error', title: string, msg?: string) => void
@@ -22,7 +23,7 @@ const TAB_META: Record<TabKey, { label: string; desc: string }> = {
   profile:       { label: 'Profile',        desc: 'Your account and organization details.' },
   branding:      { label: 'Branding',       desc: 'Your logo and workspace identity.' },
   security:      { label: 'Security',       desc: 'Password, two-factor and active sessions.' },
-  notifications: { label: 'Notifications',  desc: 'Email and in-app notification preferences.' },
+  notifications: { label: 'Notifications',  desc: 'Which notifications reach you, and how: email, in the app or on your phone.' },
   billing:       { label: 'Billing & Plan', desc: 'Your subscription, plan and invoices.' },
   integrations:  { label: 'Integrations',   desc: 'Connect external tools and services.' },
   documents:     { label: 'Document Types', desc: 'Which documents employees must upload, and the rules for each.' },
@@ -50,7 +51,7 @@ const NAV: Record<TabKey, SettingsNavItem[]> = {
   profile: [{ key: 'account', label: 'Your account', state: 'none' }, { key: 'org', label: 'Organisation', state: 'none' }],
   branding: [{ key: 'logo', label: 'Workspace logo', state: 'none' }],
   security: [{ key: 'password', label: 'Password', state: 'on' }, { key: 'twofa', label: 'Two-factor', state: 'soon' }, { key: 'sessions', label: 'Active sessions', state: 'soon' }],
-  notifications: [{ key: 'today', label: 'What reaches you', state: 'on' }, { key: 'email', label: 'Email choices', state: 'soon' }, { key: 'push', label: 'In-app choices', state: 'soon' }],
+  notifications: [{ key: 'today', label: 'What reaches you', state: 'none' }, { key: 'email', label: 'Email choices', state: 'on' }, { key: 'inapp', label: 'In-app choices', state: 'on' }, { key: 'push', label: 'Phone push choices', state: 'on' }],
   billing: [{ key: 'plan', label: 'Your plan', state: 'none' }, { key: 'invoices', label: 'Invoices', state: 'soon' }],
   integrations: INTEGRATIONS.map((i) => ({ key: i.key, label: i.name, state: 'soon' as const })),
   documents: [{ key: 'types', label: 'Document types', state: 'none' }],
@@ -227,26 +228,27 @@ const SecurityTab: React.FC = () => {
 }
 
 /**
- * Notifications. There's no preferences endpoint (NotificationsController
- * serves the in-app inbox; notification templates are tenant-wide HR copy),
- * so per-event choices are shown as coming soon. What does reach admins today
- * is stated plainly so nobody reads silence as "turned off".
+ * Notifications: the signed-in person's own choices, per event and channel
+ * (GET/PUT /v1/me/notification-preferences). Every sender checks them; the
+ * always-sent ones (security, access, billing, letters HR sends) are shown
+ * locked on. Saved through the page's unsaved-changes bar.
  */
-const NotificationsTab: React.FC = () => (
-  <>
-    <SettingsSection id="today" icon="bell" title="What reaches you today" summary="Admins and approvers get what the workspace needs to run, by email and in the app.">
-      <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6, fontSize: 13.5, color: '#334155', lineHeight: 1.5 }}>
-        <li>Leave, work-from-home and attendance-correction requests waiting for you</li>
-        <li>Shift-change requests</li>
-        <li>Welcome emails for new members</li>
-        <li>Any failed autopay payment</li>
-      </ul>
-      <SettingsNote>Your own email and push switches are on <Link to="/profile#st-notifications" style={{ color: '#047857', fontWeight: 600 }}>your profile</Link>.</SettingsNote>
-    </SettingsSection>
-    <SettingsSection id="email" icon="inbox" title="Email choices" summary="Pick which events email you: new employee joined, leave request submitted, payroll processed, deal status changed, critical tickets, invoice overdue." soon />
-    <SettingsSection id="push" icon="megaphone" title="In-app choices" summary="All notifications, critical alerts only, or just mentions and assignments." soon />
-  </>
-)
+const NotificationsTab: React.FC<{ c: NotificationChoicesState }> = ({ c }) => {
+  const user = useAuthStore((s) => s.user)
+  return (
+    <>
+      <SettingsSection id="today" icon="bell" title="What reaches you" summary="Requests waiting for you and decisions on your own requests, in the app and on your phone.">
+        <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6, fontSize: 13.5, color: '#334155', lineHeight: 1.5 }}>
+          <li>In the app and on your phone: leave, work-from-home, attendance, shift, expense, advance and document requests waiting for you, and decisions on your own requests</li>
+          <li>By email: reminders such as probation ending, plus any event you switch on below</li>
+          <li>Always: password reset and invitation emails, billing alerts for admins, and letters HR sends you</li>
+        </ul>
+        <SettingsNote>Changes apply to the next notification. The same email and push switches are on <Link to="/profile#st-notifications" style={{ color: '#047857', fontWeight: 600 }}>your profile</Link>. The wording comes from the workspace’s notification templates.</SettingsNote>
+      </SettingsSection>
+      {c.status === 'live' && <NotificationChoiceSections c={c} email={user?.email} masters />}
+    </>
+  )
+}
 
 interface BillingSubDto {
   primaryPlanKey: string | null
@@ -372,11 +374,21 @@ export const Settings: React.FC<{ tab?: TabKey }> = ({ tab: tabProp }) => {
   const active: TabKey = VALID_TABS.includes(resolved as TabKey) ? (resolved as TabKey) : 'profile'
   const meta = TAB_META[active]
   const { toast, show, dismiss } = useSettingsToast()
+  // Notifications is the one tab with a draft; it drives the unsaved-changes bar.
+  const isNotif = active === 'notifications'
+  const notif = useNotificationChoices(isNotif)
+  const saveNotif = async () => {
+    try { await notif.save(); show('ok', 'Notification choices saved', 'They apply to the next notification.') } catch (e) { show('error', 'Couldn’t save your choices', (e as Error)?.message) }
+  }
+  const nav = isNotif && notif.draft
+    ? NAV.notifications.map((n) => (n.key === 'email' ? { ...n, state: notif.draft!.emailEnabled ? 'on' as const : 'off' as const }
+      : n.key === 'push' ? { ...n, state: notif.draft!.pushEnabled ? 'on' as const : 'off' as const } : n))
+    : NAV[active]
   const body: Record<TabKey, React.ReactNode> = {
     profile: <ProfileTab />,
     branding: <BrandingTab show={show} />,
     security: <SecurityTab />,
-    notifications: <NotificationsTab />,
+    notifications: <NotificationsTab c={notif} />,
     billing: <BillingTab />,
     integrations: <IntegrationsTab />,
     documents: <DocumentsTab />,
@@ -384,8 +396,10 @@ export const Settings: React.FC<{ tab?: TabKey }> = ({ tab: tabProp }) => {
   }
   return (
     <DesignFrame>
-      <SettingsPage key={active} crumb="Workspace Settings" title={meta.label} subtitle={meta.desc} nav={NAV[active]} access="edit" status="live" entity="settings"
-        dirty={false} changeCount={0} errorCount={0} saving={false} onSave={() => {}} onDiscard={() => {}} toast={toast} onDismissToast={dismiss}>
+      <SettingsPage key={active} crumb="Workspace Settings" title={meta.label} subtitle={meta.desc} nav={nav} access="edit"
+        status={isNotif ? notif.status : 'live'} onRetry={isNotif ? notif.refetch : undefined} entity={isNotif ? 'your notification choices' : 'settings'}
+        dirty={isNotif && notif.dirty} changeCount={isNotif ? notif.changeCount : 0} errorCount={0} saving={isNotif && notif.saving}
+        onSave={isNotif ? () => { void saveNotif() } : () => {}} onDiscard={isNotif ? notif.discard : () => {}} toast={toast} onDismissToast={dismiss}>
         {body[active]}
       </SettingsPage>
     </DesignFrame>
