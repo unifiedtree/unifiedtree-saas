@@ -1,6 +1,7 @@
 package com.unifiedtree.notifications.listener;
 
 import com.unifiedtree.notifications.enums.AppNotificationType;
+import com.unifiedtree.notifications.events.AttendanceStatusChangedEvent;
 import com.unifiedtree.notifications.events.CorrectionDecidedEvent;
 import com.unifiedtree.notifications.events.CorrectionSubmittedEvent;
 import com.unifiedtree.notifications.events.EmployeeWelcomeEvent;
@@ -636,6 +637,52 @@ public class DomainEventListener {
         } catch (Exception ex) {
             log.warn("Failed to publish OVERTIME decision notification for {}: {}", e.overtimeId(), ex.getMessage());
         }
+    }
+
+    // ─── Attendance status changed by a reviewer (V143.10) ──────────────────
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onAttendanceStatusChanged(AttendanceStatusChangedEvent e) {
+        try {
+            String from = statusLabel(e.fromStatus()), to = statusLabel(e.toStatus());
+            String by = e.changedBy() != null && !e.changedBy().isBlank() ? " by " + e.changedBy() : "";
+            String day = fmt(e.date());
+            String body = switch (e.kind() == null ? "SET" : e.kind()) {
+                case "FACE_REJECT" -> "Your face punch on %s was rejected%s, so the day now counts as %s.".formatted(day, by, to);
+                case "FACE_CONFIRM" -> "Your face punch on %s was confirmed%s. The day counts as %s.".formatted(day, by, to);
+                case "EXCUSE" -> e.fromStatus() != null && !e.fromStatus().equals(e.toStatus())
+                        ? "Your %s on %s was excused%s. The day now counts as %s.".formatted(from.toLowerCase(), day, by, to)
+                        : "Your attendance on %s was reviewed and excused%s. It counts as %s.".formatted(day, by, to);
+                case "CLEAR" -> "The manual attendance status for %s was removed%s. The company rules now decide: %s.".formatted(day, by, to);
+                default -> e.fromStatus() != null && e.fromStatus().equals(e.toStatus())
+                        ? "Your attendance for %s was reviewed%s and set to %s.".formatted(day, by, to)
+                        : "Your attendance for %s was changed from %s to %s%s.".formatted(day, from, to, by);
+            };
+            if (e.reason() != null && !e.reason().isBlank()) body += " Reason: " + e.reason().trim();
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.ATTENDANCE_STATUS_CHANGED.name());
+            data.put("date", e.date() != null ? e.date().toString() : null);
+            data.put("route", "/attendance-history");
+            service.create(e.tenantId(), e.employeeId(), AppNotificationType.ATTENDANCE_STATUS_CHANGED,
+                    "Attendance updated", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish ATTENDANCE_STATUS_CHANGED for employee {} on {}: {}",
+                    e.employeeId(), e.date(), ex.getMessage());
+        }
+    }
+
+    private static String statusLabel(String s) {
+        if (s == null) return "not marked";
+        return switch (s) {
+            case "PRESENT" -> "Present";
+            case "LATE" -> "Late";
+            case "HALF_DAY" -> "Half day";
+            case "ABSENT" -> "Absent";
+            case "NOT_MARKED" -> "Not marked";
+            case "ON_LEAVE" -> "On leave";
+            case "HOLIDAY" -> "Holiday";
+            case "WEEKLY_OFF" -> "Weekly off";
+            default -> s.charAt(0) + s.substring(1).toLowerCase().replace('_', ' ');
+        };
     }
 
     // ─── Document verification ─────────────────────────────────────────────

@@ -95,6 +95,14 @@ public class AttendanceService {
     @Autowired(required = false)
     private JdbcTemplate jdbcTemplate;
 
+    /**
+     * The company attendance policy + manual reviews (V143.10). When present,
+     * monthly stats, the month history and the weekly summary read every day's
+     * status from it, so they agree with the roster and the review list.
+     */
+    @Autowired(required = false)
+    private com.hrms.attendance.policy.EffectiveDayStatusService effectiveDays;
+
     public AttendanceService(
             AttendanceRecordRepository attendanceRecordRepository,
             AttendanceEventLogRepository attendanceEventLogRepository,
@@ -614,6 +622,7 @@ public class AttendanceService {
 
     @Transactional(readOnly = true)
     public MonthlyStatsResponse getMonthlyStats(UUID employeeId, int year, int month) {
+        if (effectiveDays != null) return monthlyStatsFromPolicy(employeeId, year, month);
         LocalDate start = LocalDate.of(year, month, 1);
         LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
         LocalDate today = LocalDate.now(IST);
@@ -670,6 +679,7 @@ public class AttendanceService {
 
     @Transactional(readOnly = true)
     public List<DayRecordResponse> getMonthHistory(UUID employeeId, int year, int month) {
+        if (effectiveDays != null) return monthHistoryFromPolicy(employeeId, year, month);
         LocalDate start = LocalDate.of(year, month, 1);
         LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
         LocalDate today = LocalDate.now(IST);
@@ -735,6 +745,7 @@ public class AttendanceService {
 
     @Transactional(readOnly = true)
     public WeeklySummaryResponse getWeeklySummary(UUID employeeId, LocalDate weekStart) {
+        if (effectiveDays != null) return weeklySummaryFromPolicy(employeeId, weekStart);
         LocalDate today = LocalDate.now(IST);
         LocalDate monday = weekStart != null
                 ? weekStart.with(DayOfWeek.MONDAY)
@@ -841,6 +852,123 @@ public class AttendanceService {
                 avgArrival,
                 dailyTargetHours,
                 days);
+    }
+
+    // ── Policy-based views (V143.10) ─────────────────────────────────────────
+    // Same shapes and status words as before (WEEKEND, ON_TIME, UPCOMING …) so
+    // the mobile app keeps working; the status now comes from the company's
+    // attendance policy and any reviewer's change.
+
+    private MonthlyStatsResponse monthlyStatsFromPolicy(UUID employeeId, int year, int month) {
+        LocalDate start = LocalDate.of(year, month, 1);
+        LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
+        Map<LocalDate, com.hrms.attendance.policy.EffectiveDay> days =
+                effectiveDays.effectiveStatuses(List.of(employeeId), start, end).getOrDefault(employeeId, Map.of());
+        int present = 0, absent = 0, onTime = 0, late = 0, holidays = 0;
+        for (com.hrms.attendance.policy.EffectiveDay d : days.values()) {
+            if (d == null) continue;
+            switch (d.status()) {
+                case com.hrms.attendance.policy.EffectiveDay.PRESENT -> { present++; onTime++; }
+                case com.hrms.attendance.policy.EffectiveDay.LATE -> { present++; late++; }
+                case com.hrms.attendance.policy.EffectiveDay.HALF_DAY -> {
+                    present++;
+                    if (d.lateMinutes() != null) late++; else onTime++;
+                }
+                case com.hrms.attendance.policy.EffectiveDay.ABSENT -> absent++;
+                case com.hrms.attendance.policy.EffectiveDay.HOLIDAY -> holidays++;
+                default -> { /* leave, weekly off, not marked, upcoming, not tracked */ }
+            }
+        }
+        int workingDays = present + absent;
+        int score = workingDays > 0 ? Math.round((float) present / workingDays * 100) : 100;
+        return new MonthlyStatsResponse(present, absent, holidays, onTime, late, score);
+    }
+
+    private List<DayRecordResponse> monthHistoryFromPolicy(UUID employeeId, int year, int month) {
+        LocalDate start = LocalDate.of(year, month, 1);
+        LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
+        Map<LocalDate, com.hrms.attendance.policy.EffectiveDay> days =
+                effectiveDays.effectiveStatuses(List.of(employeeId), start, end).getOrDefault(employeeId, Map.of());
+        java.util.Set<Integer> weekOffs = resolveWeeklyOffSet(employeeId);
+        List<DayRecordResponse> result = new ArrayList<>();
+        for (LocalDate day = start; !day.isAfter(end); day = day.plusDays(1)) {
+            com.hrms.attendance.policy.EffectiveDay d = days.get(day);
+            String st = d == null ? null : d.status();
+            boolean off = weekOffs.contains(day.getDayOfWeek().getValue());
+            if (d == null || com.hrms.attendance.policy.EffectiveDay.UPCOMING.equals(st)
+                    || com.hrms.attendance.policy.EffectiveDay.NOT_TRACKED.equals(st)
+                    || com.hrms.attendance.policy.EffectiveDay.NOT_MARKED.equals(st)) {
+                // Future days, days before tracking and today without a punch are
+                // left out, as before; weekly offs still show.
+                if (off) result.add(new DayRecordResponse(day.toString(), "WEEKEND", null, null, null));
+                continue;
+            }
+            if (com.hrms.attendance.policy.EffectiveDay.WEEKLY_OFF.equals(st)) {
+                result.add(new DayRecordResponse(day.toString(), "WEEKEND", null, null, null, d.note(), d.manual()));
+                continue;
+            }
+            boolean punched = d.hasPunch();
+            result.add(new DayRecordResponse(day.toString(), st,
+                    punched ? d.checkIn().toString() : null,
+                    punched && d.checkOut() != null ? d.checkOut().toString() : null,
+                    punched && d.workedMinutes() != null ? Math.round(d.workedMinutes() / 60.0 * 100.0) / 100.0 : null,
+                    d.note(), d.manual()));
+        }
+        return result;
+    }
+
+    private WeeklySummaryResponse weeklySummaryFromPolicy(UUID employeeId, LocalDate weekStart) {
+        LocalDate today = LocalDate.now(IST);
+        LocalDate monday = (weekStart != null ? weekStart : today).with(DayOfWeek.MONDAY);
+        LocalDate sunday = monday.plusDays(6);
+        Map<LocalDate, com.hrms.attendance.policy.EffectiveDay> days =
+                effectiveDays.effectiveStatuses(List.of(employeeId), monday, sunday).getOrDefault(employeeId, Map.of());
+        List<WeeklyDayResponse> out = new ArrayList<>();
+        double totalHours = 0, overtime = 0, totalArrivalMinutes = 0;
+        int presentDays = 0, arrivalCount = 0;
+        for (int i = 0; i < 7; i++) {
+            LocalDate day = monday.plusDays(i);
+            com.hrms.attendance.policy.EffectiveDay d = days.get(day);
+            if (d == null) { out.add(new WeeklyDayResponse(day.toString(), 0, "NOT_MARKED")); continue; }
+            boolean punched = d.hasPunch();
+            double h = punched && d.workedMinutes() != null ? Math.round(d.workedMinutes() / 60.0 * 100.0) / 100.0 : 0;
+            String in = punched ? formatIstHourMinute(d.checkIn()) : null;
+            String outAt = punched ? formatIstHourMinute(d.checkOut()) : null;
+            String status = switch (d.status()) {
+                case com.hrms.attendance.policy.EffectiveDay.WEEKLY_OFF -> "WEEKEND";
+                case com.hrms.attendance.policy.EffectiveDay.PRESENT -> "ON_TIME";
+                case com.hrms.attendance.policy.EffectiveDay.NOT_TRACKED -> "NOT_MARKED";
+                default -> d.status();
+            };
+            if (d.worked()) {
+                presentDays++;
+                if (punched) {
+                    LocalTime local = d.checkIn().atZone(IST).toLocalTime();
+                    totalArrivalMinutes += local.getHour() * 60.0 + local.getMinute();
+                    arrivalCount++;
+                }
+            }
+            if (punched) {
+                totalHours += h;
+                overtime += Math.max(0, h - STANDARD_HOURS);
+            }
+            out.add(new WeeklyDayResponse(day.toString(), h, status, in, outAt, d.lateMinutes(), d.note(), d.manual()));
+        }
+        String avgArrival = null;
+        if (arrivalCount > 0) {
+            int avgMin = (int) (totalArrivalMinutes / arrivalCount);
+            int h = avgMin / 60, m = avgMin % 60;
+            avgArrival = h < 12
+                    ? "%02d:%02d AM".formatted(h == 0 ? 12 : h, m)
+                    : "%02d:%02d PM".formatted(h == 12 ? 12 : h - 12, m);
+        }
+        return new WeeklySummaryResponse(
+                Math.round(totalHours * 100.0) / 100.0,
+                Math.round(overtime * 100.0) / 100.0,
+                presentDays,
+                avgArrival,
+                lookupDailyTargetHours(employeeId, monday),
+                out);
     }
 
     private String formatIstHourMinute(Instant instant) {
@@ -1203,7 +1331,8 @@ public class AttendanceService {
         }
 
         record.setAttendanceType(parseAttendanceType(request.attendanceType()));
-        record.setAttendanceStatus(parseAttendanceStatus(request.attendanceStatus(), record.getCheckInAt()));
+        record.setAttendanceStatus(parseAttendanceStatus(request.attendanceStatus(), record.getCheckInAt(),
+                lateThresholdFor(request.employeeId(), request.attendanceDate())));
         record.setCheckInMethod(CheckInMethod.MANAGER_OVERRIDE);
         record.setManualEntry(true);
         record.setRegularized(true);
@@ -1445,6 +1574,10 @@ public class AttendanceService {
     }
 
     private AttendanceStatus parseAttendanceStatus(String value, Instant checkInAt) {
+        return parseAttendanceStatus(value, checkInAt, LATE_THRESHOLD);
+    }
+
+    private AttendanceStatus parseAttendanceStatus(String value, Instant checkInAt, LocalTime lateThreshold) {
         if (value != null && !value.isBlank()) {
             try {
                 return AttendanceStatus.valueOf(value.toUpperCase());
@@ -1452,7 +1585,7 @@ public class AttendanceService {
                 // fall through to computed status
             }
         }
-        return checkInAt == null ? AttendanceStatus.NOT_MARKED : resolveStatus(checkInAt);
+        return checkInAt == null ? AttendanceStatus.NOT_MARKED : resolveStatus(checkInAt, lateThreshold);
     }
 
     private AttendanceStatus resolveStatus(Instant checkInAt) {
@@ -1490,17 +1623,38 @@ public class AttendanceService {
      * Cross-midnight (night) shifts fall back to the default for now.
      */
     private LocalTime lateThresholdFor(UUID employeeId, LocalDate onDate) {
+        // Company attendance policy (V143.10): its grace applies when the shift
+        // has none, and its start time applies to people without a shift.
+        com.hrms.attendance.policy.AttendanceTimingPolicy policy = companyPolicyFor(employeeId);
         try {
             ShiftProfile sp = getShiftProfile(employeeId, onDate != null ? onDate : LocalDate.now(IST));
             if (sp != null && sp.scheduledStart() != null) {
                 LocalTime start = LocalTime.parse(sp.scheduledStart());
-                int grace = sp.graceMinutes() != null ? Math.max(0, sp.graceMinutes()) : 0;
+                int shiftGrace = sp.graceMinutes() != null ? Math.max(0, sp.graceMinutes()) : 0;
+                int grace = shiftGrace > 0 || policy == null ? shiftGrace : policy.graceMinutes();
                 return start.plusMinutes(grace);
             }
         } catch (Exception ex) {
             log.debug("lateThresholdFor fallback for employee {}: {}", employeeId, ex.getMessage());
         }
+        if (policy != null) return policy.defaultStartTime().plusMinutes(policy.graceMinutes());
         return LATE_THRESHOLD;
+    }
+
+    @Autowired(required = false)
+    private com.hrms.attendance.policy.AttendancePolicyService attendancePolicies;
+
+    /** The employee's company attendance policy, or null when it can't be read (old behaviour then). */
+    private com.hrms.attendance.policy.AttendanceTimingPolicy companyPolicyFor(UUID employeeId) {
+        if (attendancePolicies == null || jdbcTemplate == null || employeeId == null) return null;
+        try {
+            List<UUID> company = jdbcTemplate.query("SELECT company_id FROM hrms.employees WHERE id = ?",
+                    (rs, i) -> (UUID) rs.getObject("company_id"), employeeId);
+            return company.isEmpty() || company.get(0) == null ? null : attendancePolicies.forCompany(company.get(0));
+        } catch (Exception ex) {
+            log.debug("Attendance policy lookup failed for employee {}: {}", employeeId, ex.getMessage());
+            return null;
+        }
     }
 
     // ── Offline capture time (untrusted client input) ────────────────────────
@@ -1652,9 +1806,10 @@ public class AttendanceService {
             record.setDepartmentId(correction.getDepartmentId());
             record.setAttendanceDate(correction.getMissingForDate());
         }
+        LocalTime correctedThreshold = lateThresholdFor(correction.getEmployeeId(), correction.getMissingForDate());
         if (correction.getRequestedCheckInAt() != null) {
             record.setCheckInAt(correction.getRequestedCheckInAt());
-            record.setLateByMinutes(calculateLateMinutes(correction.getRequestedCheckInAt()));
+            record.setLateByMinutes(calculateLateMinutes(correction.getRequestedCheckInAt(), correctedThreshold));
         }
         if (correction.getRequestedCheckOutAt() != null) {
             record.setCheckOutAt(correction.getRequestedCheckOutAt());
@@ -1664,7 +1819,7 @@ public class AttendanceService {
         record.setManagedByEmployeeId(approverEmployeeId);
         record.setManagerNote(note);
         record.setAttendanceType(AttendanceType.OFFICE);
-        record.setAttendanceStatus(parseAttendanceStatus(null, record.getCheckInAt()));
+        record.setAttendanceStatus(parseAttendanceStatus(null, record.getCheckInAt(), correctedThreshold));
         recomputeWorkingHours(record);
 
         AttendanceRecord saved = attendanceRecordRepository.save(record);
