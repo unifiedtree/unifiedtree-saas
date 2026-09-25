@@ -43,7 +43,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { id: 'submit-expense', label: 'Submit an expense claim', description: 'Claim money you spent for work', path: '/hrms/expenses?tab=submit', icon: 'receipt',
     access: [{ allOf: ['hrms.expense.claim.self'], module: HR }], keywords: ['expense', 'claim', 'reimburse', 'reimbursement', 'travel', 'bill'] },
   { id: 'request-advance', label: 'Request a salary advance', description: 'Borrow against your salary', path: '/hrms/advances?tab=request', icon: 'banknote',
-    access: [{ allOf: ['hrms.advance.request.self'], noneOf: ['hrms.advance.read'], module: HR }], keywords: ['advance', 'loan', 'emi'] },
+    access: [{ allOf: ['hrms.advance.request.self'], module: HR }], keywords: ['advance', 'loan', 'emi'] },
   { id: 'my-payslip', label: 'Download my payslip', description: 'Your payslips, month by month', path: '/me/payslips', icon: 'download',
     access: [{ allOf: ['payroll.payslip.read.self'], module: PAY, self: true }], keywords: ['payslip', 'salary slip', 'pay slip'] },
   { id: 'upload-document', label: 'Upload a document', description: 'Add an ID proof or certificate to your file', path: '/hrms/documents?view=my', icon: 'fileText',

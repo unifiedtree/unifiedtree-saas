@@ -169,7 +169,8 @@ test('items 9/15/22: search inputs — icon must NOT overlap placeholder', async
 })
 
 // ── ITEM 16 — Geofencing → Add Zone drawer position ────────────────────────
-test('item 16: /hrms/attendance/geofencing → Add Zone opens right drawer', async ({ page }, testInfo) => {
+// Geofencing page retired 25 Sep (punch zones live on branches); the route now redirects to Companies & Branches.
+test.skip('item 16: /hrms/attendance/geofencing → Add Zone opens right drawer', async ({ page }, testInfo) => {
   await enter(page, '/hrms/attendance/geofencing')
   await page.waitForTimeout(1500)
   const addBtn = page.getByRole('button', { name: /Add Zone/i }).first()

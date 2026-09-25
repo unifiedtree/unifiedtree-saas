@@ -106,7 +106,7 @@ page('me-shift', 'Shift change request', '/me/shift-change', 'Me', 'me/shift-cha
 page('me-documents', 'My documents', '/hrms/documents?view=my', 'Me', 'me/documents', [{ ...any('hrms.document.read.self'), module: HR }], { keywords: ['upload', 'aadhaar', 'pan', 'id proof', 'certificate'] })
 page('me-letters', 'My letters', '/hrms/letters/generated', 'Me', 'me/letters', [{ ...any('hrms.letters.read.self'), noneOf: ['hrms.letters.read'], module: HR }], { keywords: ['offer letter', 'experience letter', 'relieving'] })
 page('me-incentives', 'My incentives', '/hrms/pli', 'Me', 'me/incentives', [{ ...any('hrms.pli.read.self'), noneOf: ['hrms.pli.read', 'hrms.pli.target.read'], module: PAY }], { keywords: ['pli', 'bonus', 'incentive'] })
-page('me-advances', 'My advances', '/hrms/advances?tab=my', 'Me', 'me/advances', [{ ...any('hrms.advance.request.self'), noneOf: ['hrms.advance.read'], module: HR }], { keywords: ['loan', 'salary advance', 'emi'] })
+page('me-advances', 'My advances', '/hrms/advances?tab=my', 'Me', 'me/advances', [{ ...any('hrms.advance.request.self'), module: HR }], { keywords: ['loan', 'salary advance', 'emi'] })
 page('me-claims', 'My expense claims', '/hrms/expenses?tab=my', 'Me', 'me/expenses', [{ ...any('hrms.expense.claim.self'), module: HR }], { aliases: ['me/claims'], keywords: ['reimbursement', 'claim', 'receipt'] })
 page('me-reviews', 'My reviews', '/hrms/performance?view=my-reviews', 'Me', 'me/reviews', [{ ...any('hrms.performance.review.self'), module: HR }], { keywords: ['appraisal', 'self review', 'feedback'] })
 page('me-goals', 'My goals', '/hrms/performance?view=my-goals', 'Me', 'me/goals', [{ ...any('hrms.performance.review.self'), module: HR }], { keywords: ['kpi', 'objectives', 'targets'] })

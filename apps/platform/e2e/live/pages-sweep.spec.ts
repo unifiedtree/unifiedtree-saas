@@ -33,7 +33,7 @@ const PAGES = [
   '/hrms/expenses', '/hrms/advances', '/hrms/fnf', '/hrms/hiring', '/hrms/performance',
   '/hrms/payroll/runs', '/hrms/payroll/components', '/hrms/payroll/settings',
   '/hrms/payroll-dashboard', '/hrms/salary-structure', '/hrms/bank-disbursement', '/hrms/shifts',
-  '/hrms/organization', '/hrms/attendance/geofencing', '/hrms/settings',
+  '/hrms/organization', '/hrms/settings',
   '/hrms/reports', '/hrms/reports/headcount', '/hrms/reports/attrition', '/hrms/reports/diversity',
   '/hrms/reports/leave-balance', '/hrms/reports/late-marks', '/hrms/reports/attendance-summary',
   '/hrms/letters/templates', '/hrms/letters/generated', '/hrms/letters/distributions',
