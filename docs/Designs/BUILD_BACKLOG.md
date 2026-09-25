@@ -107,21 +107,12 @@ Priorities:
 - Face events with the kiosk / device.
 - Per-day checked-in totals for past days (removes the WFH + late double count).
 
-**Reports** (§9)
-- Server-side PDF export (direct download, scheduled emails).
-- A server export log (who downloaded what, when).
-- Status history (headcount split on past dates).
-- A "no department" directory filter.
-
 **Workspace settings** (§8)
 - Two-factor (TOTP enrolment; `is_mfa_enabled` exists) and the active sessions list.
 - Per-user notification preferences endpoint (see P0-4).
 - Invoices (Razorpay).
 - Danger-zone endpoints (export, reset, delete, with a typed-name confirmation).
 - Account and workspace profile update.
-
-**Audit logs** (§11.15)
-- Full server export (CSV) of the filtered trail. Today only the visible page exports.
 
 **Documents and letters** (§11.13)
 - Edit a stored document.
@@ -143,13 +134,6 @@ Priorities:
 
 ## P2: polish
 
-- **Dashboard** (§2)
-  - Record names in the activity feed (the audit API returns only the type and id).
-  - Department on top performers.
-  - Clicking a department bar filters the directory (headcount rows need the department id; the API now returns `department_id`, so wire it).
-  - Milestones "View all" filters.
-  - Month filter on payroll runs.
-  - A notices pager.
 - **Geofencing**: show and restore deactivated zones (the list API returns active zones only).
 - **Integrations**: real connections (OAuth, keys, sync). Today it's a register only, and the page says so.
 - **Letters**: one "Letters" hub instead of three routes.
