@@ -50,7 +50,8 @@ public class InvitationEmailSender {
         String status;
         String error = null;
         try {
-            mailService.send(EmailMessage.simple(to, subject, bodyHtml));
+            // White label: sent under the workspace's name, never the vendor's.
+            mailService.send(EmailMessage.simple(to, subject, bodyHtml).withFromName(workspaceName(tenantId)));
             status = "SENT";
             log.info("Invitation email sent to {} (token {})", to, tokenId);
         } catch (Exception e) {
@@ -59,6 +60,17 @@ public class InvitationEmailSender {
             log.error("Invitation email send FAILED for token {} to {}", tokenId, to, e);
         }
         recordOutcome(tokenId, tenantId, status, error);
+    }
+
+    /** The workspace's display name (platform.tenants has no RLS), or a neutral fallback. */
+    private String workspaceName(UUID tenantId) {
+        try {
+            String n = jdbc.query("SELECT display_name FROM platform.tenants WHERE id = ?",
+                    rs -> rs.next() ? rs.getString(1) : null, tenantId);
+            return n == null || n.isBlank() ? "HR Team" : n;
+        } catch (Exception e) {
+            return "HR Team";
+        }
     }
 
     /**

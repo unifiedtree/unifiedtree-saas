@@ -42,13 +42,26 @@ public class LetterEmailService {
     public void send(String toEmail, String ccEmail,
                      String subject, String bodyHtml,
                      byte[] pdfBytes, String filename) {
+        send(toEmail, ccEmail, subject, bodyHtml, pdfBytes, filename, null);
+    }
+
+    /**
+     * Send under {@code senderName} (the company or workspace name). White
+     * label: a letter reaches the employee from their employer, not from the
+     * software vendor. Null falls back to the configured default.
+     */
+    public void send(String toEmail, String ccEmail,
+                     String subject, String bodyHtml,
+                     byte[] pdfBytes, String filename, String senderName) {
 
         if (apiKey == null || apiKey.isBlank()) {
             throw new RuntimeException("BREVO_API_KEY is not configured — cannot send letter email");
         }
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("sender", Map.of("name", fromName, "email", fromEmail));
+        String name = senderName == null ? null
+                : senderName.replaceAll("[\\p{Cntrl}\"<>]", " ").replaceAll("\\s+", " ").strip();
+        payload.put("sender", Map.of("name", name == null || name.isEmpty() ? fromName : name, "email", fromEmail));
         payload.put("to", List.of(Map.of("email", toEmail)));
         payload.put("subject", subject);
         payload.put("htmlContent", bodyHtml != null ? bodyHtml : "");

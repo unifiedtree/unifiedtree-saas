@@ -64,7 +64,7 @@ public class BrevoMailService implements MailService {
         to.put("email", msg.to());
         if (msg.toName() != null) to.put("name", msg.toName());
 
-        Map<String, Object> sender = Map.of("name", fromName, "email", fromEmail);
+        Map<String, Object> sender = Map.of("name", msg.senderName(fromName), "email", fromEmail);
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("sender", sender);

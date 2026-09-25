@@ -374,8 +374,10 @@ public class InvitationService {
             String tenantSlug = loadTenantSlug(resolvedTenant);
             String resetUrl   = buildUrl(tenantSlug, "/reset-password?token=" + rawToken);
 
+            // White label: the workspace's name, never the vendor's.
+            String workspaceName = loadTenantName(resolvedTenant);
             queueInviteEmail(token.getId(), resolvedTenant, email,
-                "Reset your UnifiedTree password", resetHtml(resetUrl));
+                "Reset your " + workspaceName + " password", resetHtml(resetUrl, workspaceName));
             log.info("Password reset email queued for {}", email);
         });
     }
@@ -504,7 +506,7 @@ public class InvitationService {
         try {
             return jdbc.queryForObject(
                 "SELECT display_name FROM platform.tenants WHERE id = ?", String.class, tenantId);
-        } catch (Exception e) { return "UnifiedTree"; }
+        } catch (Exception e) { return "your workspace"; }
     }
 
     private String loadTenantSlug(UUID tenantId) {
@@ -573,7 +575,7 @@ public class InvitationService {
             <!DOCTYPE html><html><body style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px;color:#1e293b">
             <p style="font-size:24px;font-weight:700;color:#0f6e56">Welcome to %s</p>
             <p>Hi %s,</p>
-            <p>You've been added to <strong>%s</strong> on UnifiedTree HRMS.
+            <p>You've been added to <strong>%s</strong>.
             Click the button below to set your password and log in.</p>
             <p style="margin:32px 0">
               <a href="%s" style="background:#0f6e56;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">
@@ -583,14 +585,19 @@ public class InvitationService {
             <p style="color:#64748b;font-size:13px">This link expires in 72 hours.<br>
             If you weren't expecting this, you can safely ignore this email.</p>
             </body></html>
-            """.formatted(tenantName, firstName, tenantName, inviteUrl);
+            """.formatted(esc(tenantName), esc(firstName), esc(tenantName), inviteUrl);
     }
 
-    private static String resetHtml(String resetUrl) {
+    private static String esc(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
+
+    private static String resetHtml(String resetUrl, String workspaceName) {
         return """
             <!DOCTYPE html><html><body style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px;color:#1e293b">
             <p style="font-size:22px;font-weight:700;color:#0f6e56">Reset your password</p>
-            <p>Someone requested a password reset for your UnifiedTree account.
+            <p>Someone requested a password reset for your %s account.
             Click the button below to set a new password.</p>
             <p style="margin:32px 0">
               <a href="%s" style="background:#0f6e56;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">
@@ -600,7 +607,7 @@ public class InvitationService {
             <p style="color:#64748b;font-size:13px">This link expires in 24 hours.<br>
             If you didn't request this, you can safely ignore this email.</p>
             </body></html>
-            """.formatted(resetUrl);
+            """.formatted(esc(workspaceName), resetUrl);
     }
 
     // ──────────────────────────────────────────────────────────────────────────

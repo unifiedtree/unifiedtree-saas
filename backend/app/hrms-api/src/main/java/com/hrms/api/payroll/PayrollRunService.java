@@ -519,7 +519,7 @@ public class PayrollRunService {
     public byte[] generatePayslipPdf(UUID tenantId, UUID runId, UUID employeeId) {
         bindTenant(tenantId);
         PayslipDto slip = buildPayslip(runId, employeeId);
-        return pdfRenderer.render(renderPayslipHtml(slip));
+        return pdfRenderer.render(withLetterhead(renderPayslipHtml(slip), tenantId, runId));
     }
 
     @Transactional
@@ -574,7 +574,24 @@ public class PayrollRunService {
             "SELECT count(*) FROM payroll.payslip_lines WHERE run_id = ? AND employee_id = ?",
             Integer.class, runId, employeeId);
         if (mine == null || mine == 0) throw new BusinessRuleException("No payslip for this period", "PAYSLIP_NOT_FOUND");
-        return pdfRenderer.render(renderPayslipHtml(buildPayslip(runId, employeeId)));
+        return pdfRenderer.render(withLetterhead(renderPayslipHtml(buildPayslip(runId, employeeId)), tenantId, runId));
+    }
+
+    /** Optional: the workspace's own letterhead (logo + company name) on payslips. */
+    private com.hrms.api.settings.WorkspaceLetterhead letterhead;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setLetterhead(com.hrms.api.settings.WorkspaceLetterhead letterhead) {
+        this.letterhead = letterhead;
+    }
+
+    /** White label: the payslip opens with the run's company name and the workspace logo. */
+    private String withLetterhead(String html, UUID tenantId, UUID runId) {
+        if (letterhead == null) return html;
+        String company = jdbc.query("""
+            SELECT c.name FROM payroll.runs r LEFT JOIN org.companies c ON c.id = r.company_id WHERE r.id = ?
+            """, rs -> rs.next() ? rs.getString(1) : null, runId);
+        return letterhead.applyToDocument(html, tenantId, company);
     }
 
     // ── Per-employee computation ─────────────────────────────────────────────────

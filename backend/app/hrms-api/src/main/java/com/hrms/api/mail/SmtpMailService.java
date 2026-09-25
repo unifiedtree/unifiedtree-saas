@@ -50,7 +50,7 @@ public class SmtpMailService implements MailService {
         try {
             MimeMessage mime = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mime, msg.attachments() != null && !msg.attachments().isEmpty(), "UTF-8");
-            helper.setFrom(fromEmail, fromName);
+            helper.setFrom(fromEmail, msg.senderName(fromName));
             helper.setTo(msg.to());
             helper.setSubject(msg.subject());
 

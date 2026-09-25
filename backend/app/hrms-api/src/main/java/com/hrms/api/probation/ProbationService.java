@@ -212,7 +212,7 @@ public class ProbationService {
             String body = buildEmailHtml(empName, end.toString(), daysRemaining, deepLink);
             for (String to : recipientEmails) {
                 try {
-                    mailService.send(EmailMessage.simple(to, subject, body));
+                    mailService.send(EmailMessage.simple(to, subject, body).withFromName(loadTenantName(tenantId)));
                 } catch (Exception e) {
                     log.warn("Probation email to {} failed: {}", to, e.getMessage());
                 }
@@ -299,7 +299,7 @@ public class ProbationService {
     private String loadTenantName(UUID tenantId) {
         try {
             return jdbc.queryForObject("SELECT display_name FROM platform.tenants WHERE id = ?", String.class, tenantId);
-        } catch (Exception e) { return "UnifiedTree"; }
+        } catch (Exception e) { return "HR Team"; }
     }
 
     private static String name(Object first, Object last) {

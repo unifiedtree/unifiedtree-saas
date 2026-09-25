@@ -124,7 +124,8 @@ public class LetterDistributionProcessor {
                     job.getCreatedBy());
             byte[] pdf = generationService.getPdf(gen.id());
             emailService.send(r.getEmail(), null,
-                    buildSubject(job, emp), buildEmailHtml(job, emp), pdf, buildFilename(templateName, emp));
+                    buildSubject(job, emp), buildEmailHtml(job, emp), pdf, buildFilename(templateName, emp),
+                    generationService.senderNameFor(gen.companyId()));
             r.setGeneratedLetterId(gen.id());
             r.setSendStatus("SENT");
             r.setSentAt(Instant.now());

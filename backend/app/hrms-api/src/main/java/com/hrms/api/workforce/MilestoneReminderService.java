@@ -265,7 +265,8 @@ public class MilestoneReminderService {
     /** One person having a milestone today. */
     private record Person(UUID id, String name, String department, UUID managerId, int years) {
         String orgLabel() {
-            return department == null || department.isBlank() ? "UnifiedTree" : department;
+            // White label: never the vendor's name. "Everyone at work wishes you a great day."
+            return department == null || department.isBlank() ? "work" : department;
         }
     }
 }
