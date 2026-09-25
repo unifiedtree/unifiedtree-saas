@@ -377,7 +377,8 @@ public class InvitationService {
             // White label: the workspace's name, never the vendor's.
             String workspaceName = loadTenantName(resolvedTenant);
             queueInviteEmail(token.getId(), resolvedTenant, email,
-                "Reset your " + workspaceName + " password", resetHtml(resetUrl, workspaceName));
+                "your workspace".equals(workspaceName) ? "Reset your password" : "Reset your " + workspaceName + " password",
+                resetHtml(resetUrl, workspaceName));
             log.info("Password reset email queued for {}", email);
         });
     }
@@ -504,8 +505,11 @@ public class InvitationService {
 
     private String loadTenantName(UUID tenantId) {
         try {
-            return jdbc.queryForObject(
+            String n = jdbc.queryForObject(
                 "SELECT display_name FROM platform.tenants WHERE id = ?", String.class, tenantId);
+            // One line, no control characters: the name also goes into an email subject.
+            n = n == null ? "" : n.replaceAll("[\\p{Cntrl}]", " ").replaceAll("\\s+", " ").strip();
+            return n.isEmpty() ? "your workspace" : n;
         } catch (Exception e) { return "your workspace"; }
     }
 

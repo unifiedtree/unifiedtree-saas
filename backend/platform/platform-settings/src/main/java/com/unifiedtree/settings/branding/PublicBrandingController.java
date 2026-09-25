@@ -53,8 +53,12 @@ public class PublicBrandingController {
         if (sub == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not identified");
         BrandingService.PublicView v = service.publicView(sub)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found"));
+        // The answer depends on the header / Host when there is no ?subdomain=,
+        // so caches must key on them too, or one workspace could be shown
+        // another's name and logo (all workspaces share one API address).
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(60, TimeUnit.SECONDS).cachePublic())
+                .varyBy("X-Tenant-Subdomain", "Host")
                 .body(v);
     }
 

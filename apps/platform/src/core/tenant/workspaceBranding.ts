@@ -79,16 +79,19 @@ export const useBrandingStore = create<State>()((set, get) => ({
     // Keep showing the previous data for the same workspace while reloading.
     set({ key, status: 'loading', data: s.key === key ? s.data : null })
     try {
+      // The subdomain goes in the address (not only the header) so no cache,
+      // browser or proxy, can hand one workspace's brand to another.
+      const publicPath = () => `/v1/public/workspace-branding?subdomain=${encodeURIComponent(currentSubdomain())}`
       let dto: BrandingDto
       try {
         dto = authed
           ? await apiJson<BrandingDto>('/v1/workspace/branding')
-          : await apiJson<BrandingDto>('/v1/public/workspace-branding')
+          : await apiJson<BrandingDto>(publicPath())
       } catch (e) {
         // A lapsed subscription answers 402 on workspace reads; the public
         // lookup (name and images only) still shows the workspace's own brand.
         if (!authed || !currentSubdomain()) throw e
-        dto = await apiJson<BrandingDto>('/v1/public/workspace-branding')
+        dto = await apiJson<BrandingDto>(publicPath())
       }
       if (get().key === key) set({ status: 'ready', data: dto })
     } catch {

@@ -140,7 +140,9 @@ try {
     pub.status === 200 && pubJson?.workspaceName === displayName && Object.keys(pubJson).sort().join(',') === 'logoUrl,markUrl,monogram,workspaceName',
     `status=${pub.status} keys=${pubJson && Object.keys(pubJson).join(',')}`)
   const pubHeader = await fetch(`${api}/v1/public/workspace-branding`, { headers: { 'X-Tenant-Subdomain': subdomain } })
-  check('public lookup also works from the X-Tenant-Subdomain header (what the web app sends)', pubHeader.status === 200)
+  check('public lookup also works from the X-Tenant-Subdomain header', pubHeader.status === 200)
+  check('header-based answers vary by X-Tenant-Subdomain, so a cache never mixes workspaces',
+    /x-tenant-subdomain/i.test(pubHeader.headers.get('vary') || ''), `vary=${pubHeader.headers.get('vary')}`)
   const unknown = await fetch(`${api}/v1/public/workspace-branding?subdomain=no-such-workspace-w1f`)
   check('public lookup for an unknown workspace is 404', unknown.status === 404, `status=${unknown.status}`)
 
