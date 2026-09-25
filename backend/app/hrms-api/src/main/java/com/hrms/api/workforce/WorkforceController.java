@@ -141,8 +141,11 @@ public class WorkforceController {
     // -- Branches ------------------------------------------------------------
     @GetMapping("/branches")
     @PreAuthorize("hasAuthority('org.company.read') or hasAuthority('platform.admin')")
-    public List<BranchResponse> listBranches(@RequestParam(required = false) UUID companyId) {
-        return companyId == null ? branches.listAll() : branches.listForCompany(companyId);
+    public List<BranchResponse> listBranches(@RequestParam(required = false) UUID companyId,
+                                             @RequestParam(defaultValue = "false") boolean includeArchived) {
+        // includeArchived: archived branches too (isActive=false), for the
+        // Companies & Branches "Inactive" filter. Pickers leave it off.
+        return companyId == null ? branches.listAll(includeArchived) : branches.listForCompany(companyId, includeArchived);
     }
 
     @PostMapping("/branches")
