@@ -10,6 +10,7 @@ import type { LeaveTypeResponse } from '../api/useLeave'
 import type { Policy } from '../api/usePolicy'
 import type { SalaryComponent, PayrollSettings, PtSlab } from '../api/usePayroll'
 import type { HrConfigResponse } from '../api/useSettings'
+import { lwfMonthsLabel } from '@/design/dc/PaySettings'
 
 export interface Contractor {
   id: string; companyId: string; agencyName: string; registrationNumber?: string | null; gstin?: string | null
@@ -167,14 +168,22 @@ function statNote(code: string, s: PayrollSettings | null | undefined) {
   if (code === 'ESI_EMPLOYEE') return `${pctText(s.esiEmployeePercent)} of Gross`
   if (code === 'ESI_EMPLOYER') return `${pctText(s.esiEmployerPercent)} of Gross`
   if (code === 'PT') return 'Per state PT slab'
+  if (code === 'LWF_EMPLOYEE') return `${inr(s.lwfEmployeeAmount)} in ${lwfMonths(s)}`
+  if (code === 'LWF_EMPLOYER') return `${inr(s.lwfEmployerAmount)} in ${lwfMonths(s)}`
   return ''
 }
+/** The months payroll deducts LWF in, e.g. "June and December". */
+const lwfMonths = (s: PayrollSettings) => lwfMonthsLabel((s.lwfDeductionMonths?.length ? [...s.lwfDeductionMonths].sort((a, b) => a - b) : [6, 12]).join(','))
+/** Lines payroll works out itself: no amount of their own, and they say where they come from. */
+const MANAGED: Record<string, string> = { ADVANCE_RECOVERY: 'Salary advance instalments', PLI_INCENTIVE: 'Approved PLI awards' }
 export function componentRec(c: SalaryComponent, s: PayrollSettings | null | undefined): Rec {
   const method = COMP_METHOD[c.computationType] || 'formula'
   return {
     _key: c.id, _raw: c, code: c.code, name: c.name, cat: COMP_CAT[c.category] || pretty(c.category), method,
-    val: method === 'pct_basic' || method === 'pct_gross' ? (c.percentValue == null ? null : Number(c.percentValue)) : null,
-    taxable: c.isTaxable ? 'Yes' : 'No', stat: !!c.isStatutory, payslip: null, status: c.isActive === false ? 'Inactive' : 'Active', system: !!c.isSystem, note: statNote(c.code, s),
+    val: method === 'pct_basic' || method === 'pct_gross' ? (c.percentValue == null ? null : Number(c.percentValue))
+      : method === 'fixed' && c.amount != null && Number(c.amount) > 0 ? Number(c.amount) : null,
+    taxable: c.isTaxable ? 'Yes' : 'No', stat: !!c.isStatutory, payslip: c.showOnPayslip !== false, status: c.isActive === false ? 'Inactive' : 'Active', system: !!c.isSystem,
+    managed: !!c.isStatutory || c.code in MANAGED, note: statNote(c.code, s) || MANAGED[c.code] || '',
   }
 }
 
@@ -190,8 +199,8 @@ export function statutoryRecs(s: PayrollSettings, slabs: PtSlab[], compCodes: Se
     { _key: 'ESI', id: 'ESI', name: 'Employee State Insurance', icon: 'heart-pulse', t: 'rose', on: !!s.esiEnabled, reg: s.esiEstablishmentCode || '—', note: '', comps: has(['ESI_EMPLOYEE', 'ESI_EMPLOYER']),
       rows: [['Employee share', `${pctText(s.esiEmployeePercent)} of Gross`], ['Employer share', `${pctText(s.esiEmployerPercent)} of Gross`], ['Eligibility', `Gross ≤ ${inr(s.esiWageCeiling)} / month`], ['Contribution periods', 'Apr–Sep · Oct–Mar']] },
     { _key: 'PT', id: 'PT', name: 'Professional Tax', icon: 'receipt', t: 'amber', on: !!s.ptEnabled, reg: '—', note: '', comps: has(['PT']), rows: ptRows },
-    { _key: 'LWF', id: 'LWF', name: 'Labour Welfare Fund', icon: 'shield-check', t: 'teal', on: !!s.lwfEnabled, reg: '—', comps: [],
-      note: 'Saved only — payroll doesn’t deduct LWF yet',
-      rows: [['Employee share', inr(s.lwfEmployeeAmount)], ['Employer share', inr(s.lwfEmployerAmount)], ['Deducted by payroll', 'Not yet']] },
+    { _key: 'LWF', id: 'LWF', name: 'Labour Welfare Fund', icon: 'shield-check', t: 'teal', on: !!s.lwfEnabled, reg: '—', comps: has(['LWF_EMPLOYEE', 'LWF_EMPLOYER']),
+      note: `Deducted in the ${lwfMonths(s)} runs`,
+      rows: [['Employee share', inr(s.lwfEmployeeAmount)], ['Employer share', inr(s.lwfEmployerAmount)], ['Deducted in', lwfMonths(s)]] },
   ]
 }

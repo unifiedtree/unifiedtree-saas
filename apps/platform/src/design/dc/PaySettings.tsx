@@ -2,6 +2,10 @@
 // Reads and saves GET/PUT /v1/payroll/settings; PT slabs come from
 // /v1/payroll/pt-slabs/{state}. The API has no switch for the payroll cycle, so
 // that card's switch stays on; TDS is "coming soon", as designed.
+// Payroll uses all of it (V143.11): runs cover the cycle (from the start day to
+// the day before the next start, so the end day follows the start day), the
+// processing day sets each run's pay date, and LWF is deducted in the months
+// chosen here.
 import { createElement, createRef } from 'react'
 import { DCLogic, dc } from './dc-runtime'
 import { PaySettingsView } from './PaySettings.view'
@@ -14,17 +18,26 @@ export interface ApiPayrollSettings {
   esiEnabled: boolean; esiEmployeePercent: number; esiEmployerPercent: number; esiWageCeiling: number; esiEstablishmentCode?: string | null
   ptEnabled: boolean; ptStateCode?: string | null; lwfEnabled: boolean; lwfEmployeeAmount: number; lwfEmployerAmount: number
   sandwichRuleEnabled: boolean; lateMarkLopThreshold?: number | null; payrollCycleStartDay: number; payrollCycleEndDay: number; salaryProcessingDay: number
+  /** Months (1-12) whose payroll runs deduct LWF. */
+  lwfDeductionMonths?: number[] | null
 }
 export const PT_STATES: [string, string][] = [['KA', 'Karnataka'], ['MH', 'Maharashtra'], ['TN', 'Tamil Nadu'], ['TS', 'Telangana'], ['AP', 'Andhra Pradesh'], ['WB', 'West Bengal'], ['GJ', 'Gujarat'], ['KL', 'Kerala']]
 const nameOf = (code?: string | null) => PT_STATES.find(([c]) => c === code)?.[1] || ''
 const codeOf = (name: string) => PT_STATES.find(([, n]) => n === name)?.[0] || ''
 const str = (n: number | null | undefined) => (n === null || n === undefined ? '' : String(n))
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+/** The LWF schedules states use: half-yearly (most), yearly in December, or monthly. Stored as months "6,12". */
+export const LWF_SCHEDULES: [string, string][] = [['6,12', 'June and December'], ['12', 'December only (yearly)'], ['1,2,3,4,5,6,7,8,9,10,11,12', 'Every month']]
+const monthsKey = (m?: number[] | null) => (m && m.length ? [...m].sort((a, b) => a - b).join(',') : '6,12')
+export const lwfMonthsLabel = (key: string) => LWF_SCHEDULES.find(([k]) => k === key)?.[1] || key.split(',').filter(Boolean).map((n) => MONTH_NAMES[Number(n) - 1]?.slice(0, 3)).join(', ')
+/** The cycle ends the day before it starts again. */
+const endFor = (start: string) => (/^\d{1,2}$/.test(start) && +start >= 1 && +start <= 31 ? String(+start === 1 ? 31 : +start - 1) : '')
 
 type Form = {
   pf: { on: boolean; emp: string; er: string; ceiling: string; applyCeiling: boolean; code: string }
   esi: { on: boolean; emp: string; er: string; ceiling: string; code: string }
   pt: { on: boolean; state: string }
-  lwf: { on: boolean; emp: string; er: string }
+  lwf: { on: boolean; emp: string; er: string; months: string }
   cycle: { on: boolean; start: string; end: string; proc: string; sandwich: boolean; late: string }
 }
 export function formOf(a: ApiPayrollSettings): Form {
@@ -32,8 +45,8 @@ export function formOf(a: ApiPayrollSettings): Form {
     pf: { on: !!a.pfEnabled, emp: str(a.pfEmployeePercent), er: str(a.pfEmployerPercent), ceiling: str(a.pfWageCeiling), applyCeiling: !!a.pfApplyCeiling, code: a.pfEstablishmentCode || '' },
     esi: { on: !!a.esiEnabled, emp: str(a.esiEmployeePercent), er: str(a.esiEmployerPercent), ceiling: str(a.esiWageCeiling), code: a.esiEstablishmentCode || '' },
     pt: { on: !!a.ptEnabled, state: nameOf(a.ptStateCode) },
-    lwf: { on: !!a.lwfEnabled, emp: str(a.lwfEmployeeAmount), er: str(a.lwfEmployerAmount) },
-    cycle: { on: true, start: str(a.payrollCycleStartDay), end: str(a.payrollCycleEndDay), proc: str(a.salaryProcessingDay), sandwich: !!a.sandwichRuleEnabled, late: str(a.lateMarkLopThreshold) },
+    lwf: { on: !!a.lwfEnabled, emp: str(a.lwfEmployeeAmount), er: str(a.lwfEmployerAmount), months: monthsKey(a.lwfDeductionMonths) },
+    cycle: { on: true, start: str(a.payrollCycleStartDay), end: endFor(str(a.payrollCycleStartDay)) || str(a.payrollCycleEndDay), proc: str(a.salaryProcessingDay), sandwich: !!a.sandwichRuleEnabled, late: str(a.lateMarkLopThreshold) },
   }
 }
 export function apiOf(f: Form): ApiPayrollSettings {
@@ -42,6 +55,7 @@ export function apiOf(f: Form): ApiPayrollSettings {
     pfEnabled: f.pf.on, pfEmployeePercent: n(f.pf.emp), pfEmployerPercent: n(f.pf.er), pfWageCeiling: n(f.pf.ceiling), pfApplyCeiling: f.pf.applyCeiling, pfEstablishmentCode: f.pf.code,
     esiEnabled: f.esi.on, esiEmployeePercent: n(f.esi.emp), esiEmployerPercent: n(f.esi.er), esiWageCeiling: n(f.esi.ceiling), esiEstablishmentCode: f.esi.code,
     ptEnabled: f.pt.on, ptStateCode: codeOf(f.pt.state) || null, lwfEnabled: f.lwf.on, lwfEmployeeAmount: n(f.lwf.emp), lwfEmployerAmount: n(f.lwf.er),
+    lwfDeductionMonths: f.lwf.months.split(',').filter(Boolean).map(Number),
     sandwichRuleEnabled: f.cycle.sandwich, lateMarkLopThreshold: f.cycle.late === '' ? null : n(f.cycle.late),
     payrollCycleStartDay: n(f.cycle.start), payrollCycleEndDay: n(f.cycle.end), salaryProcessingDay: n(f.cycle.proc),
   }
@@ -122,7 +136,12 @@ export class PaySettings extends DCLogic {
     this.setState({ toast: { kind, title, msg: msg || '' } })
     this.tt = setTimeout(() => this.setState({ toast: null }), kind === 'error' ? 8000 : 3200)
   }
-  set = (sec: keyof Form, key: string, val: any) => this.setState((ss: any) => { const cur = ss.form || this.saved(); return { form: { ...cur, [sec]: { ...cur[sec], [key]: val } } } })
+  set = (sec: keyof Form, key: string, val: any) => this.setState((ss: any) => {
+    const cur = ss.form || this.saved(), next = { ...cur[sec], [key]: val }
+    // The cycle's end day always follows its start day.
+    if (sec === 'cycle' && key === 'start') next.end = endFor(String(val))
+    return { form: { ...cur, [sec]: next } }
+  })
   save = async () => {
     if (this.state.saving) return
     const errs = this.errKeys
@@ -212,9 +231,11 @@ export class PaySettings extends DCLogic {
       esiCode: fld('esi.code', 'ESI establishment code', { clean: cDigits(17), mode: 'numeric', mono: true }),
       lwfEmp: fld('lwf.emp', 'Employee amount (₹)', { clean: cNum(5), pre: '₹', money: true, mode: 'numeric' }),
       lwfEr: fld('lwf.er', 'Employer amount (₹)', { clean: cNum(5), pre: '₹', money: true, mode: 'numeric' }),
-      cStart: fld('cycle.start', 'Cycle start day', { clean: cNum(2), mode: 'numeric' }),
-      cEnd: fld('cycle.end', 'Cycle end day', { clean: cNum(2), mode: 'numeric' }),
-      cProc: fld('cycle.proc', 'Processing day', { clean: cNum(2), mode: 'numeric' }),
+      lwfMonths: canEdit ? createElement(Field as any, { label: 'Deducted in', hint: 'Payroll takes LWF from salaries only in these months’ runs. Check your state’s rule before changing it.' },
+        createElement(HrSelect as any, { value: f.lwf.months, onChange: (v: string) => set('lwf', 'months', v), options: [...LWF_SCHEDULES, ...(LWF_SCHEDULES.some(([k]) => k === f.lwf.months) ? [] : [[f.lwf.months, lwfMonthsLabel(f.lwf.months)]])].map(([value, label]) => ({ value, label })) })) : null,
+      cStart: fld('cycle.start', 'Cycle start day', { clean: cNum(2), mode: 'numeric', hint: 'Changing it moves the dates that new and re-processed runs pay for. 1 = calendar month.' }),
+      cEnd: fld('cycle.end', 'Cycle end day', { clean: cNum(2), mode: 'numeric', disabled: true, hint: 'Always the day before the start day' }),
+      cProc: fld('cycle.proc', 'Processing day', { clean: cNum(2), mode: 'numeric', hint: 'Sets the pay date shown on each run' }),
       late: fld('cycle.late', 'Late-mark LOP threshold', { clean: cNum(2), mode: 'numeric', ph: 'Disabled', hint: 'Every N late marks = 1 LOP day. Leave blank to disable.' }),
       ptState: canEdit ? createElement(Field as any, { label: 'State', error: vis('pt.state') }, createElement(HrSelect as any, { value: f.pt.state, onChange: (v: string) => set('pt', 'state', v), options: PT_STATES.map(([, n]) => ({ value: n, label: n })), placeholder: 'Select a state' })) : null,
     }
@@ -249,7 +270,7 @@ export class PaySettings extends DCLogic {
     const pt = card('pt', 'Professional Tax (PT)', !f.pt.state ? 'Choose a state to apply PT' : ptHas ? `${f.pt.state} · ${inr(Math.min(...taxes))} to ${inr(Math.max(...taxes))} a month, by salary` : `${f.pt.state} · no monthly PT slabs`, {
       hasSlabs: ptHas, noState: !f.pt.state, noSlabs: !!f.pt.state && !ptHas, tableTitle: `${f.pt.state} PT slabs`, stateView: f.pt.state || 'Not chosen',
     })
-    const lwf = card('lwf', 'Labour Welfare Fund (LWF)', `Employee ${inr(f.lwf.emp)} · Employer ${inr(f.lwf.er)}`, { view: [V('Employee amount', inr(f.lwf.emp)), V('Employer amount', inr(f.lwf.er))] })
+    const lwf = card('lwf', 'Labour Welfare Fund (LWF)', `Employee ${inr(f.lwf.emp)} · Employer ${inr(f.lwf.er)} · deducted in ${lwfMonthsLabel(f.lwf.months)}`, { view: [V('Employee amount', inr(f.lwf.emp)), V('Employer amount', inr(f.lwf.er)), V('Deducted in', lwfMonthsLabel(f.lwf.months))] })
     const cycSum = daysOk ? `${ord(a)} to ${ord(b)} · processed on the ${ord(x)}${c.sandwich ? ' · sandwich rule on' : ''}${c.late ? ` · ${c.late} late marks = 1 LOP day` : ''}` : 'Fix the highlighted days'
     const cycle = card('cycle', 'Payroll Cycle and LOP rules', cycSum, {
       sandSwitch: Switch(!!c.sandwich, () => set('cycle', 'sandwich', !c.sandwich), { 'aria-labelledby': 'ps-sand-l', 'aria-describedby': 'ps-sand-d' }),
@@ -258,7 +279,7 @@ export class PaySettings extends DCLogic {
     const endTxt = b >= 29 ? `${ord(b)} (or the month’s last day)` : ord(b)
     const cyc = {
       show: !!c.on && daysOk,
-      caption: !inside ? `The ${ord(x)} is outside this cycle — pick a processing day from the ${ord(a)} to the ${ord(b)}.` : a <= b ? `Each cycle covers the ${ord(a)} to the ${endTxt}. Payroll is processed on the ${ord(x)}.` : `Each cycle runs from the ${ord(a)} to the ${ord(b)} of the next month. Payroll is processed on the ${ord(x)}.`,
+      caption: !inside ? `The ${ord(x)} is outside this cycle — pick a processing day from the ${ord(a)} to the ${ord(b)}.` : a <= b ? `Each cycle covers the ${ord(a)} to the ${endTxt}. Payroll is processed on the ${ord(x)}.` : `Each cycle runs from the ${ord(a)} to the ${ord(b)} of the next month, and a run is named after the month it ends in (the September run covers ${ord(a)} Aug – ${ord(b)} Sep). Payroll is processed on the ${ord(x)}.`,
       days: Array.from({ length: 31 }, (_, i) => { const d = i + 1, inC = a <= b ? d >= a && d <= b : d >= a || d <= b, isP = d === x; return { n: narrow ? '' : String(d), isProc: isP && inside, isBad: isP && !inside, isIn: !isP && inC, isOut: !isP && !inC } }),
     }
     const SECS = [['pf', 'PF', 'Provident Fund (PF)'], ['esi', 'ESI', 'ESI'], ['pt', 'PT', 'Professional Tax (PT)'], ['lwf', 'LWF', 'Labour Welfare Fund (LWF)'], ['cycle', 'Cycle & LOP', 'Payroll Cycle & LOP'], ['tds', 'TDS', 'TDS & tax regime · coming soon']]

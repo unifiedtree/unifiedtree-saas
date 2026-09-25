@@ -615,6 +615,9 @@ export function PaySettingsView({ v }: { v: any }) {
                               <div style={{minWidth: "0"}}>
                                 {txt(v.fx?.lwfEr)}
                               </div>
+                              <div style={{minWidth: "0"}}>
+                                {txt(v.fx?.lwfMonths)}
+                              </div>
                             </div>
                           </>
                         ) : null}

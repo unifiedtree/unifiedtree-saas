@@ -210,8 +210,11 @@ const LITERALS = {
     ['Basic is 50% of gross, HRA is 40% of basic, and PF is 12% of basic up to ₹1,800.', '{{ splitNote }}'],
     ['Enter at least ₹10,000.', '{{ minNote }}'],
   ],
-  // The API doesn't record who processed or locked a run, so the line is just the time when there's no name.
+  // The API records who created, processed, locked and paid a run; the bank file's line has no name, so it's just the time.
   PayrollOverview: [['{{ a.who }} · {{ a.when }}', '{{ a.meta }}']],
+  // LWF is deducted only in some months (the design's own "June & December"); which months is a
+  // setting, so the LWF card's field grid gets a third slot, built from the same Field + HrSelect kit.
+  PaySettings: [['<div style="min-width:0">{{ fx.lwfEr }}</div>', '<div style="min-width:0">{{ fx.lwfEr }}</div><div style="min-width:0">{{ fx.lwfMonths }}</div>']],
   PayrollRunPage: [
     ['title="No one to pay in Sep 2026"', 'title="{{ emptyTitle }}"'],
     // Real data for the run's parts (appended last, so it overrides the prototype's props).
