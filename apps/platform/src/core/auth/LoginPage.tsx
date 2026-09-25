@@ -127,9 +127,16 @@ export const LoginPage: React.FC = () => {
         setSetupInfo(null)
         setMfa({ token: auth.mfaToken, setup: !!auth.mfaSetupRequired, status })
         if (auth.mfaSetupRequired) {
-          setSetupInfo(await apiJson<MfaSetupInfo>('/v1/canonical-auth/login/mfa/setup', {
-            method: 'POST', body: JSON.stringify({ mfaToken: auth.mfaToken }),
-          }))
+          try {
+            setSetupInfo(await apiJson<MfaSetupInfo>('/v1/canonical-auth/login/mfa/setup', {
+              method: 'POST', body: JSON.stringify({ mfaToken: auth.mfaToken }),
+            }))
+          } catch (setupErr) {
+            // No QR code means no way forward on the set-up step: go back to
+            // the password form with the reason instead of a stuck spinner.
+            setMfa(null)
+            throw setupErr
+          }
         }
         return
       }

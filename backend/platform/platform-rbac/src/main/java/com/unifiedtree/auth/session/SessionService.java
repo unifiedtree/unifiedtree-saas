@@ -46,8 +46,12 @@ public class SessionService {
     private final TransactionTemplate tx;
     private final Cache<String, Boolean> alive = Caffeine.newBuilder()
             .expireAfterWrite(Duration.ofSeconds(30)).maximumSize(200_000).build();
+    // Short on purpose: a "not signed in" answer is re-checked against the
+    // database every 5 minutes, so one bad read can never lock a person out for
+    // the rest of their access token's life. A really signed-out session is
+    // simply found gone again.
     private final Cache<String, Boolean> revoked = Caffeine.newBuilder()
-            .expireAfterWrite(Duration.ofHours(13)).maximumSize(200_000).build();
+            .expireAfterWrite(Duration.ofMinutes(5)).maximumSize(200_000).build();
 
     public SessionService(JdbcTemplate jdbc, PlatformTransactionManager txManager) {
         this.jdbc = jdbc;
@@ -121,9 +125,12 @@ public class SessionService {
         String key = tenantId + ":" + sessionId;
         if (revoked.getIfPresent(key) != null) return false;
         if (alive.getIfPresent(key) != null) return true;
+        // Always read under the TOKEN's workspace: auth.refresh_tokens is
+        // RLS-isolated, and a read under any other workspace finds nothing and
+        // would sign the person out.
         UUID previous = TenantContext.getTenantId();
         try {
-            if (previous == null) TenantContext.setTenantId(tenantId);
+            TenantContext.setTenantId(tenantId);
             Boolean ok = tx.execute(status -> jdbc.queryForObject("""
                     WITH touched AS (
                         UPDATE auth.refresh_tokens SET last_used_at = now()
@@ -143,7 +150,7 @@ public class SessionService {
             log.warn("session check failed for tenant={} (letting the request through): {}", tenantId, e.getMessage());
             return true;
         } finally {
-            if (previous == null) TenantContext.setTenantId(null);
+            TenantContext.setTenantId(previous);
         }
     }
 

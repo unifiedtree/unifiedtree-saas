@@ -123,11 +123,18 @@ public class WorkspaceLifecycleService {
         String why = reason == null || reason.isBlank() ? null : reason.trim();
         if (why != null && why.length() > 500) why = why.substring(0, 500);
         UUID id = UUID.randomUUID();
-        jdbc.update("""
-                INSERT INTO platform.workspace_lifecycle_requests
-                       (id, tenant_id, kind, status, requested_by, requested_by_email, confirm_name, reason, scheduled_for)
-                VALUES (?, ?, ?, 'SCHEDULED', ?, ?, ?, ?, now() + make_interval(days => ?))
-                """, id, tenantId, kind, userId, email, name, why, COOLING_OFF_DAYS);
+        try {
+            jdbc.update("""
+                    INSERT INTO platform.workspace_lifecycle_requests
+                           (id, tenant_id, kind, status, requested_by, requested_by_email, confirm_name, reason, scheduled_for)
+                    VALUES (?, ?, ?, 'SCHEDULED', ?, ?, ?, ?, now() + make_interval(days => ?))
+                    """, id, tenantId, kind, userId, email, name, why, COOLING_OFF_DAYS);
+        } catch (org.springframework.dao.DuplicateKeyException race) {
+            // Two owners (or a double click) scheduling at the same moment: the
+            // one-open-request index lets exactly one through.
+            throw new HrmsException("A workspace " + ("DELETE".equals(kind) ? "deletion" : "reset")
+                    + " is already scheduled. Cancel it first if you want to change it.", HttpStatus.CONFLICT, "LIFECYCLE_ALREADY_SCHEDULED");
+        }
         RequestView v = find(tenantId, id);
         audit.record("settings", "WORKSPACE_" + kind + "_SCHEDULED", "workspace", tenantId,
                 label(kind) + " scheduled for " + fmt(v.scheduledFor()) + " IST");
