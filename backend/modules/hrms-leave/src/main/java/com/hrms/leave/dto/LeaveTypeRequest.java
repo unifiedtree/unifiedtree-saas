@@ -34,6 +34,32 @@ public record LeaveTypeRequest(
         @Size(max = 20, message = "Applicable gender must not exceed 20 characters")
         String applicableGender,
 
-        String description
+        String description,
+
+        /*
+         * V143.23. All three are optional so older clients (the mobile Leave
+         * Policies screen, the kit Leave types page) that don't send them
+         * keep the stored values on update: null = leave as is.
+         *   accrualFrequency  YEARLY (credited upfront) | MONTHLY | QUARTERLY
+         *                     ("UPFRONT" is accepted as YEARLY)
+         *   isEncashable      employees may ask to cash in unused days
+         *   maxEncashDays     yearly limit per person; 0 clears it (no limit)
+         */
+        @Size(max = 20, message = "Accrual frequency must not exceed 20 characters")
+        String accrualFrequency,
+
+        Boolean isEncashable,
+
+        @Min(value = 0, message = "Max encash days must be non-negative")
+        @Max(value = 365, message = "Max encash days must be at most 365")
+        Integer maxEncashDays
 ) {
+    /** The pre-V143.23 shape, for callers that don't set accrual or encashment. */
+    public LeaveTypeRequest(String name, String code, LeaveCategory category, double annualEntitlement,
+                            int maxConsecutiveDays, int minNoticeDays, boolean isCarryForwardAllowed,
+                            int maxCarryForwardDays, boolean isPaidLeave, String applicableGender,
+                            String description) {
+        this(name, code, category, annualEntitlement, maxConsecutiveDays, minNoticeDays, isCarryForwardAllowed,
+                maxCarryForwardDays, isPaidLeave, applicableGender, description, null, null, null);
+    }
 }

@@ -28,13 +28,15 @@ public class QuartzJobConfig {
                 .build();
     }
 
-    // ── Leave balance accrual — 1st of month at 00:30 IST = 19:00 UTC ────────
+    // ── Leave accrual + January carry forward — daily at 00:30 IST = 19:00 UTC ─
+    // Daily rather than monthly (V143.23): the job is idempotent per period, so
+    // a night the instance missed is caught up the next night.
 
     @Bean
     public JobDetail leaveAccrualJobDetail() {
         return JobBuilder.newJob(LeaveAccrualJob.class)
                 .withIdentity("leaveAccrualJob")
-                .withDescription("Monthly leave balance initialisation for active employees")
+                .withDescription("Daily leave accrual (balances, monthly/quarterly credits) and the January carry forward")
                 .storeDurably()
                 .build();
     }
@@ -44,7 +46,7 @@ public class QuartzJobConfig {
         return TriggerBuilder.newTrigger()
                 .forJob(leaveAccrualJobDetail)
                 .withIdentity("leaveAccrualTrigger")
-                .withSchedule(CronScheduleBuilder.cronSchedule("0 0 19 1 * ?")
+                .withSchedule(CronScheduleBuilder.cronSchedule("0 0 19 * * ?")
                         .inTimeZone(java.util.TimeZone.getTimeZone("UTC")))
                 .build();
     }

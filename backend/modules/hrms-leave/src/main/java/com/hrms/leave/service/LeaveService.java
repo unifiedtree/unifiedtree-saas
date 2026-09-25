@@ -80,6 +80,17 @@ public class LeaveService {
         this.kafkaEnabled = kafkaEnabled;
     }
 
+    /**
+     * V143.23 accrual. Setter-injected so tests (and any caller) that build
+     * this service by hand keep working without it; the app always sets it.
+     */
+    private LeaveAccrualService accrualService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setAccrualService(LeaveAccrualService accrualService) {
+        this.accrualService = accrualService;
+    }
+
     private String resolveEmail(UUID employeeId, UUID tenantId) {
         if (employeeId == null) return null;
         try {
@@ -218,6 +229,9 @@ public class LeaveService {
         // hard-failing. Without this, a freshly onboarded employee could never
         // apply for leave ("No allocations yet" / LEAVE_BALANCE_NOT_FOUND).
         int year = startDate.getYear();
+        // Monthly / quarterly types: make sure this month's (or quarter's)
+        // credit is on the balance before checking it (V143.23).
+        if (accrualService != null) accrualService.topUpEmployee(employeeId, year);
         LeaveBalance balance = leaveBalanceRepository
                 .findByEmployeeIdAndLeaveTypeIdAndYear(employeeId, request.leaveTypeId(), year)
                 .orElseGet(() -> {
@@ -226,7 +240,8 @@ public class LeaveService {
                     b.setEmployeeId(employeeId);
                     b.setLeaveTypeId(request.leaveTypeId());
                     b.setYear(year);
-                    b.setTotalEntitlement(leaveType.getAnnualEntitlement());
+                    b.setTotalEntitlement(LeaveAccrualMath.entitlementToDate(leaveType.getAccrualFrequency(),
+                            leaveType.getAnnualEntitlement(), null, year, LeaveAccrualService.todayIst()));
                     b.setUsed(0);
                     b.setPending(0);
                     b.setCarryForward(0);
@@ -817,6 +832,13 @@ public class LeaveService {
     @Transactional
     public void initLeaveBalances(UUID employeeId, UUID companyId, UUID tenantId, int year) {
         log.info("Initialising leave balances for employee={} company={} year={}", employeeId, companyId, year);
+        if (accrualService != null) {
+            // Creates the missing rows (yearly types with the whole quota,
+            // monthly / quarterly at 0) and credits what is due by today, with
+            // every credit on the ledger.
+            accrualService.topUpEmployee(employeeId, year);
+            return;
+        }
         List<LeaveType> activeLeaveTypes = leaveTypeRepository.findByCompanyIdAndActiveTrue(companyId);
 
         for (LeaveType leaveType : activeLeaveTypes) {
@@ -829,7 +851,8 @@ public class LeaveService {
                 balance.setEmployeeId(employeeId);
                 balance.setLeaveTypeId(leaveType.getId());
                 balance.setYear(year);
-                balance.setTotalEntitlement(leaveType.getAnnualEntitlement());
+                balance.setTotalEntitlement(LeaveAccrualMath.entitlementToDate(leaveType.getAccrualFrequency(),
+                        leaveType.getAnnualEntitlement(), null, year, LeaveAccrualService.todayIst()));
                 balance.setUsed(0);
                 balance.setPending(0);
                 balance.setCarryForward(0);

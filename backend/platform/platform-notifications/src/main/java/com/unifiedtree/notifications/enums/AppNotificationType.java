@@ -39,6 +39,14 @@ public enum AppNotificationType {
     DOCUMENT_UPLOADED,
     DOCUMENT_VERIFIED,
     DOCUMENT_REJECTED,
+    /** Leave encashment (V143.23): raised → HR; decided → the employee. */
+    LEAVE_ENCASHMENT_SUBMITTED,
+    LEAVE_ENCASHMENT_APPROVED,
+    LEAVE_ENCASHMENT_REJECTED,
+    /** A policy was published with "Email everyone"; sent with the email. */
+    POLICY_PUBLISHED,
+    /** A reminder to acknowledge a policy (manual "Remind" or the automatic one). */
+    POLICY_REMINDER,
     WELCOME,
     TRIAL_ENDING_SOON,
     TRIAL_EXPIRED,

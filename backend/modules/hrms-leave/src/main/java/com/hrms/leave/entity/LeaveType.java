@@ -59,6 +59,19 @@ public class LeaveType extends BaseEntity {
     @Column(name = "is_encashable")
     private boolean encashable;
 
+    /**
+     * How the annual quota is credited: YEARLY (all of it at the start of the
+     * year, the behaviour every balance had before V143.23), MONTHLY (quota/12
+     * on the 1st of each month) or QUARTERLY (quota/4 on the 1st of Jan, Apr,
+     * Jul and Oct). See LeaveAccrualMath.
+     */
+    @Column(name = "accrual_frequency", length = 20)
+    private String accrualFrequency = "YEARLY";
+
+    /** The most days one person may encash in a leave year; null = no yearly limit. */
+    @Column(name = "max_encash_days")
+    private Integer maxEncashDays;
+
     @Column(name = "is_paid_leave")
     private boolean paidLeave = true;
 

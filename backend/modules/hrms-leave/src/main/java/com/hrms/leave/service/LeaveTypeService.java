@@ -56,6 +56,7 @@ public class LeaveTypeService {
         leaveType.setApplicableGender(request.applicableGender());
         leaveType.setDescription(request.description());
         leaveType.setActive(true);
+        applyAccrualAndEncashment(leaveType, request);
 
         leaveType = leaveTypeRepository.save(leaveType);
         log.info("Leave type created id={}", leaveType.getId());
@@ -107,10 +108,33 @@ public class LeaveTypeService {
         leaveType.setPaidLeave(request.isPaidLeave());
         leaveType.setApplicableGender(request.applicableGender());
         leaveType.setDescription(request.description());
+        applyAccrualAndEncashment(leaveType, request);
 
         leaveType = leaveTypeRepository.save(leaveType);
         log.info("Leave type updated id={}", leaveTypeId);
         return leaveTypeMapper.toResponse(leaveType);
+    }
+
+    /**
+     * V143.23 settings. Each one is optional: null keeps what is stored, so a
+     * client that doesn't know about them (the mobile Leave Policies screen, the
+     * kit Leave types page) can't wipe them with its full-replace PUT.
+     * {@code maxEncashDays} 0 clears the yearly limit.
+     */
+    static void applyAccrualAndEncashment(LeaveType leaveType, LeaveTypeRequest request) {
+        if (request.accrualFrequency() != null) {
+            if (!LeaveAccrualMath.isKnownFrequency(request.accrualFrequency())) {
+                throw new BusinessRuleException(
+                        "Credit leave upfront (YEARLY), MONTHLY or QUARTERLY.", "LEAVE_ACCRUAL_INVALID");
+            }
+            leaveType.setAccrualFrequency(LeaveAccrualMath.normalizeFrequency(request.accrualFrequency()));
+        } else if (leaveType.getAccrualFrequency() == null) {
+            leaveType.setAccrualFrequency(LeaveAccrualMath.YEARLY);
+        }
+        if (request.isEncashable() != null) leaveType.setEncashable(request.isEncashable());
+        if (request.maxEncashDays() != null) {
+            leaveType.setMaxEncashDays(request.maxEncashDays() <= 0 ? null : request.maxEncashDays());
+        }
     }
 
     @Transactional
