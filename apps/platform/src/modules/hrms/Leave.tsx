@@ -4,6 +4,9 @@
 //   My leave · Apply · Balances   everyone except the admin bucket (client rule:
 //                                 admins don't apply for their own leave)
 //   Approvals · Decided           hrms.leave.approve.l1 (WFH rows: wfh.approve)
+//   Encash                        your own (leave.request.self, not the admin
+//                                 bucket) and HR's queue (hrms.leave.encash.approve)
+//   Year end                      hrms.leave.yearend.run: accrual, carry forward, audit trail
 //   Calendar · Leave types · Holidays   everyone; editing is permission-gated inside
 // The view lives in ?tab= so notifications and the dashboard can deep-link.
 import { useMemo, useState } from 'react'
@@ -29,6 +32,9 @@ import { useWeekendDays, jsWeekendDays } from './api/useSettings'
 import { LeaveTypes } from './leave/LeaveTypes'
 import { HolidayCalendar } from './leave/HolidayCalendar'
 import { LeaveCalendar } from './leave/LeaveCalendar'
+import { MyEncashment, EncashmentAdmin } from './leave/LeaveEncashment'
+import { LeaveYearEnd, LedgerRows } from './leave/LeaveYearEnd'
+import { useEncashments, useMyLeaveLedger } from './api/useLeaveYearEnd'
 
 const STATUS: Record<LeaveApprovalStatus, [string, PillTone]> = {
   PENDING: ['Pending', 'warn'], APPROVED: ['Approved', 'ok'], REJECTED: ['Rejected', 'red'], CANCELLED: ['Cancelled', 'gray'], PENDING_L2: ['Awaiting HR', 'purple'],
@@ -173,10 +179,13 @@ function Apply({ onDone, toast }: { onDone: () => void; toast: (m: string, err?:
 // ── Balances ─────────────────────────────────────────────────────────────────
 function Balances() {
   const q = useMyBalances(new Date().getFullYear())
+  // Monthly / quarterly credits, carry forward and encashments on your balances (V143.23).
+  const ledger = useMyLeaveLedger()
   if (q.isLoading) return <State kind="loading" height={140} />
   if (q.error) return <State kind="error" title="Couldn’t load your balances" description={errMsg(q.error)} onRetry={() => q.refetch()} />
   if (!(q.data ?? []).length) return <State kind="empty" icon="calendarDays" title="No leave balances yet" description="Ask HR to set up leave types for your company." />
   return (
+    <div style={{ display: 'grid', gap: 16 }}>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,240px),1fr))', gap: 12 }}>
       {(q.data ?? []).map((b) => {
         const total = b.totalEntitlement + b.carryForward, pct = total ? Math.min(100, (b.used / total) * 100) : 0
@@ -195,6 +204,11 @@ function Balances() {
           </div>
         )
       })}
+    </div>
+    {(ledger.data ?? []).length > 0 && <>
+      <SubHeading>Credits, carry forward and encashments</SubHeading>
+      <LedgerRows entries={ledger.data ?? []} />
+    </>}
     </div>
   )
 }
@@ -272,6 +286,9 @@ export function Leave() {
   const canApprove = usePermission(P.HRMS_LEAVE_APPROVE_L1)
   const canEditHolidays = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
   const canWfhApprove = usePermission(P.WFH_APPROVE)
+  const canEncashSelf = usePermission('leave.request.self') && !isAdmin
+  const canEncashApprove = usePermission('hrms.leave.encash.approve'), canYearEnd = usePermission('hrms.leave.yearend.run')
+  const pendEncash = useEncashments('PENDING', canEncashApprove)
   const pend = usePendingApprovals(0, canApprove), pendWfh = usePendingWfhApprovals(0, 20, canApprove && canWfhApprove)
   const waiting = canApprove ? (pend.data?.totalElements ?? 0) + (pendWfh.data?.totalElements ?? 0) : 0
   const { show, node } = useDesignToast()
@@ -281,6 +298,8 @@ export function Leave() {
     !isAdmin && { key: 'balances', label: 'Balances', icon: 'chart' },
     canApprove && { key: 'approvals', label: 'Approvals', icon: 'inbox', count: waiting || undefined, urgent: waiting > 0 },
     canApprove && { key: 'history', label: 'Decided', icon: 'checkCircle' },
+    (canEncashSelf || canEncashApprove) && { key: 'encash', label: 'Encash', icon: 'banknote', count: canEncashApprove ? (pendEncash.data?.length || undefined) : undefined, urgent: canEncashApprove && (pendEncash.data?.length ?? 0) > 0 },
+    canYearEnd && { key: 'yearend', label: 'Year end', icon: 'calendarCheck' },
     { key: 'calendar', label: 'Calendar', icon: 'calendar' },
     { key: 'types', label: 'Leave types', icon: 'list' },
     { key: 'holidays', label: 'Holidays', icon: 'sun' },
@@ -297,6 +316,10 @@ export function Leave() {
         {view === 'balances' && <Balances />}
         {view === 'approvals' && <Approvals toast={show} />}
         {view === 'history' && <Decided />}
+        {view === 'encash' && canEncashApprove && <EncashmentAdmin toast={show} />}
+        {view === 'encash' && canEncashSelf && canEncashApprove && <SubHeading>Your own encashment</SubHeading>}
+        {view === 'encash' && canEncashSelf && <MyEncashment toast={show} />}
+        {view === 'yearend' && <LeaveYearEnd toast={show} />}
         {view === 'calendar' && <LeaveCalendar />}
         {view === 'types' && <LeaveTypes embedded />}
         {view === 'holidays' && <HolidayCalendar canEdit={canEditHolidays} embedded />}
