@@ -144,7 +144,8 @@ public class CanonicalTenantCompatibilityController {
                 decimal(request.latitude()),
                 decimal(request.longitude()),
                 firstNonNull(request.geoFenceRadius(), request.geoFenceRadiusMeters()),
-                request.isHeadquarters()));
+                request.isHeadquarters(),
+                null));        // branchType: from isHeadquarters (mobile has no type picker)
         return toBranch(created);
     }
 

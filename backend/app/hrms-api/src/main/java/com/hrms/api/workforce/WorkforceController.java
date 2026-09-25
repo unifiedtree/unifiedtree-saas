@@ -13,6 +13,7 @@ import com.hrms.employee.workforce.dto.WorkforceDtos.CreateDepartmentRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateDesignationRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateWorkforceEmployeeRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.EmployeeCountsResponse;
+import com.hrms.employee.workforce.dto.WorkforceDtos.GradeResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.DepartmentResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.DesignationResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateCompanyRequest;
@@ -141,7 +142,10 @@ public class WorkforceController {
     // -- Branches ------------------------------------------------------------
     @GetMapping("/branches")
     @PreAuthorize("hasAuthority('org.company.read') or hasAuthority('platform.admin')")
-    public List<BranchResponse> listBranches(@RequestParam(required = false) UUID companyId) {
+    public List<BranchResponse> listBranches(@RequestParam(required = false) UUID companyId,
+                                             // V143.22: deactivated branches too, for the Branches page filter.
+                                             @RequestParam(defaultValue = "false") boolean includeArchived) {
+        if (includeArchived) return branches.listIncludingArchived(companyId);
         return companyId == null ? branches.listAll() : branches.listForCompany(companyId);
     }
 
@@ -479,8 +483,10 @@ public class WorkforceController {
     // -- Contractors ---------------------------------------------------------
     @GetMapping("/contractors")
     @PreAuthorize("hasAuthority('hrms.contractor.read') or hasAuthority('platform.admin')")
-    public List<ContractorResponse> listContractors(@RequestParam UUID companyId) {
-        return contractors.listForCompany(companyId);
+    public List<ContractorResponse> listContractors(@RequestParam UUID companyId,
+                                                    // V143.22: ended agencies too (Master shows them, with Reactivate).
+                                                    @RequestParam(defaultValue = "false") boolean includeArchived) {
+        return contractors.listForCompany(companyId, includeArchived);
     }
 
     @PostMapping("/contractors")
@@ -521,31 +527,41 @@ public class WorkforceController {
     }
 
     // -- Grades --------------------------------------------------------------
+    // V143.22: grades carry a pay band (min/max annual CTC). Every signed-in
+    // user can list grades (forms need them), but the band amounts are salary
+    // information and only go to holders of hrms.grade.band.read. A grade
+    // writer without it can't see or change the band (their null band means
+    // "not shown", so it is kept).
     @GetMapping("/grades")
     @PreAuthorize("isAuthenticated()")
-    public List<Grade> listGrades(@RequestParam UUID companyId) {
-        return grades.listForCompany(companyId);
+    public List<GradeResponse> listGrades(@RequestParam UUID companyId) {
+        boolean bands = MasterDataController.holds(GRADE_BAND_READ);
+        return grades.listForCompany(companyId).stream().map(g -> GradeService.toResponse(g, bands)).toList();
     }
 
     @PostMapping("/grades")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("@perm.check('hrms.grade.write')")
-    public Grade createGrade(@Valid @RequestBody Grade grade) {
-        return grades.create(grade);
+    @PreAuthorize("hasAuthority('hrms.grade.write')")
+    public GradeResponse createGrade(@Valid @RequestBody Grade grade) {
+        boolean bands = MasterDataController.holds(GRADE_BAND_READ);
+        return GradeService.toResponse(grades.create(grade, bands), bands);
     }
 
     @PutMapping("/grades/{id}")
-    @PreAuthorize("@perm.check('hrms.grade.write')")
-    public Grade updateGrade(@PathVariable UUID id, @Valid @RequestBody Grade grade) {
-        return grades.update(id, grade);
+    @PreAuthorize("hasAuthority('hrms.grade.write')")
+    public GradeResponse updateGrade(@PathVariable UUID id, @Valid @RequestBody Grade grade) {
+        boolean bands = MasterDataController.holds(GRADE_BAND_READ);
+        return GradeService.toResponse(grades.update(id, grade, bands), bands);
     }
 
     @DeleteMapping("/grades/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("@perm.check('hrms.grade.write')")
+    @PreAuthorize("hasAuthority('hrms.grade.write')")
     public void archiveGrade(@PathVariable UUID id) {
         grades.archive(id);
     }
+
+    static final String GRADE_BAND_READ = "hrms.grade.band.read";
 
     // -- Employment types ----------------------------------------------------
     @GetMapping("/employment-types")

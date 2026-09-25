@@ -3,6 +3,7 @@ package com.hrms.employee.workforce.service;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.hrms.employee.workforce.dto.WorkforceDtos.ClassificationRuleResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.CreateClassificationRuleRequest;
+import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateClassificationRuleRequest;
 import com.hrms.employee.workforce.entity.ClassificationRule;
 import com.hrms.employee.workforce.repository.ClassificationRuleRepository;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,24 @@ public class ClassificationRuleService {
         r.setCode(req.code());
         r.setDescription(req.description());
         r.setActive(true);
+        return toResponse(repository.save(r));
+    }
+
+    /**
+     * Partial update: null leaves a field as it is. The name can't be blanked;
+     * a blank code or description clears it.
+     */
+    public ClassificationRuleResponse update(UUID id, UpdateClassificationRuleRequest req) {
+        ClassificationRule r = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Classification rule " + id + " not found"));
+        if (req.name() != null) {
+            if (req.name().isBlank()) {
+                throw new com.hrms.core.exception.BusinessRuleException("The classification needs a name", "NAME_REQUIRED");
+            }
+            r.setName(req.name().trim());
+        }
+        if (req.code() != null) r.setCode(req.code().isBlank() ? null : req.code().trim().toUpperCase());
+        if (req.description() != null) r.setDescription(req.description().isBlank() ? null : req.description().trim());
         return toResponse(repository.save(r));
     }
 

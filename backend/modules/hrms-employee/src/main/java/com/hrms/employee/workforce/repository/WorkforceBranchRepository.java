@@ -11,4 +11,7 @@ import java.util.UUID;
 public interface WorkforceBranchRepository extends JpaRepository<Branch, UUID> {
     List<Branch> findAllByCompanyIdAndActiveTrueOrderByNameAsc(UUID companyId);
     List<Branch> findAllByActiveTrueOrderByNameAsc();
+    /** Active and deactivated branches (the include-archived filter). */
+    List<Branch> findAllByCompanyIdOrderByNameAsc(UUID companyId);
+    List<Branch> findAllByOrderByNameAsc();
 }

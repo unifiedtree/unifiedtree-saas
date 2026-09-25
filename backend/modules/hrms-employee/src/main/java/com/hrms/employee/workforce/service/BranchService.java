@@ -40,6 +40,51 @@ public class BranchService {
                 .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
     }
 
+    /** Active and deactivated branches, for the include-archived filter (null company = all). */
+    @Transactional(readOnly = true)
+    public List<BranchResponse> listIncludingArchived(UUID companyId) {
+        Map<UUID, Integer> counts = headcount.byColumn("branch_id");
+        return (companyId == null ? repository.findAllByOrderByNameAsc() : repository.findAllByCompanyIdOrderByNameAsc(companyId))
+                .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
+    }
+
+    /** The branch types a branch can have (V143.22). */
+    public static final List<String> BRANCH_TYPES = List.of("HEAD_OFFICE", "BRANCH", "PLANT", "WAREHOUSE", "OFFICE", "STORE", "OTHER");
+
+    /**
+     * What a branch is. is_headquarters decides the head office (it is what the
+     * rest of the app reads), so an HQ is always HEAD_OFFICE, and a branch that
+     * stopped being the HQ without being given another type reads as BRANCH.
+     */
+    public static String typeOf(Branch b) {
+        if (b.isHeadquarters()) return "HEAD_OFFICE";
+        String t = b.getBranchType();
+        return t == null || "HEAD_OFFICE".equals(t) ? "BRANCH" : t;
+    }
+
+    /**
+     * Apply a requested type and/or HQ flag. A type wins: HEAD_OFFICE makes it
+     * the head office and any other type makes it an ordinary branch. Without a
+     * type, the old isHeadquarters flag still works as before.
+     */
+    static void applyType(Branch b, String branchType, Boolean isHeadquarters) {
+        if (branchType != null && !branchType.isBlank()) {
+            String t = branchType.trim().toUpperCase().replace(' ', '_');
+            if (!BRANCH_TYPES.contains(t)) {
+                throw new com.hrms.core.exception.BusinessRuleException(
+                        "Branch type must be one of " + String.join(", ", BRANCH_TYPES), "INVALID_BRANCH_TYPE");
+            }
+            b.setBranchType(t);
+            b.setHeadquarters("HEAD_OFFICE".equals(t));
+            return;
+        }
+        if (isHeadquarters != null) {
+            b.setHeadquarters(isHeadquarters);
+            if (isHeadquarters) b.setBranchType("HEAD_OFFICE");
+            else if ("HEAD_OFFICE".equals(b.getBranchType())) b.setBranchType("BRANCH");
+        }
+    }
+
     public BranchResponse create(CreateBranchRequest req) {
         Branch b = new Branch();
         b.setCompanyId(req.companyId());
@@ -53,7 +98,9 @@ public class BranchService {
         b.setLatitude(req.latitude());
         b.setLongitude(req.longitude());
         b.setGeoFenceRadiusMeters(req.geoFenceRadiusMeters() != null ? req.geoFenceRadiusMeters() : 500);
-        b.setHeadquarters(Boolean.TRUE.equals(req.isHeadquarters()));
+        b.setHeadquarters(false);
+        b.setBranchType("BRANCH");
+        applyType(b, req.branchType(), Boolean.TRUE.equals(req.isHeadquarters()));
         b.setActive(true);
         return toResponse(repository.save(b));
     }
@@ -73,7 +120,7 @@ public class BranchService {
         if (req.state() != null)         b.setState(req.state());
         if (req.country() != null)       b.setCountry(req.country());
         if (req.pincode() != null)       b.setPincode(req.pincode());
-        if (req.isHeadquarters() != null) b.setHeadquarters(req.isHeadquarters());
+        applyType(b, req.branchType(), req.isHeadquarters());
         if (req.isActive() != null)      b.setActive(req.isActive());
         return toResponse(repository.save(b));
     }
@@ -107,6 +154,6 @@ public class BranchService {
                 b.getLatitude(), b.getLongitude(),
                 b.getGeoFenceRadiusMeters(), b.isGeoFenceEnforced(),
                 b.getManagerEmployeeId(), employees,
-                b.isHeadquarters(), b.isActive());
+                b.isHeadquarters(), b.isActive(), typeOf(b));
     }
 }

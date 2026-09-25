@@ -33,6 +33,17 @@ public class Company extends BaseEntity {
     @Column(name = "industry", length = 50)
     private String industry;
 
+    /** Tax deduction account number, AAAA99999A (V143.22). */
+    @Column(name = "tan_number", length = 10)
+    private String tanNumber;
+
+    /** Date of incorporation, shown as "since" (V143.22). */
+    @Column(name = "incorporation_date")
+    private java.time.LocalDate incorporationDate;
+
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+
     @Column(name = "country", length = 50)
     private String country;
 

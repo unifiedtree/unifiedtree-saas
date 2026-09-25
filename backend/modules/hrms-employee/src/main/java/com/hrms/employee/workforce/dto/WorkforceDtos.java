@@ -33,7 +33,11 @@ public final class WorkforceDtos {
             String fiscalYearStart,
             String logoUrl,
             Integer employeeCount,
-            boolean active
+            boolean active,
+            // V143.22: TAN, date of incorporation ("since") and a description.
+            String tanNumber,
+            LocalDate incorporationDate,
+            String description
     ) { }
 
     public record CreateCompanyRequest(
@@ -46,7 +50,12 @@ public final class WorkforceDtos {
             String country,
             String timezone,
             String currency,
-            String fiscalYearStart
+            String fiscalYearStart,
+            @jakarta.validation.constraints.Pattern(regexp = "^$|^[A-Za-z]{4}[0-9]{5}[A-Za-z]$", message = "TAN looks like AAAA99999A")
+            String tanNumber,
+            /** yyyy-MM-dd; blank = not set. */
+            String incorporationDate,
+            @Size(max = 2000) String description
     ) { }
 
     public record UpdateCompanyRequest(
@@ -59,7 +68,13 @@ public final class WorkforceDtos {
             String country,
             String timezone,
             String currency,
-            String fiscalYearStart
+            String fiscalYearStart,
+            // V143.22. Null = leave unchanged; blank = clear.
+            @jakarta.validation.constraints.Pattern(regexp = "^$|^[A-Za-z]{4}[0-9]{5}[A-Za-z]$", message = "TAN looks like AAAA99999A")
+            String tanNumber,
+            /** yyyy-MM-dd. Null = leave unchanged; blank = clear. */
+            String incorporationDate,
+            @Size(max = 2000) String description
     ) { }
 
     // -- Branch --------------------------------------------------------------
@@ -80,7 +95,9 @@ public final class WorkforceDtos {
             UUID managerEmployeeId,
             Integer employeeCount,
             boolean headquarters,
-            boolean active
+            boolean active,
+            /** HEAD_OFFICE, BRANCH, PLANT, WAREHOUSE, OFFICE, STORE or OTHER (V143.22). */
+            String branchType
     ) { }
 
     public record CreateBranchRequest(
@@ -95,7 +112,9 @@ public final class WorkforceDtos {
             BigDecimal latitude,
             BigDecimal longitude,
             Integer geoFenceRadiusMeters,
-            Boolean isHeadquarters
+            Boolean isHeadquarters,
+            /** V143.22. HEAD_OFFICE also makes it the head office. Null = BRANCH (or HEAD_OFFICE when isHeadquarters). */
+            String branchType
     ) { }
 
     /**
@@ -120,7 +139,9 @@ public final class WorkforceDtos {
             String country,
             String pincode,
             Boolean isHeadquarters,
-            Boolean isActive
+            Boolean isActive,
+            /** V143.22. HEAD_OFFICE makes it the head office; any other type makes it an ordinary branch. */
+            String branchType
     ) { }
 
     public record UpdateGeofenceRequest(
@@ -146,7 +167,9 @@ public final class WorkforceDtos {
             String colorHex,
             String iconKey,
             Integer employeeCount,
-            boolean active
+            boolean active,
+            /** Branches this department works in (hrms.department_branches); empty = not limited. */
+            List<UUID> branchIds
     ) { }
 
     public record CreateDepartmentRequest(
@@ -166,29 +189,39 @@ public final class WorkforceDtos {
             UUID id,
             UUID companyId,
             String title,
+            /** The linked grade's code, or the legacy free text when no grade is linked. */
             String grade,
             UUID departmentId,
             UUID reportsToDesignationId,
             String jobResponsibilities,
             Integer headcount,
-            boolean active
+            boolean active,
+            /** V143.22: the grade by id (null = none, or legacy text that matched no grade). */
+            UUID gradeId,
+            String code
     ) { }
 
+    /** {@code gradeId} wins over {@code grade}: when it is set the text becomes that grade's code. */
     public record CreateDesignationRequest(
             @NotNull UUID companyId,
             @NotBlank @Size(max = 100) String title,
-            @Size(max = 10) String grade,
+            @Size(max = 20) String grade,
             UUID departmentId,
             UUID reportsToDesignationId,
-            String jobResponsibilities
+            String jobResponsibilities,
+            UUID gradeId,
+            @Size(max = 30) String code
     ) { }
 
+    /** A full replace, like before: a null gradeId with a null grade clears the grade. */
     public record UpdateDesignationRequest(
             @NotBlank @Size(max = 100) String title,
-            @Size(max = 10) String grade,
+            @Size(max = 20) String grade,
             UUID departmentId,
             UUID reportsToDesignationId,
-            String jobResponsibilities
+            String jobResponsibilities,
+            UUID gradeId,
+            @Size(max = 30) String code
     ) { }
 
     // -- Workforce employee --------------------------------------------------
@@ -465,8 +498,16 @@ public final class WorkforceDtos {
             String contactEmail,
             String contactPhone,
             String city,
+            /** Contract workers linked to the agency who work here now (counted, never typed in). */
             Integer activeWorkersCount,
-            boolean active
+            boolean active,
+            // V143.22
+            String licenceNumber,
+            LocalDate licenceValidUntil,
+            String serviceType,
+            List<UUID> siteBranchIds,
+            /** Every linked contract worker, including people who have left. */
+            List<UUID> workerIds
     ) { }
 
     public record CreateContractorRequest(
@@ -479,7 +520,43 @@ public final class WorkforceDtos {
             @Size(max = 20)  String contactPhone,
             String addressLine,
             String city,
-            String state
+            String state,
+            // V143.22
+            @Size(max = 60)  String licenceNumber,
+            LocalDate licenceValidUntil,
+            @Size(max = 150) String serviceType,
+            List<UUID> siteBranchIds
+    ) { }
+
+    /**
+     * Partial agency update (V143.22). Null = leave unchanged; a blank string
+     * clears a text field; an empty siteBranchIds clears the sites. The Master
+     * form doesn't show GSTIN or the address, so a full replace would wipe them.
+     */
+    public record UpdateContractorRequest(
+            @Size(max = 150) String agencyName,
+            @Size(max = 50)  String registrationNumber,
+            @Size(max = 20)  String gstin,
+            @Size(max = 100) String contactPersonName,
+            @Size(max = 255) String contactEmail,
+            @Size(max = 20)  String contactPhone,
+            @Size(max = 255) String addressLine,
+            @Size(max = 100) String city,
+            @Size(max = 100) String state,
+            @Size(max = 60)  String licenceNumber,
+            /** yyyy-MM-dd; blank clears it. */
+            String licenceValidUntil,
+            @Size(max = 150) String serviceType,
+            List<UUID> siteBranchIds
+    ) { }
+
+    /** One contract worker linked to an agency. */
+    public record ContractorWorkerResponse(
+            UUID employeeId,
+            String employeeCode,
+            String name,
+            String employmentStatus,
+            java.time.Instant linkedAt
     ) { }
 
     // -- Classification rule -------------------------------------------------
@@ -499,4 +576,47 @@ public final class WorkforceDtos {
             @Size(max = 30) String code,
             String description
     ) { }
+
+    /** Partial update: null = leave unchanged; a blank code or description clears it. */
+    public record UpdateClassificationRuleRequest(
+            @Size(max = 100) String name,
+            @Size(max = 30) String code,
+            String description
+    ) { }
+
+    // -- Grade ---------------------------------------------------------------
+    /**
+     * A grade as the API returns it. {@code minCtcAnnual}/{@code maxCtcAnnual}
+     * are the pay band: null when none is set, and also when the caller may not
+     * see pay bands ({@code bandVisible} says which).
+     */
+    public record GradeResponse(
+            UUID id,
+            UUID tenantId,
+            UUID companyId,
+            String name,
+            String code,
+            int level,
+            String description,
+            boolean active,
+            BigDecimal minCtcAnnual,
+            BigDecimal maxCtcAnnual,
+            boolean bandVisible,
+            java.time.Instant createdAt,
+            java.time.Instant updatedAt
+    ) { }
+
+    /** The pay band that applies to one employee: their designation's grade. */
+    public record EmployeePayBandResponse(
+            UUID employeeId,
+            UUID designationId,
+            UUID gradeId,
+            String gradeCode,
+            String gradeName,
+            BigDecimal minCtcAnnual,
+            BigDecimal maxCtcAnnual
+    ) { }
+
+    /** Replace the branches a department works in. Empty = not limited to any branch. */
+    public record DepartmentBranchesRequest(@NotNull List<UUID> branchIds) { }
 }

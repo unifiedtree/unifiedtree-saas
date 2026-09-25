@@ -26,6 +26,18 @@ public class Grade extends BaseEntity {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    /**
+     * Pay band: the annual CTC range this grade pays (V143.22). Both set or
+     * both null. Salary Structure warns when a CTC falls outside it; nothing
+     * blocks. Pay data, so the API leaves it out for people without
+     * hrms.grade.band.read.
+     */
+    @Column(name = "min_ctc_annual", precision = 14, scale = 2)
+    private java.math.BigDecimal minCtcAnnual;
+
+    @Column(name = "max_ctc_annual", precision = 14, scale = 2)
+    private java.math.BigDecimal maxCtcAnnual;
+
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 }

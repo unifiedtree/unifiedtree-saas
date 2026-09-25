@@ -16,4 +16,6 @@ public interface GradeRepository extends JpaRepository<Grade, UUID> {
     Optional<Grade> findByCompanyIdAndCode(UUID companyId, String code);
 
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
+    /** Every grade of the company, archived ones too (a designation may still link to one). */
+    List<Grade> findByCompanyId(UUID companyId);
 }
