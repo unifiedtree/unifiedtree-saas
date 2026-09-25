@@ -30,6 +30,7 @@ import { useShiftPolicies, useCreateShiftPolicy, useUpdateShiftPolicy, useDelete
 import { usePendingShiftRequests, useDecidedShiftRequests, useDecideShiftRequest, type ShiftRequest } from '../api/useShiftRequests'
 import { useHolidays } from '../api/useSettings'
 import { useAttendanceSummaryReport, useLateMarksReport } from '../api/useReports'
+import { useRoles } from '@/shared/hooks/useRoles'
 
 type St = 'live' | 'loading' | 'empty' | 'error'
 interface Q { isLoading: boolean; isError: boolean }
@@ -104,6 +105,8 @@ export function AttendanceContainer() {
   const canReview = usePermission('attendance.status.review') // the review list (V143.10)
   const canOverride = usePermission('attendance.status.override') // change a day, decide face punches
   const isHr = canTeam
+  // Owners and admins don't get a My Attendance tab (the Leave page hides its personal tabs the same way).
+  const { isAdmin } = useRoles()
   const canFaceList = canFace || canReview
   const weekAgo = addDays(today, -6)
   const [target, setTarget] = useState<StatusTarget | null>(null)
@@ -485,6 +488,7 @@ export function AttendanceContainer() {
           initialStatus={params.get('status') || ''}
           date={date}
           viewAs={isHr ? 'admin' : 'employee'}
+          hideMine={isAdmin}
           mobile={mobile}
           data={{ ...data, reviewBlock }}
           states={states}

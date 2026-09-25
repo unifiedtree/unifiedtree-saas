@@ -97,7 +97,7 @@ page('plan', 'Manage plan', '/plan', 'Home', 'apps/plan', [{ when: planAdminOnly
 
 // ── My workspace (self-service) ────────────────────────────────────────────
 page('me', 'My workspace', '/me', 'Me', 'me', [{ ...any('hrms.ess.read', 'attendance.checkin.self'), module: HR, self: true }], { aliases: ['me/overview', 'me/home'], keywords: ['self service', 'ess', 'my home'] })
-page('me-attendance', 'My attendance', '/hrms/attendance?tab=my', 'Me', 'me/attendance', [{ ...any('attendance.checkin.self'), module: HR, self: true }], { keywords: ['punch', 'check in', 'my days', 'present'] })
+page('me-attendance', 'My attendance', '/hrms/attendance?tab=my', 'Me', 'me/attendance', [{ ...any('attendance.checkin.self'), module: HR, self: true, when: notAdminRole }], { keywords: ['punch', 'check in', 'my days', 'present'] })
 page('me-leave', 'My leave', '/hrms/leave?tab=my', 'Me', 'me/leave', [{ allOf: ['leave.request.self'], module: HR, self: true, when: notAdminRole }], { keywords: ['time off', 'my requests', 'leave status'] })
 page('me-payslips', 'My payslips', '/me/payslips', 'Me', 'me/payslips', [{ ...any('payroll.payslip.read.self'), module: PAY, self: true }], { aliases: ['payslips', 'payslip'], keywords: ['salary slip', 'pay slip', 'download payslip'] })
 page('me-salary', 'My salary', '/me/salary', 'Me', 'me/salary', [{ ...any('payroll.structure.read.self'), module: PAY, self: true }], { aliases: ['salary'], keywords: ['ctc', 'salary structure', 'pay'] })
@@ -150,7 +150,7 @@ tab('att-daily', 'team', 'Daily Logs', 'tab=team', 'attendance/daily-logs', [any
 tab('att-daily', 'face', 'Face Punch', 'tab=face', 'attendance/face-punch', [{ allOf: ['attendance.team.read', 'attendance.face.admin.read'] }], { aliases: ['attendance/face'], keywords: ['face', 'kiosk', 'selfie'] })
 tab('att-daily', 'corrections', 'Regularization', 'tab=corrections', 'attendance/regularization', [], { aliases: ['attendance/corrections', 'attendance/fix', 'attendance/fixes'], keywords: ['regularize', 'regularise', 'correction', 'missed punch', 'fix'] })
 tab('att-daily', 'review', 'Review', 'tab=review', 'attendance/review', [{ allOf: ['attendance.team.read', 'attendance.status.review'] }], { aliases: ['attendance/exceptions', 'attendance/status-review'], keywords: ['excuse', 'change status', 'late', 'half day', 'absent', 'no check-out', 'outside zone'] })
-tab('att-daily', 'my', 'My Attendance', 'tab=my', 'attendance/my-attendance', [any('attendance.checkin.self')], { aliases: ['attendance/my', 'attendance/mine'] })
+tab('att-daily', 'my', 'My Attendance', 'tab=my', 'attendance/my-attendance', [{ ...any('attendance.checkin.self'), when: notAdminRole }], { aliases: ['attendance/my', 'attendance/mine'] })
 page('att-shifts', 'Shifts & Overtime', '/hrms/shifts', 'Attendance & Time', 'attendance/shifts', [{ ...any('attendance.team.read', 'attendance.checkin.self'), module: HR }], { aliases: ['attendance/shifts-overtime', 'shifts'], keywords: ['shift', 'overtime', 'ot', 'roster'] })
 tab('att-shifts', 'schedules', 'Shift Schedules', 'tab=schedules', 'attendance/shift-schedules', [any('attendance.team.read')], { aliases: ['attendance/schedules'], keywords: ['shift timings', 'general shift', 'night shift'] })
 tab('att-shifts', 'roster', 'Shift Roster', 'tab=roster', 'attendance/roster', [any('attendance.team.read')], { keywords: ['assign shift', 'change shift', 'who works when'] })

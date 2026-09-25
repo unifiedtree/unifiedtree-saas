@@ -44,6 +44,9 @@ export class AttendancePage extends DCLogic {
       daily: isHr ? [['team', 'Daily Logs', 'list'], ['face', 'Face Punch', 'scanFace', nFace], ['corrections', 'Regularization', 'pencil', nCorr], ...(canReview ? [['review', 'Review', 'clipboard', nReview]] : []), ['my', 'My Attendance', 'userCheck']] : [['my', 'My Attendance', 'userCheck'], ['corrections', 'Regularization', 'pencil']],
       shifts: isHr ? [['schedules', 'Shift Schedules', 'clock'], ['roster', 'Roster', 'users', live('roster') ? noShift : 0], ['overtime', 'Overtime', 'timer', nOt], ['requests', 'Shift Requests', 'swap', nSreq]] : [['myshift', 'My Shift', 'calendarClock']],
     }
+    // Owners and admins run the workspace, so My Attendance is not shown to them;
+    // ?tab=my then opens the first tab they have (below).
+    if (p.hideMine) TABS.daily = TABS.daily.filter((t) => t[0] !== 'my')
     let section: string = p.section || 'daily'
     if (!TABS[section]) section = 'daily'
     const noAccess = section === 'analytics' && !isHr, sec = SECS.find((s) => s.key === section) || SECS[0]

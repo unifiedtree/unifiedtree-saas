@@ -11,7 +11,8 @@
  *     (WorkspacePlanController / BrandingController), so only those roles are
  *     offered the "request module" flow.
  *   - `adminRole`: the Leave page hides the personal tabs (My leave, Apply,
- *     Balances) from admin roles, so search must not offer them either.
+ *     Balances) and the Attendance page hides My Attendance from admin
+ *     roles, so search must not offer them either.
  *
  * Pure functions only (no React), so the rules can be unit-tested.
  */
