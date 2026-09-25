@@ -14,7 +14,10 @@ import type { HrConfigResponse } from '../api/useSettings'
 export interface Contractor {
   id: string; companyId: string; agencyName: string; registrationNumber?: string | null; gstin?: string | null
   contactPersonName?: string | null; contactEmail?: string | null; contactPhone?: string | null; city?: string | null
+  /** Linked contract workers who work here now (counted by the API). */
   activeWorkersCount?: number | null; active: boolean
+  licenceNumber?: string | null; licenceValidUntil?: string | null; serviceType?: string | null
+  siteBranchIds?: string[]; workerIds?: string[]
 }
 export type Rec = Record<string, any> & { _key?: string }
 
@@ -55,6 +58,11 @@ const COMP_CAT: Record<string, string> = { EARNING: 'Earning', DEDUCTION: 'Deduc
 export const COMP_CAT_CODE: Record<string, string> = Object.fromEntries(Object.entries(COMP_CAT).map(([k, v]) => [v, k]))
 const COMP_METHOD: Record<string, string> = { FIXED: 'fixed', PERCENT_OF_BASIC: 'pct_basic', PERCENT_OF_GROSS: 'pct_gross', FORMULA: 'formula', STATUTORY: 'statutory' }
 export const COMP_METHOD_CODE: Record<string, string> = Object.fromEntries(Object.entries(COMP_METHOD).map(([k, v]) => [v, k]))
+/** Branch types (V143.22) → the design's labels. */
+const BRANCH_KIND: Record<string, string> = { HEAD_OFFICE: 'Head office', BRANCH: 'Branch', PLANT: 'Plant', WAREHOUSE: 'Warehouse', OFFICE: 'Office', STORE: 'Store', OTHER: 'Other' }
+export const BRANCH_KIND_CODE: Record<string, string> = Object.fromEntries(Object.entries(BRANCH_KIND).map(([k, v]) => [v, k]))
+const BRANCH_ICON: Record<string, string> = { 'Head office': 'building-2', Plant: 'factory', Warehouse: 'warehouse' }
+const num = (x?: number | string | null) => (x == null || x === '' ? null : Number(x))
 
 const hmToMin = (t?: string | null) => { const [h, m] = String(t || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0) }
 export const rateLabel = (x?: number | null) => (x == null ? null : `${+Number(x).toFixed(2)}×`)
@@ -82,15 +90,17 @@ const CO_TONES = ['brand', 'orange', 'blue', 'violet', 'teal', 'rose']
 export function companyRec(c: Company, i: number, hq: Branch | undefined): Rec {
   return {
     _key: c.id, _raw: c, id: c.id, name: c.name, legal: c.legalName || '', industry: c.industry || '',
-    hq: hq ? [hq.city, hq.state].filter(Boolean).join(', ') : '', since: '', t: CO_TONES[i % CO_TONES.length], status: c.active === false ? 'Inactive' : 'Active',
-    ids: { CIN: c.registrationNumber || '', PAN: c.panNumber || '', TAN: '', GSTIN: c.gstin || '' },
+    hq: hq ? [hq.city, hq.state].filter(Boolean).join(', ') : '', since: c.incorporationDate ? c.incorporationDate.slice(0, 4) : '', inc: c.incorporationDate || '',
+    desc: c.description || '', t: CO_TONES[i % CO_TONES.length], status: c.active === false ? 'Inactive' : 'Active',
+    ids: { CIN: c.registrationNumber || '', PAN: c.panNumber || '', TAN: c.tanNumber || '', GSTIN: c.gstin || '' },
   }
 }
 
 export function branchRec(b: Branch): Rec {
+  const kind = b.headquarters ? 'Head office' : BRANCH_KIND[b.branchType || ''] || 'Branch'
   return {
-    _key: b.id, _raw: b, id: b.id, code: b.code || '', name: b.name, kind: b.headquarters ? 'Head office' : 'Branch',
-    city: b.city || '', state: b.state || '', co: b.companyId, icon: b.headquarters ? 'building-2' : 'building', status: b.active === false ? 'Inactive' : 'Active',
+    _key: b.id, _raw: b, id: b.id, code: b.code || '', name: b.name, kind,
+    city: b.city || '', state: b.state || '', co: b.companyId, icon: BRANCH_ICON[kind] || 'building', status: b.active === false ? 'Inactive' : 'Active',
   }
 }
 
@@ -98,18 +108,20 @@ export function deptRec(d: Department, i: number, headName: string | null, known
   return {
     _key: d.id, _raw: d, id: d.id, code: d.code || '', name: d.name, icon: iconOfKey(d.iconKey, knownIcons), t: toneOfHex(d.colorHex, DEPT_TONES[i % DEPT_TONES.length]),
     head: headName, headId: d.departmentHeadEmployeeId || null, parent: d.parentDepartmentId || null, status: d.active === false ? 'Inactive' : 'Active', co: d.companyId,
+    branches: d.branchIds || [],
   }
 }
 
 export function desigRec(x: Designation): Rec {
-  return { _key: x.id, _raw: x, id: x.id, code: '', name: x.title, dept: x.departmentId || '', grade: x.grade || '', status: x.active === false ? 'Inactive' : 'Active', co: x.companyId }
+  // `grade` is the linked grade's code (the grade record's id here), or legacy text that matches no grade (shown as a chip).
+  return { _key: x.id, _raw: x, id: x.id, code: x.code || '', name: x.title, dept: x.departmentId || '', grade: x.grade || '', status: x.active === false ? 'Inactive' : 'Active', co: x.companyId }
 }
 
 const GRADE_TONES = ['slate', 'cyan', 'teal', 'green', 'blue', 'indigo', 'violet']
 export function gradeRec(g: Grade, i: number): Rec {
   return {
-    _key: g.id, _raw: g, id: g.code || g.name, name: g.name, min: null, max: null, t: GRADE_TONES[Math.min(i, GRADE_TONES.length - 1)],
-    status: g.active === false ? 'Inactive' : 'Active', level: g.level, co: g.companyId,
+    _key: g.id, _raw: g, id: g.code || g.name, name: g.name, min: num(g.minCtcAnnual), max: num(g.maxCtcAnnual), t: GRADE_TONES[Math.min(i, GRADE_TONES.length - 1)],
+    status: g.active === false ? 'Inactive' : 'Active', level: g.level, co: g.companyId, hidden: g.bandVisible === false,
   }
 }
 
@@ -117,7 +129,8 @@ const AG_TONES = ['orange', 'indigo', 'green', 'teal', 'blue', 'rose']
 export function agencyRec(a: Contractor, i: number): Rec {
   return {
     _key: a.id, _raw: a, id: a.id, name: a.agencyName, reg: a.registrationNumber || '', since: '', contact: a.contactPersonName || '',
-    phone: a.contactPhone || '', email: a.contactEmail || '', workers: null, sites: null, licence: null, service: '',
+    phone: a.contactPhone || '', email: a.contactEmail || '', workers: a.activeWorkersCount ?? 0, sites: a.siteBranchIds || [],
+    licence: a.licenceValidUntil || null, licenceNo: a.licenceNumber || '', service: a.serviceType || '',
     status: a.active === false ? 'Inactive' : 'Active', t: a.active === false ? 'slate' : AG_TONES[i % AG_TONES.length], co: a.companyId,
   }
 }

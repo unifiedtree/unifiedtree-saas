@@ -17,6 +17,10 @@ export interface Company {
   logoUrl?: string
   employeeCount?: number
   active: boolean
+  /** V143.22: TAN, date of incorporation (yyyy-mm-dd) and a description. */
+  tanNumber?: string | null
+  incorporationDate?: string | null
+  description?: string | null
 }
 
 export interface Branch {
@@ -37,6 +41,8 @@ export interface Branch {
   employeeCount?: number
   headquarters: boolean
   active: boolean
+  /** V143.22: HEAD_OFFICE, BRANCH, PLANT, WAREHOUSE, OFFICE, STORE or OTHER. */
+  branchType?: string
 }
 
 export interface Department {
@@ -57,6 +63,8 @@ export interface Department {
   iconKey?: string | null
   employeeCount?: number
   active: boolean
+  /** V143.22: branches this department works in (empty = every branch). */
+  branchIds?: string[]
 }
 
 export interface Designation {
@@ -69,6 +77,9 @@ export interface Designation {
   jobResponsibilities?: string
   headcount?: number
   active: boolean
+  /** V143.22: the grade by id; `grade` is then that grade's code. Null for none or unmatched legacy text. */
+  gradeId?: string | null
+  code?: string | null
 }
 
 // ── Companies ─────────────────────────────────────────────────────────────────
@@ -351,6 +362,10 @@ export interface Grade {
   level: number
   description?: string
   active: boolean
+  /** V143.22 pay band (annual CTC). Null when not set, or when the viewer may not see bands (`bandVisible` false). */
+  minCtcAnnual?: number | null
+  maxCtcAnnual?: number | null
+  bandVisible?: boolean
 }
 
 export interface GradePayload {
