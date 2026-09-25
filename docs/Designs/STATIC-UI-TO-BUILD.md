@@ -525,3 +525,16 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
 - **Checked live:**
   - The manager and finance lead dashboards make no refused calls.
   - `live-design-dashboard` 12/12 and `live-staff-dashboard` 12/12.
+
+### 11.6 My team (`/team`): done
+- **Layout:** on the module kit, in this order:
+  - today's tiles: Present, Not marked yet, On leave, and Waiting for you
+  - leave waiting for the manager, decided right on the page with the same cards as Leave (it used to be a list with a link to the Leave page)
+  - "Who's in today" with punch times
+  - the week's shift roster
+- **Fixed:**
+  - Leave approvals are only fetched for people with `hrms.leave.approve.l1`; managers without it got a 403.
+  - Roster names linked to the employee page, which managers can't open (no `hrms.employee.read`). They link now only for people who can.
+  - The roster showed only the first 8 people; now everyone is listed.
+- **Note:** the attendance API counts someone with no punch today as both "not marked" and "absent" (absent = no punch and no leave so far, by design). The page shows "Not marked yet" for today so it matches the rows.
+- **Checked live:** `e2e/recovery/live-design-team.mjs`, 7/7.
