@@ -69,6 +69,7 @@ const FullAndFinal = lazyPage(() => import('@/modules/hrms/FullAndFinal').then(m
 const ExitCenter = lazyPage(() => import('@/modules/hrms/exit/ExitCenter').then(m => ({ default: m.ExitCenter })))
 const Hiring = lazyPage(() => import('@/modules/hrms/Hiring').then(m => ({ default: m.Hiring })))
 const Performance = lazyPage(() => import('@/modules/hrms/Performance').then(m => ({ default: m.Performance })))
+const EmployeePerformancePage = lazyPage(() => import('@/modules/hrms/performance/EmployeePerformancePage').then(m => ({ default: m.EmployeePerformancePage })))
 const WorkforceAnalytics = lazyPage(() => import('@/modules/hrms/analytics/WorkforceAnalytics').then(m => ({ default: m.WorkforceAnalytics })))
 // Payroll (Dashboard · Salary Structure · Processing & Payslips · Settings · PLI · Advances · Bank) — one designed page.
 const PayrollModule = lazyPage(() => import('@/modules/hrms/payroll/PayrollContainer').then(m => ({ default: m.PayrollContainer })))
@@ -78,6 +79,7 @@ const BankDisbursement = lazyPage(() => import('@/modules/hrms/payroll/BankDisbu
 const DocumentVault = lazyPage(() => import('@/modules/hrms/DocumentVault').then(m => ({ default: m.DocumentVault })))
 const PendingDocuments = lazyPage(() => import('@/pages/PendingDocuments').then(m => ({ default: m.PendingDocuments })))
 const Learning = lazyPage(() => import('@/modules/hrms/Learning').then(m => ({ default: m.Learning })))
+const LearningProgramDetail = lazyPage(() => import('@/modules/hrms/learning/ProgramDetail').then(m => ({ default: m.ProgramDetail })))
 const Compliance = lazyPage(() => import('@/modules/hrms/Compliance').then(m => ({ default: m.Compliance })))
 const Policies = lazyPage(() => import('@/modules/hrms/Policies').then(m => ({ default: m.Policies })))
 /** Policy admins get the Master "Policy Documents" page; everyone else keeps the page where they read and acknowledge policies. */
@@ -400,6 +402,14 @@ const ROUTE_TREE = (
           }
         />
         <Route
+          path="/hrms/performance/employees/:id"
+          element={
+            <RouteGuard anyOf={['hrms.performance.read']}>
+              <ModuleGate moduleKey="hrms"><EmployeePerformancePage /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
           path="/hrms/workforce-analytics"
           element={
             <RouteGuard anyOf={[P.HRMS_REPORT_HEADCOUNT, P.HRMS_REPORT_ATTRITION, P.HRMS_REPORT_DIVERSITY]}>
@@ -515,8 +525,16 @@ const ROUTE_TREE = (
         <Route
           path="/hrms/learning"
           element={
-            <RouteGuard anyOf={['hrms.learning.read', 'hrms.learning.write', 'hrms.learning.enroll.self', 'hrms.learning.skill.read']}>
+            <RouteGuard anyOf={['hrms.learning.read', 'hrms.learning.write', 'hrms.learning.enroll.self', 'hrms.learning.skill.read', 'hrms.learning.skill.approve', 'hrms.learning.skill.assess.self']}>
               <ModuleGate moduleKey="hrms"><Learning /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/learning/programs/:id"
+          element={
+            <RouteGuard anyOf={['hrms.learning.read', 'hrms.learning.write']}>
+              <ModuleGate moduleKey="hrms"><LearningProgramDetail /></ModuleGate>
             </RouteGuard>
           }
         />

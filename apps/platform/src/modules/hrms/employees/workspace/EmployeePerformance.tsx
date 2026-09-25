@@ -1,28 +1,28 @@
 /**
- * Performance — this employee's goals/KPIs and recorded skills.
+ * Performance — this employee's goals/KPIs, reviews and recorded skills.
  *
- * Two real per-employee reads, both already on the backend:
+ * Per-employee reads:
  *   GET /v1/performance/kpis?ownerId={employeeId}   (hrms.performance.read)
+ *   GET /v1/performance/employees/{employeeId}      (hrms.performance.read; team-scoped for managers)
  *   GET /v1/learning/skills/{employeeId}            (hrms.learning.skill.read)
  *
- * What is deliberately NOT here: review history. The only admin route,
- * GET /v1/performance/reviews, filters by cycleId and has no employeeId
- * parameter — the per-employee lookup exists in the service but is reachable
- * only through the JWT-bound /reviews/my. Showing an employee's reviews would
- * therefore mean paging the whole organisation's reviews, or one request per
- * cycle, to find one person's. Both are the fan-out this milestone forbids, so
- * the section says plainly that review history needs a backend filter rather
- * than quietly fetching everyone's reviews.
+ * Review history comes from the per-employee performance endpoint (2026-09-25),
+ * and "Open performance page" leads to the full page with ratings over time.
  */
 
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { Target, Award, Info } from 'lucide-react'
+import { Target, Award, ClipboardList } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
-import { TableCard, HrStatusPill, type PillTone } from '@/shared/components/hr'
-import { useEmployeeKpis } from '../../api/usePerformance'
+import { TableCard, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
+import { useEmployeeKpis, useEmployeePerformanceProfile } from '../../api/usePerformance'
 import { useEmployeeSkills } from '../../api/useLearning'
 import { SectionState, SubSection } from './shared'
+
+const REVIEW_TONE: Record<string, PillTone> = { PENDING: 'warn', IN_PROGRESS: 'info', SUBMITTED: 'ok', ACKNOWLEDGED: 'teal', MISSED: 'red' }
+const words = (v?: string | null) => (v || '').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
+const day = (v?: string | null) => { if (!v) return '—'; try { return format(new Date(v.length === 10 ? `${v}T12:00:00` : v), 'd MMM yyyy') } catch { return v } }
 
 const KPI_TONE: Record<string, PillTone> = {
   ACTIVE: 'info', COMPLETED: 'green', DROPPED: 'gray',
@@ -51,8 +51,12 @@ export function EmployeePerformance({ employeeId }: { employeeId: string }) {
   const canReadPerformance = usePermission('hrms.performance.read')
   const canReadSkills = usePermission('hrms.learning.skill.read')
 
+  const navigate = useNavigate()
   const kpis = useEmployeeKpis(employeeId, { enabled: canReadPerformance })
+  const profile = useEmployeePerformanceProfile(employeeId, canReadPerformance)
   const skills = useEmployeeSkills(employeeId, canReadSkills)
+  const reviews = profile.data?.reviews ?? []
+  const openPage = <HrButton size="sm" variant="ghost" onClick={() => navigate(`/hrms/performance/employees/${employeeId}`)}>Open performance page</HrButton>
 
   const kpiRows = kpis.data?.items ?? []
   const skillRows = skills.data ?? []
@@ -70,7 +74,7 @@ export function EmployeePerformance({ employeeId }: { employeeId: string }) {
   return (
     <div className="flex flex-col gap-3">
       {canReadPerformance && (
-        <SubSection title="Goals & KPIs" hint="What this employee is currently measured on.">
+        <SubSection title="Goals & KPIs" hint="What this employee is currently measured on." action={openPage}>
           <SectionState
             isLoading={kpis.isLoading}
             error={kpis.error}
@@ -107,6 +111,41 @@ export function EmployeePerformance({ employeeId }: { employeeId: string }) {
                           ? <HrStatusPill tone={KPI_TONE[k.status] ?? 'gray'}>{k.status.replace(/_/g, ' ')}</HrStatusPill>
                           : '—'}
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableCard>
+          </SectionState>
+        </SubSection>
+      )}
+
+      {canReadPerformance && (
+        <SubSection title="Reviews" hint="Every review about this employee, newest cycle first.">
+          <SectionState
+            isLoading={profile.isLoading}
+            error={profile.error}
+            isEmpty={!profile.isLoading && !profile.error && reviews.length === 0}
+            emptyIcon={ClipboardList}
+            emptyTitle="No reviews yet"
+            emptyHint="Reviews appear here once a review cycle includes this employee."
+            forbiddenTitle="Outside your team"
+            forbiddenHint="You can see the reviews of people in your own team only."
+            onRetry={() => profile.refetch()}
+          >
+            <TableCard>
+              <table className="hr-table">
+                <thead>
+                  <tr><th>Cycle</th><th>Reviewer</th><th>Rating</th><th>Status</th><th>Submitted</th></tr>
+                </thead>
+                <tbody>
+                  {reviews.map((r) => (
+                    <tr key={r.id}>
+                      <td className="text-text-primary font-medium">{r.cycleName || 'Review cycle'}</td>
+                      <td className="text-text-secondary">{r.reviewerType === 'SELF' || !r.reviewerId || r.reviewerId === employeeId ? 'Self review' : r.reviewerName || 'Reviewer'}</td>
+                      <td className="tabular-nums font-semibold">{r.overallRating == null ? '—' : `${r.overallRating} / 5`}</td>
+                      <td><HrStatusPill tone={REVIEW_TONE[r.status] ?? 'gray'}>{words(r.status)}</HrStatusPill></td>
+                      <td className="text-text-secondary whitespace-nowrap">{day(r.submittedAt)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -158,19 +197,6 @@ export function EmployeePerformance({ employeeId }: { employeeId: string }) {
         </SubSection>
       )}
 
-      {/* Stated, not hidden: the reader needs to know this section is partial,
-          otherwise "no reviews shown" reads as "never reviewed". */}
-      <div className="flex gap-3" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px' }}>
-        <Info size={15} className="text-text-tertiary shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-text-primary">Review history isn’t shown here yet</p>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Appraisal reviews can only be listed per cycle today, not per employee, so this
-            page would have to read every employee’s reviews to find this one’s. Open
-            Performance → Reviews for the cycle you need.
-          </p>
-        </div>
-      </div>
     </div>
   )
 }

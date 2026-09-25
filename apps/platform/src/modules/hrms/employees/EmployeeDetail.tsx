@@ -90,7 +90,8 @@ export function EmployeeDetail() {
   const shift = useEmployeeShift(id, { enabled: (canAttendance || canShift) && !!emp })
   const structure = useEmployeeStructure(canSalary && emp ? id : '')
   const documents = useEmployeeDocuments(id, 0, canDocs && !!emp, EMPLOYEE_DOCUMENTS_PAGE_SIZE)
-  const kpis = useEmployeeKpis(id, { enabled: canPerf && !!emp })
+  // Goals tile: only goals still being worked on (active or at risk), not completed or dropped ones.
+  const kpis = useEmployeeKpis(id, { enabled: canPerf && !!emp, activeOnly: true })
   const invitation = useQuery({
     queryKey: ['hrms', 'employee', id, 'invitation-status'],
     queryFn: () => apiJson<{ activated?: boolean; invitedAt?: string; lastLoginAt?: string }>(`/v1/employees/${id}/invitation-status`),
@@ -155,7 +156,7 @@ export function EmployeeDetail() {
       { l: 'This week', v: canAttendance ? (w ? hrs(w.totalHours) : '…') : '—', s: canAttendance ? (w ? `${w.presentDays} present${late ? ` · ${late} late` : ''}` : '') : 'No access', onClick: () => setTab('attendance') },
       { l: 'Salary structure', v: canSalary ? (structure.data ? inr(Number(structure.data.ctcAnnual || 0)) : structure.isLoading ? '…' : '—') : '—', s: canSalary ? (structure.data?.effectiveFrom ? `Effective ${fmt(structure.data.effectiveFrom)}` : structure.isLoading ? '' : 'Not set up') : 'No access', onClick: () => setTab('payroll') },
       { l: 'Documents', v: canDocs ? (docTotal != null ? String(docTotal) : '…') : '—', s: canDocs ? 'on record' : 'No access', onClick: () => setTab('documents') },
-      { l: 'Goals', v: canPerf ? (kpis.data ? String(kpis.data.total) : '…') : '—', s: canPerf ? 'goals & KPIs' : 'No access', onClick: () => setTab('performance') },
+      { l: 'Goals', v: canPerf ? (kpis.data ? String(kpis.data.total) : '…') : '—', s: canPerf ? 'active goals & KPIs' : 'No access', onClick: () => setTab('performance') },
     ]
 
     // Onboarding record (people who can edit employees only — the endpoint's rule)

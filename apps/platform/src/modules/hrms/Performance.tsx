@@ -4,6 +4,11 @@
 //   - hrms.performance.review.self: My goals and My reviews. "My reviews" is
 //     what the API returns for /reviews/my: reviews the viewer has to write,
 //     and reviews written about them.
+//   - People (hrms.performance.read): the performance directory; each person
+//     opens their own page (/hrms/performance/employees/:id). Managers see
+//     their team only (the API scopes it).
+//   - While writing a review the reviewee's goals and KPIs for the cycle are
+//     shown; My goals shows each goal's progress history (value, when, who, note).
 import React, { useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
@@ -12,19 +17,21 @@ import { HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { ModulePage, Views, useView, StatRow, State, Panel, SubHeading, Note, useDesignToast, dmy, CARD, HEAD_FONT } from '@/design/module/ModuleKit'
 import { dashIcon } from '@/design/dc/icons'
 import {
-  useMyReviews, useSubmitReview, useMyGoals, useCreateGoal, useUpdateGoalProgress,
-  type ReviewStatus, type GoalStatus, type PerformanceReview,
+  useMyReviews, useSubmitReview, useMyGoals, useCreateGoal, useUpdateGoalProgress, useMyGoalHistory,
+  type ReviewStatus, type GoalStatus, type PerformanceReview, type Goal,
 } from './api/usePerformance'
 import { AdminKpis } from './performance/AdminKpis'
 import { AdminCycles } from './performance/AdminCycles'
 import { AdminReviews } from './performance/AdminReviews'
+import { PerformanceDirectory } from './performance/PerformanceDirectory'
+import { ReviewGoalsPanel, GoalHistoryList } from './performance/shared'
 
 export const REVIEW_TONE: Record<ReviewStatus, PillTone> = { PENDING: 'warn', IN_PROGRESS: 'info', MISSED: 'red', SUBMITTED: 'ok', ACKNOWLEDGED: 'teal' }
 export const GOAL_TONE: Record<GoalStatus, PillTone> = { ACTIVE: 'info', AT_RISK: 'warn', COMPLETED: 'ok', DROPPED: 'gray' }
 /** "AT_RISK" → "At risk" */
 export const words = (v?: string | null) => (v || '').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
 
-type Tab = 'cycles' | 'reviews' | 'kpis' | 'my-goals' | 'my-reviews'
+type Tab = 'cycles' | 'reviews' | 'kpis' | 'people' | 'my-goals' | 'my-reviews'
 
 export const Performance: React.FC = () => {
   const canSelf = usePermission('hrms.performance.review.self')
@@ -34,6 +41,7 @@ export const Performance: React.FC = () => {
       { key: 'cycles', label: 'Review cycles', icon: 'calendarDays' },
       { key: 'reviews', label: 'Employee reviews', icon: 'clipboard' },
       { key: 'kpis', label: 'Goals & KPIs', icon: 'target' },
+      { key: 'people', label: 'People', icon: 'users' },
     ] : []),
     ...(canSelf ? [{ key: 'my-reviews', label: 'My reviews', icon: 'fileText' }, { key: 'my-goals', label: 'My goals', icon: 'checkCircle' }] : []),
   ]
@@ -47,6 +55,7 @@ export const Performance: React.FC = () => {
         {tab === 'cycles' && canRead && <AdminCycles />}
         {tab === 'reviews' && canRead && <AdminReviews />}
         {tab === 'kpis' && canRead && <AdminKpis />}
+        {tab === 'people' && canRead && <PerformanceDirectory />}
         {tab === 'my-reviews' && canSelf && <MyReviews />}
         {tab === 'my-goals' && canSelf && <MyGoals />}
       </div>
@@ -72,6 +81,8 @@ function MyGoals() {
   const [description, setDescription] = useState('')
   const [weight, setWeight] = useState('')
   const [drafts, setDrafts] = useState<Record<string, number>>({})
+  const [notes, setNotes] = useState<Record<string, string>>({})
+  const [historyOpen, setHistoryOpen] = useState<string | null>(null)
   const stats = useMemo(() => ({
     active: goals.filter((g) => g.status === 'ACTIVE' || g.status === 'AT_RISK').length,
     completed: goals.filter((g) => g.status === 'COMPLETED').length,
@@ -86,9 +97,13 @@ function MyGoals() {
     } catch (e) { show('Couldn’t add the goal', true, (e as Error)?.message) }
   }
   const onSave = async (id: string, progress: number) => {
+    const note = (notes[id] ?? '').trim()
+    if (note.length > 1000) { show('Keep the note under 1,000 characters', true); return }
     try {
-      await updateProgress.mutateAsync({ id, progress })
-      show('Progress saved'); setDrafts((p) => { const n = { ...p }; delete n[id]; return n })
+      await updateProgress.mutateAsync({ id, progress, note: note || undefined })
+      show('Progress saved')
+      setDrafts((p) => { const n = { ...p }; delete n[id]; return n })
+      setNotes((p) => { const n = { ...p }; delete n[id]; return n })
     } catch (e) { show('Couldn’t save progress', true, (e as Error)?.message) }
   }
   return (
@@ -125,6 +140,7 @@ function MyGoals() {
                         {kpi && <HrStatusPill tone="purple">Company KPI</HrStatusPill>}
                         {g.weight > 0 && <span style={{ fontSize: 12.5, color: '#64748b' }}>{`Weight ${g.weight}`}</span>}
                         <HrStatusPill tone={GOAL_TONE[g.status]}>{words(g.status)}</HrStatusPill>
+                        <HrButton size="sm" variant="ghost" aria-expanded={historyOpen === g.id} onClick={() => setHistoryOpen(historyOpen === g.id ? null : g.id)}>{historyOpen === g.id ? 'Hide history' : 'History'}</HrButton>
                       </div>
                       {kpi ? (
                         <div style={{ display: 'grid', gap: 6 }}>
@@ -139,12 +155,30 @@ function MyGoals() {
                           <HrButton size="sm" variant={dirty ? 'primary' : 'ghost'} onClick={() => onSave(g.id, value)} disabled={!dirty || updateProgress.isPending || g.status === 'DROPPED'}>Save</HrButton>
                         </div>
                       )}
+                      {!kpi && dirty && (
+                        <div><label className="mb-1.5 block text-[13px] font-semibold text-text-secondary" htmlFor={`goal-note-${g.id}`}>Note (optional)</label>
+                          <input id={`goal-note-${g.id}`} maxLength={1000} value={notes[g.id] ?? ''} onChange={(e) => setNotes((p) => ({ ...p, [g.id]: e.target.value }))} placeholder="What changed since the last update?" className="ut-input" /></div>
+                      )}
+                      {historyOpen === g.id && <MyGoalHistory goal={g} />}
                     </article>
                   )
                 })}
               </div>
             )}
       {node}
+    </div>
+  )
+}
+
+/** A goal's progress history under My goals: GET /v1/performance/goals/my/{id}/history. */
+function MyGoalHistory({ goal }: { goal: Goal }) {
+  const q = useMyGoalHistory(goal.id)
+  return (
+    <div style={{ display: 'grid', gap: 8, borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
+      <SubHeading>Progress history</SubHeading>
+      {q.isLoading ? <State kind="loading" height={60} />
+        : q.isError ? <State kind="error" title="Couldn’t load the history" description={(q.error as Error)?.message} onRetry={() => q.refetch()} />
+          : <GoalHistoryList entries={q.data ?? []} kpi={goal.targetValue != null} unit={goal.unit} />}
     </div>
   )
 }
@@ -202,6 +236,7 @@ function ReviewCard({ review, me, canWrite }: { review: PerformanceReview; me?: 
       </div>
       {canWrite ? (
         <div style={{ display: 'grid', gap: 12, borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
+          <ReviewGoalsPanel reviewId={review.id} selfReview={self} />
           <div style={{ maxWidth: 200 }}><label className="mb-1.5 block text-[13px] font-semibold text-text-secondary" htmlFor={`rating-${review.id}`}>Overall rating (0–5)</label>
             <input id={`rating-${review.id}`} type="number" min={0} max={5} step="0.1" value={rating} onChange={(e) => setRating(e.target.value)} className="ut-input" /></div>
           <div><label className="mb-1.5 block text-[13px] font-semibold text-text-secondary" htmlFor={`str-${review.id}`}>Strengths</label>
