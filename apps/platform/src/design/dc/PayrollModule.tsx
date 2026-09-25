@@ -6,8 +6,9 @@ import { DCLogic, dc } from './dc-runtime'
 import { PayrollModuleView } from './PayrollModule.view'
 import { dashIcon } from './icons'
 
+// Payroll Settings opens in HRMS settings, the one settings place in HRMS.
 export const PAYROLL_ROUTES: Record<string, string> = {
-  dashboard: '/hrms/payroll-dashboard', salary: '/hrms/salary-structure', runs: '/hrms/payroll/runs', settings: '/hrms/payroll/settings',
+  dashboard: '/hrms/payroll-dashboard', salary: '/hrms/salary-structure', runs: '/hrms/payroll/runs', settings: '/hrms/settings/payroll',
   pli: '/hrms/pli', advances: '/hrms/advances', bank: '/hrms/bank-disbursement',
 }
 const SECTIONS: [string, string, string][] = [

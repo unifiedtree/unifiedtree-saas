@@ -18,6 +18,8 @@ import { GlobalSearch } from '@/shared/components/GlobalSearch'
 import { accessState } from '@/shared/navigation/access'
 import { menuRule } from '@/shared/navigation/pageRegistry'
 import { useAccessContext } from '@/shared/navigation/useAccess'
+import { HUB_PAGES } from '@/shared/navigation/hrmsSettings'
+import { WORKSPACE_SETTINGS } from '@/shared/navigation/workspaceSettings'
 import { useNotificationStore } from '@/core/notifications/notificationStore'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
 import { usePageTitle } from '@/core/tenant/workspaceBranding'
@@ -149,7 +151,7 @@ const MODULE_ITEMS: NavItemDef[] = [
       // Processing & Payslips is a workflow surface — HR still runs it,
       // but rupee KPIs on the child pages defer to the useRoles guard.
       { label: 'Processing & Payslips', path: '/hrms/payroll/runs', icon: <Receipt size={15} />, visibleForRoles: R_FIN_META },
-      { label: 'Payroll Settings', path: '/hrms/payroll/settings', icon: <Settings size={15} />, visibleForRoles: R_FIN_RUPEE },
+      // Payroll Settings is in HRMS settings (the one settings place in HRMS).
       { label: 'Production-Linked Incentive', path: '/hrms/pli', icon: <Target size={15} />, visibleForRoles: R_FIN_META },
       { label: 'Advances & Loans', path: '/hrms/advances', icon: <Wallet size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_ESS] },
       { label: 'Bank Disbursement', path: '/hrms/bank-disbursement', icon: <CreditCard size={15} />, visibleForRoles: R_FIN_RUPEE },
@@ -220,11 +222,17 @@ const MODULE_ITEMS: NavItemDef[] = [
     ],
   },
   {
-    key: 'hrsettings', label: 'HR Setup', icon: <Settings size={18} />, module: 'hrms',
+    // HRMS settings: the one settings place in HRMS (shared/navigation/hrmsSettings.ts).
+    // The overview lists every HR setting; these pages open inside it as its tabs.
+    // Each shows only to people who may open it (the page registry's rules).
+    key: 'hrsettings', label: 'HRMS settings', icon: <Settings size={18} />, module: 'hrms',
     children: [
-      { label: 'HR Configuration', path: '/hrms/settings', icon: <Settings size={15} />, visibleForRoles: R_HR },
-      { label: 'Notification Templates', path: '/hrms/notification-templates', icon: <Bell size={15} />, visibleForRoles: R_HR },
-      { label: 'Integrations', path: '/hrms/integrations', icon: <Plug size={15} />, visibleForRoles: R_HR },
+      { label: 'Overview', path: HUB_PAGES.overview, icon: <Settings size={15} /> },
+      { label: 'HR configuration', path: HUB_PAGES.hrConfig, icon: <Settings size={15} /> },
+      { label: 'Payroll settings', path: HUB_PAGES.payroll, icon: <CreditCard size={15} /> },
+      { label: 'Document types', path: HUB_PAGES.documentTypes, icon: <FileText size={15} /> },
+      { label: 'Notification templates', path: HUB_PAGES.notifications, icon: <Bell size={15} /> },
+      { label: 'Roles & permissions', path: HUB_PAGES.roles, icon: <ShieldAlert size={15} /> },
     ],
   },
   {
@@ -268,27 +276,15 @@ const PLATFORM_ITEMS: NavItemDef[] = [
 ]
 
 // ─── Workspace Settings nav (the "Settings" app — workspace-level, NOT a module) ──
-// Account + Workspace sections everyone with settings access sees; Administration
-// is super-admin only. Each maps to a route the shell drives.
-const SETTINGS_NAV: NavItemDef[] = [
-  { key: 's-profile', label: 'Profile', icon: <UserCircle2 size={18} />, path: '/profile' },
-  { key: 's-branding', label: 'Branding', icon: <ImageIcon size={18} />, path: '/settings/branding', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'], visibleWithAnyPermission: ['settings.branding.write'] },
-  { key: 's-security', label: 'Security', icon: <Shield size={18} />, path: '/settings/security' },
-  // Notifications is deliberately open — every role can manage their OWN
-  // notification preferences, so no visibleForRoles filter here.
-  { key: 's-notifications', label: 'Notifications', icon: <Bell size={18} />, path: '/settings/notifications' },
-  // Billing was previously visible to every role — a plain EMPLOYEE would see
-  // a "Billing & Plan" pill they had no authority to open. Restrict to the
-  // admins the backend actually lets manage billing.
-  { key: 's-billing', label: 'Billing & Plan', icon: <CreditCard size={18} />, path: '/settings/billing', visibleForRoles: ['SUPER_ADMIN', 'OWNER', 'COMPANY_ADMIN'] },
-  { key: 's-integrations', label: 'Integrations', icon: <Plug size={18} />, path: '/settings/integrations' },
-  { key: 's-users', label: 'Users & Access', icon: <Users size={18} />, path: '/users', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 's-roles', label: 'Roles & Permissions', icon: <ShieldAlert size={18} />, path: '/roles', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  { key: 's-audit', label: 'Audit Logs', icon: <FileText size={18} />, path: '/audit-logs', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'] },
-  // Danger Zone is destructive tenant surgery — only SUPER_ADMIN and OWNER
-  // (workspace owner) are allowed near it, never a HR/FIN admin.
-  { key: 's-danger', label: 'Danger Zone', icon: <AlertTriangle size={18} />, path: '/settings/danger', visibleForRoles: ['SUPER_ADMIN', 'OWNER'] },
-]
+// Opened from the Apps page and the profile menu (shared/navigation/workspaceSettings.ts
+// lists the pages); each page shows the rest as its section tabs. Who sees each
+// one is the page registry's rule for its path. HR settings (roles, document
+// types…) are in HRMS settings; your own profile is under the profile menu.
+const SETTINGS_ICONS: Record<string, React.ReactNode> = {
+  's-profile': <Building2 size={18} />, 's-branding': <ImageIcon size={18} />, 's-security': <Shield size={18} />, 's-notifications': <Bell size={18} />,
+  's-billing': <CreditCard size={18} />, 's-integrations': <Plug size={18} />, 's-users': <Users size={18} />, 's-audit': <FileText size={18} />, 's-danger': <AlertTriangle size={18} />,
+}
+const SETTINGS_NAV: NavItemDef[] = WORKSPACE_SETTINGS.map((s) => ({ key: s.key, label: s.label, icon: SETTINGS_ICONS[s.key] ?? <Settings size={18} />, path: s.path }))
 
 // Non-HRMS modules become their own apps in the launcher / switcher.
 const NON_HRMS = MODULE_ITEMS.filter(m => m.module && m.module !== 'hrms')
@@ -302,7 +298,7 @@ const RAIL_LABELS: Record<string, string> = {
   company: 'Company', master: 'Master', attendance: 'Attendance', leave: 'Leave',
   recruit: 'Hiring', 'payroll-hr': 'Payroll', expense: 'Expenses', ess: 'Me',
   performance: 'Performance', compliance: 'Compliance', reports: 'Reports', exit: 'Exit',
-  hrsettings: 'HR Setup',
+  hrsettings: 'Settings',
   's-profile': 'Profile', 's-branding': 'Brand', 's-security': 'Security',
   's-notifications': 'Alerts', 's-billing': 'Billing', 's-integrations': 'Connect',
   's-users': 'Users', 's-roles': 'Roles', 's-audit': 'Audit', 's-danger': 'Danger',
@@ -452,8 +448,8 @@ export function PlatformShell() {
     // Links the registry doesn't know are the not-yet-built apps' own pages.
     return accessCtx.planAdmin
   }
-  // The Settings gear: any workspace-settings page beyond your own profile.
-  const canSettings = SETTINGS_NAV.some(i => i.key !== 's-profile' && isVisible(i))
+  // Workspace settings (profile menu): any workspace-settings page this person may open.
+  const canSettings = SETTINGS_NAV.some(i => isVisible(i))
 
   // ─── Which app owns the current route → drives the scoped sidebar ───────────
   const scope: string = (() => {
@@ -581,7 +577,7 @@ export function PlatformShell() {
         <button onClick={() => navigate('/profile')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><UserCircle2 size={16} /> My Profile</button>
         <button onClick={() => navigate('/modules')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><LayoutGrid size={16} /> My Apps</button>
         {canSettings && (
-          <button onClick={() => navigate('/settings')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><Settings size={16} /> Settings</button>
+          <button onClick={() => navigate('/settings')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><Settings size={16} /> Workspace settings</button>
         )}
       </div>
       <div className="border-t border-[var(--border-subtle)] p-1.5">
@@ -688,7 +684,8 @@ export function PlatformShell() {
       active: scope !== 'admin' && i.key === litKey,
       onClick: () => navigate(i.target),
     })),
-    ...(canSettings ? [{ key: 'settings', label: 'Settings', icon: dashIcon('settings', 18), active: scope === 'admin', onClick: () => navigate('/settings') }] : []),
+    // Workspace settings open from the Apps page and the profile menu, not from
+    // inside a module; the module's own settings are its rail entry above.
   ]
 
   const profileDropdown = (
@@ -712,11 +709,7 @@ export function PlatformShell() {
         <DesignHeader
           search={<HeaderSearch onOpen={() => setSearchOpen(true)} />}
           right={<>
-            {canSettings && (
-              <HeaderIconButton label="Settings" active={scope === 'admin'} onClick={() => navigate('/settings')}>
-                {dashIcon('settings', 19)}
-              </HeaderIconButton>
-            )}
+            {/* Workspace settings open from All apps (and the profile menu); HRMS settings is the rail's gear. */}
             <HeaderIconButton label="All apps" onClick={() => navigate('/modules')}>{dashIcon('grid', 19)}</HeaderIconButton>
             <div className="relative" ref={notifAnchor('desktop')}>
               <ShellNotificationBell open={notifOpen} onToggle={() => setNotifOpen(v => !v)} onNavigate={(to) => { setNotifOpen(false); navigate(to) }} />

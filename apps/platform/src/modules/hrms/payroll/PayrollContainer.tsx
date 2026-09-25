@@ -11,7 +11,7 @@ import { jwtDecode } from 'jwt-decode'
 import { getAccessToken, usePermission, P } from '@unifiedtree/sdk'
 import { apiBlob, apiJson } from '@/core/api/client'
 import { HrDrawer } from '@/shared/components/hr'
-import { PayrollModule } from '@/design/dc/PayrollModule'
+import { PayrollModule, PAYROLL_ROUTES } from '@/design/dc/PayrollModule'
 import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
 import { istToday, addDays, fmtShort, MON, MONTHS } from '@/design/dc/dates'
 import type { RunRow, RunStatus } from '@/design/dc/PayRuns'
@@ -20,7 +20,7 @@ import type { RunPageData } from '@/design/dc/PayrollRunPage'
 import type { Payslip } from '@/design/dc/PayslipDrawer'
 import type { StructureInfo, PayCalc, SalaryRow, PayBand, BulkBody, BulkOptions, BulkPreview } from '@/design/dc/PaySalary'
 import { designSplit } from '@/design/dc/PaySalary'
-import type { ApiPayrollSettings } from '@/design/dc/PaySettings'
+import { PaySettings, type ApiPayrollSettings } from '@/design/dc/PaySettings'
 import type { PliRow } from '@/design/dc/PayPli'
 import type { AdvRow, AdvPlanRow } from '@/design/dc/PayAdvances'
 import type { BankData, BankBatch } from '@/design/dc/PayBank'
@@ -96,7 +96,9 @@ export function PayrollContainer() {
   const qc = useQueryClient()
   const today = istToday()
   const path = location.pathname
-  const section = path.startsWith('/hrms/payroll-dashboard') ? 'dashboard' : path.startsWith('/hrms/salary-structure') ? 'salary' : path.startsWith('/hrms/payroll/settings') ? 'settings'
+  // Payroll settings live in HRMS settings (/hrms/settings/payroll), shown there without the payroll section bar.
+  const inHrmsSettings = path.startsWith('/hrms/settings/payroll')
+  const section = path.startsWith('/hrms/payroll-dashboard') ? 'dashboard' : path.startsWith('/hrms/salary-structure') ? 'salary' : path.startsWith('/hrms/payroll/settings') || inHrmsSettings ? 'settings'
     : path.startsWith('/hrms/pli') ? 'pli' : path.startsWith('/hrms/advances') ? 'advances' : path.startsWith('/hrms/bank-disbursement') ? 'bank' : 'runs'
   const runId = section === 'runs' ? runParam || '' : ''
   const [y, m] = [Number(today.slice(0, 4)), Number(today.slice(5, 7))]
@@ -524,6 +526,15 @@ export function PayrollContainer() {
   // People without the admin view keep their own pages (My Incentives, My Advances).
   if (section === 'pli' && !pliAdmin) return <Pli />
   if (section === 'advances' && !advAdmin) return <Advance />
+  // Inside HRMS settings: the same Payroll Settings page, under the hub's tabs instead of the payroll section bar.
+  if (inHrmsSettings) {
+    return (
+      <DesignFrame>
+        <PaySettings state="live" mobile={mobile} access={canSettingsEdit ? 'edit' : canSettings ? 'view' : 'none'} saveFails={false}
+          onGo={(sec: string) => go(PAYROLL_ROUTES[sec] || PAYROLL_ROUTES.dashboard)} onToast={(msg: string) => toast.message(msg)} {...(px.PaySettings as Record<string, unknown>)} />
+      </DesignFrame>
+    )
+  }
 
   const visibleSections = [
     canRuns && 'dashboard', canRuns && 'salary', canRuns && 'runs', canSettings && 'settings', (pliAdmin || canPliSelf) && 'pli', (advAdmin || canAdvRequest || canAdvApprove || canAdvOthers) && 'advances', canRuns && 'bank',
