@@ -102,8 +102,8 @@ export function TopBarSearch({ onOpen, onAdvanced, variant = 'bar', onClose }: T
   const serverQ = normalizeGlobalQuery(debounced)
   const serverActive = serverQ.length >= GLOBAL_SEARCH_MIN_CHARS
   const server = useGlobalSearch(debounced)
-  // The response for what is on screen now; while the next one loads the last one stays up.
-  const data = serverActive ? server.data : undefined
+  // Only the answer for what is in the box now: a stale row under a new query could be opened with Enter.
+  const data = server.data && server.data.query === q.toLowerCase().slice(0, 100) ? server.data : undefined
   const searching = q.length >= GLOBAL_SEARCH_MIN_CHARS && (server.isFetching || debounced !== query)
   const failed = serverActive && server.isError
 
