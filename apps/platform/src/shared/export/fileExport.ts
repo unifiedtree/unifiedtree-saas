@@ -4,6 +4,8 @@
 // and a list of what this browser downloaded recently. Everything is built from
 // data the page already has; nothing is sent anywhere.
 
+import { resolveAssetUrl, useBrandingStore } from '@/core/tenant/workspaceBranding'
+
 export type Cell = string | number | null | undefined
 
 /** A CSV cell. Leading = + - @ tab/CR get a quote so spreadsheets don't run them as formulas. */
@@ -103,11 +105,25 @@ export function svgToPng(svg: string, width: number, height: number): Promise<Bl
 export const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 /**
+ * The workspace's own logo (white label) for the top of a printed snapshot,
+ * or nothing when it has none: the report title and company name follow.
+ */
+function brandHeader(): string {
+  const d = useBrandingStore.getState().data
+  const src = resolveAssetUrl(d?.logoUrl) || resolveAssetUrl(d?.markUrl)
+  if (!src) return ''
+  let abs = src
+  try { abs = new URL(src, window.location.href).href } catch { /* keep as is */ }
+  return `<div style="margin:0 0 12px"><img src="${esc(abs)}" alt="" style="max-height:36px;max-width:220px;object-fit:contain"></div>`
+}
+
+/**
  * Opens a print-ready page (A4, the app's fonts and colours) and the browser's
  * print dialog, where "Save as PDF" makes the file. Returns false when a popup
  * blocker stopped the window.
  */
 export function printDocument(title: string, bodyHtml: string): boolean {
+  const brand = brandHeader()
   const w = window.open('', '_blank', 'noopener=no,width=1024,height=800')
   if (!w) return false
   w.document.open()
@@ -124,7 +140,7 @@ h1 { font-size: 22px; margin: 0 0 4px } h2 { font-size: 15px; margin: 0 0 10px }
 table { width: 100%; border-collapse: collapse; font-size: 12px } th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #f1f5f9 } th { background: #f8fafc; font-weight: 700 }
 tfoot td { font-weight: 800; border-top: 2px solid #e2e8f0 }
 svg { max-width: 100% }
-</style></head><body>${bodyHtml}<script>window.onload=function(){setTimeout(function(){window.focus();window.print()},250)}</script></body></html>`)
+</style></head><body>${brand}${bodyHtml}<script>window.onload=function(){setTimeout(function(){window.focus();window.print()},250)}</script></body></html>`)
   w.document.close()
   return true
 }

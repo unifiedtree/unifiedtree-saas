@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
-import { MonogramTile, WorkspaceMark } from '@/shared/components/WorkspaceMark'
+import { WorkspaceMark } from '@/shared/components/WorkspaceMark'
 
 /**
  * The moment after signing in.
@@ -257,14 +257,14 @@ export const WelcomeSplash: React.FC<Props> = ({ ready = true, name, workspace, 
                 mark, else its monogram. Held empty at the same height until
                 the branding has loaded, so nothing swaps mid-animation. */}
             <div className="flex h-14 items-center justify-center">
-              {brand.loaded || brand.workspaceName ? (
+              {brand.loaded ? (
                 <motion.div
                   initial={{ opacity: 0, scale: reduce ? 1 : 0.86 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: reduce ? 0.2 : 0.7, ease: EASE }}
                   className="flex h-14 items-center justify-center"
                 >
-                  {brand.loaded ? <WorkspaceMark size={56} tone="ground" preferLogo /> : <MonogramTile letter={brand.monogram} size={56} tone="ground" />}
+                  <WorkspaceMark size={56} tone="ground" preferLogo />
                 </motion.div>
               ) : null}
             </div>

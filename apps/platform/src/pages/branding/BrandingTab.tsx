@@ -7,7 +7,7 @@
 // a wide logo, optionally remove a flat background with a tolerance slider,
 // and compare before / after on the dark green rail and on white. The server
 // re-validates every upload (type from magic bytes, 2 MB, ≥ 128 px).
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { getAccessToken, usePermission } from '@unifiedtree/sdk'
 import { Modal } from '@unifiedtree/ui-kit'
 import { Upload } from 'lucide-react'
@@ -211,7 +211,6 @@ function BrandingEditor({ name, letter, onSaved, show }: { name: string; letter:
   const [pickError, setPickError] = useState<string | null>(null)
   const [kind, setKind] = useState<Kind>('mark')
   const [aspectKey, setAspectKey] = useState('fit')
-  const [size, setSize] = useState(100)
   const [crops, setCrops] = useState<Record<Kind, Crop | null>>({ mark: null, logo: null })
   const [removeBg, setRemoveBg] = useState(false)
   const [tolerance, setTolerance] = useState(20)
@@ -223,10 +222,15 @@ function BrandingEditor({ name, letter, onSaved, show }: { name: string; letter:
   const aspect = kind === 'mark' ? 1 : aspectKey === 'fit' ? Math.max(1, W / H) : Number(aspectKey)
 
   // Background removal runs on the whole working image; re-run only when its inputs change.
-  const after = useMemo(() => (source ? processed(source, removeBg, tolerance) : null), [source, removeBg, tolerance])
+  // Deferred so dragging the tolerance slider stays smooth on large images.
+  const tol = useDeferredValue(tolerance)
+  const after = useMemo(() => (source ? processed(source, removeBg, tol) : null), [source, removeBg, tol])
   const stageUrl = useMemo(() => (after ? after.toDataURL('image/png') : null), [after])
 
   const crop: Crop | null = source ? (crops[kind] ?? centredCrop(W, H, aspect)) : null
+  // The frame size slider reads the current crop, so switching between the
+  // mark and the logo shows each one's own size.
+  const size = crop ? Math.min(100, Math.max(20, Math.round((crop.w / centredCrop(W, H, aspect).w) * 100))) : 100
 
   // A new aspect or size keeps the crop centred where it was.
   const reshape = (nextAspect: number, fraction: number) => {
@@ -245,7 +249,6 @@ function BrandingEditor({ name, letter, onSaved, show }: { name: string; letter:
       const s = await loadSource(file)
       setSource(s)
       setCrops({ mark: null, logo: null })
-      setSize(100)
       setAspectKey('fit')
       setRemoveBg(false)
     } catch (e) {
@@ -265,8 +268,7 @@ function BrandingEditor({ name, letter, onSaved, show }: { name: string; letter:
     const stage = stageRef.current
     if (!d || !stage) return
     const r = stage.getBoundingClientRect()
-    const k = W / r.width
-    const next = clampCrop({ ...d.crop, x: d.crop.x + (e.clientX - d.px) * k, y: d.crop.y + (e.clientY - d.py) * k }, W, H)
+    const next = clampCrop({ ...d.crop, x: d.crop.x + (e.clientX - d.px) * (W / r.width), y: d.crop.y + (e.clientY - d.py) * (H / r.height) }, W, H)
     setCrops((c) => ({ ...c, [kind]: next }))
   }
   const onPointerUp = () => { drag.current = null }
@@ -309,7 +311,7 @@ function BrandingEditor({ name, letter, onSaved, show }: { name: string; letter:
 
       {source && crop && (
         <>
-          <Views label="What to save" items={[{ key: 'mark', label: 'Square mark' }, { key: 'logo', label: 'Wide logo' }]} active={kind} onChange={(k) => { setKind(k as Kind); setSize(100) }} />
+          <Views label="What to save" items={[{ key: 'mark', label: 'Square mark' }, { key: 'logo', label: 'Wide logo' }]} active={kind} onChange={(k) => setKind(k as Kind)} />
           <span style={BODY}>
             {kind === 'mark'
               ? 'A square image for the app rail, the welcome screen and the browser tab. A symbol or initials work best.'
@@ -318,7 +320,7 @@ function BrandingEditor({ name, letter, onSaved, show }: { name: string; letter:
 
           <div style={{ display: 'grid', gap: 8 }}>
             <span style={LABEL}>Drag the frame to choose the area (arrow keys move it too)</span>
-            <div ref={stageRef} style={{ position: 'relative', width: '100%', maxWidth: 520, aspectRatio: `${W} / ${H}`, maxHeight: 360, background: CHECKER, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', touchAction: 'none' }}>
+            <div ref={stageRef} style={{ position: 'relative', width: `min(100%, 520px, ${Math.round((360 * W) / H)}px)`, aspectRatio: `${W} / ${H}`, background: CHECKER, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', touchAction: 'none' }}>
               {stageUrl && <img src={stageUrl} alt="The picked image" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', userSelect: 'none' }} />}
               <div role="slider" tabIndex={0} aria-label="Crop area. Use the arrow keys to move it."
                 aria-valuetext={`${Math.round(crop.x)}, ${Math.round(crop.y)}`}
@@ -334,7 +336,7 @@ function BrandingEditor({ name, letter, onSaved, show }: { name: string; letter:
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {LOGO_ASPECTS.map((a) => (
                     <HrButton key={a.key} size="sm" variant={aspectKey === a.key ? 'primary' : 'ghost'} aria-pressed={aspectKey === a.key}
-                      onClick={() => { setAspectKey(a.key); setSize(100); reshape(a.key === 'fit' ? Math.max(1, W / H) : Number(a.key), 100) }}>{a.label}</HrButton>
+                      onClick={() => { setAspectKey(a.key); reshape(a.key === 'fit' ? Math.max(1, W / H) : Number(a.key), 100) }}>{a.label}</HrButton>
                   ))}
                 </div>
               </div>
@@ -343,7 +345,7 @@ function BrandingEditor({ name, letter, onSaved, show }: { name: string; letter:
               <span style={LABEL}>Frame size</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <input type="range" min={20} max={100} value={size} aria-label="Frame size"
-                  onChange={(e) => { const v = parseInt(e.target.value, 10); setSize(v); reshape(aspect, v) }} className="h-2 flex-1 cursor-pointer accent-[#059669]" />
+                  onChange={(e) => reshape(aspect, parseInt(e.target.value, 10))} className="h-2 flex-1 cursor-pointer accent-[#059669]" />
                 <span style={{ width: 44, textAlign: 'right', fontSize: 13.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{`${size}%`}</span>
               </span>
             </label>
