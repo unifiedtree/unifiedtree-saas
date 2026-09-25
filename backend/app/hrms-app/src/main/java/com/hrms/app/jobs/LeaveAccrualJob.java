@@ -1,5 +1,8 @@
 package com.hrms.app.jobs;
 
+import com.hrms.leave.dto.LeaveAccrualDtos.AccrualRunResult;
+import com.hrms.leave.dto.LeaveAccrualDtos.CarryForwardResult;
+import com.hrms.leave.service.LeaveAccrualService;
 import com.hrms.leave.service.LeaveService;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.quartz.DisallowConcurrentExecution;
@@ -8,6 +11,8 @@ import org.quartz.JobExecutionContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -15,33 +20,34 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
- * Runs on the 1st of each month at 00:30 IST (19:00 UTC prior day).
- * Ensures every active employee has a leave balance row for the current year.
- * Also called programmatically on hire and exit events.
+ * Daily leave job, 00:30 IST (QuartzJobConfig), and once at startup to catch a
+ * night the instance wasn't running.
  *
- * <p><b>B7 perf + correctness rewrite (2026-08-14):</b>
- * <ul>
- *   <li>The previous implementation ran a single {@code @Transactional} +
- *       {@code employeeRepository.findByEmploymentStatus(ACTIVE, ...)} without
- *       ever touching {@link TenantContext} nor {@code SET LOCAL app.tenant_id}.
- *       RLS on {@code hrms.employees} is {@code tenant_id = current_tenant_id()};
- *       with the GUC unset the policy silently returns ZERO rows — the job
- *       "succeeded" every month while accruing nothing (rls-after-commit-trap
- *       memory).</li>
- *   <li>It also called {@code leaveService.initLeaveBalances} per employee,
- *       which itself ran an N+1 SELECT-then-save loop over the leave types.
- *       For 5k employees × 4 leave types that is 40k DB round-trips per run.</li>
- * </ul>
- * The rewrite iterates {@code platform.tenants} (RLS-free) → for each ACTIVE
- * tenant opens a fresh {@code REQUIRES_NEW} transaction, sets the tenant GUC,
- * pages employees 200 at a time, preloads the tenant's leave-types once, and
- * emits ONE {@code INSERT ... ON CONFLICT DO NOTHING} batch per page.
+ * <ol>
+ *   <li><b>Accrual</b>: every live employee (active, on probation or serving
+ *       notice) gets a balance for the current leave year for each active leave
+ *       type of their company, and MONTHLY / QUARTERLY types are credited up to
+ *       what is due today. Idempotent per period (the ledger's unique key), so
+ *       running it every day credits each month or quarter once.</li>
+ *   <li><b>Year-end carry forward</b>, in January only: unused days of the
+ *       year just ended move into this year up to each type's cap and the rest
+ *       lapse. Each employee × type is done once; later January runs pick up
+ *       only what an earlier run missed.</li>
+ * </ol>
+ *
+ * <p>Tenancy: {@code platform.tenants} is listed without a tenant (it has no
+ * row-level security); each tenant then runs in its own REQUIRES_NEW
+ * transaction with the tenant bound, so row-level security sees that tenant's
+ * rows and a failing tenant never stops the others.
+ *
+ * <p>2026-09-25 (V143.23): this job used to insert balance rows without an id
+ * ({@code leave_balances.id} has no default), so every tenant failed and was
+ * only logged; it also skipped people on probation. The work now lives in
+ * {@link LeaveAccrualService}.
  */
 @Component
 @ConditionalOnBean(LeaveService.class)
@@ -49,132 +55,78 @@ import java.util.UUID;
 public class LeaveAccrualJob implements Job {
 
     private static final Logger log = LoggerFactory.getLogger(LeaveAccrualJob.class);
-    private static final int PAGE_SIZE = 200;
+    private static final String ACTOR = "leave-accrual-job";
 
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tenantTx;
+    private final LeaveAccrualService accrual;
 
-    public LeaveAccrualJob(JdbcTemplate jdbc, PlatformTransactionManager txManager) {
+    public LeaveAccrualJob(JdbcTemplate jdbc, PlatformTransactionManager txManager, LeaveAccrualService accrual) {
         this.jdbc = jdbc;
+        this.accrual = accrual;
         this.tenantTx = new TransactionTemplate(txManager);
         this.tenantTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
     public void execute(JobExecutionContext context) {
-        int year = LocalDate.now().getYear();
-        log.info("LeaveAccrualJob: initialising leave balances for year={}", year);
+        runAllTenants();
+    }
 
-        // ── Step 1: enumerate ACTIVE tenants OUTSIDE any tenant-scoped tx.
-        // platform.tenants has RLS disabled by design (see V002 comment), so
-        // this is safe without setting app.tenant_id. Anything under an RLS
-        // table here would silently return zero rows.
-        List<UUID> tenants = jdbc.queryForList(
-                "SELECT id FROM platform.tenants WHERE status = 'ACTIVE'",
-                UUID.class);
-        if (tenants.isEmpty()) {
-            log.info("LeaveAccrualJob: no ACTIVE tenants found — nothing to do");
+    @EventListener(ApplicationReadyEvent.class)
+    public void onStartup() {
+        try {
+            runAllTenants();
+        } catch (Exception e) {
+            log.warn("LeaveAccrualJob: startup run failed: {}", e.getMessage());
+        }
+    }
+
+    public void runAllTenants() {
+        LocalDate today = LeaveAccrualService.todayIst();
+        List<UUID> tenants;
+        try {
+            tenants = jdbc.queryForList("SELECT id FROM platform.tenants WHERE status = 'ACTIVE'", UUID.class);
+        } catch (Exception e) {
+            log.error("LeaveAccrualJob: could not list tenants: {}", e.getMessage());
             return;
         }
-
-        int totalTenants = 0, totalInserted = 0, tenantsFailed = 0;
+        int ok = 0, failed = 0, credited = 0, created = 0;
         for (UUID tenantId : tenants) {
             try {
-                int inserted = processTenant(tenantId, year);
-                totalTenants++;
-                totalInserted += inserted;
+                AccrualRunResult r = inTenant(tenantId, () -> accrual.accrueTenant(today, null, ACTOR));
+                created += r.balancesCreated();
+                credited += r.balancesCredited();
+                if (today.getMonthValue() == 1) {
+                    CarryForwardResult cf = inTenant(tenantId,
+                            () -> accrual.runCarryForward(today.getYear() - 1, null, ACTOR, today));
+                    if (cf.processed() > 0) {
+                        log.info("LeaveAccrualJob: tenant {} carried forward {} line(s) from {}", tenantId, cf.processed(), cf.fromYear());
+                    }
+                }
+                ok++;
             } catch (Exception e) {
-                // One bad tenant must not sink the whole run — its REQUIRES_NEW
-                // tx rolled back on its own.
-                tenantsFailed++;
+                failed++;
                 log.warn("LeaveAccrualJob: tenant {} failed: {}", tenantId, e.getMessage());
             }
         }
-        log.info("LeaveAccrualJob: completed — tenants ok={} failed={} rows inserted={} year={}",
-                totalTenants, tenantsFailed, totalInserted, year);
+        log.info("LeaveAccrualJob: {} — tenants ok={} failed={} balances created={} credited={}",
+                today, ok, failed, created, credited);
     }
 
-    /**
-     * All work for one tenant runs in ONE fresh REQUIRES_NEW transaction so
-     * the SET LOCAL below survives every statement in the tx and the tx
-     * commits/rolls back independently of its siblings.
-     */
-    private int processTenant(UUID tenantId, int year) {
-        Integer inserted = tenantTx.execute(status -> {
-            TenantContext.setTenantId(tenantId);
-            try {
+    private <T> T inTenant(UUID tenantId, java.util.function.Supplier<T> work) {
+        try {
+            return tenantTx.execute(status -> {
+                TenantContext.setTenantId(tenantId);
                 com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
-            } catch (Throwable ignored) { /* older tenant-context bean absent */ }
-            // Bind the RLS GUC to this exact transaction. LOCAL scope is
-            // required so PgBouncer/Hikari session recycling can't leak it.
-            jdbc.execute("SET LOCAL app.tenant_id = '" + tenantId + "'");
-
-            // Preload every active leave type for every company in this
-            // tenant, keyed by company_id. Doing it once per tenant beats
-            // the previous per-employee findByCompanyIdAndActiveTrue call.
-            Map<UUID, List<LeaveTypeRow>> typesByCompany = new java.util.HashMap<>();
-            jdbc.query("""
-                    SELECT id, company_id, annual_entitlement
-                      FROM leave_mgmt.leave_types
-                     WHERE is_active = TRUE
-                    """, rs -> {
-                UUID companyId = rs.getObject("company_id", UUID.class);
-                typesByCompany
-                        .computeIfAbsent(companyId, k -> new ArrayList<>())
-                        .add(new LeaveTypeRow(
-                                rs.getObject("id", UUID.class),
-                                rs.getDouble("annual_entitlement")));
+                // Bind the tenant to this transaction (the connection may have been
+                // handed out before the context was set).
+                jdbc.queryForObject("SELECT set_config('app.tenant_id', ?, true)", String.class, tenantId.toString());
+                return work.get();
             });
-            if (typesByCompany.isEmpty()) return 0;
-
-            int totalRows = 0;
-            int offset = 0;
-            while (true) {
-                List<EmployeeRow> page = jdbc.query("""
-                        SELECT id, company_id
-                          FROM hrms.employees
-                         WHERE employment_status = 'ACTIVE'
-                           AND is_active = TRUE
-                         ORDER BY id
-                         LIMIT ? OFFSET ?
-                        """, (rs, i) -> new EmployeeRow(
-                                rs.getObject("id", UUID.class),
-                                rs.getObject("company_id", UUID.class)),
-                        PAGE_SIZE, offset);
-                if (page.isEmpty()) break;
-
-                // Build the batch args across (employee × leave-type-of-company).
-                List<Object[]> batch = new ArrayList<>(page.size() * 4);
-                for (EmployeeRow emp : page) {
-                    List<LeaveTypeRow> types = typesByCompany.get(emp.companyId());
-                    if (types == null) continue;
-                    for (LeaveTypeRow lt : types) {
-                        batch.add(new Object[]{
-                                tenantId, emp.id(), lt.id(), year, lt.annualEntitlement()
-                        });
-                    }
-                }
-                if (!batch.isEmpty()) {
-                    int[] rows = jdbc.batchUpdate("""
-                            INSERT INTO leave_mgmt.leave_balances
-                                (tenant_id, employee_id, leave_type_id, year,
-                                 total_entitlement, used, pending, carry_forward)
-                            VALUES (?, ?, ?, ?, ?, 0, 0, 0)
-                            ON CONFLICT ON CONSTRAINT uq_leave_balance DO NOTHING
-                            """, batch);
-                    for (int r : rows) if (r > 0) totalRows++;
-                }
-
-                if (page.size() < PAGE_SIZE) break;
-                offset += page.size();
-            }
-            return totalRows;
-        });
-        int n = inserted == null ? 0 : inserted;
-        if (n > 0) log.info("LeaveAccrualJob: tenant {} → {} new balance rows", tenantId, n);
-        return n;
+        } finally {
+            TenantContext.clear();
+            com.hrms.core.tenant.TenantContext.clear();
+        }
     }
-
-    private record LeaveTypeRow(UUID id, double annualEntitlement) {}
-    private record EmployeeRow(UUID id, UUID companyId) {}
 }

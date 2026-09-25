@@ -20,6 +20,8 @@ import com.unifiedtree.notifications.events.DocumentUploadedEvent;
 import com.unifiedtree.notifications.events.DocumentVerifiedEvent;
 import com.unifiedtree.notifications.events.DocumentRejectedEvent;
 import com.unifiedtree.notifications.events.RetirementDueEvent;
+import com.unifiedtree.notifications.events.LeaveEncashmentDecidedEvent;
+import com.unifiedtree.notifications.events.LeaveEncashmentSubmittedEvent;
 import com.unifiedtree.notifications.events.WfhCancelledEvent;
 import com.unifiedtree.notifications.events.WfhDecidedEvent;
 import com.unifiedtree.notifications.events.WfhRequestSubmittedEvent;
@@ -744,6 +746,62 @@ public class DomainEventListener {
             }
         } catch (Exception ex) {
             log.warn("Failed to publish RETIREMENT_DUE notifications for {}: {}", e.employeeId(), ex.getMessage());
+        }
+    }
+
+    // ─── Leave encashment (V143.23) ────────────────────────────────────────
+    private static final String ROUTE_ENCASH = "/hrms/leave?tab=encash";
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onLeaveEncashmentSubmitted(LeaveEncashmentSubmittedEvent e) {
+        try {
+            String type = firstOrElse(e.leaveTypeName(), "leave");
+            String days = e.days() == Math.rint(e.days()) ? String.valueOf((long) e.days()) : String.valueOf(e.days());
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.LEAVE_ENCASHMENT_SUBMITTED.name());
+            data.put("encashmentId", e.requestId().toString());
+            data.put("route", ROUTE_ENCASH);
+            if (e.raisedByHr()) {
+                // HR raised it for the employee: tell the employee it is on its way.
+                data.put("audience", "requester");
+                service.create(e.tenantId(), e.employeeId(), AppNotificationType.LEAVE_ENCASHMENT_SUBMITTED,
+                        "Leave encashment raised for you",
+                        "HR raised an encashment of %s day(s) of your %s. You'll hear once it's decided.".formatted(days, type),
+                        data);
+                return;
+            }
+            UUID hr = firstEmployeeWithRole(e.tenantId(), HR_MANAGER);
+            if (hr == null) hr = firstEmployeeWithRole(e.tenantId(), SUPER_ADMIN);
+            if (hr == null || hr.equals(e.employeeId())) return;
+            String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
+            data.put("audience", "approver");
+            service.create(e.tenantId(), hr, AppNotificationType.LEAVE_ENCASHMENT_SUBMITTED,
+                    "Leave encashment to review",
+                    "%s asked to encash %s day(s) of %s.".formatted(who, days, type), data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish LEAVE_ENCASHMENT_SUBMITTED notification for {}: {}", e.requestId(), ex.getMessage());
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onLeaveEncashmentDecided(LeaveEncashmentDecidedEvent e) {
+        try {
+            AppNotificationType type = e.approved() ? AppNotificationType.LEAVE_ENCASHMENT_APPROVED : AppNotificationType.LEAVE_ENCASHMENT_REJECTED;
+            String leave = firstOrElse(e.leaveTypeName(), "leave");
+            String days = e.days() == Math.rint(e.days()) ? String.valueOf((long) e.days()) : String.valueOf(e.days());
+            String body = e.approved()
+                    ? "Your encashment of %s day(s) of %s was approved%s. It's paid with your next salary.".formatted(days, leave,
+                            e.amount() != null ? " (" + money("INR", e.amount()) + ")" : "")
+                    : "Your encashment of %s day(s) of %s was rejected, and the days are back in your balance.%s".formatted(days, leave,
+                            e.note() != null && !e.note().isBlank() ? " Reason: " + e.note() : "");
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", type.name());
+            data.put("encashmentId", e.requestId().toString());
+            data.put("route", ROUTE_ENCASH);
+            service.create(e.tenantId(), e.employeeId(), type,
+                    e.approved() ? "Leave encashment approved" : "Leave encashment rejected", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish LEAVE_ENCASHMENT decision notification for {}: {}", e.requestId(), ex.getMessage());
         }
     }
 

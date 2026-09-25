@@ -8,7 +8,7 @@ import { apiJson } from '@/core/api/client'
 import { assignEmployeeShift } from '../api/useOrg'
 import { sendInvite } from '../employees/api/useInvitation'
 import type { PayrollSettings } from '../api/usePayroll'
-import { TYPE_CODE, TONE_HEX, LEAVE_CAT_CODE, COMP_CAT_CODE, COMP_METHOD_CODE, BRANCH_KIND_CODE, pretty, type Rec } from './masterData'
+import { TYPE_CODE, TONE_HEX, LEAVE_CAT_CODE, COMP_CAT_CODE, COMP_METHOD_CODE, BRANCH_KIND_CODE, ACCRUAL_CODE, WEEK, pretty, type Rec } from './masterData'
 
 export interface Diff { added: Rec[]; changed: [Rec, Rec][]; removed: Rec[] }
 export interface SyncEnv {
@@ -227,6 +227,11 @@ const rate = (s?: string | null) => (s ? Number(String(s).replace(/[^\d.]/g, '')
 const shiftBody = (r: Rec) => ({
   name: String(r.name).trim(), shiftType: shiftType(r), startTime: hhmm(r.start), endTime: hhmm(r.end),
   gracePeriodMinutes: r.grace ?? undefined, workingHoursPerDay: Number(r.hours), overtimeApplicable: !!r.ot, overtimeMultiplier: r.ot ? rate(r.rate) : undefined,
+  // V143.23: "" clears the code; [] clears the weekly offs; core hours only for a flexible shift.
+  code: String(r.code || '').trim().toUpperCase(),
+  coreStartTime: r.kind === 'Flexible' && r.core ? hhmm(r.core[0]) : undefined,
+  coreEndTime: r.kind === 'Flexible' && r.core ? hhmm(r.core[1]) : undefined,
+  weeklyOffDays: Array.isArray(r.offs) ? r.offs.map((d: string) => WEEK.indexOf(d) + 1).filter((d: number) => d > 0) : undefined,
 })
 async function shifts({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) await apiJson(`/v1/shifts?companyId=${env.defaultCo}`, json('POST', { ...shiftBody(r), gracePeriodMinutes: r.grace ?? 0 }))
@@ -244,6 +249,8 @@ async function leaves({ added, changed }: Diff, env: SyncEnv) {
     // A full replace: fields this page doesn't show are sent back as they were.
     maxConsecutiveDays: r._raw?.maxConsecutiveDays ?? undefined, minNoticeDays: r._raw?.minNoticeDays ?? undefined,
     applicableGender: r._raw?.applicableGender ?? undefined, description: r._raw?.description ?? undefined,
+    // V143.23: how the quota is credited, and encashment (0 clears the yearly limit).
+    accrualFrequency: ACCRUAL_CODE[r.accrual] || 'YEARLY', isEncashable: !!r.encash, maxEncashDays: r.encash && r.encashMax ? Number(r.encashMax) : 0,
   })
   for (const r of added) await apiJson(`/v1/leave/types?companyId=${env.defaultCo}`, json('POST', body(r)))
   await each(changed, async ([o, r]) => {
@@ -253,23 +260,30 @@ async function leaves({ added, changed }: Diff, env: SyncEnv) {
   return [['hrms', 'leave', 'types']]
 }
 
+/** V143.23 distribution settings: acknowledgement, the automatic reminder (0 = off) and email on publish. */
+const distribution = (r: Rec) => ({
+  acknowledgementRequired: r.ackReq !== false, notifyOnPublish: !!r.notify,
+  autoRemindAfterDays: r.ackReq !== false && r.remindAfter !== '' && r.remindAfter != null ? Number(r.remindAfter) : 0,
+})
 /** Keep the stored spelling ("v1.0", "GENERAL") unless the person changed it. */
 const verOut = (r: Rec, o?: Rec) => (o && r.ver === o.ver && r._raw?.version ? r._raw.version : (/^v/i.test(r._raw?.version || '') ? 'v' : '') + String(r.ver || '1.0').replace(/^v/i, ''))
 const catOut = (r: Rec) => (r._raw?.category && pretty(r._raw.category) === r.cat ? r._raw.category : r.cat || undefined)
-async function policies({ added, changed }: Diff, env: SyncEnv) {
+async function policies({ added, changed, removed }: Diff, env: SyncEnv) {
   for (const r of added) {
-    await apiJson(`/v1/policy/policies?companyId=${env.defaultCo}`, json('POST', { title: String(r.title).trim(), category: catOut(r), content: r.content || '', version: verOut(r), effectiveDate: r.eff || undefined, status: r.status === 'Draft' ? 'DRAFT' : 'ACTIVE' }))
+    await apiJson(`/v1/policy/policies?companyId=${env.defaultCo}`, json('POST', { title: String(r.title).trim(), category: catOut(r), content: r.content || '', version: verOut(r), effectiveDate: r.eff || undefined, status: r.status === 'Draft' ? 'DRAFT' : 'ACTIVE', ...distribution(r) }))
   }
   await each(changed, async ([o, r]) => {
     const base = `/v1/policy/policies/${r._key}`
-    if (changedAny(o, r, ['title', 'cat', 'ver', 'eff', 'content'])) {
-      await apiJson(base, json('PUT', { title: String(r.title).trim(), category: catOut(r), content: r.content || '', version: verOut(r, o), effectiveDate: r.eff || undefined }))
+    if (changedAny(o, r, ['title', 'cat', 'ver', 'eff', 'content', 'ackReq', 'notify', 'remindAfter'])) {
+      await apiJson(base, json('PUT', { title: String(r.title).trim(), category: catOut(r), content: r.content || '', version: verOut(r, o), effectiveDate: r.eff || undefined, ...distribution(r) }))
     }
     if (r.status === o.status) return
     if (r.status === 'Archived') await apiJson(`${base}/archive`, json('POST'))
     else if (r.status === 'Active' && o.status === 'Draft') await apiJson(`${base}/publish`, json('POST'))
     else if (r.status === 'Active' && o.status === 'Archived') await apiJson(`${base}/unarchive`, json('POST'))
   }, 'policies')
+  // "Discard draft": a draft is deleted for good (the server archives a published one instead).
+  await each(removed, (r) => apiJson(`/v1/policy/policies/${r._key}`, json('DELETE')), 'policies')
   return [['hrms', 'policy']]
 }
 

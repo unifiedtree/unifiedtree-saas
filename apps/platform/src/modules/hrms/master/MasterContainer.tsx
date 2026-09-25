@@ -305,6 +305,14 @@ export function MasterContainer() {
       downloadCsv(`agencies-${TODAY_ISO}.csv`, [head.join(','), ...rows.map((x) => [x.name, x.reg, x.service, x.contact, x.phone, x.email, x.workers, (x.sites || []).map((b: string) => site.get(b) || '').filter(Boolean).join('; '), x.licenceNo, x.licence, x.status].map(csvCell).join(','))])
       show(`Exported ${pl(rows.length, 'agency', 'agencies')} to CSV`)
     },
+    /** "Remind N people" on a live policy: everyone who hasn't acknowledged, not anyone reminded in the last 24 hours. */
+    remindPolicy: async (p: Rec) => {
+      try {
+        const r = await apiJson<{ reminded: number; skippedRecentlyReminded: number; notAcknowledged: number }>(`/v1/policy/policies/${p._key}/remind`, { method: 'POST' })
+        if (r.reminded > 0) show(`Reminder sent to ${pl(r.reminded, 'person', 'people')}${r.skippedRecentlyReminded ? ` · ${pl(r.skippedRecentlyReminded, 'person was', 'people were')} already reminded in the last 24 hours` : ''}`)
+        else show(r.notAcknowledged ? 'Everyone who hasn’t acknowledged was already reminded in the last 24 hours' : 'Everyone has acknowledged it', 'info')
+      } catch (e) { show(errText(e), 'error') }
+    },
     /** The employment types someone can be given — the ones linked to the employee record's type. */
     typeOptions: (cur?: string) => {
       const list = db.classes.filter((c) => c.status === 'Active' && c.co === defaultCo && TYPE_LABEL[c.code]).map((c) => c.type as string)

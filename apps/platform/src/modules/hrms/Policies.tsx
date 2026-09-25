@@ -513,11 +513,11 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
   // shrink for the Acknowledge button to come back. See useMyAcknowledgements.
   const ackSet = useMemo(() => new Set(myAcks), [myAcks])
 
+  // Only policies that ask for an acknowledgement count (V143.23: some are published for reading only).
   const stats = useMemo(() => {
-    const total = policies.length
-    const acknowledged = policies.filter((p) => ackSet.has(p.id)).length
-    const pending = total - acknowledged
-    return { total, acknowledged, pending }
+    const asked = policies.filter((p) => p.acknowledgementRequired !== false)
+    const acknowledged = asked.filter((p) => ackSet.has(p.id)).length
+    return { total: asked.length, acknowledged, pending: asked.length - acknowledged }
   }, [policies, ackSet])
 
   const onAcknowledge = async (id: string) => {
@@ -549,6 +549,7 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
         <div style={{ display: 'grid', gap: 10 }}>
           {policies.map((p) => {
             const acked = ackSet.has(p.id)
+            const asked = p.acknowledgementRequired !== false
             const open = openId === p.id
             return (
               <div key={p.id} style={{ ...CARD, overflow: 'hidden' }}>
@@ -562,7 +563,7 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
                       <span style={{ fontFamily: HEAD_FONT, fontSize: 15.5, fontWeight: 700 }}>{p.title}</span>
                       {p.category && <HrStatusPill tone="info">{p.category}</HrStatusPill>}
                       {p.version && <span className="text-xs font-medium text-text-tertiary">{p.version}</span>}
-                      {canAcknowledge && (acked ? <HrStatusPill tone="ok">Acknowledged</HrStatusPill> : <HrStatusPill tone="warn">To acknowledge</HrStatusPill>)}
+                      {canAcknowledge && (!asked ? <HrStatusPill tone="gray">For reading</HrStatusPill> : acked ? <HrStatusPill tone="ok">Acknowledged</HrStatusPill> : <HrStatusPill tone="warn">To acknowledge</HrStatusPill>)}
                     </div>
                     <p className="mt-1 text-xs text-text-tertiary">
                       {p.effectiveDate ? `Effective ${dmy(p.effectiveDate)}` : 'No effective date'}
@@ -576,7 +577,10 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
                     <p className="whitespace-pre-wrap text-sm leading-relaxed text-text-secondary">
                       {p.content?.trim() || 'No content provided for this policy.'}
                     </p>
-                    {canAcknowledge && (
+                    {canAcknowledge && !asked && (
+                      <p className="mt-4 text-right text-sm text-text-tertiary">For reading only: no acknowledgement needed.</p>
+                    )}
+                    {canAcknowledge && asked && (
                       // `acked` is read straight off the server's version-scoped
                       // list on every render, so when an admin bumps this
                       // policy's version the id leaves that list and the

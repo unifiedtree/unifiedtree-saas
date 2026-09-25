@@ -21,5 +21,22 @@ public record PolicyRequest(
         // — updates preserve the current status; DRAFT → ACTIVE happens via
         // POST /publish only. ARCHIVED is set via POST /archive.
         // Unknown values are rejected with HTTP 400 at the controller.
-        PolicyStatus status
-) {}
+        PolicyStatus status,
+        /*
+         * V143.23, all optional: null keeps what is stored (create: the defaults
+         * true / false / off), so older clients can't reset them.
+         *   acknowledgementRequired  ask employees to acknowledge it (default true)
+         *   notifyOnPublish          email everyone when it is published
+         *   autoRemindAfterDays      1-90: one automatic reminder that many days
+         *                            after publishing; 0 turns it off
+         */
+        Boolean acknowledgementRequired,
+        Boolean notifyOnPublish,
+        Integer autoRemindAfterDays
+) {
+    /** The pre-V143.23 shape. */
+    public PolicyRequest(UUID companyId, String title, String category, String content, String version,
+                         LocalDate effectiveDate, PolicyStatus status) {
+        this(companyId, title, category, content, version, effectiveDate, status, null, null, null);
+    }
+}

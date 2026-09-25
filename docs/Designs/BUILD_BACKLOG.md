@@ -27,9 +27,6 @@ All P0 items are done (wave 1).
 ## P1: admin features that are switched off
 
 **Master data** (§6)
-- Leave types: accrual frequency and encashment in the API; a year-end carry-forward job.
-- Shifts: shift code, flexible core hours, weekly offs per shift.
-- Policies: delete, reminders, email on publish, optional acknowledgement.
 
 **Payroll** (§5)
 - Bulk revise CTC ("Apply revision").

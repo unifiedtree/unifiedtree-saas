@@ -32,7 +32,14 @@ public final class ShiftDtos {
             int gracePeriodMinutes,
             Double workingHoursPerDay,
             boolean overtimeApplicable,
-            BigDecimal overtimeMultiplier) {}
+            BigDecimal overtimeMultiplier,
+            /** V143.23: short code, e.g. "GEN" (null when not set). */
+            String code,
+            /** V143.23: core hours of a FLEXIBLE shift (null when not set). */
+            LocalTime coreStartTime,
+            LocalTime coreEndTime,
+            /** V143.23: weekly offs for people on this shift, ISO 1 = Mon … 7 = Sun (null when not set). */
+            java.util.List<Integer> weeklyOffDays) {}
 
     /**
      * Create / update a shift definition.
@@ -66,7 +73,27 @@ public final class ShiftDtos {
             @Min(0) @Max(120) Integer gracePeriodMinutes,
             @DecimalMin("0.5") @DecimalMax("24.0") Double workingHoursPerDay,
             Boolean overtimeApplicable,
-            @DecimalMin("1.0") @DecimalMax("9.99") BigDecimal overtimeMultiplier) {}
+            @DecimalMin("1.0") @DecimalMax("9.99") BigDecimal overtimeMultiplier,
+            /*
+             * V143.23, all optional; null leaves the stored value as it is (the
+             * update is a merge), so older clients can't wipe them.
+             *   code            1–20 letters, digits, - or _ ("" clears it)
+             *   coreStartTime / coreEndTime   FLEXIBLE only; both or neither
+             *   weeklyOffDays   ISO days 1–7; [] clears them
+             */
+            String code,
+            LocalTime coreStartTime,
+            LocalTime coreEndTime,
+            java.util.List<Integer> weeklyOffDays) {
+
+        /** The pre-V143.23 shape. */
+        public ShiftPolicyRequest(String name, ShiftType shiftType, LocalTime startTime, LocalTime endTime,
+                                  Integer gracePeriodMinutes, Double workingHoursPerDay, Boolean overtimeApplicable,
+                                  BigDecimal overtimeMultiplier) {
+            this(name, shiftType, startTime, endTime, gracePeriodMinutes, workingHoursPerDay, overtimeApplicable,
+                    overtimeMultiplier, null, null, null, null);
+        }
+    }
 
     /** Assign a shift to an employee. effectiveFrom defaults to today when null. */
     public record AssignShiftRequest(

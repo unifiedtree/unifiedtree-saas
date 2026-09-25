@@ -63,6 +63,7 @@ public class PolicyService {
         policy.setCompanyId(resolvedCompany);
         apply(policy, request);
         policy.setStatus(status);
+        if (status == PolicyStatus.ACTIVE) policy.setPublishedAt(Instant.now());
 
         policy = policyRepository.save(policy);
         return toResponse(policy);
@@ -86,6 +87,7 @@ public class PolicyService {
                     "POLICY_STATUS_INVALID");
         }
         policy.setStatus(PolicyStatus.ACTIVE);
+        policy.setPublishedAt(Instant.now());
         policy = policyRepository.save(policy);
         log.info("HR policy {} published (DRAFT → ACTIVE)", policyId);
         return toResponse(policy);
@@ -162,6 +164,32 @@ public class PolicyService {
         return toResponse(policy);
     }
 
+    /** What {@link #deletePolicy} did. */
+    public enum DeleteOutcome { DELETED, ARCHIVED }
+
+    /**
+     * Delete a policy (V143.23). A draft was never shown to anyone, so it is
+     * removed for good. A published policy has acknowledgements that are a
+     * compliance record, so it is archived instead (restorable); an archived
+     * one stays archived.
+     */
+    @Transactional
+    public DeleteOutcome deletePolicy(UUID policyId) {
+        HrPolicy policy = policyRepository.findById(policyId)
+                .orElseThrow(() -> new ResourceNotFoundException("HrPolicy", policyId));
+        if (policy.getStatus() == PolicyStatus.DRAFT) {
+            policyRepository.delete(policy);
+            log.info("Draft policy {} deleted", policyId);
+            return DeleteOutcome.DELETED;
+        }
+        if (policy.getStatus() != PolicyStatus.ARCHIVED) {
+            policy.setStatus(PolicyStatus.ARCHIVED);
+            policyRepository.save(policy);
+            log.info("Published policy {} archived instead of deleted", policyId);
+        }
+        return DeleteOutcome.ARCHIVED;
+    }
+
     // ── Acknowledgements ─────────────────────────────────────────────────────
 
     /**
@@ -207,6 +235,8 @@ public class PolicyService {
     public boolean needsAcknowledgment(UUID policyId, UUID employeeId) {
         HrPolicy policy = policyRepository.findById(policyId)
                 .orElseThrow(() -> new ResourceNotFoundException("HrPolicy", policyId));
+        // V143.23: a policy published for reading only never needs an acknowledgement.
+        if (!policy.isAcknowledgementRequired()) return false;
         String currentVersion = policy.getPolicyVersion();
         return ackRepository.findByEmployeeId(employeeId).stream()
                 .filter(a -> a.getPolicyId().equals(policy.getId()))
@@ -264,6 +294,17 @@ public class PolicyService {
         policy.setContent(request.content());
         policy.setPolicyVersion(request.version());
         policy.setEffectiveDate(request.effectiveDate());
+        // V143.23: null keeps the stored value (older clients don't send these).
+        if (request.acknowledgementRequired() != null) policy.setAcknowledgementRequired(request.acknowledgementRequired());
+        if (request.notifyOnPublish() != null) policy.setNotifyOnPublish(request.notifyOnPublish());
+        if (request.autoRemindAfterDays() != null) {
+            int d = request.autoRemindAfterDays();
+            if (d < 0 || d > 90) {
+                throw new BusinessRuleException("Remind after 1 to 90 days, or 0 for no automatic reminder.",
+                        "POLICY_REMIND_DAYS_INVALID");
+            }
+            policy.setAutoRemindAfterDays(d == 0 ? null : d);
+        }
     }
 
     private PolicyResponse toResponse(HrPolicy p) {
@@ -275,7 +316,8 @@ public class PolicyService {
                 // the compliance figure read 100% right after a version bump,
                 // when the true figure for the current text was 0%.
                 ackRepository.countByPolicyIdAndPolicyVersion(p.getId(), p.getPolicyVersion()),
-                p.getCreatedAt());
+                p.getCreatedAt(),
+                p.isAcknowledgementRequired(), p.isNotifyOnPublish(), p.getAutoRemindAfterDays(), p.getPublishedAt());
     }
 
     private AcknowledgementResponse toAck(PolicyAcknowledgement a) {

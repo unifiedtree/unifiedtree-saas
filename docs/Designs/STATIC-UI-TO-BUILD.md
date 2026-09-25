@@ -218,9 +218,9 @@ Checked live:
 | Bulk status change | Changed | "Mark as active" confirms people on probation and cancels notice for people serving it. "Mark as probation" changes active people only; people on notice are left alone. The toast counts only the people who changed. |
 | Start exit | Done | A last working day of today or earlier marks the person exited; a later one starts their notice. |
 | Import / Export | Done | **Import** opens the existing bulk import. **Export** downloads the rows shown, with the same columns and spreadsheet-formula guard as the server export. |
-| Shift Rules | Partial | Name, type, times, grace, hours and overtime rate are saved. Shift code, flexible core hours and per-shift weekly offs aren't stored ("Coming soon"). **Duplicate** opens a filled "Add shift" form, because shifts can't be parked as inactive. Overtime copy says the rate is recorded, not paid, which is the business rule. An overnight shift is saved as a Night shift. |
-| Leave Rules | Partial | Name, code, category, quota (must be more than 0), paid and carry-forward cap are saved. Accrual shows "Credited upfront", which is what the balance job does. Monthly/quarterly accrual, encashment and per-classification "Applies to" aren't in the API ("Coming soon"). The year-end carry-forward move isn't automated; the tip says so. |
-| Policy Documents | Partial | Publish, save as draft, edit, new version (a new draft), archive and restore all work. **Remind**, **Email everyone when published** and optional acknowledgement aren't in the API ("Coming soon"). **Discard draft** archives the draft, because policies can't be deleted. |
+| Shift Rules | Done (25 Sep, w2d) | Name, type, times, grace, hours and overtime rate are saved, and now also the **shift code** (optional, unique among active shifts), **core hours** for flexible shifts (a check-in after core start is Late) and **weekly offs per shift** (attendance uses them for people with no weekly offs of their own). **Duplicate** opens a filled "Add shift" form without the code, because shifts can't be parked as inactive and codes are unique. Overtime copy says the rate is recorded, not paid, which is the business rule. An overnight shift is saved as a Night shift. |
+| Leave Rules | Partial | Name, code, category, quota (must be more than 0), paid, carry-forward cap, **how it's credited** (upfront, monthly, quarterly), **encashable** and the **most days encashed a year** are saved and used (25 Sep, w2d): a daily job credits monthly/quarterly balances, the January job carries unused days forward up to the cap and lapses the rest, and employees ask to encash from Leave → Encash (HR approves; payroll pays it, see the w2d payroll hook). HR sees and runs both jobs from Leave → Year end, with the audit trail. Per-classification "Applies to" is still "Coming soon". |
+| Policy Documents | Done (25 Sep, w2d) | Publish, save as draft, edit, new version (a new draft), archive and restore all work. **Remind** reminds everyone who hasn't acknowledged (not anyone reminded in the last 24 hours), **Email everyone when published** emails and notifies the roster, **Require acknowledgement** can be switched off (published for reading only) and an optional **automatic reminder** goes N days after publishing. **Discard draft** deletes the draft for good after a confirmation; deleting a published policy archives it. |
 | Salary Components | Partial | Add, edit and delete (for components that aren't built-in or in use) work. Computation shows the backend's types: Fixed, % of Basic, % of Gross, Formula, Statutory. Statutory lines show the real PF/ESI rates. Done in w1b: a fixed component's **monthly amount** (paid to everyone whose structure doesn't list it, pro-rated; a deduction is taken in full unless the structure sets its own), **Show on payslip** (hidden lines print as one "Other earnings/deductions" line on payslips and the PDF) and **Deactivate** (with a warning; skipped from the next run; built-in components stay on). "Partly exempt" is still "Coming soon". The CTC card shows the split new salary structures use. |
 | Statutory Settings | Partial | The switches save the payroll settings (the same ones as Payroll Settings). PT shows the configured state's real slabs. LWF is deducted by payroll in the chosen months (w1b); the card shows them and its linked components. PT and LWF registration numbers and PF admin charges aren't stored, so they show a dash. |
 | Companies | Done (25 Sep) | The head office comes from the branch marked HQ. TAN (AAAA99999A), the date of incorporation (shown as "since" on the card; not in the future) and a description (shown under the legal name) are saved. |
@@ -231,11 +231,11 @@ Checked live:
 
 **Backend gaps found while building Master** (to build; not built here). Built on 25 Sep (V143_22): grade pay bands and designation → grade by id; agency update, restore, licence, service, sites, worker links and counts; the classification update; department parent moves and `branchIds`.
 - Components: done in w1b (switch off, fixed `amount`, `show_on_payslip`; duplicates were already 409).
-- Leave types: accrual frequency and encashable exist in the database but not in the API; there is no year-end carry-forward job; `annualEntitlement` must be more than 0.
+- ~~Leave types: accrual frequency and encashable exist in the database but not in the API; there is no year-end carry-forward job~~ Done 25 Sep (w2d). `annualEntitlement` must still be more than 0.
 - Shifts:
   - `GET /v1/shifts` re-creates the four default shifts on every read, so deleting one of them is undone.
-  - No code, core hours or weekly offs.
-- Policies: no delete, no reminders, no email on publish.
+  - ~~No code, core hours or weekly offs.~~ Done 25 Sep (w2d).
+- ~~Policies: no delete, no reminders, no email on publish.~~ Done 25 Sep (w2d).
 - Cached counts (company, branch and department `employeeCount`, designation `headcount`) are never maintained.
 - Payroll: LWF, cycle days and PF/ESI establishment codes: done in w1b.
 
@@ -444,7 +444,7 @@ Found while redesigning the pages above. Fixed in the backend, running locally, 
 **Still open (noted, not changed):**
 - *Payroll* treating Saturday and Sunday as off for everyone: done in w1b after the client decided (D1). Each employee's own weekly off, else the company's, else Sat+Sun, and holidays from Settings plus the old leave table, as leave and attendance count them.
 - The alternate `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) has the same "today is absent" and Sat/Sun rules.
-- A company that had only the old "Standard 9-6" shift no longer gets "General" added automatically. It can be added in Shift Rules.
+- ~~A company that had only the old "Standard 9-6" shift no longer gets "General" added automatically.~~ Done 25 Sep (w2d): such a company gets "General" once (V143_23 for existing companies, on first read of the shift list for new ones).
 
 ## 11. Full redesign: the module kit, then module by module
 

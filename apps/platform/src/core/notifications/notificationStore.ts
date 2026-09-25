@@ -51,6 +51,13 @@ export type AppNotificationType =
   // Someone reaches the company's retirement age in 90 (then 30) days; sent to
   // people holding hrms.retirement.alerts. Opens that person's record.
   | 'RETIREMENT_DUE'
+  // V143.23: leave encashment and policy notices. Both carry a web data.route
+  // (/hrms/leave?tab=encash, /hrms/policies), which webRouteFor prefers.
+  | 'LEAVE_ENCASHMENT_SUBMITTED'
+  | 'LEAVE_ENCASHMENT_APPROVED'
+  | 'LEAVE_ENCASHMENT_REJECTED'
+  | 'POLICY_PUBLISHED'
+  | 'POLICY_REMINDER'
   | 'GENERAL'
 
 /** Raw server DTO (see {@code NotificationDtos.NotificationDto}). */

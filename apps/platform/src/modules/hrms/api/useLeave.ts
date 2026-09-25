@@ -30,6 +30,11 @@ export interface LeaveTypeResponse {
   minNoticeDays?: number
   applicableGender?: string | null
   description?: string | null
+  /** V143.23: YEARLY (credited upfront), MONTHLY or QUARTERLY. */
+  accrualFrequency?: 'YEARLY' | 'MONTHLY' | 'QUARTERLY'
+  isEncashable?: boolean
+  /** The most days one person may encash a year; null = no yearly limit. */
+  maxEncashDays?: number | null
 }
 
 export interface LeaveBalanceResponse {

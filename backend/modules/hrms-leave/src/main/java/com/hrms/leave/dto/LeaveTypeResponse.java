@@ -31,6 +31,11 @@ public record LeaveTypeResponse(
          */
         int minNoticeDays,
         String applicableGender,
-        String description
+        String description,
+        /** YEARLY (credited upfront), MONTHLY or QUARTERLY — see LeaveAccrualMath. */
+        String accrualFrequency,
+        boolean isEncashable,
+        /** The most days one person may encash in a year; null = no yearly limit. */
+        Integer maxEncashDays
 ) {
 }

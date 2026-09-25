@@ -19,6 +19,13 @@ export interface Policy {
   status: PolicyStatus
   acknowledgementCount: number
   createdAt: string
+  /** V143.23: false = published for reading only (nobody is asked to acknowledge it). */
+  acknowledgementRequired?: boolean
+  /** V143.23: everyone is emailed when it is published. */
+  notifyOnPublish?: boolean
+  /** V143.23: one automatic reminder this many days after publishing; null = off. */
+  autoRemindAfterDays?: number | null
+  publishedAt?: string | null
 }
 
 export interface PolicyAcknowledgement {

@@ -51,7 +51,12 @@ public class LeaveTypeMapperImpl implements LeaveTypeMapper {
         String applicableGender = leaveType.getApplicableGender();
         String description = leaveType.getDescription();
 
-        LeaveTypeResponse leaveTypeResponse = new LeaveTypeResponse( id, name, code, category, annualEntitlement, maxConsecutiveDays, isPaidLeave, isCarryForwardAllowed, maxCarryForwardDays, isActive, minNoticeDays, applicableGender, description );
+        // V143.23: accrual and encashment settings.
+        String accrualFrequency = com.hrms.leave.service.LeaveAccrualMath.normalizeFrequency(leaveType.getAccrualFrequency());
+        boolean isEncashable = leaveType.isEncashable();
+        Integer maxEncashDays = leaveType.getMaxEncashDays();
+
+        LeaveTypeResponse leaveTypeResponse = new LeaveTypeResponse( id, name, code, category, annualEntitlement, maxConsecutiveDays, isPaidLeave, isCarryForwardAllowed, maxCarryForwardDays, isActive, minNoticeDays, applicableGender, description, accrualFrequency, isEncashable, maxEncashDays );
 
         return leaveTypeResponse;
     }

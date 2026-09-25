@@ -51,6 +51,13 @@ export interface ShiftPolicy {
    */
   overtimeApplicable?: boolean
   overtimeMultiplier?: number | null
+  /** V143.23: short code ("GEN"), null when not set. */
+  code?: string | null
+  /** V143.23: core hours of a FLEXIBLE shift, "HH:mm:ss"; a check-in after core start is Late. */
+  coreStartTime?: string | null
+  coreEndTime?: string | null
+  /** V143.23: weekly offs for people on this shift with none of their own, ISO 1 = Mon … 7 = Sun. */
+  weeklyOffDays?: number[] | null
 }
 
 /** Mirrors ShiftDtos.ShiftPolicyRequest (all fields optional server-side except name). */
@@ -67,6 +74,12 @@ export interface ShiftPolicyPayload {
   overtimeApplicable?: boolean
   /** Server bound: 1.0..9.99. */
   overtimeMultiplier?: number
+  /** V143.23, optional (omitted = keep): "" clears the code. */
+  code?: string
+  coreStartTime?: string
+  coreEndTime?: string
+  /** [] clears them. */
+  weeklyOffDays?: number[]
 }
 
 /** Namespaced away from useOrg's ['hrms','org','shifts',…] so the two caches never collide. */
