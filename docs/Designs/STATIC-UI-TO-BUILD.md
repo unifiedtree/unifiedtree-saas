@@ -549,3 +549,34 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Dragging cards between stages. For now, the stage is changed with the select on each card.
   - Interview scheduling and scorecards. The stage list has interview stages, but there's no calendar or feedback record behind them.
 - **Checked live:** `live-candidate-conversion` 13/13 and `live-offers-browser`, which passed.
+
+### 11.8 Onboarding & assets (`/hrms/onboarding/instances`, `…/instances/:id`, `…/instances/new`, `/hrms/onboarding`, `/hrms/onboarding/templates/:id`): done
+- **Layout:** on the module kit.
+  - One page with three views: New hires, Assets and Checklist templates (`?view=`).
+  - Templates used to be reachable only from a row menu; they are now a view on this page as well. `/hrms/onboarding` still works on its own.
+  - **New hires:** clickable status tiles, and a table with a checklist progress bar on each row.
+  - **Checklist page:** shows whose onboarding it is, a progress bar, and the tasks.
+    - Task status reads "To do", "Overdue", "Done" or "Skipped".
+    - Notes and completion times are shown. They were saved before, but never displayed.
+    - HR can put the onboarding on hold, resume it or reopen it right from this page.
+  - **Assets:**
+    - Tiles for All, With employees and In store (which includes returned items, since those can be handed out again).
+    - Search and a status filter.
+    - Register, assign and take-back now open in drawers.
+    - Statuses read "In store", "With employee" or "Returned".
+  - **New-hire wizard:** sits in the kit frame, with a floating Back / Next bar. The steps themselves are unchanged.
+- **Permissions:** the API decides whose onboardings each user gets back, and the page follows it.
+  - **HR** (`hrms.onboarding.instance.write`) sees every new hire.
+  - **Everyone else** with `instance.read` (employees, managers, finance) gets only their own onboardings. The view is called "Your onboarding" and has no table. Before, they saw a table of dashes because they can't read colleagues' names.
+  - **Assets** need `asset.read` or `instance.write`. Only `asset.write` or `instance.write` can change them.
+  - **Templates** need `template.read`.
+- **Fixed (backend):** removing a task from a template that any started onboarding had used failed with a foreign-key error.
+  - Migration `V143_8` clears the link instead. Started onboardings already keep their own copy of each task's title, owner and required flag, so nothing is lost.
+  - Deleting a task now also checks that it belongs to the template in the URL. A task from another template returns 404.
+- **Fixed (tests):** `live-onboarding.mjs` left its QA hire behind on every run, and later payroll and letter tests picked those hires up. It now deletes the hire at the end.
+  - The older leftovers stay in local data. They are in payroll lines and letters from earlier runs, so removing them would mean editing past payroll.
+- **Static / to build:**
+  - Reordering template tasks. The API has no reorder endpoint; order is fixed when a task is added.
+  - Picking the owner role from a list. It is typed in for now.
+  - A "my assets" view for employees. The asset API is company-wide and only for asset readers, so employees don't see what they hold.
+- **Checked live:** `live-design-onboarding.mjs` 34/34 (owner, employee and department manager, with cleanup) and `live-onboarding.mjs` (passes and cleans up).

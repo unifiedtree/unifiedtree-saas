@@ -8,6 +8,8 @@ import { addMonths, format, parseISO } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { EmptyState } from '@unifiedtree/ui-kit'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
+import { DesignFrame } from '@/design/dc/DesignFrame'
+import { ModulePage } from '@/design/module/ModuleKit'
 import { useToast } from '@/shared/hooks/useToast'
 import {
   useBranches, useCompanies, useDepartments, useDesignations, useEmploymentTypes,
@@ -902,12 +904,13 @@ export const OnboardingForm: React.FC = () => {
   if (created) {
     const dept = activeDepartments.find((d) => d.id === created.departmentId)
     return (
-      <div className="mx-auto max-w-xl p-4 sm:p-6 lg:p-8">
-        <div className="ut-card p-6 text-center sm:p-8">
+      <DesignFrame>
+      <div className="mx-auto max-w-xl">
+        <div className="ut-card p-6 text-center sm:p-8" style={{ borderRadius: 16 }}>
           <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-bg)]">
             <CheckCircle2 size={34} className="text-[#059669]" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-text-primary">Employee Created Successfully!</h1>
+          <h1 className="text-xl font-bold tracking-tight text-text-primary">Employee created</h1>
           <p className="mx-auto mt-1.5 max-w-sm text-[13px] text-text-secondary">
             The employee record has been created and Employee ID has been generated.
           </p>
@@ -978,6 +981,7 @@ export const OnboardingForm: React.FC = () => {
           </div>
         </div>
       </div>
+      </DesignFrame>
     )
   }
 
@@ -986,11 +990,9 @@ export const OnboardingForm: React.FC = () => {
   const head = STEP_HEAD[step]
 
   return (
-    <div className="mx-auto max-w-5xl p-4 sm:p-6 lg:p-8">
-      <div className="mb-6">
-        <h1 className="text-[26px] font-bold leading-tight tracking-tight text-text-primary">{head.title}</h1>
-        <p className="mt-1 text-sm font-medium text-text-secondary">{head.description}</p>
-      </div>
+    <ModulePage crumb="Onboarding · New hire" title={head.title} subtitle={head.description}
+      actions={<HrButton variant="ghost" onClick={() => navigate('/hrms/onboarding/instances')}>Cancel</HrButton>}>
+    <div style={{ maxWidth: 1024, minWidth: 0 }}>
 
       <Stepper active={step} reached={reached} onJump={goTo} />
 
@@ -1796,7 +1798,7 @@ export const OnboardingForm: React.FC = () => {
 
       {/* Sticky action bar — Back / Next stay reachable on long steps and on
           phones where the header has scrolled away. */}
-      <div className="sticky bottom-0 z-10 -mx-4 mt-6 flex items-center justify-between gap-3 border-t border-border-default bg-[var(--bg-base)]/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="sticky bottom-3 z-10 mt-6 flex items-center justify-between gap-3 rounded-2xl border border-border-default bg-[var(--bg-surface)]/95 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(15,23,42,0.35)] backdrop-blur">
         <span className="text-xs font-medium text-text-tertiary">
           Step {stepIndex + 1} of {STEPS.length}
         </span>
@@ -1812,6 +1814,7 @@ export const OnboardingForm: React.FC = () => {
         </div>
       </div>
     </div>
+    </ModulePage>
   )
 }
 

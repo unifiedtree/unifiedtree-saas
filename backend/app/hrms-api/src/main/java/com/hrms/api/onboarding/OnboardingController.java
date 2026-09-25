@@ -121,7 +121,7 @@ public class OnboardingController {
     @Operation(summary = "Remove a task from an onboarding template")
     @PreAuthorize("@perm.check('hrms.onboarding.template.write')")
     public ResponseEntity<Void> removeTask(@PathVariable UUID templateId, @PathVariable UUID taskId) {
-        onboardingService.removeTask(taskId);
+        onboardingService.removeTask(templateId, taskId);
         return ResponseEntity.noContent().build();
     }
 

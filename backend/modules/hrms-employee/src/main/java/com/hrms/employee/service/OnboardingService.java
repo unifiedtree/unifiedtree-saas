@@ -217,9 +217,17 @@ public class OnboardingService {
         return taskRepo.save(task);
     }
 
+    /**
+     * Removes a task from a template. Runs that already started keep their own
+     * copy of it (the link is cleared by the FK, V143.8). A task id that isn't
+     * on this template is a 404, not a silent delete of some other template's task.
+     */
     @Transactional
-    public void removeTask(UUID taskId) {
-        taskRepo.deleteById(taskId);
+    public void removeTask(UUID templateId, UUID taskId) {
+        OnboardingTask task = taskRepo.findById(taskId)
+                .filter(t -> templateId.equals(t.getTemplateId()))
+                .orElseThrow(() -> new ResourceNotFoundException("OnboardingTask", taskId));
+        taskRepo.delete(task);
     }
 
     // ── Instance lifecycle (called on hire) ───────────────────────────────

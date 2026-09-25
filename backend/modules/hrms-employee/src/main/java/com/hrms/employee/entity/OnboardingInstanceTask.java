@@ -18,7 +18,8 @@ public class OnboardingInstanceTask extends BaseEntity {
     @Column(name = "instance_id", nullable = false)
     private UUID instanceId;
 
-    @Column(name = "task_id", nullable = false)
+    /** The template task this was copied from; null once that task is removed from the template. */
+    @Column(name = "task_id")
     private UUID taskId;
 
     @Column(name = "sequence_no", nullable = false)

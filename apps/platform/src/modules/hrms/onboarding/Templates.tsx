@@ -1,186 +1,99 @@
-import React, { useState } from 'react'
+// Onboarding checklist templates, on the module kit. Stands alone at
+// /hrms/onboarding and also sits inside Onboarding & assets as a view
+// (`embedded`), which is where the sidebar leads.
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, ClipboardList, Archive } from 'lucide-react'
-import { Drawer, TableSkeleton, EmptyState, Button } from '@unifiedtree/ui-kit'
-import { HrPageHeader, HrStatusPill, TableCard } from '@/shared/components/hr'
-import { toast } from 'sonner'
-import { Can, P } from '@unifiedtree/sdk'
+import { Plus } from 'lucide-react'
+import { usePermission, P } from '@unifiedtree/sdk'
+import { HrButton, HrDrawer, HrStatusPill, HrSelect } from '@/shared/components/hr'
+import { ModulePage, State, RowList, Row, SubHeading, useDesignToast } from '@/design/module/ModuleKit'
+import { dashIcon } from '@/design/dc/icons'
 import { useTemplates, useCreateTemplate, useDeleteTemplate } from './api/useOnboarding'
 import type { OnboardingTemplate } from './api/useOnboarding'
 import { useCompanies } from '../api/useOrg'
 
-// ── Create drawer ──────────────────────────────────────────────────────────────
+const label = 'mb-1.5 block text-[13px] font-semibold text-text-secondary'
 
-function CreateTemplateDrawer({ onClose }: { onClose: () => void }) {
+function CreateTemplateDrawer({ onClose, onDone }: { onClose: () => void; onDone: (msg: string, err?: boolean, detail?: string) => void }) {
   const create = useCreateTemplate()
   const { data: companies = [] } = useCompanies()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [companyId, setCompanyId] = useState('')
-
-  // Default to the first company once the list loads (auto-picks when there's only one).
-  React.useEffect(() => {
-    if (!companyId && companies.length) setCompanyId(companies[0].id)
-  }, [companies, companyId])
-
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => { if (!companyId && companies.length) setCompanyId(companies[0].id) }, [companies, companyId])
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
-    if (!companyId) {
-      toast.error('Create a company first (Organization → Companies)')
-      return
-    }
-    create.mutate(
-      { companyId, name: name.trim(), description: description.trim() || undefined, active: true },
-      {
-        onSuccess: () => {
-          toast.success('Template created')
-          onClose()
-        },
-        onError: () => toast.error('Failed to create template'),
-      },
-    )
+    if (!companyId) { onDone('Add a company first', true, 'Templates belong to a company (Organization → Companies).'); return }
+    try {
+      await create.mutateAsync({ companyId, name: name.trim(), description: description.trim() || undefined, active: true })
+      onDone('Template created'); onClose()
+    } catch (err) { onDone('Couldn’t create the template', true, (err as Error)?.message) }
   }
-
   return (
-    <Drawer open onOpenChange={(open) => { if (!open) onClose() }} title="Create onboarding template">
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <HrDrawer title="New checklist template" onClose={onClose}
+      footer={<><HrButton variant="ghost" onClick={onClose}>Cancel</HrButton><HrButton type="submit" form="tpl-create" disabled={create.isPending || !name.trim()}>{create.isPending ? 'Creating…' : 'Create template'}</HrButton></>}>
+      <form id="tpl-create" onSubmit={submit} className="space-y-4">
+        <p className="text-[13px] text-text-secondary">Add the tasks after creating it. Every new hire on this template works through them.</p>
         {companies.length > 1 && (
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
-              Company *
-            </label>
-            <select
-              value={companyId}
-              onChange={(e) => setCompanyId(e.target.value)}
-              className="w-full rounded-lg border border-border-default bg-bg-base px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-default/40"
-            >
-              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
+          <div><span className={label}>Company</span><HrSelect value={companyId} onChange={setCompanyId} options={companies.map((c) => ({ value: c.id, label: c.name }))} /></div>
         )}
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
-            Template name *
-          </label>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Engineering Hire"
-            className="w-full rounded-lg border border-border-default bg-bg-base px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-default/40"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
-            Description
-          </label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional description"
-            rows={3}
-            className="w-full rounded-lg border border-border-default bg-bg-base px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-default/40 resize-none"
-          />
-        </div>
-        <div className="flex gap-2 border-t border-border-default pt-4">
-          <Button type="submit" size="sm" loading={create.isPending}>
-            Create template
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
+        <div><label className={label} htmlFor="tpl-name">Template name</label><input id="tpl-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Engineering hire" className="ut-input" /></div>
+        <div><label className={label} htmlFor="tpl-desc">Description</label><textarea id="tpl-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" rows={3} className="ut-input resize-none" /></div>
       </form>
-    </Drawer>
+    </HrDrawer>
   )
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────────
-
-export const Templates: React.FC = () => {
+export const Templates: React.FC<{ embedded?: boolean }> = ({ embedded }) => {
   const navigate = useNavigate()
+  const canWrite = usePermission(P.HRMS_ONBOARDING_TEMPLATE_WRITE)
   const [createOpen, setCreateOpen] = useState(false)
-
+  const { show, node } = useDesignToast()
   const { data: templates = [], isLoading, error, refetch } = useTemplates()
   const del = useDeleteTemplate()
-
-  const handleDelete = (template: OnboardingTemplate) => {
-    if (!window.confirm(`Archive "${template.name}"? It will no longer be available for new hires.`)) return
-    del.mutate(template.id, {
-      onSuccess: () => toast.success('Template archived'),
-      onError: () => toast.error('Failed to archive template'),
-    })
+  const archive = async (t: OnboardingTemplate) => {
+    if (!window.confirm(`Archive “${t.name}”? It won’t be offered for new hires any more.`)) return
+    try { await del.mutateAsync(t.id); show('Template archived') } catch (e) { show('Couldn’t archive the template', true, (e as Error)?.message) }
   }
-
-  return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
-      <HrPageHeader
-        crumb="Recruitment & Onboarding"
-        title="Onboarding Templates"
-        subtitle="Define reusable task checklists for new hires"
-        actions={
-          <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
-            <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => setCreateOpen(true)}>New template</Button>
-          </Can>
-        }
-      />
-
-      {isLoading ? (
-        <TableSkeleton />
-      ) : error ? (
-        <EmptyState
-          variant="error"
-          title="Failed to load templates"
-          description={(error as Error).message}
-          primaryAction={{ label: 'Retry', onClick: () => refetch() }}
-        />
-      ) : templates.length === 0 ? (
-        <EmptyState variant="first-run" title="No templates yet" description="Create your first onboarding template to get started." />
-      ) : (
-        <TableCard>
-          <table className="hr-table">
-            <thead>
-              <tr><th>Template</th><th>Tasks</th><th>Status</th><th></th></tr>
-            </thead>
-            <tbody>
-              {templates.map((row) => (
-                <tr key={row.id} onClick={() => navigate(`/hrms/onboarding/templates/${row.id}`)} className="cursor-pointer">
-                  <td>
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#ECFDF5]">
-                        <ClipboardList size={13} className="text-[#059669]" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-text-primary">{row.name}</p>
-                        {row.description && <p className="max-w-[240px] truncate text-xs text-text-tertiary">{row.description}</p>}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="text-text-secondary">{row.tasks?.length ?? 0}</td>
-                  <td><HrStatusPill tone={row.active ? 'ok' : 'gray'}>{row.active ? 'Active' : 'Inactive'}</HrStatusPill></td>
-                  <td>
-                    {row.active && (
-                      <Can code={P.HRMS_ONBOARDING_TEMPLATE_WRITE}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDelete(row) }}
-                          disabled={del.isPending}
-                          className="rounded-lg p-1.5 text-text-tertiary transition-colors hover:bg-[#FEE2E2] hover:text-[#B91C1C] disabled:opacity-40"
-                          aria-label="Archive template" title="Archive template"
-                        >
-                          <Archive size={14} />
-                        </button>
-                      </Can>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableCard>
-      )}
-
-      {createOpen && <CreateTemplateDrawer onClose={() => setCreateOpen(false)} />}
+  const addBtn = canWrite ? <HrButton size={embedded ? 'sm' : undefined} onClick={() => setCreateOpen(true)}><Plus size={15} /> New template</HrButton> : undefined
+  const active = templates.filter((t) => t.active), archived = templates.filter((t) => !t.active)
+  const list = (rows: OnboardingTemplate[]) => (
+    <RowList>
+      {rows.map((t) => {
+        const n = t.tasks?.length ?? 0
+        return (
+          <Row key={t.id} muted={!t.active} onClick={() => navigate(`/hrms/onboarding/templates/${t.id}`)}
+            lead={<span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 10, background: '#ecfdf5', color: '#0f6e56', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{dashIcon('list', 16)}</span>}
+            title={t.name} meta={t.description || undefined}
+            trail={<>
+              <span style={{ fontSize: 12.5, color: '#475569' }}>{`${n} ${n === 1 ? 'task' : 'tasks'}`}</span>
+              <HrStatusPill tone={t.active ? 'ok' : 'gray'}>{t.active ? 'Active' : 'Archived'}</HrStatusPill>
+              {t.active && canWrite && (
+                <span role="presentation" onClick={(e) => e.stopPropagation()}>
+                  <HrButton size="sm" variant="ghost" disabled={del.isPending} onClick={() => archive(t)} aria-label={`Archive ${t.name}`}>Archive</HrButton>
+                </span>
+              )}
+            </>} />
+        )
+      })}
+    </RowList>
+  )
+  const body = (
+    <div style={{ display: 'grid', gap: 16 }}>
+      {embedded && <SubHeading aside={addBtn}>Checklist templates</SubHeading>}
+      {isLoading ? <State kind="loading" />
+        : error ? <State kind="error" title="Couldn’t load templates" description={(error as Error).message} onRetry={() => refetch()} />
+          : templates.length === 0 ? <State kind="empty" icon="list" title="No templates yet" description={canWrite ? 'Create a template with the tasks every new hire should finish, like IT setup or policy sign-off.' : 'HR hasn’t set up any onboarding checklists yet.'} />
+            : <>{active.length > 0 && list(active)}{archived.length > 0 && <><SubHeading>Archived</SubHeading>{list(archived)}</>}</>}
+      {createOpen && <CreateTemplateDrawer onClose={() => setCreateOpen(false)} onDone={show} />}
+      {node}
     </div>
+  )
+  if (embedded) return body
+  return (
+    <ModulePage crumb="Onboarding" title="Checklist templates" subtitle="Reusable task lists for new hires." actions={addBtn}>
+      {body}
+    </ModulePage>
   )
 }

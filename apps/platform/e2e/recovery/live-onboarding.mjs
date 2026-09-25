@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { chromium, expect } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const ui = process.env.RECOVERY_UI_URL || 'http://demo.localhost:3002'
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -30,6 +32,7 @@ const errors=[]
 page.on('pageerror',error=>errors.push(error.message))
 mkdirSync('test-results/recovery',{recursive:true})
 const stamp=Date.now()
+let createdId=''
 try {
   await page.goto(ui+'/login')
   await page.locator('input[type=email]').fill('owner@unifiedtree.demo')
@@ -78,6 +81,7 @@ try {
   const created=await createdResponse
   assert.ok(created.ok(),`Employee create ${created.status()}`)
   const employee=await created.json()
+  createdId=employee.id
   await expect(page.getByText('Benefits, asset issues, selected policies and joining details are saved on the employee profile.')).toBeVisible({timeout:30000})
   await expect(page.getByRole('button',{name:'Go to Employee Profile'})).toBeEnabled()
   const recordResponse=await request(`/v1/hrms/employees/${employee.id}/onboarding-record`)
@@ -111,4 +115,20 @@ try {
 } catch(error) {
   await page.screenshot({path:'test-results/recovery/onboarding-failure.png',fullPage:true})
   throw error
-} finally { await browser.close() }
+} finally {
+  await browser.close()
+  // The hire is a fixture: remove it before other runs (payroll, letters) pick it up.
+  if(createdId) {
+    const e=createdId
+    for(const q of [
+      `delete from hrms.onboarding_instances where employee_id='${e}'`,
+      `delete from hrms.employee_onboarding_records where employee_id='${e}'`,
+      `delete from hrms.asset_allocations where employee_id='${e}'`,
+      `delete from payroll.employee_structure_components where structure_id in (select id from payroll.employee_salary_structures where employee_id='${e}')`,
+      `delete from payroll.employee_salary_structures where employee_id='${e}'`,
+      `delete from leave_mgmt.leave_balances where employee_id='${e}'`,
+      `delete from hrms.employees where id='${e}'`,
+    ]) { try { sql(q) } catch(err) { console.log('cleanup:', String(err).split(String.fromCharCode(10))[0]) } }
+    console.log(`cleanup: removed QA hire ${e}: ${sql(`select count(*) from hrms.employees where id='${e}'`)==='0'}`)
+  }
+}
