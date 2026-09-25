@@ -39,6 +39,12 @@ public enum AppNotificationType {
     DOCUMENT_UPLOADED,
     DOCUMENT_VERIFIED,
     DOCUMENT_REJECTED,
+    /** An employee proposed a skill level; sent to the manager or HR who approves it (V143.21). */
+    SKILL_ASSESSMENT_SUBMITTED,
+    /** The employee's proposed skill level was approved; their skill matrix is updated. */
+    SKILL_ASSESSMENT_APPROVED,
+    /** The employee's proposed skill level was not approved; the note says why. */
+    SKILL_ASSESSMENT_REJECTED,
     WELCOME,
     TRIAL_ENDING_SOON,
     TRIAL_EXPIRED,

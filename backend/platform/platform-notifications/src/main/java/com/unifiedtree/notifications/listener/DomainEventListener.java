@@ -18,6 +18,8 @@ import com.unifiedtree.notifications.events.OvertimeDecidedEvent;
 import com.unifiedtree.notifications.events.DocumentUploadedEvent;
 import com.unifiedtree.notifications.events.DocumentVerifiedEvent;
 import com.unifiedtree.notifications.events.DocumentRejectedEvent;
+import com.unifiedtree.notifications.events.SkillAssessmentDecidedEvent;
+import com.unifiedtree.notifications.events.SkillAssessmentSubmittedEvent;
 import com.unifiedtree.notifications.events.WfhCancelledEvent;
 import com.unifiedtree.notifications.events.WfhDecidedEvent;
 import com.unifiedtree.notifications.events.WfhRequestSubmittedEvent;
@@ -689,6 +691,60 @@ public class DomainEventListener {
                     "Document needs re-upload", body, data);
         } catch (Exception ex) {
             log.warn("Failed to publish DOCUMENT_REJECTED notification for {}: {}", e.documentId(), ex.getMessage());
+        }
+    }
+
+    // ─── Skill self-assessment (V143.21) ──────────────────────────────────
+    // Employee proposes a level → the manager whose team includes them (else HR)
+    // is asked to approve; the decision goes back to the employee. Routes are the
+    // web Learning views; the mobile app has no Learning screen.
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onSkillAssessmentSubmitted(SkillAssessmentSubmittedEvent e) {
+        try {
+            UUID to = e.approverEmployeeId();
+            if (to == null || to.equals(e.employeeId())) to = firstEmployeeWithRole(e.tenantId(), HR_MANAGER);
+            if (to == null || to.equals(e.employeeId())) to = firstEmployeeWithRole(e.tenantId(), SUPER_ADMIN);
+            if (to == null || to.equals(e.employeeId())) {
+                log.warn("SkillAssessmentSubmittedEvent {}: no approver to notify", e.assessmentId());
+                return;
+            }
+            String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
+            String skill = firstOrElse(e.skillName(), "a skill");
+            String body = e.currentLevel() == null
+                    ? "%s added %s at level %d of 5 and asks you to approve it.".formatted(who, skill, e.proposedLevel())
+                    : "%s proposes level %d of 5 for %s (recorded: %d of 5). Please approve or reject it."
+                        .formatted(who, e.proposedLevel(), skill, e.currentLevel());
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.SKILL_ASSESSMENT_SUBMITTED.name());
+            data.put("skillAssessmentId", e.assessmentId().toString());
+            data.put("employeeId", e.employeeId().toString());
+            data.put("route", "/hrms/learning?view=approvals");
+            service.create(e.tenantId(), to, AppNotificationType.SKILL_ASSESSMENT_SUBMITTED,
+                    "Skill level to approve", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish SKILL_ASSESSMENT_SUBMITTED notification for {}: {}", e.assessmentId(), ex.getMessage());
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onSkillAssessmentDecided(SkillAssessmentDecidedEvent e) {
+        try {
+            AppNotificationType type = e.approved()
+                    ? AppNotificationType.SKILL_ASSESSMENT_APPROVED : AppNotificationType.SKILL_ASSESSMENT_REJECTED;
+            String skill = firstOrElse(e.skillName(), "your skill");
+            String by = e.deciderName() != null && !e.deciderName().isBlank() ? " by " + e.deciderName() : "";
+            String body = e.approved()
+                    ? "Your level %d of 5 for %s was approved%s. Your skill record is updated.".formatted(e.proposedLevel(), skill, by)
+                    : "Your proposed level %d of 5 for %s wasn't approved%s.%s".formatted(e.proposedLevel(), skill, by,
+                            e.decisionNote() != null && !e.decisionNote().isBlank() ? " Note: " + e.decisionNote() : "");
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", type.name());
+            data.put("skillAssessmentId", e.assessmentId().toString());
+            data.put("route", "/hrms/learning?view=my");
+            service.create(e.tenantId(), e.employeeId(), type,
+                    e.approved() ? "Skill level approved" : "Skill level not approved", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish SKILL_ASSESSMENT decision notification for {}: {}", e.assessmentId(), ex.getMessage());
         }
     }
 
