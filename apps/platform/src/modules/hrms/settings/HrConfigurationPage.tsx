@@ -104,7 +104,9 @@ export function HrConfigurationPage() {
             employeeCodePrefix: f.prefix.toUpperCase(), employeeCodeNextNumber: Number(f.next), employeeCodePadding: f.next.length,
             probationPeriodMonths: f.probationMonths === '' ? undefined : Number(f.probationMonths), defaultNoticePeriodDays: f.noticeDays === '' ? undefined : Number(f.noticeDays),
             retirementAge: f.retirementAge === '' ? undefined : Number(f.retirementAge), workweekStartDay: Number(f.weekStart), weekendDays: f.weekend,
-            lateGraceMinutes: f.grace === '' ? undefined : Number(f.grace), enableLateAutoDeduction: f.autoDeduct, enforceGeofencingForMobile: f.geofence, allowWorkFromHome: f.wfh, fiscalYearStart: f.fiscal,
+            lateGraceMinutes: f.grace === '' ? undefined : Number(f.grace), enableLateAutoDeduction: f.autoDeduct, enforceGeofencingForMobile: f.geofence, allowWorkFromHome: f.wfh,
+            // The fiscal year lives on the company record: send it only when it was changed here.
+            fiscalYearStart: changed.includes('fiscal') ? f.fiscal : undefined,
           },
         })
       }

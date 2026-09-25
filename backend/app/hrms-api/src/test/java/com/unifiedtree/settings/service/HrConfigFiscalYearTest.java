@@ -55,11 +55,27 @@ class HrConfigFiscalYearTest {
         assertEquals("APRIL", service.fiscalYearStart(null));
     }
 
+    @SuppressWarnings("unchecked")
     @Test void savingWritesTheCompanyRecordNotTheHrCopy() {
-        companyHas("JULY");
+        // Stored April before the save, July after it.
+        when(jdbc.query(contains("FROM org.companies"), any(ResultSetExtractor.class), eq(company))).thenReturn("APRIL", "JULY");
         when(jdbc.update(contains("UPDATE org.companies SET fiscal_year_start"), eq("JULY"), eq(company))).thenReturn(1);
         assertEquals("JULY", service.update(company, fiscal(" july ")).fiscalYearStart());
         verify(jdbc).update(contains("UPDATE org.companies SET fiscal_year_start"), eq("JULY"), eq(company));
+    }
+
+    @Test void anUnchangedMonthDoesNotRewriteTheCompany() {
+        companyHas("JULY");
+        assertEquals("JULY", service.update(company, fiscal("JULY")).fiscalYearStart());
+        verify(jdbc, never()).update(contains("UPDATE org.companies"), any(), any());
+    }
+
+    @Test void aRetirementAgeOutsideThirtyToHundredIsRefused() {
+        companyHas("APRIL");
+        UpdateHrConfigRequest young = new UpdateHrConfigRequest(null, null, null, 25, null, null, null, null, null, null, null, null, null);
+        assertThrows(BusinessRuleException.class, () -> service.update(company, young));
+        UpdateHrConfigRequest ok = new UpdateHrConfigRequest(null, null, null, 58, null, null, null, null, null, null, null, null, null);
+        assertEquals(58, service.update(company, ok).retirementAge());
     }
 
     @Test void aMonthNameIsRequired() {

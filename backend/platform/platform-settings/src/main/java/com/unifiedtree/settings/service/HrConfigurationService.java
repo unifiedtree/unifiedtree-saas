@@ -66,10 +66,14 @@ public class HrConfigurationService {
     @Transactional(readOnly = true)
     public String fiscalYearStart(UUID companyId) {
         if (companyId == null) return DEFAULT_FISCAL_YEAR_START;
-        String stored = jdbc.query("SELECT fiscal_year_start FROM org.companies WHERE id = ?",
-                rs -> rs.next() ? rs.getString(1) : null, companyId);
-        String m = normaliseMonth(stored);
+        String m = normaliseMonth(storedFiscalYearStart(companyId));
         return m == null ? DEFAULT_FISCAL_YEAR_START : m;
+    }
+
+    /** The company record's value exactly as stored (null when unset or no such company). */
+    private String storedFiscalYearStart(UUID companyId) {
+        return jdbc.query("SELECT fiscal_year_start FROM org.companies WHERE id = ?",
+                rs -> rs.next() ? rs.getString(1) : null, companyId);
     }
 
     public HrConfigResponse update(UUID companyId, UpdateHrConfigRequest req) {
@@ -85,13 +89,25 @@ public class HrConfigurationService {
                         "INVALID_FISCAL_YEAR_START");
             }
             // Written to the company record, the one source (see fiscalYearStart).
-            int rows = jdbc.update("UPDATE org.companies SET fiscal_year_start = ?, updated_at = now(), version = version + 1 WHERE id = ?",
-                    month, companyId);
-            if (rows == 0) throw new ResourceNotFoundException("Company " + companyId + " not found");
+            // Only when it actually changes, so an unrelated HR Configuration
+            // save never rewrites (or re-versions) the company.
+            if (!month.equals(storedFiscalYearStart(companyId))) {
+                int rows = jdbc.update("UPDATE org.companies SET fiscal_year_start = ?, updated_at = now(), version = version + 1 WHERE id = ?",
+                        month, companyId);
+                if (rows == 0) throw new ResourceNotFoundException("Company " + companyId + " not found");
+            }
         }
         if (req.defaultNoticePeriodDays()   != null) cfg.setDefaultNoticePeriodDays(req.defaultNoticePeriodDays());
         if (req.probationPeriodMonths()     != null) cfg.setProbationPeriodMonths(req.probationPeriodMonths());
-        if (req.retirementAge()             != null) cfg.setRetirementAge(req.retirementAge());
+        if (req.retirementAge()             != null) {
+            // Same range the retirement-due list and alerts accept (RetirementService);
+            // outside it they would silently fall back to 60 while the page showed this value.
+            if (req.retirementAge() < 30 || req.retirementAge() > 100) {
+                throw new BusinessRuleException("Retirement age must be between 30 and 100 years",
+                        "INVALID_RETIREMENT_AGE");
+            }
+            cfg.setRetirementAge(req.retirementAge());
+        }
         if (req.enableLateAutoDeduction()   != null) cfg.setEnableLateAutoDeduction(req.enableLateAutoDeduction());
         if (req.lateGraceMinutes()          != null) cfg.setLateGraceMinutes(req.lateGraceMinutes());
         if (req.enforceGeofencingForMobile()!= null) cfg.setEnforceGeofencingForMobile(req.enforceGeofencingForMobile());
