@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addMonths, emptyText, isValidRange, maxTo, presetRange, rangeLabel, rangeOf, rangeOptions, rowLabels, serverRange, viewAllPath } from './milestoneRange'
+import { addMonths, emptyText, isValidRange, lastTo, maxTo, presetRange, rangeLabel, rangeOf, rangeOptions, rangeReach, reachNote, rowLabels, serverRange, viewAllPath } from './milestoneRange'
 
 const today = '2026-09-26'
 
@@ -34,6 +34,31 @@ describe('upcoming milestones: date ranges', () => {
     expect(isValidRange('2026-02-30', '2026-03-01')).toBe(false)
     expect(isValidRange('nope', '2026-03-01')).toBe(false)
     expect(isValidRange(null, '2026-03-01')).toBe(false)
+  })
+
+  it('a custom range reaches only as far as the server shows', () => {
+    // Birthdays and anniversaries: a year either side of today.
+    expect(rangeReach('birthdays', today)).toEqual({ min: '2025-09-26', max: '2027-09-26' })
+    expect(rangeReach('anniversaries', today, true)).toEqual({ min: '2025-09-26', max: '2027-09-26' })
+    // Retirements on the milestones list: today to 60 months on; from retirement due: no limit.
+    expect(rangeReach('retirements', today)).toEqual({ min: today, max: '2031-09-26' })
+    expect(rangeReach('retirements', today, true)).toEqual({})
+    // Every preset stays inside the reach.
+    for (const kind of ['birthdays', 'anniversaries', 'retirements'] as const) {
+      const reach = rangeReach(kind, today)
+      for (const o of rangeOptions(kind).filter((x) => x.value !== 'custom')) {
+        const r = presetRange(kind, o.value, today)
+        expect(r.from >= reach.min! && r.to <= reach.max!).toBe(true)
+      }
+    }
+    // The To calendar ends at 12 months less a day, or at the reach's end if sooner.
+    expect(lastTo('2027-06-01')).toBe('2028-05-31')
+    expect(lastTo('2027-06-01', rangeReach('birthdays', today))).toBe('2027-09-26')
+    expect(lastTo('2031-06-01', rangeReach('retirements', today))).toBe('2031-09-26')
+    expect(lastTo('2031-06-01', rangeReach('retirements', today, true))).toBe('2032-05-31')
+    expect(reachNote('birthdays', rangeReach('birthdays', today))).toBe('Up to 12 months, within a year of today.')
+    expect(reachNote('retirements', rangeReach('retirements', today))).toBe('Up to 12 months, from today to 5 years ahead.')
+    expect(reachNote('retirements', rangeReach('retirements', today, true))).toBe('Up to 12 months.')
   })
 
   it('a list on its own window asks the server for nothing new; a range asks for its dates', () => {

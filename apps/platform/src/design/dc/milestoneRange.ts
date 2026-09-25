@@ -36,6 +36,31 @@ const endOfMonth = (iso: string) => { const d = dt(iso); return isoOf(new Date(d
 /** The latest end a range starting on `from` may have: 12 months less a day (the server refuses longer). */
 export const maxTo = (from: string) => addDays(addMonths(from, 12), -1)
 
+/** The earliest start and latest end a custom range may have; undefined = no limit. */
+export interface RangeReach { min?: string; max?: string }
+
+/**
+ * How far a custom range may reach. GET /v1/hrms/milestones is open to every
+ * employee, so a range there shows no more than its windows always did (the
+ * server drops the rest): birthdays and work anniversaries within 12 months
+ * either side of today, retirements from today to 60 months on. Retirements
+ * from retirement due (`retirementDue`: people who can read employee records,
+ * one company) have no such limit.
+ */
+export function rangeReach(kind: MilestoneKind, today: string, retirementDue = false): RangeReach {
+  if (kind !== 'retirements') return { min: addMonths(today, -12), max: addMonths(today, 12) }
+  return retirementDue ? {} : { min: today, max: addMonths(today, 60) }
+}
+
+/** The line under a custom range: its length, and how far it reaches when that is limited. */
+export function reachNote(kind: MilestoneKind, reach: RangeReach): string {
+  if (!reach.min && !reach.max) return 'Up to 12 months.'
+  return kind === 'retirements' ? 'Up to 12 months, from today to 5 years ahead.' : 'Up to 12 months, within a year of today.'
+}
+
+/** The latest end for a custom range from `from`: 12 months less a day, or the reach's end if sooner. */
+export const lastTo = (from: string, reach: RangeReach = {}) => (reach.max && reach.max < maxTo(from) ? reach.max : maxTo(from))
+
 /** A usable range: real dates, the end not before the start, at most 12 months. */
 export function isValidRange(from?: string | null, to?: string | null): boolean {
   if (!from || !to || !ISO.test(from) || !ISO.test(to)) return false

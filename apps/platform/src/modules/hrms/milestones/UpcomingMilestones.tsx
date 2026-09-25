@@ -4,7 +4,7 @@ import { Cake, Award, PartyPopper, type LucideIcon } from 'lucide-react'
 import { usePermission, P } from '@unifiedtree/sdk'
 import type { Milestone } from '../api/useMilestones'
 import { istToday } from '@/design/dc/dates'
-import { emptyText, rangeLabel, rangeOf, type MilestoneKind, type RangeChoice } from '@/design/dc/milestoneRange'
+import { emptyText, rangeLabel, rangeOf, rangeReach, type MilestoneKind, type RangeChoice } from '@/design/dc/milestoneRange'
 import {
   INITIAL_CHOICES, MilestoneCustomRange, MilestoneRangeMenu, useMilestoneColumns, type MilestoneColumn, type RangeTone,
 } from '@/design/dc/MilestonesCard'
@@ -95,7 +95,7 @@ const Column: React.FC<ColumnProps> = ({
       </span>
     </div>
     {choice.preset === 'custom'
-      ? <MilestoneCustomRange value={range} today={today} onChange={(r) => onChoice({ preset: 'custom', ...r })} />
+      ? <MilestoneCustomRange kind={kind} value={range} today={today} reach={rangeReach(kind, today)} onChange={(r) => onChoice({ preset: 'custom', ...r })} />
       : <p className="mb-3 text-[11.5px] tabular-nums text-text-secondary" data-milestone-range>{rangeLabel(range)}</p>}
 
     {isLoading ? (

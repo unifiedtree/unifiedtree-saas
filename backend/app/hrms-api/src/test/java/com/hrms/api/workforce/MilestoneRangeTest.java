@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
 
 import java.sql.ResultSet;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -24,7 +25,8 @@ import static org.mockito.Mockito.*;
 /**
  * The dashboard's "Upcoming milestones" date ranges, without a database: the
  * year end, 29 February, anniversaries (never the joining year), the
- * 12-month cap, and that a list without a range keeps its window.
+ * 12-month cap, how far a range reaches on the endpoint every employee can
+ * call, and that a list without a range keeps its window.
  */
 class MilestoneRangeTest {
 
@@ -119,9 +121,14 @@ class MilestoneRangeTest {
         }).when(jdbc).query(contains(column + " AS src"), any(RowCallbackHandler.class), eq(tenant));
     }
 
+    /** "Today" for the controller's chosen ranges in these tests (noon in India). */
+    private static final LocalDate TODAY = LocalDate.parse("2026-09-26");
+
     private MilestonesController controller(JdbcTemplate jdbc, RetirementService retirements) {
         TenantContext.setTenantId(tenant);
-        return new MilestonesController(jdbc, mock(MilestoneReminderService.class), retirements);
+        MilestonesController c = new MilestonesController(jdbc, mock(MilestoneReminderService.class), retirements);
+        c.clock = Clock.fixed(TODAY.atTime(12, 0).atZone(ZoneId.of("Asia/Kolkata")).toInstant(), ZoneId.of("Asia/Kolkata"));
+        return c;
     }
 
     @Test void birthdaysInARangeAcrossTheYearEndAreSoonestFirst() throws Exception {
@@ -191,6 +198,72 @@ class MilestoneRangeTest {
         assertThrows(BusinessRuleException.class, () -> c.upcoming(14, 31, 6, d("2026-10-01"), d("2027-10-01"), null, null, null, null));
         assertThrows(BusinessRuleException.class, () -> c.upcoming(14, 31, 6, null, null, d("2026-10-01"), null, null, null));
         verifyNoInteractions(jdbc);
+    }
+
+    // -- how far a range reaches on GET /v1/hrms/milestones (any employee) -----------
+
+    @Test void aRetirementRangeReachesFromTodayToSixtyMonthsOnAsTheWindowDid() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        RetirementService retirements = mock(RetirementService.class);
+        MilestonesController c = controller(jdbc, retirements);
+
+        // Years out: nothing, and nothing is read (a retirement date and age give away a date of birth).
+        var far = c.upcoming(14, 31, 6, null, null, null, null, d("2045-01-01"), d("2045-12-31"));
+        assertEquals(List.of(), far.retirements());
+        verify(retirements, never()).between(any(), any(), any(), any(), any());
+
+        // Across the 60-month end: only up to it.
+        c.upcoming(14, 31, 6, null, null, null, null, d("2031-06-01"), d("2032-05-31"));
+        verify(retirements).between(eq(tenant), eq(TODAY), eq(d("2031-06-01")), eq(d("2031-09-26")), isNull());
+
+        // Into the past: from today only (people past retirement age who are still working stay hidden).
+        c.upcoming(14, 31, 6, null, null, null, null, d("2026-01-01"), d("2026-12-31"));
+        verify(retirements).between(eq(tenant), eq(TODAY), eq(TODAY), eq(d("2026-12-31")), isNull());
+
+        // Wholly in the past: nothing.
+        assertEquals(List.of(), c.upcoming(14, 31, 6, null, null, null, null, d("2025-01-01"), d("2025-12-31")).retirements());
+        verifyNoMoreInteractions(retirements);
+    }
+
+    @Test void aBirthdayRangeReachesAYearEitherSideOfToday() throws Exception {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        feed(jdbc, "e.date_of_birth",
+                row("nov", "Nia", "Rao", null, "1990-11-01"),
+                row("mar", "Mani", "Iyer", null, "1990-03-01"));
+        MilestonesController c = controller(jdbc, mock(RetirementService.class));
+
+        // Decades back: which people show up in 1994 would give away who was born before it.
+        assertEquals(List.of(), c.upcoming(14, 31, 6, d("1994-06-01"), d("1995-05-31"), null, null, null, null).birthdays());
+        verify(jdbc, never()).query(contains("e.date_of_birth AS src"), any(RowCallbackHandler.class), eq(tenant));
+
+        // Last year: only from a year before today (26 Sep 2025), so 1 March 2025 is dropped.
+        var lastYear = c.upcoming(14, 31, 6, d("2025-01-01"), d("2025-12-31"), null, null, null, null).birthdays();
+        assertEquals(List.of("nov"), lastYear.stream().map(MilestonesController.Milestone::employeeId).toList());
+        assertEquals(d("2025-11-01"), lastYear.get(0).date());
+    }
+
+    @Test void anAnniversaryRangeNeverShowsSomeoneWhoHasNotJoinedYet() throws Exception {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        feed(jdbc, "e.date_of_joining",
+                row("soon", "Soon", "Joiner", null, "2026-10-15"),
+                row("seven", "Seven", "Years", null, "2020-03-10"));
+        // Ends a year after today at most, so the first anniversary of a future joiner (15 Oct 2027) is out of reach.
+        var res = controller(jdbc, mock(RetirementService.class))
+                .upcoming(14, 31, 6, null, null, d("2027-01-01"), d("2027-12-31"), null, null);
+
+        assertEquals(List.of("seven"), res.anniversaries().stream().map(MilestonesController.Milestone::employeeId).toList());
+        assertEquals(7, res.anniversaries().get(0).years());
+    }
+
+    @Test void withinKeepsThePartOfARangeInsideItsReach() {
+        LocalDate min = d("2026-09-26"), max = d("2031-09-26");
+        assertEquals(r("2026-10-01", "2027-03-31"), MilestonesController.within(r("2026-10-01", "2027-03-31"), min, max));
+        assertEquals(r("2026-09-26", "2026-12-31"), MilestonesController.within(r("2026-01-01", "2026-12-31"), min, max));
+        assertEquals(r("2031-06-01", "2031-09-26"), MilestonesController.within(r("2031-06-01", "2032-05-31"), min, max));
+        assertNull(MilestonesController.within(r("2045-01-01", "2045-12-31"), min, max));
+        assertNull(MilestonesController.within(r("2025-01-01", "2025-12-31"), min, max));
+        // Both ends are included.
+        assertEquals(r("2031-09-26", "2031-09-26"), MilestonesController.within(r("2031-09-26", "2032-01-31"), min, max));
     }
 
     // -- retirement due and the directory's "View all" -----------------------------

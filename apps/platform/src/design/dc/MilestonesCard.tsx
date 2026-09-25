@@ -19,8 +19,8 @@ import { DatePicker } from './DatePicker'
 import { dashIcon } from './icons'
 import { dt, istToday, MON } from './dates'
 import {
-  DEFAULT_CHOICE, choiceLabel, emptyText, maxTo, presetRange, rangeLabel, rangeOf, rangeOptions, rowLabels, serverRange, viewAllPath,
-  type DateRange, type MilestoneKind, type RangeChoice, type RangePreset,
+  DEFAULT_CHOICE, choiceLabel, emptyText, lastTo, presetRange, rangeLabel, rangeOf, rangeOptions, rangeReach, reachNote, rowLabels, serverRange, viewAllPath,
+  type DateRange, type MilestoneKind, type RangeChoice, type RangePreset, type RangeReach,
 } from './milestoneRange'
 import './MilestonesCard.css'
 
@@ -36,6 +36,9 @@ const fromDue = (rows?: RetirementDue[]): Milestone[] => (rows ?? []).map((r) =>
   employeeId: r.employeeId, name: r.name, initials: r.initials, department: r.department, date: r.retirementDate, years: r.retirementAge,
 }))
 
+/** Whether retirements come from retirement due (one company, people who can read employee records). */
+export const usesRetirementDue = (opts: { companyId?: string; canReadEmployees?: boolean }) => !!opts.canReadEmployees && !!opts.companyId
+
 /**
  * The three lists for the chosen ranges. A list on its own window reads the
  * request the dashboard already makes (same query, shared cache); a range asks
@@ -47,7 +50,7 @@ export function useMilestoneColumns(
   opts: { today: string; companyId?: string; canReadEmployees?: boolean },
 ): Record<MilestoneKind, MilestoneColumn> {
   const { today, companyId } = opts
-  const companyScoped = !!opts.canReadEmployees && !!companyId
+  const companyScoped = usesRetirementDue(opts)
   const bRange = serverRange('birthdays', choices.birthdays, today)
   const aRange = serverRange('anniversaries', choices.anniversaries, today)
   const rRange = serverRange('retirements', choices.retirements, today)
@@ -164,11 +167,18 @@ export function MilestoneRangeMenu({ kind, choice, today, tone = 'ok', onChange 
   )
 }
 
-/** From / To on the calendar for a custom range. To stays within 12 months of From. */
-export function MilestoneCustomRange({ value, today, onChange }: { value: DateRange; today: string; onChange: (r: DateRange) => void }) {
+/**
+ * From / To on the calendar for a custom range. To stays within 12 months of
+ * From, and both stay inside `reach` (rangeReach: how far the list's source
+ * shows).
+ */
+export function MilestoneCustomRange({ kind, value, today, reach = {}, onChange }: {
+  kind: MilestoneKind; value: DateRange; today: string; reach?: RangeReach; onChange: (r: DateRange) => void
+}) {
   const setFrom = (from: string) => {
     if (!from) return
-    const to = value.to < from ? from : value.to > maxTo(from) ? maxTo(from) : value.to
+    const end = lastTo(from, reach)
+    const to = value.to < from ? from : value.to > end ? end : value.to
     onChange({ from, to })
   }
   const setTo = (to: string) => { if (to) onChange({ from: value.from, to }) }
@@ -177,13 +187,13 @@ export function MilestoneCustomRange({ value, today, onChange }: { value: DateRa
     <div role="group" aria-label="Custom date range" style={{ display: 'grid', gap: 8, margin: '6px 0 8px' }}>
       <div style={{ display: 'grid', gap: 4, minWidth: 0 }}>
         <span style={label}>From</span>
-        <DatePicker value={value.from} today={today} onChange={(_e: unknown, v: string) => setFrom(v)} label="From" />
+        <DatePicker value={value.from} today={today} min={reach.min} max={reach.max} onChange={(_e: unknown, v: string) => setFrom(v)} label="From" />
       </div>
       <div style={{ display: 'grid', gap: 4, minWidth: 0 }}>
         <span style={label}>To</span>
-        <DatePicker value={value.to} today={today} min={value.from} max={maxTo(value.from)} onChange={(_e: unknown, v: string) => setTo(v)} label="To" />
+        <DatePicker value={value.to} today={today} min={value.from} max={lastTo(value.from, reach)} onChange={(_e: unknown, v: string) => setTo(v)} label="To" />
       </div>
-      <p style={{ margin: 0, fontSize: 11.5, color: '#64748b' }}>Up to 12 months.</p>
+      <p style={{ margin: 0, fontSize: 11.5, color: '#64748b' }}>{reachNote(kind, reach)}</p>
     </div>
   )
 }
@@ -196,9 +206,9 @@ const COLS: { kind: MilestoneKind; title: string; icon: string; tone: RangeTone 
   { kind: 'retirements', title: 'Retirements', icon: 'star', tone: 'ok' },
 ]
 
-function Column({ kind, title, icon, tone, choice, col, today, onChoice, onNavigate }: {
+function Column({ kind, title, icon, tone, choice, col, today, reach, onChoice, onNavigate }: {
   kind: MilestoneKind; title: string; icon: string; tone: RangeTone; choice: RangeChoice; col: MilestoneColumn; today: string
-  onChoice: (c: RangeChoice) => void; onNavigate: (path: string) => void
+  reach: RangeReach; onChoice: (c: RangeChoice) => void; onNavigate: (path: string) => void
 }) {
   const [all, setAll] = useState(false)
   const range = rangeOf(kind, choice, today)
@@ -218,7 +228,7 @@ function Column({ kind, title, icon, tone, choice, col, today, onChoice, onNavig
         <MilestoneRangeMenu kind={kind} choice={choice} today={today} tone={tone} onChange={onChoice} />
       </div>
       {choice.preset === 'custom'
-        ? <MilestoneCustomRange value={range} today={today} onChange={(r) => onChoice({ preset: 'custom', ...r })} />
+        ? <MilestoneCustomRange kind={kind} value={range} today={today} reach={reach} onChange={(r) => onChoice({ preset: 'custom', ...r })} />
         : <p data-milestone-range style={{ margin: '0 0 2px', fontSize: 11.5, color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{rangeLabel(range)}</p>}
       <div style={{ display: 'grid', flex: 1, alignContent: 'start', ...(all && rows.length > MAX_ROWS ? { maxHeight: 440, overflowY: 'auto', padding: '0 6px', margin: '0 -6px' } : {}) }} aria-busy={col.isLoading || undefined}>
         {col.isLoading ? (
@@ -267,6 +277,7 @@ export function MilestonesCard({ today: todayProp, companyId, canReadEmployees, 
   const today = todayProp || istToday()
   const [choices, setChoices] = useState<Record<MilestoneKind, RangeChoice>>(INITIAL_CHOICES)
   const cols = useMilestoneColumns(choices, { today, companyId, canReadEmployees })
+  const retirementDue = usesRetirementDue({ companyId, canReadEmployees })
   const go = (path: string) => onNavigate && onNavigate(path)
   return (
     <div data-milestones-card style={{ minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 2px rgba(15,23,42,.04)', padding: '20px 22px' }}>
@@ -279,7 +290,7 @@ export function MilestonesCard({ today: todayProp, companyId, canReadEmployees, 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(max(220px,30%),1fr))', gap: 12 }}>
         {COLS.map((c) => (
           <Column
-            key={c.kind} {...c} choice={choices[c.kind]} col={cols[c.kind]} today={today} onNavigate={go}
+            key={c.kind} {...c} choice={choices[c.kind]} col={cols[c.kind]} today={today} reach={rangeReach(c.kind, today, retirementDue)} onNavigate={go}
             onChoice={(next) => setChoices((cur) => ({ ...cur, [c.kind]: next }))}
           />
         ))}

@@ -13,7 +13,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -47,6 +49,12 @@ import java.util.UUID;
  * {@link MilestoneWindow#occurrenceIn} (the year end, 29 February, and no
  * anniversary in the joining year) and the company's retirement age.
  *
+ * <p><b>How far a range reaches.</b> A range shows no more than the windows
+ * always did, since anyone can call this: birthdays and work anniversaries
+ * within {@link #YEARLY_REACH_MONTHS} months either side of today, retirements
+ * from today to {@link #RETIREMENT_REACH_MONTHS} months on. The part of a range
+ * outside that is dropped (see {@link #within}).
+ *
  * <p>Read-only, tenant-scoped, and visible to any authenticated member of the
  * workspace: knowing a colleague's birthday is not privileged information, and
  * the payload deliberately carries no contact details, salary or identifiers
@@ -56,9 +64,28 @@ import java.util.UUID;
 @RequestMapping("/v1/hrms/milestones")
 public class MilestonesController {
 
+    /**
+     * Birthdays and work anniversaries: a range reaches at most this many months
+     * before or after today. Further back, which people show up in a year would
+     * give away their birth year (nobody has a birthday before they are born);
+     * further ahead, it would list the first anniversary of someone who has not
+     * joined yet. The old windows showed neither.
+     */
+    static final int YEARLY_REACH_MONTHS = 12;
+    /**
+     * Retirements: a range covers today to this many months on, the longest
+     * window this endpoint ever allowed (retirementMonths up to 60). A
+     * retirement date and age give away a date of birth, so this list must not
+     * reach further, or into the past. Retirement due
+     * (/v1/hrms/retirements/due) needs hrms.employee.read and has no such limit.
+     */
+    static final int RETIREMENT_REACH_MONTHS = 60;
+
     private final JdbcTemplate jdbc;
     private final MilestoneReminderService reminders;
     private final RetirementService retirementService;
+    /** "Today" for chosen ranges: the India business date. Tests fix it. */
+    Clock clock = Clock.system(ZoneId.of("Asia/Kolkata"));
 
     public MilestonesController(JdbcTemplate jdbc, MilestoneReminderService reminders,
                                 RetirementService retirementService) {
@@ -92,11 +119,29 @@ public class MilestonesController {
         int bDays = clamp(birthdayDays, 1, 366);
         int aDays = clamp(anniversaryDays, 1, 366);
         int rMonths = clamp(retirementMonths, 1, 60);
+        LocalDate today = LocalDate.now(clock);
+        LocalDate yearlyMin = today.minusMonths(YEARLY_REACH_MONTHS), yearlyMax = today.plusMonths(YEARLY_REACH_MONTHS);
 
         return new MilestonesResponse(
-                bRange == null ? birthdays(tenantId, bDays) : yearlyIn(tenantId, "e.date_of_birth", bRange, false),
-                aRange == null ? anniversaries(tenantId, aDays) : yearlyIn(tenantId, "e.date_of_joining", aRange, true),
-                rRange == null ? retirements(tenantId, rMonths) : retirementsIn(tenantId, rRange));
+                bRange == null ? birthdays(tenantId, bDays)
+                        : yearlyIn(tenantId, "e.date_of_birth", within(bRange, yearlyMin, yearlyMax), false),
+                aRange == null ? anniversaries(tenantId, aDays)
+                        : yearlyIn(tenantId, "e.date_of_joining", within(aRange, yearlyMin, yearlyMax), true),
+                rRange == null ? retirements(tenantId, rMonths)
+                        : retirementsIn(tenantId, today, within(rRange, today, today.plusMonths(RETIREMENT_REACH_MONTHS))));
+    }
+
+    /**
+     * The part of a chosen range between {@code min} and {@code max} (both
+     * included), or null when none of it is: how far a range may reach here
+     * ({@link #YEARLY_REACH_MONTHS}, {@link #RETIREMENT_REACH_MONTHS}).
+     * Dropped rather than refused, so a browser whose clock is a day out still
+     * gets its list; the dashboard never asks for more.
+     */
+    static Range within(Range range, LocalDate min, LocalDate max) {
+        LocalDate from = range.from().isBefore(min) ? min : range.from();
+        LocalDate to = range.to().isAfter(max) ? max : range.to();
+        return to.isBefore(from) ? null : new Range(from, to);
     }
 
     /**
@@ -210,9 +255,11 @@ public class MilestonesController {
      * at both years, 29 February falls on 28 February in other years, and the
      * joining year itself is not an anniversary.
      *
-     * @param col qualified source column, {@code e.date_of_birth} or {@code e.date_of_joining}
+     * @param col   qualified source column, {@code e.date_of_birth} or {@code e.date_of_joining}
+     * @param range already cut to this endpoint's reach; null lists nobody
      */
     private List<Milestone> yearlyIn(UUID tenantId, String col, Range range, boolean anniversary) {
+        if (range == null) return List.of();
         List<Milestone> out = new ArrayList<>();
         jdbc.query("""
                 SELECT e.id, e.first_name, e.last_name, e.employee_code,
@@ -239,9 +286,13 @@ public class MilestonesController {
         return out;
     }
 
-    /** Retirements inside a chosen range, at each company's retirement age (RetirementService). */
-    private List<Milestone> retirementsIn(UUID tenantId, Range range) {
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+    /**
+     * Retirements inside a chosen range, at each company's retirement age
+     * (RetirementService). {@code range} is already cut to this endpoint's
+     * reach; null lists nobody.
+     */
+    private List<Milestone> retirementsIn(UUID tenantId, LocalDate today, Range range) {
+        if (range == null) return List.of();
         return retirementService.between(tenantId, today, range.from(), range.to(), null).stream()
                 .map(r -> new Milestone(r.employeeId().toString(), r.name(), r.initials(), r.department(),
                         r.retirementDate(), r.retirementAge()))

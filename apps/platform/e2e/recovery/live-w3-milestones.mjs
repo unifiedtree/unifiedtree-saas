@@ -7,7 +7,11 @@
 //  2. "View all": the directory's milestone filter with the same range picks
 //     the same people; retirement due takes the range too.
 //  3. Access: department manager and employee see what they saw before (the
-//     milestones list; still refused on the directory and retirement due).
+//     milestones list; still refused on the directory and retirement due). A
+//     range on the milestones list reaches no further than its old windows:
+//     birthdays / anniversaries a year either side of today (no birth years,
+//     no anniversaries of people not yet joined), retirements today to 60
+//     months on (no dates of birth from far or past retirements).
 //  4. Browser (owner): each preset changes the dashboard card's list, a custom
 //     range on the calendar across the year end, "View all" opens the directory
 //     on that range; the manager's dashboard and the employee's staff dashboard
@@ -82,7 +86,12 @@ const soon = addDays(today, 2) <= endOfMonth(today) ? addDays(today, 2) : today
 const nextM = addDays(firstOfMonth(today, 1), 9)
 const in3 = addDays(firstOfMonth(today, 2), 14)
 const in6 = addDays(firstOfMonth(today, 5), 9)
-const yearEnd = { from: `${year}-12-15`, to: `${year + 1}-01-20` }
+// The nearest December-to-January inside a year of today (the reach of a birthday range).
+const yeY = today < `${year}-01-20` ? year - 1 : year
+const yearEnd = { from: `${yeY}-12-15`, to: `${yeY + 1}-01-20` }
+// Retirement fixtures outside the milestones list's reach: 7 years on, and 2 months ago (still working).
+const farRetire = addMonths(today, 84)
+const pastRetire = addMonths(today, -2)
 
 async function login(email) {
   const r = await fetch(`${api}/v1/canonical-auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant }, body: JSON.stringify({ tenantId: tenant, email, password }) })
@@ -90,7 +99,7 @@ async function login(email) {
   if (!d.accessToken) throw new Error(`login failed for ${email}: ${r.status}`)
   const call = async (path, method = 'GET', body) => {
     const res = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${d.accessToken}` }, body: body === undefined ? undefined : JSON.stringify(body) })
-    const text = await res.text(); let json = null; try { json = text ? JSON.parse(text) : null } catch { json = text }
+    const text = await res.text(); let json; try { json = text ? JSON.parse(text) : null } catch { json = text }
     return { status: res.status, json }
   }
   return { call }
@@ -126,6 +135,8 @@ try {
     a3: await hire('AThree', { dateOfJoining: withYear(in3, year - 1) }),
     aNew: await hire('ANew', { dateOfJoining: nextM }),
     r3: await hire('RThree', { dateOfBirth: withYear(in3, Number(in3.slice(0, 4)) - age), dateOfJoining: joinedOn }),
+    rFar: await hire('RFar', { dateOfBirth: withYear(farRetire, Number(farRetire.slice(0, 4)) - age), dateOfJoining: joinedOn }),
+    rPast: await hire('RPast', { dateOfBirth: withYear(pastRetire, Number(pastRetire.slice(0, 4)) - age), dateOfJoining: joinedOn }),
   }
   check('fixtures: test employees created', created.length === Object.keys(F).length)
   const retireOn = in3
@@ -158,8 +169,9 @@ try {
   check('API anniversaries count the years (1 and 3)', a3row?.years === 1 && aNextRow?.years === 3, JSON.stringify([a3row, aNextRow]).slice(0, 200))
   const ye = await ms(owner, { birthdayFrom: yearEnd.from, birthdayTo: yearEnd.to })
   const yeRows = (ye.json?.birthdays || []).filter((m) => [F.bDec.id, F.bJan.id].includes(m.employeeId))
-  check('API birthdays across the year end: 20 Dec and 5 Jan, soonest first', ye.status === 200 && yeRows.length === 2 && yeRows[0].date === `${year}-12-20` && yeRows[1].date === `${year + 1}-01-05` && !ids(ye.json?.birthdays).has(F.b3.id), JSON.stringify(yeRows).slice(0, 200))
-  const nonLeap = [year, year + 1, year + 2].find((y) => !((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0))
+  check('API birthdays across the year end: 20 Dec and 5 Jan, soonest first', ye.status === 200 && yeRows.length === 2 && yeRows[0].date === `${yeY}-12-20` && yeRows[1].date === `${yeY + 1}-01-05` && !ids(ye.json?.birthdays).has(F.b3.id), JSON.stringify(yeRows).slice(0, 200))
+  // A February to March in a non-leap year, inside a year of today.
+  const nonLeap = [year - 1, year, year + 1].find((y) => !((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) && `${y}-02-01` >= addMonths(today, -12) && `${y}-03-31` <= addMonths(today, 12))
   const leapRes = await ms(owner, { birthdayFrom: `${nonLeap}-02-01`, birthdayTo: `${nonLeap}-03-31` })
   check('API 29 February birthdays show on 28 February in a non-leap year', (leapRes.json?.birthdays || []).find((m) => m.employeeId === F.bLeap.id)?.date === `${nonLeap}-02-28`)
   const keys = Object.keys((ye.json?.birthdays || [])[0] || {}).sort().join(',')
@@ -203,7 +215,23 @@ try {
     check(`access: ${who} reads the milestones list with a range, as before without one`, r.status === 200 && ids(r.json?.birthdays).has(F.b3.id))
     check(`access: ${who} is still refused on the directory filter (403)`, (await dir(u, 'birthday', yearEnd)).status === 403)
     check(`access: ${who} is still refused on retirement due with a range (403)`, (await u.call(`/v1/hrms/retirements/due?from=${today}&to=${addMonths(today, 3)}`)).status === 403)
+    // A range reaches no further than the old windows did.
+    const far = await ms(u, { retirementFrom: addMonths(today, 78), retirementTo: addDays(addMonths(today, 90), -1) })
+    check(`access: ${who} sees no retirements more than 60 months out (no dates of birth)`, far.status === 200 && (far.json?.retirements || []).length === 0, `status=${far.status} n=${(far.json?.retirements || []).length}`)
+    const past = await ms(u, { retirementFrom: addMonths(today, -6), retirementTo: addMonths(today, 3) })
+    check(`access: ${who} sees retirements from today only (not people already past it)`, past.status === 200 && !ids(past.json?.retirements).has(F.rPast.id) && ids(past.json?.retirements).has(F.r3.id))
+    const born = await ms(u, { birthdayFrom: '1994-06-01', birthdayTo: '1995-05-31' })
+    check(`access: ${who} gets no birthdays decades back (no birth years)`, born.status === 200 && (born.json?.birthdays || []).length === 0, `status=${born.status} n=${(born.json?.birthdays || []).length}`)
+    const ahead = await ms(u, { anniversaryFrom: addMonths(today, 6), anniversaryTo: addDays(addMonths(today, 18), -1) })
+    check(`access: ${who} sees no anniversary of someone not joined yet`, ahead.status === 200 && !ids(ahead.json?.anniversaries).has(F.aNew.id))
   }
+  // Retirement due (people who can read employee records) still takes any range.
+  const dueFar = await owner.call(`/v1/hrms/retirements/due?from=${addMonths(today, 78)}&to=${addDays(addMonths(today, 90), -1)}&companyId=${company}`)
+  check('retirement due still shows a retirement 7 years out to people who can read employee records', dueFar.status === 200 && (dueFar.json || []).some((x) => x.employeeId === F.rFar.id && x.retirementDate === farRetire))
+  const duePast = await owner.call(`/v1/hrms/retirements/due?from=${addMonths(today, -6)}&to=${today}&companyId=${company}`)
+  check('retirement due still shows a past retirement to people who can read employee records', duePast.status === 200 && (duePast.json || []).some((x) => x.employeeId === F.rPast.id))
+  const ownerFar = await ms(owner, { retirementFrom: addMonths(today, 78), retirementTo: addDays(addMonths(today, 90), -1) })
+  check('the milestones list keeps the same reach for everyone (owner too)', ownerFar.status === 200 && !ids(ownerFar.json?.retirements).has(F.rFar.id))
 
   // ── 4. browser ────────────────────────────────────────────────────────────
   const session = async (email, width = 1440) => {
@@ -255,6 +283,17 @@ try {
     await settle(page)
   }
 
+  /** Opens a DatePicker and says whether its "Previous month" arrow can be used, then closes it. */
+  const prevEnabled = async (page, trigger) => {
+    await trigger.click()
+    const pop = page.getByRole('dialog', { name: /choose a date/i }).last()
+    await pop.waitFor({ timeout: 5_000 })
+    const on = await pop.getByRole('button', { name: /previous month/i }).first().isEnabled()
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(150)
+    return on
+  }
+
   // Owner: the admin dashboard card.
   {
     const { page, errors, failed, asked, done } = await session('owner@unifiedtree.demo')
@@ -294,13 +333,14 @@ try {
     await choose(page, 'birthdays', 'Custom range')
     const pickers = col(page, 'birthdays').locator('button[aria-haspopup="dialog"]')
     check('UI owner custom range: From and To calendars appear', (await pickers.count()) === 2)
+    check('UI owner custom range: birthdays say how far they reach', (await col(page, 'birthdays').innerText()).includes('within a year of today'))
     await pickDate(page, pickers.nth(0), yearEnd.from)
     await pickDate(page, pickers.nth(1), yearEnd.to)
     const ct = await listText(page, 'birthdays')
     const req = asked.find((u) => u.includes(`birthdayFrom=${yearEnd.from}`) && u.includes(`birthdayTo=${yearEnd.to}`))
     check('UI owner custom range across the year end lists 20 Dec and 5 Jan, not November', !!req && ct.includes(F.bDec.name) && ct.includes(F.bJan.name) && !ct.includes(F.b3.name), `req=${!!req}`)
     const toAria = (await pickers.nth(1).getAttribute('aria-label')) || ''
-    check('UI owner custom range: the To calendar shows the chosen day', toAria.includes(`${Number(yearEnd.to.slice(8))} Jan ${year + 1}`), toAria)
+    check('UI owner custom range: the To calendar shows the chosen day', toAria.includes(`${Number(yearEnd.to.slice(8))} Jan ${yeY + 1}`), toAria)
     await card.screenshot({ path: `${shots}/milestones-custom-1440.png` })
     // "View all" follows the range.
     await col(page, 'birthdays').getByRole('button', { name: /View all/ }).click()
@@ -315,6 +355,15 @@ try {
     await page.waitForTimeout(800)
     const body = await page.locator('body').innerText()
     check('UI owner directory: only the people inside the range (20 Dec, 5 Jan)', body.includes(F.bDec.name) && body.includes(F.bJan.name) && !body.includes(F.b3.name) && !body.includes(F.bSoon.name))
+    // Retirements from retirement due (a company is chosen): the calendar is not limited to the milestones list's reach.
+    await page.goto(base + '/dashboard')
+    await card.waitFor({ timeout: 30_000 })
+    await settle(page)
+    const viaDue = asked.some((u) => u.includes('/retirements/due'))
+    await choose(page, 'retirements', 'Custom range')
+    const rNote = await col(page, 'retirements').innerText()
+    const rPrev = await prevEnabled(page, col(page, 'retirements').locator('button[aria-haspopup="dialog"]').nth(0))
+    check('UI owner retirements custom range: limited to today .. 5 years only when read from the milestones list', viaDue ? (rPrev && rNote.includes('Up to 12 months.')) : (!rPrev && rNote.includes('from today to 5 years ahead')), `viaDue=${viaDue} prev=${rPrev}`)
     check('UI owner: no page errors', errors.length === 0, errors.slice(0, 3).join(' | '))
     check('UI owner: no failed milestone / retirement / directory-filter calls', failed.length === 0, failed.slice(0, 5).join(' | '))
     await done('owner')
@@ -380,6 +429,12 @@ try {
     const sb = await page.locator('[data-milestones-staff-card]').boundingBox(), mb = await menu.boundingBox()
     if (sb && mb) await page.screenshot({ path: `${shots}/milestones-staff-1440.png`, clip: { x: sb.x, y: sb.y, width: sb.width, height: Math.max(sb.y + sb.height, mb.y + mb.height + 8) - sb.y } })
     await page.keyboard.press('Escape')
+    // The custom range's calendars stay inside what the milestones list shows.
+    await choose(page, 'retirements', 'Custom range')
+    const rPick = col(page, 'retirements').locator('button[aria-haspopup="dialog"]')
+    check('UI employee retirements custom range: From starts today (no earlier month)', !(await prevEnabled(page, rPick.nth(0))) && (await col(page, 'retirements').innerText()).includes('from today to 5 years ahead'))
+    await choose(page, 'birthdays', 'Custom range')
+    check('UI employee birthdays custom range: From can go back (a year)', await prevEnabled(page, col(page, 'birthdays').locator('button[aria-haspopup="dialog"]').nth(0)))
     check('UI employee: no page errors', errors.length === 0, errors.slice(0, 3).join(' | '))
     check('UI employee: no failed milestone calls', failed.length === 0, failed.slice(0, 5).join(' | '))
     await done('employee')
