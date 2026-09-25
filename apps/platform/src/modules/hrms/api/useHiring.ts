@@ -195,6 +195,19 @@ export function useCandidates(requisitionId: string | undefined, enabled = true)
   })
 }
 
+/**
+ * Candidates across every requisition ("All roles" in the pipeline, and where
+ * the dashboard's stage counts open). Optional company filter.
+ */
+export function useAllCandidates(companyId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'hiring', 'candidates', 'all', companyId ?? ''],
+    queryFn: () => apiJson<Candidate[]>(`/v1/hiring/candidates${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`),
+    enabled,
+    staleTime: 15_000,
+  })
+}
+
 export interface CandidatePayload {
   fullName: string
   email?: string

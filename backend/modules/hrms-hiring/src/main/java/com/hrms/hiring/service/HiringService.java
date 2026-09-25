@@ -275,6 +275,14 @@ public class HiringService {
                 .toList();
     }
 
+    /** Candidates across every requisition, optionally for one company and one stage (oldest first). */
+    @Transactional(readOnly = true)
+    public List<CandidateResponse> getCandidatesAcrossRequisitions(UUID companyId, CandidateStage stage) {
+        return candidateRepository.findAcrossRequisitions(companyId, stage).stream()
+                .map(this::toCandidate)
+                .toList();
+    }
+
     @Transactional
     public CandidateResponse updateStage(UUID candidateId, CandidateStageRequest request) {
         Candidate candidate = candidateRepository.findById(candidateId)

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Pencil, UserPlus, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -13,7 +13,7 @@ import { OffersTab } from './hiring/OffersTab'
 import { useCompanies } from './api/useOrg'
 import {
   useRequisitions, useRequisition, useCreateRequisition, useUpdateRequisition, useCloseRequisition,
-  useCandidates, useAddCandidate, useUpdateCandidateStage, useConvertCandidate,
+  useCandidates, useAllCandidates, useAddCandidate, useUpdateCandidateStage, useConvertCandidate,
   inr, CANDIDATE_STAGES, EMPLOYMENT_TYPES,
   type RequisitionStatus, type CandidateStage, type EmploymentType, type JobRequisition, type Candidate,
 } from './api/useHiring'
@@ -335,14 +335,22 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
 
 // ── Pipeline ─────────────────────────────────────────────────────────────────
 
+/** The role picker's "All roles" value (?role=all). */
+const ALL_ROLES = 'all'
+
 function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
   const { toast } = useToast()
   const { data } = useRequisitions(0)
   const requisitions = useMemo(() => data?.content ?? [], [data])
   // ?role=<requisition id> opens that role's pipeline (the Requisitions list links here).
+  // ?role=all shows every role's candidates together; the dashboard's stage
+  // counts open it with ?stage=<STAGE> (and ?company=<id>), scrolled to that stage.
   const [params, setParams] = useSearchParams()
-  const [requisitionId, setRequisitionIdState] = useState(params.get('role') || '')
+  const focusStage = params.get('stage') || ''
+  const companyParam = params.get('company') || undefined
+  const [requisitionId, setRequisitionIdState] = useState(params.get('role') || (focusStage ? ALL_ROLES : ''))
   const setRequisitionId = (id: string) => { setRequisitionIdState(id); setParams((p) => { const n = new URLSearchParams(p); n.set('role', id); return n }, { replace: true }) }
+  const allRoles = requisitionId === ALL_ROLES
 
   useEffect(() => {
     if (!requisitionId && requisitions.length > 0) {
@@ -352,7 +360,15 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
   }, [requisitions, requisitionId])
 
   const selected: JobRequisition | undefined = requisitions.find((r) => r.id === requisitionId)
-  const { data: candidates = [], isLoading } = useCandidates(requisitionId || undefined)
+  const oneRole = useCandidates(allRoles ? undefined : requisitionId || undefined)
+  const everyRole = useAllCandidates(companyParam, allRoles)
+  const { data: candidates = [], isLoading } = allRoles ? everyRole : oneRole
+  const roleTitle = (id: string) => requisitions.find((r) => r.id === id)?.title
+  // Bring the stage the dashboard pointed at into view (the board scrolls sideways on narrow screens).
+  const stageRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    if (focusStage && !isLoading) stageRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'center' })
+  }, [focusStage, isLoading])
   const addCandidate = useAddCandidate()
   const updateStage = useUpdateCandidateStage()
   const convert = useConvertCandidate()
@@ -400,7 +416,7 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
   const onConvert = async (c: Candidate) => {
     const ok = await confirm({
       title: `Convert ${c.fullName} to an employee?`,
-      body: `Creates their employee record in the company of ${selected?.title ? `the "${selected.title}" requisition` : 'this requisition'}, with the name, email and phone on file, plus the department, role, joining date and CTC from the requisition and accepted offer where recorded. It uses one workspace seat. Complete the rest on their profile.`,
+      body: `Creates their employee record in the company of ${roleTitle(c.requisitionId) ? `the "${roleTitle(c.requisitionId)}" requisition` : 'this requisition'}, with the name, email and phone on file, plus the department, role, joining date and CTC from the requisition and accepted offer where recorded. It uses one workspace seat. Complete the rest on their profile.`,
       confirmLabel: 'Create employee',
     })
     if (!ok) return
@@ -419,9 +435,9 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Role</span>
         <div style={{ minWidth: 280 }}><HrSelect value={requisitionId} onChange={setRequisitionId} size="sm" placeholder={requisitions.length ? 'Choose a role' : 'No requisitions yet'}
-          options={requisitions.map((r) => ({ value: r.id, label: `${r.title} · ${fmtEnum(r.status)}` }))} /></div>
+          options={[...(requisitions.length ? [{ value: ALL_ROLES, label: 'All roles' }] : []), ...requisitions.map((r) => ({ value: r.id, label: `${r.title} · ${fmtEnum(r.status)}` }))]} /></div>
         {selected && <HrStatusPill tone={STATUS_TONE[selected.status]}>{`${selected.openings} ${selected.openings === 1 ? 'opening' : 'openings'}`}</HrStatusPill>}
-        {selected && <span style={{ fontSize: 12.5, color: '#64748b' }}>{`${candidates.length} ${candidates.length === 1 ? 'candidate' : 'candidates'}`}</span>}
+        {(selected || allRoles) && <span style={{ fontSize: 12.5, color: '#64748b' }}>{`${candidates.length} ${candidates.length === 1 ? 'candidate' : 'candidates'}${allRoles ? ' across every role' : ''}`}</span>}
       </div>
 
       {canAdd && (
@@ -456,7 +472,7 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
                 {CANDIDATE_STAGES.map((st) => {
                   const list = byStage.get(st) || []
                   return (
-                    <section key={st} role="listitem" aria-label={`${fmtEnum(st)}: ${list.length}`} style={{ ...CARD, background: '#f8fafc', padding: 10, display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', alignContent: 'start', gap: 8, minHeight: 180, minWidth: 0 }}>
+                    <section key={st} ref={st === focusStage ? stageRef : undefined} role="listitem" aria-label={`${fmtEnum(st)}: ${list.length}`} aria-current={st === focusStage ? 'true' : undefined} style={{ ...CARD, background: '#f8fafc', padding: 10, display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', alignContent: 'start', gap: 8, minHeight: 180, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px 6px' }}>
                         <h3 style={{ margin: 0, flex: 1, fontFamily: HEAD_FONT, fontSize: 14, fontWeight: 800 }}>{fmtEnum(st)}</h3>
                         <HrStatusPill tone={STAGE_TONE[st]}>{String(list.length)}</HrStatusPill>
@@ -466,6 +482,7 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
                         <article key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 12px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 8, minWidth: 0, overflow: 'hidden' }}>
                           <HrAvatar name={c.fullName} sub={c.email} seed={i} />
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 12, color: '#64748b' }}>
+                            {allRoles && roleTitle(c.requisitionId) && <span style={{ fontWeight: 600, color: '#334155' }}>{roleTitle(c.requisitionId)}</span>}
                             {c.source && <span>{c.source}</span>}
                             {c.expectedCtc != null && <span>· expects {inr(c.expectedCtc)}</span>}
                           </div>

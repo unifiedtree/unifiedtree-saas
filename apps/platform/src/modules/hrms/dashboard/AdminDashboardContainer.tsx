@@ -174,7 +174,7 @@ export function AdminDashboardContainer() {
       return { id: m.employeeId, name: m.name, dept: m.department || '', when, date }
     }
     return {
-      today, todayLabel: fmtLong(today), firstName,
+      today, todayLabel: fmtLong(today), firstName, companyId,
       greetingWord: (() => { const h = istHour(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' })(),
       counts: c, daily,
       summary: st ? {
@@ -209,7 +209,7 @@ export function AdminDashboardContainer() {
       probations: (probations.data ?? []).map((p) => ({ id: p.employeeId, code: p.employeeCode, name: p.employeeName, title: p.jobTitle || '', manager: p.managerName || '—', end: fmtShort(p.probationEndDate), days: p.daysRemaining })),
       ops: { corrections: corrections.data?.totalElements ?? 0, leave: leaveOverview.data?.pendingApprovals ?? 0 },
     }
-  }, [team.data, trend.data, directory.data, stats.data, alerts.data, seats.data, holidays.data, headcount.data, performers.data, onboarding.data, hiring.data, projects.data, runs.data, activity.data, notices.data, milestones.data, probations.data, corrections.data, leaveOverview.data, sel, today, firstName, canReadEmployees])
+  }, [team.data, trend.data, directory.data, stats.data, alerts.data, seats.data, holidays.data, headcount.data, performers.data, onboarding.data, hiring.data, projects.data, runs.data, activity.data, notices.data, milestones.data, probations.data, corrections.data, leaveOverview.data, sel, today, firstName, canReadEmployees, companyId])
 
   const d = data
   const sec: Record<SectionKey, { state: SectionStatus; retry: () => void }> = {

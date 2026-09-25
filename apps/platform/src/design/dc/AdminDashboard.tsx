@@ -34,6 +34,8 @@ export class AdminDashboard extends DCLogic {
     const p = this.props
     const D = p.data || {}
     const go = (path: string) => p.onNavigate && p.onNavigate(path)
+    // Hiring counts are company-wide across roles: open the pipeline's "All roles" board at that stage.
+    const hiringStage = (stage?: string) => `/hrms/hiring?tab=pipeline&role=all${stage ? `&stage=${stage}` : ''}${D.companyId ? `&company=${D.companyId}` : ''}`
     const ic = dashIcon
     const U = DashChart
     const secIn: Record<string, { state: SectionStatus; retry?: () => void }> = p.sec || {}
@@ -109,7 +111,7 @@ export class AdminDashboard extends DCLogic {
     const complianceDue = Number(s.complianceDue || 0), complianceDone = Number(s.complianceDone || 0)
     const summaryTiles = [
       s.active != null && tile('users', 'green', 'Active employees', sumEmpty ? 0 : s.active, 'Excludes exited and on-notice', '/hrms/employees?status=ACTIVE', sumLoading),
-      canHiring && s.openRoles != null && tile('briefcase', 'blue', 'Open roles', sumEmpty ? 0 : s.openRoles, sumEmpty || !s.openRoles ? 'No open requisitions' : s.pipeline != null ? `${s.pipeline} candidates in pipeline` : 'Open requisitions', '/hrms/hiring?status=OPEN', sumLoading),
+      canHiring && s.openRoles != null && tile('briefcase', 'blue', 'Open roles', sumEmpty ? 0 : s.openRoles, sumEmpty || !s.openRoles ? 'No open requisitions' : s.pipeline != null ? `${s.pipeline} candidates in pipeline` : 'Open requisitions', '/hrms/hiring?tab=requisitions', sumLoading),
       s.complianceDue != null && tile('shield', 'teal', 'Compliance completion', sumEmpty || !complianceDue ? 'No items due' : Math.round((complianceDone / complianceDue) * 100) + '%', sumEmpty || !complianceDue ? 'Nothing due this month through today' : sub(`${complianceDone} of ${complianceDue} obligations due this month through today completed`, ratio(complianceDone / complianceDue, 'teal', sumLoading, false)), '/hrms/compliance', sumLoading),
       hasPayroll && s.hasPayrollFigure && tile('rupee', 'purple', `Finalized payroll · ${s.payrollMonth || ''}`, sumEmpty || s.payrollGross == null ? 'Not finalized' : inr(s.payrollGross), sub('Gross amount from locked or paid payroll', spark(payVals, 'purple', sumLoading, sumEmpty)), '/hrms/payroll/runs', sumLoading),
     ].filter(Boolean)
@@ -173,7 +175,7 @@ export class AdminDashboard extends DCLogic {
     const hiring = {
       openJobs: h.openJobs, pipeline: h.stages.reduce((n: number, x: any) => n + x.count, 0),
       interviews: (h.stages.find((x: any) => x.stage === 'INTERVIEW') || {}).count || 0,
-      stages: h.stages.map((x: any, i: number) => ({ ...x, pct: Math.round((x.count / sMax) * 100), color: P.hire[i] || P.hire[0], tip: '→ ' + `/hrms/hiring?tab=candidates&stage=${x.stage}`, onClick: () => go(`/hrms/hiring?tab=candidates&stage=${x.stage}`) })),
+      stages: h.stages.map((x: any, i: number) => ({ ...x, pct: Math.round((x.count / sMax) * 100), color: P.hire[i] || P.hire[0], tip: '→ ' + hiringStage(x.stage), onClick: () => go(hiringStage(x.stage)) })),
     }
     const pj = D.projects || {}
     const pr = (D.payroll || []) as any[]
@@ -275,9 +277,9 @@ export class AdminDashboard extends DCLogic {
       goPerformance: () => go('/hrms/performance'),
       goOnboarding: () => go('/hrms/onboarding/instances'),
       goHiring: () => go('/hrms/hiring'),
-      goOpenRoles: () => go('/hrms/hiring?status=OPEN'),
-      goCandidates: () => go('/hrms/hiring?tab=candidates'),
-      goInterviews: () => go('/hrms/hiring?tab=candidates&stage=INTERVIEW'),
+      goOpenRoles: () => go('/hrms/hiring?tab=requisitions'),
+      goCandidates: () => go(hiringStage()),
+      goInterviews: () => go(hiringStage('INTERVIEW')),
       goProjects: () => go('/projects'),
       goPayroll: () => go('/hrms/payroll-dashboard'),
       goAudit: () => go('/audit-logs'),
@@ -312,8 +314,8 @@ export class AdminDashboard extends DCLogic {
       probationTips: JSON.stringify(probations.map((r) => '→ /hrms/employees/' + r.id)),
       tips: {
         goBilling: '→ /settings/billing', goAttendance: '→ ' + `/hrms/attendance?tab=team&date=${sel}`, goEmployees: '→ /hrms/employees', goPerformance: '→ /hrms/performance',
-        goOnboarding: '→ /hrms/onboarding/instances', goHiring: '→ /hrms/hiring', goOpenRoles: '→ /hrms/hiring?status=OPEN', goCandidates: '→ /hrms/hiring?tab=candidates',
-        goInterviews: '→ /hrms/hiring?tab=candidates&stage=INTERVIEW', goProjects: '→ /projects', goPayroll: '→ /hrms/payroll-dashboard', goAudit: '→ /audit-logs',
+        goOnboarding: '→ /hrms/onboarding/instances', goHiring: '→ /hrms/hiring', goOpenRoles: '→ /hrms/hiring?tab=requisitions', goCandidates: '→ ' + hiringStage(),
+        goInterviews: '→ ' + hiringStage('INTERVIEW'), goProjects: '→ /projects', goPayroll: '→ /hrms/payroll-dashboard', goAudit: '→ /audit-logs',
         goProbationList: '→ /hrms/employees?status=PROBATION', openNotice: 'Opens the Add notice form', backToToday: "Back to today's data",
       },
     }
