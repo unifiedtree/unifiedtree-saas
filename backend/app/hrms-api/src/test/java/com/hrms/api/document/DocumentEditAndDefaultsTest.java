@@ -72,6 +72,17 @@ class DocumentEditAndDefaultsTest {
         verify(jdbc, never()).update(anyString(), any(Object[].class));
     }
 
+    @Test void missingOnlyWhenTheWorkspaceHasNoTypes() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        UUID tenant = UUID.randomUUID();
+        com.hrms.core.tenant.TenantContext.setTenantId(tenant);
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class), eq(tenant))).thenReturn(false, true);
+        assertTrue(new DocumentTypeDefaults(jdbc).missing());
+        assertFalse(new DocumentTypeDefaults(jdbc).missing());
+        com.hrms.core.tenant.TenantContext.clear();
+        assertFalse(new DocumentTypeDefaults(jdbc).missing(), "no tenant: nothing to seed");
+    }
+
     @Test void noTenantNoSeed() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         assertEquals(0, new DocumentTypeDefaults(jdbc).ensureDefaults());

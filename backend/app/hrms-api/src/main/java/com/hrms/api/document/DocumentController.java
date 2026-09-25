@@ -208,7 +208,7 @@ public class DocumentController {
     public java.util.List<java.util.Map<String, Object>> myMissing(@AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
         // Same lazy seed as GET /types: a new workspace's required types must show here too.
-        if (typeDefaults != null) typeDefaults.ensureDefaults();
+        if (typeDefaults != null && typeDefaults.missing()) typeDefaults.ensureDefaults();
         return jdbc.query("""
                 SELECT t.id, t.code, t.display_name, t.allowed_formats, t.max_size_mb, t.expiry_tracked
                   FROM document_mgmt.document_types t

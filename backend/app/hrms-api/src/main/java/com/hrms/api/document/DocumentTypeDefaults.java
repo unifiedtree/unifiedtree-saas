@@ -53,6 +53,19 @@ public class DocumentTypeDefaults {
         this.jdbc = jdbc;
     }
 
+    /**
+     * True when the current tenant has no document type at all. Runs in the
+     * caller's transaction (no annotation), so a normal read costs one cheap query
+     * and never opens the second connection {@link #ensureDefaults()} needs.
+     */
+    public boolean missing() {
+        UUID tenant = TenantContext.getTenantId();
+        if (tenant == null) return false;
+        Boolean any = jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM document_mgmt.document_types WHERE tenant_id = ?)", Boolean.class, tenant);
+        return !Boolean.TRUE.equals(any);
+    }
+
     /** Seeds the defaults when the current tenant has no document types. Returns how many were inserted. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int ensureDefaults() {

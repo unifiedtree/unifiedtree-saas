@@ -62,7 +62,8 @@ public class DocumentTypeController {
     @Transactional(readOnly = true)
     public List<DocumentTypeDto> list(@RequestParam(defaultValue = "false") boolean includeInactive) {
         // A workspace created after V143.7 has no types at all; give it the defaults on first read.
-        defaults.ensureDefaults();
+        // Only the first read of an empty workspace takes the seeding transaction (a second connection).
+        if (defaults.missing()) defaults.ensureDefaults();
         String sql = includeInactive
                 ? "SELECT id, code, display_name, description, allowed_formats, max_size_mb, required, expiry_tracked, active, sort_order FROM document_mgmt.document_types ORDER BY sort_order, display_name"
                 : "SELECT id, code, display_name, description, allowed_formats, max_size_mb, required, expiry_tracked, active, sort_order FROM document_mgmt.document_types WHERE active = TRUE ORDER BY sort_order, display_name";
