@@ -18,8 +18,10 @@ public class CompanyNoticeController {
  private final JdbcTemplate jdbc;
  public CompanyNoticeController(JdbcTemplate jdbc){this.jdbc=jdbc;}
  public record Input(@NotNull UUID companyId,@NotBlank @Size(max=200) String title,@NotBlank @Size(max=5000) String body,LocalDate expiresOn){}
+ // Notices are company-wide announcements: everyone signed in to the workspace
+ // reads them (the tenant filter below scopes them); only org.company.write posts.
  @GetMapping
- @PreAuthorize("hasAuthority('org.company.read')")
+ @PreAuthorize("isAuthenticated()")
  @Transactional(readOnly=true)
  public Map<String,Object> list(@RequestParam UUID companyId,@RequestParam(defaultValue="0") int page) {
   if(page<0||page>100000)throw new BusinessRuleException("Invalid page","NOTICE_PAGE_INVALID");

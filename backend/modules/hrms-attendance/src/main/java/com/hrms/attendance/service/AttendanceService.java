@@ -366,7 +366,7 @@ public class AttendanceService {
         if (record.getCheckInAt() != null) {
             double hours = Duration.between(record.getCheckInAt(), checkOutAt).toMinutes() / 60.0;
             record.setWorkingHours(Math.round(hours * 100.0) / 100.0);
-            record.setOvertimeMinutes(calculateOvertimeMinutes(record.getWorkingHours()));
+            record.setOvertimeMinutes(calculateOvertimeMinutes(record));
         }
 
         AttendanceRecord saved = attendanceRecordRepository.save(record);
@@ -1109,7 +1109,7 @@ public class AttendanceService {
         if (record.getCheckInAt() != null) {
             double hours = Duration.between(record.getCheckInAt(), checkOutAt).toMinutes() / 60.0;
             record.setWorkingHours(Math.round(hours * 100.0) / 100.0);
-            record.setOvertimeMinutes(calculateOvertimeMinutes(record.getWorkingHours()));
+            record.setOvertimeMinutes(calculateOvertimeMinutes(record));
         }
         AttendanceRecord saved = attendanceRecordRepository.save(record);
         logEvent(saved, AttendanceEventType.CHECK_OUT, request.latitude(), request.longitude(),
@@ -1620,18 +1620,66 @@ public class AttendanceService {
                 : serverNow;
     }
 
-    private Integer calculateOvertimeMinutes(Double workingHours) {
+    /**
+     * Overtime is time on the clock beyond the employee's shift. The shift's
+     * length (end - start, overnight rolls over) already includes its break,
+     * so a normal 09:30-18:30 day is 0 overtime; before 2026-09-25 anything
+     * past a fixed 8 clock hours counted, which gave every full day 60 minutes.
+     * No shift assigned: the old 8-hour rule.
+     */
+    private Integer calculateOvertimeMinutes(AttendanceRecord record) {
+        Double workingHours = record.getWorkingHours();
         if (workingHours == null) {
             return 0;
         }
-        return (int) Math.max(0, Math.round((workingHours - STANDARD_HOURS) * 60));
+        double threshold = overtimeThresholdHours(record.getEmployeeId(), record.getAttendanceDate());
+        return (int) Math.max(0, Math.round((workingHours - threshold) * 60));
+    }
+
+    private double overtimeThresholdHours(UUID employeeId, LocalDate onDate) {
+        if (jdbcTemplate == null || employeeId == null || onDate == null) {
+            return STANDARD_HOURS;
+        }
+        try {
+            Double hours = jdbcTemplate.query("""
+                    SELECT sp.start_time, sp.end_time, sp.working_hours_per_day
+                      FROM attendance.employee_shift_assignments esa
+                      JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id
+                     WHERE esa.employee_id = ?
+                       AND esa.effective_from <= ?
+                       AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
+                       AND sp.is_active = TRUE
+                     ORDER BY esa.effective_from DESC
+                     LIMIT 1
+                    """,
+                    rs -> {
+                        if (!rs.next()) return null;
+                        java.sql.Time start = rs.getTime("start_time");
+                        java.sql.Time end = rs.getTime("end_time");
+                        double perDay = rs.getDouble("working_hours_per_day");
+                        if (rs.wasNull()) perDay = 0;
+                        double span = 0;
+                        if (start != null && end != null) {
+                            long minutes = Duration.between(start.toLocalTime(), end.toLocalTime()).toMinutes();
+                            if (minutes <= 0) minutes += 24 * 60;
+                            span = minutes / 60.0;
+                        }
+                        double t = Math.max(span, perDay);
+                        return t > 0 ? t : null;
+                    },
+                    employeeId, onDate, onDate);
+            return hours != null ? hours : STANDARD_HOURS;
+        } catch (Exception ex) {
+            log.debug("Overtime threshold lookup failed for employee {}: {}", employeeId, ex.getMessage());
+            return STANDARD_HOURS;
+        }
     }
 
     private void recomputeWorkingHours(AttendanceRecord record) {
         if (record.getCheckInAt() != null && record.getCheckOutAt() != null) {
             double hours = Duration.between(record.getCheckInAt(), record.getCheckOutAt()).toMinutes() / 60.0;
             record.setWorkingHours(Math.round(hours * 100.0) / 100.0);
-            record.setOvertimeMinutes(calculateOvertimeMinutes(record.getWorkingHours()));
+            record.setOvertimeMinutes(calculateOvertimeMinutes(record));
         }
     }
 

@@ -51,9 +51,13 @@ public class MergeFieldResolver {
         put(ctx, "employee.confirmationDate", formatDate(employee.getDateOfConfirmation(), SHORT_FMT));
         put(ctx, "employee.lastWorkingDay",   formatDate(employee.getDateOfTermination(), SHORT_FMT));
 
-        BigDecimal annualCtc = employee.getMonthlySalary() != null
-                ? employee.getMonthlySalary().multiply(BigDecimal.valueOf(12))
-                : null;
+        // The annual CTC HR entered wins; monthly x 12 is only a fallback (it
+        // rounds: Rs 7,00,000 / 12 x 12 printed Rs 6,99,996 on letters).
+        BigDecimal annualCtc = employee.getCtcAnnual() != null
+                ? employee.getCtcAnnual()
+                : employee.getMonthlySalary() != null
+                        ? employee.getMonthlySalary().multiply(BigDecimal.valueOf(12))
+                        : null;
         put(ctx, "employee.ctc",        annualCtc != null ? formatInr(annualCtc) : null);
         put(ctx, "employee.ctc:words",  annualCtc != null ? inrToWords(annualCtc) : null);
         put(ctx, "employee.ctcWords",   annualCtc != null ? inrToWords(annualCtc) : null); // camelCase alias

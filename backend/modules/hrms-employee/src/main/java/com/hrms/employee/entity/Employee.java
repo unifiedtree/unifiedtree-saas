@@ -115,6 +115,10 @@ public class Employee extends BaseEntity {
     @Column(name = "monthly_salary", precision = 14, scale = 2)
     private BigDecimal monthlySalary;
 
+    /** Annual CTC as HR typed it in the Employee Master. Read-only here: that screen owns it. */
+    @Column(name = "ctc_annual", precision = 14, scale = 2, insertable = false, updatable = false)
+    private BigDecimal ctcAnnual;
+
     @Column(name = "pan_number", length = 10)
     private String panNumber;
 

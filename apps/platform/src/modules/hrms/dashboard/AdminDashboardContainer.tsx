@@ -106,7 +106,7 @@ export function AdminDashboardContainer() {
   const projects = useQuery({ queryKey: ['hrms', 'projects', companyId], queryFn: () => apiJson<Project[]>(`/v1/hrms/projects?companyId=${companyId}`), enabled: canReadProjects && !!companyId })
   const runs = useRuns({ companyId }, { enabled: hasPayroll && !!companyId })
   const activity = useActivityFeed(5, canAudit)
-  const notices = useQuery({ queryKey: ['dashboard', 'notices', companyId, 0], queryFn: () => apiJson<{ content: Notice[]; totalElements: number }>(`/v1/admin/dashboard/notices?companyId=${companyId}&page=0&size=5`), enabled: canReadCompany && !!companyId })
+  const notices = useQuery({ queryKey: ['dashboard', 'notices', companyId, 0], queryFn: () => apiJson<{ content: Notice[]; totalElements: number }>(`/v1/admin/dashboard/notices?companyId=${companyId}&page=0&size=5`), enabled: !!companyId })
   const milestones = useMilestones({ birthdayDays: 14, anniversaryDays: 31, retirementMonths: 6 })
   const probations = useUpcomingProbations(30, canReadEmployees)
   const corrections = useCorrectionApprovals('PENDING', { enabled: canApproveCorrections, size: 1 })
@@ -219,7 +219,7 @@ export function AdminDashboardContainer() {
     projects: { state: status(projects, canReadProjects, !(projects.data ?? []).length), retry: () => projects.refetch() },
     payroll: { state: status(runs, hasPayroll, !d.payroll.length), retry: () => runs.refetch() },
     activity: { state: status(activity, canAudit, !d.activity.length), retry: () => activity.refetch() },
-    notices: { state: status(notices, canReadCompany, !d.notices.length), retry: () => notices.refetch() },
+    notices: { state: status(notices, true, !d.notices.length), retry: () => notices.refetch() },
     milestones: { state: status(milestones, true, !(d.milestones.birthdays.length + d.milestones.anniversaries.length + d.milestones.retirements.length)), retry: () => milestones.refetch() },
     probations: { state: status(probations, canSeeProbation && canReadEmployees, !d.probations.length), retry: () => probations.refetch() },
   }
