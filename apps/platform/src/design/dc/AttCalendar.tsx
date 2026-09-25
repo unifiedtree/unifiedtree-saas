@@ -15,11 +15,14 @@ export class AttCalendar extends DCLogic {
     const hol: Record<string, string> = {}
     ;(O.holidays || []).forEach((h: any) => { hol[h.date] = h.name })
     const rateOf = (r: any) => { const e = (r.present || 0) + (r.absent || 0) + (r.notMarked || 0); return e ? Math.round((r.present / e) * 100) : 0 }
+    // A weekly off is a day nobody in scope was scheduled (the company's and each person's own week-offs,
+    // from the trend); days it doesn't cover follow the weekday pattern, Sunday when nothing is known.
+    const offWd: number[] = O.offWeekdays || [0]
+    const isOff = (iso: string) => { const r = daily[iso]; return r && typeof r.weeklyOff === 'boolean' ? r.weeklyOff : offWd.includes(dt(iso).getDay()) }
     const kind = (iso: string) => {
-      const wd = dt(iso).getDay()
       if (iso > today) return 'future'
       if (hol[iso]) return 'holiday'
-      if (wd === 0) return 'off'
+      if (isOff(iso)) return 'off'
       if (isEmpty || !daily[iso]) return 'none'
       return 'work'
     }
@@ -56,7 +59,7 @@ export class AttCalendar extends DCLogic {
       present: r.present || 0, expected: (r.present || 0) + (r.absent || 0) + (r.notMarked || 0), rate: rt + '%', rateLabel: tone[2],
       isGreat: rt >= 95, isGood: rt >= 90 && rt < 95, isLow: rt < 90, rows,
       offText: k === 'holiday' ? `${hol[sel]} — a company holiday, so no one was expected at work.`
-        : r.present ? `Sunday is the weekly off. ${r.present} ${r.present === 1 ? 'person' : 'people'} still checked in.` : 'Sunday is the weekly off.',
+        : r.present ? `${WDL[sd.getDay()]} is a weekly off. ${r.present} ${r.present === 1 ? 'person' : 'people'} still checked in.` : `${WDL[sd.getDay()]} is a weekly off.`,
       open: () => open('', sel), openTip: `→ /hrms/attendance?tab=team&date=${sel}`,
     }
     return {

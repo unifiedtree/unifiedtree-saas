@@ -27,4 +27,8 @@ public class EmployeeShiftAssignment extends BaseEntity {
 
     @Column(name = "effective_to")
     private LocalDate effectiveTo;
+
+    /** Why this shift was assigned (V143.25), shown in the employee's shift history. */
+    @Column(name = "note", length = 500)
+    private String note;
 }

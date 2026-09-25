@@ -30,7 +30,7 @@ import {
   useEmployeeAttendanceRecords, useEmployeeWeeklySummary,
   type WeeklyDayResponse,
 } from '../../api/useAttendance'
-import { useEmployeeShift } from '../../api/useShiftPolicies'
+import { useEmployeeShift, useEmployeeShiftHistory } from '../../api/useShiftPolicies'
 import { useStatusHistory, statusLabel } from '../../api/useAttendanceReview'
 import { SectionState, SubSection } from './shared'
 
@@ -60,6 +60,11 @@ function fmtHours(h?: number) {
   const hrs = Math.floor(h)
   const mins = Math.round((h - hrs) * 60)
   return mins ? `${hrs}h ${mins}m` : `${hrs}h`
+}
+
+function fmtDay(iso?: string | null) {
+  if (!iso) return '—'
+  try { return format(parseISO(iso), 'd MMM yyyy') } catch { return iso }
 }
 
 function fmtTime(iso?: string) {
@@ -128,6 +133,8 @@ export function EmployeeAttendance({ employeeId }: { employeeId: string }) {
   const records = useEmployeeAttendanceRecords(employeeId, page, PAGE_SIZE, { enabled: canRead })
   const shift = useEmployeeShift(employeeId, { enabled: canRead })
   const changes = useStatusHistory(employeeId, canRead)
+  // Every assignment with who made it and why (the Change-shift note).
+  const shiftHistory = useEmployeeShiftHistory(employeeId, { enabled: canRead })
 
   const total = records.data?.totalElements ?? 0
   const totalPages = records.data?.totalPages ?? 0
@@ -219,6 +226,45 @@ export function EmployeeAttendance({ employeeId }: { employeeId: string }) {
               </div>
             )}
           </div>
+        </SectionState>
+      </SubSection>
+
+      <SubSection title="Shift history" hint="Every shift this employee has been on, who set it and why.">
+        <SectionState
+          isLoading={shiftHistory.isLoading}
+          error={shiftHistory.error}
+          isEmpty={!shiftHistory.isLoading && !shiftHistory.error && !(shiftHistory.data?.length)}
+          emptyIcon={Clock}
+          emptyTitle="No shift changes yet"
+          emptyHint="Each time a shift is assigned or changed, it’s listed here with the note left for it."
+          forbiddenTitle="You don’t have access to this employee’s shift history"
+          forbiddenHint="Shift history is visible to HR, the employee and their own manager."
+          onRetry={() => shiftHistory.refetch()}
+        >
+          <TableCard>
+            <table className="hr-table">
+              <thead>
+                <tr>
+                  <th>Shift</th><th>Timing</th><th>From</th><th>Until</th><th>Note</th><th>Set by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(shiftHistory.data ?? []).map((h) => (
+                  <tr key={h.id}>
+                    <td className="whitespace-nowrap">{h.shiftName || 'Removed shift'}</td>
+                    <td className="whitespace-nowrap">{h.startTime && h.endTime ? `${h.startTime.slice(0, 5)} → ${h.endTime.slice(0, 5)}` : '—'}</td>
+                    <td className="whitespace-nowrap">{fmtDay(h.effectiveFrom)}</td>
+                    <td className="whitespace-nowrap">{h.effectiveTo ? fmtDay(h.effectiveTo) : 'Ongoing'}</td>
+                    <td>{h.note || '—'}</td>
+                    <td className="text-text-tertiary">
+                      {h.setBy || '—'}
+                      {h.setAt ? <span className="block text-[11px]">{fmtDay(h.setAt)}</span> : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableCard>
         </SectionState>
       </SubSection>
 

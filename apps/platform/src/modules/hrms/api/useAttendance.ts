@@ -283,6 +283,17 @@ export interface DailyAttendanceCounts {
   absent: number
   /** Total overtime clocked that day across the roster, in minutes. */
   overtimeMinutes: number
+  // Added by V143.25; absent on older servers.
+  /** People who checked in that day, each counted once. */
+  checkedIn?: number
+  /** Of those, who worked from home and was neither late nor half-day. */
+  workFromHomeOnTime?: number
+  /** People expected at work that day (joined, not on their weekly off). */
+  scheduled?: number
+  /** People whose own weekly off is that day. */
+  weeklyOff?: number
+  /** The day is a weekly off for everyone in scope. */
+  weeklyOffDay?: boolean
 }
 
 /** One capture-method bucket from the attendance-source panel. */

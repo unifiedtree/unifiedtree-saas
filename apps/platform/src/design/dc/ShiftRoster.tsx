@@ -52,7 +52,8 @@ export class ShiftRoster extends DCLogic {
     const save = async () => {
       if (!valid || !emp0 || !p.onAssign) return
       this.setState({ busy: true })
-      try { const ok = await p.onAssign(emp0.id, f.shift, f.date); if (ok !== false) close() } finally { this.setState({ busy: false }) }
+      // The note is kept with the assignment and shows in the person's shift history.
+      try { const ok = await p.onAssign(emp0.id, f.shift, f.date, f.note); if (ok !== false) close() } finally { this.setState({ busy: false }) }
     }
     const drawerFooter = emp0
       ? createElement('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },

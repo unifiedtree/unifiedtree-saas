@@ -19,7 +19,7 @@ import {
   useMyCorrections, useCorrectionApprovals, useCreateCorrection, useDecideCorrection,
   type StaffStatusResponse, type CorrectionRequestResponse,
 } from '../api/useAttendance'
-import { dayBuckets, trendBuckets, type DayBuckets } from './attendanceBuckets'
+import { dayBuckets, trendBuckets, offWeekdays, isWeeklyOff, type DayBuckets } from './attendanceBuckets'
 import {
   useReviewExceptions, useFaceReviewEvents, useChangeDayStatus, useDecideFacePunch, uploadCorrectionProof, correctionProofLink,
   statusLabel, type ReviewException, type FaceReviewEvent,
@@ -27,7 +27,7 @@ import {
 import { ReviewList } from './ReviewList'
 import { StatusChangeDrawer, type StatusTarget } from './StatusChangeDrawer'
 import { useShiftPolicies, useCreateShiftPolicy, useUpdateShiftPolicy, useDeleteShiftPolicy, type ShiftPolicy } from '../api/useShiftPolicies'
-import { usePendingShiftRequests, useDecideShiftRequest, type ShiftRequest } from '../api/useShiftRequests'
+import { usePendingShiftRequests, useDecidedShiftRequests, useDecideShiftRequest, type ShiftRequest } from '../api/useShiftRequests'
 import { useHolidays } from '../api/useSettings'
 import { useAttendanceSummaryReport, useLateMarksReport } from '../api/useReports'
 
@@ -59,8 +59,15 @@ const proofName = (url: string) => { try { return decodeURIComponent(url.replace
 
 interface MeResponse { id: string }
 interface CurrentShift { shiftPolicyId?: string | null; effectiveFrom?: string | null }
-interface Overtime { id: string; employeeId: string; employeeName: string; date: string | number; minutes: number; status: string; note?: string | null }
-interface ScheduleRow { employeeId: string; employeeName: string; shiftName?: string | null }
+interface Overtime {
+  id: string; employeeId: string; employeeName: string; date: string | number; minutes: number; status: string; note?: string | null
+  // V143.25: the shift in force that day, when they left, and why.
+  shiftName?: string | null; shiftEnd?: string | null; checkOutAt?: string | number | null
+  reason?: string | null; reasonSource?: 'EMPLOYEE' | 'FIX_REQUEST' | 'MANUAL_ENTRY' | null
+}
+/** Where an overtime reason came from, as the card's "Raised" line says it. */
+const OT_RAISED: Record<string, string> = { EMPLOYEE: 'reason from the employee', FIX_REQUEST: 'times from an approved fix request', MANUAL_ENTRY: 'times entered by HR' }
+interface ScheduleRow { employeeId: string; employeeName: string; shiftName?: string | null; shiftPolicyId?: string | null; since?: string | null; joinedOn?: string | null }
 
 /** Every overtime row in the range — the API pages 20 at a time. */
 async function loadOvertime(from: string, to: string) {
@@ -134,6 +141,7 @@ export function AttendanceContainer() {
   })
   const overtime = useQuery({ queryKey: ['attendance', 'overtime', 'design', prevMonthStart, today], queryFn: () => loadOvertime(prevMonthStart, today), enabled: canTeam })
   const sreq = usePendingShiftRequests({ enabled: canApprove })
+  const sreqDone = useDecidedShiftRequests(30, { enabled: canApprove && section === 'shifts' })
   const myReq = useQuery({ queryKey: ['shifts', 'change-requests', 'my'], queryFn: () => apiJson<ShiftRequest[]>('/v1/shifts/change-requests/my'), enabled: canSelf && section === 'shifts' })
 
   // ── mutations ──
@@ -146,8 +154,8 @@ export function AttendanceContainer() {
   const changeStatus = useChangeDayStatus()
   const decideFace = useDecideFacePunch()
   const assign = useMutation({
-    mutationFn: ({ emp, sid, from }: { emp: string; sid: string; from: string }) =>
-      apiJson(`/v1/shifts/employee/${emp}`, { method: 'POST', body: JSON.stringify({ shiftPolicyId: sid, effectiveFrom: from }) }),
+    mutationFn: ({ emp, sid, from, note }: { emp: string; sid: string; from: string; note?: string }) =>
+      apiJson(`/v1/shifts/employee/${emp}`, { method: 'POST', body: JSON.stringify({ shiftPolicyId: sid, effectiveFrom: from, ...(note ? { note } : {}) }) }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['team', 'schedule'] }); qc.invalidateQueries({ queryKey: ['shifts'] }); qc.invalidateQueries({ queryKey: ['hrms', 'attendance'] }) },
   })
   const decideOt = useMutation({
@@ -199,11 +207,14 @@ export function AttendanceContainer() {
     // Analytics: this month to date (past days from the trend API, today from the live roster).
     const daily: Record<string, DayBuckets> = {}
     for (const r of trend.data ?? []) daily[r.date] = trendBuckets(r, today)
-    if (teamToday.data) daily[today] = dayBuckets(teamToday.data, today)
+    // Today's numbers come from the live roster; whether today is a weekly off comes from the trend.
+    if (teamToday.data) daily[today] = { ...dayBuckets(teamToday.data, today), ...(typeof daily[today]?.weeklyOff === 'boolean' ? { weeklyOff: daily[today].weeklyOff } : {}) }
     const hol = (holidays.data ?? []).filter((h) => h.active !== false).map((h) => ({ date: h.holidayDate, name: h.holidayName }))
     const holSet = new Set(hol.map((h) => h.date))
+    // Weekly offs are the company's and each person's own (the trend flags a day nobody was scheduled), not just Sundays.
+    const offDays = offWeekdays(daily)
     let workingDays = 0
-    for (let d = monthStart; d <= today; d = addDays(d, 1)) if (new Date(d + 'T00:00:00').getDay() !== 0 && !holSet.has(d)) workingDays++
+    for (let d = monthStart; d <= today; d = addDays(d, 1)) if (!isWeeklyOff(d, daily, offDays) && !holSet.has(d)) workingDays++
     const lateBy = new Map<string, { id: string; code: string; name: string; dept: string; n: number }>()
     for (const r of lateMarks.data ?? []) {
       const cur = lateBy.get(r.employee_code) || { id: idByCode.get(r.employee_code) || '', code: r.employee_code, name: r.employee_name, dept: r.department || '—', n: 0 }
@@ -213,7 +224,7 @@ export function AttendanceContainer() {
     const graces = [...new Set((policies.data ?? []).map((sp) => sp.gracePeriodMinutes ?? 0))]
     const reportLink = `/hrms/reports/attendance-summary?${new URLSearchParams({ ...(companyId ? { company: companyId } : {}), from: monthStart, to: today })}`
     const ov = {
-      today, counts: todayCounts, graceMin: graces.length === 1 ? graces[0] : null, daily, holidays: hol, workingDays, reportLink,
+      today, counts: todayCounts, graceMin: graces.length === 1 ? graces[0] : null, daily, offWeekdays: offDays, holidays: hol, workingDays, reportLink,
       sources: (sources.data?.sources ?? []).filter((s) => s.count > 0).map((s) => ({ label: sourceOf(s.method)[0], icon: sourceOf(s.method)[1], n: s.count })),
       lateMarks: [...lateBy.values()].sort((a, b) => b.n - a.n).slice(0, 5),
       summary: (summary.data ?? []).map((r) => ({
@@ -229,7 +240,8 @@ export function AttendanceContainer() {
         const b = BAND[e.scoreBucket || 'UNKNOWN'] || BAND.UNKNOWN, isToday = e.date === today
         return {
           id: e.id, empId: e.employeeId, code: e.employeeCode || '—', name: e.employeeName || 'Unknown person', dept: e.departmentName || '—', date: e.date, today: isToday,
-          device: e.purpose === 'PUNCH_OUT' ? 'Punch out' : 'Punch in', time: isToday ? clock(e.createdAt) : `${fmtShort(e.date)}, ${clock(e.createdAt)}`, conf: b[0], band: b[1],
+          // The phone or kiosk the check was made on; older events recorded none.
+          device: e.device || 'Not recorded', time: isToday ? clock(e.createdAt) : `${fmtShort(e.date)}, ${clock(e.createdAt)}`, conf: b[0], band: b[1],
           status: e.status, raw: e,
         }
       })
@@ -273,7 +285,11 @@ export function AttendanceContainer() {
     const idByName = new Map(shiftList.map((s) => [s.name, s.id]))
     const roster = (schedule.data ?? []).map((r) => {
       const p = who(r.employeeId, r.employeeName)
-      return { id: r.employeeId, code: p.code, name: r.employeeName || p.name, dept: p.dept, shift: r.shiftName ? idByName.get(r.shiftName) || null : null, since: '' }
+      // Matched by id (two shifts may share a name); older servers only send the name.
+      const shift = r.shiftPolicyId || (r.shiftName ? idByName.get(r.shiftName) || null : null)
+      // Since: the day the current assignment started; with no shift yet, the joining date.
+      const since = shift && r.since ? fmtShort(r.since) : !shift && r.joinedOn ? `Joined ${fmtShort(r.joinedOn)}` : '—'
+      return { id: r.employeeId, code: p.code, name: r.employeeName || p.name, dept: p.dept, shift, since }
     })
 
     // Overtime: everything still waiting (this month and last), plus this month's decided rows.
@@ -281,8 +297,10 @@ export function AttendanceContainer() {
     const thisMonth = (o: Overtime) => isoDay(o.date) >= monthStart
     const otRows = otAll.filter((o) => o.status === 'PENDING' || thisMonth(o)).map((o) => {
       const p = who(o.employeeId, o.employeeName), iso = isoDay(o.date)
-      // The overtime API has no shift end, check-out time or reason — dashes, not guesses.
-      return { id: o.id, emp: p.code, name: o.employeeName || p.name, dept: p.dept, date: fmtWd(iso), shift: '', shiftEnd: '—', out: '—', minutes: o.minutes, reason: '—', raised: `${fmtShort(iso)} · recorded automatically`, status: o.status, note: o.note || '' }
+      // Shift end = the shift in force that day; left at = the check-out; reason = the employee's, else the fix or manual entry's.
+      const shiftEnd = o.shiftEnd ? fmtTime(o.shiftEnd) : '—', out = o.checkOutAt ? clock(typeof o.checkOutAt === 'number' ? new Date(o.checkOutAt).toISOString() : o.checkOutAt) : '—'
+      const raised = `${fmtShort(iso)} · ${(o.reasonSource && OT_RAISED[o.reasonSource]) || 'recorded automatically'}`
+      return { id: o.id, emp: p.code, name: o.employeeName || p.name, dept: p.dept, date: fmtWd(iso), shift: o.shiftName || '', shiftEnd, out, minutes: o.minutes, reason: o.reason || 'None given', raised, status: o.status, note: o.note || '' }
     })
     const otBy = new Map<string, { emp: string; name: string; dept: string; days: number; minutes: number }>()
     for (const o of otAll) {
@@ -294,12 +312,20 @@ export function AttendanceContainer() {
     }
 
     // Shift change requests.
-    const sreqRows = (sreq.data ?? []).map((r) => {
+    // Waiting (pending), plus what was decided in the last 30 days: who decided, when, and their note.
+    const decidedLine = (r: ShiftRequest) => {
+      const when = r.decidedAt ? fmtShort(istToday(new Date(r.decidedAt))) : ''
+      const head = r.approverName ? `${r.status === 'APPROVED' ? 'Approved' : 'Rejected'} by ${r.approverName}${when ? ', ' + when : ''}` : `Closed automatically${when ? ', ' + when : ''}`
+      return r.decisionNote ? `${head} · ${r.decisionNote}` : head
+    }
+    const pendingIds = new Set((sreq.data ?? []).map((r) => r.id))
+    const sreqRows = [...(sreq.data ?? []), ...(sreqDone.data ?? []).filter((r) => !pendingIds.has(r.id))].map((r) => {
       const p = who(r.employeeId)
+      const startIso = r.status === 'PENDING' ? r.requestedEffectiveDate : r.appliedEffectiveDate || r.requestedEffectiveDate
       return {
         id: r.id, emp: p.code, name: p.name, dept: p.dept, from: r.currentShiftPolicyId || '', fromName: r.currentShiftName || 'No shift yet', to: r.requestedShiftPolicyId, toName: r.requestedShiftName,
-        starts: r.requestedEffectiveDate ? fmtShort(r.requestedEffectiveDate) : 'the day it’s approved', submitted: fmtShort(istToday(new Date(r.createdAt))),
-        reason: r.reason || '', status: r.status, note: r.decisionNote || '',
+        starts: startIso ? fmtShort(startIso) : 'the day it’s approved', submitted: fmtShort(istToday(new Date(r.createdAt))),
+        reason: r.reason || '', status: r.status, note: r.status === 'PENDING' ? r.decisionNote || '' : decidedLine(r),
       }
     })
     const myReqRows = (myReq.data ?? []).map((r) => ({
@@ -320,7 +346,7 @@ export function AttendanceContainer() {
     }
   }, [team.data, teamToday.data, trend.data, sources.data, holidays.data, summary.data, lateMarks.data, face.data, review.data,
     approvals.data, approved.data, rejected.data, myCorr.data, monthStats.data, history.data, policies.data, schedule.data, myShift.data,
-    overtime.data, sreq.data, myReq.data, companyId, monthStart, today, date, y, m])
+    overtime.data, sreq.data, sreqDone.data, myReq.data, companyId, monthStart, today, date, y, m])
 
   const states: Record<string, St> = {
     logs: stateOf(team, canTeam),
@@ -354,7 +380,7 @@ export function AttendanceContainer() {
     retryShifts: () => policies.refetch(),
     retryRoster: () => schedule.refetch(),
     retryOt: () => overtime.refetch(),
-    retrySreq: () => sreq.refetch(),
+    retrySreq: () => { sreq.refetch(); sreqDone.refetch() },
     retryMyReq: () => myReq.refetch(),
     decideCorr: (id: string, d: string, note: string) =>
       decideCorr.mutateAsync({ id, status: d === 'APPROVED' ? 'APPROVED' : 'REJECTED', comment: note?.trim() || undefined })
@@ -405,9 +431,9 @@ export function AttendanceContainer() {
       if (!companyId) return false
       return deletePolicy.mutateAsync({ id, companyId }).then(() => done(`${s ? s.name : 'Shift'} deleted`), failed('Could not delete the shift'))
     },
-    assign: (emp: string, sid: string, from: string) => {
+    assign: (emp: string, sid: string, from: string, note?: string) => {
       const e = data.roster.find((r) => r.id === emp), s = data.shifts.find((x) => x.id === sid)
-      return assign.mutateAsync({ emp, sid, from }).then(() => done(`${e ? e.name : 'Employee'} moves to ${s ? s.name : 'the new shift'} from ${fmtShort(from)}`), failed('Could not change the shift'))
+      return assign.mutateAsync({ emp, sid, from, note: note?.trim() || undefined }).then(() => done(`${e ? e.name : 'Employee'} moves to ${s ? s.name : 'the new shift'} from ${fmtShort(from)}`), failed('Could not change the shift'))
     },
     decideOt: (id: string, d: string, note: string) => {
       const text = note?.trim() || ''

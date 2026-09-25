@@ -119,13 +119,26 @@ class AttendanceReviewRulesTest {
                 a, Map.of(YESTERDAY, day("PRESENT", IN, null, null, false, false, false, false, "WFH")),
                 b, Map.of(YESTERDAY, day("LATE", IN, null, 30, false, false, false, false, "WFH")),
                 c, Map.of(YESTERDAY, day("ON_LEAVE", null, null, null, false, false, false, false, null)));
-        var counts = AttendanceController.effectiveCounts(YESTERDAY, List.of(a, b, c), eff, List.of());
+        var counts = AttendanceController.effectiveCounts(YESTERDAY, List.of(a, b, c), 0, eff, List.of());
         assertEquals(1, counts.workFromHome());
         assertEquals(1, counts.late());
         assertEquals(0, counts.present());
         assertEquals(1, counts.onLeave());
         assertEquals(1, counts.notMarked());
         assertEquals(0, counts.absent());
+        // w2f's per-day totals (V143.25): the late WFH person is counted once.
+        assertEquals(2, counts.checkedIn());
+        assertEquals(1, counts.workFromHomeOnTime());
+        assertEquals(3, counts.scheduled());
+        assertFalse(counts.weeklyOffDay());
+    }
+
+    @Test
+    void trendMarksADayEveryoneHasOffAsAWeeklyOff() {
+        var counts = AttendanceController.effectiveCounts(YESTERDAY, List.of(), 4, Map.of(), List.of());
+        assertEquals(0, counts.scheduled());
+        assertEquals(4, counts.weeklyOff());
+        assertTrue(counts.weeklyOffDay());
     }
 
     @Test

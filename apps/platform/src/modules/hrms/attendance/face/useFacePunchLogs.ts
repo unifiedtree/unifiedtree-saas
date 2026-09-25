@@ -6,7 +6,8 @@ import { apiJson } from '@/core/api/client'
 //
 // `employeeId` on both records is the employee's auth user id (the JWT subject
 // the mobile app punched with), not an hrms.employees id — the backend joins it
-// to auth.user_credentials for the email and returns no name, code or device.
+// to auth.user_credentials for the email and returns no name or code. `device`
+// is the phone or kiosk the check was made on, when known (V143.25).
 
 export type FacePurpose = 'PUNCH_IN' | 'PUNCH_OUT' | 'ENROLLMENT_SAMPLE' | 'MANUAL_TEST'
 export type FaceResult =
@@ -24,6 +25,8 @@ export interface FaceVerificationEvent {
   reason?: string | null
   scoreBucket?: FaceScoreBucket | null
   createdAt: string
+  /** The phone or kiosk the check was made on; null for older events. */
+  device?: string | null
 }
 
 /** GET /v1/attendance/face/admin/employees item. */

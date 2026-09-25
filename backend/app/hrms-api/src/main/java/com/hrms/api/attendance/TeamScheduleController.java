@@ -16,6 +16,10 @@ public class TeamScheduleController {
  private final TeamEmployeeScope scope;
  private final NamedParameterJdbcTemplate jdbc;
  public TeamScheduleController(TeamEmployeeScope scope, NamedParameterJdbcTemplate jdbc) { this.scope=scope;this.jdbc=jdbc; }
+ /**
+  * One row per person per day: the shift in force (shiftPolicyId, shiftName, times), since = the day that assignment
+  * started (null with no shift), and joinedOn = the joining date (for people with no shift yet).
+  */
  @GetMapping
  @PreAuthorize("hasAuthority('attendance.team.read')")
  @Transactional(readOnly=true)
@@ -25,11 +29,13 @@ public class TeamScheduleController {
    if(employees.isEmpty())return List.of();
    return jdbc.queryForList("""
     SELECT e.id AS "employeeId",concat_ws(' ',e.first_name,e.last_name) AS "employeeName",
-      d.day::date AS date,s.name AS "shiftName",s.start_time AS "startTime",s.end_time AS "endTime"
+      d.day::date AS date,s.name AS "shiftName",s.start_time AS "startTime",s.end_time AS "endTime",
+      s.id AS "shiftPolicyId",CASE WHEN s.id IS NOT NULL THEN to_char(assignment.effective_from,'YYYY-MM-DD') END AS since,
+      to_char(e.date_of_joining,'YYYY-MM-DD') AS "joinedOn"
     FROM hrms.employees e
     CROSS JOIN generate_series(CAST(:from AS date),CAST(:to AS date),interval '1 day') d(day)
     LEFT JOIN LATERAL (
-      SELECT a.shift_policy_id FROM attendance.employee_shift_assignments a
+      SELECT a.shift_policy_id,a.effective_from FROM attendance.employee_shift_assignments a
       WHERE a.tenant_id=e.tenant_id AND a.employee_id=e.id AND a.effective_from<=d.day::date
         AND (a.effective_to IS NULL OR a.effective_to>=d.day::date)
       ORDER BY a.effective_from DESC,a.created_at DESC LIMIT 1

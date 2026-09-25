@@ -174,6 +174,7 @@ public class EmployeeShiftService {
 
         if (!policy.isActive()) throw new BusinessRuleException("Choose an active shift", "SHIFT_INACTIVE");
         LocalDate from = req.effectiveFrom() != null ? req.effectiveFrom() : LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        String note = assignmentNote(req.note());
 
         // Close any currently-open assignment(s) the day before the new one starts.
         List<EmployeeShiftAssignment> open = assignmentRepo.findByEmployeeIdAndEffectiveToIsNull(employeeId);
@@ -189,6 +190,7 @@ public class EmployeeShiftService {
                 // Daily assignments have one effective policy per day. Replacing
                 // today's choice must not create a period ending before it starts.
                 a.setShiftPolicyId(policy.getId());
+                a.setNote(note);
                 return toEmployeeResponse(employeeId, assignmentRepo.save(a), policy);
             }
             a.setEffectiveTo(from.minusDays(1));
@@ -200,6 +202,7 @@ public class EmployeeShiftService {
         fresh.setShiftPolicyId(policy.getId());
         fresh.setEffectiveFrom(from);
         fresh.setEffectiveTo(null);
+        fresh.setNote(note);
         EmployeeShiftAssignment saved = assignmentRepo.save(fresh);
         log.info("Assigned employee {} to shift {} ({}) from {}", employeeId, policy.getId(), policy.getName(), from);
         return toEmployeeResponse(employeeId, saved, policy);
@@ -253,6 +256,21 @@ public class EmployeeShiftService {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /** Longest note kept with an assignment (column width, V143.25). */
+    static final int NOTE_MAX = 500;
+
+    /**
+     * The note to keep with an assignment: trimmed, line breaks and other
+     * control characters turned into spaces, cut to {@value #NOTE_MAX}
+     * characters. Null when blank.
+     */
+    static String assignmentNote(String raw) {
+        if (raw == null) return null;
+        String s = raw.replaceAll("\\p{Cntrl}", " ").replaceAll("\\s+", " ").trim();
+        if (s.isEmpty()) return null;
+        return s.length() > NOTE_MAX ? s.substring(0, NOTE_MAX) : s;
+    }
 
     /**
      * Add any missing standard shifts (case-insensitive by name). Returns true

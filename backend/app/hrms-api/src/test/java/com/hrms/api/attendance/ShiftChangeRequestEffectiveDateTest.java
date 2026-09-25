@@ -35,6 +35,7 @@ import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -95,7 +96,8 @@ class ShiftChangeRequestEffectiveDateTest {
 
         ShiftChangeRequestResponse approved = decide(created.id(), true);
 
-        verify(shifts).assignShift(employee, new AssignShiftRequest(night, monday));
+        verify(shifts).assignShift(eq(employee), argThat((AssignShiftRequest r) -> night.equals(r.shiftPolicyId()) && monday.equals(r.effectiveFrom())
+                && r.note() != null && r.note().startsWith("Approved shift change request")));
         assertEquals("APPROVED", approved.status());
         assertEquals(monday, approved.appliedEffectiveDate());
         assertEquals(monday, column(created.id(), "applied_effective_date"));
@@ -164,7 +166,7 @@ class ShiftChangeRequestEffectiveDateTest {
     @Test void requestsFromOlderAppBuildsStartOnTheDayTheyAreApproved() {
         UUID legacy = insertPending(employee, null);
         assertEquals(today, decide(legacy, true).appliedEffectiveDate());
-        verify(shifts).assignShift(employee, new AssignShiftRequest(night, today));
+        verify(shifts).assignShift(eq(employee), argThat((AssignShiftRequest r) -> night.equals(r.shiftPolicyId()) && today.equals(r.effectiveFrom())));
     }
 
     @Test void datesOutsideTodayToAYearAheadAreRefused() {

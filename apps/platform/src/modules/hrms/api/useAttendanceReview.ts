@@ -98,6 +98,8 @@ export interface FaceReviewEvent {
   decisionNote?: string | null
   decidedBy?: string | null
   decidedAt?: string | null
+  /** The phone or kiosk the check was made on (V143.25); null when none was recorded. */
+  device?: string | null
 }
 
 export function useAttendancePolicy(companyId: string | undefined) {

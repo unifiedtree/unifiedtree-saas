@@ -31,12 +31,6 @@ All P0 items are done (wave 1).
 **Payroll** (§5)
 - TDS calculation.
 
-**Attendance** (§4)
-- Overtime details (shift end, left at, reason).
-- Shift requests "Already decided" list for HR.
-- Change-shift note.
-- `/v1/team/schedule` with `shiftPolicyId` and `since`.
-- Face events with the kiosk / device.
 
 **Workspace settings** (§8)
 - Invoices (Razorpay).

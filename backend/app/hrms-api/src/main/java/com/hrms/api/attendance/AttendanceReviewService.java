@@ -92,7 +92,28 @@ public class AttendanceReviewService {
     /** A face punch with the HR decision on it. */
     public record FaceEvent(UUID id, UUID employeeId, String employeeName, String employeeCode, String departmentName,
                             String purpose, String result, String scoreBucket, Instant createdAt, LocalDate date,
-                            String status, String decision, String decisionNote, String decidedBy, Instant decidedAt) {}
+                            String status, String decision, String decisionNote, String decidedBy, Instant decidedAt,
+                            /** The phone or kiosk the check was made on (V143.25), or null when none was recorded. */
+                            String device) {}
+
+    /**
+     * The phone / kiosk of a face check: what the client sent with it, else (a
+     * passed punch-in check made before the punch labelled it, FacePunchDevices)
+     * the device on the check-in it cleared, within 15 minutes after it.
+     * Same rule as FaceService.adminEvents (w2f).
+     */
+    private static final String FACE_DEVICE_JOIN = """
+                  LEFT JOIN LATERAL (
+                       SELECT NULLIF(btrim(r.device_id), '') AS device_id
+                         FROM attendance.records r
+                        WHERE r.tenant_id = ev.tenant_id AND r.employee_id = uc.employee_id
+                          AND r.attendance_date = (ev.created_at AT TIME ZONE 'Asia/Kolkata')::date
+                          AND r.check_in_at BETWEEN ev.created_at - interval '2 minutes' AND ev.created_at + interval '15 minutes'
+                          AND ev.purpose = 'PUNCH_IN' AND ev.result = 'PASS'
+                          AND NULLIF(btrim(ev.device_fingerprint), '') IS NULL
+                        ORDER BY r.check_in_at
+                        LIMIT 1) punch ON true
+            """;
 
     /** Result of a face decision: the event and the day it belongs to, after the change. */
     public record FaceDecisionResult(FaceEvent event, EffectiveDay day) {}
@@ -250,16 +271,18 @@ public class AttendanceReviewService {
         params.add(Timestamp.from(lastDay));
         List<Object[]> rows = new ArrayList<>();
         jdbc.query("""
-                SELECT ev.id, ev.purpose, ev.result, ev.score_bucket, ev.created_at, uc.employee_id
+                SELECT ev.id, ev.purpose, ev.result, ev.score_bucket, ev.created_at, uc.employee_id,
+                       COALESCE(NULLIF(btrim(ev.device_fingerprint), ''), punch.device_id) AS device
                   FROM attendance.face_verification_events ev
                   JOIN auth.user_credentials uc ON uc.id = ev.employee_id
+                """ + FACE_DEVICE_JOIN + """
                  WHERE uc.employee_id IN (%s)
                    AND ev.purpose IN ('PUNCH_IN', 'PUNCH_OUT') AND ev.created_at >= ? AND ev.created_at < ?
                    AND (ev.created_at >= ? OR (ev.result = 'PASS' AND ev.score_bucket IN ('LOW', 'MEDIUM')))
                  ORDER BY ev.created_at DESC LIMIT 2000
                 """.formatted(tin), (RowCallbackHandler) rs -> rows.add(new Object[]{rs.getObject("id"), rs.getString("purpose"),
                 rs.getString("result"), rs.getString("score_bucket"), rs.getTimestamp("created_at").toInstant(),
-                rs.getObject("employee_id")}), params.toArray());
+                rs.getObject("employee_id"), rs.getString("device")}), params.toArray());
         List<Object[]> scoped = rows.stream().filter(o -> o[5] != null && ids.contains((UUID) o[5])).toList();
         Map<UUID, Object[]> decisions = latestDecisions(scoped.stream().map(o -> (UUID) o[0]).toList());
         List<FaceEvent> out = new ArrayList<>();
@@ -281,12 +304,15 @@ public class AttendanceReviewService {
             throw new BusinessRuleException("Say why this isn't them (at least 3 characters). The employee will see it.", "FACE_NOTE_REQUIRED");
         if (note.length() > 500) throw new BusinessRuleException("Keep the note under 500 characters.", "FACE_NOTE_TOO_LONG");
         List<Object[]> found = jdbc.query("""
-                SELECT ev.id, ev.purpose, ev.result, ev.score_bucket, ev.created_at, uc.employee_id
+                SELECT ev.id, ev.purpose, ev.result, ev.score_bucket, ev.created_at, uc.employee_id,
+                       COALESCE(NULLIF(btrim(ev.device_fingerprint), ''), punch.device_id) AS device
                   FROM attendance.face_verification_events ev
                   LEFT JOIN auth.user_credentials uc ON uc.id = ev.employee_id
+                """ + FACE_DEVICE_JOIN + """
                  WHERE ev.id = ?
                 """, (rs, i) -> new Object[]{rs.getObject("id"), rs.getString("purpose"), rs.getString("result"),
-                rs.getString("score_bucket"), rs.getTimestamp("created_at").toInstant(), rs.getObject("employee_id")}, eventId);
+                rs.getString("score_bucket"), rs.getTimestamp("created_at").toInstant(), rs.getObject("employee_id"),
+                rs.getString("device")}, eventId);
         if (found.isEmpty()) throw new ResourceNotFoundException("Face punch", eventId);
         Object[] ev = found.get(0);
         if (!"PASS".equals(ev[2]) || !("PUNCH_IN".equals(ev[1]) || "PUNCH_OUT".equals(ev[1])))
@@ -372,7 +398,8 @@ public class AttendanceReviewService {
         return new FaceEvent((UUID) o[0], emp.getId(), name(emp), emp.getEmployeeCode(), dept, (String) o[1], result, bucket,
                 at, at.atZone(AttendancePolicyEvaluator.IST).toLocalDate(), status,
                 decision != null ? (String) decision[0] : null, decision != null ? (String) decision[1] : null,
-                decision != null ? (String) decision[2] : null, decision != null ? (Instant) decision[3] : null);
+                decision != null ? (String) decision[2] : null, decision != null ? (Instant) decision[3] : null,
+                o.length > 6 ? (String) o[6] : null);
     }
 
     /** OK / REVIEW (medium or low match, nobody checked) / CONFIRMED / FLAGGED / FAILED. Package-visible for tests. */

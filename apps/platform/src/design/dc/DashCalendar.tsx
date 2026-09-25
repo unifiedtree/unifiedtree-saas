@@ -48,19 +48,25 @@ export class DashCalendar extends DCLogic {
       return sch > 0 ? d.present / sch : null
     }
     const rc = (r: number) => (r >= 0.9 ? rate.hi : r >= 0.75 ? rate.mid : rate.lo)
+    // Weekly offs: the trend flags a day nobody in scope was scheduled (the company's and each person's own
+    // week-offs). Days it doesn't cover follow the weekdays that were always off; Sunday when nothing is known.
+    const seenOff: Record<number, boolean> = {}
+    Object.keys(daily).forEach((k) => { const o = daily[k]?.weeklyOff; if (typeof o === 'boolean') { const w = new Date(k + 'T00:00:00').getDay(); seenOff[w] = (seenOff[w] ?? true) && o } })
+    const offWd = Object.keys(seenOff).length ? Object.keys(seenOff).map(Number).filter((w) => seenOff[w]) : [0]
+    const isWeekOff = (k: string) => { const o = daily[k]?.weeklyOff; return typeof o === 'boolean' ? o : offWd.includes(new Date(k + 'T00:00:00').getDay()) }
     const cells: any[] = []
     for (let i = 0; i < total; i++) {
-      const d = new Date(y, m - 1, 1 - off + i), k = this.iso(d), inM = d.getMonth() === m - 1, fut = k > today, wd = d.getDay(), isHol = !!hol[k]
+      const d = new Date(y, m - 1, 1 - off + i), k = this.iso(d), inM = d.getMonth() === m - 1, fut = k > today, wd = d.getDay(), isHol = !!hol[k], wOff = isWeekOff(k)
       const r = rateOf(k)
-      const kind = !inM ? 'out' : fut ? 'future' : k === pick ? 'sel' : k === today ? 'today' : wd === 0 || isHol ? 'off' : 'day'
-      const hasRate = inM && !fut && r != null && wd !== 0 && !isHol
+      const kind = !inM ? 'out' : fut ? 'future' : k === pick ? 'sel' : k === today ? 'today' : wOff || isHol ? 'off' : 'day'
+      const hasRate = inM && !fut && r != null && !wOff && !isHol
       cells.push({
         key: k, day: d.getDate(),
         isSel: kind === 'sel', isToday: kind === 'today', isDay: kind === 'day', isOff: kind === 'off', isFuture: kind === 'future', isOut: kind === 'out',
         markColor: kind === 'sel' ? '#ffffff' : hasRate ? rc(r as number) : '#ffffff',
         markOpacity: hasRate ? 1 : 0,
         holidayOpacity: isHol ? 1 : 0,
-        label: `${WDL[wd]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}${isHol ? ' · ' + hol[k] : wd === 0 ? ' · Weekly off' : ''}${fut ? ' · no attendance yet' : ''}`,
+        label: `${WDL[wd]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}${isHol ? ' · ' + hol[k] : wOff ? ' · Weekly off' : ''}${fut ? ' · no attendance yet' : ''}`,
         onClick: () => { if (!fut && inM) this.setState({ pick: k }) },
       })
     }
@@ -69,7 +75,7 @@ export class DashCalendar extends DCLogic {
       this.setState({ month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
     }
     const pd = daily[pick], pw = new Date(pick + 'T00:00:00'), pwd = pw.getDay(), r = rateOf(pick)
-    const tag = pick === today ? ['ok', 'Today'] : hol[pick] ? ['warn', hol[pick]] : pwd === 0 ? ['gray', 'Weekly off'] : ['info', 'Past day']
+    const tag = pick === today ? ['ok', 'Today'] : hol[pick] ? ['warn', hol[pick]] : isWeekOff(pick) ? ['gray', 'Weekly off'] : ['info', 'Past day']
     const sc = emerald ? ['#0f6e56', '#10b981', '#0a5240', '#34d399'] : ['#10b981', '#f59e0b', '#f43f5e', '#8b5cf6']
     const panel = {
       title: `${WDL[pwd]}, ${pw.getDate()} ${MON[pw.getMonth()]} ${pw.getFullYear()}`,
@@ -83,7 +89,8 @@ export class DashCalendar extends DCLogic {
     }
     const lastWorking = () => {
       const d = new Date(today + 'T00:00:00')
-      do { d.setDate(d.getDate() - 1) } while (d.getDay() === 0 || hol[this.iso(d)])
+      let guard = 0
+      do { d.setDate(d.getDate() - 1) } while ((isWeekOff(this.iso(d)) || hol[this.iso(d)]) && ++guard < 60)
       this.set(this.iso(d))
     }
     return {

@@ -51,9 +51,12 @@ export class AttOverview extends DCLogic {
     let peak = 0
     for (let i = 1; i <= N; i++) { const r = (O.daily || {})[`${y}-${String(mo + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`] || {}; peak = Math.max(peak, (r.present || 0) + (r.absent || 0)) }
     const top = Math.max(10, Math.ceil(peak / 10) * 10), k = ph / top, base = pt + ph, days: any[] = []
+    // Weekly offs come from the trend (a day nobody was scheduled), else the weekday pattern; Sunday when nothing is known.
+    const offWd: number[] = O.offWeekdays || [0]
+    const weeklyOff = (iso: string) => { const r = (O.daily || {})[iso]; return r && typeof r.weeklyOff === 'boolean' ? r.weeklyOff : offWd.includes(dt(iso).getDay()) }
     for (let i = 0; i < N; i++) {
       const day = i + 1, iso = `${y}-${String(mo + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`, r = (O.daily || {})[iso] || {}
-      const wd = dt(iso).getDay(), off = wd === 0 || !!hol[iso], isToday = iso === today
+      const wd = dt(iso).getDay(), off = weeklyOff(iso) || !!hol[iso], isToday = iso === today
       const onT = off ? 0 : Math.max(0, (r.present || 0) - (r.late || 0)), lt = off ? 0 : r.late || 0, ab = off ? 0 : r.absent || 0
       const x = pl + i * cw + (cw - bw) / 2, h1 = off ? 8 : onT * k, h2 = lt * k, h3 = ab * k, y1 = base - h1, y2 = y1 - h2 - (h2 ? 1.5 : 0), y3 = y2 - h3 - (h3 ? 1.5 : 0)
       days.push({
