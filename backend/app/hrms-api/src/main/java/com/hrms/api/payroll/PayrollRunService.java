@@ -726,6 +726,15 @@ public class PayrollRunService {
         this.effectiveDays = effectiveDays;
     }
 
+    /**
+     * Switch for the effective-status hook (default on). Off, payroll reads the
+     * stored record status exactly as before wave 2: a way back without a
+     * redeploy (UNIFIEDTREE_PAYROLL_EFFECTIVE_ATTENDANCE=false) if a client's
+     * numbers ever need the old rule while something is looked at.
+     */
+    @org.springframework.beans.factory.annotation.Value("${unifiedtree.payroll.effective-attendance:${UNIFIEDTREE_PAYROLL_EFFECTIVE_ATTENDANCE:true}}")
+    private boolean effectiveAttendance = true;
+
     /** Approved leave encashment paid through payroll (w2d, V143.23). Optional for the same reason. */
     private com.hrms.leave.service.LeaveEncashmentService leaveEncashment;
 
@@ -1169,7 +1178,7 @@ public class PayrollRunService {
         // this transaction with the tenant bound; a failure fails the run
         // loudly rather than paying on a partial picture.
         Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> effective =
-                effectiveDays == null ? Map.of() : effectiveDays.effectiveStatuses(empIds, periodStart, periodEnd);
+                effectiveDays == null || !effectiveAttendance ? Map.of() : effectiveDays.effectiveStatuses(empIds, periodStart, periodEnd);
         Map<UUID, Map<LocalDate, DayStatus>> attendanceByEmp = new HashMap<>(empIds.size() * 2);
         Map<UUID, Integer> lateMarkCountByEmp = new HashMap<>();
         for (UUID eid : empIds) {

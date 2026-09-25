@@ -141,7 +141,8 @@ class PerformanceInsightServiceTest {
 
     @Test void activeFilterCountsOnlyGoalsStillBeingWorkedOn() {
         JdbcTemplate kpiJdbc = mock(JdbcTemplate.class);
-        signIn(UUID.randomUUID(), "HR_MANAGER", "hrms.performance.read");
+        // Company-wide KPI scope comes from hrms.performance.write / hrms.kpi.manage since w1h, not the role name.
+        signIn(UUID.randomUUID(), "HR_MANAGER", "hrms.performance.read", "hrms.performance.write");
         new KpiService(kpiJdbc, teamScope).list(tenant, reviewee, null, null, null, true, 0, 25);
         verify(kpiJdbc).queryForObject(contains("g.status IN ('ACTIVE','AT_RISK')"), eq(Long.class), eq(tenant), eq(reviewee));
         assertEquals(Set.of("ACTIVE", "AT_RISK"), KpiService.ACTIVE_STATUSES);

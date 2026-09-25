@@ -42,7 +42,9 @@ class ShiftHistoryAccessTest {
     private Jwt as(List<String> roles, String... authorities) {
         SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken("u", "p", authorities));
         return Jwt.withTokenValue("t").header("alg", "none").subject(UUID.randomUUID().toString())
-                .claim("employee_id", me.toString()).claim("roles", roles).build();
+                .claim("employee_id", me.toString()).claim("roles", roles)
+                // Since w1h the approver scope reads permissions from the token, not role names.
+                .claim("permissions", List.of(authorities)).build();
     }
 
     private void myTeamIs(UUID... ids) {
@@ -98,7 +100,7 @@ class ShiftHistoryAccessTest {
     }
 
     @Test void hrSeesEveryDecidedRequest() {
-        Jwt jwt = as(List.of("HR_MANAGER"), "attendance.regularization.approve");
+        Jwt jwt = as(List.of("HR_MANAGER"), "attendance.regularization.approve", "attendance.workforce.admin");
         when(requests.listDecided(7)).thenReturn(List.of(decided(teammate), decided(stranger)));
         assertEquals(2, controller.decidedChangeRequests(jwt, 7).getBody().size());
     }
