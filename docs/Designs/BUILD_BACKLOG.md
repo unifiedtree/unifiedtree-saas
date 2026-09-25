@@ -89,9 +89,6 @@ Priorities:
 - Branch types (plant, warehouse…).
 
 **Payroll** (§5)
-- Bulk revise CTC ("Apply revision").
-- Export every salary structure.
-- Issue an advance for someone else.
 - TDS calculation.
 - Statutory dues computed from payroll (not the hand-filled ledger).
 - LWF deduction.
