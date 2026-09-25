@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
-import { apiJson, apiBlob } from '@/core/api/client'
+import { apiJson } from '@/core/api/client'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { HrDrawer } from '@/shared/components/hr'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
@@ -17,15 +17,17 @@ import { useCompanies } from '../api/useOrg'
 import { useTeamDashboard, useAttendanceTrend, useCorrectionApprovals } from '../api/useAttendance'
 import { dayBuckets, trendBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
 import { useLeaveOverview } from '../api/useLeave'
-import { useHeadcountReport } from '../api/useReports'
+import { useHeadcountReport, fetchHeadcountWorkbook } from '../api/useReports'
 import { useActivityFeed, activityActor } from '../api/useActivity'
 import { useSeatsUsage } from '../api/useSeats'
 import { useHolidays } from '../api/useSettings'
-import { useMilestones, type Milestone } from '../api/useMilestones'
+import { useMilestones, useRetirementsDue, type Milestone } from '../api/useMilestones'
 import { useUpcomingProbations } from '../api/useProbation'
 import { useRuns } from '../api/usePayrollRuns'
 import { useEmployeeDirectory } from '../api/useWorkforce'
 import { ProjectProductivity } from './ProjectProductivity'
+import { headcountFileName, headcountSheets } from './headcountWorkbook'
+import { saveAndRecord, xlsxBlob } from '@/shared/export/fileExport'
 
 interface Stats { activeEmployees?: number; openRoles?: number; complianceScore?: number | null; complianceDue?: number; complianceCompleted?: number; monthlyPayroll?: number | null; month: string }
 interface Alert { type: string; count: number; label: string; path: string }
@@ -108,6 +110,11 @@ export function AdminDashboardContainer() {
   const activity = useActivityFeed(5, canAudit)
   const notices = useQuery({ queryKey: ['dashboard', 'notices', companyId, 0], queryFn: () => apiJson<{ content: Notice[]; totalElements: number }>(`/v1/admin/dashboard/notices?companyId=${companyId}&page=0&size=5`), enabled: canReadCompany && !!companyId })
   const milestones = useMilestones({ birthdayDays: 14, anniversaryDays: 31, retirementMonths: 6 })
+  // Retirements: the next 6 months for this company, at each company's retirement age (HR Configuration).
+  const sixMonthsOut = dt(today)
+  sixMonthsOut.setMonth(sixMonthsOut.getMonth() + 6)
+  const retirementDays = Math.round((sixMonthsOut.getTime() - dt(today).getTime()) / 86400000)
+  const retirementsDue = useRetirementsDue(retirementDays, { companyId, enabled: canReadEmployees && !!companyId })
   const probations = useUpcomingProbations(30, canReadEmployees)
   const corrections = useCorrectionApprovals('PENDING', { enabled: canApproveCorrections, size: 1 })
   const leaveOverview = useLeaveOverview()
@@ -119,19 +126,17 @@ export function AdminDashboardContainer() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['dashboard', 'notices'] }),
   })
 
+  // "Export headcount": an Excel workbook (Summary + Employees) for the dashboard's company and date.
+  const companyName = companies[0]?.name as string | undefined
+  const exportName = headcountFileName(companyName, sel)
   const exportHeadcount = async () => {
     if (!companyId || exporting) return
     setExporting(true)
     try {
-      const blob = await apiBlob(`/v1/reports/headcount/export.csv?companyId=${encodeURIComponent(companyId)}`)
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `headcount-${today}.csv`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
+      const wb = await fetchHeadcountWorkbook(companyId, sel)
+      const file = headcountFileName(wb.companyName, wb.asOf)
+      saveAndRecord(file, xlsxBlob(headcountSheets(wb)), { report: 'Headcount', fmt: 'Excel', company: wb.companyName })
+      toast.success('Headcount exported', { description: wb.employeesIncluded ? file : `${file} · summary only, your role can’t read employee records` })
     } catch (err) {
       const code = (err as Error & { status?: number }).status
       toast.error('Could not generate the report', { description: code === 403 ? "Your role doesn't include the headcount report." : (err as Error)?.message || 'Please try again.' })
@@ -198,12 +203,14 @@ export function AdminDashboardContainer() {
       milestones: {
         birthdays: (milestones.data?.birthdays ?? []).map((m) => milestone(m, 'b')),
         anniversaries: (milestones.data?.anniversaries ?? []).map((m) => milestone(m, 'a')),
-        retirements: (milestones.data?.retirements ?? []).map((m) => milestone(m, 'r')),
+        retirements: (retirementsDue.data
+          ? retirementsDue.data.map((r): Milestone => ({ employeeId: r.employeeId, name: r.name, initials: r.initials, department: r.department, date: r.retirementDate, years: r.retirementAge }))
+          : milestones.data?.retirements ?? []).map((m) => milestone(m, 'r')),
       },
       probations: (probations.data ?? []).map((p) => ({ id: p.employeeId, code: p.employeeCode, name: p.employeeName, title: p.jobTitle || '', manager: p.managerName || '—', end: fmtShort(p.probationEndDate), days: p.daysRemaining })),
       ops: { corrections: corrections.data?.totalElements ?? 0, leave: leaveOverview.data?.pendingApprovals ?? 0 },
     }
-  }, [team.data, trend.data, directory.data, stats.data, alerts.data, seats.data, holidays.data, headcount.data, performers.data, onboarding.data, hiring.data, projects.data, runs.data, activity.data, notices.data, milestones.data, probations.data, corrections.data, leaveOverview.data, sel, today, firstName])
+  }, [team.data, trend.data, directory.data, stats.data, alerts.data, seats.data, holidays.data, headcount.data, performers.data, onboarding.data, hiring.data, projects.data, runs.data, activity.data, notices.data, milestones.data, retirementsDue.data, probations.data, corrections.data, leaveOverview.data, sel, today, firstName])
 
   const d = data
   const sec: Record<SectionKey, { state: SectionStatus; retry: () => void }> = {
@@ -255,6 +262,7 @@ export function AdminDashboardContainer() {
         canAddEmployee={canAddEmployee}
         canManageNotices={canWriteCompany}
         exporting={exporting}
+        exportName={exportName}
         quickActions={quickActions}
         payRange={(() => {
           if (!d.payroll.length) return ''

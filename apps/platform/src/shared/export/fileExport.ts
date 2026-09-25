@@ -57,15 +57,16 @@ function zip(files: { name: string; data: string }[]): Blob {
 const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
 const colName = (i: number) => { let s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + ((i - 1) % 26)) + s; return s }
 
-export interface Sheet { name: string; rows: Cell[][]; widths?: number[] }
+/** `bold`: extra rows (0-based) drawn bold, e.g. the headings of tables further down a summary sheet. */
+export interface Sheet { name: string; rows: Cell[][]; widths?: number[]; bold?: number[] }
 
-/** An Excel workbook, one sheet per entry; the first row of each sheet is bold (its header). */
+/** An Excel workbook, one sheet per entry; the first row of each sheet is bold (its header), plus any `bold` rows. */
 export function xlsxBlob(sheets: Sheet[]): Blob {
   const safe = sheets.map((s, i) => ({ ...s, name: (s.name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || `Sheet${i + 1}`) }))
   const sheetXml = (s: Sheet) => {
     const cols = s.widths?.length ? `<cols>${s.widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : ''
     const rows = s.rows.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => {
-      const ref = `${colName(ci)}${ri + 1}`, st = ri === 0 ? ' s="1"' : ''
+      const ref = `${colName(ci)}${ri + 1}`, st = ri === 0 || s.bold?.includes(ri) ? ' s="1"' : ''
       if (v == null || v === '') return ''
       if (typeof v === 'number' && isFinite(v)) return `<c r="${ref}"${st}><v>${v}</v></c>`
       return `<c r="${ref}" t="inlineStr"${st}><is><t xml:space="preserve">${xml(String(v))}</t></is></c>`

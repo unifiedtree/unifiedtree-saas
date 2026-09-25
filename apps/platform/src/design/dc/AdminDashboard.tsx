@@ -237,7 +237,7 @@ export class AdminDashboard extends DCLogic {
       style: { display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 12px', fontSize: 13, fontWeight: 600, color: isToday ? '#334155' : '#0a5240', background: isToday ? '#fff' : '#ecfdf5', border: `1px solid ${isToday ? '#e2e8f0' : '#6ee7b7'}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', boxShadow: calOpen ? '0 0 0 3px #a7f3d0' : '0 1px 2px rgba(15,23,42,.04)' },
     }, ic('calendarDays', 15, { color: '#0f6e56' }), isToday ? D.todayLabel : `Viewing ${fmtWd(sel)}`, ic('chevronDown', 14, { color: '#64748b' }))
     const headerActions = createElement(Fragment, null, chip,
-      p.canExport ? createElement(HrButton, { variant: 'ghost', disabled: !!p.exporting, 'data-tip': `Downloads headcount-${today}.csv`, onClick: () => p.onExportHeadcount && p.onExportHeadcount() } as any, ic('download', 15), p.exporting ? ' Preparing…' : ' Export headcount') : null,
+      p.canExport ? createElement(HrButton, { variant: 'ghost', disabled: !!p.exporting, 'data-tip': `Downloads ${p.exportName || `headcount-${today}.xlsx`}`, onClick: () => p.onExportHeadcount && p.onExportHeadcount() } as any, ic('download', 15), p.exporting ? ' Preparing…' : ' Export headcount') : null,
       p.canAddEmployee ? createElement(HrButton, { 'data-tip': '→ /hrms/employees?add=1', onClick: () => go('/hrms/employees?add=1') } as any, ic('userPlus', 15), ' Add employee') : null)
     const trendSel = trendRows.findIndex((r) => r.iso === sel)
     const setDate = (iso: string | null) => p.onDate && p.onDate(iso)
