@@ -16,7 +16,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
-import { apiJson, API_BASE_URL, currentSubdomain } from '@/core/api/client'
+import { apiJson, API_BASE_URL, currentSubdomain, HttpError } from '@/core/api/client'
 
 export interface BrandingDto {
   workspaceName: string | null
@@ -66,16 +66,33 @@ interface State {
   setPageTitle: (t: string | null) => void
 }
 
+// After a failed load, wait before trying the same key again: 15 s, 30 s,
+// 60 s ... up to 5 minutes. Without this every re-render or session change
+// retried at once, and when the edge's per-IP rate limit answered 429 (no CORS
+// headers, so the browser reports a CORS error) the retries kept that IP
+// banned: one open tab could lock a whole office network out of the app.
+// Kept per key outside the store so a session flipping between signed-in and
+// signed-out (two keys) can't reset it.
+const RETRY_BASE_MS = 15_000
+const RETRY_MAX_MS = 5 * 60_000
+const backoff = new Map<string, { failures: number; retryAt: number }>()
+
 export const useBrandingStore = create<State>()((set, get) => ({
   key: null,
   status: 'idle',
   data: null,
   pageTitle: null,
-  apply: (key, dto) => set({ key, status: 'ready', data: dto }),
+  apply: (key, dto) => { backoff.delete(key); set({ key, status: 'ready', data: dto }) },
   setPageTitle: (t) => { if (get().pageTitle !== t) set({ pageTitle: t }) },
   load: async (key, authed, force = false) => {
     const s = get()
     if (!force && s.key === key && (s.status === 'loading' || s.status === 'ready')) return
+    const wait = backoff.get(key)
+    if (!force && wait && Date.now() < wait.retryAt) {
+      // Still cooling down: show this key's failed state without a request.
+      if (s.key !== key) set({ key, status: 'error', data: null })
+      return
+    }
     // Keep showing the previous data for the same workspace while reloading.
     set({ key, status: 'loading', data: s.key === key ? s.data : null })
     try {
@@ -88,13 +105,19 @@ export const useBrandingStore = create<State>()((set, get) => ({
           ? await apiJson<BrandingDto>('/v1/workspace/branding')
           : await apiJson<BrandingDto>(publicPath())
       } catch (e) {
-        // A lapsed subscription answers 402 on workspace reads; the public
-        // lookup (name and images only) still shows the workspace's own brand.
-        if (!authed || !currentSubdomain()) throw e
+        // A lapsed subscription answers 402 (or 403) on workspace reads; the
+        // public lookup (name and images only) still shows the workspace's own
+        // brand. Any other failure (network, rate limit, server error) would
+        // fail the same way there too, so don't double the traffic.
+        const refused = e instanceof HttpError && (e.status === 402 || e.status === 403)
+        if (!authed || !currentSubdomain() || !refused) throw e
         dto = await apiJson<BrandingDto>(publicPath())
       }
+      backoff.delete(key)
       if (get().key === key) set({ status: 'ready', data: dto })
     } catch {
+      const failures = (backoff.get(key)?.failures ?? 0) + 1
+      backoff.set(key, { failures, retryAt: Date.now() + Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (failures - 1)) })
       if (get().key === key) set({ status: 'error' })
     }
   },
