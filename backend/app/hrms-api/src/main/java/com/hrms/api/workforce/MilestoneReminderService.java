@@ -183,10 +183,12 @@ public class MilestoneReminderService {
                 SELECT e.id,
                        TRIM(COALESCE(e.first_name,'') || ' ' || COALESCE(e.last_name,'')) AS name,
                        d.name AS dept,
+                       c.name AS company,
                        e.reporting_manager_id,
                        0 AS years
                   FROM hrms.employees e
                   LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
+                  LEFT JOIN org.companies c ON c.id = e.company_id AND c.tenant_id = e.tenant_id
                  WHERE e.is_active
                    AND e.date_of_birth IS NOT NULL
                    AND EXTRACT(MONTH FROM e.date_of_birth) = EXTRACT(MONTH FROM CAST(? AS date))
@@ -200,10 +202,12 @@ public class MilestoneReminderService {
                 SELECT e.id,
                        TRIM(COALESCE(e.first_name,'') || ' ' || COALESCE(e.last_name,'')) AS name,
                        d.name AS dept,
+                       c.name AS company,
                        e.reporting_manager_id,
                        (EXTRACT(YEAR FROM CAST(? AS date)) - EXTRACT(YEAR FROM e.date_of_joining))::int AS years
                   FROM hrms.employees e
                   LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
+                  LEFT JOIN org.companies c ON c.id = e.company_id AND c.tenant_id = e.tenant_id
                  WHERE e.is_active
                    AND e.date_of_joining IS NOT NULL
                    AND EXTRACT(MONTH FROM e.date_of_joining) = EXTRACT(MONTH FROM CAST(? AS date))
@@ -218,6 +222,7 @@ public class MilestoneReminderService {
                 rs.getObject("id", UUID.class),
                 (name == null || name.isBlank()) ? "A colleague" : name,
                 rs.getString("dept"),
+                rs.getString("company"),
                 rs.getObject("reporting_manager_id", UUID.class),
                 rs.getInt("years"));
     }
@@ -263,9 +268,11 @@ public class MilestoneReminderService {
     }
 
     /** One person having a milestone today. */
-    private record Person(UUID id, String name, String department, UUID managerId, int years) {
+    private record Person(UUID id, String name, String department, String company, UUID managerId, int years) {
+        /** Who the greeting is from: the department, else the company (never the product's name: white-label). */
         String orgLabel() {
-            return department == null || department.isBlank() ? "UnifiedTree" : department;
+            if (department != null && !department.isBlank()) return department;
+            return company == null || company.isBlank() ? "the team" : company;
         }
     }
 }

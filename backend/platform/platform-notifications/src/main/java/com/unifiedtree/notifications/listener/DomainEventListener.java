@@ -18,6 +18,7 @@ import com.unifiedtree.notifications.events.OvertimeDecidedEvent;
 import com.unifiedtree.notifications.events.DocumentUploadedEvent;
 import com.unifiedtree.notifications.events.DocumentVerifiedEvent;
 import com.unifiedtree.notifications.events.DocumentRejectedEvent;
+import com.unifiedtree.notifications.events.RetirementDueEvent;
 import com.unifiedtree.notifications.events.WfhCancelledEvent;
 import com.unifiedtree.notifications.events.WfhDecidedEvent;
 import com.unifiedtree.notifications.events.WfhRequestSubmittedEvent;
@@ -689,6 +690,38 @@ public class DomainEventListener {
                     "Document needs re-upload", body, data);
         } catch (Exception ex) {
             log.warn("Failed to publish DOCUMENT_REJECTED notification for {}: {}", e.documentId(), ex.getMessage());
+        }
+    }
+
+    // ─── Retirement due (daily job, 90 and 30 days before) ──────────────────
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onRetirementDue(RetirementDueEvent e) {
+        try {
+            String who = firstOrElse(e.employeeName(), "A colleague");
+            // Plain ASCII: this text also travels as a push notification.
+            String title = e.daysLeft() <= 0
+                    ? who + " reaches retirement age today"
+                    : "%s retires in %d %s".formatted(who, e.daysLeft(), e.daysLeft() == 1 ? "day" : "days");
+            String body = "Reaches the retirement age of %d on %s%s. Plan the handover and the final settlement."
+                    .formatted(e.retirementAge(), fmt(e.retirementDate()),
+                            e.department() != null && !e.department().isBlank() ? " (" + e.department() + ")" : "");
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.RETIREMENT_DUE.name());
+            data.put("employeeId", e.employeeId().toString());
+            data.put("retirementDate", e.retirementDate().toString());
+            data.put("daysLeft", e.daysLeft());
+            // Mobile: the milestones screen lists upcoming retirements. The web
+            // bell opens the person's record instead (notificationStore).
+            data.put("route", "/milestones");
+            for (UUID recipient : e.recipientEmployeeIds()) {
+                try {
+                    service.create(e.tenantId(), recipient, AppNotificationType.RETIREMENT_DUE, title, body, data);
+                } catch (Exception ex) {
+                    log.warn("Failed to publish RETIREMENT_DUE to {} for {}: {}", recipient, e.employeeId(), ex.getMessage());
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to publish RETIREMENT_DUE notifications for {}: {}", e.employeeId(), ex.getMessage());
         }
     }
 

@@ -62,5 +62,10 @@ public enum AppNotificationType {
      * 402 the moment they'd exceed cap, no grandfather, no warning surface.
      */
     BILLING_OVER_CAP,
+    /**
+     * Someone reaches the company's retirement age in 90 (then 30) days. Sent by
+     * the daily retirement alert job to people holding hrms.retirement.alerts.
+     */
+    RETIREMENT_DUE,
     GENERAL
 }

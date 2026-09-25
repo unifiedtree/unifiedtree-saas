@@ -44,21 +44,15 @@ import java.util.UUID;
 @RequestMapping("/v1/hrms/milestones")
 public class MilestonesController {
 
-    /**
-     * Superannuation age used to project a retirement date, since the schema
-     * has no retirement_date column. 60 is the common private-sector norm in
-     * India. It belongs in settings.* eventually — a workspace with a
-     * different policy currently has no way to change it, so treat any
-     * retirement row as indicative rather than authoritative.
-     */
-    private static final int RETIREMENT_AGE_YEARS = 60;
-
     private final JdbcTemplate jdbc;
     private final MilestoneReminderService reminders;
+    private final RetirementService retirementService;
 
-    public MilestonesController(JdbcTemplate jdbc, MilestoneReminderService reminders) {
+    public MilestonesController(JdbcTemplate jdbc, MilestoneReminderService reminders,
+                                RetirementService retirementService) {
         this.jdbc = jdbc;
         this.reminders = reminders;
+        this.retirementService = retirementService;
     }
 
     @Operation(summary = "Upcoming birthdays, work anniversaries and retirements")
@@ -171,19 +165,15 @@ public class MilestonesController {
     // -- retirements -----------------------------------------------------------
 
     private List<Milestone> retirements(UUID tenantId, int months) {
-        return query("""
-                SELECT e.id, e.first_name, e.last_name, e.employee_code,
-                       d.name AS dept, e.date_of_birth AS src,
-                       (e.date_of_birth + make_interval(years => %d))::date AS occurs,
-                       %d AS years
-                  FROM hrms.employees e
-                  LEFT JOIN hrms.departments d ON d.id = e.department_id
-                 WHERE e.tenant_id = ? AND e.is_active AND e.date_of_birth IS NOT NULL
-                   AND (e.date_of_birth + make_interval(years => %d))::date
-                       BETWEEN current_date AND current_date + make_interval(months => ?)
-                 ORDER BY occurs
-                """.formatted(RETIREMENT_AGE_YEARS, RETIREMENT_AGE_YEARS, RETIREMENT_AGE_YEARS),
-                tenantId, months);
+        // The retirement age comes from each company's HR Configuration (60 when
+        // unset), the same rule as the retirement-due list and its alerts
+        // (RetirementService). "Today" is the India business date.
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        int days = (int) java.time.temporal.ChronoUnit.DAYS.between(today, today.plusMonths(months));
+        return retirementService.due(tenantId, today, days, null).stream()
+                .map(r -> new Milestone(r.employeeId().toString(), r.name(), r.initials(), r.department(),
+                        r.retirementDate(), r.retirementAge()))
+                .toList();
     }
 
     /**
