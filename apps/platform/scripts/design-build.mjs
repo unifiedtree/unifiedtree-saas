@@ -318,6 +318,16 @@ const LITERALS = {
 // slot (real data + its own loading/error state). dc-props is appended last, so
 // it overrides the shared props the prototype passed.
 const PATCH = {
+  // Client, 26 Sep: the page title, its one-line description and Add company
+  // belong to the whole page, not to the left column. The prototype nested them
+  // inside the <aside>, so the heading was squeezed into the company card's
+  // width and Add company sat mid-page instead of at the right edge. Lift the
+  // row out above the two columns and give it the page-header type scale.
+  CompaniesPage(html) {
+    html = replaceOnce(html, '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;min-height:40px;margin-bottom:4px"><h1 style="margin:0;font-family:\'Plus Jakarta Sans\',Inter,sans-serif;font-size:20px;font-weight:700;letter-spacing:-.01em;color:#0f172a">Companies &amp; Branches</h1><sc-if value="{{ canEdit }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="UnifiedTree.HrButton" size="sm" onClick="{{ addCompany }}" data-tip="Opens Add company" hint-size="124px,32px">{{ icPlus }} Add company</x-import></sc-if></div>\n', '')
+    html = replaceOnce(html, '<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:20px;min-width:0">\n', '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px;min-width:0"><div style="display:grid;gap:4px;min-width:0"><h1 style="margin:0;font-family:\'Plus Jakarta Sans\',Inter,sans-serif;font-size:28px;font-weight:700;letter-spacing:-.02em;color:#0f172a">Companies &amp; Branches</h1><p style="margin:0;font-size:14px;line-height:1.5;color:#64748b">Manage your company details and branch locations with their attendance boundaries.</p></div><sc-if value="{{ canEdit }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="UnifiedTree.HrButton" size="sm" onClick="{{ addCompany }}" data-tip="Opens Add company" hint-size="124px,32px">{{ icPlus }} Add company</x-import></sc-if></div>\n' + '<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:20px;min-width:0">\n')
+    return html
+  },
   AttendancePage(html) {
     // One column capped at the page width, so the section bar scrolls sideways
     // on a phone (as its overflow-x:auto intends) instead of widening the page.

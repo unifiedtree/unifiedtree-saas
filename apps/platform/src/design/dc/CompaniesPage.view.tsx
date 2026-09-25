@@ -17,20 +17,25 @@ export function CompaniesPageView({ v }: { v: any }) {
       <div style={{display: "grid", gap: "20px", minWidth: "0", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
         {v.hasCompanies ? (
           <>
+            <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "12px 16px", minWidth: "0"}}>
+              <div style={{display: "grid", gap: "4px", minWidth: "0"}}>
+                <h1 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "28px", fontWeight: "700", letterSpacing: "-.02em", color: "#0f172a"}}>
+                  {"Companies & Branches"}
+                </h1>
+                <p style={{margin: "0", fontSize: "14px", lineHeight: "1.5", color: "#64748b"}}>
+                  {"Manage your company details and branch locations with their attendance boundaries."}
+                </p>
+              </div>
+              {v.canEdit ? (
+                <>
+                  <HrButton size="sm" onClick={v.addCompany} data-tip="Opens Add company">
+                    {txt(v.icPlus)}{" Add company"}
+                  </HrButton>
+                </>
+              ) : null}
+            </div>
             <div style={{display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: "20px", minWidth: "0"}}>
               <aside aria-label="Companies" style={{flex: "1 1 400px", minWidth: "0", display: "grid", gap: "12px", alignContent: "start"}}>
-                <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "10px 16px", minHeight: "40px", marginBottom: "4px"}}>
-                  <h1 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "20px", fontWeight: "700", letterSpacing: "-.01em", color: "#0f172a"}}>
-                    {"Companies & Branches"}
-                  </h1>
-                  {v.canEdit ? (
-                    <>
-                      <HrButton size="sm" onClick={v.addCompany} data-tip="Opens Add company">
-                        {txt(v.icPlus)}{" Add company"}
-                      </HrButton>
-                    </>
-                  ) : null}
-                </div>
                 <div ref={v.pickerRef} style={{position: "relative", zIndex: "5", display: "grid", gap: "6px"}}>
                   <div style={{display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "8px"}}>
                     <span id="co-pick-label" style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "#64748b"}}>
