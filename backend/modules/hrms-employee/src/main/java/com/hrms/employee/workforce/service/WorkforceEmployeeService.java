@@ -67,7 +67,11 @@ public class WorkforceEmployeeService {
     // -- Directory query ----------------------------------------------------
     @Transactional(readOnly = true)
     public PageResponse<WorkforceEmployeeResponse> directory(WorkforceFilter f) {
-        var spec = buildSpec(f);
+        // Milestone filters pick their people with the dashboard card's own SQL
+        // (MilestoneWindow), once, before the paged query.
+        List<UUID> milestoneIds = f.milestone() == null ? null
+                : jdbc.queryForList(MilestoneWindow.idsSql(f.milestone()), UUID.class, f.milestone().clamp(f.milestoneWithin()));
+        var spec = buildSpec(f, milestoneIds);
         Page<WorkforceEmployee> page = repository.findAll(
                 spec,
                 PageRequest.of(f.page(), f.pageSize(),
@@ -78,12 +82,14 @@ public class WorkforceEmployeeService {
         return PageResponse.from(page, this::toListResponse);
     }
 
-    private Specification<WorkforceEmployee> buildSpec(WorkforceFilter f) {
+    private Specification<WorkforceEmployee> buildSpec(WorkforceFilter f, List<UUID> milestoneIds) {
         return (root, query, cb) -> {
             List<Predicate> ps = new ArrayList<>();
             ps.add(cb.isTrue(root.get("active")));
             if (f.companyId()    != null) ps.add(cb.equal(root.get("companyId"), f.companyId()));
             if (f.departmentId() != null) ps.add(cb.equal(root.get("departmentId"), f.departmentId()));
+            if (f.noDepartment())         ps.add(cb.isNull(root.get("departmentId")));
+            if (milestoneIds != null)     ps.add(milestoneIds.isEmpty() ? cb.disjunction() : root.get("id").in(milestoneIds));
             if (f.branchId()     != null) ps.add(cb.equal(root.get("branchId"), f.branchId()));
             if (f.status()       != null) ps.add(cb.equal(root.get("employmentStatus"), f.status()));
             if (f.search() != null && !f.search().isBlank()) {
