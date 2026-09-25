@@ -69,7 +69,7 @@ function MyAdvancesTab() {
             <RowList>
               {list.map((a) => (
                 <Row key={a.id} title={`${inr(a.amount)} · ${a.repaymentMonths} ${a.repaymentMonths === 1 ? 'month' : 'months'}`}
-                  meta={`${inr(a.monthlyDeduction)} a month${a.status === 'DISBURSED' && a.outstandingAmount != null ? ` · ${inr(a.outstandingAmount)} left to repay` : ''} · asked ${dmy(a.createdAt?.slice(0, 10))}`}
+                  meta={`${inr(a.monthlyDeduction)} a month${a.status === 'DISBURSED' && a.outstandingAmount != null ? ` · ${inr(a.outstandingAmount)} left to repay` : ''} · ${a.raisedById ? `raised for you by ${a.raisedByName || 'HR'}` : 'asked'} ${dmy(a.createdAt?.slice(0, 10))}`}
                   note={a.reason ? `“${a.reason}”` : undefined}
                   trail={<HrStatusPill tone={TONE[a.status]}>{advanceLabel(a)}</HrStatusPill>} />
               ))}

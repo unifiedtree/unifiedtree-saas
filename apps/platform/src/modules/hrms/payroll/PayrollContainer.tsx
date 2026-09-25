@@ -18,7 +18,7 @@ import type { RunRow, RunStatus } from '@/design/dc/PayRuns'
 import type { PayDashData } from '@/design/dc/PayDashboard'
 import type { RunPageData } from '@/design/dc/PayrollRunPage'
 import type { Payslip } from '@/design/dc/PayslipDrawer'
-import type { StructureInfo, PayCalc, SalaryRow } from '@/design/dc/PaySalary'
+import type { StructureInfo, PayCalc, SalaryRow, BulkBody, BulkOptions, BulkPreview } from '@/design/dc/PaySalary'
 import { designSplit } from '@/design/dc/PaySalary'
 import type { ApiPayrollSettings } from '@/design/dc/PaySettings'
 import type { PliRow } from '@/design/dc/PayPli'
@@ -32,7 +32,8 @@ import {
 import type { EmployeeSalaryStructure, SalaryComponent, PtSlab, PayrollDashboardKpis } from '../api/usePayroll'
 import { downloadBatchFile, type DisbursementBatch, type BankProfile, type BatchDetail } from '../api/useDisbursement'
 import type { AdvanceRequest, Page, AdvanceScheduleRow } from '../api/useAdvance'
-import { useAdvanceDecision, useRequestAdvance } from '../api/useAdvance'
+import { useAdvanceDecision, useRequestAdvance, useRequestAdvanceOnBehalf } from '../api/useAdvance'
+import { downloadBlob, xlsxBlob, type Cell } from '@/shared/export/fileExport'
 import type { PliTarget } from '../api/usePli'
 import type { StatutoryFiling } from '../api/useCompliance'
 import type { PageResponse, WorkforceEmployee } from '../api/useWorkforce'
@@ -67,6 +68,24 @@ async function loadDirectory() {
   return all
 }
 const saveBlob = (blob: Blob, name: string) => { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url) }
+/** GET /v1/payroll/structures/export — every current salary structure with its configured components. */
+interface StructureExport {
+  generatedOn: string
+  components: { code: string; name: string; category: string }[]
+  rows: { employeeCode: string; name: string; company: string | null; department: string | null; designation: string | null; grade: string | null; employmentStatus: string | null
+    effectiveFrom: string; ctcAnnual: number; ctcMonthly: number; grossMonthly: number | null; derivedFromCtc: boolean; taxRegime: string | null; pfApplicable: boolean; amounts: Record<string, number> }[]
+}
+const statusText = (v?: string | null) => (v ? v.charAt(0) + v.slice(1).toLowerCase().replace(/_/g, ' ') : '')
+/** The export as an Excel workbook: one row per person, components as columns (monthly amounts). */
+function structuresWorkbook(x: StructureExport) {
+  const head: Cell[] = ['Employee code', 'Employee name', 'Company', 'Department', 'Designation', 'Grade', 'Status', 'Effective from', 'Annual CTC', 'Monthly CTC',
+    ...x.components.map((c) => `${c.name} (monthly)`), 'Gross monthly', 'Structure', 'Tax regime', 'PF']
+  const rows: Cell[][] = x.rows.map((r) => [r.employeeCode, r.name, r.company, r.department, r.designation, r.grade, statusText(r.employmentStatus), r.effectiveFrom,
+    num(r.ctcAnnual), num(r.ctcMonthly), ...x.components.map((c) => (r.amounts?.[c.code] != null ? num(r.amounts[c.code]) : null)),
+    r.grossMonthly != null ? num(r.grossMonthly) : null, r.derivedFromCtc ? 'From CTC (no components)' : 'Component split', r.taxRegime ? `${r.taxRegime} regime` : '', r.pfApplicable ? 'Yes' : 'No'])
+  return xlsxBlob([{ name: 'Salary structures', rows: [head, ...rows], widths: [14, 26, 22, 20, 20, 10, 14, 14, 14, 14, ...x.components.map(() => 16), 14, 24, 12, 8] }])
+}
+const GROSS = (c?: string) => c === 'EARNING' || c === 'REIMBURSEMENT'
 
 export function PayrollContainer() {
   const navigate = useNavigate()
@@ -85,12 +104,12 @@ export function PayrollContainer() {
 
   // ── permissions (the codes each endpoint checks) ──
   const canRuns = usePermission(P.PAYROLL_RUNS_READ), canManage = usePermission(P.PAYROLL_RUNS_MANAGE), canLock = usePermission(P.PAYROLL_RUNS_LOCK)
-  const canStruct = usePermission(P.PAYROLL_STRUCTURE_READ), canStructManage = usePermission(P.PAYROLL_STRUCTURE_MANAGE)
+  const canStruct = usePermission(P.PAYROLL_STRUCTURE_READ), canStructManage = usePermission(P.PAYROLL_STRUCTURE_MANAGE), canBulk = usePermission('payroll.structure.bulk-revise')
   const canSettings = usePermission(P.PAYROLL_SETTINGS_READ), canSettingsEdit = usePermission(P.PAYROLL_SETTINGS_UPDATE)
   const canDisbRead = usePermission('hrms.disbursement.read'), canBuild = usePermission('hrms.disbursement.build'), canPost = usePermission('hrms.disbursement.post')
   const canProfiles = usePermission('hrms.bank_profile.read')
   const canPliRead = usePermission('hrms.pli.read'), canPliTarget = usePermission('hrms.pli.target.read'), canPliWrite = usePermission('hrms.pli.write'), canPliTargetWrite = usePermission('hrms.pli.target.write'), canPliSelf = usePermission('hrms.pli.read.self')
-  const canAdvRead = usePermission('hrms.advance.read'), canAdvApprove = usePermission('hrms.advance.approve'), canAdvRequest = usePermission('hrms.advance.request.self')
+  const canAdvRead = usePermission('hrms.advance.read'), canAdvApprove = usePermission('hrms.advance.approve'), canAdvRequest = usePermission('hrms.advance.request.self'), canAdvOthers = usePermission('hrms.advance.request.others')
   const canCompliance = usePermission('hrms.compliance.read'), canEmpRead = usePermission(P.HRMS_EMPLOYEE_READ)
   const pliAdmin = canPliRead || canPliTarget, advAdmin = canAdvRead
   const me = useMemo(() => { try { return jwtDecode<{ employee_id?: string; name?: string; given_name?: string }>(getAccessToken() || '') } catch { return {} as any } }, [])
@@ -104,7 +123,7 @@ export function PayrollContainer() {
   const sorted = useMemo(() => runs.slice().sort((a, b) => byPeriod(b) - byPeriod(a)), [runs])
   /** The run for this month (the dashboard's "this month's run"). */
   const thisMonthRun = sorted.find((r) => r.periodYear === y && r.periodMonth === m && r.status !== 'CANCELLED') || null
-  const directoryQ = useQuery({ queryKey: ['hrms', 'employees', 'all-for-payroll'], queryFn: loadDirectory, enabled: canEmpRead && ['salary', 'pli', 'runs'].includes(section), staleTime: 300_000 })
+  const directoryQ = useQuery({ queryKey: ['hrms', 'employees', 'all-for-payroll'], queryFn: loadDirectory, enabled: canEmpRead && (['salary', 'pli', 'runs'].includes(section) || (section === 'advances' && canAdvOthers)), staleTime: 300_000 })
   const directory = useMemo(() => directoryQ.data ?? [], [directoryQ.data])
   const deptIds = useMemo(() => [...new Set(companies.map((c) => c.id))], [companies])
   const deptQs = useQueries({ queries: deptIds.map((cid) => ({ queryKey: ['hrms', 'departments', cid], queryFn: () => apiJson<Department[]>(`/v1/hrms/departments?companyId=${cid}`), enabled: ['salary', 'pli', 'runs'].includes(section), staleTime: 300_000 })) })
@@ -190,7 +209,7 @@ export function PayrollContainer() {
   const [advView, setAdvView] = useState<string | null>(null)
   const [recoveryFor, setRecoveryFor] = useState<string | null>(null)
   const scheduleQ = useQuery({ queryKey: ['hrms', 'advance', 'schedule', advView], queryFn: () => apiJson<AdvanceScheduleRow[]>(`/v1/advance/${advView}/schedule`), enabled: !!advView && canAdvRead, staleTime: 30_000 })
-  const decide = useAdvanceDecision(), requestAdv = useRequestAdvance()
+  const decide = useAdvanceDecision(), requestAdv = useRequestAdvance(), requestFor = useRequestAdvanceOnBehalf()
 
   // ── Bank ──
   // ?run= (from a run's page) shows that run's bank file; otherwise this month's, or the latest locked one.
@@ -336,7 +355,8 @@ export function PayrollContainer() {
         gross, net: num(s.netMonthly ?? gross - dedLines.reduce((a, l) => a + num(l.monthlyAmount), 0)), ctcAnnual: num(s.ctcAnnual), effectiveFrom: s.effectiveFrom,
         basic, hra, special: Math.max(0, gross - basic - hra), deductions: num(s.totalDeductions ?? dedLines.reduce((a, l) => a + num(l.monthlyAmount), 0)),
         dedCodes: dedLines.filter((l) => num(l.monthlyAmount) > 0).map((l) => codeName[l.componentCode] || l.componentCode).filter((v, i, a) => a.indexOf(v) === i),
-        earnings: earn.filter((l) => l.componentId).map((l) => ({ componentId: l.componentId as string, code: l.componentCode, amount: num(l.monthlyAmount) })),
+        // The configured lines (with their component ids) are what the drawer scales; the engine's projection has no ids.
+        earnings: (s.lines ?? []).filter((l) => l.componentId && GROSS(l.category)).map((l) => ({ componentId: l.componentId as string, code: l.componentCode, amount: num(l.monthlyAmount) })),
         ...({ raw: s } as object),
       } as StructureInfo
     })
@@ -351,10 +371,26 @@ export function PayrollContainer() {
       state: stateOf(directoryQ), employees, structures, calc, missing, newIds, canEdit: canStructManage, focus: params.get('employee') || '',
       monthStart, nextMonthStart, runId: salaryRun?.id || '', runLabel: salaryRun ? runLabel(salaryRun) : '',
       onVisible: (ids: string[]) => setVisible((cur) => (cur.join(',') === ids.join(',') ? cur : ids)), onRetry: () => directoryQ.refetch(),
+      canExport: canStruct,
+      onExport: () => apiJson<StructureExport>('/v1/payroll/structures/export').then((x) => {
+        if (!x.rows.length) { toast.message('No salary structures to export yet'); return }
+        downloadBlob(`salary-structures-${x.generatedOn}.xlsx`, structuresWorkbook(x))
+        toast.success(`${x.rows.length} salary ${x.rows.length === 1 ? 'structure' : 'structures'} downloaded`)
+      }, failed('Could not export salary structures')),
+      canBulk,
+      loadBulkOptions: () => apiJson<BulkOptions>('/v1/payroll/structures/bulk-revise/options'),
+      previewBulk: (body: BulkBody) => apiJson<BulkPreview>('/v1/payroll/structures/bulk-revise/preview', { method: 'POST', body: JSON.stringify(body) }),
+      applyBulk: (body: BulkBody) => apiJson<{ applied: number; effectiveFrom: string }>('/v1/payroll/structures/bulk-revise', { method: 'POST', body: JSON.stringify(body) }).then((r) => {
+        qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'structure'] }); qc.invalidateQueries({ queryKey: ['hrms', 'payroll', 'runs'] })
+        toast.success(`Salary revised for ${r.applied} ${r.applied === 1 ? 'person' : 'people'} · from ${fmtShort(r.effectiveFrom)}`, { description: 'Each person has been told their salary was revised.' })
+        return true
+      }, failed('Could not apply the revision')),
       onSave: async (q: { employeeId: string; name: string; monthly: number; effectiveFrom: string; isNew: boolean; lines: { componentId: string; code: string; amount: number }[] | null; current: (StructureInfo & { raw?: EmployeeSalaryStructure }) | null }) => {
         const cur = q.current?.raw
         let components: { componentId: string; monthlyAmount: number }[]
-        if (q.lines) components = q.lines.map((l) => ({ componentId: l.componentId, monthlyAmount: l.amount }))
+        // Lines that aren't pay (a fixed deduction, an employer contribution) are kept as they are.
+        if (q.lines) components = [...q.lines.map((l) => ({ componentId: l.componentId, monthlyAmount: l.amount })),
+          ...(cur?.lines ?? []).filter((l) => l.componentId && !GROSS(l.category)).map((l) => ({ componentId: l.componentId as string, monthlyAmount: num(l.monthlyAmount) }))]
         else {
           const sp = designSplit(q.monthly)
           const missingCodes = Object.entries(sp).filter(([code, v]) => v > 0 && !compId.get(code)).map(([code]) => code)
@@ -409,14 +445,21 @@ export function PayrollContainer() {
   if (section === 'advances') {
     const rows: AdvRow[] = (advQ.data?.content ?? []).map((a) => ({
       id: a.id, empId: a.employeeId, name: a.employeeName || 'Employee', code: a.employeeCode || '', type: a.reason?.trim() ? a.reason.trim().slice(0, 40) : 'Salary advance',
-      principal: num(a.amount), emi: num(a.monthlyDeduction), months: a.repaymentMonths, left: num(a.outstandingAmount), status: a.status, raw: a,
+      principal: num(a.amount), emi: num(a.monthlyDeduction), months: a.repaymentMonths, left: num(a.outstandingAmount), status: a.status, raw: a, raisedBy: a.raisedById ? a.raisedByName || 'HR' : '',
     }))
     const plan: AdvPlanRow[] | null = scheduleQ.data ? scheduleQ.data.map((r) => ({ month: r.scheduledMonth, amount: num(r.scheduledAmount), status: r.status })) : null
     px.PayAdvances = {
       state: stateOf(advQ), rows, plan, me: me.employee_id || '', meLabel: me.name || me.given_name || '', canApprove: canAdvApprove, canRequest: canAdvRequest,
+      // Issue advance for someone else: everyone active in the directory (the server checks the permission and the person).
+      canRequestOthers: canAdvOthers,
+      people: canAdvOthers ? directory.filter((e) => e.id !== me.employee_id && e.employmentStatus !== 'EXITED' && e.employmentStatus !== 'TERMINATED')
+        .map((e) => ({ id: e.id, name: nameOfEmp(e), code: e.employeeCode })).sort((a, b) => a.name.localeCompare(b.name)) : [],
       decisionActions: AdvanceDecisionActions, onView: (id: string) => setAdvView(id), onRecovery: (id: string) => setRecoveryFor(id), onRetry: () => advQ.refetch(),
       onApprove: (id: string) => decide.mutateAsync({ id, approved: true }).then(() => done('Advance approved'), failed('Could not approve the advance')),
-      onRequest: (q: { amount: number; reason: string; repaymentMonths: number }) => requestAdv.mutateAsync(q).then(() => done('Advance request sent for approval'), failed('Could not send the request')),
+      onRequest: (q: { employeeId: string; name: string; amount: number; reason: string; repaymentMonths: number }) => q.employeeId && q.employeeId !== me.employee_id
+        ? requestFor.mutateAsync({ employeeId: q.employeeId, amount: q.amount, reason: q.reason, repaymentMonths: q.repaymentMonths })
+          .then(() => done(`Advance raised for ${q.name} · sent for approval`), failed('Could not raise the advance'))
+        : requestAdv.mutateAsync({ amount: q.amount, reason: q.reason, repaymentMonths: q.repaymentMonths }).then(() => done('Advance request sent for approval'), failed('Could not send the request')),
     }
   }
   if (section === 'bank') {
@@ -449,7 +492,7 @@ export function PayrollContainer() {
   if (section === 'advances' && !advAdmin) return <Advance />
 
   const visibleSections = [
-    canRuns && 'dashboard', canRuns && 'salary', canRuns && 'runs', canSettings && 'settings', (pliAdmin || canPliSelf) && 'pli', (advAdmin || canAdvRequest || canAdvApprove) && 'advances', canRuns && 'bank',
+    canRuns && 'dashboard', canRuns && 'salary', canRuns && 'runs', canSettings && 'settings', (pliAdmin || canPliSelf) && 'pli', (advAdmin || canAdvRequest || canAdvApprove || canAdvOthers) && 'advances', canRuns && 'bank',
   ].filter(Boolean) as string[]
   return (
     <DesignFrame>

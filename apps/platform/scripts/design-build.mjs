@@ -206,6 +206,16 @@ const LITERALS = {
     ['They’re skipped in the Sep 2026 run until you add one.', 'They’re skipped in the {{ runLabel }} run until you add one.'],
     ['value="{{ fDate }}" min="2026-09-01"', 'value="{{ fDate }}" min="{{ fDateMin }}"'],
     ['value="{{ bDate }}" min="2026-10-01"', 'value="{{ bDate }}" min="{{ bDateMin }}"'],
+    // Bulk revise CTC (built 2026-09-25): the design's modal keeps its fields and
+    // look; slots add what a real revision needs, built from the same field
+    // styles and the module kit — how to revise (% or a fixed yearly amount),
+    // the people picker when "Who" is a hand-picked list, the reason, and the
+    // per-person preview with its warning.
+    ['<label style="display:grid;gap:6px;font-size:13px;font-weight:600">Increase by (%) *<input type="number" min="1" max="50" step="0.5" value="{{ bPct }}"', '{{ bModeBlock }}<label style="display:grid;gap:6px;font-size:13px;font-weight:600">{{ bValueLabel }}<input type="number" min="{{ bMin }}" max="{{ bMax }}" step="{{ bStep }}" value="{{ bPct }}"'],
+    ['options="{{ deptOptions }}" hint-size="100%,42px"></x-import></div>', 'options="{{ deptOptions }}" hint-size="100%,42px"></x-import></div>{{ bWhoBlock }}'],
+    ['min="{{ bDateMin }}" on-change="{{ setBDate }}" label="Effective from" hint-size="100%,42px"></dc-import></div>', 'min="{{ bDateMin }}" on-change="{{ setBDate }}" label="Effective from" hint-size="100%,42px"></dc-import></div>{{ bReasonBlock }}'],
+    ['color:#065f46">{{ bPreview }}</p>', 'color:#065f46">{{ bPreview }}</p>{{ bPreviewBlock }}'],
+    ['disabled="{{ bBad }}" hint-size="150px,40px">Apply revision</x-import>', 'disabled="{{ bBad }}" hint-size="150px,40px">{{ bApplyLabel }}</x-import>'],
     // The split is the backend's, not the prototype's fixed 50% / 40% / 12% rule.
     ['Basic is 50% of gross, HRA is 40% of basic, and PF is 12% of basic up to ₹1,800.', '{{ splitNote }}'],
     ['Enter at least ₹10,000.', '{{ minNote }}'],
@@ -286,6 +296,11 @@ const PATCH = {
     const i = html.lastIndexOf('</sc-if>')
     if (i < 0) throw new Error('PayslipDrawer: payslip block not found')
     return html.slice(0, i + '</sc-if>'.length) + '\n{{ stateBlock }}' + html.slice(i + '</sc-if>'.length)
+  },
+  // Bulk revise CTC is for people who may revise many salaries at once
+  // (payroll.structure.bulk-revise); others don't see the button.
+  PaySalary(html) {
+    return wrapIf(html, 'onClick="{{ openBulk }}"', 'canBulk')
   },
   // Same for the payroll module: every section gets its own real-data props slot.
   PayrollModule(html) {

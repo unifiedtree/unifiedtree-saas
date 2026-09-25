@@ -21,6 +21,9 @@ export interface AdvanceRequest {
   disbursedAt?: string
   outstandingAmount: number
   createdAt: string
+  /** Set when HR / finance raised it on the employee's behalf (null when the employee asked). */
+  raisedById?: string | null
+  raisedByName?: string | null
 }
 
 export interface Page<T> {
@@ -142,6 +145,16 @@ export function useRequestAdvance() {
   return useMutation({
     mutationFn: (data: RequestAdvancePayload) =>
       apiJson<AdvanceRequest>('/v1/advance/requests', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'advance'] }),
+  })
+}
+
+/** HR / finance raise an advance in an employee's name (hrms.advance.request.others). Same approval → payout → recovery flow. */
+export function useRequestAdvanceOnBehalf() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: RequestAdvancePayload & { employeeId: string }) =>
+      apiJson<AdvanceRequest>('/v1/advance/requests/on-behalf', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'advance'] }),
   })
 }

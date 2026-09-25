@@ -362,7 +362,7 @@ const ROUTE_TREE = (
         <Route
           path="/hrms/advances"
           element={
-            <RouteGuard anyOf={['hrms.advance.request.self', 'hrms.advance.read', 'hrms.advance.approve', 'hrms.advance.disburse']}>
+            <RouteGuard anyOf={['hrms.advance.request.self', 'hrms.advance.read', 'hrms.advance.approve', 'hrms.advance.disburse', 'hrms.advance.request.others']}>
               <ModuleGate moduleKey="hrms"><PayrollModule /></ModuleGate>
             </RouteGuard>
           }
