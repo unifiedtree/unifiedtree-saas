@@ -458,16 +458,34 @@ public class WorkforceController {
     public WorkforceEmployeeResponse startNotice(@PathVariable UUID id,
                                                  @RequestParam LocalDate noticeStart,
                                                  @RequestParam LocalDate lastWorkingDay,
-                                                 @RequestParam(required = false) String reason) {
-        return employees.startNotice(id, noticeStart, lastWorkingDay, reason);
+                                                 @RequestParam(required = false) String reason,
+                                                 @RequestParam(required = false) String exitType) {
+        return employees.startNotice(id, noticeStart, lastWorkingDay, reason, parseExitType(exitType));
     }
 
     @PostMapping("/employees/{id}/exit")
     @PreAuthorize("hasAuthority('hrms.employee.write')")
     public WorkforceEmployeeResponse exit(@PathVariable UUID id,
                                           @RequestParam LocalDate lastWorkingDay,
-                                          @RequestParam(required = false) String reason) {
-        return employees.exit(id, lastWorkingDay, reason);
+                                          @RequestParam(required = false) String reason,
+                                          @RequestParam(required = false) String exitType) {
+        return employees.exit(id, lastWorkingDay, reason, parseExitType(exitType));
+    }
+
+    /**
+     * V143.13: optional exit type on the notice / exit calls. Blank means "not
+     * given" (the recorded type is kept); anything outside the list is a 400.
+     */
+    static com.hrms.employee.workforce.entity.WorkforceEmployee.ExitType parseExitType(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return com.hrms.employee.workforce.entity.WorkforceEmployee.ExitType.valueOf(
+                    raw.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Exit type must be one of RESIGNATION, TERMINATION, RETIREMENT, END_OF_CONTRACT, ABSCONDING, DEATH or OTHER");
+        }
     }
 
     @PostMapping("/employees/{id}/cancel-notice")

@@ -41,6 +41,8 @@ public class DocumentController {
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private org.springframework.context.ApplicationEventPublisher events;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private DocumentTypeDefaults typeDefaults;
 
     public DocumentController(DocumentService documentService,
                               EmployeeRepository employeeRepository,
@@ -205,6 +207,8 @@ public class DocumentController {
     @PreAuthorize("hasAuthority('hrms.document.type.read')")
     public java.util.List<java.util.Map<String, Object>> myMissing(@AuthenticationPrincipal Jwt jwt) {
         UUID employeeId = extractEmployeeId(jwt);
+        // Same lazy seed as GET /types: a new workspace's required types must show here too.
+        if (typeDefaults != null && typeDefaults.missing()) typeDefaults.ensureDefaults();
         return jdbc.query("""
                 SELECT t.id, t.code, t.display_name, t.allowed_formats, t.max_size_mb, t.expiry_tracked
                   FROM document_mgmt.document_types t

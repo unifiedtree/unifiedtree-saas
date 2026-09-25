@@ -89,6 +89,33 @@ export function useMyBalances(year?: number) {
   })
 }
 
+/**
+ * Another person's leave, for the employee workspace's Leave tab (V143.13).
+ * HR / admin (hrms.leave.employee.read) read anyone, department managers their
+ * team, everyone else only themselves; the server answers 403 otherwise.
+ */
+export function useEmployeeLeaveBalances(employeeId: string, year?: number, enabled = true) {
+  const params = year ? `?year=${year}` : ''
+  return useQuery({
+    queryKey: ['hrms', 'leave', 'employee', employeeId, 'balances', year ?? 'current'],
+    queryFn: () => apiJson<LeaveBalanceResponse[]>(`/v1/leave/employees/${employeeId}/balances${params}`),
+    enabled: !!employeeId && enabled,
+    staleTime: 30_000,
+    retry: false,
+  })
+}
+
+export function useEmployeeLeaveRequests(employeeId: string, page = 0, pageSize = 10, enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'leave', 'employee', employeeId, 'requests', page, pageSize],
+    queryFn: () => apiJson<{ content: LeaveRequestResponse[]; totalElements: number; totalPages: number }>(
+      `/v1/leave/employees/${employeeId}/requests?page=${page}&size=${pageSize}`),
+    enabled: !!employeeId && enabled,
+    staleTime: 30_000,
+    retry: false,
+  })
+}
+
 export function useLeaveOverview(year?: number) {
   const params = year ? `?year=${year}` : ''
   return useQuery({

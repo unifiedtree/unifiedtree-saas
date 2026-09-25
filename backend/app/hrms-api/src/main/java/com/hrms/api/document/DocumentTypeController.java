@@ -31,8 +31,12 @@ import java.util.UUID;
 public class DocumentTypeController {
 
     private final JdbcTemplate jdbc;
+    private final DocumentTypeDefaults defaults;
 
-    public DocumentTypeController(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    public DocumentTypeController(JdbcTemplate jdbc, DocumentTypeDefaults defaults) {
+        this.jdbc = jdbc;
+        this.defaults = defaults;
+    }
 
     public record DocumentTypeDto(UUID id, String code, String displayName, String description,
                                   String allowedFormats, int maxSizeMb, boolean required,
@@ -57,6 +61,9 @@ public class DocumentTypeController {
     @PreAuthorize("hasAuthority('hrms.document.type.read')")
     @Transactional(readOnly = true)
     public List<DocumentTypeDto> list(@RequestParam(defaultValue = "false") boolean includeInactive) {
+        // A workspace created after V143.7 has no types at all; give it the defaults on first read.
+        // Only the first read of an empty workspace takes the seeding transaction (a second connection).
+        if (defaults.missing()) defaults.ensureDefaults();
         String sql = includeInactive
                 ? "SELECT id, code, display_name, description, allowed_formats, max_size_mb, required, expiry_tracked, active, sort_order FROM document_mgmt.document_types ORDER BY sort_order, display_name"
                 : "SELECT id, code, display_name, description, allowed_formats, max_size_mb, required, expiry_tracked, active, sort_order FROM document_mgmt.document_types WHERE active = TRUE ORDER BY sort_order, display_name";

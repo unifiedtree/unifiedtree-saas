@@ -578,7 +578,16 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
                   <Label>
                     {txt(f?.l)}
                   </Label>
-                  <Input type={f?.type} value={f?.v} maxLength={f?.max} placeholder={f?.ph} onChange={f?.on} />
+                  {f?.isSelect ? (
+                    <>
+                      <HrSelect value={f?.v} options={f?.opts} onChange={f?.onSel} />
+                    </>
+                  ) : null}
+                  {f?.isInput ? (
+                    <>
+                      <Input type={f?.type} value={f?.v} maxLength={f?.max} placeholder={f?.ph} onChange={f?.on} />
+                    </>
+                  ) : null}
                   {f?.hasErr ? (
                     <>
                       <div style={{fontSize: "12.5px", fontWeight: "600", color: "#be123c"}}>

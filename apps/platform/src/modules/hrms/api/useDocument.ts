@@ -103,6 +103,69 @@ export function useCreateDocument() {
   })
 }
 
+// ── V143.13: edit a stored document, and bulk upload ────────────────────────
+
+export interface EditDocumentPayload {
+  id: string
+  title: string
+  category?: DocumentCategory
+  /** null = free-form (no type). A new type must be active and fit the kept file. */
+  documentTypeId?: string | null
+  issuedDate?: string | null
+  expiryDate?: string | null
+  notes?: string | null
+  /** Only for documents stored as a link. */
+  fileUrl?: string
+  /** Replaces the stored file (the old one is deleted; the new one lands verified). */
+  file?: File | null
+}
+
+export function useEditDocument() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, file, ...metadata }: EditDocumentPayload) => {
+      if (file) {
+        const body = new FormData()
+        body.append('file', file)
+        body.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+        return apiJson<EmployeeDocumentV2>(`/v1/document/documents/${id}`, { method: 'PUT', body })
+      }
+      return apiJson<EmployeeDocumentV2>(`/v1/document/documents/${id}`, { method: 'PUT', body: JSON.stringify(metadata) })
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'document'] }),
+  })
+}
+
+/**
+ * Same category the server derives for a typed self-upload
+ * (DocumentUploadController.guessCategory), so a typed HR upload files the same way.
+ */
+export function categoryForType(code?: string | null): DocumentCategory {
+  switch (code) {
+    case 'PAN': case 'TAX': return 'TAX'
+    case 'AADHAAR': case 'PASSPORT': case 'DRIVING_LICENSE': case 'VOTER_ID': case 'PHOTO': return 'ID_PROOF'
+    case 'RESUME': case 'OFFER_LETTER': return 'CONTRACT'
+    case 'EDUCATION_CERT': return 'CERTIFICATE'
+    default: return 'OTHER'
+  }
+}
+
+/** The formats a type accepts ('jpg' and 'jpeg' are the same file). */
+export function typeFormats(t?: Pick<DocumentType, 'allowedFormats'> | null): string[] {
+  return (t?.allowedFormats || 'pdf,png,jpg,jpeg').split(',').map((f) => f.trim().toLowerCase()).filter(Boolean)
+}
+
+/** Returns why a file doesn't fit a type's rules, or '' when it does. */
+export function fileProblem(file: File, t?: Pick<DocumentType, 'allowedFormats' | 'maxSizeMb' | 'displayName'> | null): string {
+  const formats = typeFormats(t)
+  const ext = file.name.split('.').pop()?.toLowerCase() || ''
+  const ok = formats.includes(ext) || (ext === 'jpg' && formats.includes('jpeg')) || (ext === 'jpeg' && formats.includes('jpg'))
+  if (!ok) return `${t?.displayName ?? 'This type'} takes ${formats.join(', ').toUpperCase()}`
+  const maxMb = t?.maxSizeMb ?? 10
+  if (file.size > maxMb * 1024 * 1024) return `The file must be ${maxMb} MB or smaller`
+  return ''
+}
+
 export function useDeleteDocument() {
   const qc = useQueryClient()
   return useMutation({

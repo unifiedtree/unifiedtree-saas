@@ -250,6 +250,13 @@ server:
   # Bind graceful shutdown to the SIGTERM the orchestrator sends. Pairs with
   # spring.lifecycle.timeout-per-shutdown-phase above.
   shutdown: graceful
+  tomcat:
+    # After an upload over the multipart limit is refused, Tomcat reads and
+    # discards up to this much of the rest of the body so the browser receives
+    # the 400 "File is too large (max 10 MB)" instead of a connection reset
+    # (the 2 MB default reset anything much over the limit). Cloud Run caps an
+    # HTTP/1 request at 32 MB, so this stays bounded.
+    max-swallow-size: ${UNIFIEDTREE_MAX_SWALLOW_SIZE:40MB}
 
 # Actuator lockdown. Base application.yml exposes health,info,metrics,prometheus
 # with health show-details: always — i.e. /actuator/prometheus and /actuator/metrics

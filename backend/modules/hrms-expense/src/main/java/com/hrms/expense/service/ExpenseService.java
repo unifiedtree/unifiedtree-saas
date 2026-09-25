@@ -138,6 +138,36 @@ public class ExpenseService {
         return toPage(claimRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId, pageable));
     }
 
+    /** Any employee's claims, newest first (the employee workspace; the API layer checks who may see whom). */
+    @Transactional(readOnly = true)
+    public PageResponse<ExpenseClaimResponse> getEmployeeClaims(UUID employeeId, Pageable pageable) {
+        return toPage(claimRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId, pageable));
+    }
+
+    /**
+     * Attach (or replace) the receipt on one line of a claim that is still waiting
+     * for a decision. Returns the receipt it replaced (null if none) so the caller
+     * can remove the old file. Ownership is checked by the caller.
+     */
+    @Transactional
+    public String attachReceipt(UUID claimId, UUID itemId, String receiptUrl) {
+        ExpenseClaim claim = claimRepository.findById(claimId)
+                .orElseThrow(() -> new ResourceNotFoundException("ExpenseClaim", claimId));
+        if (claim.getStatus() != ExpenseStatus.SUBMITTED) {
+            throw new BusinessRuleException(
+                    "Receipts can be added until the claim is decided (this claim is " + claim.getStatus() + ")",
+                    "EXPENSE_RECEIPT_LOCKED");
+        }
+        ExpenseItem item = itemRepository.findById(itemId)
+                .filter(i -> claimId.equals(i.getClaimId()))
+                .orElseThrow(() -> new ResourceNotFoundException("ExpenseItem", itemId));
+        String previous = item.getReceiptUrl();
+        item.setReceiptUrl(receiptUrl);
+        itemRepository.save(item);
+        log.info("Receipt attached to expense item {} of claim {}", itemId, claimId);
+        return previous;
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<ExpenseClaimResponse> getPendingApprovals(UUID approverId, Pageable pageable) {
         return toPage(claimRepository.findByApproverIdAndStatusOrderByCreatedAtDesc(approverId, ExpenseStatus.SUBMITTED, pageable));
@@ -271,26 +301,43 @@ public class ExpenseService {
     // ── mapping ──────────────────────────────────────────────────────────────
 
     private PageResponse<ExpenseClaimResponse> toPage(Page<ExpenseClaim> page) {
+        java.util.Map<UUID, int[]> counts = new java.util.HashMap<>();
+        List<UUID> ids = page.getContent().stream().map(ExpenseClaim::getId).toList();
+        if (!ids.isEmpty()) {
+            for (Object[] row : itemRepository.countItemsAndReceipts(ids)) {
+                counts.put((UUID) row[0], new int[] {((Number) row[1]).intValue(), ((Number) row[2]).intValue()});
+            }
+        }
         List<ExpenseClaimResponse> content = page.getContent().stream()
-                .map(c -> toResponse(c, null))
+                .map(c -> toResponse(c, null, counts.getOrDefault(c.getId(), new int[] {0, 0})))
                 .toList();
         return new PageResponse<>(content, page.getNumber(), page.getSize(),
                 page.getTotalElements(), page.getTotalPages(), page.isLast());
     }
 
     private ExpenseClaimResponse toResponse(ExpenseClaim c, List<ExpenseItem> items) {
+        int[] counts = items == null ? new int[] {0, 0}
+                : new int[] {items.size(), (int) items.stream().filter(i -> hasReceipt(i.getReceiptUrl())).count()};
+        return toResponse(c, items, counts);
+    }
+
+    private ExpenseClaimResponse toResponse(ExpenseClaim c, List<ExpenseItem> items, int[] counts) {
         List<ExpenseItemResponse> itemDtos = items == null ? null
                 : items.stream().map(this::toItem).toList();
         return new ExpenseClaimResponse(
                 c.getId(), c.getEmployeeId(), null, null, c.getCompanyId(),
                 c.getTitle(), c.getTotalAmount(), c.getCurrency(), c.getStatus(),
                 c.getSubmittedAt(), c.getApproverId(), c.getApprovedAt(), c.getApproverComment(),
-                c.getReimbursedAt(), c.getNotes(), c.getCreatedAt(), itemDtos);
+                c.getReimbursedAt(), c.getNotes(), c.getCreatedAt(), itemDtos, counts[0], counts[1]);
     }
 
     private ExpenseItemResponse toItem(ExpenseItem i) {
         return new ExpenseItemResponse(
                 i.getId(), i.getCategory(), i.getDescription(), i.getAmount(),
-                i.getExpenseDate(), i.getReceiptUrl(), i.getMerchantName());
+                i.getExpenseDate(), i.getReceiptUrl(), i.getMerchantName(), hasReceipt(i.getReceiptUrl()));
+    }
+
+    private static boolean hasReceipt(String url) {
+        return url != null && !url.isBlank();
     }
 }

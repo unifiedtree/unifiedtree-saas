@@ -12,7 +12,7 @@ import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { useToast } from '@/shared/hooks/useToast'
 import {
   useCancelNotice, useEmployeeCounts, useEmployeeDirectory, useExitEmployee, useStartNotice, useUpdateWorkforceEmployee,
-  type EmploymentStatus, type WorkforceEmployee,
+  EXIT_TYPES, exitTypeLabel, type EmploymentStatus, type ExitType, type WorkforceEmployee,
 } from '../api/useWorkforce'
 
 /**
@@ -53,6 +53,7 @@ export function ExitCenter() {
   const [page, setPage] = useState(0)
   const [starting, setStarting] = useState(false)
   const [editing, setEditing] = useState<WorkforceEmployee | null>(null)
+  const [exiting, setExiting] = useState<WorkforceEmployee | null>(null)
   const counts = useEmployeeCounts(undefined, { enabled: canRead })
   const list = useEmployeeDirectory({ status: tab as EmploymentStatus, search: search.trim() || undefined, page, pageSize: PAGE_SIZE }, { enabled: canRead })
   const confirm = useConfirmDialog()
@@ -68,17 +69,16 @@ export function ExitCenter() {
     try { await cancelNotice.mutateAsync(emp.id); toast(`${fullName(emp)} is active again`, 'success') }
     catch (e) { toast(e instanceof Error ? e.message : 'Unable to withdraw the notice.', 'error') }
   }
-  const onMarkExited = async (emp: WorkforceEmployee) => {
-    if (!emp.lastWorkingDay) { setEditing(emp); return }
-    const ok = await confirm({ title: `Mark ${fullName(emp)} as exited?`, body: `Last working day ${day(emp.lastWorkingDay)}. The employee loses platform access and moves to the Exited list; payroll and settlement records are unaffected.`, confirmLabel: 'Mark exited', tone: 'danger' })
-    if (!ok) return
-    try { await exitEmployee.mutateAsync({ id: emp.id, lastWorkingDay: emp.lastWorkingDay, reason: emp.exitReason || undefined }); toast(`${fullName(emp)} marked as exited`, 'success') }
-    catch (e) { toast(e instanceof Error ? e.message : 'Unable to mark the employee as exited.', 'error') }
-  }
+  // Mark exited asks for the exit type (prefilled from the notice) in a drawer; the list carries no reason, so it's kept server-side.
+  const onMarkExited = (emp: WorkforceEmployee) => { if (!emp.lastWorkingDay) { setEditing(emp); return } setExiting(emp) }
 
   const employeeCell: Column<WorkforceEmployee> = {
     key: 'employee', header: 'Employee',
     render: emp => <Link to={`/hrms/employees/${emp.id}?tab=exit`} className="hover:underline"><HrAvatar name={fullName(emp)} sub={emp.employeeCode} /></Link>,
+  }
+  const exitTypeCell: Column<WorkforceEmployee> = {
+    key: 'exitType', header: 'Exit type',
+    render: emp => <span className="text-text-secondary">{exitTypeLabel(emp.exitType)}</span>,
   }
   const reasonCell: Column<WorkforceEmployee> = {
     key: 'exitReason', header: 'Reason',
@@ -89,6 +89,7 @@ export function ExitCenter() {
     { key: 'noticeStartDate', header: 'Notice started', render: emp => day(emp.noticeStartDate) },
     { key: 'lastWorkingDay', header: 'Last working day', render: emp => day(emp.lastWorkingDay) },
     { key: 'daysLeft', header: 'Days left', render: emp => <DaysLeft lastWorkingDay={emp.lastWorkingDay} /> },
+    exitTypeCell,
     reasonCell,
     {
       key: 'actions', header: '',
@@ -105,6 +106,7 @@ export function ExitCenter() {
   const leaverColumns: Column<WorkforceEmployee>[] = [
     employeeCell,
     { key: 'lastWorkingDay', header: 'Last working day', render: emp => day(emp.lastWorkingDay) },
+    exitTypeCell,
     reasonCell,
     { key: 'employmentStatus', header: 'Status', render: emp => <HrStatusPill tone={STATUS_TONE[emp.employmentStatus ?? ''] ?? 'gray'}>{STATUS_LABEL[emp.employmentStatus ?? ''] ?? emp.employmentStatus ?? '—'}</HrStatusPill> },
     {
@@ -154,6 +156,13 @@ export function ExitCenter() {
       </div>
       {starting && <StartNoticeDrawer onClose={() => setStarting(false)} onDone={() => { setStarting(false); switchTab('NOTICE_PERIOD') }} />}
       {editing && <SeparationDrawer emp={editing} onClose={() => setEditing(null)} />}
+      {exiting && <MarkExitedDrawer emp={exiting} busy={exitEmployee.isPending} onClose={() => setExiting(null)}
+        onSave={async (exitType) => {
+          try {
+            await exitEmployee.mutateAsync({ id: exiting.id, lastWorkingDay: exiting.lastWorkingDay!, exitType })
+            toast(`${fullName(exiting)} marked as exited (${exitTypeLabel(exitType)})`, 'success'); setExiting(null)
+          } catch (e) { toast(e instanceof Error ? e.message : 'Unable to mark the employee as exited.', 'error') }
+        }} />}
     </ModulePage>
   )
 }
@@ -175,6 +184,7 @@ function StartNoticeDrawer({ onClose, onDone }: { onClose: () => void; onDone: (
   const [noticeStart, setNoticeStart] = useState(today())
   const [lastDay, setLastDay] = useState('')
   const [reason, setReason] = useState('')
+  const [exitType, setExitType] = useState<ExitType>('RESIGNATION')
   // No status filter: new hires are PROBATION, not ACTIVE, and they resign too.
   // The directory page is shown as returned; rows already leaving are disabled.
   const candidates = useEmployeeDirectory({ search: query.trim() || undefined, page: 0, pageSize: 8 }, { enabled: !employee && query.trim().length >= 2 })
@@ -184,7 +194,7 @@ function StartNoticeDrawer({ onClose, onDone }: { onClose: () => void; onDone: (
   const save = async () => {
     if (!employee) return
     try {
-      await start.mutateAsync({ id: employee.id, noticeStart, lastWorkingDay: lastDay, reason: reason.trim() || undefined })
+      await start.mutateAsync({ id: employee.id, noticeStart, lastWorkingDay: lastDay, reason: reason.trim() || undefined, exitType })
       toast(`${fullName(employee)} is now serving notice until ${day(lastDay)}`, 'success'); onDone()
     } catch { /* Keep the form open and show the server error below. */ }
   }
@@ -213,6 +223,7 @@ function StartNoticeDrawer({ onClose, onDone }: { onClose: () => void; onDone: (
           )}
         </div>
       )}
+      <ExitTypeField value={exitType} onChange={setExitType} />
       <label className="block text-sm font-medium">Notice start date<input type="date" className="ut-input mt-2" value={noticeStart} onChange={e => setNoticeStart(e.target.value)} required max={lastDay || undefined} /></label>
       <label className="block text-sm font-medium">Last working day<input type="date" className="ut-input mt-2" value={lastDay} onChange={e => setLastDay(e.target.value)} required min={noticeStart || undefined} /></label>
       <div><label htmlFor="notice-reason" className="block text-sm font-medium">Reason <span className="font-normal text-text-secondary">(optional)</span></label><textarea id="notice-reason" className="ut-input mt-2" value={reason} maxLength={100} rows={3} onChange={e => setReason(e.target.value)} /></div>
@@ -229,21 +240,47 @@ function SeparationDrawer({ emp, onClose }: { emp: WorkforceEmployee; onClose: (
   const [noticeStart, setNoticeStart] = useState(emp.noticeStartDate || '')
   const [lastDay, setLastDay] = useState(emp.lastWorkingDay || '')
   const [reason, setReason] = useState(emp.exitReason || '')
+  const [exitType, setExitType] = useState<ExitType | ''>(emp.exitType || '')
   const invalidOrder = Boolean(noticeStart && lastDay && lastDay < noticeStart)
   const save = async () => {
     try {
-      await update.mutateAsync({ id: emp.id, data: { noticeStartDate: noticeStart || undefined, lastWorkingDay: lastDay, exitReason: reason.trim() } })
+      // The list response carries no reason (detail-only), so an empty box must not wipe the recorded one.
+      await update.mutateAsync({ id: emp.id, data: { noticeStartDate: noticeStart || undefined, lastWorkingDay: lastDay, exitReason: reason.trim() || undefined, exitType: exitType || undefined } })
       toast('Separation details saved', 'success'); onClose()
     } catch { /* Keep input visible and display the server error. */ }
   }
   return <HrDrawer title={`Separation details — ${fullName(emp)}`} onClose={() => { if (!update.isPending) onClose() }}
     footer={<div className="flex justify-end gap-3"><HrButton variant="ghost" disabled={update.isPending} onClick={onClose}>Cancel</HrButton><HrButton disabled={!lastDay || !noticeStart || invalidOrder || update.isPending} onClick={save}>{update.isPending ? 'Saving…' : 'Save'}</HrButton></div>}>
     <div className="space-y-5">
+      <ExitTypeField value={exitType} onChange={setExitType} />
       <label className="block text-sm font-medium">Notice start date<input type="date" className="ut-input mt-2" value={noticeStart} onChange={e => setNoticeStart(e.target.value)} required max={lastDay || undefined} /></label>
       <label className="block text-sm font-medium">Last working day<input type="date" className="ut-input mt-2" value={lastDay} onChange={e => setLastDay(e.target.value)} required min={noticeStart || undefined} /></label>
       <div><label htmlFor="separation-reason" className="block text-sm font-medium">Reason</label><textarea id="separation-reason" className="ut-input mt-2" value={reason} maxLength={100} rows={3} onChange={e => setReason(e.target.value)} /></div>
       {invalidOrder && <p role="alert" className="text-sm text-danger">Last working day must be on or after the notice start date.</p>}
       {update.isError && <p role="alert" className="text-sm text-danger">{update.error instanceof Error ? update.error.message : 'Unable to update separation details.'}</p>}
+    </div>
+  </HrDrawer>
+}
+
+/** The exit type list, with what it's used for. */
+function ExitTypeField({ value, onChange }: { value: ExitType | ''; onChange: (v: ExitType) => void }) {
+  return <label className="block text-sm font-medium">Exit type
+    <select className="ut-select mt-2" value={value} onChange={e => onChange(e.target.value as ExitType)}>
+      {!value && <option value="">Not recorded</option>}
+      {EXIT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+    </select>
+    <span className="mt-1 block text-xs font-normal text-text-secondary">Why the person is leaving. The attrition report counts the exit as resigned, terminated or other from it.</span>
+  </label>
+}
+
+/** Mark exited: confirm the last working day and record the exit type (POST …/exit). */
+function MarkExitedDrawer({ emp, busy, onClose, onSave }: { emp: WorkforceEmployee; busy: boolean; onClose: () => void; onSave: (exitType: ExitType) => void }) {
+  const [exitType, setExitType] = useState<ExitType>(emp.exitType || 'RESIGNATION')
+  return <HrDrawer title={`Mark ${fullName(emp)} as exited`} onClose={() => { if (!busy) onClose() }}
+    footer={<div className="flex justify-end gap-3"><HrButton variant="ghost" disabled={busy} onClick={onClose}>Cancel</HrButton><HrButton variant="danger" disabled={busy} onClick={() => onSave(exitType)}>{busy ? 'Saving…' : 'Mark exited'}</HrButton></div>}>
+    <div className="space-y-5">
+      <p className="text-sm text-text-secondary">Last working day {day(emp.lastWorkingDay)}. The employee loses platform access and moves to the Exited list; payroll and settlement records are unaffected.</p>
+      <ExitTypeField value={exitType} onChange={setExitType} />
     </div>
   </HrDrawer>
 }

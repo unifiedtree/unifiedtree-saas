@@ -7,8 +7,9 @@
  * and its logic src/design/dc/EmployeeWorkspace.tsx. This file loads the real
  * record and everything the header and Overview show, maps each action to its
  * API, and puts each section's real content in the design's frame. Nothing is
- * invented: a value the API doesn't have shows a dash, and the Leave and Expenses
- * tabs say why they're empty (docs/Designs/STATIC-UI-TO-BUILD.md §7).
+ * invented: a value the API doesn't have shows a dash. The Leave and Expenses tabs
+ * read the per-employee endpoints (V143.13), scoped by the server: HR / admin see
+ * anyone, department managers their team, everyone else themselves.
  *
  * The tab lives in the URL (?tab=, replaced, so Back leaves the page rather than
  * stepping through tabs).
@@ -23,7 +24,7 @@ import { EmployeeWorkspace, type WorkspaceData, type WsStatus, type WsField } fr
 import { istToday } from '@/design/dc/dates'
 import {
   useWorkforceEmployee, useConfirmEmployee, useStartNotice, useExitEmployee, useCancelNotice, useEmployeesByIds, useUpdateWorkforceEmployee,
-  type UpdateWorkforceEmployeePayload, type EmploymentType,
+  EXIT_TYPES, exitTypeLabel, type UpdateWorkforceEmployeePayload, type EmploymentType, type ExitType,
 } from '../api/useWorkforce'
 import { useExtendProbation } from '../api/useProbation'
 import { useCompanies, useDepartments, useDesignations, useBranches, useEmploymentTypes, assignEmployeeShift } from '../api/useOrg'
@@ -44,6 +45,9 @@ import { EmployeeDocuments, EMPLOYEE_DOCUMENTS_PAGE_SIZE } from './workspace/Emp
 import { EmployeeLetters } from './workspace/EmployeeLetters'
 import { EmployeePerformance } from './workspace/EmployeePerformance'
 import { EmployeeExit } from './workspace/EmployeeExit'
+import { EmployeeLeave } from './workspace/EmployeeLeave'
+import { EmployeeExpenses } from './workspace/EmployeeExpenses'
+import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 
 const STATUS: Record<string, WsStatus> = { ACTIVE: 'Active', PROBATION: 'Probation', NOTICE_PERIOD: 'Notice period', SUSPENDED: 'Suspended', EXITED: 'Exited', TERMINATED: 'Terminated' }
 const TYPE_LABEL: Record<string, string> = { FULL_TIME: 'Full time', PART_TIME: 'Part time', INTERN: 'Intern', CONTRACT: 'Contract', CONSULTANT: 'Consultant' }
@@ -74,6 +78,11 @@ export function EmployeeDetail() {
   const canAttendance = usePermission('attendance.team.read'), canSalary = usePermission(P.PAYROLL_STRUCTURE_READ), canBank = usePermission(P.HRMS_EMPLOYEE_BANK_READ)
   const canDocs = usePermission('hrms.document.read'), canLetters = usePermission(P.HRMS_LETTERS_READ)
   const canPerf = usePermission('hrms.performance.read'), canSkills = usePermission('hrms.learning.skill.read')
+  // Leave / Expenses tabs: anyone (HR, admin; finance for claims), a manager's team, or yourself.
+  const canLeave = usePermission('hrms.leave.employee.read'), canLeaveTeam = usePermission('hrms.leave.approve.l1')
+  const canClaims = usePermission('hrms.expense.employee.read'), canClaimsTeam = usePermission('hrms.expense.claim.approve')
+  const { data: me } = useCurrentUser()
+  const self = !!me?.employeeId && me.employeeId === id
 
   // ── data ──
   const empQ = useWorkforceEmployee(id)
@@ -248,39 +257,37 @@ export function EmployeeDetail() {
 
     const L = emp.lastWorkingDay || ''
     const lifecycle: WorkspaceData['lifecycle'] = {
-      defaults: { noticeStart: emp.noticeStartDate || today, lwd: L, reason: emp.exitReason || '', extendTo: emp.probationEndDate || '' },
+      defaults: { noticeStart: emp.noticeStartDate || today, lwd: L, reason: emp.exitReason || '', extendTo: emp.probationEndDate || '', exitType: emp.exitType || '' },
+      exitTypes: EXIT_TYPES,
       onConfirm: async (date) => { await confirmM.mutateAsync({ id: emp.id, confirmationDate: date }); return `${name} confirmed from ${fmt(date)}` },
       onExtend: async (date) => { await extendM.mutateAsync({ employeeId: emp.id, newEndDate: date }); await empQ.refetch(); return `Probation extended to ${fmt(date)}` },
-      onNotice: async (start, lwd, reason) => { await noticeM.mutateAsync({ id: emp.id, noticeStart: start, lastWorkingDay: lwd, reason: reason || undefined }); return `Notice started · last working day ${fmt(lwd)}` },
-      onExit: async (lwd, reason) => { await exitM.mutateAsync({ id: emp.id, lastWorkingDay: lwd, reason: reason || undefined }); return `${name} marked as exited · ${fmt(lwd)}` },
+      onNotice: async (start, lwd, reason, exitType) => { await noticeM.mutateAsync({ id: emp.id, noticeStart: start, lastWorkingDay: lwd, reason: reason || undefined, exitType: (exitType || undefined) as ExitType | undefined }); return `Notice started (${exitTypeLabel(exitType)}) · last working day ${fmt(lwd)}` },
+      onExit: async (lwd, reason, exitType) => { await exitM.mutateAsync({ id: emp.id, lastWorkingDay: lwd, reason: reason || undefined, exitType: (exitType || undefined) as ExitType | undefined }); return `${name} marked as exited (${exitTypeLabel(exitType)}) · ${fmt(lwd)}` },
       onCancel: async () => { await cancelM.mutateAsync(emp.id); return `Notice cancelled — ${name} is active again` },
     }
 
     // Tabs: each shows when the viewer can read something in it (every section re-checks its own
-    // permission, and every endpoint enforces its own). Leave and Expenses have no per-employee API.
+    // permission, and every endpoint enforces its own; a manager outside their team gets a no-access state).
     const tabs = [
       { key: 'overview', label: 'Overview' },
       ...(canPii || canIdentity ? [{ key: 'personal', label: 'Personal' }] : []),
       { key: 'job', label: 'Job' },
       ...(canAttendance ? [{ key: 'attendance', label: 'Attendance' }] : []),
       ...(canSalary || canBank ? [{ key: 'payroll', label: 'Payroll' }] : []),
-      { key: 'leave', label: 'Leave' },
-      { key: 'expenses', label: 'Expenses' },
+      ...(canLeave || canLeaveTeam || self ? [{ key: 'leave', label: 'Leave' }] : []),
+      ...(canClaims || canClaimsTeam || self ? [{ key: 'expenses', label: 'Expenses' }] : []),
       ...(canDocs ? [{ key: 'documents', label: 'Documents', badge: docTotal || undefined }] : []),
       ...(canLetters ? [{ key: 'letters', label: 'Letters' }] : []),
       ...(canPerf || canSkills ? [{ key: 'performance', label: 'Performance' }] : []),
       { key: 'exit', label: 'Exit' },
     ]
     const visibleTab = tabs.some((t) => t.key === tab) ? tab : 'overview'
-    const GAP: Record<string, { label: string; note: string; cta: string; path: string }> = {
-      leave: { label: 'Leave', note: `Leave balances and requests are only served for the signed-in person today, so ${first}’s can’t be shown here yet. Requests waiting for you are in the Leave centre.`, cta: 'Open Leave', path: '/hrms/leave' },
-      expenses: { label: 'Expenses', note: `Expense claims are only served for the signed-in person today, so ${first}’s can’t be listed here yet. Claims waiting for approval are in the Expense centre.`, cta: 'Open Expenses', path: '/hrms/expenses' },
-    }
-    const gap = GAP[visibleTab]
     const content = visibleTab === 'personal' ? <EmployeePersonal emp={emp} />
       : visibleTab === 'job' ? <EmployeeJob emp={emp} />
         : visibleTab === 'attendance' ? <EmployeeAttendance employeeId={emp.id} />
           : visibleTab === 'payroll' ? <EmployeePayroll emp={emp} />
+            : visibleTab === 'leave' ? <EmployeeLeave employeeId={emp.id} firstName={first} />
+            : visibleTab === 'expenses' ? <EmployeeExpenses employeeId={emp.id} firstName={first} self={self} />
             : visibleTab === 'documents' ? <EmployeeDocuments employeeId={emp.id} />
               : visibleTab === 'letters' ? <EmployeeLetters employeeId={emp.id} />
                 : visibleTab === 'performance' ? <EmployeePerformance employeeId={emp.id} />
@@ -292,7 +299,7 @@ export function EmployeeDetail() {
       ...base, state: 'ready', name, code: emp.employeeCode, seed: seedOf(emp.id),
       metaLine: [company?.name, dept?.name, emp.dateOfJoining ? `Joined ${fmt(emp.dateOfJoining)}` : ''].filter(Boolean).join(' · '),
       status: st, probation, tabs, tab: visibleTab, onTab: setTab, otherContent: content,
-      otherPlaceholder: gap ? { label: gap.label, note: gap.note, cta: gap.cta, onClick: () => navigate(gap.path) } : null,
+      otherPlaceholder: null,
       jobTitle: desig?.title || 'No designation', jobSub: [dept?.name || 'No department', branch?.name].filter(Boolean).join(' · '),
       facts: [
         { l: 'Company', v: company?.name || '—' }, { l: 'Employment type', v: TYPE_LABEL[emp.employmentType || ''] || emp.employmentType || '—' },
@@ -310,7 +317,7 @@ export function EmployeeDetail() {
       shift: shiftD, edit, lifecycle,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emp, empQ.isLoading, empQ.error, companies, departments, designations, branches, types, shiftList, managers, week.data, shift.data, shift.isLoading, shift.error, structure.data, structure.isLoading, structure.error, documents.data, kpis.data, invitation.data, onboarding.data, onboarding.isLoading, onboarding.error, tab, today, canWrite, canInvite, canFace, canShift, canPii, canIdentity, canAttendance, canSalary, canBank, canDocs, canLetters, canPerf, canSkills])
+  }, [emp, empQ.isLoading, empQ.error, companies, departments, designations, branches, types, shiftList, managers, week.data, shift.data, shift.isLoading, shift.error, structure.data, structure.isLoading, structure.error, documents.data, kpis.data, invitation.data, onboarding.data, onboarding.isLoading, onboarding.error, tab, today, canWrite, canInvite, canFace, canShift, canPii, canIdentity, canAttendance, canSalary, canBank, canDocs, canLetters, canPerf, canSkills, canLeave, canLeaveTeam, canClaims, canClaimsTeam, self])
 
   return (
     <DesignFrame>

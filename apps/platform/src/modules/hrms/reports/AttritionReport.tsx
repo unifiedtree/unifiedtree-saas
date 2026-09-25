@@ -1,7 +1,8 @@
 // Monthly exits and attrition rate, in the Workforce Analytics design's report
 // layout (ReportKit). Every month in the range is shown, including months
-// without exits. Exits are split into resigned, terminated and other (the
-// workforce exit flow records people as EXITED without a reason type).
+// without exits. Exits are split into resigned, terminated and other from the
+// exit type HR records on Start notice / Mark exited (V143.13); exits recorded
+// before the type existed count as other.
 import { useSearchParams } from 'react-router-dom'
 import { useAttritionReport } from '@/modules/hrms/api/useReports'
 import { lineSvg } from '@/shared/export/charts'

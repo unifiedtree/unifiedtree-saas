@@ -278,7 +278,7 @@ Checked live:
 | Face enrollment | Done | Shows whether the person is enrolled; **Reset** calls the admin reset. |
 | Needs attention, At a glance | Done | Same rules as before (probation within 30 days, notice, no salary structure, no shift, finished days absent this week). Tiles open their tab. |
 | Onboarding record | Done | Real details, assets, policies and checklists. Rejected documents show a red pill. Only people who can edit employees can read it (the endpoint's rule). |
-| Leave and Expenses tabs | Needs backend | Shown, as in the design, with a note and a link to the Leave or Expense centre. The API only returns leave and claims for the signed-in person. It needs `GET /v1/leave/employees/{id}/balances` / `…/requests` and `GET /v1/expense/employees/{id}/claims`. |
+| Leave and Expenses tabs | Done (w1d, V143_13) | Leave: the year's balances (IST year) and the person's requests; Expenses: their claims with line items and receipts. `GET /v1/leave/employees/{id}/balances`, `…/requests`, `GET /v1/expense/employees/{id}/claims`: `hrms.leave.employee.read` / `hrms.expense.employee.read` (HR, admin; finance for claims) read anyone, department managers their team (TeamEmployeeScope), everyone else themselves; 403 renders as a no-access state. Live test: `live-w1d.mjs`. |
 | Goals tile | Partial | Counts all goals and KPIs; the API has no "active" filter. |
 | Onboarding "Offer accepted / Hiring manager / Recruiter / Source / Buddy" | Needs backend | The saved record doesn't hold these; the real saved details are shown instead. |
 | Old Overview section | Removed | Replaced by the design's Overview. |
@@ -421,7 +421,7 @@ How it's built:
 | Export → Dashboard snapshot (PDF) | Done (browser) | Opens a print-ready page; the browser's "Save as PDF" writes the file. *Needs:* server-side PDF for a direct download and for scheduled emails. |
 | Export → Excel and CSV; chart PNGs | Done | Excel and PNG are built in the browser from the numbers on screen. Report CSVs come from the server routes. |
 | Recent downloads (Reports Center) | Partial | Lists downloads made in this browser. *Needs:* a server export log (who downloaded what, when) for a shared, auditable history. |
-| Attrition split (resigned / terminated / other) | Partial | The exit flow marks people `EXITED` without saying whether they resigned, so most exits show as "other". *Needs:* an exit type on the exit flow. |
+| Attrition split (resigned / terminated / other) | Done (w1d, V143_13) | HR records the exit type (Resignation, Termination, Retirement, End of contract, Absconding, Death, Other) on Start notice / Mark exited and in the separation editors; `hrms.employees.exit_type`. The report splits on it; exits recorded before it existed count as "other". |
 | Headcount on a past date | Partial | Who was employed is correct for any date. The active/notice/probation split uses today's status. *Needs:* status history. |
 | "No department" click | Partial | Opens the company's whole directory; the directory has no "no department" filter. *Needs:* that filter. |
 | "N in directory" (Total headcount card) | As designed | Counts every record in the directory, including people who have left. |
@@ -498,7 +498,7 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Approvals: decision cards with the existing approve and disburse actions.
 - **New kit part:** `DecisionCard`, the ApprovalCard's look with slots for details and custom actions.
 - **Fixed:** a new expense line's default date was the UTC date (yesterday before 05:30 IST).
-- **Static, noted:** receipts can't be attached to claims yet. The line items have a Receipt column but there's no upload; the Submit form now says so. *Needs:* receipt upload on expense items.
+- **Receipts: done (w1d).** Each line of a new claim takes a receipt (PDF, PNG or JPEG, 10 MB), uploaded to the private document bucket before the claim is sent (`POST /v1/expense/receipts`); a claim may only reference receipts its claimant uploaded. My claims can attach or replace one until the claim is decided. Line items (My claims, approvals, the employee record) open it through a signed link; decision cards show how many lines have one. `requiresReceipt` on policies is shown as a hint, not enforced: the policy form has no switch for it and the column defaults to true, so enforcing it would block claims in every workspace with a policy.
 - **Checked live:** `e2e/recovery/live-design-expenses.mjs`, 11/11. The employee sees only their views and submits a claim; the owner opens its line items, approves it and marks it reimbursed; batches and policies render. The claim is removed afterwards.
 
 ### 11.4 Resignation & exit (`/hrms/exit`) and Full & final (`/hrms/fnf`): done
@@ -702,10 +702,13 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Generated letters showed an 8-character UUID when the employee code was missing. A letter showed "Generated By" and "Template ID" as UUID fragments. All of these are removed.
   - A distribution that failed to load showed a skeleton forever. It now shows an error with Try again.
   - Failed deletes and retries now show the server's reason.
-- **Checked (security):** the review queue's SQL has no tenant filter. It relies on row-level security, which applies because the app connects as `ut_app`, not the table owner, so there's no leak. RLS isn't forced on `document_mgmt` tables, so this would break if the app ever connected as the owner. Noted, not changed.
+- **Checked (security):** the review queue's SQL has no tenant filter. It relies on row-level security, which applies because the app connects as `ut_app`, not the table owner, so there's no leak. *Done (w1d, V143_13):* RLS is now FORCEd on `document_mgmt.employee_documents` and `document_types` where the owner isn't the app role, so it also holds for the owner.
+- **Done (w1d):**
+  - **Edit** on each Employee documents row: type, title, category, dates, notes, link, or replace the file (`PUT /v1/document/documents/{id}`). A new type must fit the kept file; a replaced file lands verified and the old one is deleted (the drawer warns).
+  - **Bulk upload** (header): several files at once, each assigned to an employee and a document type; each goes through the single-file upload so its type's formats and size are enforced, with a per-row result and retry.
+  - New workspaces get the ten default document types on their first read of the list (V143_7 only seeded the workspaces that existed); V143_13 backfills any that have none.
+  - An upload over the multipart limit is a 400 "File is too large (max N MB)", not a 500.
 - **Static / to build:**
-  - Documents can't be edited after they're stored. The only fix is to delete and add again.
-  - There's no bulk upload.
   - The Letters pages are separate routes linked from the Hiring sub-navigation; there's no single "Letters" hub.
 - **Fixed (tests):** `letters-admin-live.mjs` left its template and letter behind. It now removes them.
 - **Checked live:** `live-design-documents.mjs` 19/19 (HR adds by link → employee sees it → HR deletes; pending card, View file, reject with reason, verify; every letters page; with cleanup) and `letters-admin-live.mjs` (passes).

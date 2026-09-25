@@ -10,6 +10,7 @@ import com.unifiedtree.settings.branding.DocumentStorage;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -102,6 +103,117 @@ public class DocumentUploadController {
         return saved;
     }
 
+    // ─── V143.13: edit a stored document ────────────────────────────────────
+
+    /**
+     * What HR can change on a stored document. {@code documentTypeId} null makes it
+     * free-form; {@code category} null keeps (or derives from the type) the current
+     * one; dates and notes are replaced as sent (null clears). {@code fileUrl} only
+     * applies to documents stored as a link (an uploaded file is replaced with a file).
+     */
+    public record EditMetadata(@NotBlank @Size(max = 300) String title, DocumentCategory category,
+                               UUID documentTypeId, LocalDate issuedDate, LocalDate expiryDate,
+                               @Size(max = 2000) String notes, @Size(max = 2000) String fileUrl) {}
+
+    /** Edit with an optional replacement file (multipart: "metadata" JSON + optional "file"). */
+    @PutMapping(value = "/documents/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('hrms.document.write')")
+    public DocumentResponse edit(@PathVariable UUID id,
+                                 @RequestPart(value = "file", required = false) MultipartFile file,
+                                 @Valid @RequestPart("metadata") EditMetadata metadata,
+                                 @AuthenticationPrincipal Jwt jwt) throws IOException {
+        return applyEdit(id, file, metadata, jwt);
+    }
+
+    /** Metadata-only edit (JSON body). */
+    @PutMapping(value = "/documents/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAuthority('hrms.document.write')")
+    public DocumentResponse editDetails(@PathVariable UUID id, @Valid @RequestBody EditMetadata metadata,
+                                        @AuthenticationPrincipal Jwt jwt) throws IOException {
+        return applyEdit(id, null, metadata, jwt);
+    }
+
+    private DocumentResponse applyEdit(UUID id, MultipartFile file, EditMetadata m, Jwt jwt) throws IOException {
+        DocumentResponse existing = documents.getDocument(id);
+        UUID typeId = m.documentTypeId();
+        boolean typeChanged = typeId != null && !typeId.equals(existing.documentTypeId());
+        // Keeping a type that HR has since switched off is fine; choosing one must pick an active type.
+        DocumentType type = typeId == null ? null : typeChanged ? requireType(typeId) : loadType(typeId);
+        if (m.expiryDate() != null && m.issuedDate() != null && m.expiryDate().isBefore(m.issuedDate()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Expiry date cannot precede issue date");
+        DocumentCategory category = m.category() != null ? m.category()
+                : typeChanged ? guessCategory(type.code) : existing.category();
+        String notes = m.notes() == null || m.notes().isBlank() ? null : m.notes().trim();
+
+        boolean replacing = file != null && !file.isEmpty();
+        DocumentService.FileChange change = null;
+        String newKey = null;
+        if (replacing) {
+            validateFile(file, type);
+            byte[] bytes = file.getBytes();
+            String contentType = detectContentType(bytes);
+            String ext = extForContentType(contentType);
+            if (type != null && !type.allowsFormat(ext)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Upload a " + type.allowedFormats + " for " + type.displayName + " (this file is " + ext + ")");
+            }
+            if (!storage.isConfigured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Document storage is not configured. Ask your admin to set R2_DOCUMENT_BUCKET.");
+            newKey = "employee-documents/" + TenantContext.getTenantId() + "/" + UUID.randomUUID() + "." + ext;
+            storage.put(newKey, bytes, contentType);
+            change = new DocumentService.FileChange("r2://" + newKey, file.getOriginalFilename(), file.getSize(), contentType);
+        } else {
+            // A new type must still fit the file that stays.
+            if (typeChanged) assertFileFitsType(existing, type);
+            String link = m.fileUrl() == null ? null : m.fileUrl().trim();
+            if (link != null && !link.isEmpty() && !link.equals(existing.fileUrl())) {
+                if (existing.fileUrl() != null && existing.fileUrl().startsWith("r2://"))
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "This document holds an uploaded file. Replace the file instead of pasting a link.");
+                if (!link.matches("(?i)^https?://[^\\s]+$"))
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a link starting with http:// or https://");
+                change = new DocumentService.FileChange(link, null, null, null);
+            }
+        }
+        try {
+            DocumentResponse saved = documents.updateDocument(id, m.title().trim(), category, typeId,
+                    m.issuedDate(), m.expiryDate(), notes, change,
+                    // An HR file replacement lands verified, like an HR upload.
+                    replacing ? "VERIFIED" : null, replacing ? optionalEmployeeId(jwt) : null);
+            if (replacing && isOwnedStorageUrl(existing.fileUrl())) storage.deleteQuietly(existing.fileUrl().substring(5));
+            return saved;
+        } catch (RuntimeException failure) {
+            if (newKey != null) storage.deleteQuietly(newKey);
+            throw failure;
+        }
+    }
+
+    /** Refuses a type change the stored file doesn't satisfy (format or size). Link documents carry no file facts. */
+    static void assertFileFitsType(DocumentResponse existing, DocumentType type) {
+        if (existing.contentType() != null) {
+            String ext = extForContentType(existing.contentType());
+            if (!type.allowsFormat(ext)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        type.displayName + " takes " + type.allowedFormats.toUpperCase(Locale.ROOT).replace(",", ", ")
+                                + " and this document's file is " + ext.toUpperCase(Locale.ROOT) + ". Replace the file as well.");
+            }
+        }
+        if (existing.fileSizeBytes() != null && existing.fileSizeBytes() > type.maxSizeMb() * 1024L * 1024L) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    type.displayName() + " allows files up to " + type.maxSizeMb() + " MB and this document's file is larger. Replace the file as well.");
+        }
+    }
+
+    private boolean isOwnedStorageUrl(String url) {
+        return url != null && url.startsWith("r2://employee-documents/" + TenantContext.getTenantId() + "/")
+                && !url.contains("..") && !url.contains("\\");
+    }
+
+    private static UUID optionalEmployeeId(Jwt jwt) {
+        String empId = jwt == null ? null : jwt.getClaimAsString("employee_id");
+        try { return empId == null ? null : UUID.fromString(empId); } catch (IllegalArgumentException e) { return null; }
+    }
+
     private DocumentResponse storeAndPersist(UUID employeeId, UUID companyId, MultipartFile file,
                                              String title, DocumentCategory category, LocalDate issued,
                                              LocalDate expiry, String notes, DocumentType type,
@@ -142,6 +254,20 @@ public class DocumentUploadController {
         }
     }
 
+    /** Like {@link #requireType} but accepts an inactive type (the one a document already has). */
+    private DocumentType loadType(UUID id) {
+        Map<String, Object> row;
+        try {
+            row = jdbc.queryForMap(
+                    "SELECT id, code, display_name, allowed_formats, max_size_mb FROM document_mgmt.document_types WHERE id = ?", id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document type not found");
+        }
+        return new DocumentType((UUID) row.get("id"), (String) row.get("code"),
+                (String) row.get("display_name"), (String) row.get("allowed_formats"),
+                ((Number) row.get("max_size_mb")).intValue());
+    }
+
     /** Look up a document type row by id and hydrate into a lightweight record. Throws 404 if missing/inactive. */
     private DocumentType requireType(UUID id) {
         Map<String, Object> row;
@@ -180,7 +306,7 @@ public class DocumentUploadController {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Supported formats: PDF, PNG, JPEG");
     }
 
-    private static String extForContentType(String contentType) {
+    static String extForContentType(String contentType) {
         return switch (contentType) {
             case "application/pdf" -> "pdf";
             case "image/png" -> "png";
@@ -196,7 +322,7 @@ public class DocumentUploadController {
     }
 
     /** Lightweight snapshot of one type row for upload-time validation. */
-    private record DocumentType(UUID id, String code, String displayName, String allowedFormats, int maxSizeMb) {
+    record DocumentType(UUID id, String code, String displayName, String allowedFormats, int maxSizeMb) {
         boolean allowsFormat(String ext) {
             String needle = ext.toLowerCase(Locale.ROOT);
             List<String> allowed = Arrays.asList(allowedFormats.toLowerCase(Locale.ROOT).split(","));

@@ -96,6 +96,10 @@ public class WorkforceEmployee extends BaseEntity {
     @Column(name = "notice_start_date")     private LocalDate noticeStartDate;
     @Column(name = "last_working_day")      private LocalDate lastWorkingDay;
     @Column(name = "exit_reason", length = 100) private String exitReason;
+    // V143.13: why the person left (resignation, termination, ...). Read by the
+    // attrition report's resigned / terminated / other split. NULL = not recorded.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "exit_type", length = 30)     private ExitType exitType;
 
     @Column(name = "ctc_annual", precision = 14, scale = 2)
     private BigDecimal ctcAnnual;
@@ -157,4 +161,6 @@ public class WorkforceEmployee extends BaseEntity {
     public enum Gender { MALE, FEMALE, OTHER, PREFER_NOT_TO_SAY }
     public enum EmploymentType { FULL_TIME, PART_TIME, CONTRACT, INTERN, CONSULTANT }
     public enum EmploymentStatus { PROBATION, ACTIVE, NOTICE_PERIOD, SUSPENDED, EXITED, TERMINATED }
+    /** Mirrors ck_employees_exit_type (V143.13). */
+    public enum ExitType { RESIGNATION, TERMINATION, RETIREMENT, END_OF_CONTRACT, ABSCONDING, DEATH, OTHER }
 }
