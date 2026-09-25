@@ -730,3 +730,27 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
 - **Checked live:**
   - `live-design-hrsetup.mjs` 17/17, including a real acknowledge-only user: `policy.read` was removed from the local EMPLOYEE role, the test waited out the server's 5-minute cache, then put it back.
   - `live-design-master.mjs` 41/41
+
+### 11.15 Users & access, Roles & permissions, Audit logs (`/users`, `/roles`, `/audit-logs`): done
+- **Users & access:**
+  - On the module kit.
+  - Clickable tiles: Members, Active, Invited and No access yet. Filter views match them.
+  - Search, and roles grouped by module.
+  - A failed invitation email is shown under the status, and "Resend invitation" becomes "Retry invitation".
+  - The list now has an error state with Try again; before, it said "Please try again" with no button.
+  - The invite modal and the Manage access drawer are unchanged.
+- **Roles & permissions:**
+  - On the kit.
+  - Tiles: Roles, Built-in, Custom and Permissions.
+  - Views: Roles, Who has which role, and Permission catalogue (`?view=`).
+  - The catalogue gains a search across code, name and description, alongside the module chips.
+  - Granting or removing a role now shows the server's reason when it fails.
+- **Audit logs:**
+  - On the kit.
+  - Each row shows the absolute time as well as "2 hours ago", and actions and resources read as words.
+  - A line gives the total count.
+  - The details drawer shows who, when, action, IP and device, then the IDs, then what changed.
+- **Fixed (Audit logs):** the date filter sent the "To" day as its UTC midnight, which dropped that whole day, and shifted "From" by 5½ hours. Both now use local day boundaries: "To" includes the whole day.
+- **Added (Audit logs):** "Export this page" writes the rows on screen to a CSV and records it in the Reports Center. The page says it's one page only.
+  - **Static / to build:** there's no server export of the full trail.
+- **Checked live:** `live-design-access.mjs` 16/16 (users tiles, filter and search; a temporary role granted and removed from the drawer; built-in roles read-only; catalogue view and search; the audit day filter matching the API over the full local day; CSV export; event details; the temporary role removed).

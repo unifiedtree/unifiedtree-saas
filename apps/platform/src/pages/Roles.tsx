@@ -1,13 +1,11 @@
 import React, { useState, useMemo } from 'react'
 import { Shield, Search, X, UserCog, Plus, KeyRound, Copy, Pencil, Trash2 } from 'lucide-react'
-import {
-  DataTable, Badge, Drawer,
-  TableSkeleton, EmptyState, Button,
-} from '@unifiedtree/ui-kit'
+import { DataTable, Badge, Drawer, Button } from '@unifiedtree/ui-kit'
 import type { Column } from '@unifiedtree/ui-kit'
 import { toast } from 'sonner'
-import { Can, P } from '@unifiedtree/sdk'
-import { HrTabs, HrTabPanel } from '@/shared/components/hr'
+import { Can, P, usePermission } from '@unifiedtree/sdk'
+import { HrButton } from '@/shared/components/hr'
+import { ModulePage, Views, useView, StatRow, State, Note } from '@/design/module/ModuleKit'
 import {
   useRoles, usePermissionsCatalogue, useRolePermissions, useSetRolePermissions,
   useUserRoles, useGrantRole, useRevokeRole,
@@ -205,14 +203,14 @@ function AssignmentsTab({ roles }: { roles: RbacRole[] }) {
     if (!selectedUserId || !roleId) return
     grant.mutate({ userId: selectedUserId, roleId }, {
       onSuccess: () => toast.success('Role granted'),
-      onError: () => toast.error('Failed to grant role'),
+      onError: (e) => toast.error('Couldn’t grant the role', { description: (e as Error)?.message }),
     })
   }
   const handleRevoke = (roleId: string, label: string) => {
     if (!selectedUserId) return
     revoke.mutate({ userId: selectedUserId, roleId }, {
       onSuccess: () => toast.success(`Removed ${label}`),
-      onError: () => toast.error('Failed to revoke role'),
+      onError: (e) => toast.error('Couldn’t remove the role', { description: (e as Error)?.message }),
     })
   }
 
@@ -466,7 +464,9 @@ function DeleteRoleConfirm({ role, onClose }: { role: RbacRole; onClose: () => v
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export const Roles: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('roles')
+  const canWriteRoles = usePermission(P.RBAC_ROLE_WRITE)
+  const [activeTab, setActiveTab] = useView(['roles', 'assignments', 'catalogue'])
+  const [permSearch, setPermSearch] = useState('')
   const [drawerRole, setDrawerRole] = useState<RbacRole | null>(null)
   const [editorState, setEditorState] = useState<RoleEditorState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<RbacRole | null>(null)
@@ -595,48 +595,37 @@ export const Roles: React.FC = () => {
     [permissions],
   )
 
-  const filteredPerms = moduleFilter
-    ? permissions.filter((p) => p.module === moduleFilter)
-    : permissions
+  const filteredPerms = useMemo(() => {
+    const q = permSearch.trim().toLowerCase()
+    return permissions.filter((p) => (!moduleFilter || p.module === moduleFilter)
+      && (!q || p.code.toLowerCase().includes(q) || (p.displayName ?? '').toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q)))
+  }, [permissions, moduleFilter, permSearch])
+  const systemCount = roles.filter((r) => r.systemRole).length
 
   return (
-    <div className="p-6 animate-fade-in">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-text-primary">Role Management</h1>
-        <p className="mt-0.5 text-sm text-text-secondary">
-          View roles and manage permission assignments
-        </p>
-      </div>
+    <ModulePage crumb="Settings" title="Roles & permissions" subtitle="What each role can do, and who holds which role."
+      actions={canWriteRoles && activeTab === 'roles' ? <HrButton onClick={() => setEditorState({ mode: 'create' })}><Plus size={15} /> New role</HrButton> : undefined}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+      {rolesLoading ? <State kind="loading" height={96} /> : !rolesError && <StatRow tiles={[
+        { icon: 'shield', color: 'blue', label: 'Roles', value: String(roles.length), sub: 'In this workspace', onClick: () => setActiveTab('roles') },
+        { icon: 'lock', color: 'teal', label: 'Built-in', value: String(systemCount), sub: 'Permissions can be viewed, not changed' },
+        { icon: 'workflow', color: 'green', label: 'Custom', value: String(roles.length - systemCount), sub: 'Made for this workspace' },
+        { icon: 'list', color: 'orange', label: 'Permissions', value: permsLoading ? '…' : String(permissions.length), sub: `${modules.length} modules`, onClick: () => setActiveTab('catalogue') },
+      ]} />}
+      <Views label="Role views" active={activeTab} onChange={setActiveTab} items={[
+        { key: 'roles', label: 'Roles', icon: 'shield' },
+        { key: 'assignments', label: 'Who has which role', icon: 'users' },
+        { key: 'catalogue', label: 'Permission catalogue', icon: 'list' },
+      ]} />
 
-      <HrTabs
-        tabs={[
-          { key: 'roles', label: 'Roles' },
-          { key: 'assignments', label: 'Assignments' },
-          { key: 'catalogue', label: 'Permission Catalogue' },
-        ]}
-        active={activeTab}
-        onChange={setActiveTab}
-      />
-
-      {/* ── Tab: Roles ──────────────────────────────────────────────────── */}
+      {/* ── Roles ──────────────────────────────────────────────────────── */}
       {activeTab === 'roles' && (
-        <HrTabPanel tabKey="roles">
-          <Can code={P.RBAC_ROLE_WRITE}>
-            <div className="mb-3 flex justify-end">
-              <Button size="sm" onClick={() => setEditorState({ mode: 'create' })}>
-                <Plus size={14} className="mr-1" /> New role
-              </Button>
-            </div>
-          </Can>
+        <div style={{ display: 'grid', gap: 12 }}>
+          <Note>Click a role to see its permissions. Built-in roles can be cloned into a custom role you can change.</Note>
           {rolesLoading ? (
-            <TableSkeleton />
+            <State kind="loading" height={220} />
           ) : rolesError ? (
-            <EmptyState
-              variant="error"
-              title="Failed to load roles"
-              description={(rolesError as Error).message}
-              primaryAction={{ label: 'Retry', onClick: () => refetchRoles() }}
-            />
+            <State kind="error" title="Couldn’t load roles" description={(rolesError as Error).message} onRetry={() => refetchRoles()} />
           ) : (
             <DataTable
               data={roles}
@@ -648,25 +637,20 @@ export const Roles: React.FC = () => {
               emptyVariant="first-run"
             />
           )}
-        </HrTabPanel>
+        </div>
       )}
 
-      {/* ── Tab: Assignments ────────────────────────────────────────────── */}
-      {activeTab === 'assignments' && (
-        <HrTabPanel tabKey="assignments">
-          {rolesLoading ? (
-            <TableSkeleton />
-          ) : (
-            <AssignmentsTab roles={roles} />
-          )}
-        </HrTabPanel>
-      )}
+      {/* ── Assignments ────────────────────────────────────────────────── */}
+      {activeTab === 'assignments' && (rolesLoading ? <State kind="loading" height={220} /> : <AssignmentsTab roles={roles} />)}
 
-      {/* ── Tab: Permission Catalogue ───────────────────────────────────── */}
+      {/* ── Permission catalogue ───────────────────────────────────────── */}
       {activeTab === 'catalogue' && (
-        <HrTabPanel tabKey="catalogue">
+        <div style={{ display: 'grid', gap: 12 }}>
+          {!permsLoading && !permsError && (
+            <input type="search" aria-label="Search permissions" value={permSearch} onChange={(e) => setPermSearch(e.target.value)} placeholder="Search code, name or description" className="ut-input" style={{ maxWidth: 420 }} />
+          )}
           {!permsLoading && !permsError && modules.length > 0 && (
-            <div className="mb-4 flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                   !moduleFilter
@@ -693,14 +677,9 @@ export const Roles: React.FC = () => {
             </div>
           )}
           {permsLoading ? (
-            <TableSkeleton />
+            <State kind="loading" height={220} />
           ) : permsError ? (
-            <EmptyState
-              variant="error"
-              title="Failed to load permissions"
-              description={(permsError as Error).message}
-              primaryAction={{ label: 'Retry', onClick: () => refetchPerms() }}
-            />
+            <State kind="error" title="Couldn’t load permissions" description={(permsError as Error).message} onRetry={() => refetchPerms()} />
           ) : (
             <DataTable
               data={filteredPerms}
@@ -708,15 +687,16 @@ export const Roles: React.FC = () => {
               getRowKey={(row) => row.code}
               emptyTitle="No permissions"
               emptyDescription={
-                moduleFilter
+                permSearch ? 'Nothing matches that search.' : moduleFilter
                   ? `No permissions in module "${moduleFilter}".`
                   : 'No permissions registered.'
               }
-              emptyVariant={moduleFilter ? 'filtered' : 'first-run'}
+              emptyVariant={moduleFilter || permSearch ? 'filtered' : 'first-run'}
             />
           )}
-        </HrTabPanel>
+        </div>
       )}
+      </div>
 
       {drawerRole && (
         <PermissionsDrawer
@@ -733,6 +713,6 @@ export const Roles: React.FC = () => {
       {deleteTarget && (
         <DeleteRoleConfirm role={deleteTarget} onClose={() => setDeleteTarget(null)} />
       )}
-    </div>
+    </ModulePage>
   )
 }
