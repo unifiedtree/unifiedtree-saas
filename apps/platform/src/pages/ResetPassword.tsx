@@ -3,10 +3,13 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff, Lock } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { resetPassword } from '@/modules/hrms/employees/api/useInvitation'
+import { WorkspaceWordmark } from '@/shared/components/WorkspaceMark'
+import { usePageTitle } from '@/core/tenant/workspaceBranding'
 
 export const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
+  usePageTitle('Reset password')
 
   const [password, setPassword] = useState('')
   const [confirm, setConfirm]   = useState('')
@@ -51,12 +54,7 @@ export const ResetPassword: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="ut-card ut-card-lg w-full max-w-[420px] p-10"
       >
-        <div className="flex items-center gap-2.5 mb-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#059669]">
-            <span className="text-xl font-black text-white">U</span>
-          </div>
-          <span className="text-xl font-black tracking-tight text-text-primary">UnifiedTree</span>
-        </div>
+        <WorkspaceWordmark textClassName="text-text-primary" />
 
         {done ? (
           <div className="text-center py-4">

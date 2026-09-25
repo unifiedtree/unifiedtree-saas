@@ -3,12 +3,15 @@ import { Link } from 'react-router-dom'
 import { Mail } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { forgotPassword } from '@/modules/hrms/employees/api/useInvitation'
+import { WorkspaceWordmark } from '@/shared/components/WorkspaceMark'
+import { usePageTitle } from '@/core/tenant/workspaceBranding'
 
 export const ForgotPassword: React.FC = () => {
   const [email, setEmail]     = useState('')
   const [loading, setLoading] = useState(false)
   const [sent, setSent]       = useState(false)
   const [error, setError]     = useState('')
+  usePageTitle('Reset password')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,12 +37,7 @@ export const ForgotPassword: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="ut-card ut-card-lg w-full max-w-[420px] p-10"
       >
-        <div className="flex items-center gap-2.5 mb-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#059669]">
-            <span className="text-xl font-black text-white">U</span>
-          </div>
-          <span className="text-xl font-black tracking-tight text-slate-900">UnifiedTree</span>
-        </div>
+        <WorkspaceWordmark />
 
         {sent ? (
           <div className="text-center py-4">

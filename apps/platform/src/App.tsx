@@ -195,7 +195,7 @@ const ROUTE_TREE = (
             preference to the /:tab wildcard below, so ordering is safe. */}
         <Route path="/settings/billing" element={<RequirePermission code={P.WORKSPACE_BILLING_MANAGE}><Settings tab="billing" /></RequirePermission>} />
         <Route path="/settings/danger"  element={<RequirePermission code={P.TENANT_SETTINGS_WRITE}><Settings tab="danger" /></RequirePermission>} />
-        <Route path="/settings/:tab" element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ]}><Settings /></RouteGuard>} />
+        <Route path="/settings/:tab" element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'settings.branding.write']}><Settings /></RouteGuard>} />
         {/* Personal profile page. Auth-only (no permission gate) — every
             signed-in user is allowed to view and edit their own profile;
             the backend's /v1/users/me enforces "you can only touch yourself". */}

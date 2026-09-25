@@ -689,7 +689,7 @@ export const Plan: React.FC = () => {
           if (s.wasReplacement) {
             toast.success('Payment successful', {
               description: 'Your subscription is active. If your UPI app still shows an older '
-                + 'UnifiedTree autopay for a few days, please ignore it — that one is cancelled '
+                + 'autopay for this workspace for a few days, please ignore it — that one is cancelled '
                 + 'and nothing will be debited from it.',
               duration: 9000,
             })

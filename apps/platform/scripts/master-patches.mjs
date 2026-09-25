@@ -66,6 +66,8 @@ export const PATCHES = {
 
   // ── Employee Master · Contractor Master · Classification Rules ───────────
   d6399539: [
+    // White label: no vendor name in placeholders.
+    ["placeholder:'name@unifiedtree.in'", "placeholder:'name@company.com'"],
     // Employee Master: filters can arrive in the URL; codes are shown, ids are keys; real import/export.
     ['const {db,d,update,toast,route,t}=useApp();const M=useMaps();', 'const {db,d,update,toast,route,t,act:ax}=useApp();const M=useMaps();'],
     ["const [dept,setDept]=React.useState('');const [branch,setBranch]=React.useState('');", "const [dept,setDept]=React.useState(route.dept||'');const [branch,setBranch]=React.useState(route.branch||'');"],
@@ -148,6 +150,9 @@ export const PATCHES = {
 
   // ── Companies · Branches · Departments · Designations · Grades & Bands ───
   aa085547: [
+    // White label: no vendor name in placeholders.
+    ["placeholder:'e.g. UnifiedTree Retail'}", "placeholder:'e.g. Acme Retail'}"],
+    ["placeholder:'e.g. UnifiedTree Retail Pvt. Ltd.'}", "placeholder:'e.g. Acme Retail Pvt. Ltd.'}"],
     [`const IN_STATES=['Karnataka','Maharashtra','Telangana','Tamil Nadu','Haryana','Delhi','Gujarat','Kerala','Uttar Pradesh','West Bengal'];`, `const IN_STATES=${JSON.stringify(STATES).replace(/"/g, "'")};`],
     // Companies: head office comes from the branch marked HQ; TAN and "since" aren't stored.
     ['<small>{c.legal} · {c.industry}</small>', "<small>{[c.legal,c.industry].filter(Boolean).join(' · ')||'Legal name not set'}</small>"],

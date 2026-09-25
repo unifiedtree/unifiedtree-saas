@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { useWorkspaceBranding } from '@/core/tenant/workspaceBranding'
+import { MonogramTile, WorkspaceMark } from '@/shared/components/WorkspaceMark'
 
 /**
  * The moment after signing in.
@@ -165,6 +167,8 @@ const EXIT_MS = 460
 export const WelcomeSplash: React.FC<Props> = ({ ready = true, name, workspace, onDone }) => {
   const reduce = useReducedMotion()
   const [visible, setVisible] = useState(true)
+  const brand = useWorkspaceBranding()
+  const shownWorkspace = brand.workspaceName || workspace
 
   /* The clock starts when there is something to read, not when the screen
      appears — otherwise a slow /me eats the whole greeting and the splash
@@ -249,18 +253,21 @@ export const WelcomeSplash: React.FC<Props> = ({ ready = true, name, workspace, 
           )}
 
           <div className="relative z-10 flex flex-col items-center px-6 text-center">
-            <motion.img
-              src="/UnifiedTreeLogo.png"
-              alt=""
-              aria-hidden
-              initial={{ opacity: 0, scale: reduce ? 1 : 0.86 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: reduce ? 0.2 : 0.7, ease: EASE }}
-              className="h-14 w-auto object-contain"
-              onError={(e) => {
-                ;(e.target as HTMLImageElement).style.display = 'none'
-              }}
-            />
+            {/* The workspace's own logo (white label): wide logo, else square
+                mark, else its monogram. Held empty at the same height until
+                the branding has loaded, so nothing swaps mid-animation. */}
+            <div className="flex h-14 items-center justify-center">
+              {brand.loaded || brand.workspaceName ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: reduce ? 1 : 0.86 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: reduce ? 0.2 : 0.7, ease: EASE }}
+                  className="flex h-14 items-center justify-center"
+                >
+                  {brand.loaded ? <WorkspaceMark size={56} tone="ground" preferLogo /> : <MonogramTile letter={brand.monogram} size={56} tone="ground" />}
+                </motion.div>
+              ) : null}
+            </div>
 
             {/* Fixed height so the logo does not jump when the text arrives on a
                 cold load, where identity resolves a beat after the screen. */}
@@ -288,13 +295,13 @@ export const WelcomeSplash: React.FC<Props> = ({ ready = true, name, workspace, 
                     Welcome back{shown ? <>, {shown}</> : ''}
                   </motion.h1>
 
-                  {workspace && (
+                  {shownWorkspace && (
                     <motion.p
                       {...beat(0.46, 10)}
                       className="mt-3.5 text-[15px]"
                       style={{ color: INK_SOFT }}
                     >
-                      Opening {workspace}
+                      {shownWorkspace}
                     </motion.p>
                   )}
                 </>
