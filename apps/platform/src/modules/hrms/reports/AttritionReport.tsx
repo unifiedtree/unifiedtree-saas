@@ -7,7 +7,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useAttritionReport } from '@/modules/hrms/api/useReports'
 import { lineSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
-import { todayIso, monthStartIso, ReportPage, KpiRow, KPI_ICON, ReportSection, TrendChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, printHead, printKpis, printTable, type Kpi } from './ReportKit'
+import { todayIso, monthStartIso, ReportPage, KpiRow, KPI_ICON, ReportSection, TrendChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const label = (ym: string) => { const [y, m] = ym.split('-').map(Number); return `${MON[m - 1]} ${y}` }
@@ -53,11 +53,10 @@ export function AttritionReport() {
       exports={{
         fileBase, csvParams: { from, to },
         sheets: () => [{ name: 'Summary', widths: [28, 30], rows: [['Attrition report', ''], ['Company', co.companyName], ['Range', range], ...kpis.map((k) => [k.label, k.value])] }, { name: 'Monthly attrition', widths: [12, 8, 10, 11, 8, 11, 12], rows: [HEAD, ...table()] }],
-        print: () => printHead('Attrition report', `${co.companyName} · ${range}`) + printKpis(kpis) + `<div class="card">${chart().svg}</div>` + printTable('Months', HEAD, table(), foot),
       }}>
       <KpiRow items={kpis} />
       <ReportSection title="Monthly attrition" aside={<span style={{ fontSize: 12.5, color: '#64748b', fontWeight: 500 }}>{range}</span>} legend={[['Attrition %', '#0f6e56', 'line']]}
-        onDownload={() => downloadChart(`monthly-attrition-${slug(co.companyName)}-${from}_${to}.png`, chart(), { report: 'Attrition', company: co.companyName })}>
+        onDownload={() => downloadChart(`monthly-attrition-${slug(co.companyName)}-${from}_${to}.png`, chart(), { report: 'attrition', companyId: co.company, filters: { from, to } })}>
         <TrendChart points={rows.map((r) => ({ key: r.id, short: r.short, value: r.pct }))} readout={(i) => {
           const r = rows[i]
           return <>

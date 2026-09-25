@@ -6,7 +6,7 @@ import { useLateMarksReport } from '@/modules/hrms/api/useReports'
 import { HrStatusPill } from '@/shared/components/hr'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
-import { todayIso, monthStartIso, longDate, dayMonth, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, printHead, printKpis, printTable, type Kpi } from './ReportKit'
+import { todayIso, monthStartIso, longDate, dayMonth, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
 
 const long = longDate, dayShort = dayMonth
 const time = (at: string | null) => (at ? new Date(at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '—')
@@ -53,11 +53,10 @@ export function LateMarksReport() {
       exports={{
         fileBase, csvParams: { from, to },
         sheets: () => [{ name: 'Summary', widths: [24, 34], rows: [['Late marks report', ''], ['Company', co.companyName], ['Range', range], ...kpis.map((k) => [k.label, k.value])] }, { name: 'Late marks', widths: [14, 12, 26, 22, 10, 12], rows: [HEAD, ...table()] }, { name: 'By person', widths: [26, 10, 14], rows: [['Name', 'Late marks', 'Minutes late'], ...[...people.values()].sort((a, b) => b.count - a.count).map((p) => [p.name, p.count, p.mins])] }],
-        print: () => printHead('Late marks report', `${co.companyName} · ${range}`) + printKpis(kpis) + `<div class="card">${chart().svg}</div>` + printTable('Late marks', HEAD, table()),
       }}>
       <KpiRow items={kpis} />
       <ReportSection title="Late marks per day" legend={SERIES}
-        onDownload={() => downloadChart(`late-marks-per-day-${slug(co.companyName)}-${from}_${to}.png`, chart(), { report: 'Late Marks', company: co.companyName })}>
+        onDownload={() => downloadChart(`late-marks-per-day-${slug(co.companyName)}-${from}_${to}.png`, chart(), { report: 'late-marks', companyId: co.company, filters: { from, to } })}>
         <BarsChart series={SERIES} unit="late marks" bars={days.map(([d, n]) => ({ key: d, label: dayShort(d), parts: [n], tip: `${n} late ${n === 1 ? 'mark' : 'marks'} · ${long(d)}` }))} />
       </ReportSection>
       <ReportTable<Row & { sL: string }>

@@ -306,8 +306,25 @@ public class WorkforceController {
             @RequestParam(required = false) WorkforceEmployee.EmploymentStatus status,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0")  int page,
-            @RequestParam(defaultValue = "50") int pageSize) {
-        return employees.directory(new WorkforceFilter(companyId, departmentId, branchId, status, search, page, pageSize));
+            @RequestParam(defaultValue = "50") int pageSize,
+            // "No department" (people without one) and the dashboard's upcoming
+            // milestones: milestone=birthday|anniversary|retirement, within =
+            // days (months for retirements; defaults to the dashboard's window).
+            @RequestParam(defaultValue = "false") boolean noDepartment,
+            @RequestParam(required = false) String milestone,
+            @RequestParam(required = false) Integer milestoneWithin) {
+        return employees.directory(new WorkforceFilter(companyId, departmentId, branchId, status, search, page, pageSize,
+                noDepartment, milestoneKind(milestone), milestoneWithin));
+    }
+
+    private static com.hrms.employee.workforce.service.MilestoneWindow.Kind milestoneKind(String milestone) {
+        if (milestone == null || milestone.isBlank()) return null;
+        var kind = com.hrms.employee.workforce.service.MilestoneWindow.Kind.parse(milestone);
+        if (kind == null) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "milestone must be birthday, anniversary or retirement", "DIRECTORY_MILESTONE_INVALID");
+        }
+        return kind;
     }
 
     /** Upper bound on one export; beyond it the response says so instead of silently cutting rows. */
@@ -331,12 +348,17 @@ public class WorkforceController {
             @RequestParam(required = false) UUID departmentId,
             @RequestParam(required = false) UUID branchId,
             @RequestParam(required = false) WorkforceEmployee.EmploymentStatus status,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "false") boolean noDepartment,
+            @RequestParam(required = false) String milestone,
+            @RequestParam(required = false) Integer milestoneWithin) {
+        var milestoneKind = milestoneKind(milestone);
         List<WorkforceEmployeeResponse> rows = new java.util.ArrayList<>();
         long total = 0;
         for (int page = 0; ; page++) {
             PageResponse<WorkforceEmployeeResponse> chunk = employees.directory(
-                    new WorkforceFilter(companyId, departmentId, branchId, status, search, page, 500));
+                    new WorkforceFilter(companyId, departmentId, branchId, status, search, page, 500,
+                            noDepartment, milestoneKind, milestoneWithin));
             total = chunk.totalElements();
             rows.addAll(chunk.content());
             if (chunk.last() || chunk.content().isEmpty() || rows.size() >= EXPORT_MAX_ROWS) break;

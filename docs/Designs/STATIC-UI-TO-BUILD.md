@@ -35,15 +35,15 @@ Checked live: `e2e/recovery/live-design-dashboard.mjs`, 12/12 (calendar, past-da
 | Chart axes | Done | The prototype had fixed axes (0–120 people, ₹42L–₹50L). They now scale to the real numbers. |
 | Projects & Productivity card | Kept | The design shows a summary card. **Manage projects →** opens the existing project and task manager in a side panel, because `/projects` is still a placeholder and this is the only place to change task status. |
 | Archiving a notice | Kept | Asks for confirmation first, as the old card did. The prototype archived immediately. |
-| Activity feed: record name ("… for **Rahul Verma**") | Needs backend | `/v1/audit/events` returns the resource type and id but not its name. Each row shows the actor and the action, and links to Audit Logs rather than the record. |
-| Top performers: department line | Needs backend | `/v1/admin/dashboard/performers` has no department. Only the review count is shown. |
-| Dept Distribution: click a bar to filter the directory | Needs backend | `/v1/reports/headcount` rows have the department name but no id, so the click opens the unfiltered directory. |
-| Milestones "View all →" (birthdays, anniversaries, retirements) | Needs backend | Opens `/hrms/employees?filter=birthday` etc., but the directory has no such filters yet. |
+| Activity feed: record name ("… for **Rahul Verma**") | Done | `/v1/audit/events` now returns `resourceName` and `resourcePath` (employee, leave request, expense claim, payroll run, department, document, policy, letter run, report email…). The row names the record and opens its page; records without a page open Audit Logs. |
+| Top performers: department line | Done | `/v1/admin/dashboard/performers` returns `department`; the line reads "Engineering · 3 completed reviews". |
+| Dept Distribution: click a bar to filter the directory | Done | Opens `/hrms/employees?departmentId=<id>`; the "No department" bar opens `departmentId=none` (people without one). |
+| Milestones "View all →" (birthdays, anniversaries, retirements) | Done | Opens `/hrms/employees?filter=birthday` (or `anniversary`, `retirement`). The directory has a Milestone filter with the card's windows (14 days, 31 days, 6 months); the people come from `/v1/hrms/employees?milestone=…`, which uses the card's own rules. |
 | Milestones → Retirements | Done (w1e) | Reads `GET /v1/hrms/retirements/due` for the company: people reaching the company's retirement age (HR Configuration) in the next 6 months. Roles without `hrms.employee.read` get the same rule through `/v1/hrms/milestones`. |
 | Export headcount | Done (w1e) | Downloads `headcount-<company>-<date>.xlsx` for the dashboard's company and selected date (`GET /v1/reports/headcount/workbook`, `hrms.report.headcount`). **Summary** sheet: company, as-of date, fiscal year, totals (total, active, probation, on notice, suspended, joined/left this month and this fiscal year) and breakdowns by department, branch, designation and employment type, plus gender with `hrms.report.diversity`. **Employees** sheet (only with `hrms.employee.read`): code, name, department, designation, branch, employment type, status, joining date, manager, work email, probation end, notice last day. Names only, no ids. Past dates are worked out from joining, confirmation, probation, notice and exit dates. Live test: `e2e/recovery/live-w1e.mjs`. |
-| Payroll chart: click a month | Needs backend | Opens `/hrms/payroll/runs?month=YYYY-MM`. The runs page doesn't filter by month yet. |
+| Payroll chart: click a month | Done | Opens `/hrms/payroll/runs?month=YYYY-MM`; the runs page has a Month filter next to Year and opens on that month. |
 | Hiring stage rows → `/hrms/hiring?tab=candidates&stage=…` | To verify | Check the Hiring page applies the `stage` filter. |
-| Company notices | Partial | Shows the latest 5, as in the design ("5 per page"). There's no pager, so older notices aren't reachable from the dashboard. |
+| Company notices | Done | 5 per page, as in the design, with Newer / Older buttons beside the count when there are more. Archiving the last notice on a page steps back a page. |
 | Date calendar colours | Partial | The trend API caps at 31 days, so only the last month is coloured. Early departures for past days show 0 (the trend API doesn't return them). Today's figures are exact. |
 | Today's Absence / Not Marked, donut, "exceptions" | Changed | Same one-bucket-per-person numbers as Attendance & Time (`attendance/attendanceBuckets.ts`). Today, someone with no punch and no leave is **Not Marked**, and Absence stays 0 until the day is over. The donut and the exceptions count no longer count them twice (the API's "not marked" also contains the absent and people on leave). |
 | Seats tile | Partial | Shown only to billing admins (Owner, Super Admin, Company Admin), and once the seats data has loaded. |
@@ -385,8 +385,8 @@ How it's built:
   - CSV
   - a real `.xlsx` writer (no library)
   - chart PNGs drawn from the same numbers
-  - a print-ready snapshot
-  - the "Recent downloads" list
+  - the export log calls (every file is recorded on the server)
+- PDFs are made on the server (`ReportPdfService`), and **scheduled report emails** (Reports Center → Scheduled emails, `hrms.report.schedule.manage`) send any report weekly or monthly as a PDF to workspace members who can open it.
 - `useReportCompany` shares the company filter through `?co=` (old `?company=` links still work). If a role can't list companies, it uses the person's own company and locks the picker.
 
 **Who sees what:**
@@ -422,12 +422,12 @@ How it's built:
 | Item | Status | Detail |
 |---|---|---|
 | Workforce Analytics page (all seven states, charts, table, mobile cards) | Done | "Company list not allowed" couldn't be tested live: every seeded role that can see reports can also list companies. |
-| Export → Dashboard snapshot (PDF) | Done (browser) | Opens a print-ready page; the browser's "Save as PDF" writes the file. *Needs:* server-side PDF for a direct download and for scheduled emails. |
+| Export → Dashboard snapshot (PDF) | Done | A direct download made on the server (`/v1/reports/workforce-analytics/export.pdf`, and `/v1/reports/{report}/export.pdf` for each report page): KPIs, charts and table, the company's name, each section only with its own report permission. |
 | Export → Excel and CSV; chart PNGs | Done | Excel and PNG are built in the browser from the numbers on screen. Report CSVs come from the server routes. |
-| Recent downloads (Reports Center) | Partial | Lists downloads made in this browser. *Needs:* a server export log (who downloaded what, when) for a shared, auditable history. |
+| Recent downloads (Reports Center) | Done | Reads the server export log (`hrms.report_exports`, `GET /v1/reports/exports`): every CSV, Excel, PNG and PDF export and every scheduled email, with who, the filters, the company and when. HR (`hrms.report.exports.read_all`) sees everyone's, with an Only mine switch; others see their own. It can't be cleared. |
 | Attrition split (resigned / terminated / other) | Done (w1d, V143_13) | HR records the exit type (Resignation, Termination, Retirement, End of contract, Absconding, Death, Other) on Start notice / Mark exited and in the separation editors; `hrms.employees.exit_type`. The report splits on it; exits recorded before it existed count as "other". |
-| Headcount on a past date | Partial | Who was employed is correct for any date. The active/notice/probation split uses today's status. *Needs:* status history. |
-| "No department" click | Partial | Opens the company's whole directory; the directory has no "no department" filter. *Needs:* that filter. |
+| Headcount on a past date | Done | The split uses each person's status on that date, from `hrms.employee_status_history` (a trigger records every status change; existing people were backfilled from their joining, confirmation, notice and exit dates). Someone whose exit is still to come counts as on notice. |
+| "No department" click | Done | Opens the directory with its new "No department" option (`departmentId=none`; the API takes `noDepartment=true`). |
 | "N in directory" (Total headcount card) | As designed | Counts every record in the directory, including people who have left. |
 | Headcount CSV | Changed | Now also has a `department_id` column. |
 
@@ -759,8 +759,8 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - A line gives the total count.
   - The details drawer shows who, when, action, IP and device, then the IDs, then what changed.
 - **Fixed (Audit logs):** the date filter sent the "To" day as its UTC midnight, which dropped that whole day, and shifted "From" by 5½ hours. Both now use local day boundaries: "To" includes the whole day.
-- **Added (Audit logs):** "Export this page" writes the rows on screen to a CSV and records it in the Reports Center. The page says it's one page only.
-  - **Static / to build:** there's no server export of the full trail.
+- **Added (Audit logs):** "Export all (CSV)" downloads every event matching the filters from `GET /v1/audit/events/export.csv` (streamed by the server, newest first, sensitive fields masked). The export is recorded in the Reports Center's download history and in the audit trail. The "Who" filter now also takes an email address, and each row names the record it's about.
+  - **Done:** the full server export of the trail.
 - **Checked live:** `live-design-access.mjs` 16/16 (users tiles, filter and search; a temporary role granted and removed from the drawer; built-in roles read-only; catalogue view and search; the audit day filter matching the API over the full local day; CSV export; event details; the temporary role removed).
 - **Done (w1h, migrations `V143_17`, `V143_17_1`): per-person permissions, duplicate roles, levels, descriptions, no role-name bypasses.**
   - Manage access drawer: new "Extra and removed permissions" section (search the catalogue, reason required, optional end date) and "What they can do" with the source of every permission (role, every employee, extra). API `GET/PUT /v1/workspace/users/{id}/permissions`, new permission `rbac.access.manage-overrides` (critical). Effective = (roles + employee baseline + extras) − removed, in the sign-in token, `/me` and `@perm`.

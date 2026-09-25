@@ -449,12 +449,24 @@ public final class WorkforceDtos {
             WorkforceEmployee.EmploymentStatus status,
             String search,
             int page,
-            int pageSize
+            int pageSize,
+            /** Only people without a department (the dashboard's and reports' "No department"). */
+            boolean noDepartment,
+            /** Only people with an upcoming birthday / work anniversary / retirement (null = no such filter). */
+            com.hrms.employee.workforce.service.MilestoneWindow.Kind milestone,
+            /** The milestone window: days for birthdays and anniversaries, months for retirements (null = the dashboard's default). */
+            Integer milestoneWithin
     ) {
         public WorkforceFilter {
             if (pageSize <= 0)   pageSize = 50;
             if (pageSize > 200)  pageSize = 200;
             if (page < 0)        page = 0;
+        }
+
+        /** The original filter, without the "no department" and milestone options. */
+        public WorkforceFilter(UUID companyId, UUID departmentId, UUID branchId,
+                               WorkforceEmployee.EmploymentStatus status, String search, int page, int pageSize) {
+            this(companyId, departmentId, branchId, status, search, page, pageSize, false, null, null);
         }
     }
 

@@ -6,7 +6,7 @@ import { useReportCompany } from './useReportCompany'
 import { useDiversityReport } from '@/modules/hrms/api/useReports'
 import { HrStatusPill } from '@/shared/components/hr'
 import { donutSvg, stackedBarsSvg } from '@/shared/export/charts'
-import { todayIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, DonutChart, BarsChart, ReportTable, downloadChart, num, pctOf, sortKey, slug, printHead, printKpis, printTable, type Kpi } from './ReportKit'
+import { todayIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, DonutChart, BarsChart, ReportTable, downloadChart, num, pctOf, sortKey, slug, type Kpi } from './ReportKit'
 
 const GENDERS: { key: string; label: string; color: string }[] = [
   { key: 'FEMALE', label: 'Women', color: '#0f6e56' },
@@ -59,17 +59,16 @@ export function DiversityReport() {
       exports={{
         fileBase, csvParams: {},
         sheets: () => [{ name: 'Summary', widths: [26, 34], rows: [['Diversity report', ''], ['Company', co.companyName], ['As of', today], ...kpis.map((k) => [k.label, k.value])] }, { name: 'By department', widths: [28, ...series.map(() => 12), 10, 10], rows: [HEAD, ...table(), foot] }],
-        print: () => printHead('Diversity report', `${co.companyName} · ${today}`) + printKpis(kpis) + `<div class="card">${donut().svg}</div><div class="card">${bars().svg}</div>` + printTable('By department', HEAD, table(), foot),
       }}>
       <KpiRow items={kpis} />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'stretch' }}>
         <ReportSection title="Gender split" flex="1 1 300px" pill={<HrStatusPill tone="purple">{`${num(people)} people`}</HrStatusPill>}
-          onDownload={() => downloadChart(`gender-split-${slug(co.companyName)}.png`, donut(), { report: 'Diversity', company: co.companyName })}>
+          onDownload={() => downloadChart(`gender-split-${slug(co.companyName)}.png`, donut(), { report: 'diversity', companyId: co.company })}>
           <DonutChart parts={series.map((g) => ({ label: g.label, value: totals[g.key] || 0, color: g.color }))}
             footer={<div style={{ width: '100%', padding: '9px 11px', borderRadius: 10, background: '#f8fafc', border: '1px solid #f1f5f9', fontSize: 12.5, color: '#475569', fontWeight: 500, boxSizing: 'border-box' }}>Most balanced: <b style={{ color: '#0f172a' }}>{balanced ? `${balanced.dept} · ${pctOf(balanced.counts.FEMALE || 0, tot(balanced))}% women` : recorded ? 'Not enough data' : 'No gender recorded yet'}</b></div>} />
         </ReportSection>
         <ReportSection title="Gender by department" flex="2 1 520px" legend={series.map((g) => [g.label, g.color] as [string, string])}
-          onDownload={() => downloadChart(`gender-by-department-${slug(co.companyName)}.png`, bars(), { report: 'Diversity', company: co.companyName })}>
+          onDownload={() => downloadChart(`gender-by-department-${slug(co.companyName)}.png`, bars(), { report: 'diversity', companyId: co.company })}>
           <BarsChart series={series.map((g) => [g.label, g.color] as [string, string])} unit="people"
             bars={depts.map((d) => ({ key: d.id, label: d.dept, none: d.none, parts: series.map((g) => d.counts[g.key] || 0) }))} />
         </ReportSection>

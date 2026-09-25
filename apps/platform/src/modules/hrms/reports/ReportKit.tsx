@@ -14,7 +14,7 @@ import { SkeletonBlock, SkeletonRow } from '@/shared/components/SkeletonCard'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { apiBlob } from '@/core/api/client'
 import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
-import { esc, printDocument, saveAndRecord, svgToPng, xlsxBlob, type Sheet } from '@/shared/export/fileExport'
+import { saveAndRecord, saveServerFile, svgToPng, xlsxBlob, type ExportFilters, type ExportReportKey, type Sheet } from '@/shared/export/fileExport'
 import { EXPORT_SPEC, type ReportKey } from './reportSpec'
 import { slug, type useReportCompany } from './useReportCompany'
 
@@ -53,9 +53,7 @@ export interface ReportExports {
   fileBase: string
   /** Sheets for the Excel workbook (first row of each is its header). */
   sheets: () => Sheet[]
-  /** HTML body for the print-ready snapshot. */
-  print: () => string
-  /** Filters the server CSV export takes besides companyId (same as the on-screen query). */
+  /** Filters the server CSV and PDF exports take besides companyId (same as the on-screen query). */
   csvParams: Record<string, string>
 }
 
@@ -128,27 +126,28 @@ export function ReportPage({ title, subtitle, report, co, filters, note, state, 
   const noCo = !co.loading && !co.company
   const ready = allowed && !noCo && state === 'live'
   const loading = allowed && !noCo && (state === 'loading' || co.loading)
-  const meta = (fmt: string) => ({ report: title.replace(/ Report$/, ''), fmt, company: co.companyName })
   const run = async (fn: () => Promise<string>) => {
     if (busy) return
     setBusy(true)
     try { show(await fn()) } catch (e) { show(e instanceof Error && e.message ? e.message : 'Could not export the report', true) } finally { setBusy(false) }
   }
   const items = !ready || !exports ? [] : [
-    { key: 'pdf', label: 'Report snapshot (PDF)', sub: 'Charts and table on one page, print-ready', run: () => run(async () => {
-      if (!printDocument(`${exports.fileBase}.pdf`, exports.print())) throw new Error('Your browser blocked the print window. Allow pop-ups for this site, then try again.')
-      return 'Print dialog opened. Choose “Save as PDF” to keep a copy.'
+    { key: 'pdf', label: 'Report snapshot (PDF)', sub: 'KPIs, charts and table, made on the server', run: () => run(async () => {
+      // apiBlob, not a link: the route needs the bearer token and tenant header.
+      const blob = await apiBlob(`${spec.pdf}?${new URLSearchParams({ companyId: co.company, ...exports.csvParams })}`)
+      const file = `${exports.fileBase}.pdf`
+      saveServerFile(file, blob)
+      return `${file} downloaded`
     }) },
     { key: 'xlsx', label: 'Data workbook (.xlsx)', sub: 'Summary and every row, ready for Excel', run: () => run(async () => {
       const file = `${exports.fileBase}.xlsx`
-      saveAndRecord(file, xlsxBlob(exports.sheets()), meta('Excel'))
+      saveAndRecord(file, xlsxBlob(exports.sheets()), { report, fmt: 'XLSX', companyId: co.company, filters: exports.csvParams })
       return `${file} downloaded`
     }) },
     { key: 'csv', label: 'Raw rows (CSV)', sub: 'Straight from the server, same filters', run: () => run(async () => {
-      // apiBlob, not a link: the route needs the bearer token and tenant header.
       const blob = await apiBlob(`${spec.path}?${new URLSearchParams({ companyId: co.company, ...exports.csvParams })}`)
       const file = `${exports.fileBase}.csv`
-      saveAndRecord(file, blob, meta('CSV'))
+      saveServerFile(file, blob)
       return `${file} downloaded`
     }) },
   ]
@@ -261,8 +260,8 @@ export function ReportSection({ title, pill, legend, onDownload, footer, flex, c
   )
 }
 
-/** PNG of a standalone chart SVG, saved and remembered in Recent downloads. */
-export async function downloadChart(file: string, chart: { svg: string; width: number; height: number }, meta: { report: string; company?: string }) {
+/** PNG of a standalone chart SVG, saved and recorded in the workspace's export log. */
+export async function downloadChart(file: string, chart: { svg: string; width: number; height: number }, meta: { report: ExportReportKey; companyId?: string; filters?: ExportFilters }) {
   saveAndRecord(file, await svgToPng(chart.svg, chart.width, chart.height), { ...meta, fmt: 'PNG' })
   return `${file} downloaded`
 }
@@ -451,11 +450,5 @@ export function ReportTable<T extends { id: string }>({ title, subtitle, columns
     </TableCard>
   )
 }
-
-/** Print snapshot pieces (see printDocument). */
-export const printHead = (title: string, meta: string) => `<h1>${esc(title)}</h1><div class="muted">${esc(meta)}</div>`
-export const printKpis = (k: Kpi[]) => `<div class="kpis">${k.map((x) => `<div class="kpi"><span class="muted">${esc(x.label)}</span><b>${esc(x.value)}</b><span class="muted">${esc(x.sub || '')}</span></div>`).join('')}</div>`
-export const printTable = (title: string, head: string[], rows: (string | number | null)[][], foot?: (string | number | null)[]) =>
-  `<div class="card"><h2>${esc(title)}</h2><table><thead><tr>${head.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c ?? '—')}</td>`).join('')}</tr>`).join('')}</tbody>${foot ? `<tfoot><tr>${foot.map((c) => `<td>${esc(c ?? '—')}</td>`).join('')}</tr></tfoot>` : ''}</table></div>`
 
 export { slug }

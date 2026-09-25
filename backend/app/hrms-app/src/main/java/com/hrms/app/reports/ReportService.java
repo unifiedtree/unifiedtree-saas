@@ -36,15 +36,41 @@ public class ReportService {
         // before asOf counts as gone (the status already says they left).
         // department_id lets a click open that department's people. (Gender
         // stays in the diversity report, behind its own permission.)
+        //
+        // The active / notice / probation split is each person's status ON
+        // asOf, read from hrms.employee_status_history (V143_27: fed by a
+        // trigger on every status change, backfilled from the record's own
+        // dates), not today's status. Someone whose exit is still to come
+        // counts as on notice. Without a history row (should not happen after
+        // the backfill) the current status is used, as before.
         String sql = """
+                WITH status_on AS (
+                    SELECT DISTINCT ON (h.employee_id) h.employee_id, h.status
+                      FROM hrms.employee_status_history h
+                     WHERE h.effective_on <= ?
+                     ORDER BY h.employee_id, h.effective_on DESC, h.recorded_at DESC
+                ),
+                -- An exit already recorded by asOf whose last working day is
+                -- still to come: that person is serving notice on asOf, even
+                -- when they went straight from active to exited.
+                leaving_on AS (
+                    SELECT DISTINCT h.employee_id
+                      FROM hrms.employee_status_history h
+                     WHERE h.status IN ('EXITED', 'TERMINATED', 'RESIGNED')
+                       AND h.effective_on > ?
+                       AND (h.recorded_at AT TIME ZONE 'Asia/Kolkata')::date <= ?
+                )
                 SELECT
                     d.id                            AS department_id,
                     d.name                          AS department,
                     COUNT(e.id)                     AS total,
-                    SUM(CASE WHEN e.employment_status = 'ACTIVE'        THEN 1 ELSE 0 END) AS active,
-                    SUM(CASE WHEN e.employment_status = 'NOTICE_PERIOD' THEN 1 ELSE 0 END) AS on_notice,
-                    SUM(CASE WHEN e.employment_status = 'PROBATION'     THEN 1 ELSE 0 END) AS probation
+                    SUM(CASE WHEN l.employee_id IS NULL AND COALESCE(s.status, e.employment_status) = 'ACTIVE'    THEN 1 ELSE 0 END) AS active,
+                    SUM(CASE WHEN l.employee_id IS NOT NULL OR COALESCE(s.status, e.employment_status)
+                                  IN ('NOTICE_PERIOD', 'EXITED', 'TERMINATED', 'RESIGNED') THEN 1 ELSE 0 END) AS on_notice,
+                    SUM(CASE WHEN l.employee_id IS NULL AND COALESCE(s.status, e.employment_status) = 'PROBATION' THEN 1 ELSE 0 END) AS probation
                 FROM hrms.employees e
+                LEFT JOIN status_on s ON s.employee_id = e.id
+                LEFT JOIN leaving_on l ON l.employee_id = e.id
                 LEFT JOIN hrms.departments d ON d.id = e.department_id
                 WHERE e.company_id = ?
                   AND e.date_of_joining <= ?
@@ -55,7 +81,7 @@ public class ReportService {
                 GROUP BY d.id, d.name
                 ORDER BY total DESC
                 """;
-        return jdbc.queryForList(sql, companyId, asOf, asOf);
+        return jdbc.queryForList(sql, asOf, asOf, asOf, companyId, asOf, asOf);
     }
 
     // ── 2. Attrition Report ───────────────────────────────────────────────────

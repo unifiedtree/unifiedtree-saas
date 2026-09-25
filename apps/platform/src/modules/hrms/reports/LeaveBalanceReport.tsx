@@ -6,7 +6,7 @@ import { useLeaveBalanceReport } from '@/modules/hrms/api/useReports'
 import { HrSelect } from '@/shared/components/hr'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
-import { ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, downloadChart, num, sortKey, slug, printHead, printKpis, printTable, type Kpi } from './ReportKit'
+import { ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
 
 const YEAR = new Date().getFullYear()
 const YEARS = [YEAR + 1, YEAR, YEAR - 1, YEAR - 2].map((y) => ({ value: String(y), label: String(y) }))
@@ -52,11 +52,10 @@ export function LeaveBalanceReport() {
       exports={{
         fileBase, csvParams: { year },
         sheets: () => [{ name: 'Summary', widths: [24, 34], rows: [['Leave balance report', ''], ['Company', co.companyName], ['Year', year], ...kpis.map((k) => [k.label, k.value])] }, { name: 'Balances', widths: [12, 26, 22, 16, 10, 15, 8, 9, 10], rows: [HEAD, ...table(), foot] }],
-        print: () => printHead('Leave balance report', `${co.companyName} · ${year}`) + printKpis(kpis) + `<div class="card">${chart().svg}</div>` + printTable('Balances', HEAD, table(), foot),
       }}>
       <KpiRow items={kpis} />
       <ReportSection title="Leave by type" legend={SERIES}
-        onDownload={() => downloadChart(`leave-by-type-${slug(co.companyName)}-${year}.png`, chart(), { report: 'Leave Balance', company: co.companyName })}>
+        onDownload={() => downloadChart(`leave-by-type-${slug(co.companyName)}-${year}.png`, chart(), { report: 'leave-balance', companyId: co.company, filters: { year } })}>
         <BarsChart series={SERIES} unit="days" bars={types.map((t) => ({ key: t.type, label: t.type, parts: [t.used, t.pending, t.avail] }))} />
       </ReportSection>
       <ReportTable<Row & { sE: string; sU: string; sP: string; sA: string }>

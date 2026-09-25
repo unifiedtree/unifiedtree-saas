@@ -6,7 +6,7 @@ import { useAttendanceSummaryReport } from '@/modules/hrms/api/useReports'
 import { HrStatusPill } from '@/shared/components/hr'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
-import { todayIso, monthStartIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, printHead, printKpis, printTable, type Kpi } from './ReportKit'
+import { todayIso, monthStartIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, sortKey, slug, type Kpi } from './ReportKit'
 
 const long = longDate
 const hm = (mins: number) => (mins ? `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m` : '—')
@@ -51,11 +51,10 @@ export function AttendanceSummaryReport() {
       exports={{
         fileBase, csvParams: { from, to },
         sheets: () => [{ name: 'Summary', widths: [26, 34], rows: [['Attendance summary', ''], ['Company', co.companyName], ['Range', range], ...kpis.map((k) => [k.label, k.value])] }, { name: 'People', widths: [12, 26, 22, 13, 10, 10, 22], rows: [HEAD, ...table()] }],
-        print: () => printHead('Attendance summary', `${co.companyName} · ${range}`) + printKpis(kpis) + `<div class="card">${chart().svg}</div>` + printTable('People', HEAD, table()),
       }}>
       <KpiRow items={kpis} />
       <ReportSection title="Present days by department" legend={SERIES}
-        onDownload={() => downloadChart(`attendance-by-department-${slug(co.companyName)}-${from}_${to}.png`, chart(), { report: 'Attendance Summary', company: co.companyName })}>
+        onDownload={() => downloadChart(`attendance-by-department-${slug(co.companyName)}-${from}_${to}.png`, chart(), { report: 'attendance-summary', companyId: co.company, filters: { from, to } })}>
         <BarsChart series={SERIES} unit="days" bars={depts.map((d) => ({ key: d.dept, label: d.dept, none: d.none, parts: [d.onTime, d.late] }))} />
       </ReportSection>
       <ReportTable<Row & { sP: string; sL: string; sH: string; sO: string }>

@@ -13,7 +13,7 @@ import { usePermission, P } from '@unifiedtree/sdk'
 import { HrStatusPill, TableCard, HrButton, HrAvatar, type PillTone } from '@/shared/components/hr'
 import { DataTable } from '@/shared/components/DataTable'
 import { apiBlob } from '@/core/api/client'
-import { saveAndRecord } from '@/shared/export/fileExport'
+import { saveServerFile } from '@/shared/export/fileExport'
 import { ModulePage, StatRow, State, Panel, Note, useDesignToast, todayIso } from '@/design/module/ModuleKit'
 import { DonutChart } from '../reports/ReportKit'
 import { dashIcon } from '@/design/dc/icons'
@@ -117,7 +117,8 @@ export const MusterRoll: React.FC = () => {
     setExporting(true)
     try {
       const blob = await apiBlob(`/v1/reports/attendance-summary/export.csv?${new URLSearchParams({ companyId, from: date, to: date })}`)
-      saveAndRecord(`muster-roll-${date}.csv`, blob, { report: 'Muster roll', fmt: 'CSV', company: companies[0]?.name })
+      // The server route logged this download in the export log.
+      saveServerFile(`muster-roll-${date}.csv`, blob)
       show('Muster roll exported', false, deptId ? 'The CSV covers every department; the export has no department filter.' : undefined)
     } catch (err) { show('Couldn’t export the muster roll', true, (err as Error)?.message) } finally { setExporting(false) }
   }

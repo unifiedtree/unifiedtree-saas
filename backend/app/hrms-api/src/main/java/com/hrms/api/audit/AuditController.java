@@ -31,10 +31,12 @@ public class AuditController {
 
     private final AuditService auditService;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+    private final AuditRecordNames recordNames;
 
-    public AuditController(AuditService auditService, org.springframework.jdbc.core.JdbcTemplate jdbc) {
+    public AuditController(AuditService auditService, org.springframework.jdbc.core.JdbcTemplate jdbc, AuditRecordNames recordNames) {
         this.auditService = auditService;
         this.jdbc = jdbc;
+        this.recordNames = recordNames;
     }
 
     @GetMapping
@@ -51,7 +53,13 @@ public class AuditController {
 
         int effectiveSize = Math.min(size, 100);
 
-        UUID actorUserId = tryParseUuid(actor);
+        // "Who" may be a user id or an email address (the screen's filter is
+        // labelled "Who (email)"). An email that matches nobody matches no events.
+        AuditRecordNames.ActorFilter who = recordNames.actor(actor);
+        if (who.matchesNothing()) {
+            return new AuditPageResponse(List.of(), new PageMeta(page, effectiveSize, 0));
+        }
+        UUID actorUserId = who.userId();
         UUID entityId    = tryParseUuid(resourceId);
         // Tolerate a malformed from/to (optional filters) instead of 500-ing on
         // Instant.parse — an unparseable value simply drops that bound.
@@ -78,8 +86,12 @@ public class AuditController {
         // page so the feed says who did it instead of printing a raw UUID.
         java.util.Map<UUID, String[]> actors = actorDetails(events.stream()
                 .map(AuditEvent::getActorUserId).filter(java.util.Objects::nonNull).distinct().toList());
+        // And the record each event is about, so the feed can say "... for Rahul Verma".
+        java.util.Map<String, AuditRecordNames.Named> records = recordNames.resolve(events.stream()
+                .map(e -> new AuditRecordNames.Ref(e.getEntityType(), e.getEntityId())).toList());
         List<AuditEventDto> data = events.stream()
-                .map(e -> toDto(e, actors.get(e.getActorUserId())))
+                .map(e -> toDto(e, actors.get(e.getActorUserId()),
+                        e.getEntityId() == null ? null : records.get(AuditRecordNames.key(e.getEntityType(), e.getEntityId()))))
                 .toList();
 
         return new AuditPageResponse(data, new PageMeta(page, effectiveSize, result.getTotalElements()));
@@ -105,7 +117,7 @@ public class AuditController {
         }
     }
 
-    private AuditEventDto toDto(AuditEvent e, String[] actor) {
+    private AuditEventDto toDto(AuditEvent e, String[] actor, AuditRecordNames.Named record) {
         String name = actor != null && actor[0] != null && !actor[0].isBlank() ? actor[0] : null;
         String email = e.getActorEmail() != null ? e.getActorEmail() : (actor != null ? actor[1] : null);
         return new AuditEventDto(
@@ -122,7 +134,9 @@ public class AuditController {
                 e.getCorrelationId(),
                 e.getModule(),
                 e.getSummary(),
-                name
+                name,
+                record == null ? null : record.name(),
+                record == null ? null : record.path()
         );
     }
 
@@ -169,7 +183,11 @@ public class AuditController {
              */
             String summary,
             /** The actor's display name, resolved from their user id. Null for system events. */
-            String actorName) {}
+            String actorName,
+            /** The record's display name (an employee's name, a payroll month...), when it can be resolved. */
+            String resourceName,
+            /** The app route that opens the record, when it has one. */
+            String resourcePath) {}
 
     public record PageMeta(int page, int size, long total) {}
 

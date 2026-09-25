@@ -28,6 +28,7 @@ import {
   TYPE_LABEL, type Contractor, type Rec,
 } from './masterData'
 import { SYNC, diff, type SyncEnv } from './masterSync'
+import { saveAndRecord } from '@/shared/export/fileExport'
 
 // The generated design module is untyped JavaScript; these are the pieces used here.
 const { NAV, TopTabs, Toasts, ICONS, deriveDB } = Design as any
@@ -60,6 +61,23 @@ interface ScheduleRow { employeeId: string; shiftName?: string | null }
 interface ToastItem { id: number; msg: string; kind?: string }
 interface Coll<T> { data: T[]; loading: boolean; error: unknown }
 
+/** The directory's milestone filters: the dashboard's "Upcoming milestones" windows. */
+const MILESTONES = [
+  { v: 'birthday', l: 'Birthdays', sub: 'Next 14 days' },
+  { v: 'anniversary', l: 'Work anniversaries', sub: 'Next 31 days' },
+  { v: 'retirement', l: 'Retirements', sub: 'Next 6 months' },
+]
+/** Ids of the people with that milestone coming up, chosen by the server with the dashboard card's own rules. */
+async function loadMilestone(kind: string) {
+  const ids: string[] = []
+  for (let page = 0; page < 10; page++) {
+    const r = await apiJson<PageResponse<WorkforceEmployee>>(`/v1/hrms/employees?milestone=${encodeURIComponent(kind)}&page=${page}&pageSize=200`)
+    ids.push(...r.content.map((e) => e.id))
+    if (page + 1 >= r.totalPages) break
+  }
+  return ids
+}
+
 /** Every employee in the directory (pages of 200). */
 async function loadDirectory() {
   const all: WorkforceEmployee[] = []
@@ -76,15 +94,16 @@ const one = <T,>(r: UseQueryResult<T[]>, on: boolean): Coll<T> => ({ data: r.dat
 const errText = (e: unknown) => (e instanceof Error && e.message) || 'Please try again.'
 /** One CSV cell. Text a spreadsheet would run as a formula (= + - @) gets a leading ' — as the server export does. */
 const csvCell = (v: unknown) => { let s = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`; return /[",\n']/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+const csvText = (lines: string[]) => new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
 function downloadCsv(name: string, lines: string[]) {
-  const url = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
+  const url = URL.createObjectURL(csvText(lines))
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url)
 }
 
 export function MasterContainer() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const qc = useQueryClient()
 
   // ── who may see and change what (the codes each endpoint checks) ──
@@ -123,7 +142,8 @@ export function MasterContainer() {
   const page: string = PAGE_AT[path] || (path === '/hrms/organization' ? firstOf('org') || 'companies' : 'overview')
   const route = useMemo(() => ({
     p: page, q: params.get('q') || '', status: STATUS_PARAM[params.get('status') || ''] || params.get('status') || '',
-    co: params.get('co') || '', dept: params.get('departmentId') || params.get('dept') || '', branch: params.get('branchId') || params.get('branch') || '',
+    // departmentId=none (the dashboard's and reports' "No department") is the directory's "No department" option.
+    co: params.get('co') || '', dept: ((d) => (d === 'none' ? '__none' : d))(params.get('departmentId') || params.get('dept') || ''), branch: params.get('branchId') || params.get('branch') || '',
   }), [page, params])
   const want = (k: string) => page === 'overview' || NEEDS[page]?.includes(k)
 
@@ -160,6 +180,11 @@ export function MasterContainer() {
   const compQ = useQuery({ queryKey: ['hrms', 'payroll', 'components'], queryFn: () => apiJson<SalaryComponent[]>('/v1/payroll/components'), enabled: canCompRead && want('components'), staleTime: 30_000 })
   const setQ = useQuery({ queryKey: ['hrms', 'payroll', 'settings'], queryFn: () => apiJson<PayrollSettings>('/v1/payroll/settings'), enabled: canSetRead && (want('statutory') || want('components')), staleTime: 60_000 })
   const ptCode = setQ.data?.ptStateCode || ''
+  // Milestone filter (URL filter=birthday|anniversary|retirement). Changing it keeps the page's other filters.
+  const milestone = MILESTONES.some((m) => m.v === params.get('filter')) ? params.get('filter') as string : ''
+  const setMilestone = useCallback((v: string) => setParams((cur) => { const n = new URLSearchParams(cur); if (v) n.set('filter', v); else n.delete('filter'); return n }, { replace: true }), [setParams])
+  const milestoneQ = useQuery({ queryKey: ['hrms', 'employees', 'milestone', milestone], queryFn: () => loadMilestone(milestone), enabled: canEmpRead && !!milestone && page === 'employees', staleTime: 60_000 })
+  const milestoneIds = useMemo(() => (milestoneQ.data ? new Set(milestoneQ.data) : null), [milestoneQ.data])
   const slabsQ = useQuery({ queryKey: ['hrms', 'payroll', 'pt-slabs', ptCode], queryFn: () => apiJson<PtSlab[]>(`/v1/payroll/pt-slabs/${ptCode}`), enabled: !!ptCode && canSlabs && want('statutory'), staleTime: Infinity })
 
   const colls: Record<string, Coll<unknown>> = {
@@ -250,13 +275,15 @@ export function MasterContainer() {
     defaultCo, canAssignShift: canShiftAdmin, nextCode: nextCodeQ.data?.preview || '', noticeDays: hrDefault?.defaultNoticePeriodDays,
     importEmployees: () => (canImport ? navigate('/hrms/employees/import') : show('You don’t have access to import employees', 'error')),
     openRecord: (id: string) => navigate(`/hrms/employees/${id}`),
+    milestone: { value: milestone, options: MILESTONES, set: setMilestone, ids: milestoneIds },
     exportEmployees: (rows: Rec[]) => {
       const nameOf = (m: Rec[]) => new Map(m.map((x) => [x.id, x.name as string]))
       const dept = nameOf(db.depts), des = nameOf(db.desigs), br = nameOf(db.branches), emp = nameOf(db.employees)
       // The same columns as the server's directory export (no salary, bank or identity fields).
       const head = ['Employee code', 'First name', 'Last name', 'Work email', 'Phone', 'Department', 'Designation', 'Branch', 'Reporting manager', 'Employment type', 'Status', 'Date of joining', 'Probation end', 'Notice start', 'Last working day']
       const lines = rows.map((e) => [e.code, e.first, e.last, e.email, e.phone, dept.get(e.dept), des.get(e.desig), br.get(e.branch), emp.get(e.mgrId), e.type, e.statusLabel || e.status, e.joined, e.probEnd, e._raw?.noticeStartDate, e.lwd || e.exitOn].map(csvCell).join(','))
-      downloadCsv(`employees-${TODAY_ISO}.csv`, [head.join(','), ...lines])
+      // Recorded in the workspace's export log (Reports Center → Recent downloads).
+      saveAndRecord(`employees-${TODAY_ISO}.csv`, csvText([head.join(','), ...lines]), { report: 'employee-directory', fmt: 'CSV', rows: rows.length })
       show(`Exported ${pl(rows.length, 'employee', 'employees')} to CSV`)
     },
     exportAgencies: (rows: Rec[]) => {

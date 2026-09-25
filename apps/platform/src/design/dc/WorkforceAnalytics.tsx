@@ -58,7 +58,7 @@ function ExportMenu({ busy, onPick, allow }: { busy: boolean; onPick: (k: Export
     h(HrButton as any, { variant: 'ghost', disabled: busy, onClick: () => setOpen((o) => !o), 'aria-haspopup': 'menu', 'aria-expanded': open }, h(Ico, { d: busy ? P.hourglass : P.download, size: 16 }), busy ? 'Preparing…' : 'Export'),
     open && h('div', { role: 'menu', style: { position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 60, width: 260, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, boxShadow: '0 16px 40px -14px rgba(15,110,86,.3)', padding: 5 } },
       h('div', { style: { padding: '6px 11px 4px', fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#64748b' } }, 'Download'),
-      item('pdf', 'Dashboard snapshot (PDF)', 'All charts on one page, print-ready'),
+      item('pdf', 'Dashboard snapshot (PDF)', 'All charts and the table, made on the server'),
       item('xlsx', 'Data workbook (.xlsx)', 'One sheet per chart + departments'),
       allow.csv && item('csv', 'Departments (CSV)', 'The table below as raw rows')))
 }
@@ -108,7 +108,7 @@ export class WorkforceAnalytics extends DCLogic {
         const ha = Math.max(0, H - hn - hp - (hn ? 1 : 0) - (hp ? 1 : 0)), ya = H - ha, yn = ya - (hn ? 1 : 0) - hn, yp = Math.max(0, yn - (hp ? 1 : 0) - hp)
         return {
           label: r.dept, named: !r.none, none: r.none, top: num(r.total), tipSub: `${num(r.total)} employees · ${pctOf(r.total, t.total)}%`,
-          hint: p.canDirectory ? (r.none ? 'Open this company’s directory' : `Open ${r.dept} in the directory`) : r.dept,
+          hint: p.canDirectory ? (r.none ? 'Open the people without a department' : `Open ${r.dept} in the directory`) : r.dept,
           H: q(H), ha: q(ha), hn: q(hn), hp: q(hp), ya: q(ya), yn: q(yn), yp: q(yp), va: num(r.active), vb: num(r.notice), vc: num(r.probation),
           hot: s.hi === i, enter: () => this.state.hi !== i && this.setState({ hi: i }), open: () => openDept(r),
         }

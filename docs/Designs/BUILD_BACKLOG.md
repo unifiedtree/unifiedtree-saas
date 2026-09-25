@@ -50,17 +50,8 @@ All P0 items are done (wave 1).
 - `/v1/team/schedule` with `shiftPolicyId` and `since`.
 - Face events with the kiosk / device.
 
-**Reports** (§9)
-- Server-side PDF export (direct download, scheduled emails).
-- A server export log (who downloaded what, when).
-- Status history (headcount split on past dates).
-- A "no department" directory filter.
-
 **Workspace settings** (§8)
 - Invoices (Razorpay).
-
-**Audit logs** (§11.15)
-- Full server export (CSV) of the filtered trail. Today only the visible page exports.
 
 **Onboarding** (§11.8)
 - Reorder template tasks.
@@ -78,13 +69,6 @@ All P0 items are done (wave 1).
 
 ## P2: polish
 
-- **Dashboard** (§2)
-  - Record names in the activity feed (the audit API returns only the type and id).
-  - Department on top performers.
-  - Clicking a department bar filters the directory (headcount rows need the department id; the API now returns `department_id`, so wire it).
-  - Milestones "View all" filters.
-  - Month filter on payroll runs.
-  - A notices pager.
 - **Integrations**: real connections (OAuth, keys, sync). Today it's a register only, and the page says so.
 - **Letters**: one "Letters" hub instead of three routes.
 - **Old gaps that are low risk**

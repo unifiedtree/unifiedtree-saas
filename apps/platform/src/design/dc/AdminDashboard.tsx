@@ -161,10 +161,12 @@ export class AdminDashboard extends DCLogic {
         return seg
       })
     const deptMax = Math.max(1, ...((D.departments || []) as any[]).map((d) => d.active))
+    // A bar opens the directory on that department; "No department" opens the people without one.
+    const deptPath = (d: any) => `/hrms/employees?departmentId=${encodeURIComponent(d.id || 'none')}`
     const departments = ((D.departments || []) as any[]).map((d) => ({
       ...d, pct: Math.round((d.active / deptMax) * 100),
-      tip: '→ ' + `/hrms/employees?department=${encodeURIComponent(d.name)}`,
-      onClick: () => go(d.id ? `/hrms/employees?departmentId=${encodeURIComponent(d.id)}` : '/hrms/employees'),
+      tip: '→ ' + deptPath(d),
+      onClick: () => go(deptPath(d)),
     }))
     const performers = ((D.performers || []) as any[]).map((x) => ({ ...x, meta: `${x.dept ? x.dept + ' · ' : ''}${x.reviews} completed reviews`, rating: Number(x.rating).toFixed(1) }))
     const onboarding = ((D.onboarding || []) as any[]).map((o) => {
@@ -211,6 +213,14 @@ export class AdminDashboard extends DCLogic {
         this.setState({ saving: false })
       }
     }
+    // Company notices, five per page, with a pager when there are more.
+    const nTotal = D.noticeTotal ?? notices.length, nPage = Number(p.noticePage || 0), nPages = Math.max(1, Number(p.noticePages || 1))
+    const noticeText = `${nTotal} active ${nTotal === 1 ? 'notice' : 'notices'} · 5 per page`
+    const noticePager = nPages > 1
+      ? createElement(Fragment, null, `${noticeText} · page ${nPage + 1} of ${nPages} `,
+        createElement(HrButton, { size: 'sm', variant: 'ghost', disabled: nPage <= 0, onClick: () => p.onNoticePage && p.onNoticePage(nPage - 1), 'aria-label': 'Newer notices', style: { marginLeft: 8 } } as any, 'Newer'),
+        createElement(HrButton, { size: 'sm', variant: 'ghost', disabled: nPage >= nPages - 1, onClick: () => p.onNoticePage && p.onNoticePage(nPage + 1), 'aria-label': 'Older notices', style: { marginLeft: 6 } } as any, 'Older'))
+      : noticeText
     const ms = D.milestones || { birthdays: [], anniversaries: [], retirements: [] }
     const mcol = (title: string, icon: string, rows: any[], windowLabel: string, tone: string, filter: string) => ({
       title, icon: ic(icon, 15), count: rows.length, window: windowLabel, tone,
@@ -299,7 +309,7 @@ export class AdminDashboard extends DCLogic {
       payMin, payMax, payTicks, payLast: payRows.length - 1,
       payPick: (i: number) => { const r = payRows[i]; if (r) go(`/hrms/payroll/runs?month=${r.month}`) },
       activity, notices,
-      noticeCountLabel: `${D.noticeTotal ?? notices.length} active ${(D.noticeTotal ?? notices.length) === 1 ? 'notice' : 'notices'} · 5 per page`,
+      noticeCountLabel: noticePager,
       canManageNotices: !!p.canManageNotices,
       milestoneCols, probations, probationColumns, probationCount: probations.length,
       openEmployeeRow: (r: any) => go(`/hrms/employees/${r.id}`),

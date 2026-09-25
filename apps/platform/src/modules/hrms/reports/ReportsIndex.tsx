@@ -1,17 +1,22 @@
 // Reports Center (/hrms/reports) in the Workforce Analytics design's language:
 // the dashboard first, then every report grouped by what it's about, each
-// shown only to people allowed to read it, and the files this browser
-// downloaded from the report pages. The company picked here travels with every
-// link (?co=), so the report opens on the same company.
-import { useEffect, useState, type ReactNode } from 'react'
+// shown only to people allowed to read it, scheduled report emails, and the
+// workspace's download history (the server export log). The company picked
+// here travels with every link (?co=), so the report opens on the same company.
+import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrPageHeader, HrSelect, HrStatusPill } from '@/shared/components/hr'
 import { EmptyState } from '@/shared/components/EmptyState'
+import { HrPagination } from '@/shared/components/HrPagination'
+import { SkeletonRow } from '@/shared/components/SkeletonCard'
 import { DesignFrame } from '@/design/dc/DesignFrame'
-import { clearRecentDownloads, fileSize, recentDownloads, type DownloadRecord } from '@/shared/export/fileExport'
+import { fileSize } from '@/shared/export/fileExport'
+import { useExportLog, type ExportLogRow } from '@/modules/hrms/api/useReportExports'
 import { useReportCompany } from './useReportCompany'
 import { Ico, KPI_ICON, SECTION } from './ReportKit'
+import { REPORT_LABEL } from './reportSpec'
+import { ScheduledEmails } from './ReportSchedules'
 
 const FONT = "'Plus Jakarta Sans',sans-serif"
 const ARROW = 'M5 12h14M12 5l7 7-7 7'
@@ -48,22 +53,38 @@ function Group({ title, sub, children }: { title: string; sub: string; children:
   )
 }
 
-function useDownloads() {
-  const [list, setList] = useState<DownloadRecord[]>(() => recentDownloads())
-  useEffect(() => {
-    const f = () => setList(recentDownloads())
-    window.addEventListener('ut-downloads', f); window.addEventListener('storage', f)
-    return () => { window.removeEventListener('ut-downloads', f); window.removeEventListener('storage', f) }
-  }, [])
-  return list
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const d = (iso: unknown) => { const v = String(iso ?? ''); if (!/^\d{4}-\d{2}-\d{2}/.test(v)) return v; const [y, m, dd] = v.slice(0, 10).split('-').map(Number); return `${dd} ${MON[m - 1]} ${y}` }
+const FORMAT: Record<string, { label: string; tone: 'green' | 'blue' | 'purple' | 'teal' }> = {
+  XLSX: { label: 'Excel', tone: 'green' }, CSV: { label: 'CSV', tone: 'blue' }, PDF: { label: 'PDF', tone: 'purple' }, PNG: { label: 'PNG', tone: 'teal' },
 }
+/** The filters a download was made with, in words ("1 Sep 2026 – 25 Sep 2026", "as of 25 Sep 2026", "2026"). */
+function filtersText(f: ExportLogRow['filters']) {
+  const parts: string[] = []
+  if (f.period) parts.push(String(f.period))
+  else if (f.from && f.to) parts.push(`${d(f.from)} – ${d(f.to)}`)
+  if (f.asOf && !f.from) parts.push(`as of ${d(f.asOf)}`)
+  if (f.year) parts.push(`leave year ${f.year}`)
+  if (f.who) parts.push(`who: ${f.who}`)
+  if (f.action) parts.push(`action: ${String(f.action).toLowerCase()}`)
+  if (f.resource) parts.push(`resource: ${String(f.resource).toLowerCase()}`)
+  if (f.frequency) parts.push(`${String(f.frequency).toLowerCase()} email to ${f.recipients ?? 0} ${f.recipients === 1 ? 'person' : 'people'}`)
+  if (f.truncated) parts.push('stopped at the export limit')
+  return parts.join(' · ')
+}
+const PAGE = 20
 
 export function ReportsIndex() {
   const navigate = useNavigate()
   const co = useReportCompany()
   const head = usePermission(P.HRMS_REPORT_HEADCOUNT), attr = usePermission(P.HRMS_REPORT_ATTRITION), div = usePermission(P.HRMS_REPORT_DIVERSITY)
   const att = usePermission(P.HRMS_REPORT_ATTENDANCE), leave = usePermission(P.HRMS_REPORT_LEAVE)
-  const downloads = useDownloads()
+  const canSchedule = usePermission('hrms.report.schedule.manage')
+  const [scope, setScope] = useState<'all' | 'mine' | undefined>(undefined)
+  const [page, setPage] = useState(0)
+  const anyReport = head || attr || div || att || leave
+  const log = useExportLog(scope, page, PAGE, anyReport)
+  const downloads = log.data?.content ?? []
   const go = (to: string) => navigate(`${to}${co.company ? `?co=${co.company}` : ''}`)
   const EXPORTS = ['PDF', 'Excel', 'CSV']
   const people: Card[] = [
@@ -108,36 +129,62 @@ export function ReportsIndex() {
         {time.length > 0 && <Group title="Time & attendance" sub="Days worked, lateness and overtime for any date range">{time.map((c) => <ReportCard key={c.key} c={c} go={go} />)}</Group>}
         {leaves.length > 0 && <Group title="Leave" sub="Balances for the leave year">{leaves.map((c) => <ReportCard key={c.key} c={c} go={go} />)}</Group>}
 
-        <section style={SECTION}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 12px', marginBottom: 10 }}>
-            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Recent downloads</h2>
-            <span style={{ fontSize: 12.5, color: '#64748b', fontWeight: 500 }}>On this device</span>
-            <span style={{ flex: 1 }} />
-            {downloads.length > 0 && <HrButton variant="ghost" onClick={clearRecentDownloads}>Clear list</HrButton>}
-          </div>
-          {downloads.length === 0 ? (
-            <EmptyState icon={((p: { size?: number }) => Ico({ d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3', size: p.size })) as any} title="Nothing downloaded yet" description="Files you export from a report (Excel, CSV or chart images) are listed here so you can find them again." />
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 560 }}>
-                <thead><tr style={{ textAlign: 'left', color: '#64748b', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.05em' }}>{['File', 'Report', 'Format', 'Company', 'When', 'Size'].map((hd) => <th key={hd} style={{ padding: '8px 10px', fontWeight: 700, borderBottom: '1px solid #f1f5f9' }}>{hd}</th>)}</tr></thead>
-                <tbody>
-                  {downloads.map((d) => (
-                    <tr key={d.id}>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc', fontFamily: 'JetBrains Mono,monospace', fontSize: 12.5, wordBreak: 'break-all' }}>{d.file}</td>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc', fontWeight: 600 }}>{d.report}</td>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc' }}><HrStatusPill tone={d.fmt === 'Excel' ? 'green' : d.fmt === 'CSV' ? 'blue' : 'purple'}>{d.fmt}</HrStatusPill></td>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc', color: '#475569' }}>{d.company || '—'}</td>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc', color: '#475569', whiteSpace: 'nowrap' }}>{new Date(d.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
-                      <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc', color: '#475569', whiteSpace: 'nowrap' }}>{fileSize(d.size)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p style={{ margin: '10px 0 0', fontSize: 12, color: '#64748b' }}>Only downloads made in this browser are listed. PDF snapshots are saved from the print dialog, so they don’t appear here.</p>
+        {canSchedule && anyReport && (
+          <ScheduledEmails co={co} reports={[
+            ...(analytics ? [{ key: 'workforce-analytics', label: 'Workforce Analytics' }] : []),
+            ...[...people, ...time, ...leaves].map((c) => ({ key: c.key === 'attendance' ? 'attendance-summary' : c.key === 'late' ? 'late-marks' : c.key === 'leave' ? 'leave-balance' : c.key, label: c.title })),
+          ]} />
+        )}
+
+        {anyReport && (
+          <section style={SECTION}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 12px', marginBottom: 10 }}>
+              <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Recent downloads</h2>
+              <span style={{ fontSize: 12.5, color: '#64748b', fontWeight: 500 }}>{log.data?.scope === 'all' ? 'Everyone in this workspace' : 'Your downloads'}</span>
+              <span style={{ flex: 1 }} />
+              {log.data?.canSeeAll && (
+                <div style={{ flex: '0 1 170px', minWidth: 0 }}>
+                  <HrSelect size="sm" value={log.data.scope} options={[{ value: 'all', label: 'Everyone' }, { value: 'mine', label: 'Only mine' }]} onChange={(v) => { setScope(v as 'all' | 'mine'); setPage(0) }} />
+                </div>
+              )}
             </div>
-          )}
-        </section>
+            {log.isLoading ? <div>{[1, 2, 3].map((x) => <SkeletonRow key={x} />)}</div>
+              : log.isError ? (
+                <div role="alert" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, padding: '6px 2px' }}>
+                  <span style={{ flex: '1 1 240px', fontSize: 13, color: '#64748b' }}>Couldn’t load the download history. {(log.error as Error)?.message}</span>
+                  <HrButton variant="ghost" size="sm" onClick={() => log.refetch()}>Try again</HrButton>
+                </div>
+              )
+                : downloads.length === 0 ? (
+                  <EmptyState icon={((p: { size?: number }) => Ico({ d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3', size: p.size })) as any} title="Nothing downloaded yet" description="Every report you export (PDF, Excel, CSV or chart images) and every scheduled email is listed here, with who made it and the filters used." />
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 720 }}>
+                      <thead><tr style={{ textAlign: 'left', color: '#64748b', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.05em' }}>{['File', 'Report', 'Format', 'Company', 'Who', 'When', 'Size'].map((hd) => <th key={hd} style={{ padding: '8px 10px', fontWeight: 700, borderBottom: '1px solid #f1f5f9' }}>{hd}</th>)}</tr></thead>
+                      <tbody>
+                        {downloads.map((x) => {
+                          const fmt = FORMAT[x.format] || { label: x.format, tone: 'blue' as const }
+                          const detail = filtersText(x.filters || {})
+                          return (
+                            <tr key={x.id}>
+                              <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc', fontFamily: 'JetBrains Mono,monospace', fontSize: 12.5, wordBreak: 'break-all' }}>{x.fileName || '—'}</td>
+                              <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc' }}><div style={{ fontWeight: 600 }}>{REPORT_LABEL[x.report] || x.label}</div>{detail && <div style={{ fontSize: 12, color: '#64748b' }}>{detail}</div>}</td>
+                              <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc' }}><HrStatusPill tone={fmt.tone}>{fmt.label}</HrStatusPill></td>
+                              <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc', color: '#475569' }}>{x.companyName || '—'}</td>
+                              <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc', color: '#475569' }}>{x.mine ? 'You' : x.userName || x.userEmail || '—'}{x.source === 'SCHEDULE' && <div style={{ fontSize: 12, color: '#64748b' }}>Scheduled email</div>}</td>
+                              <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc', color: '#475569', whiteSpace: 'nowrap' }}>{new Date(x.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
+                              <td style={{ padding: '10px', borderBottom: '1px solid #f8fafc', color: '#475569', whiteSpace: 'nowrap' }}>{x.sizeBytes != null ? fileSize(x.sizeBytes) : '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                    <HrPagination page={page} pageSize={PAGE} totalElements={log.data?.total ?? 0} totalPages={Math.max(1, Math.ceil((log.data?.total ?? 0) / PAGE))} onPageChange={setPage} />
+                    <p style={{ margin: '10px 0 0', fontSize: 12, color: '#64748b' }}>Every download is recorded on the server: files made on the server and in the browser, and scheduled emails. The history can’t be cleared.</p>
+                  </div>
+                )}
+          </section>
+        )}
       </div>
     </DesignFrame>
   )

@@ -251,6 +251,8 @@ export function PayrollContainer() {
   }
   if (section === 'runs' && !runId) {
     px.PayRuns = {
+      // ?month=YYYY-MM (the dashboard's payroll chart) opens the list on that month.
+      month: params.get('month') || '',
       state: stateOf(runsQ), runs: runs.map(toRun), companies: companies.map((c) => ({ id: c.id, name: c.name })), canManage, onRetry: () => runsQ.refetch(),
       onCreate: (q: { companyId: string; year: number; month: number }) => createRun.mutateAsync({ companyId: q.companyId, periodMonth: q.month, periodYear: q.year })
         .then((r) => { toast.success('Payroll run created'); navigate(`/hrms/payroll/runs/${r.id}`); return true }, failed('Could not create the run')),
