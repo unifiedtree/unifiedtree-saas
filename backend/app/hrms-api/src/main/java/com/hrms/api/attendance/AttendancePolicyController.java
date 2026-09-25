@@ -25,8 +25,8 @@ import java.util.UUID;
 /**
  * A company's attendance timing policy (V143.10): grace, start time for people
  * without a shift, half-day rules, minimum hours, early leave and the late
- * allowance. Anyone signed in may read it (it's the rule their day is judged
- * by); changing it needs {@code attendance.policy.manage}.
+ * allowance. Employees, managers and settings readers may read it (it's the
+ * rule their day is judged by); changing it needs {@code attendance.policy.manage}.
  */
 @RestController
 @RequestMapping("/v1/attendance/policy")
@@ -46,7 +46,10 @@ public class AttendancePolicyController {
 
     @Operation(summary = "A company's attendance timing policy (defaults are stored on first read)")
     @GetMapping
-    @PreAuthorize("isAuthenticated()")
+    // Employees (the rule their day is judged by), managers, reviewers and the
+    // people who can open HR Configuration.
+    @PreAuthorize("hasAnyAuthority('attendance.checkin.self', 'attendance.team.read', 'attendance.status.review', "
+            + "'attendance.policy.manage', 'settings.read', 'settings.hrconfig.write', 'hrms.probation.config.read')")
     public PolicyView get(@RequestParam(required = false) UUID companyId, @AuthenticationPrincipal Jwt jwt) {
         return policies.getOrCreate(companyId != null ? companyId : callerCompany(jwt));
     }

@@ -17,6 +17,8 @@ export interface StatusTarget {
   note?: string | null
   manual?: boolean
   faceEventId?: string
+  /** The face punch being rejected was a punch-out (only the check-out stops counting). */
+  punchOut?: boolean
   /** Pre-selected choice, e.g. EXCUSE from the review list. */
   preset?: string
   facts?: { k: string; v: string }[]
@@ -79,7 +81,9 @@ export function StatusChangeDrawer({ target, onClose, onSubmit }: {
           {tried && tooShort && <span style={{ fontSize: 12, fontWeight: 600, color: '#be123c' }}>Add a reason (at least 3 characters).</span>}
         </label>
         {face
-          ? <Note tone="amber">The punch will no longer count. The day becomes Absent (or Not marked yet, if it’s today) unless someone changes it. {first} gets a notification with your note.</Note>
+          ? <Note tone="amber">{target.punchOut
+            ? `The check-out will no longer count, so the day shows “No check-out” for review. ${first} gets a notification with your note.`
+            : `The punch will no longer count. The day becomes Absent (or Not marked yet, if it’s today) unless someone changes it. ${first} gets a notification with your note.`}</Note>
           : status === 'ABSENT' ? <Note tone="amber">Warning: an absent day is unpaid. Payroll can deduct a day’s pay for it.</Note>
             : status === 'HALF_DAY' ? <Note tone="amber">Warning: payroll can deduct half a day’s pay for a half day.</Note>
               : status === 'CLEAR' ? <Note>The company’s attendance rules decide this day again (grace, half-day rules and the late allowance).</Note>

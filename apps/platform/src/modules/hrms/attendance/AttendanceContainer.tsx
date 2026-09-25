@@ -381,7 +381,7 @@ export function AttendanceContainer() {
           .then(() => done(`Checked — the punch stays as ${e.employeeName.split(' ')[0]}’s`), failed('Could not record the check', face.refetch))
         return
       }
-      setTarget({ kind: 'face-reject', employeeId: e.employeeId, name: e.employeeName, sub: `${e.employeeCode}${e.departmentName ? ' · ' + e.departmentName : ''}`, date: e.date, faceEventId: e.id,
+      setTarget({ kind: 'face-reject', employeeId: e.employeeId, name: e.employeeName, sub: `${e.employeeCode}${e.departmentName ? ' · ' + e.departmentName : ''}`, date: e.date, faceEventId: e.id, punchOut: e.purpose === 'PUNCH_OUT',
         facts: [{ k: 'Time', v: `${clock(e.createdAt)} IST` }, { k: 'Match', v: (BAND[e.scoreBucket || 'UNKNOWN'] || BAND.UNKNOWN)[1] }] })
     },
     // Daily Logs drawer → "Change status".

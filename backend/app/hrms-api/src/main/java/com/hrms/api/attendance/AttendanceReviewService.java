@@ -237,16 +237,29 @@ public class AttendanceReviewService {
         Map<UUID, Employee> byId = team.stream().collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
         Instant start = r[0].atStartOfDay(AttendancePolicyEvaluator.IST).toInstant();
         Instant end = r[1].plusDays(1).atStartOfDay(AttendancePolicyEvaluator.IST).toInstant();
+        // Every punch from the last day of the range (the "All punches" list),
+        // plus older punches the camera wasn't sure about (the ones to check).
+        // Scoped to the caller's team in SQL so a busy company can't push the
+        // unsure punches past the row limit.
+        Instant lastDay = r[1].atStartOfDay(AttendancePolicyEvaluator.IST).toInstant();
+        List<UUID> teamIds = new ArrayList<>(ids);
+        String tin = String.join(",", Collections.nCopies(teamIds.size(), "?"));
+        List<Object> params = new ArrayList<>(teamIds);
+        params.add(Timestamp.from(start));
+        params.add(Timestamp.from(end));
+        params.add(Timestamp.from(lastDay));
         List<Object[]> rows = new ArrayList<>();
         jdbc.query("""
                 SELECT ev.id, ev.purpose, ev.result, ev.score_bucket, ev.created_at, uc.employee_id
                   FROM attendance.face_verification_events ev
-                  LEFT JOIN auth.user_credentials uc ON uc.id = ev.employee_id
-                 WHERE ev.purpose IN ('PUNCH_IN', 'PUNCH_OUT') AND ev.created_at >= ? AND ev.created_at < ?
-                 ORDER BY ev.created_at DESC LIMIT 500
-                """, (RowCallbackHandler) rs -> rows.add(new Object[]{rs.getObject("id"), rs.getString("purpose"),
+                  JOIN auth.user_credentials uc ON uc.id = ev.employee_id
+                 WHERE uc.employee_id IN (%s)
+                   AND ev.purpose IN ('PUNCH_IN', 'PUNCH_OUT') AND ev.created_at >= ? AND ev.created_at < ?
+                   AND (ev.created_at >= ? OR (ev.result = 'PASS' AND ev.score_bucket IN ('LOW', 'MEDIUM')))
+                 ORDER BY ev.created_at DESC LIMIT 2000
+                """.formatted(tin), (RowCallbackHandler) rs -> rows.add(new Object[]{rs.getObject("id"), rs.getString("purpose"),
                 rs.getString("result"), rs.getString("score_bucket"), rs.getTimestamp("created_at").toInstant(),
-                rs.getObject("employee_id")}), Timestamp.from(start), Timestamp.from(end));
+                rs.getObject("employee_id")}), params.toArray());
         List<Object[]> scoped = rows.stream().filter(o -> o[5] != null && ids.contains((UUID) o[5])).toList();
         Map<UUID, Object[]> decisions = latestDecisions(scoped.stream().map(o -> (UUID) o[0]).toList());
         List<FaceEvent> out = new ArrayList<>();

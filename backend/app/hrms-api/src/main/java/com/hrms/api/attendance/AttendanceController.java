@@ -426,10 +426,20 @@ public class AttendanceController {
                 .filter(r -> !"WFH".equals(r.attendanceType())).count();
         Set<UUID> markedIds = rows.stream().filter(worked).map(StaffStatusResponse::employeeId).collect(Collectors.toSet());
         long onLeaveUnmarked = onLeaveIds.stream().filter(id -> !markedIds.contains(id)).count();
-        long notMarked = Math.max(0, rows.size() - markedIds.size());
+        // A company holiday, a day before tracking started or a future day is
+        // nobody's "not marked" / absent.
+        long offDay = rows.stream().filter(r -> !worked.test(r) && isOffDay(r.effectiveStatus())).count();
+        long notMarked = Math.max(0, rows.size() - markedIds.size() - offDay);
         long absent = Math.max(0, notMarked - onLeaveUnmarked);
         long early = rows.stream().filter(StaffStatusResponse::earlyCheckout).count();
         return new AttendanceSummaryCounts(present, onLeaveIds.size(), late, halfDay, early, wfh, notMarked, absent);
+    }
+
+    private static boolean isOffDay(String effectiveStatus) {
+        return com.hrms.attendance.policy.EffectiveDay.HOLIDAY.equals(effectiveStatus)
+                || com.hrms.attendance.policy.EffectiveDay.WEEKLY_OFF.equals(effectiveStatus)
+                || com.hrms.attendance.policy.EffectiveDay.NOT_TRACKED.equals(effectiveStatus)
+                || com.hrms.attendance.policy.EffectiveDay.UPCOMING.equals(effectiveStatus);
     }
 
     /**

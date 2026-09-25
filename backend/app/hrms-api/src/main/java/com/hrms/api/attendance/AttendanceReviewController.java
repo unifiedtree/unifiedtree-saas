@@ -81,7 +81,7 @@ public class AttendanceReviewController {
         return review.day(jwt, employeeId, date);
     }
 
-    @Operation(summary = "Face punches with names and HR decisions (your team)")
+    @Operation(summary = "Face punches with names and HR decisions (your team): every punch on the last day of the range, plus older medium/low matches")
     @GetMapping("/face-events")
     @PreAuthorize("hasAnyAuthority('attendance.face.admin.read', 'attendance.status.review')")
     public List<AttendanceReviewService.FaceEvent> faceEvents(

@@ -96,6 +96,22 @@ class AttendanceReviewRulesTest {
         assertEquals(1, counts.earlyCheckout());
     }
 
+    private static StaffStatusResponse effRow(UUID id, String status, String effective) {
+        return new StaffStatusResponse(id, "E", "Name", null, null, null, null, status, null, null, null, null, null,
+                false, null, false, null, null, null, null, effective, null, false, false, false, false, false, null, null);
+    }
+
+    @Test
+    void offDaysAreNotCountedAsNotMarkedOrAbsent() {
+        UUID a = UUID.randomUUID(), b = UUID.randomUUID(), c = UUID.randomUUID(), d = UUID.randomUUID();
+        var counts = AttendanceController.countSummaryFromRows(List.of(
+                effRow(a, "NOT_MARKED", "HOLIDAY"), effRow(b, "NOT_MARKED", "NOT_TRACKED"),
+                effRow(c, "NOT_MARKED", "ABSENT"), effRow(d, "ON_TIME", "PRESENT")), Set.of());
+        assertEquals(1, counts.present());
+        assertEquals(1, counts.notMarked(), "only the real absence");
+        assertEquals(1, counts.absent());
+    }
+
     @Test
     void trendCountsEachPersonOnce() {
         UUID a = UUID.randomUUID(), b = UUID.randomUUID(), c = UUID.randomUUID();

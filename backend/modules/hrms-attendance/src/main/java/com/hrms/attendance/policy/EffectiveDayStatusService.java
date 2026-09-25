@@ -47,6 +47,8 @@ import java.util.UUID;
 @Service
 public class EffectiveDayStatusService {
 
+    private static final String PUNCH_OUT = "PUNCH_OUT";
+
     private final JdbcTemplate jdbc;
     private final AttendancePolicyService policies;
 
@@ -191,16 +193,21 @@ public class EffectiveDayStatusService {
                 }, args(empIds, Date.valueOf(lf), Date.valueOf(lt)));
 
         // Face punches HR rejected ("Not them"): the newest decision per event.
+        // A rejected punch-in means the day has no punch; a rejected punch-out
+        // only drops the check-out (the person did come in).
         Map<UUID, Set<LocalDate>> rejected = new HashMap<>();
+        Map<UUID, Set<LocalDate>> rejectedOut = new HashMap<>();
         jdbc.query("""
-                SELECT employee_id, attendance_date, decision FROM (
+                SELECT latest.employee_id, latest.attendance_date, ev.purpose FROM (
                     SELECT DISTINCT ON (event_id) event_id, employee_id, attendance_date, decision
                       FROM attendance.face_event_reviews
                      WHERE employee_id IN (%s) AND attendance_date BETWEEN ? AND ?
                      ORDER BY event_id, created_at DESC) latest
-                 WHERE decision = 'REJECTED'
+                  LEFT JOIN attendance.face_verification_events ev ON ev.id = latest.event_id
+                 WHERE latest.decision = 'REJECTED'
                 """.formatted(ein),
-                (RowCallbackHandler) rs -> rejected.computeIfAbsent((UUID) rs.getObject("employee_id"), k -> new HashSet<>())
+                (RowCallbackHandler) rs -> (PUNCH_OUT.equals(rs.getString("purpose")) ? rejectedOut : rejected)
+                        .computeIfAbsent((UUID) rs.getObject("employee_id"), k -> new HashSet<>())
                         .add(rs.getDate("attendance_date").toLocalDate()),
                 args(empIds, Date.valueOf(lf), Date.valueOf(lt)));
 
@@ -217,10 +224,12 @@ public class EffectiveDayStatusService {
             List<Assign> as = assigns.getOrDefault(e.id(), List.of());
             Map<LocalDate, ManualStatus> man = manual.getOrDefault(e.id(), Map.of());
             Set<LocalDate> rej = rejected.getOrDefault(e.id(), Set.of());
+            Set<LocalDate> rejOut = rejectedOut.getOrDefault(e.id(), Set.of());
             List<DayFacts> days = new ArrayList<>();
             for (LocalDate d = lf; !d.isAfter(lt); d = d.plusDays(1)) {
                 Rec rec = r.get(d);
-                days.add(new DayFacts(d, rec != null ? rec.in() : null, rec != null ? rec.out() : null, rec != null ? rec.type() : null,
+                Instant out = rec != null && !rejOut.contains(d) ? rec.out() : null;
+                days.add(new DayFacts(d, rec != null ? rec.in() : null, out, rec != null ? rec.type() : null,
                         lv.contains(d), hol.contains(d), shiftOn(as, d), rej.contains(d),
                         rec != null && Boolean.TRUE.equals(rec.outside()), rec != null ? rec.distance() : null, man.get(d)));
             }
