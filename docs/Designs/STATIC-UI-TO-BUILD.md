@@ -538,3 +538,14 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - The roster showed only the first 8 people; now everyone is listed.
 - **Note:** the attendance API counts someone with no punch today as both "not marked" and "absent" (absent = no punch and no leave so far, by design). The page shows "Not marked yet" for today so it matches the rows.
 - **Checked live:** `e2e/recovery/live-design-team.mjs`, 7/7.
+
+### 11.7 Hiring (`/hrms/hiring`): done
+- **Layout:** on the module kit, with three views: Pipeline, Requisitions and Offers (`?tab=`).
+  - **Pipeline** is a board with one column per stage. Each candidate card has a "Move to" select, "Convert to employee" once they are HIRED, and "View employee" after conversion.
+  - **Requisitions** has stat tiles at the top. Each row links to its pipeline (`?tab=pipeline&role=<id>`), so a role can be shared as a link.
+  - **Offers:** statuses read as words (Sent, Accepted, Withdrawn), and dates use the Indian format.
+- **Permissions:** Pipeline and Requisitions need `hrms.hiring.read`. Offers need `hrms.hiring.offer.read`, because offers carry salary. Someone with neither sees "No hiring access".
+- **Static / to build:**
+  - Dragging cards between stages. For now, the stage is changed with the select on each card.
+  - Interview scheduling and scorecards. The stage list has interview stages, but there's no calendar or feedback record behind them.
+- **Checked live:** `live-candidate-conversion` 13/13 and `live-offers-browser`, which passed.

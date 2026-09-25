@@ -325,7 +325,7 @@ export function OffersTab() {
                       </td>
                       <td>{offer.roleTitle}</td>
                       <td>{inr(offer.offeredCtc)}</td>
-                      <td>{offer.joiningDate || 'Not set'}</td>
+                      <td>{offer.joiningDate ? new Date(`${offer.joiningDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set'}</td>
                       <td>
                         <HrStatusPill
                           tone={
@@ -333,10 +333,12 @@ export function OffersTab() {
                               ? 'green'
                               : offer.status === 'DECLINED'
                                 ? 'red'
-                                : 'gray'
+                                : offer.status === 'SENT'
+                                  ? 'warn'
+                                  : 'gray'
                           }
                         >
-                          {offer.status}
+                          {String(offer.status).charAt(0) + String(offer.status).slice(1).toLowerCase()}
                         </HrStatusPill>
                       </td>
                       <td>
@@ -351,7 +353,7 @@ export function OffersTab() {
                           <p className="mt-2 text-xs text-text-secondary">
                             Submitted to {offer.emailRecipient}
                             <br />
-                            {new Date(offer.emailSubmittedAt).toLocaleString()}
+                            {new Date(offer.emailSubmittedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                           </p>
                         ) : (
                           canWrite &&

@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Plus, Briefcase, DoorOpen, Lock, Pencil, Users, UserPlus, XCircle } from 'lucide-react'
+import { Plus, Pencil, UserPlus, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrDrawer, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
+  HrButton, HrDrawer, HrStatusPill, TableCard, HrAvatar, HrSelect, type PillTone,
 } from '@/shared/components/hr'
+import { ModulePage, Views, useView, StatRow, State, Panel, CARD, HEAD_FONT } from '@/design/module/ModuleKit'
 import { OffersTab } from './hiring/OffersTab'
 import { useCompanies } from './api/useOrg'
 import {
@@ -29,36 +30,32 @@ const fmtEnum = (c: string) => c.replace(/_/g, ' ').toLowerCase().replace(/\b\w/
 
 type Tab = 'requisitions' | 'pipeline' | 'offers'
 
+// Hiring (/hrms/hiring) in the design language of the redesigned modules
+// (design/module/ModuleKit). Requisitions and the pipeline need
+// hrms.hiring.read; offers carry salary, so they need hrms.hiring.offer.read
+// (the API no longer accepts plain hiring.read for them).
 export const Hiring: React.FC = () => {
   const canRead = usePermission('hrms.hiring.read')
   const canWrite = usePermission('hrms.hiring.write')
   const canCandidateWrite = usePermission('hrms.hiring.candidate.write')
   const canOfferRead = usePermission('hrms.hiring.offer.read')
-  const [selectedTab, setTab] = useState<Tab | null>(null)
-
-  const tabs: { key: Tab; label: string }[] = [
-    ...(canRead ? [{ key: 'requisitions' as Tab, label: 'Requisitions' }] : []),
-    ...(canRead ? [{ key: 'pipeline' as Tab, label: 'Pipeline' }] : []),
-    // Offers carry salary, so they need offer.read itself; the API no longer
-    // accepts plain hiring.read for them (managers keep the pipeline).
-    ...(canOfferRead ? [{ key: 'offers' as Tab, label: 'Offer Management' }] : []),
+  const views = [
+    ...(canRead ? [{ key: 'pipeline', label: 'Pipeline', icon: 'workflow' }, { key: 'requisitions', label: 'Requisitions', icon: 'briefcase' }] : []),
+    ...(canOfferRead ? [{ key: 'offers', label: 'Offers', icon: 'fileText' }] : []),
   ]
-
-  const tab = selectedTab && tabs.some(t => t.key === selectedTab) ? selectedTab : tabs[0]?.key
-
+  const [tab, setTab] = useView(views.map((v) => v.key), 'tab') as [Tab, (k: string) => void]
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
-      <HrPageHeader crumb="Recruitment" title="Hiring Center" subtitle="Open requisitions and move candidates through the pipeline" />
-
-      <HrTabs tabs={tabs} active={tab ?? ''} onChange={(k) => setTab(k as Tab)} />
-
-      {tab === 'requisitions' && <HrTabPanel tabKey="requisitions"><RequisitionsTab canWrite={canWrite} /></HrTabPanel>}
-      {tab === 'pipeline' && canRead && <HrTabPanel tabKey="pipeline"><PipelineTab canCandidateWrite={canCandidateWrite} /></HrTabPanel>}
-      {tab === 'offers' && canOfferRead && <HrTabPanel tabKey="offers"><OffersTab /></HrTabPanel>}
-    </div>
+    <ModulePage crumb="Recruitment" title="Hiring" subtitle="Open roles, move candidates through the stages, and make offers.">
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        {views.length > 0 ? <Views items={views} active={tab} onChange={setTab} label="Hiring views" />
+          : <State kind="empty" icon="lock" title="No hiring access" description="Ask an admin if you should see open roles or candidates." />}
+        {tab === 'requisitions' && canRead && <RequisitionsTab canWrite={canWrite} />}
+        {tab === 'pipeline' && canRead && <PipelineTab canCandidateWrite={canCandidateWrite} />}
+        {tab === 'offers' && canOfferRead && <OffersTab />}
+      </div>
+    </ModulePage>
   )
 }
-
 // ── Requisitions ───────────────────────────────────────────────────────────
 
 function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
@@ -180,16 +177,16 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<Briefcase size={18} />} color="blue" value={requisitions.length} label="Requisitions" loading={isLoading} />
-        <HrStatCard icon={<DoorOpen size={18} />} color="green" value={stats.open} label="Open" loading={isLoading} />
-        <HrStatCard icon={<Users size={18} />} color="orange" value={stats.totalOpenings} label="Open Positions" loading={isLoading} />
-        <HrStatCard icon={<Lock size={18} />} color="teal" value={stats.closed} label="Closed" loading={isLoading} />
-      </div>
+    <div style={{ display: 'grid', gap: 16 }}>
+      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        { icon: 'briefcase', color: 'blue', label: 'Requisitions', value: String(requisitions.length), sub: 'On this page' },
+        { icon: 'checkCircle', color: 'green', label: 'Open', value: String(stats.open), sub: 'Taking candidates' },
+        { icon: 'users', color: 'orange', label: 'Positions to fill', value: String(stats.totalOpenings), sub: 'Across open and on-hold roles' },
+        { icon: 'lock', color: 'teal', label: 'Closed', value: String(stats.closed), sub: 'Filled or stopped' },
+      ]} />}
 
       {canWrite && (
-        <div className="ut-card flex flex-wrap items-end gap-2 p-4">
+        <div className="ut-card flex flex-wrap items-end gap-2 p-4" style={{ borderRadius: 16 }}>
           <div className="flex-1 min-w-[180px]">
             <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Job title</label>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Senior Backend Engineer" className="ut-input" />
@@ -208,7 +205,7 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
               {EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{fmtEnum(t)}</option>)}
             </select>
           </div>
-          <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Open Requisition</HrButton>
+          <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Open requisition</HrButton>
         </div>
       )}
 
@@ -235,7 +232,7 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
                 <td className="font-medium text-text-primary">{r.title}{r.location ? <span className="block text-xs text-text-tertiary">{r.location}</span> : null}</td>
                 <td className="text-text-secondary">{r.employmentType ? fmtEnum(r.employmentType) : '—'}</td>
                 <td className="font-semibold text-text-primary">{r.openings}</td>
-                <td className="text-text-secondary">{r.candidateCount}</td>
+                <td className="text-text-secondary"><Link to={`/hrms/hiring?tab=pipeline&role=${r.id}`} className="font-semibold text-accent-fg hover:underline">{r.candidateCount} · Pipeline</Link></td>
                 <td><HrStatusPill tone={STATUS_TONE[r.status]}>{fmtEnum(r.status)}</HrStatusPill></td>
                 <td className="hidden sm:table-cell text-text-secondary">{r.createdAt ? format(new Date(r.createdAt), 'd MMM yyyy') : '—'}</td>
                 {canWrite && (
@@ -342,12 +339,15 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
   const { toast } = useToast()
   const { data } = useRequisitions(0)
   const requisitions = useMemo(() => data?.content ?? [], [data])
-  const [requisitionId, setRequisitionId] = useState('')
+  // ?role=<requisition id> opens that role's pipeline (the Requisitions list links here).
+  const [params, setParams] = useSearchParams()
+  const [requisitionId, setRequisitionIdState] = useState(params.get('role') || '')
+  const setRequisitionId = (id: string) => { setRequisitionIdState(id); setParams((p) => { const n = new URLSearchParams(p); n.set('role', id); return n }, { replace: true }) }
 
   useEffect(() => {
     if (!requisitionId && requisitions.length > 0) {
       const firstOpen = requisitions.find((r) => r.status !== 'CLOSED') ?? requisitions[0]
-      setRequisitionId(firstOpen.id)
+      setRequisitionIdState(firstOpen.id)
     }
   }, [requisitions, requisitionId])
 
@@ -413,97 +413,81 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
     }
   }
 
+  const byStage = new Map(CANDIDATE_STAGES.map((st) => [st, candidates.filter((c) => c.stage === st)]))
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="text-[13px] font-semibold text-text-secondary">Requisition</label>
-        <select value={requisitionId} onChange={(e) => setRequisitionId(e.target.value)} className="ut-select ut-select-sm w-auto min-w-[240px]">
-          {requisitions.length === 0 && <option value="">No requisitions</option>}
-          {requisitions.map((r) => (
-            <option key={r.id} value={r.id}>{r.title} ({fmtEnum(r.status)})</option>
-          ))}
-        </select>
-        {selected && (
-          <HrStatusPill tone={STATUS_TONE[selected.status]}>{selected.openings} opening{selected.openings === 1 ? '' : 's'}</HrStatusPill>
-        )}
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Role</span>
+        <div style={{ minWidth: 280 }}><HrSelect value={requisitionId} onChange={setRequisitionId} size="sm" placeholder={requisitions.length ? 'Choose a role' : 'No requisitions yet'}
+          options={requisitions.map((r) => ({ value: r.id, label: `${r.title} · ${fmtEnum(r.status)}` }))} /></div>
+        {selected && <HrStatusPill tone={STATUS_TONE[selected.status]}>{`${selected.openings} ${selected.openings === 1 ? 'opening' : 'openings'}`}</HrStatusPill>}
+        {selected && <span style={{ fontSize: 12.5, color: '#64748b' }}>{`${candidates.length} ${candidates.length === 1 ? 'candidate' : 'candidates'}`}</span>}
       </div>
 
       {canAdd && (
-        <div className="ut-card flex flex-wrap items-end gap-2 p-4">
-          <div className="flex-1 min-w-[160px]">
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Full name</label>
-            <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Priya Sharma" className="ut-input" />
+        <Panel title="Add a candidate" sub={`To ${selected?.title}`}>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex-1 min-w-[160px]">
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Full name</label>
+              <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Priya Sharma" className="ut-input" />
+            </div>
+            <div className="flex-1 min-w-[160px]">
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Optional" className="ut-input" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Source</label>
+              <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. LinkedIn" className="ut-input w-36" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Expected CTC (₹)</label>
+              <input type="number" min={0} value={expectedCtc} onChange={(e) => setExpectedCtc(e.target.value)} placeholder="Optional" className="ut-input w-32" />
+            </div>
+            <HrButton onClick={onAdd} disabled={addCandidate.isPending}><Plus size={15} /> Add candidate</HrButton>
           </div>
-          <div className="flex-1 min-w-[160px]">
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Optional" className="ut-input" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Source</label>
-            <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. LinkedIn" className="ut-input w-36" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Expected CTC (₹)</label>
-            <input type="number" min={0} value={expectedCtc} onChange={(e) => setExpectedCtc(e.target.value)} placeholder="Optional" className="ut-input w-32" />
-          </div>
-          <HrButton onClick={onAdd} disabled={addCandidate.isPending}><Plus size={15} /> Add Candidate</HrButton>
-        </div>
+        </Panel>
       )}
 
-      <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Candidate</th>
-              <th>Source</th>
-              <th>Expected CTC</th>
-              <th>Stage</th>
-              <th>Employee</th>
-              {canCandidateWrite && <th className="text-right">Advance</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {!requisitionId ? (
-              <tr><td colSpan={canCandidateWrite ? 6 : 5} className="py-14 text-center text-sm text-text-tertiary">Pick a requisition to view its pipeline.</td></tr>
-            ) : isLoading ? (
-              [...Array(3)].map((_, i) => <tr key={i}><td colSpan={canCandidateWrite ? 6 : 5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : candidates.length === 0 ? (
-              <tr><td colSpan={canCandidateWrite ? 6 : 5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No candidates yet</p><p className="mt-1 text-xs text-text-tertiary">Add candidates to start the pipeline.</p></td></tr>
-            ) : candidates.map((c, i) => (
-              <tr key={c.id}>
-                <td><HrAvatar name={c.fullName} sub={c.email} seed={i} /></td>
-                <td className="text-text-secondary">{c.source || '—'}</td>
-                <td className="text-text-secondary">{c.expectedCtc != null ? inr(c.expectedCtc) : '—'}</td>
-                <td><HrStatusPill tone={STAGE_TONE[c.stage]}>{fmtEnum(c.stage)}</HrStatusPill></td>
-                <td>
-                  {c.convertedEmployeeId ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link to={`/hrms/employees/${c.convertedEmployeeId}`} className="text-[13px] font-semibold text-accent-fg hover:underline">View employee</Link>
-                    </div>
-                  ) : c.stage === 'HIRED' && canConvert ? (
-                    <HrButton size="sm" variant="ghost" disabled={convert.isPending} onClick={() => onConvert(c)}><UserPlus size={14} /> Convert to employee</HrButton>
-                  ) : <span className="text-text-tertiary">—</span>}
-                </td>
-                {canCandidateWrite && (
-                  <td>
-                    <div className="flex items-center justify-end">
-                      <select
-                        value={c.stage}
-                        onChange={(e) => onStage(c.id, e.target.value as CandidateStage)}
-                        disabled={updateStage.isPending}
-                        className="ut-select ut-select-sm w-auto"
-                        aria-label="Advance candidate stage"
-                      >
-                        {CANDIDATE_STAGES.map((s) => <option key={s} value={s}>{fmtEnum(s)}</option>)}
-                      </select>
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
+      {!requisitionId ? <State kind="empty" icon="briefcase" title="Choose a role" description="Pick a requisition above to see its candidates by stage." />
+        : isLoading ? <State kind="loading" height={220} />
+          : (
+            <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+              <div role="list" aria-label="Pipeline by stage" style={{ display: 'grid', gridTemplateColumns: `repeat(${CANDIDATE_STAGES.length}, minmax(220px, 1fr))`, gap: 12, minWidth: CANDIDATE_STAGES.length * 232 }}>
+                {CANDIDATE_STAGES.map((st) => {
+                  const list = byStage.get(st) || []
+                  return (
+                    <section key={st} role="listitem" aria-label={`${fmtEnum(st)}: ${list.length}`} style={{ ...CARD, background: '#f8fafc', padding: 10, display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', alignContent: 'start', gap: 8, minHeight: 180, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px 6px' }}>
+                        <h3 style={{ margin: 0, flex: 1, fontFamily: HEAD_FONT, fontSize: 14, fontWeight: 800 }}>{fmtEnum(st)}</h3>
+                        <HrStatusPill tone={STAGE_TONE[st]}>{String(list.length)}</HrStatusPill>
+                      </div>
+                      {list.length === 0 && <p style={{ margin: 0, padding: '14px 6px', fontSize: 12.5, color: '#94a3b8', textAlign: 'center', border: '1px dashed #e2e8f0', borderRadius: 10 }}>No one here</p>}
+                      {list.map((c, i) => (
+                        <article key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 12px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+                          <HrAvatar name={c.fullName} sub={c.email} seed={i} />
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 12, color: '#64748b' }}>
+                            {c.source && <span>{c.source}</span>}
+                            {c.expectedCtc != null && <span>· expects {inr(c.expectedCtc)}</span>}
+                          </div>
+                          {canCandidateWrite && (
+                            <select value={c.stage} onChange={(e) => onStage(c.id, e.target.value as CandidateStage)} disabled={updateStage.isPending}
+                              className="ut-select ut-select-sm" aria-label={`Move ${c.fullName} to stage`}>
+                              {CANDIDATE_STAGES.map((x) => <option key={x} value={x}>{`Move to: ${fmtEnum(x)}`}</option>)}
+                            </select>
+                          )}
+                          {c.convertedEmployeeId
+                            ? <Link to={`/hrms/employees/${c.convertedEmployeeId}`} className="text-[13px] font-semibold text-accent-fg hover:underline">View employee →</Link>
+                            : c.stage === 'HIRED' && canConvert
+                              ? <HrButton size="sm" variant="ghost" disabled={convert.isPending} onClick={() => onConvert(c)}><UserPlus size={14} /> Convert to employee</HrButton>
+                              : null}
+                        </article>
+                      ))}
+                    </section>
+                  )
+                })}
+              </div>
+            </div>
+          )}
     </div>
   )
 }
