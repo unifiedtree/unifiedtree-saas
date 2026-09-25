@@ -69,14 +69,14 @@ try {
     const { ctx, page } = await session('reader@unifiedtree.demo')
 
     await page.goto(base + '/me')
-    await page.getByText('Leave Balances').waitFor({ timeout: 30_000 })
-    const salaryCard = page.getByRole('button', { name: /View salary/ })
+    await page.getByText('Your balance this year').waitFor({ timeout: 30_000 })
+    const salaryCard = page.getByRole('button', { name: /^Salary.*View/ })
     check('/me shows a My Salary shortcut to the employee', (await salaryCard.count()) === 1)
 
-    const applyLeave = page.getByRole('button', { name: /Apply leave/ })
+    const applyLeave = page.getByRole('button', { name: /Apply for leave/ })
     check('/me shows "Apply leave" to the employee', (await applyLeave.count()) === 1)
     check('/me shows the Onboarding Tasks shortcut (employee holds onboarding.instance.read / task.complete)',
-      (await page.getByText('Onboarding Tasks').count()) === 1)
+      (await page.getByText('Onboarding tasks', { exact: true }).count()) === 1)
     assertClean('/me')
 
     await applyLeave.click()
@@ -88,9 +88,9 @@ try {
     assertClean('/hrms/leave?tab=apply')
 
     await page.goto(base + '/me')
-    await page.getByRole('button', { name: /View salary/ }).click()
+    await page.getByRole('button', { name: /^Salary.*View/ }).click()
     await page.waitForURL((u) => u.pathname === '/me/salary', { timeout: 15_000 })
-    await page.getByRole('heading', { name: 'My Salary' }).waitFor({ timeout: 30_000 })
+    await page.getByRole('heading', { name: 'Salary', level: 1 }).waitFor({ timeout: 30_000 })
     check('My Salary shortcut on /me opens /me/salary', path(page) === '/me/salary')
     if (salary) {
       const body = await page.locator('main').innerText().catch(() => page.locator('body').innerText())
@@ -100,17 +100,17 @@ try {
       const firstEarning = salary.earnings?.[0]?.componentName
       check('/me/salary lists a real earnings component', !firstEarning || body.includes(firstEarning), firstEarning)
     } else {
-      check('/me/salary renders its empty state when the API returns none', (await page.getByText('No salary structure').count()) === 1)
+      check('/me/salary renders its empty state when the API returns none', (await page.getByText('No salary structure yet').count()) === 1)
     }
     assertClean('/me/salary')
 
     await page.goto(base + '/me/payslips')
-    await page.getByRole('heading', { name: 'My Payslips' }).waitFor({ timeout: 30_000 })
-    const payslipLink = page.getByRole('button', { name: /My salary structure/ })
+    await page.getByRole('heading', { name: 'Payslips', level: 1 }).waitFor({ timeout: 30_000 })
+    const payslipLink = page.getByRole('button', { name: /Salary structure/ })
     check('/me/payslips shows a "My salary structure" action', (await payslipLink.count()) === 1)
     await payslipLink.click()
     await page.waitForURL((u) => u.pathname === '/me/salary', { timeout: 15_000 })
-    await page.getByRole('heading', { name: 'My Salary' }).waitFor({ timeout: 30_000 })
+    await page.getByRole('heading', { name: 'Salary', level: 1 }).waitFor({ timeout: 30_000 })
     check('"My salary structure" on /me/payslips opens /me/salary', path(page) === '/me/salary')
     assertClean('/me/payslips → /me/salary')
 

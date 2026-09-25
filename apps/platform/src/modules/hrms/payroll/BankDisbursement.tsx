@@ -1,16 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { DisbursementHistory } from './DisbursementHistory'
 import { Link } from 'react-router-dom'
-import { Banknote, Users, Wallet, ListChecks, Landmark, Download, Plus, Pencil, Power, Trash2, CheckCircle2, XCircle, Building2 } from 'lucide-react'
+import { Banknote, Landmark, Download, Plus, Pencil, Power, Trash2, CheckCircle2, XCircle, Building2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
 } from 'recharts'
 import { useToast } from '@/shared/hooks/useToast'
-import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, type PillTone,
-} from '@/shared/components/hr'
+import { HrButton, HrStatusPill, TableCard, HrAvatar, type PillTone } from '@/shared/components/hr'
+import { ModulePage, StatRow } from '@/design/module/ModuleKit'
 import { useCompanies } from '../api/useOrg'
 import {
   useRuns, useRunEmployees, MONTHS, inr, type RunStatus,
@@ -377,19 +376,20 @@ export const BankDisbursement: React.FC = () => {
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-6 sm:p-8">
-      <HrPageHeader
-        crumb="Payroll"
-        title="Bank Disbursement"
-        subtitle="Review payroll amounts, bank readiness and recorded payments."
-        actions={
-          canExport && hasRun && rows.length > 0 ? (
+    <ModulePage
+        crumb="Payroll · Bank"
+        title="Bank profiles & payment tools"
+        subtitle="Set up the company's bank profiles, and review any run's payroll amounts, bank readiness and recorded payments."
+        actions={<>
+          <Link to="/hrms/bank-disbursement" className="inline-flex h-10 items-center rounded-md border border-border-default bg-white px-4 text-sm font-semibold text-text-primary hover:bg-bg-base">← Bank disbursement</Link>
+          {canExport && hasRun && rows.length > 0 && (
             <HrButton variant="ghost" onClick={handleExport}>
               <Download size={15} /> Export advice
             </HrButton>
-          ) : undefined
-        }
-      />
+          )}
+        </>}
+      >
+      <div style={{ minWidth: 0 }}>
 
       {/* ── Selectors ─────────────────────────────────────────────── */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -419,7 +419,7 @@ export const BankDisbursement: React.FC = () => {
             {!runsLoading && runs.length === 0 && <option value="">No payroll runs</option>}
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
-                {MONTHS[r.periodMonth - 1]} {r.periodYear} · {r.companyName} · {r.status}
+                {`${MONTHS[r.periodMonth - 1]} ${r.periodYear} · ${r.companyName} · ${r.status.charAt(0)}${r.status.slice(1).toLowerCase().replace(/_/g, ' ')}`}
               </option>
             ))}
           </select>
@@ -680,38 +680,13 @@ export const BankDisbursement: React.FC = () => {
           )}
 
           {/* ── KPI cards ──────────────────────────────────────────── */}
-          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <HrStatCard
-              icon={<Banknote size={18} />}
-              color="green"
-              value={inr(totals.total)}
-              label={activeBatch ? (activeBatch.status === 'PAID' ? 'Payment recorded' : 'Batch total') : 'Payroll net total'}
-              sub={selectedRun ? `${MONTHS[selectedRun.periodMonth - 1]} ${selectedRun.periodYear}` : undefined}
-              loading={rowsLoading}
-            />
-            <HrStatCard
-              icon={<Users size={18} />}
-              color="blue"
-              value={totals.count}
-              label={activeBatch ? 'Bank beneficiaries' : 'Employees in payroll'}
-              sub={activeBatch ? (activeBatch.status === 'PAID' ? 'payment recorded' : 'ready for payment') : 'payment not yet prepared'}
-              loading={rowsLoading}
-            />
-            <HrStatCard
-              icon={<Wallet size={18} />}
-              color="teal"
-              value={inr(totals.avg)}
-              label={activeBatch ? 'Average batch amount' : 'Average net pay'}
-              loading={rowsLoading}
-            />
-            <HrStatCard
-              icon={<ListChecks size={18} />}
-              color="purple"
-              value={selectedRun ? <HrStatusPill tone={STATUS_TONE[selectedRun.status]}>{selectedRun.status}</HrStatusPill> : '—'}
-              label="Run Status"
-              sub={selectedRun ? fmtPeriod(selectedRun.periodStart, selectedRun.periodEnd) : undefined}
-              loading={rowsLoading}
-            />
+          <div className="mb-5">
+            <StatRow tiles={[
+              { icon: 'banknote', color: 'green', label: activeBatch ? (activeBatch.status === 'PAID' ? 'Payment recorded' : 'Bank file total') : 'Payroll net total', value: rowsLoading ? '…' : inr(totals.total), sub: selectedRun ? `${MONTHS[selectedRun.periodMonth - 1]} ${selectedRun.periodYear}` : undefined },
+              { icon: 'users', color: 'blue', label: activeBatch ? 'In the bank file' : 'People in payroll', value: rowsLoading ? '…' : String(totals.count), sub: activeBatch ? (activeBatch.status === 'PAID' ? 'Payment recorded' : 'Ready for payment') : 'No bank file yet' },
+              { icon: 'rupee', color: 'teal', label: activeBatch ? 'Average amount' : 'Average net pay', value: rowsLoading ? '…' : inr(totals.avg) },
+              { icon: 'list', color: 'purple', label: 'Run status', value: selectedRun ? <HrStatusPill tone={STATUS_TONE[selectedRun.status]}>{`${selectedRun.status.charAt(0)}${selectedRun.status.slice(1).toLowerCase().replace(/_/g, ' ')}`}</HrStatusPill> : '—', sub: selectedRun ? fmtPeriod(selectedRun.periodStart, selectedRun.periodEnd) : undefined },
+            ]} />
           </div>
 
           {/* ── Net-pay distribution chart ─────────────────────────── */}
@@ -818,6 +793,7 @@ export const BankDisbursement: React.FC = () => {
 
       {canReadBatches && <DisbursementHistory key={companyId} companyId={companyId || undefined} />}
 
-    </div>
+      </div>
+    </ModulePage>
   )
 }

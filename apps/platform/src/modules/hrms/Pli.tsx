@@ -1,11 +1,9 @@
 import React, { useMemo, useState } from 'react'
-import { Plus, Check, X, Wallet, Clock, BadgeCheck, Trophy, Banknote, Award } from 'lucide-react'
-import { format } from 'date-fns'
+import { Plus, Check, X, Banknote, Award } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
+import { ModulePage, Views, useView, StatRow, State, Note, dmy } from '@/design/module/ModuleKit'
 import { useToast } from '@/shared/hooks/useToast'
-import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
-} from '@/shared/components/hr'
+import { HrButton, HrStatusPill, TableCard, HrAvatar, type PillTone } from '@/shared/components/hr'
 import { hrPaginationFooter } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
@@ -17,6 +15,7 @@ import {
 const STATUS_TONE: Record<PliStatus, PillTone> = {
   PROPOSED: 'warn', APPROVED: 'ok', PAID: 'teal', REJECTED: 'red',
 }
+const STATUS_LABEL: Record<PliStatus, string> = { PROPOSED: 'Proposed', APPROVED: 'Approved', PAID: 'Paid', REJECTED: 'Not approved' }
 
 type Tab = 'all' | 'my' | 'targets'
 
@@ -24,24 +23,24 @@ export const Pli: React.FC = () => {
   const canReadAll = usePermission('hrms.pli.read')
   const canWrite = usePermission('hrms.pli.write')
   const canReadSelf = usePermission('hrms.pli.read.self')
-  const [tab, setTab] = useState<Tab>(canReadAll ? 'all' : 'my')
-
-  const tabs: { key: Tab; label: string }[] = [
-    ...(canReadAll ? [{ key: 'targets' as Tab, label: 'Monthly Targets' }] : []),
-    ...(canReadAll ? [{ key: 'all' as Tab, label: 'All Awards' }] : []),
-    ...(canReadSelf ? [{ key: 'my' as Tab, label: 'My Incentives' }] : []),
+  // Admins get the designed Payroll → PLI page; this page is mostly people's own incentives.
+  const tabs = [
+    ...(canReadSelf ? [{ key: 'my', label: 'My incentives', icon: 'rupee' }] : []),
+    ...(canReadAll ? [{ key: 'all', label: 'All awards', icon: 'list' }, { key: 'targets', label: 'Monthly targets', icon: 'target' }] : []),
   ]
-
+  const [tab, setTab] = useView(tabs.map((t) => t.key)) as [Tab, (k: string) => void]
+  const onlyMine = !canReadAll
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
-      <HrPageHeader crumb="Performance-Linked Incentive" title="Incentive Center" subtitle="Propose, approve, and pay out performance-linked incentives" />
-
-      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
-
-      {tab === 'targets' && canReadAll && <HrTabPanel tabKey="targets"><PliTargetsTab canWrite={canWrite} /></HrTabPanel>}
-      {tab === 'all' && canReadAll && <HrTabPanel tabKey="all"><AllAwardsTab canWrite={canWrite} /></HrTabPanel>}
-      {tab === 'my' && canReadSelf && <HrTabPanel tabKey="my"><MyIncentivesTab /></HrTabPanel>}
-    </div>
+    <ModulePage crumb="Payroll" title={onlyMine ? 'My incentives' : 'Incentives'}
+      subtitle={onlyMine ? 'Performance-linked incentives proposed for you, and where each one stands.' : 'Propose, approve and pay out performance-linked incentives.'}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        {tabs.length > 1 && <Views items={tabs} active={tab} onChange={setTab} label="Incentive views" />}
+        {tabs.length === 0 && <State kind="empty" icon="lock" title="No incentive access" description="Ask an admin if you should see incentives." />}
+        {tab === 'my' && canReadSelf && <MyIncentivesTab />}
+        {tab === 'all' && canReadAll && <AllAwardsTab canWrite={canWrite} />}
+        {tab === 'targets' && canReadAll && <PliTargetsTab canWrite={canWrite} />}
+      </div>
+    </ModulePage>
   )
 }
 
@@ -240,8 +239,8 @@ function MyIncentivesTab() {
   // Was hard-coded to page 0 with no control, so a long-serving employee could
   // not see any incentive older than their most recent PLI_PAGE_SIZE awards.
   const [page, setPage] = useState(0)
-  const { data, isLoading } = useMyIncentives(page)
-  const awards = data?.content ?? []
+  const { data, isLoading, isError, error, refetch } = useMyIncentives(page)
+  const awards = useMemo(() => data?.content ?? [], [data])
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
 
@@ -259,48 +258,36 @@ function MyIncentivesTab() {
   // (totalElements), so it stays unqualified — it used to show awards.length,
   // which never exceeded one page.
   const pageScoped = totalPages > 1 ? 'On this page' : undefined
-
+  if (isError) return <State kind="error" title="Couldn’t load your incentives" description={(error as Error)?.message} onRetry={() => refetch()} />
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<Trophy size={18} />} color="blue" value={total} label="Total Awards" loading={isLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.proposed} label="Proposed" sub={pageScoped} loading={isLoading} />
-        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved" sub={pageScoped} loading={isLoading} />
-        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.paid)} label="Paid Out" sub={pageScoped} loading={isLoading} />
-      </div>
-
-      <TableCard
-        footer={hrPaginationFooter({
-          page, pageSize: PLI_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage,
-        })}
-      >
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Plan</th>
-              <th className="hidden sm:table-cell">Period</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th className="hidden sm:table-cell">Awarded</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(4)].map((_, i) => <tr key={i}><td colSpan={5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : awards.length === 0 ? (
-              <tr><td colSpan={5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No incentives yet</p><p className="mt-1 text-xs text-text-tertiary">Performance-linked incentives awarded to you will appear here.</p></td></tr>
-            ) : awards.map((a) => (
-              <tr key={a.id}>
-                <td className="font-semibold text-text-primary">{a.planName}</td>
-                <td className="hidden sm:table-cell text-text-secondary">{a.period || '—'}</td>
-                <td className="font-semibold tabular-nums text-text-primary">{inr(a.amount)}</td>
-                <td><HrStatusPill tone={STATUS_TONE[a.status]}>{a.status}</HrStatusPill></td>
-                <td className="hidden sm:table-cell text-text-secondary">{a.createdAt ? format(new Date(a.createdAt), 'd MMM yyyy') : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
+    <div style={{ display: 'grid', gap: 16 }}>
+      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        { icon: 'target', color: 'blue', label: 'Incentives', value: String(total), sub: 'Proposed for you so far' },
+        { icon: 'clock', color: 'orange', label: 'Waiting for approval', value: String(stats.proposed), sub: pageScoped || 'Proposed' },
+        { icon: 'checkCircle', color: 'green', label: 'Approved, to be paid', value: String(stats.approved), sub: pageScoped || 'Not paid yet' },
+        { icon: 'rupee', color: 'teal', label: 'Paid to you', value: inr(stats.paid), sub: pageScoped || 'All time' },
+      ]} />}
+      {isLoading ? <State kind="loading" height={200} />
+        : awards.length === 0 ? <State kind="empty" icon="target" title="No incentives yet" description="Performance-linked incentives proposed for you appear here with their status." />
+          : (
+            <TableCard footer={totalPages > 1 ? hrPaginationFooter({ page, pageSize: PLI_PAGE_SIZE, totalElements: total, totalPages, onPageChange: setPage }) : undefined}>
+              <table className="hr-table">
+                <thead><tr><th>Plan</th><th className="hidden sm:table-cell">Period</th><th>Amount</th><th>Status</th><th className="hidden sm:table-cell">Proposed on</th></tr></thead>
+                <tbody>
+                  {awards.map((a) => (
+                    <tr key={a.id}>
+                      <td className="font-semibold text-text-primary">{a.planName}</td>
+                      <td className="hidden sm:table-cell text-text-secondary">{a.period || '—'}</td>
+                      <td className="font-semibold tabular-nums text-text-primary">{inr(a.amount)}</td>
+                      <td><HrStatusPill tone={STATUS_TONE[a.status]}>{STATUS_LABEL[a.status] ?? a.status}</HrStatusPill></td>
+                      <td className="hidden sm:table-cell text-text-secondary">{a.createdAt ? dmy(a.createdAt) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableCard>
+          )}
+      <Note>Ask HR if an incentive looks wrong or is missing.</Note>
     </div>
   )
 }

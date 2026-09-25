@@ -31,11 +31,9 @@ try {
       await expect(page.getByRole('status', { name: 'Loading apps' })).toHaveCount(0)
     }
     if (route === '/dashboard') {
-      const overview = page.getByRole('region', { name: 'Live overview' })
-      await expect(overview).toBeVisible({ timeout: 30000 })
-      await expect(overview).toHaveAttribute('aria-busy', 'false', { timeout: 30000 })
-      await expect(overview).not.toContainText('Unavailable')
-      await expect(overview).not.toContainText('Loading...')
+      // The designed admin dashboard: its first tile is Total Employees.
+      await expect(page.getByText('Total Employees', { exact: true }).first()).toBeVisible({ timeout: 30000 })
+      await expect(page.locator('body')).not.toContainText('Unavailable')
       await page.mouse.move(0, 0)
     }
     const text = await page.locator('body').innerText()

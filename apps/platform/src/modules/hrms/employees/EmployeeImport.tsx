@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   AlertCircle,
@@ -12,17 +12,11 @@ import {
   Loader2,
   Upload,
   Users,
-  XCircle,
 } from 'lucide-react'
 import { useToast } from '@/shared/hooks/useToast'
 import { Skeleton } from '@unifiedtree/ui-kit'
-import { EmptyState } from '@/shared/components/EmptyState'
-import {
-  HrPageHeader,
-  HrButton,
-  HrStatCard,
-  TableCard,
-} from '@/shared/components/hr'
+import { ModulePage, StatRow, State } from '@/design/module/ModuleKit'
+import { HrButton, TableCard } from '@/shared/components/hr'
 import { useCompanies } from '../api/useOrg'
 import {
   countValidRows,
@@ -272,25 +266,17 @@ export const EmployeeImport: React.FC = () => {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 max-w-3xl p-6 sm:p-8">
-      {/* Header */}
-      <nav className="flex items-center gap-1.5 text-xs text-text-tertiary">
-        <Link to="/hrms" className="hover:text-[#047857] transition-colors">HRMS</Link>
-        <ChevronRight size={12} />
-        <Link to="/hrms/employees" className="hover:text-[#047857] transition-colors">Employees</Link>
-        <ChevronRight size={12} />
-        <span className="text-text-secondary">Import</span>
-      </nav>
-      <HrPageHeader
-        crumb="Employees"
+    <ModulePage
+        crumb="Employees · Import"
         title="Import employees"
-        subtitle="Upload a CSV or XLSX file to add multiple employees at once."
+        subtitle="Upload a CSV or XLSX file to add many employees at once. Nothing is created until every row passes."
         actions={
           <HrButton variant="ghost" onClick={() => navigate('/hrms/employees')}>
             <ArrowLeft size={15} /> Back to employees
           </HrButton>
         }
-      />
+      >
+      <div className="space-y-6" style={{ maxWidth: 860, minWidth: 0 }}>
 
       <Stepper current={step} />
 
@@ -411,26 +397,11 @@ export const EmployeeImport: React.FC = () => {
           {validationResult && !validateMutation.isPending && (
             <div className="space-y-4">
               {/* Summary stat cards */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <HrStatCard
-                  icon={<Users size={18} />}
-                  color="blue"
-                  value={validationResult.totalRows}
-                  label="Total rows"
-                />
-                <HrStatCard
-                  icon={<CheckCircle size={18} />}
-                  color="green"
-                  value={validRows}
-                  label="Valid"
-                />
-                <HrStatCard
-                  icon={validationResult.errorCount > 0 ? <XCircle size={18} /> : <CheckCircle size={18} />}
-                  color={validationResult.errorCount > 0 ? 'red' : 'green'}
-                  value={validationResult.errorCount}
-                  label="Errors"
-                />
-              </div>
+              <StatRow min={180} tiles={[
+                { icon: 'users', color: 'blue', label: 'Rows in the file', value: String(validationResult.totalRows), sub: 'Employees to add' },
+                { icon: 'checkCircle', color: 'green', label: 'Ready', value: String(validRows), sub: 'Passed every check' },
+                { icon: validationResult.errorCount > 0 ? 'circleX' : 'checkCircle', color: validationResult.errorCount > 0 ? 'red' : 'green', label: 'Problems', value: String(validationResult.errorCount), sub: validationResult.errorCount > 0 ? 'Fix them and upload again' : 'None' },
+              ]} />
 
               {/* Error table */}
               {validationResult.errorCount > 0 && (
@@ -657,14 +628,11 @@ export const EmployeeImport: React.FC = () => {
 
       {/* Network / 5xx error during commit */}
       {step === 'done' && commitMutation.isError && (
-        <EmptyState
-          icon={XCircle}
-          title="Import failed"
-          description={
-            `${(commitMutation.error as Error)?.message ?? 'An unknown error occurred.'} ` +
-            'Import status is unclear — check the employees list to confirm what was created.'
-          }
-          action={{ label: 'Try again', onClick: handleCommit }}
+        <State
+          kind="error"
+          title="The import didn’t finish"
+          description={`${(commitMutation.error as Error)?.message ?? 'Something went wrong.'} Trying again is safe: the file is checked again first, and anyone whose email already exists is reported instead of being added twice.`}
+          onRetry={handleCommit}
         />
       )}
 
@@ -676,6 +644,7 @@ export const EmployeeImport: React.FC = () => {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </ModulePage>
   )
 }

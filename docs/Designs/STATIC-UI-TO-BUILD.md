@@ -754,3 +754,23 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
 - **Added (Audit logs):** "Export this page" writes the rows on screen to a CSV and records it in the Reports Center. The page says it's one page only.
   - **Static / to build:** there's no server export of the full trail.
 - **Checked live:** `live-design-access.mjs` 16/16 (users tiles, filter and search; a temporary role granted and removed from the drawer; built-in roles read-only; catalogue view and search; the audit day filter matching the API over the full local day; CSV export; event details; the temporary role removed).
+
+### 11.16 PLI for employees, Employee import, Bank profiles & payment tools: done
+- **PLI (`/hrms/pli` for people without the admin view):**
+  - On the module kit, titled "My incentives".
+  - Tiles: Waiting for approval, Approved (to be paid), and Paid to you.
+  - Statuses read as words: a rejected award reads "Not approved".
+  - There's now an error state with Try again.
+  - Admins still get the designed Payroll → PLI page.
+- **Employee import:**
+  - Kit frame, with the old breadcrumb row removed.
+  - The validation result is kit tiles: Rows in the file, Ready, Problems.
+  - The failure state now says trying again is safe. That's checked in the backend: commit validates the whole file first and rejects any email that already exists, so nothing is created twice.
+- **Bank profiles & payment tools (`/hrms/bank-disbursement/setup`):**
+  - Kit frame, with a link back to the designed Bank disbursement page.
+  - Kit tiles, and run statuses read as words ("Paid", not "PAID").
+- **Left as they are (outside the HRMS scope you set):** the Modules launcher and the Plan / billing page each have their own full designs, and ModuleWorkspace is the non-HRMS apps' shell.
+- **Tests brought up to date:**
+  - `live-dead-entrypoints.mjs` now follows the redesigned My workspace wording (29/29).
+  - `live-browser.mjs` now checks the designed dashboard instead of the old "Live overview" region. Every `/hrms` route, plus Settings, Users and Roles, renders its heading with no failed calls.
+- **Checked live:** `live-design-last.mjs` 10/10.
