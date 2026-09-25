@@ -397,7 +397,9 @@ public class WorkforceEmployeeService {
         e.setEmergencyContactPhone(req.emergencyContactPhone());
 
         e.setActive(true);
-        return toResponse(repository.save(e));
+        // Flush now: callers in the same transaction (the Users & access invite)
+        // read the new row with plain JDBC, which never triggers a JPA flush.
+        return toResponse(repository.saveAndFlush(e));
     }
 
     // -- Update -------------------------------------------------------------
