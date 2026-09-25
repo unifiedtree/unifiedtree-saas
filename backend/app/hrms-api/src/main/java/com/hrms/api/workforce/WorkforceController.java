@@ -350,7 +350,7 @@ public class WorkforceController {
         for (UUID company : rows.stream().map(WorkforceEmployeeResponse::companyId).filter(java.util.Objects::nonNull).distinct().toList()) {
             departments.listForCompany(company).forEach(d -> departmentNames.put(d.id(), d.name()));
             designations.listForCompany(company, null).forEach(d -> designationNames.put(d.id(), d.title()));
-            branches.listForCompany(company).forEach(b -> branchNames.put(b.id(), b.name()));
+            branches.listForCompany(company, true).forEach(b -> branchNames.put(b.id(), b.name()));
         }
         // Managers are usually in the same export; the rest are looked up once each.
         java.util.Map<UUID, String> managerNames = new java.util.HashMap<>();
