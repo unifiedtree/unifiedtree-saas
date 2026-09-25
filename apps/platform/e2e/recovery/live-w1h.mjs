@@ -49,7 +49,7 @@ const code = (r) => r.json?.errorCode || r.json?.error || r.json?.code || ''
 const msg = (r) => r.json?.message || ''
 const stamp = Date.now()
 const tomorrow = new Date(Date.now() + 36 * 3600e3).toISOString()
-const created = { roles: [], departments: [], overrideUsers: new Set(), userRoles: [], auditFrom: new Date().toISOString() }
+const created = { roles: [], departments: [], overrideUsers: new Set(), userRoles: [], weeklyOffs: null, auditFrom: new Date().toISOString() }
 
 try {
   const owner = await login('owner@unifiedtree.demo')
@@ -163,6 +163,17 @@ try {
   const role = dup.json?.id
   check('db: the copy has exactly the source role’s permissions', role && sql(`select count(*) from rbac.role_permissions where role_id = '${role}'`) === sql(`select count(*) from rbac.role_permissions where role_id = '${deptRole}'`))
   check('db: the duplicate is audited', role && sql(`select count(*) from audit.events where tenant_id = '${tenant}' and entity_type = 'ROLE' and entity_id = '${role}' and action = 'CREATE'`) === '1')
+  const renamed = await owner.call(`/v1/rbac/roles/${role}`, 'PUT', { displayName: `QA Senior manager ${stamp} (renamed)`, description: 'QA w1h rename' })
+  check('roles: rename a custom role (audited)', renamed.status === 200 && renamed.json?.displayName === `QA Senior manager ${stamp} (renamed)`
+    && sql(`select count(*) from audit.events where tenant_id = '${tenant}' and entity_type = 'ROLE' and entity_id = '${role}' and action = 'UPDATE'`) === '1', `status=${renamed.status} ${msg(renamed)}`)
+  check('roles: reader cannot rename, duplicate or re-permission a role', (await reader.call(`/v1/rbac/roles/${role}`, 'PUT', { displayName: 'QA' })).status === 403
+    && (await reader.call(`/v1/rbac/roles/${deptRole}/duplicate`, 'POST', { displayName: `QA reader ${stamp}` })).status === 403
+    && (await reader.call(`/v1/rbac/roles/${role}/permissions?acknowledgeRisk=true`, 'PUT', ['hrms.leave.read'])).status === 403)
+  check('roles: reader cannot read someone’s roles', (await reader.call(`/v1/rbac/users/${MGR}/roles`)).status === 403)
+  const inviteOwner = await admin.call('/v1/workspace/users/invite', 'POST', { email: `qa-w1h-${stamp}@example.invalid`, firstName: 'QA', lastName: 'Invite', roleCodes: ['OWNER'], createEmployee: false })
+  check('levels: the super admin cannot invite someone as Owner (nothing created)', inviteOwner.status === 403
+    && sql(`select count(*) from auth.user_credentials where email = 'qa-w1h-${stamp}@example.invalid'`) === '0', `status=${inviteOwner.status} ${code(inviteOwner)}`)
+  check('levels: reader cannot invite anyone', (await reader.call('/v1/workspace/users/invite', 'POST', { email: `qa-w1h-r-${stamp}@example.invalid`, roleCodes: [], createEmployee: false })).status === 403)
   const builtinCode = await owner.call('/v1/rbac/roles', 'POST', { code: 'OWNER', displayName: 'QA fake owner' })
   check('roles: a custom role cannot take a built-in role’s code', builtinCode.status === 422 && code(builtinCode) === 'ROLE_CODE_DUPLICATE', `status=${builtinCode.status}`)
   const adminRole = sql(`select id from rbac.roles where tenant_id is null and code = 'ADMIN'`)
@@ -200,6 +211,7 @@ try {
   check('employees: finance lead reads by company (hrms.employee.read)', (await fin.call(`/v1/employees/company/${company}?size=1`)).status === 200)
   check('employees: reader cannot list by company', (await reader.call(`/v1/employees/company/${company}?size=1`)).status === 403)
   const offs = sql(`select coalesce(weekly_off_days, '') from hrms.employees where id = '${READER_EMP}'`)
+  created.weeklyOffs = offs
   const setOffs = await mgr.call(`/v1/employees/${READER_EMP}/weekly-offs?days=${encodeURIComponent(offs || '6,7')}`, 'PUT')
   check('employees: manager sets a team member’s weekly offs', setOffs.status === 200, `status=${setOffs.status}`)
   check('employees: manager cannot set weekly offs outside the team', (await mgr.call(`/v1/employees/${other}/weekly-offs?days=6,7`, 'PUT')).status === 403)
@@ -244,6 +256,7 @@ try {
 } finally {
   // ── cleanup ───────────────────────────────────────────────────────────────
   try {
+    if (created.weeklyOffs !== null) sql(`update hrms.employees set weekly_off_days = ${created.weeklyOffs ? `'${created.weeklyOffs}'` : 'null'} where id = '${READER_EMP}'`)
     for (const u of created.overrideUsers) sql(`delete from rbac.user_permission_overrides where user_id = '${u}'`)
     for (const [u, c] of created.userRoles) sql(`delete from rbac.user_roles ur using rbac.roles r where r.id = ur.role_id and ur.user_id = '${u}' and r.code = '${c}' and ur.granted_at >= '${created.auditFrom}'`)
     for (const r of created.roles) { sql(`delete from rbac.user_roles where role_id = '${r}'`); sql(`delete from rbac.role_permissions where role_id = '${r}'`); sql(`delete from rbac.roles where id = '${r}'`) }

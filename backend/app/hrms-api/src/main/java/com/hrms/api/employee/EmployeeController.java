@@ -6,6 +6,7 @@ import com.hrms.core.dto.PageResponse;
 import com.hrms.core.enums.Role;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.tenant.TenantContext;
+import com.unifiedtree.rbac.security.PermissionChecker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.hrms.employee.dto.CreateEmployeeRequest;
@@ -55,6 +56,11 @@ public class EmployeeController {
     static final String EMPLOYEE_WRITE = "hrms.employee.write";
     static final String EMPLOYEE_READ = "hrms.employee.read";
     static final String TEAM_MANAGE = "hrms.employee.team.manage";
+    // hrms.employee.team.manage is new in V143.17, so tokens minted before the
+    // deploy do not carry it (they last up to 12 hours). Its checks therefore
+    // also ask the @perm bean, which reads the database (60-second cache), so a
+    // department manager already signed in keeps adding staff and managing
+    // their team right after the deploy instead of getting 403 until re-login.
 
     private static final EnumSet<Role> STAFF_ONBOARDING_ROLES = EnumSet.of(
             Role.EMPLOYEE,
@@ -67,15 +73,18 @@ public class EmployeeController {
     private final InvitationService invitationService;
     private final JdbcTemplate jdbcTemplate;
     private final WorkspaceAccessService accessService;
+    private final PermissionChecker permissionChecker;
 
     public EmployeeController(EmployeeService employeeService,
                               @Autowired(required = false) InvitationService invitationService,
                               @Autowired(required = false) JdbcTemplate jdbcTemplate,
-                              @Autowired(required = false) WorkspaceAccessService accessService) {
+                              @Autowired(required = false) WorkspaceAccessService accessService,
+                              @Autowired(required = false) PermissionChecker permissionChecker) {
         this.employeeService = employeeService;
         this.invitationService = invitationService;
         this.jdbcTemplate = jdbcTemplate;
         this.accessService = accessService;
+        this.permissionChecker = permissionChecker;
     }
 
     @Operation(summary = "Create a new employee")
@@ -95,7 +104,7 @@ public class EmployeeController {
 
     @Operation(summary = "Create staff member with login role and temporary password")
     @PostMapping("/staff")
-    @PreAuthorize("hasAnyAuthority('hrms.employee.write','hrms.employee.team.manage')")
+    @PreAuthorize("hasAuthority('hrms.employee.write') or @perm.check('hrms.employee.team.manage')")
     public ResponseEntity<EmployeeResponse> createStaff(
             @Valid @RequestBody StaffOnboardingRequest request,
             @AuthenticationPrincipal Jwt jwt) {
@@ -199,7 +208,7 @@ public class EmployeeController {
         if (hasPermission(companyWidePermission)) return;
 
         boolean managerAllowed = managerAccess == ManagerAccess.ANY
-                || (managerAccess == ManagerAccess.WITH_TEAM_PERMISSION && hasPermission(TEAM_MANAGE));
+                || (managerAccess == ManagerAccess.WITH_TEAM_PERMISSION && holdsTeamManage());
         // Direct-manager: target.reporting_manager_id == caller
         if (managerAllowed && jdbcTemplate != null) {
             try {
@@ -229,7 +238,7 @@ public class EmployeeController {
 
     @Operation(summary = "List employees by department")
     @GetMapping("/department/{departmentId}")
-    @PreAuthorize("hasAnyAuthority('hrms.employee.read','hrms.employee.team.manage')")
+    @PreAuthorize("hasAuthority('hrms.employee.read') or @perm.check('hrms.employee.team.manage')")
     public ResponseEntity<PageResponse<EmployeeSummaryResponse>> listByDepartment(
             @PathVariable UUID departmentId,
             @PageableDefault(size = 20) Pageable pageable,
@@ -274,7 +283,7 @@ public class EmployeeController {
 
     @Operation(summary = "Assign or clear the geofence zone an employee must punch in at")
     @PutMapping("/{employeeId}/punch-zone")
-    @PreAuthorize("hasAnyAuthority('hrms.employee.write','hrms.employee.team.manage')")
+    @PreAuthorize("hasAuthority('hrms.employee.write') or @perm.check('hrms.employee.team.manage')")
     public ResponseEntity<EmployeeResponse> assignPunchZone(
             @PathVariable UUID employeeId,
             @RequestParam(required = false) UUID zoneId,
@@ -286,7 +295,7 @@ public class EmployeeController {
 
     @Operation(summary = "Set an employee's weekly off days (CSV of ISO day numbers 1=Mon..7=Sun)")
     @PutMapping("/{employeeId}/weekly-offs")
-    @PreAuthorize("hasAnyAuthority('hrms.employee.write','hrms.employee.team.manage')")
+    @PreAuthorize("hasAuthority('hrms.employee.write') or @perm.check('hrms.employee.team.manage')")
     public ResponseEntity<EmployeeResponse> setWeeklyOffs(
             @PathVariable UUID employeeId,
             @RequestParam(required = false) String days,
@@ -477,6 +486,17 @@ public class EmployeeController {
     private UUID extractEmployeeId(Jwt jwt) {
         String employeeId = jwt.getClaimAsString("employee_id");
         return employeeId != null ? UUID.fromString(employeeId) : UUID.fromString(jwt.getSubject());
+    }
+
+    /** hrms.employee.team.manage from the token, or (older tokens) from the database. */
+    boolean holdsTeamManage() {
+        if (hasPermission(TEAM_MANAGE)) return true;
+        try {
+            return permissionChecker != null && permissionChecker.check(TEAM_MANAGE);
+        } catch (RuntimeException e) {
+            log.warn("TEAM_MANAGE_LOOKUP_FAIL — treating as not held", e);
+            return false;
+        }
     }
 
     /** Whether the signed-in principal holds this permission (JWT authorities). */
