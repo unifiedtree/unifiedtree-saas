@@ -323,6 +323,7 @@ public class KpiService {
                 rs -> rs.next() ? rs.getString(1) : null, id);
         BigDecimal previous = snap[0];
         BigDecimal target   = snap[1];
+        requireTarget(target);
         BigDecimal pct = computeProgressPct(req.newValue(), target, direction);
         if (pct == null) pct = BigDecimal.ZERO;
 
@@ -340,6 +341,21 @@ public class KpiService {
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, tenantId, id, previous, req.newValue(), pct, req.notes(), actorId);
         return get(tenantId, id);
+    }
+
+    /**
+     * A value can only be recorded against a target. Without one the progress
+     * would be written as 0% and wipe the percentage the owner set on their
+     * personal goal (My goals), and its history would mix values with
+     * percentages. Such goals are updated by their owner; add a target to
+     * measure one with values. (2026-09-25)
+     */
+    static void requireTarget(BigDecimal target) {
+        if (target == null) {
+            throw new BusinessRuleException(
+                    "This goal has no target, so there's no value to record. Its owner updates the percentage under My goals. Add a target to measure it with values.",
+                    "KPI_TARGET_REQUIRED");
+        }
     }
 
     /** Soft delete — status='DROPPED' keeps history for audit; hard-DELETE not exposed. */

@@ -97,6 +97,9 @@ try {
   check('history: personal goal progress with a note is recorded', pp.status === 200 && pp.json?.progress === 30 && ppRow === `30|${TAG} note`, `status=${pp.status} row=${ppRow}`)
   const finPP = await fin.call(`/v1/performance/goals/${personal.json?.id}/progress`, 'PUT', { progress: 90, note: 'not mine' })
   check('history: nobody else can update the personal goal', finPP.status === 422 && sql(`select progress from performance_mgmt.goals where id='${personal.json?.id}'`) === '30', `status=${finPP.status}`)
+  const kpiOnPersonal = await owner.call(`/v1/performance/kpis/${personal.json?.id}/progress`, 'PUT', { newValue: 5 })
+  check('history: a value can’t be recorded on a goal without a target (its % stays)', kpiOnPersonal.status === 422, `status=${kpiOnPersonal.status}`)
+  check('history: the personal goal’s percentage is untouched', sql(`select progress from performance_mgmt.goals where id='${personal.json?.id}'`) === '30')
   const ph = await reader.call(`/v1/performance/goals/my/${personal.json?.id}/history`)
   check('history: the personal goal’s history shows the update', ph.status === 200 && ph.json?.[0]?.notes === `${TAG} note`)
 
