@@ -102,7 +102,7 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
     setHint(null)
     setPending({ dataUrl: f.dataUrl, base64: f.base64, light: lightProblem(f.brightness), state: 'new' })
   }
-  const usePhoto = () => {
+  const keepPhoto = () => {
     if (!pending) return
     const next = { ...shotsRef.current, [current]: { ...pending, state: 'new' as const, error: undefined } }
     setShots(next)
@@ -169,7 +169,6 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
   }
 
   // ── view ──
-  const whose = self ? 'your' : `${first}’s`
   const title = self ? (reenroll ? 'Re-enroll your face' : 'Enroll your face') : (reenroll ? `Re-enroll ${name}’s face` : `Enroll ${name}’s face`)
   const idx = angles.indexOf(current)
   const a = ANGLE[current]
@@ -259,8 +258,8 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
     )
     footer = pending ? <>
       {pending.light
-        ? <><HrButton variant="ghost" onClick={usePhoto}>Use anyway</HrButton><HrButton onClick={() => setPending(null)}>Retake</HrButton></>
-        : <><HrButton variant="ghost" onClick={() => setPending(null)}>Retake</HrButton><HrButton onClick={usePhoto}>Use photo</HrButton></>}
+        ? <><HrButton variant="ghost" onClick={keepPhoto}>Use anyway</HrButton><HrButton onClick={() => setPending(null)}>Retake</HrButton></>
+        : <><HrButton variant="ghost" onClick={() => setPending(null)}>Retake</HrButton><HrButton onClick={keepPhoto}>Use photo</HrButton></>}
     </> : <>
       <HrButton variant="ghost" onClick={() => { setPending(null); setStep(backToReview ? 'review' : 'intro') }}>Back</HrButton>
       <HrButton onClick={take} disabled={!camReady || !!camError}>{<Camera size={15} />} Take photo</HrButton>
@@ -335,7 +334,7 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
 
   return (
     <HrDrawer title={title} onClose={close} footer={footer}>
-      <div aria-label={`${whose} face enrollment`} style={{ fontFamily: 'Inter,-apple-system,sans-serif', color: INK }}>{body}</div>
+      <div style={{ fontFamily: 'Inter,-apple-system,sans-serif', color: INK }}>{body}</div>
     </HrDrawer>
   )
 }
@@ -352,8 +351,12 @@ function Guide({ turn, prompt }: { turn: -1 | 0 | 1; prompt: string }) {
           <path d={turn < 0 ? 'M40,188 l18,-16 v10 h20 v12 h-20 v10z' : 'M260,188 l-18,-16 v10 h-20 v12 h20 v10z'} fill="#34d399" />
         )}
       </svg>
-      <span style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', maxWidth: '88%', padding: '6px 12px', borderRadius: 99, background: 'rgba(15,23,42,.72)', color: '#fff', fontSize: 13, fontWeight: 600, textAlign: 'center', lineHeight: 1.35 }}>{prompt}</span>
-      <span style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap', padding: '5px 10px', borderRadius: 99, background: 'rgba(15,23,42,.6)', color: '#e2e8f0', fontSize: 12 }}>Good light · one face only</span>
+      <div style={{ position: 'absolute', top: 12, left: 12, right: 12, display: 'flex', justifyContent: 'center' }}>
+        <span style={{ padding: '6px 12px', borderRadius: 99, background: 'rgba(15,23,42,.72)', color: '#fff', fontSize: 13, fontWeight: 600, textAlign: 'center', lineHeight: 1.35 }}>{prompt}</span>
+      </div>
+      <div style={{ position: 'absolute', bottom: 12, left: 12, right: 12, display: 'flex', justifyContent: 'center' }}>
+        <span style={{ whiteSpace: 'nowrap', padding: '5px 10px', borderRadius: 99, background: 'rgba(15,23,42,.6)', color: '#e2e8f0', fontSize: 12 }}>Good light · one face only</span>
+      </div>
     </div>
   )
 }

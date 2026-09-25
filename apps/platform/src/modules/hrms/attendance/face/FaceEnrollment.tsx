@@ -30,7 +30,7 @@ export function MyFaceEnrollmentSection({ employeeLinked }: { employeeLinked: bo
   const [open, setOpen] = useState<{ reenroll: boolean; enrolledAt?: string | null } | null>(null)
   const d = q.data ? describeFace(q.data, true) : null
   const summary = !employeeLinked ? 'Needs an employee record'
-    : q.isLoading ? 'Checking…' : d ? (d.enrolled ? d.detail : d.label) : 'Couldn’t load'
+    : q.isLoading ? 'Checking…' : d?.enrolled && !d.locked ? d.detail : 'Punch in with your face. Enroll it here with your camera.'
 
   return (
     <SettingsSection id="face" icon="scanFace" title="Face enrollment" summary={summary}>

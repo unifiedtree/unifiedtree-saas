@@ -18,6 +18,7 @@
 // deleted at the end; the real save runs only if reader had no enrollment.
 //
 //   node e2e/recovery/live-w3-faceenroll.mjs
+/* global document, window, console, process, fetch */
 import { chromium } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
@@ -79,6 +80,8 @@ const open = async (email, width, height) => {
   errors.length = 0; failed.length = 0
   return { page, ctx, errors, failed }
 }
+/** Waits for the locator to show (isVisible() alone doesn't wait). */
+const seen = (loc, timeout = 15000) => loc.first().waitFor({ state: 'visible', timeout }).then(() => true, () => false)
 const settle = async (page) => { await page.waitForLoadState('networkidle').catch(() => {}); await page.waitForTimeout(400) }
 const cameraLive = (page) => page.waitForFunction(() => { const v = document.querySelector('video[aria-label="Camera preview"]'); return !!v && v.videoWidth > 0 && !v.paused }, null, { timeout: 20000 }).then(() => true, () => false)
 const takeAndUse = async (page) => {
@@ -94,28 +97,31 @@ try {
     const { page, ctx, errors, failed } = await open('reader@unifiedtree.demo', 1440, 900)
     await page.goto(`${base}/profile`); await settle(page)
     const section = page.locator('#st-face')
-    check('profile has a Face enrollment section', await section.getByRole('heading', { name: 'Face enrollment' }).isVisible().catch(() => false))
-    const enrolledBefore = await section.getByText('Re-enroll').count() > 0
+    check('profile has a Face enrollment section', await seen(section.getByRole('heading', { name: 'Face enrollment' })))
+    await seen(section.getByRole('button', { name: /^(Enroll my face|Re-enroll)$/ }))
+    const enrolledBefore = await section.getByRole('button', { name: 'Re-enroll', exact: true }).count() > 0
     await section.scrollIntoViewIfNeeded()
     await page.screenshot({ path: `${shotDir}/faceenroll-1440-profile.png` })
     await section.getByRole('button', { name: /^(Enroll my face|Re-enroll)$/ }).click()
     const d = page.getByRole('dialog')
-    check('the drawer opens on your own face', await d.getByRole('heading', { name: enrolledBefore ? 'Re-enroll your face' : 'Enroll your face' }).isVisible().catch(() => false))
+    check('the drawer opens on your own face', await seen(d.getByRole('heading', { name: enrolledBefore ? 'Re-enroll your face' : 'Enroll your face' })))
+    await page.waitForTimeout(500) // the drawer slides in
     await page.screenshot({ path: `${shotDir}/faceenroll-1440-intro.png` })
     await d.getByRole('button', { name: /Open camera/ }).click()
     check('the camera preview shows', await cameraLive(page))
-    check('the oval guide asks for a straight look', await d.getByText('Look straight at the camera').isVisible().catch(() => false))
+    check('the oval guide asks for a straight look', await seen(d.getByText('Look straight at the camera')))
     await page.screenshot({ path: `${shotDir}/faceenroll-1440-camera.png` })
     await d.getByRole('button', { name: /Take photo/ }).click()
-    check('a taken photo is shown back with Retake', await d.getByRole('img', { name: 'Photo 1: Straight' }).isVisible().catch(() => false) && await d.getByRole('button', { name: 'Retake' }).isVisible())
+    check('a taken photo is shown back with Retake', await seen(d.getByRole('img', { name: 'Photo 1: Straight' })) && await d.getByRole('button', { name: 'Retake' }).isVisible())
     await page.screenshot({ path: `${shotDir}/faceenroll-1440-preview.png` })
     await d.getByRole('button', { name: 'Retake' }).click()
     check('Retake goes back to the live camera', await cameraLive(page))
     await takeAndUse(page)
-    check('the next photo asks to turn left', await d.getByText('Turn your head a little to the left').isVisible({ timeout: 5000 }).catch(() => false))
+    check('the next photo asks to turn left', await seen(d.getByText('Turn your head a little to the left')))
     await takeAndUse(page)
     await takeAndUse(page)
     const save = d.getByRole('button', { name: /^(Save my face|Send again)$/ })
+    await seen(save)
     check('all three photos are reviewed side by side', await d.getByRole('img', { name: /^Photo [123]:/ }).count() === 3)
     check('consent is required before saving', await save.isDisabled())
     await d.getByRole('checkbox').check()
@@ -128,9 +134,11 @@ try {
     } else {
       await save.click()
       if (worker) {
-        check('no face in the fake video → a plain message (real face worker)', await d.getByText('No face found in this photo. Keep the face inside the oval and take it again.').first().isVisible({ timeout: 45000 }).catch(() => false))
+        const answered = await seen(d.getByText(/^Photo 3 \(Right\):/), 60000)
+        check('no face in the fake video → a plain message (real face worker)', answered && await d.getByText(/No face found in this photo\. Keep the face inside the oval and take it again\./).count() === 3 && await d.getByText('Not accepted', { exact: true }).count() === 3)
+        check('a refused photo must be retaken before sending again (real)', await save.isDisabled() && await d.getByRole('button', { name: 'Retake' }).count() === 3)
       } else {
-        check('face service down → a plain message, photos kept', await d.getByText(/The face check service isn’t available right now\. Your photos are kept here/).isVisible({ timeout: 45000 }).catch(() => false))
+        check('face service down → a plain message, photos kept', await seen(d.getByText(/The face check service isn’t available right now\. Your photos are kept here/), 60000))
         check('the photo reached the face check (valid request)', failed.some((f) => f.startsWith('503 POST /v1/attendance/face/enroll/sample')), failed.join('; '))
       }
       check('each web photo is logged as from the web browser', sql(`select count(*) from attendance.face_verification_events where tenant_id='${tenant}' and employee_id='${READER}' and purpose='ENROLLMENT_SAMPLE' and device_fingerprint='Web browser' and created_at >= '${startedAt}'`) !== '0')
@@ -145,16 +153,18 @@ try {
       })
       if (hadEnrollment) await page.route('**/enroll/start', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enrollmentId: '00000000-0000-0000-0000-000000000001', samplesRequired: 3, captureSequence: ['FRONT', 'LEFT_30', 'RIGHT_30'], liveness: [], workerHint: 'worker-offline' }) }))
       await save.click()
-      check('no face found → a plain message on each photo', await d.getByText(/No face found in this photo\. Keep the face inside the oval and take it again\./).first().isVisible({ timeout: 20000 }).catch(() => false) && await d.getByText('Not accepted').count() === 3)
+      const answered = await seen(d.getByText(/^Photo 3 \(Right\):/), 20000)
+      check('no face found → a plain message on each photo', answered && await d.getByText(/No face found in this photo\. Keep the face inside the oval and take it again\./).count() === 3 && await d.getByText('Not accepted', { exact: true }).count() === 3)
       check('a refused photo must be retaken before sending again', await save.isDisabled() && await d.getByRole('button', { name: 'Retake' }).count() === 3)
       await page.screenshot({ path: `${shotDir}/faceenroll-1440-error-noface.png` })
       await page.unroute('**/enroll/sample'); await page.unroute('**/enroll/start')
     }
 
     await d.getByRole('button', { name: 'Cancel' }).click()
-    const leaving = await d.getByText(/Leave without finishing\?/).isVisible().catch(() => false)
+    const leaving = await seen(d.getByText(/Leave without finishing\?/), 3000)
     if (leaving) await d.getByRole('button', { name: 'Leave anyway' }).click()
     check('closing after sending asks first', hadEnrollment && worker ? true : leaving)
+    await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {})
     check('the camera is released on close', await page.evaluate(() => !document.querySelector('video[aria-label="Camera preview"]')))
     const expected = (f) => /^503 POST \/v1\/attendance\/face\/enroll\/sample/.test(f) && !worker
     check('no page errors or unexpected API failures (self)', errors.length === 0 && failed.filter((f) => !expected(f)).length === 0, [...errors, ...failed.filter((f) => !expected(f))].join('; '))
@@ -167,10 +177,12 @@ try {
     await page.goto(`${base}/profile`); await settle(page)
     const section = page.locator('#st-face')
     await section.scrollIntoViewIfNeeded()
-    check('phone: profile section fits the width', await section.isVisible() && await noHScroll(page))
+    check('phone: profile section fits the width', await seen(section.getByRole('button', { name: /^(Enroll my face|Re-enroll)$/ })) && await noHScroll(page))
     await page.screenshot({ path: `${shotDir}/faceenroll-390-profile.png` })
     await section.getByRole('button', { name: /^(Enroll my face|Re-enroll)$/ }).click()
     const d = page.getByRole('dialog')
+    await seen(d.getByRole('button', { name: /Open camera/ }))
+    await page.waitForTimeout(500)
     await page.screenshot({ path: `${shotDir}/faceenroll-390-intro.png` })
     await d.getByRole('button', { name: /Open camera/ }).click()
     check('phone: camera preview shows', await cameraLive(page) && await noHScroll(page))
@@ -190,16 +202,16 @@ try {
     await page.goto(`${base}/hrms/employees/${READER}`); await settle(page)
     await page.getByText('Reader User').first().waitFor({ timeout: 20000 })
     const btn = page.getByRole('button', { name: /^(Enroll face|Re-enroll face)$/ })
-    check('owner sees Face enrollment with Enroll on an employee’s record', await page.getByText('Face enrollment', { exact: false }).first().isVisible() && await btn.isVisible().catch(() => false))
+    check('owner sees Face enrollment with Enroll on an employee’s record', await seen(page.getByText('Face enrollment')) && await seen(btn) && await seen(page.getByText('Not enrolled')))
     await btn.scrollIntoViewIfNeeded()
     await page.screenshot({ path: `${shotDir}/faceenroll-1440-hr-record.png` })
     await btn.click()
     const d = page.getByRole('dialog')
-    check('the drawer is about that person', await d.getByRole('heading', { name: /Reader User’s face$/ }).isVisible().catch(() => false) && await d.getByText(/Only Reader in the frame/).isVisible())
+    check('the drawer is about that person', await seen(d.getByRole('heading', { name: /Reader User’s face$/ })) && await d.getByText(/Only Reader in the frame/).isVisible())
     await d.getByRole('button', { name: /Open camera/ }).click()
     check('HR: the camera preview shows', await cameraLive(page))
     await takeAndUse(page); await takeAndUse(page); await takeAndUse(page)
-    check('HR: consent is given for the person', await d.getByText('Reader User agrees to their face being used to mark their attendance.').isVisible())
+    check('HR: consent is given for the person', await seen(d.getByText('Reader User agrees to their face being used to mark their attendance.')))
     await page.screenshot({ path: `${shotDir}/faceenroll-1440-hr-review.png` })
     await d.getByRole('button', { name: 'Cancel' }).click()
     check('no page errors or API failures (HR)', errors.length === 0 && failed.length === 0, [...errors, ...failed].join('; '))
@@ -208,8 +220,9 @@ try {
     const m = await open('owner@unifiedtree.demo', 390, 844)
     await m.page.goto(`${base}/hrms/employees/${READER}`); await settle(m.page)
     const b = m.page.getByRole('button', { name: /^(Enroll face|Re-enroll face)$/ })
+    const shown = await seen(b)
     await b.scrollIntoViewIfNeeded().catch(() => {})
-    check('phone: HR record shows Enroll face and fits', await b.isVisible().catch(() => false) && await noHScroll(m.page))
+    check('phone: HR record shows Enroll face and fits', shown && await noHScroll(m.page))
     await m.page.screenshot({ path: `${shotDir}/faceenroll-390-hr-record.png` })
     await m.ctx.close()
   }
