@@ -51,7 +51,7 @@ public class HeadcountWorkbookService {
                   LEFT JOIN hrms.employees m ON m.id = e.reporting_manager_id
                  WHERE e.company_id = ?
                 """, HeadcountWorkbookService::row, companyId);
-        return HeadcountWorkbook.build(companyId, companyName, asOf, today, hrConfig.fiscalYearStart(companyId),
+        return HeadcountWorkbook.build(companyName, asOf, today, hrConfig.fiscalYearStart(companyId),
                 rows, includeEmployees, includeGender);
     }
 

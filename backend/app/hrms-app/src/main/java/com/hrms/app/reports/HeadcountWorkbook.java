@@ -29,8 +29,9 @@ import java.util.function.Function;
  *       probation end date when no confirmation date is recorded).</li>
  * </ul>
  *
- * <p>No ids ever leave this class: every department, branch, designation and
- * manager is a name, and missing ones read "No department" etc.
+ * <p>No ids ever leave this class (not even the company's): every department,
+ * branch, designation and manager is a name, and missing ones read
+ * "No department" etc.
  */
 public final class HeadcountWorkbook {
 
@@ -63,7 +64,7 @@ public final class HeadcountWorkbook {
                          String employmentType, String status, String dateOfJoining, String reportingManager,
                          String workEmail, String probationEnds, String noticeLastDay) {}
 
-    public record Workbook(UUID companyId, String companyName, LocalDate asOf, boolean pastDate, FiscalYear fiscalYear,
+    public record Workbook(String companyName, LocalDate asOf, boolean pastDate, FiscalYear fiscalYear,
                            Totals totals,
                            List<Group> byDepartment, List<Group> byBranch, List<Group> byDesignation,
                            List<Group> byEmploymentType,
@@ -76,7 +77,7 @@ public final class HeadcountWorkbook {
      * @param includeEmployees the caller may read employee records (hrms.employee.read)
      * @param includeGender    the caller may read the diversity report (hrms.report.diversity)
      */
-    public static Workbook build(UUID companyId, String companyName, LocalDate asOf, LocalDate today,
+    public static Workbook build(String companyName, LocalDate asOf, LocalDate today,
                                  String fiscalStartMonth, List<Row> rows,
                                  boolean includeEmployees, boolean includeGender) {
         FiscalYear fy = fiscalYear(asOf, fiscalStartMonth);
@@ -114,7 +115,7 @@ public final class HeadcountWorkbook {
                             iso(noticeLastDay(r))))
                     .toList();
         }
-        return new Workbook(companyId, companyName, asOf, asOf.isBefore(today), fy, totals,
+        return new Workbook(companyName, asOf, asOf.isBefore(today), fy, totals,
                 groups(employed, status, r -> or(r.department(), "No department")),
                 groups(employed, status, r -> or(r.branch(), "No branch")),
                 groups(employed, status, r -> or(r.designation(), "No designation")),

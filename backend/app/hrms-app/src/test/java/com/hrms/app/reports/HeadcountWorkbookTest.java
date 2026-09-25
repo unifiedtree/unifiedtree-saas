@@ -14,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class HeadcountWorkbookTest {
 
     private static final LocalDate TODAY = LocalDate.of(2026, 9, 25);
-    private static final UUID CO = UUID.randomUUID();
 
     private static Row row(String code, String status, LocalDate joined) {
         return new Row(UUID.randomUUID(), code, "Asha", null, code, code.toLowerCase() + "@acme.test", "FEMALE",
@@ -35,7 +34,7 @@ class HeadcountWorkbookTest {
     }
 
     private static Workbook build(LocalDate asOf, List<Row> rows, boolean employees, boolean gender) {
-        return HeadcountWorkbook.build(CO, "Acme Industries", asOf, TODAY, "APRIL", rows, employees, gender);
+        return HeadcountWorkbook.build("Acme Industries", asOf, TODAY, "APRIL", rows, employees, gender);
     }
 
     @Test void todayUsesTheCurrentStatuses() {
@@ -100,7 +99,7 @@ class HeadcountWorkbookTest {
         assertTrue(w.byBranch().stream().anyMatch(g -> g.name().equals("No branch")));
         assertTrue(w.byEmploymentType().stream().anyMatch(g -> g.name().equals("Contract") && g.probation() == 1));
         assertTrue(w.byEmploymentType().stream().anyMatch(g -> g.name().equals("Full-time") && g.total() == 2));
-        String everything = w.byDepartment() + " " + w.byBranch() + " " + w.byDesignation() + " " + w.employees();
+        String everything = w.toString();
         for (Row r : rows) assertFalse(everything.contains(r.id().toString()), "row id leaked");
     }
 
