@@ -3,31 +3,35 @@
 // app shell; this page renders the tab named in the URL as section cards with
 // the design's "On this page" list. What isn't built yet is shown as "Coming
 // soon" rather than as controls that pretend to work (notes on each tab below).
+// Profile, Security and Danger zone are their own pages (SettingsWorkspaceProfile,
+// SettingsSecurity, SettingsDangerZone) because each saves to its own API.
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Check } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/authStore'
 import { apiJson } from '@/core/api/client'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
 import { SkeletonBlock } from '@/shared/components/SkeletonCard'
 import { DesignFrame } from '@/design/dc/DesignFrame'
-import { SettingsPage, SettingsSection, SettingsGrid, SettingsValue, SettingsNote, useSettingsToast, type SettingsNavItem } from '@/design/settings/SettingsKit'
+import { SettingsPage, SettingsSection, SettingsNote, useSettingsToast, type SettingsNavItem } from '@/design/settings/SettingsKit'
 import { DocumentTypesTab } from './SettingsDocumentTypes'
 import { NotificationChoiceSections, useNotificationChoices, type NotificationChoicesState } from './NotificationChoices'
 import { BrandingTab } from './branding/BrandingTab'
+import { WorkspaceProfileSettings } from './SettingsWorkspaceProfile'
+import { SecuritySettings } from './SettingsSecurity'
+import { DangerZoneSettings } from './SettingsDangerZone'
 
 type TabKey = 'profile' | 'branding' | 'security' | 'notifications' | 'billing' | 'integrations' | 'documents' | 'danger'
 type Show = (kind: 'ok' | 'error', title: string, msg?: string) => void
 
 const TAB_META: Record<TabKey, { label: string; desc: string }> = {
-  profile:       { label: 'Profile',        desc: 'Your account and organization details.' },
+  profile:       { label: 'Profile',        desc: 'Your account and the workspace’s own details.' },
   branding:      { label: 'Branding',       desc: 'Your logo and workspace identity.' },
   security:      { label: 'Security',       desc: 'Password, two-factor and active sessions.' },
   notifications: { label: 'Notifications',  desc: 'Which notifications reach you, and how: email, in the app or on your phone.' },
   billing:       { label: 'Billing & Plan', desc: 'Your subscription, plan and invoices.' },
   integrations:  { label: 'Integrations',   desc: 'Connect external tools and services.' },
   documents:     { label: 'Document Types', desc: 'Which documents employees must upload, and the rules for each.' },
-  danger:        { label: 'Danger Zone',    desc: 'Irreversible, workspace-wide actions.' },
+  danger:        { label: 'Danger Zone',    desc: 'Export all data, or schedule a reset or deletion of the workspace.' },
 }
 const VALID_TABS = Object.keys(TAB_META) as TabKey[]
 
@@ -46,79 +50,14 @@ const INTEGRATIONS = [
   { key: 'salesforce', name: 'Salesforce', desc: 'Sync CRM data with Salesforce.', icon: 'globe' },
 ]
 
-/** The "On this page" list for each tab (sections are fixed per tab). */
-const NAV: Record<TabKey, SettingsNavItem[]> = {
-  profile: [{ key: 'account', label: 'Your account', state: 'none' }, { key: 'org', label: 'Organisation', state: 'none' }],
+/** The "On this page" list for each tab (sections are fixed per tab). Profile,
+ *  Security and Danger zone build their own (their sections depend on data). */
+const NAV: Partial<Record<TabKey, SettingsNavItem[]>> & { notifications: SettingsNavItem[] } = {
   branding: [{ key: 'logo', label: 'Workspace logo', state: 'none' }, { key: 'editor', label: 'Upload and edit', state: 'none' }],
-  security: [{ key: 'password', label: 'Password', state: 'on' }, { key: 'twofa', label: 'Two-factor', state: 'soon' }, { key: 'sessions', label: 'Active sessions', state: 'soon' }],
   notifications: [{ key: 'today', label: 'What reaches you', state: 'none' }, { key: 'email', label: 'Email choices', state: 'on' }, { key: 'inapp', label: 'In-app choices', state: 'on' }, { key: 'push', label: 'Phone push choices', state: 'on' }],
   billing: [{ key: 'plan', label: 'Your plan', state: 'none' }, { key: 'invoices', label: 'Invoices', state: 'soon' }],
   integrations: INTEGRATIONS.map((i) => ({ key: i.key, label: i.name, state: 'soon' as const })),
   documents: [{ key: 'types', label: 'Document types', state: 'none' }],
-  danger: [{ key: 'export', label: 'Export all data', state: 'none' }, { key: 'reset', label: 'Reset workspace', state: 'none' }, { key: 'delete', label: 'Delete organisation', state: 'none' }],
-}
-
-const ProfileTab: React.FC = () => {
-  const user = useAuthStore((s) => s.user)
-  const tenant = useAuthStore((s) => s.tenant)
-  return (
-    <>
-      <SettingsSection id="account" icon="userCheck" title="Your account" summary={[`${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim(), user?.email].filter(Boolean).join(' · ')}>
-        <SettingsGrid min={220}>
-          <SettingsValue label="First name" value={user?.firstName || '—'} />
-          <SettingsValue label="Last name" value={user?.lastName || '—'} />
-          <SettingsValue label="Email address" value={user?.email || '—'} />
-          <SettingsValue label="Role" value={user?.role || '—'} />
-        </SettingsGrid>
-      </SettingsSection>
-      {/* Industry isn't stored anywhere on the backend, so it isn't shown. */}
-      <SettingsSection id="org" icon="building" title="Organisation" summary={[tenant?.name, tenant?.subdomain].filter(Boolean).join(' · ')}>
-        <SettingsGrid min={220}>
-          <SettingsValue label="Company name" value={tenant?.name || '—'} />
-          <SettingsValue label="Subdomain" value={tenant?.subdomain || '—'} />
-          <SettingsValue label="Plan" value={tenant?.planType || '—'} />
-        </SettingsGrid>
-        {/* No Save: no endpoint updates an account or a workspace profile
-            (TenantController exposes no update mapping). A "Saved!" tick over
-            a save that didn't happen is worse than no button. */}
-        <SettingsNote>These details are read-only for now. To change your name or company details, <a href="mailto:unifiedtree@gmail.com" style={{ color: '#047857', fontWeight: 600 }}>email our support team</a>. Your own display name and phone are on <Link to="/profile" style={{ color: '#047857', fontWeight: 600 }}>your profile</Link>.</SettingsNote>
-      </SettingsSection>
-    </>
-  )
-}
-
-/**
- * Security. What was here before and why none of it survives: an "Active
- * Sessions" list of two hard-coded devices with a Revoke button that did
- * nothing (no session endpoint exists); a 2FA toggle on local state (no
- * enrolment service exists); and a change-password form whose inputs were
- * never read. Password change now uses the real forgot-password email; 2FA
- * and sessions are shown as coming soon.
- */
-const SecurityTab: React.FC = () => {
-  const user = useAuthStore((s) => s.user)
-  const [sent, setSent] = useState(false)
-  const [sending, setSending] = useState(false)
-  const sendReset = async () => {
-    if (!user?.email) return
-    setSending(true)
-    try {
-      await apiJson('/v1/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email: user.email }) })
-    } catch {
-      // Deliberately soft: forgot-password never says whether an address exists.
-    } finally { setSent(true); setSending(false) }
-  }
-  return (
-    <>
-      <SettingsSection id="password" icon="lock" title="Password" summary={`We email a secure reset link to ${user?.email ?? 'your address'}. It expires shortly after it’s sent.`}>
-        {sent
-          ? <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderRadius: 12, border: '1px solid #6ee7b7', background: '#ecfdf5', color: '#047857', fontSize: 13.5, fontWeight: 600 }}><Check size={15} className="shrink-0" />Reset link sent. Check your inbox (and spam folder).</div>
-          : <div><HrButton onClick={sendReset} disabled={sending || !user?.email}>{sending ? 'Sending…' : 'Email me a password reset link'}</HrButton></div>}
-      </SettingsSection>
-      <SettingsSection id="twofa" icon="shield" title="Two-factor authentication" summary="Protect your account with a one-time code from Google Authenticator or a similar app." soon />
-      <SettingsSection id="sessions" icon="smartphone" title="Active sessions" summary="See where your account is signed in and sign out other devices." soon />
-    </>
-  )
 }
 
 /**
@@ -228,36 +167,6 @@ const DocumentsTab: React.FC = () => (
 )
 
 /**
- * Danger Zone. These once were three buttons with no handler under copy that
- * promised permanent deletion. Until real, carefully built endpoints exist,
- * each opens an email to our team, which confirms with you before anything
- * is done. Promising nothing beats promising a deletion we don't perform.
- */
-const DangerTab: React.FC = () => {
-  const tenant = useAuthStore((s) => s.tenant)
-  const mail = (what: string) =>
-    `mailto:unifiedtree@gmail.com?subject=${encodeURIComponent(`${what} — ${tenant?.subdomain ?? 'workspace'}`)}` +
-    `&body=${encodeURIComponent(`Workspace: ${tenant?.subdomain ?? ''}\nOrganisation: ${tenant?.name ?? ''}\n\nPlease ${what.toLowerCase()} for this workspace.\n\nI understand this request will be confirmed with me before anything is actioned.`)}`
-  const rows = [
-    { id: 'export', icon: 'download', title: 'Export all data', desc: 'Get a full copy of your workspace data. We confirm your identity and send a download link.', cta: 'Request data export', href: mail('Data export request') },
-    { id: 'reset', icon: 'archive', title: 'Reset workspace', desc: 'Clear all records but keep the workspace and your account. Useful after trying it out with test data.', cta: 'Request workspace reset', href: mail('Workspace reset request') },
-    { id: 'delete', icon: 'trash', title: 'Delete organisation', desc: 'Permanently delete this workspace and everything in it. We confirm in writing before anything is removed.', cta: 'Request deletion', href: mail('Workspace deletion request') },
-  ]
-  return (
-    <>
-      {rows.map((r, i) => (
-        <SettingsSection key={r.id} id={r.id} icon={r.icon} title={r.title} summary={r.desc}>
-          {i === 0 && <SettingsNote>These are handled by our team so nothing irreversible happens by accident. Each button opens an email to us; we confirm with you before doing anything.</SettingsNote>}
-          <div>
-            <a href={r.href} style={{ display: 'inline-flex', alignItems: 'center', height: 40, padding: '0 16px', borderRadius: 12, border: '1px solid #fca5a5', background: r.id === 'delete' ? '#fee2e2' : '#fef2f2', color: '#b91c1c', fontSize: 13.5, fontWeight: 600, textDecoration: 'none' }}>{r.cta}</a>
-          </div>
-        </SettingsSection>
-      ))}
-    </>
-  )
-}
-
-/**
  * @param tab  Forces the tab for routes with a LITERAL path (/settings/billing,
  *             /settings/danger). Those have no `:tab` param; without the prop
  *             the page fell back to Profile under a "Billing" header (P0-7).
@@ -277,16 +186,17 @@ export const Settings: React.FC<{ tab?: TabKey }> = ({ tab: tabProp }) => {
   const nav = isNotif && notif.draft
     ? NAV.notifications.map((n) => (n.key === 'email' ? { ...n, state: notif.draft!.emailEnabled ? 'on' as const : 'off' as const }
       : n.key === 'push' ? { ...n, state: notif.draft!.pushEnabled ? 'on' as const : 'off' as const } : n))
-    : NAV[active]
-  const body: Record<TabKey, React.ReactNode> = {
-    profile: <ProfileTab />,
+    : (NAV[active] ?? [])
+  if (active === 'profile' || active === 'security' || active === 'danger') {
+    const Page = active === 'profile' ? WorkspaceProfileSettings : active === 'security' ? SecuritySettings : DangerZoneSettings
+    return <DesignFrame><Page key={active} crumb="Workspace Settings" title={meta.label} subtitle={meta.desc} /></DesignFrame>
+  }
+  const body: Partial<Record<TabKey, React.ReactNode>> = {
     branding: <BrandingTab show={show} />,
-    security: <SecurityTab />,
     notifications: <NotificationsTab c={notif} />,
     billing: <BillingTab />,
     integrations: <IntegrationsTab />,
     documents: <DocumentsTab />,
-    danger: <DangerTab />,
   }
   return (
     <DesignFrame>

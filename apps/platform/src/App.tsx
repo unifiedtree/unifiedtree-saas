@@ -195,14 +195,19 @@ const ROUTE_TREE = (
         <Route path="/analytics" element={<ComingSoonForAdmins module="analytics" />} />
         {/* Gated on any settings capability so non-admins (e.g. plain EMPLOYEE) get a clean
             "Access Restricted" instead of an empty page; matches the sidebar's Settings gate. */}
-        <Route path="/settings"      element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ]}><Settings /></RouteGuard>} />
+        <Route path="/settings"      element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'workspace.profile.update', 'workspace.security.manage']}><Settings /></RouteGuard>} />
         {/* Two tabs of the settings page carry destructive/financial authority
             and get their own gated routes so a plain SETTINGS_READ user can't
             deep-link into them. React Router v6 matches the static paths in
             preference to the /:tab wildcard below, so ordering is safe. */}
         <Route path="/settings/billing" element={<RequirePermission code={P.WORKSPACE_BILLING_MANAGE}><Settings tab="billing" /></RequirePermission>} />
-        <Route path="/settings/danger"  element={<RequirePermission code={P.TENANT_SETTINGS_WRITE}><Settings tab="danger" /></RequirePermission>} />
-        <Route path="/settings/:tab" element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'settings.branding.write']}><Settings /></RouteGuard>} />
+        {/* Danger zone: export needs workspace.data.export, reset/delete need
+            workspace.lifecycle.manage (owners and super admins, V143_26). */}
+        <Route path="/settings/danger"  element={<RouteGuard anyOf={['workspace.data.export', 'workspace.lifecycle.manage']}><Settings tab="danger" /></RouteGuard>} />
+        {/* AUTH-ONLY (intentional): Security is personal (your own two-factor and
+            sessions); the workspace rule inside it is gated on its own permission. */}
+        <Route path="/settings/security" element={<Settings tab="security" />} />
+        <Route path="/settings/:tab" element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ, 'settings.branding.write', 'workspace.profile.update', 'workspace.security.manage']}><Settings /></RouteGuard>} />
         {/* Personal profile page. Auth-only (no permission gate) — every
             signed-in user is allowed to view and edit their own profile;
             the backend's /v1/users/me enforces "you can only touch yourself". */}

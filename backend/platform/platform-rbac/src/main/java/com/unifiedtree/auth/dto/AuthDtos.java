@@ -19,9 +19,36 @@ public final class AuthDtos {
     public record LoginRequest(
             UUID tenantId,
             @NotBlank @Email String email,
-            @NotBlank String password
+            @NotBlank String password,
+            /**
+             * True when the client can show the two-factor step (the web app
+             * sends it). When the account needs a two-factor code and this is
+             * not set (the mobile app today), sign-in is refused with a message
+             * that says how to sign in instead, rather than issuing a session
+             * without the code.
+             */
+            Boolean mfaCapable
     ) {
+        public LoginRequest(UUID tenantId, String email, String password) {
+            this(tenantId, email, password, null);
+        }
         @Override public String toString() { return "LoginRequest[credentials=REDACTED]"; }
+    }
+
+    /**
+     * Sign-in that stopped at the two-factor step: the password was right and
+     * the client now asks for a code ({@code mfaRequired}) or, when the
+     * workspace requires two-factor and the person has not set it up yet, walks
+     * them through set-up ({@code mfaSetupRequired}). {@code mfaToken} carries
+     * the sign-in to POST /v1/canonical-auth/login/mfa and expires in 10 minutes.
+     */
+    public record MfaChallengeResponse(
+            boolean mfaRequired,
+            boolean mfaSetupRequired,
+            String mfaToken,
+            String email
+    ) {
+        @Override public String toString() { return "MfaChallengeResponse[token=REDACTED]"; }
     }
 
     public record LoginResponse(

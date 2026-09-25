@@ -57,10 +57,7 @@ All P0 items are done (wave 1).
 - A "no department" directory filter.
 
 **Workspace settings** (§8)
-- Two-factor (TOTP enrolment; `is_mfa_enabled` exists) and the active sessions list.
 - Invoices (Razorpay).
-- Danger-zone endpoints (export, reset, delete, with a typed-name confirmation).
-- Account and workspace profile update.
 
 **Audit logs** (§11.15)
 - Full server export (CSV) of the filtered trail. Today only the visible page exports.
