@@ -64,13 +64,70 @@ public class AdvanceController {
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new IllegalArgumentException("Employee not found: " + employeeId));
         UUID companyId = employee.getCompanyId();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(enrichOne(advanceService.requestAdvance(employeeId, companyId, request, resolveApprover(employee))));
+    }
+
+    /** What HR / finance send to raise an advance in an employee's name. */
+    public record AdvanceOnBehalfRequest(
+            @jakarta.validation.constraints.NotNull(message = "Choose the employee") UUID employeeId,
+            @jakarta.validation.constraints.NotNull
+            @jakarta.validation.constraints.DecimalMin(value = "0.01", message = "Advance amount must be greater than zero")
+            java.math.BigDecimal amount,
+            @jakarta.validation.constraints.Size(max = 500, message = "Keep the reason under 500 characters") String reason,
+            @jakarta.validation.constraints.NotNull
+            @jakarta.validation.constraints.Min(value = 1, message = "Repayment must be at least 1 month")
+            @jakarta.validation.constraints.Max(value = 60, message = "Repayment cannot exceed 60 months") Integer repaymentMonths) {}
+
+    /**
+     * HR / finance raise a salary advance for another employee. It is the same
+     * request the employee could make themselves: routed to the employee's
+     * approver, then paid out and recovered from their salary as usual. The
+     * raiser is recorded and the employee is notified. Holders of
+     * {@code hrms.advance.request.others} may raise for any active employee
+     * of the workspace, but never for themselves (that is their own request).
+     */
+    @Operation(summary = "Raise a salary advance request on an employee's behalf (HR / finance)")
+    @PostMapping("/requests/on-behalf")
+    @PreAuthorize("hasAuthority('hrms.advance.request.others')")
+    public ResponseEntity<AdvanceResponse> requestOnBehalf(
+            @Valid @RequestBody AdvanceOnBehalfRequest body,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID caller = extractEmployeeId(jwt);
+        if (body.employeeId().equals(caller)) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "To ask for an advance for yourself, use your own advance request.", "ADVANCE_ON_BEHALF_SELF");
+        }
+        Employee employee = employeeRepository.findById(body.employeeId())
+                .orElseThrow(() -> new com.hrms.core.exception.ResourceNotFoundException("Employee", body.employeeId()));
+        if (employee.getEmploymentStatus() != null && SEPARATED.contains(employee.getEmploymentStatus().name())) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "This employee has left the company, so an advance can't be raised for them.", "ADVANCE_EMPLOYEE_SEPARATED");
+        }
+        AdvanceRequestCreateRequest request = new AdvanceRequestCreateRequest(
+                body.amount(), body.reason() == null || body.reason().isBlank() ? null : body.reason().trim(), body.repaymentMonths());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(enrichOne(advanceService.requestAdvanceOnBehalf(
+                        employee.getId(), employee.getCompanyId(), request, resolveApprover(employee), caller)));
+    }
+
+    private static final java.util.Set<String> SEPARATED = java.util.Set.of("EXITED", "TERMINATED", "RESIGNED", "RETIRED");
+
+    /**
+     * The employee's advance approver: their reporting manager, else the
+     * workspace's terminal approver (HR / super admin), redirected through any
+     * active delegation.
+     *
+     * <p>B3 FIX (audit 2026-08-15): reject an advance request whose approver
+     * would be null (no manager configured) OR self (manager==requester, the
+     * direct-manager pointer is stale). Fall back to a terminal approver
+     * (HR/SUPER_ADMIN) so the request routes to a real inbox instead of a
+     * dead-lettered null. If even that resolves to self, reject cleanly,
+     * never let an employee self-approve.
+     */
+    private UUID resolveApprover(Employee employee) {
+        UUID employeeId = employee.getId();
         UUID approverId = employee.getManagerId();
-        // B3 FIX (audit 2026-08-15): reject an advance request whose approver
-        // would be null (no manager configured) OR self (manager==requester —
-        // the direct-manager pointer is stale). Fall back to a terminal
-        // approver (HR/SUPER_ADMIN) so the request routes to a real inbox
-        // instead of a dead-lettered null. If even that resolves to self,
-        // reject cleanly with a 400 — never let an employee self-approve.
         if (approverId == null || approverId.equals(employeeId)) {
             UUID fallback = approverFallback.resolveTerminalApprover(
                     com.hrms.core.tenant.TenantContext.getTenantId()).orElse(null);
@@ -83,10 +140,8 @@ public class AdvanceController {
             approverId = fallback;
         }
         // Redirect through any active delegation the approver has set up.
-        approverId = approverFallback.redirectIfDelegated(
+        return approverFallback.redirectIfDelegated(
                 approverId, java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(enrichOne(advanceService.requestAdvance(employeeId, companyId, request, approverId)));
     }
 
     @Operation(summary = "Get my salary advance requests")
@@ -95,7 +150,8 @@ public class AdvanceController {
     public ResponseEntity<PageResponse<AdvanceResponse>> myRequests(
             @AuthenticationPrincipal Jwt jwt,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(advanceService.getMyRequests(extractEmployeeId(jwt), pageable));
+        // Enriched so a request HR raised for the employee says who raised it.
+        return ResponseEntity.ok(enrichPage(advanceService.getMyRequests(extractEmployeeId(jwt), pageable)));
     }
 
     @Operation(summary = "Get a single salary advance request")
@@ -253,7 +309,7 @@ public class AdvanceController {
 
     private PageResponse<AdvanceResponse> enrichPage(PageResponse<AdvanceResponse> page) {
         List<UUID> employeeIds = page.content().stream()
-                .map(AdvanceResponse::employeeId)
+                .flatMap(r -> java.util.stream.Stream.of(r.employeeId(), r.raisedById()))
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
@@ -262,7 +318,8 @@ public class AdvanceController {
                 : employeeRepository.findAllById(employeeIds).stream()
                         .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
         List<AdvanceResponse> enriched = page.content().stream()
-                .map(r -> enrich(r, employeeMap.get(r.employeeId())))
+                .map(r -> enrich(r, employeeMap.get(r.employeeId()),
+                        r.raisedById() == null ? null : employeeMap.get(r.raisedById())))
                 .toList();
         return new PageResponse<>(enriched, page.page(), page.size(),
                 page.totalElements(), page.totalPages(), page.last());
@@ -272,19 +329,25 @@ public class AdvanceController {
         Employee employee = r.employeeId() == null
                 ? null
                 : employeeRepository.findById(r.employeeId()).orElse(null);
-        return enrich(r, employee);
+        Employee raisedBy = r.raisedById() == null
+                ? null
+                : employeeRepository.findById(r.raisedById()).orElse(null);
+        return enrich(r, employee, raisedBy);
     }
 
-    private AdvanceResponse enrich(AdvanceResponse r, Employee employee) {
-        String employeeName = employee != null
-                ? (employee.getFirstName() + " " + (employee.getLastName() == null ? "" : employee.getLastName())).trim()
-                : null;
+    private static String fullName(Employee e) {
+        return e == null ? null
+                : (e.getFirstName() + " " + (e.getLastName() == null ? "" : e.getLastName())).trim();
+    }
+
+    private AdvanceResponse enrich(AdvanceResponse r, Employee employee, Employee raisedBy) {
         String employeeCode = employee != null ? employee.getEmployeeCode() : null;
         return new AdvanceResponse(
-                r.id(), r.employeeId(), employeeName, employeeCode, r.companyId(),
+                r.id(), r.employeeId(), fullName(employee), employeeCode, r.companyId(),
                 r.amount(), r.reason(), r.repaymentMonths(), r.monthlyDeduction(),
                 r.status(), r.approverId(), r.approvedAt(), r.approverComment(),
-                r.disbursedAt(), r.outstandingAmount(), r.createdAt());
+                r.disbursedAt(), r.outstandingAmount(), r.createdAt(),
+                r.raisedById(), fullName(raisedBy));
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

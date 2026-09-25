@@ -29,9 +29,13 @@ export function PaySalaryView({ v }: { v: any }) {
               </p>
             </div>
             <div style={{flex: "1 1 auto", display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "8px"}}>
-              <HrButton onClick={v.openBulk} data-tip="Opens Bulk revise CTC">
-                {txt(v.icTrend)}{" Bulk revise CTC"}
-              </HrButton>
+              {v.canBulk ? (
+                <>
+                  <HrButton onClick={v.openBulk} data-tip="Opens Bulk revise CTC">
+                    {txt(v.icTrend)}{" Bulk revise CTC"}
+                  </HrButton>
+                </>
+              ) : null}
             </div>
           </div>
         </header>
@@ -253,9 +257,10 @@ export function PaySalaryView({ v }: { v: any }) {
       ) : null}
       <Modal open={v.bulkOpen} onOpenChange={v.setBulkOpen} title="Bulk revise CTC?" description="Raise monthly pay for a group of people from a chosen date." size="sm">
         <div style={{display: "grid", gap: "14px", marginTop: "4px", fontFamily: "Inter,-apple-system,sans-serif", color: "#0f172a"}}>
+          {" "}{txt(v.bModeBlock)}
           <label style={{display: "grid", gap: "6px", fontSize: "13px", fontWeight: "600"}}>
-            {"Increase by (%) *"}
-            <input type="number" min="1" max="50" step="0.5" value={v.bPct} onChange={v.setPct} style={{font: "inherit", fontWeight: "500", height: "42px", padding: "0 12px", boxSizing: "border-box", border: "1px solid #cbd5e1", borderRadius: "10px", outline: "none"}} className="dc-pay-salary-1" />
+            {txt(v.bValueLabel)}
+            <input type="number" min={v.bMin} max={v.bMax} step={v.bStep} value={v.bPct} onChange={v.setPct} style={{font: "inherit", fontWeight: "500", height: "42px", padding: "0 12px", boxSizing: "border-box", border: "1px solid #cbd5e1", borderRadius: "10px", outline: "none"}} className="dc-pay-salary-1" />
           </label>
           <div style={{display: "grid", gap: "6px", fontSize: "13px", fontWeight: "600"}}>
             <span>
@@ -263,21 +268,24 @@ export function PaySalaryView({ v }: { v: any }) {
             </span>
             <HrSelect value={v.bDept} onChange={v.setBDept} options={v.deptOptions} />
           </div>
+          {txt(v.bWhoBlock)}{" "}
           <div style={{display: "grid", gap: "6px", fontSize: "13px", fontWeight: "600"}}>
             <span>
               {"Effective from *"}
             </span>
             <DatePicker value={v.bDate} min={v.bDateMin} onChange={v.setBDate} label="Effective from" />
           </div>
+          {txt(v.bReasonBlock)}{" "}
           <p style={{margin: "0", padding: "10px 12px", borderRadius: "12px", background: "#ecfdf5", border: "1px solid #a7f3d0", fontSize: "13px", lineHeight: "1.45", color: "#065f46"}}>
             {txt(v.bPreview)}
           </p>
+          {txt(v.bPreviewBlock)}{" "}
           <div style={{display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "8px"}}>
             <HrButton variant="ghost" onClick={v.closeBulk}>
               {"Cancel"}
             </HrButton>
             <HrButton onClick={v.applyBulk} disabled={v.bBad}>
-              {"Apply revision"}
+              {txt(v.bApplyLabel)}
             </HrButton>
           </div>
         </div>

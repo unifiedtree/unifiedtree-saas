@@ -2,7 +2,9 @@
 // Rows are GET /v1/advance/requests. Approve / reject / record payout use the
 // existing decision actions; a paid-out advance's recovery tools (defer a month,
 // close early, write off) open the existing detail panel. "Issue advance" asks
-// for the signed-in person (the API has no issue-on-behalf).
+// for the signed-in person, or — with hrms.advance.request.others — for anyone
+// else (POST /v1/advance/requests/on-behalf): same approval, payout and
+// recovery, and the employee is told it was raised for them.
 import { createElement } from 'react'
 import { DCLogic, dc } from './dc-runtime'
 import { PayAdvancesView } from './PayAdvances.view'
@@ -14,7 +16,11 @@ import { MON } from './dates'
 export interface AdvRow {
   id: string; empId: string; name: string; code: string; type: string; principal: number; emi: number; months: number; left: number
   status: 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'DISBURSED' | 'CLOSED'; raw: unknown
+  /** Who raised it for the employee (HR / finance); empty when they asked themselves. */
+  raisedBy?: string
 }
+/** Someone an advance can be raised for. */
+export interface AdvPerson { id: string; name: string; code: string }
 export interface AdvPlanRow { month: string; amount: number; status: 'PENDING' | 'RECOVERED' | 'SKIPPED' | 'CANCELLED' }
 
 /** Design status → [tone, label]; the API's statuses map onto it. */
@@ -32,7 +38,9 @@ export class PayAdvances extends DCLogic {
     const st = p.state || 'live', isLoading = st === 'loading', isError = st === 'error'
     const base: AdvRow[] = isLoading || isError ? [] : p.rows || []
     const isEmpty = !isLoading && !isError && base.length === 0, live = !isLoading && !isError && !isEmpty
-    const me: string = p.me || '', canApprove = !!p.canApprove, canRequest = !!p.canRequest, Decision = p.decisionActions
+    const me: string = p.me || '', canApprove = !!p.canApprove, canRequest = !!p.canRequest, canOthers = !!p.canRequestOthers, Decision = p.decisionActions
+    const people: AdvPerson[] = p.people || []
+    const firstEmp = canRequest ? me : people[0]?.id || ''
     const q = s.q.trim().toLowerCase()
     const all = base.map((a) => {
       const t = statusOf(a)
@@ -70,14 +78,16 @@ export class PayAdvances extends DCLogic {
       createElement(HrButton, { variant: 'ghost', onClick: closeView } as any, 'Close'),
       (va.status === 'REQUESTED' || va.status === 'APPROVED') && Decision ? createElement(Decision, { advance: va.raw }) : null,
       va.status === 'DISBURSED' || va.status === 'CLOSED' ? createElement(HrButton, { onClick: () => { closeView(); if (p.onRecovery) p.onRecovery(va.id) }, 'data-tip': 'Defer a month, close early or write off' } as any, 'Recovery options') : null) : null
-    // Issue advance → a request for the signed-in person (the API has no issue-on-behalf).
-    const i = s.issue || { emp: me, type: 'Salary advance', amount: '', months: '3', start: 'after' }
-    const amt = Number(i.amount) || 0, mo = Number(i.months) || 1, iBad = !canRequest || amt < 1 || s.busy
+    // Issue advance → for the signed-in person, or (with the permission) for someone else.
+    const i = s.issue || { emp: firstEmp, type: 'Salary advance', amount: '', months: '3', start: 'after' }
+    const forSelf = !!i.emp && i.emp === me, target = forSelf ? null : people.find((x) => x.id === i.emp) || null
+    const allowed = forSelf ? canRequest : canOthers && !!target
+    const amt = Number(i.amount) || 0, mo = Number(i.months) || 1, iBad = !allowed || amt < 1 || s.busy
     const closeIssue = () => { if (!s.busy) this.setState({ issue: null }) }
     const saveIssue = async () => {
       if (iBad || !p.onRequest) return
       this.setState({ busy: true })
-      try { const ok = await p.onRequest({ amount: amt, reason: i.type, repaymentMonths: mo }); if (ok !== false) this.setState({ issue: null }) } finally { this.setState({ busy: false }) }
+      try { const ok = await p.onRequest({ employeeId: i.emp, name: target ? target.name : '', amount: amt, reason: i.type, repaymentMonths: mo }); if (ok !== false) this.setState({ issue: null }) } finally { this.setState({ busy: false }) }
     }
     const ap = s.approve ? all.find((a) => a.id === s.approve) : null
     const set = (k: string) => (v: any) => this.setState({ issue: { ...i, [k]: v && v.target ? v.target.value : v } })
@@ -97,21 +107,25 @@ export class PayAdvances extends DCLogic {
         },
       } as any, dashIcon('download', 14), ' Export'),
       viewOpen: !!va, vTitle: 'Advance details', closeView,
-      v: va ? { ...va, facts: [{ k: 'Principal', v: va.principalL }, { k: 'Remaining', v: va.leftL }, { k: 'Recovery', v: va.emiL }, { k: 'Starts', v: starts }], plan } : { facts: [], plan: [] },
+      v: va ? { ...va, facts: [{ k: 'Principal', v: va.principalL }, { k: 'Remaining', v: va.leftL }, { k: 'Recovery', v: va.emiL }, { k: 'Starts', v: starts }, ...(va.raisedBy ? [{ k: 'Raised by', v: va.raisedBy }] : [])], plan } : { facts: [], plan: [] },
       vFooter,
-      openIssue: () => this.setState({ issue: { emp: me, type: 'Salary advance', amount: '', months: '3', start: 'after' } }), issueOpen: !!s.issue, closeIssue, i,
+      openIssue: () => this.setState({ issue: { emp: firstEmp, type: 'Salary advance', amount: '', months: '3', start: 'after' } }), issueOpen: !!s.issue, closeIssue, i,
       setEmp: set('emp'), setType: set('type'), setAmount: set('amount'), setMonths: set('months'), setStart: set('start'),
-      empOptions: canRequest ? [{ value: me, label: p.meLabel ? `${p.meLabel} (you)` : 'Me' }] : [{ value: '', label: 'Issuing for someone else isn’t available yet' }],
+      empOptions: [...(canRequest && me ? [{ value: me, label: p.meLabel ? `${p.meLabel} (you)` : 'Me' }] : []), ...(canOthers ? people.map((x) => ({ value: x.id, label: x.code ? `${x.name} · ${x.code}` : x.name })) : [])],
       typeOptions: ['Salary advance', 'Medical emergency', 'Travel advance', 'Personal loan'].map((x) => ({ value: x, label: x })),
       monthOptions: ['1', '2', '3', '6', '10', '12'].map((x) => ({ value: x, label: x === '1' ? 'One month' : `${x} months` })),
       startOptions: [{ value: 'after', label: 'The month after payout' }],
-      iPreview: !canRequest ? 'Advances are requested by the employee; issuing one for someone else isn’t available yet.' : amt < 1 ? 'Enter the amount you need.' : `${inr(Math.round(amt / mo))} a month from the payroll after it’s paid out, for ${mo === 1 ? '1 month' : mo + ' months'}.`,
+      iPreview: !i.emp ? (canOthers ? 'Choose the employee the advance is for.' : 'You can’t raise advances.')
+        : !allowed ? (forSelf ? 'You can’t request an advance for yourself here.' : 'Only HR and finance can raise an advance for someone else.')
+          : amt < 1 ? (forSelf ? 'Enter the amount you need.' : 'Enter the amount of the advance.')
+            : forSelf ? `${inr(Math.round(amt / mo))} a month from the payroll after it’s paid out, for ${mo === 1 ? '1 month' : mo + ' months'}.`
+              : `${inr(Math.round(amt / mo))} a month from ${target!.name}’s salary after it’s paid out, for ${mo === 1 ? '1 month' : mo + ' months'}. It goes to their approver as usual, and ${target!.name} is told it was raised for them.`,
       iFooter: createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', width: '100%' } }, createElement(HrButton, { variant: 'ghost', onClick: closeIssue } as any, 'Cancel'), createElement(HrButton, { onClick: saveIssue, disabled: iBad } as any, s.busy ? 'Sending…' : 'Send for approval')),
       approveOpen: !!ap, aTitle: ap ? `Approve ${ap.name}’s advance?` : 'Approve advance?',
       aDesc: ap ? `${ap.principalL} is approved for payout; recovery ${ap.months > 1 ? `of ${ap.emiL}` : 'in one go'} starts from the payroll after it’s paid out.` : '',
       setApproveOpen: (o: boolean) => { if (!o) this.setState({ approve: null }) }, closeApprove: () => this.setState({ approve: null }),
       doApprove: async () => { if (!ap || !p.onApprove || s.busy) return; this.setState({ busy: true }); try { const ok = await p.onApprove(ap.id); if (ok !== false) this.setState({ approve: null }) } finally { this.setState({ busy: false }) } },
-      issueAction: { label: 'Issue advance', onClick: () => this.setState({ issue: { emp: me, type: 'Salary advance', amount: '', months: '3', start: 'after' } }) },
+      issueAction: { label: 'Issue advance', onClick: () => this.setState({ issue: { emp: firstEmp, type: 'Salary advance', amount: '', months: '3', start: 'after' } }) },
       errIcon: dashIconComponent('circleX'), emptyIcon: dashIconComponent('creditCard'), retry: { label: 'Retry', onClick: () => p.onRetry && p.onRetry() },
       skA: { style: { height: 48, width: '100%', borderRadius: 14 } }, skB: { style: { height: 220, width: '100%', borderRadius: 16 } }, icPlus: dashIcon('plus', 15),
     }

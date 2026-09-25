@@ -34,6 +34,10 @@ public enum AppNotificationType {
     ADVANCE_SUBMITTED,
     ADVANCE_APPROVED,
     ADVANCE_REJECTED,
+    /** HR or finance raised a salary advance in the employee's name (it still needs approval). */
+    ADVANCE_RAISED_FOR_YOU,
+    /** The employee's salary structure was revised (bulk revision), from a stated date. */
+    SALARY_REVISED,
     OVERTIME_APPROVED,
     OVERTIME_REJECTED,
     /** A reviewer changed the employee's attendance status for a day (V143.10). */

@@ -61,4 +61,9 @@ public class AdvanceRequest extends BaseEntity {
     // Remaining balance to be recovered via payroll deductions.
     @Column(name = "outstanding_amount", nullable = false)
     private BigDecimal outstandingAmount = BigDecimal.ZERO;
+
+    // Who raised it when HR / finance asked on the employee's behalf
+    // (→ employees.id). NULL = the employee asked for it themselves. (V143_24)
+    @Column(name = "raised_by_employee_id")
+    private UUID raisedByEmployeeId;
 }

@@ -439,6 +439,14 @@ public class PayrollService {
         } catch (java.time.format.DateTimeParseException ex) {
             throw new BusinessRuleException("effectiveFrom must be an ISO date (yyyy-MM-dd)", "INVALID_EFFECTIVE_FROM");
         }
+        // ESI and the PT state aren't in the request; a revision keeps the
+        // current structure's (a new structure starts with the defaults).
+        List<Map<String, Object>> prior = jdbc.queryForList("""
+            SELECT esi_applicable, pt_state FROM payroll.employee_salary_structures
+             WHERE employee_id = ? AND is_current IS TRUE
+            """, req.employeeId());
+        boolean esiApplicable = !prior.isEmpty() && Boolean.TRUE.equals(prior.get(0).get("esi_applicable"));
+        String ptState = prior.isEmpty() ? null : (String) prior.get(0).get("pt_state");
         // Demote the existing current structure (TRUE -> NULL leaves the unique slot).
         jdbc.update("""
             UPDATE payroll.employee_salary_structures
@@ -450,15 +458,15 @@ public class PayrollService {
         UUID newId = jdbc.queryForObject("""
             INSERT INTO payroll.employee_salary_structures
                 (tenant_id, employee_id, ctc_annual, ctc_monthly, pf_applicable, pf_status, tax_regime,
-                 revision_note, effective_from, is_current)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+                 revision_note, effective_from, is_current, esi_applicable, pt_state)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?)
             RETURNING id
             """, UUID.class,
             tenantId, req.employeeId(), req.ctcAnnual(), ctcMonthly,
             req.pfApplicable() == null || req.pfApplicable(),
             req.pfStatus() == null ? "ENROLLED" : req.pfStatus(),
             req.taxRegime() == null ? "NEW" : req.taxRegime(),
-            req.revisionNote(), effFrom);
+            req.revisionNote(), effFrom, esiApplicable, ptState);
 
         if (req.components() != null) {
             for (LineInput li : req.components()) {

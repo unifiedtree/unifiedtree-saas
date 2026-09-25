@@ -13,6 +13,8 @@ import com.unifiedtree.notifications.events.ShiftChangeDecidedEvent;
 import com.unifiedtree.notifications.events.ShiftChangeSubmittedEvent;
 import com.unifiedtree.notifications.events.AdvanceRequestDecidedEvent;
 import com.unifiedtree.notifications.events.AdvanceRequestSubmittedEvent;
+import com.unifiedtree.notifications.events.AdvanceRaisedOnBehalfEvent;
+import com.unifiedtree.notifications.events.SalaryStructureRevisedEvent;
 import com.unifiedtree.notifications.events.ExpenseClaimDecidedEvent;
 import com.unifiedtree.notifications.events.ExpenseClaimSubmittedEvent;
 import com.unifiedtree.notifications.events.OvertimeDecidedEvent;
@@ -586,6 +588,44 @@ public class DomainEventListener {
             markSubmissionReadSafely(e.advanceId());
         } catch (Exception ex) {
             log.warn("Failed to publish ADVANCE decision notification for {}: {}", e.advanceId(), ex.getMessage());
+        }
+    }
+
+    // HR / finance raised an advance in the employee's name. Route: the mobile
+    // notifications tab (the app has no advances screen); the web maps the
+    // type to /hrms/advances (notificationStore.webRouteFor).
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onAdvanceRaisedOnBehalf(AdvanceRaisedOnBehalfEvent e) {
+        try {
+            String who = firstOrElse(resolveEmployeeName(e.raisedById(), e.tenantId()), "HR");
+            int months = e.repaymentMonths() == null ? 1 : e.repaymentMonths();
+            String body = "%s raised a salary advance of %s for you, recovered from your salary over %s. It is waiting for approval."
+                    .formatted(who, money("INR", e.amount()), months == 1 ? "1 month" : months + " months");
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.ADVANCE_RAISED_FOR_YOU.name());
+            data.put("advanceRequestId", e.advanceId().toString());
+            data.put("route", "/notifications");
+            service.create(e.tenantId(), e.employeeId(), AppNotificationType.ADVANCE_RAISED_FOR_YOU,
+                    "Salary advance raised for you", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish ADVANCE_RAISED_FOR_YOU notification for {}: {}", e.advanceId(), ex.getMessage());
+        }
+    }
+
+    // Bulk salary revision: one per person. No amounts (push shows on lock screens).
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onSalaryRevised(SalaryStructureRevisedEvent e) {
+        try {
+            String body = "Your salary structure has been revised with effect from %s. Open My Salary to see the new breakdown."
+                    .formatted(fmt(e.effectiveFrom()));
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", AppNotificationType.SALARY_REVISED.name());
+            data.put("structureId", e.structureId().toString());
+            data.put("route", "/notifications");
+            service.create(e.tenantId(), e.employeeId(), AppNotificationType.SALARY_REVISED,
+                    "Your salary has been revised", body, data);
+        } catch (Exception ex) {
+            log.warn("Failed to publish SALARY_REVISED notification for {}: {}", e.employeeId(), ex.getMessage());
         }
     }
 

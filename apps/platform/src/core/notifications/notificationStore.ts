@@ -58,6 +58,9 @@ export type AppNotificationType =
   | 'LEAVE_ENCASHMENT_REJECTED'
   | 'POLICY_PUBLISHED'
   | 'POLICY_REMINDER'
+  // Payroll: HR / finance raised a salary advance in your name; your salary structure was revised.
+  | 'ADVANCE_RAISED_FOR_YOU'
+  | 'SALARY_REVISED'
   | 'GENERAL'
 
 /** Raw server DTO (see {@code NotificationDtos.NotificationDto}). */
@@ -225,6 +228,11 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   // Grandfathered over-cap warning routes to /plan where the amber banner
   // (Plan.tsx) explains the "set up autopay for the extras" action.
   if (type === 'BILLING_OVER_CAP') return '/plan'
+
+  // Payroll — the employee's own advances page (Advances shows "My advances"
+  // to anyone without the admin view) and their salary structure.
+  if (type === 'ADVANCE_RAISED_FOR_YOU') return '/hrms/advances'
+  if (type === 'SALARY_REVISED') return '/me/salary'
 
   if (type === 'WELCOME') return '/'
   // Retirement alerts (HR): the retiring person's record.

@@ -51,6 +51,26 @@ public class AdvanceService {
      */
     @Transactional
     public AdvanceResponse requestAdvance(UUID employeeId, UUID companyId, AdvanceRequestCreateRequest request, UUID approverId) {
+        return raise(employeeId, companyId, request, approverId, null);
+    }
+
+    /**
+     * HR / finance raise an advance in an employee's name. Same request as the
+     * employee's own (same amount rules, same approver, same approval → payout
+     * → recovery flow); {@code raisedBy} is recorded, and the employee is
+     * notified that an advance was raised for them. The caller has already
+     * checked that the employee is active and is not the raiser.
+     */
+    @Transactional
+    public AdvanceResponse requestAdvanceOnBehalf(UUID employeeId, UUID companyId, AdvanceRequestCreateRequest request,
+                                                  UUID approverId, UUID raisedBy) {
+        if (raisedBy == null || raisedBy.equals(employeeId)) {
+            throw new BusinessRuleException("To ask for an advance for yourself, use your own request.", "ADVANCE_ON_BEHALF_SELF");
+        }
+        return raise(employeeId, companyId, request, approverId, raisedBy);
+    }
+
+    private AdvanceResponse raise(UUID employeeId, UUID companyId, AdvanceRequestCreateRequest request, UUID approverId, UUID raisedBy) {
         if (request.amount() == null || request.amount().signum() <= 0) {
             throw new BusinessRuleException("Advance amount must be greater than zero", "ADVANCE_INVALID_AMOUNT");
         }
@@ -72,12 +92,17 @@ public class AdvanceService {
         advance.setOutstandingAmount(request.amount());
         advance.setApproverId(approverId);
         advance.setStatus(AdvanceStatus.REQUESTED);
+        advance.setRaisedByEmployeeId(raisedBy);
         advance = advanceRepository.save(advance);
 
-        log.info("Advance request raised id={} employee={} amount={} months={}",
-                advance.getId(), employeeId, request.amount(), request.repaymentMonths());
+        log.info("Advance request raised id={} employee={} amount={} months={} raisedBy={}",
+                advance.getId(), employeeId, request.amount(), request.repaymentMonths(), raisedBy);
         publishSafely(new com.unifiedtree.notifications.events.AdvanceRequestSubmittedEvent(
                 advance.getId(), employeeId, approverId, tenantId, request.amount()));
+        if (raisedBy != null) {
+            publishSafely(new com.unifiedtree.notifications.events.AdvanceRaisedOnBehalfEvent(
+                    advance.getId(), employeeId, raisedBy, tenantId, request.amount(), request.repaymentMonths()));
+        }
         return toResponse(advance);
     }
 
@@ -190,6 +215,6 @@ public class AdvanceService {
                 a.getId(), a.getEmployeeId(), null, null, a.getCompanyId(),
                 a.getAmount(), a.getReason(), a.getRepaymentMonths(), a.getMonthlyDeduction(),
                 a.getStatus(), a.getApproverId(), a.getApprovedAt(), a.getApproverComment(),
-                a.getDisbursedAt(), a.getOutstandingAmount(), a.getCreatedAt());
+                a.getDisbursedAt(), a.getOutstandingAmount(), a.getCreatedAt(), a.getRaisedByEmployeeId(), null);
     }
 }

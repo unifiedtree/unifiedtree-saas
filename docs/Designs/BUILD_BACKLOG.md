@@ -29,9 +29,6 @@ All P0 items are done (wave 1).
 **Master data** (§6)
 
 **Payroll** (§5)
-- Bulk revise CTC ("Apply revision").
-- Export every salary structure.
-- Issue an advance for someone else.
 - TDS calculation.
 
 **Attendance** (§4)
