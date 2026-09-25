@@ -458,66 +458,24 @@ public class AttendanceService {
     }
 
     /**
-     * The employee's weekly OFF days as ISO day numbers (1=Mon .. 7=Sun). Not
-     * everyone is off Sat+Sun — this reads the per-employee {@code
-     * weekly_off_days} CSV so present/absent/weekend is computed against THEIR
-     * schedule. Falls back to Sat+Sun ({6,7}) for null / unparseable / missing
-     * JdbcTemplate, so attendance math always has a sane week-off set.
+     * The employee's weekly OFF days as ISO day numbers (1=Mon .. 7=Sun): their
+     * own {@code weekly_off_days}, else their company's weekly offs from HR
+     * Configuration, else Sat+Sun. Shared with CanonicalAttendanceService
+     * through {@link AttendanceCalendar} so the two never disagree.
      */
     private java.util.Set<Integer> resolveWeeklyOffSet(UUID employeeId) {
-        java.util.Set<Integer> defaults = new java.util.HashSet<>(java.util.Arrays.asList(6, 7));
-        if (jdbcTemplate == null || employeeId == null) return defaults;
-        String csv;
-        try {
-            csv = jdbcTemplate.queryForObject(
-                    "SELECT weekly_off_days FROM hrms.employees WHERE id = ?",
-                    String.class, employeeId);
-        } catch (Exception ex) {
-            return defaults;
-        }
-        if (csv == null || csv.isBlank()) return defaults;
-        java.util.Set<Integer> set = new java.util.HashSet<>();
-        for (String tok : csv.split(",")) {
-            try {
-                int d = Integer.parseInt(tok.trim());
-                if (d >= 1 && d <= 7) set.add(d);
-            } catch (NumberFormatException ignored) { /* skip junk */ }
-        }
-        return set.isEmpty() ? defaults : set;
+        return AttendanceCalendar.weeklyOffDays(jdbcTemplate, employeeId);
     }
 
     /**
      * Bulk version of {@link #resolveWeeklyOffSet} for the team dashboard: one
-     * query for a list of employees. Missing rows fall back to Sat+Sun. Used to
-     * decide whether an employee is "not marked" today or simply on their
+     * query for a list of employees (same rule; missing rows get Sat+Sun). Used
+     * to decide whether an employee is "not marked" today or simply on their
      * weekly off. Empty input → empty result.
      */
     @Transactional(readOnly = true)
     public java.util.Map<UUID, java.util.Set<Integer>> weeklyOffSetsFor(java.util.List<UUID> employeeIds) {
-        java.util.Map<UUID, java.util.Set<Integer>> out = new java.util.HashMap<>();
-        if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) return out;
-        java.util.Set<Integer> fallback = new java.util.HashSet<>(java.util.Arrays.asList(6, 7));
-        for (UUID id : employeeIds) out.put(id, fallback);
-        String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
-        try {
-            jdbcTemplate.query(
-                    "SELECT id, weekly_off_days FROM hrms.employees WHERE id IN (" + inClause + ")",
-                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
-                        UUID id = (UUID) rs.getObject("id");
-                        String csv = rs.getString("weekly_off_days");
-                        if (csv == null || csv.isBlank()) return;
-                        java.util.Set<Integer> set = new java.util.HashSet<>();
-                        for (String tok : csv.split(",")) {
-                            try {
-                                int d = Integer.parseInt(tok.trim());
-                                if (d >= 1 && d <= 7) set.add(d);
-                            } catch (NumberFormatException ignored) { /* skip junk */ }
-                        }
-                        if (!set.isEmpty()) out.put(id, set);
-                    },
-                    employeeIds.toArray());
-        } catch (Exception ex) { /* keep the fallback map */ }
-        return out;
+        return AttendanceCalendar.weeklyOffDays(jdbcTemplate, employeeIds);
     }
 
     /** Bulk joining-date lookup — the team dashboard filters out future hires. */
