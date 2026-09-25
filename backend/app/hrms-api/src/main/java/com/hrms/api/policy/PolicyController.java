@@ -38,11 +38,41 @@ public class PolicyController {
 
     private final PolicyService policyService;
     private final EmployeeRepository employeeRepository;
+    /** V143.23 email-on-publish and reminders; optional so unit tests can build the controller alone. */
+    private PolicyNoticeService notices;
 
     public PolicyController(PolicyService policyService,
                             EmployeeRepository employeeRepository) {
         this.policyService = policyService;
         this.employeeRepository = employeeRepository;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setNotices(PolicyNoticeService notices) {
+        this.notices = notices;
+    }
+
+    /**
+     * After a policy goes live: queue the "new policy" email for everyone when
+     * the author asked for it, and send it straight after. Never fails the
+     * publish itself; PolicyNoticeJob picks up anything missed.
+     */
+    private void announceIfAsked(PolicyResponse policy, Jwt jwt) {
+        if (notices == null || policy == null || policy.status() != com.hrms.policy.enums.PolicyStatus.ACTIVE || !policy.notifyOnPublish()) return;
+        try {
+            if (notices.queuePublished(policy.id(), actor(jwt)) > 0) {
+                notices.dispatchSoon(com.unifiedtree.security.tenant.TenantContext.getTenantId());
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(PolicyController.class)
+                    .warn("Policy {} published, but its emails weren't queued yet: {}", policy.id(), e.getMessage());
+        }
+    }
+
+    private static String actor(Jwt jwt) {
+        if (jwt == null) return "system";
+        String empId = jwt.getClaimAsString("employee_id");
+        return empId != null ? empId : jwt.getSubject();
     }
 
     // ─── Policy administration ───────────────────────────────────────────────
@@ -61,8 +91,9 @@ public class PolicyController {
                 resolvedCompany = caller.getCompanyId();
             }
         }
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(policyService.createPolicy(resolvedCompany, request));
+        PolicyResponse created = policyService.createPolicy(resolvedCompany, request);
+        announceIfAsked(created, jwt);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     /**
@@ -133,8 +164,28 @@ public class PolicyController {
     @Operation(summary = "Publish a DRAFT policy (DRAFT → ACTIVE)")
     @PostMapping("/policies/{id}/publish")
     @PreAuthorize("hasAuthority('hrms.policy.write')")
-    public ResponseEntity<PolicyResponse> publishPolicy(@PathVariable UUID id) {
-        return ResponseEntity.ok(policyService.publishPolicy(id));
+    public ResponseEntity<PolicyResponse> publishPolicy(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        boolean wasDraft = policyService.getPolicy(id).status() == com.hrms.policy.enums.PolicyStatus.DRAFT;
+        PolicyResponse published = policyService.publishPolicy(id);
+        if (wasDraft) announceIfAsked(published, jwt);
+        return ResponseEntity.ok(published);
+    }
+
+    @Operation(summary = "Delete a policy: a draft is removed for good, a published policy is archived instead")
+    @DeleteMapping("/policies/{id}")
+    @PreAuthorize("hasAuthority('hrms.policy.write')")
+    public ResponseEntity<Map<String, String>> deletePolicy(@PathVariable UUID id) {
+        return ResponseEntity.ok(Map.of("outcome", policyService.deletePolicy(id).name()));
+    }
+
+    @Operation(summary = "Remind everyone who hasn't acknowledged the current version (skips anyone reminded in the last 24 hours)")
+    @PostMapping("/policies/{id}/remind")
+    @PreAuthorize("hasAuthority('hrms.policy.write')")
+    public ResponseEntity<PolicyNoticeService.RemindResult> remind(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        if (notices == null) throw new IllegalStateException("Policy reminders aren't available");
+        PolicyNoticeService.RemindResult result = notices.remind(id, actor(jwt));
+        if (result.reminded() > 0) notices.dispatchSoon(com.unifiedtree.security.tenant.TenantContext.getTenantId());
+        return ResponseEntity.ok(result);
     }
 
     @Operation(summary = "Archive an HR policy")

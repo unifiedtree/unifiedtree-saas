@@ -43,4 +43,22 @@ public class HrPolicy extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
     private PolicyStatus status = PolicyStatus.ACTIVE;
+
+    // ── V143.23 ─────────────────────────────────────────────────────────────
+
+    /** False = published for reading only: nobody is asked to acknowledge it or reminded. */
+    @Column(name = "acknowledgement_required", nullable = false)
+    private boolean acknowledgementRequired = true;
+
+    /** Email (and notify in the app) everyone when it is published. */
+    @Column(name = "notify_on_publish", nullable = false)
+    private boolean notifyOnPublish = false;
+
+    /** One automatic reminder this many days after publishing, to whoever hasn't acknowledged. Null = off. */
+    @Column(name = "auto_remind_after_days")
+    private Integer autoRemindAfterDays;
+
+    /** When it last went live (DRAFT → ACTIVE, or created ACTIVE). */
+    @Column(name = "published_at")
+    private java.time.Instant publishedAt;
 }
