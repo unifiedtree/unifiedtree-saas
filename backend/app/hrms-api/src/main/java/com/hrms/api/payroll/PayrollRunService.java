@@ -151,23 +151,32 @@ public class PayrollRunService {
      * display name, else their employee name, else their e-mail; the actor may
      * also be an employee id (older tokens), which falls back to that employee.
      */
-    private static String actorName(String idText) {
+    /**
+     * @param userMatch     predicate on {@code u} (auth.user_credentials) for the actor
+     * @param employeeMatch predicate on {@code x} (hrms.employees) for the actor
+     */
+    private static String actorName(String userMatch, String employeeMatch) {
         return "(SELECT q.n FROM ("
                 + "SELECT COALESCE(NULLIF(btrim(u.display_name), ''), "
                 + "NULLIF(btrim(concat_ws(' ', ue.first_name, ue.last_name)), ''), u.email) AS n, 1 AS o "
                 + "FROM auth.user_credentials u LEFT JOIN hrms.employees ue ON ue.id = u.employee_id "
-                + "WHERE u.id::text = " + idText + " "
+                + "WHERE " + userMatch + " "
                 + "UNION ALL SELECT NULLIF(btrim(concat_ws(' ', x.first_name, x.last_name)), ''), 2 "
-                + "FROM hrms.employees x WHERE x.id::text = " + idText
+                + "FROM hrms.employees x WHERE " + employeeMatch
                 + ") q WHERE q.n IS NOT NULL ORDER BY q.o LIMIT 1)";
+    }
+
+    private static String actorName(String uuidColumn) {
+        return actorName("u.id = " + uuidColumn, "x.id = " + uuidColumn);
     }
 
     private static final String RUN_SELECT =
             "SELECT r.*, c.name AS company_name, "
-            + actorName("r.created_by::text") + " AS created_by_name, "
-            + actorName("r.processed_by::text") + " AS processed_by_name, "
-            + actorName("r.locked_by::text") + " AS locked_by_name, "
-            + actorName("pb.updated_by") + " AS paid_by_name "
+            + actorName("r.created_by") + " AS created_by_name, "
+            + actorName("r.processed_by") + " AS processed_by_name, "
+            + actorName("r.locked_by") + " AS locked_by_name, "
+            // disbursement_batches.updated_by is text (the actor's id as a string).
+            + actorName("u.id::text = pb.updated_by", "x.id::text = pb.updated_by") + " AS paid_by_name "
             + "FROM payroll.runs r "
             + "LEFT JOIN org.companies c ON c.id = r.company_id "
             + "LEFT JOIN LATERAL (SELECT b.updated_by FROM payroll.disbursement_batches b "
