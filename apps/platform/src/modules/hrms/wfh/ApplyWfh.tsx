@@ -22,7 +22,7 @@ export function ApplyWfh() {
   const mine = useMyWfhRequests(0, 100)
   const apply = useApplyWfh(), cancel = useCancelWfh()
   const { show, node } = useDesignToast()
-  const list = mine.data?.content ?? []
+  const list = useMemo(() => mine.data?.content ?? [], [mine.data])
   const overlap = useMemo(() => list.find((r) => ['PENDING', 'APPROVED', 'PENDING_L2'].includes(r.status) && r.fromDate <= to && r.toDate >= from) || null, [list, from, to])
   const n = span(from, to), r = reason.trim()
   const problem = !from ? 'Pick a start date.' : !to ? 'Pick an end date.' : from < today ? 'The start date can’t be in the past.' : to < from ? 'The end date must be on or after the start date.'
