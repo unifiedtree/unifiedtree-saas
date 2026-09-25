@@ -214,7 +214,69 @@ public class OnboardingService {
         OnboardingTemplate template = getTemplate(templateId);
         task.setTenantId(template.getTenantId());
         task.setTemplateId(templateId);
+        task.setOwnerRole(validOwnerRole(task.getOwnerRole()));
+        // A task added without a position goes to the end of the list.
+        if (task.getSequenceNo() <= 0) {
+            task.setSequenceNo(template.getTasks().stream().mapToInt(OnboardingTask::getSequenceNo).max().orElse(0) + 1);
+        }
         return taskRepo.save(task);
+    }
+
+    /**
+     * The roles a task can be owned by: the workspace's roles (built-in and
+     * custom), as {code, name}. The platform operator role is not offered.
+     */
+    @Transactional(readOnly = true)
+    public List<java.util.Map<String, Object>> ownerRoles() {
+        return jdbc.queryForList("""
+                SELECT code, name FROM (
+                    SELECT DISTINCT ON (code) code, display_name AS name, tenant_id
+                      FROM rbac.roles
+                     WHERE (tenant_id IS NULL OR tenant_id = ?) AND code <> 'PLATFORM_SUPER_ADMIN'
+                     ORDER BY code, tenant_id NULLS LAST
+                ) r ORDER BY name
+                """, TenantContext.getTenantId());
+    }
+
+    /** Blank means "no owner"; anything else must be one of the workspace's role codes. */
+    String validOwnerRole(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String code = raw.trim();
+        Integer n = jdbc.queryForObject(
+                "SELECT count(*) FROM rbac.roles WHERE code = ? AND (tenant_id IS NULL OR tenant_id = ?) AND code <> 'PLATFORM_SUPER_ADMIN'",
+                Integer.class, code, TenantContext.getTenantId());
+        if (n == null || n == 0) {
+            throw new BusinessRuleException("Choose the owner from the workspace's roles", "TASK_OWNER_ROLE_UNKNOWN");
+        }
+        return code;
+    }
+
+    /**
+     * Puts a template's tasks in the given order (every task exactly once).
+     * Onboardings that already started keep their own copy of the order;
+     * only onboardings started from now on follow the new one.
+     */
+    @Transactional
+    public OnboardingTemplate reorderTasks(UUID templateId, List<UUID> orderedTaskIds) {
+        OnboardingTemplate template = getTemplate(templateId);
+        List<OnboardingTask> tasks = template.getTasks();
+        java.util.Set<UUID> current = new java.util.HashSet<>();
+        tasks.forEach(t -> current.add(t.getId()));
+        if (orderedTaskIds == null || orderedTaskIds.size() != tasks.size()
+                || new java.util.HashSet<>(orderedTaskIds).size() != orderedTaskIds.size()
+                || !current.equals(new java.util.HashSet<>(orderedTaskIds))) {
+            throw new BusinessRuleException("The new order must list every task of this template exactly once. Reload the page and try again.",
+                    "TASK_ORDER_INVALID");
+        }
+        java.util.Map<UUID, OnboardingTask> byId = new java.util.HashMap<>();
+        tasks.forEach(t -> byId.put(t.getId(), t));
+        for (int i = 0; i < orderedTaskIds.size(); i++) {
+            byId.get(orderedTaskIds.get(i)).setSequenceNo(i + 1);
+        }
+        taskRepo.saveAll(tasks);
+        tasks.sort(java.util.Comparator.comparingInt(OnboardingTask::getSequenceNo));
+        log.info("Reordered {} tasks on onboarding template {}", tasks.size(), templateId);
+        return template;
     }
 
     /**
@@ -252,7 +314,9 @@ public class OnboardingService {
         instance.setTemplateId(templateId);
         instance.setStatus("IN_PROGRESS");
         instance.setStartedAt(Instant.now());
-        instanceRepo.save(instance);
+        // Flushed now so the hire details below can be written onto the row.
+        instanceRepo.saveAndFlush(instance);
+        prefillHireDetails(instance.getId(), employeeId);
 
         List<OnboardingTask> tasks = taskRepo.findByTemplateIdOrderBySequenceNoAsc(templateId);
         for (OnboardingTask task : tasks) {
@@ -277,6 +341,46 @@ public class OnboardingService {
         // entity (open-in-view disabled in the canonical profiles).
         instance.getInstanceTasks().size();
         return instance;
+    }
+
+    /**
+     * When the new hire came through the hiring pipeline (a candidate converted
+     * into this employee), copy the hire details onto the onboarding: the
+     * candidate, their source, the requisition's hiring manager, the recruiter
+     * (whoever added the candidate) and the date the offer was accepted (IST).
+     * Values HR already set are kept. People who no longer have an employee
+     * record are skipped rather than failing the onboarding.
+     */
+    public int prefillHireDetails(UUID instanceId, UUID employeeId) {
+        UUID tenant = TenantContext.getTenantId();
+        if (tenant == null || instanceId == null || employeeId == null) return 0;
+        return jdbc.update("""
+                UPDATE hrms.onboarding_instances i
+                   SET candidate_id      = h.candidate_id,
+                       hire_source       = COALESCE(i.hire_source, h.source),
+                       hiring_manager_id = COALESCE(i.hiring_manager_id, h.hiring_manager_id),
+                       recruiter_id      = COALESCE(i.recruiter_id, h.recruiter_id),
+                       offer_accepted_on = COALESCE(i.offer_accepted_on, h.accepted_on)
+                  FROM (
+                        SELECT c.id AS candidate_id, left(c.source, 80) AS source,
+                               (SELECT e.id FROM hrms.employees e
+                                 WHERE e.id = r.hiring_manager_id AND e.tenant_id = r.tenant_id) AS hiring_manager_id,
+                               (SELECT e.id FROM auth.user_credentials uc
+                                  JOIN hrms.employees e ON e.id = uc.employee_id AND e.tenant_id = uc.tenant_id
+                                 WHERE uc.tenant_id = c.tenant_id AND uc.id::text = c.created_by
+                                 LIMIT 1) AS recruiter_id,
+                               (SELECT (COALESCE(o.responded_at, o.updated_at) AT TIME ZONE 'Asia/Kolkata')::date
+                                  FROM hiring_mgmt.offers o
+                                 WHERE o.tenant_id = c.tenant_id AND o.candidate_id = c.id AND o.status = 'ACCEPTED'
+                                 ORDER BY o.responded_at DESC NULLS LAST, o.created_at DESC
+                                 LIMIT 1) AS accepted_on
+                          FROM hiring_mgmt.candidates c
+                          JOIN hiring_mgmt.job_requisitions r ON r.id = c.requisition_id AND r.tenant_id = c.tenant_id
+                         WHERE c.tenant_id = ? AND c.converted_employee_id = ?
+                         LIMIT 1
+                       ) h
+                 WHERE i.tenant_id = ? AND i.id = ?
+                """, tenant, employeeId, tenant, instanceId);
     }
 
     // ── Task completion ───────────────────────────────────────────────────

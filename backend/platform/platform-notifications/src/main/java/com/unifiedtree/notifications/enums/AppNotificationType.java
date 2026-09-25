@@ -39,6 +39,10 @@ public enum AppNotificationType {
     DOCUMENT_UPLOADED,
     DOCUMENT_VERIFIED,
     DOCUMENT_REJECTED,
+    // Hiring interviews (V143.20): sent to the interviewers.
+    INTERVIEW_SCHEDULED,
+    INTERVIEW_RESCHEDULED,
+    INTERVIEW_CANCELLED,
     WELCOME,
     TRIAL_ENDING_SOON,
     TRIAL_EXPIRED,

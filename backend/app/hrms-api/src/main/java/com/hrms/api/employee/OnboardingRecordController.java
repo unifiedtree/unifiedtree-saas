@@ -29,8 +29,10 @@ public class OnboardingRecordController {
     private final JdbcTemplate jdbc;
     private final EmployeeRepository employees;
     private final ObjectMapper mapper;
-    public OnboardingRecordController(JdbcTemplate jdbc, EmployeeRepository employees, ObjectMapper mapper) {
-        this.jdbc = jdbc; this.employees = employees; this.mapper = mapper;
+    private final com.hrms.api.onboarding.OnboardingHireDetailsService hireDetails;
+    public OnboardingRecordController(JdbcTemplate jdbc, EmployeeRepository employees, ObjectMapper mapper,
+                                      com.hrms.api.onboarding.OnboardingHireDetailsService hireDetails) {
+        this.jdbc = jdbc; this.employees = employees; this.mapper = mapper; this.hireDetails = hireDetails;
     }
     public record RecordRequest(
             @Size(max=30) Map<@Size(max=60) String, @Size(max=2000) String> details,
@@ -56,15 +58,22 @@ public class OnboardingRecordController {
         UUID tenant = bindAndCheck(employeeId);
         List<String> records = jdbc.query("SELECT details::text FROM hrms.employee_onboarding_records WHERE tenant_id=? AND employee_id=?",
                 (rs, i) -> rs.getString(1), tenant, employeeId);
-        if (records.isEmpty()) return mapper.createObjectNode();
-        try {
-            JsonNode result = mapper.readTree(records.getFirst());
+        JsonNode result;
+        if (records.isEmpty()) result = mapper.createObjectNode();
+        else try {
+            result = mapper.readTree(records.getFirst());
             if (result.get("details") instanceof com.fasterxml.jackson.databind.node.ObjectNode details) {
                 details.retain(DETAIL_FIELDS);
             }
-            return result;
         }
         catch (com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalStateException("Invalid onboarding record", e); }
+        // Hire details (V143.20): kept on the onboarding, or read from the hiring
+        // record when the person was hired through the pipeline but has no onboarding yet.
+        var hire = hireDetails.forEmployee(employeeId);
+        if (hire != null && !hire.isEmpty() && result instanceof com.fasterxml.jackson.databind.node.ObjectNode obj) {
+            obj.set("hire", mapper.valueToTree(hire));
+        }
+        return result;
     }
 
     @PutMapping
