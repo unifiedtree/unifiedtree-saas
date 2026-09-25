@@ -236,7 +236,7 @@ try {
   }
 
   // ── company rule: work from home ──
-  const wfhWas = restore.hrcfg.split('|')[2] === 't'
+  const wfhWas = /^t(rue)?$/.test(restore.hrcfg.split('|')[2])  // boolean || text gives 'true', a plain boolean 't'
   const off = await owner.call(`/v1/settings/hr-configuration?companyId=${company}`, 'PUT', { allowWorkFromHome: false })
   check('owner turns work from home off', off.status === 200 && sql(`select allow_work_from_home from settings.hr_configuration where company_id='${company}'`) === 'f', `status=${off.status}`)
   const tomorrow = addDays(TODAY, 1)
@@ -262,7 +262,8 @@ try {
     const ci = await reader.call('/v1/attendance/checkin', 'POST', { latitude: 12.9716, longitude: 77.5946, checkInMethod: 'GPS', clientEventId: `w1a-${stamp}` })
     if (ci.json?.id) created.checkinRecord = ci.json.id
     check('check-in outside the zone is accepted when the company doesn’t require geofencing', ci.status === 200, `status=${ci.status} ${ci.json?.message || ''}`)
-    check('…and flagged with its distance for review', ci.json?.id && sql(`select check_in_outside_geofence||'|'||(check_in_distance_m > 1000) from attendance.records where id='${ci.json.id}'`) === 't|t')
+    const flagged = ci.json?.id ? sql(`select (check_in_outside_geofence and check_in_distance_m > 1000)::text from attendance.records where id='${ci.json.id}'`) : ''
+    check('…and flagged with its distance for review', flagged === 'true', `record=${ci.json?.id} flag=${flagged}`)
     const exToday = await mgr.call(`/v1/attendance/review/exceptions?from=${TODAY}&to=${TODAY}`)
     check('…and listed as "outside the zone" for the manager', (exToday.json || []).some((x) => x.employeeId === READER && x.flags.includes('OUTSIDE_ZONE')))
   } else skip('geofence flag', branch ? 'the reader already checked in today' : 'no active branch')
@@ -285,7 +286,7 @@ try {
 } finally {
   // ── cleanup: remove everything created, restore every setting ──
   const ids = [E, F, READER].map((x) => `'${x}'`).join(',')
-  const safe = (q) => { try { sql(q) } catch (e) { console.log('cleanup warning:', String(e.message || e).split('\n')[0]) } }
+  const safe = (q) => { try { sql(q) } catch (e) { console.log('cleanup warning:', String(e.message || e).split(/\r?\n/)[0]) } }
   if (adminGrant) safe(`delete from rbac.user_roles where user_id='${adminGrant.user}' and role_id='${adminGrant.role}'`)
   safe(`delete from attendance.day_status_reviews where employee_id in (${ids}) and created_at >= '${startedAt}'`)
   if (created.faceEvent) { safe(`delete from attendance.face_event_reviews where event_id='${created.faceEvent}'`); safe(`delete from attendance.face_verification_events where id='${created.faceEvent}'`) }
@@ -308,7 +309,7 @@ try {
   }
   if (restore.hrcfg) {
     const [g, auto, wfhOn, geo] = restore.hrcfg.split('|')
-    safe(`update settings.hr_configuration set late_grace_minutes=${g}, enable_late_auto_deduction=${auto === 't'}, allow_work_from_home=${wfhOn === 't'}, enforce_geofencing_for_mobile=${geo === 't'} where company_id='${company}'`)
+    safe(`update settings.hr_configuration set late_grace_minutes=${g}, enable_late_auto_deduction=${/^t(rue)?$/.test(auto)}, allow_work_from_home=${/^t(rue)?$/.test(wfhOn)}, enforce_geofencing_for_mobile=${/^t(rue)?$/.test(geo)} where company_id='${company}'`)
   }
   const left = sql(`select (select count(*) from hrms.employees where id in ('${E}','${F}')) + (select count(*) from attendance.day_status_reviews where employee_id in (${ids}) and created_at >= '${startedAt}')`)
   check('cleanup: fixtures and review rows removed', left === '0', `left=${left}`)

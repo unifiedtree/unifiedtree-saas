@@ -83,7 +83,7 @@ try {
   check('components: add a fixed ₹1,500 earning', r.status === 201 && sql(`select amount from payroll.salary_components where tenant_id='${tenant}' and code='${meal}'`) === '1500.00', `status=${r.status}`)
   r = await owner.call('/v1/payroll/components', 'POST', mk(canteen, 'QA canteen', 'DEDUCTION', 300, { showOnPayslip: false }))
   cleanup.components.push(canteen)
-  check('components: add a fixed ₹300 deduction hidden from payslips', r.status === 201 && sql(`select amount||'|'||show_on_payslip from payroll.salary_components where tenant_id='${tenant}' and code='${canteen}'`) === '300.00|f', `status=${r.status}`)
+  check('components: add a fixed ₹300 deduction hidden from payslips', r.status === 201 && sql(`select amount||'|'||show_on_payslip from payroll.salary_components where tenant_id='${tenant}' and code='${canteen}'`) === '300.00|false', `status=${r.status}`)
   r = await owner.call('/v1/payroll/components', 'POST', mk(off, 'QA switched off', 'EARNING', 700))
   cleanup.components.push(off)
   const offId = sql(`select id from payroll.salary_components where tenant_id='${tenant}' and code='${off}'`)
@@ -236,7 +236,7 @@ try {
     if (cleanup.settings && owner) {
       const back = await owner.call('/v1/payroll/settings', 'PUT', cleanup.settings)
       const s = cleanup.settings
-      check('cleanup: settings put back', back.status === 200 && sql(`select payroll_cycle_start_day||'|'||lwf_enabled||'|'||array_to_string(lwf_deduction_months,',') from payroll.settings where tenant_id='${tenant}'`) === `${s.payrollCycleStartDay}|${s.lwfEnabled ? 't' : 'f'}|${(s.lwfDeductionMonths || [6, 12]).join(',')}`)
+      check('cleanup: settings put back', back.status === 200 && sql(`select payroll_cycle_start_day||'|'||lwf_enabled||'|'||array_to_string(lwf_deduction_months,',') from payroll.settings where tenant_id='${tenant}'`) === `${s.payrollCycleStartDay}|${s.lwfEnabled ? 'true' : 'false'}|${(s.lwfDeductionMonths || [6, 12]).join(',')}`)
     }
     check('cleanup: nothing left behind', (!cleanup.runId || sql(`select count(*) from payroll.runs where id='${cleanup.runId}'`) === '0')
       && sql(`select count(*) from payroll.salary_components where tenant_id='${tenant}' and code like 'QA%${stamp}'`) === '0'

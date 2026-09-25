@@ -219,7 +219,7 @@ try {
   const future = await owner.call(wbUrl('2099-01-01'))
   check('workbook: a future date is treated as today', future.status === 200 && future.json?.asOf === today, future.json?.asOf)
 } catch (e) {
-  check('run completed without an exception', false, String(e?.stack || e).split('\n').slice(0, 3).join(' | '))
+  check('run completed without an exception', false, String(e?.stack || e).split(/\r?\n/).slice(0, 3).join(' | '))
 } finally {
   const cleanup = [
     `delete from notif.notifications where type='RETIREMENT_DUE' and created_at >= ${lit(startedAt)}`,
@@ -233,7 +233,7 @@ try {
     `update org.companies set fiscal_year_start = ${lit(origFiscal)} where id='${company}'`,
     cfgRow ? `update settings.hr_configuration set probation_period_months = ${origMonths === '' ? 'NULL' : Number(origMonths)}, retirement_age = ${origAge === '' ? 'NULL' : Number(origAge)} where company_id='${company}'` : null,
   ].filter(Boolean)
-  for (const q of cleanup) { try { sql(q) } catch (e) { console.log('cleanup failed:', q.slice(0, 80), String(e).split('\n')[0]) } }
+  for (const q of cleanup) { try { sql(q) } catch (e) { console.log('cleanup failed:', q.slice(0, 80), String(e).split(/\r?\n/)[0]) } }
   const left = sql(`select (select count(*) from org.branches where name like 'QA w1e ${tag}%') + (select count(*) from hrms.employees where last_name like 'W1e%${tag}')`)
   check('cleanup: every branch and employee created is gone, settings put back', left === '0' && sql(`select fiscal_year_start from org.companies where id='${company}'`) === origFiscal, `left=${left}`)
   const passed = results.filter((r) => r.ok).length

@@ -56,7 +56,7 @@ let readerCreds = null
 
 const backupPrefs = (userIdSql) => {
   const rows = sql(`select id || '|' || coalesce(notification_preferences::text, 'NULL') from auth.user_credentials where tenant_id='${tenant}' and ${userIdSql}`)
-  for (const line of rows.split('\n').filter(Boolean)) {
+  for (const line of rows.split(/\r?\n/).filter(Boolean)) {
     const i = line.indexOf('|')
     const id = line.slice(0, i)
     if (!(id in prefsBackup)) prefsBackup[id] = line.slice(i + 1)

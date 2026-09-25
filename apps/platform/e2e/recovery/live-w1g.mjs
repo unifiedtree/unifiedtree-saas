@@ -156,7 +156,7 @@ try {
   check('geofence: refused saves changed nothing', sql(`select coalesce(geo_fence_radius_meters::text,'') from org.branches where id='${branchId}'`) === branch.split('|')[3])
   const saved = await hrm.call(`/v1/hrms/branches/${branchId}/geofence`, 'PUT', body)
   const row = sql(`select latitude||'|'||longitude||'|'||geo_fence_radius_meters||'|'||geo_fence_enforced from org.branches where id='${branchId}'`).split('|')
-  check('geofence: HR saves the branch punch zone', saved.status === 200 && Math.abs(Number(row[0]) - 17.385044) < 1e-6 && Math.abs(Number(row[1]) - 78.486671) < 1e-6 && row[2] === '250' && row[3] === 't', `status=${saved.status} db=${row.join(',')}`)
+  check('geofence: HR saves the branch punch zone', saved.status === 200 && Math.abs(Number(row[0]) - 17.385044) < 1e-6 && Math.abs(Number(row[1]) - 78.486671) < 1e-6 && row[2] === '250' && /^t(rue)?$/.test(row[3]), `status=${saved.status} db=${row.join(',')}`)
   const wfhToday = sql(`select count(*) from leave_mgmt.wfh_requests where employee_id='${READER}' and status='APPROVED' and (now() at time zone 'Asia/Kolkata')::date between from_date and to_date`)
   if (zoneOverride) skip('geofence: the punch check uses the branch zone', 'the employee has a personal zone override')
   else if (wfhToday !== '0') skip('geofence: the punch check uses the branch zone', 'the employee has approved WFH today (any place is allowed)')
@@ -174,7 +174,7 @@ try {
   if (branch) {
     const [id, lat, lon, radius, enforced] = branch.split('|')
     try {
-      sql(`update org.branches set latitude=${lat ? lit(lat) : 'null'}, longitude=${lon ? lit(lon) : 'null'}, geo_fence_radius_meters=${radius ? Number(radius) : 'null'}, geo_fence_enforced=${enforced === 't'} where id='${id}'`)
+      sql(`update org.branches set latitude=${lat ? lit(lat) : 'null'}, longitude=${lon ? lit(lon) : 'null'}, geo_fence_radius_meters=${radius ? Number(radius) : 'null'}, geo_fence_enforced=${/^t(rue)?$/.test(enforced)} where id='${id}'`)
       sql(`delete from public.geo_fence_audits where employee_id='${READER}' and created_at >= ${lit(started)}`)
     } catch (e) { console.log('cleanup:', String(e).split(String.fromCharCode(10))[0]) }
     const back = sql(`select coalesce(latitude::text,'')||'|'||coalesce(longitude::text,'')||'|'||coalesce(geo_fence_radius_meters::text,'')||'|'||geo_fence_enforced from org.branches where id='${id}'`)

@@ -217,8 +217,14 @@ try {
   check('employees: manager cannot set weekly offs outside the team', (await mgr.call(`/v1/employees/${other}/weekly-offs?days=6,7`, 'PUT')).status === 403)
   check('employees: reader cannot set weekly offs', (await reader.call(`/v1/employees/${READER_EMP}/weekly-offs?days=6,7`, 'PUT')).status === 403)
   check('employees: reader cannot change a punch zone', (await reader.call(`/v1/employees/${READER_EMP}/punch-zone`, 'PUT')).status === 403)
-  check('employees: reader cannot create or terminate employees', (await reader.call('/v1/employees', 'POST', {})).status === 403 && (await reader.call(`/v1/employees/${other}/terminate`, 'POST', {})).status === 403)
-  check('employees: reader cannot add staff', (await reader.call('/v1/employees/staff', 'POST', {})).status === 403)
+  // Bodies must pass @Valid (it runs before @PreAuthorize), or the answer is a 400, not the 403 under test.
+  const newHire = { firstName: 'QA', lastName: `Refused ${stamp}`, email: `qa-w1h-refused-${stamp}@example.invalid`, companyId: company }
+  const createRefused = await reader.call('/v1/employees', 'POST', newHire)
+  const terminateRefused = await reader.call(`/v1/employees/${other}/terminate`, 'POST', { dateOfTermination: '2031-01-31' })
+  check('employees: reader cannot create or terminate employees', createRefused.status === 403 && terminateRefused.status === 403, `create=${createRefused.status} terminate=${terminateRefused.status}`)
+  const staffRefused = await reader.call('/v1/employees/staff', 'POST', { employee: newHire })
+  check('employees: reader cannot add staff', staffRefused.status === 403
+    && sql(`select count(*) from hrms.employees where email = 'qa-w1h-refused-${stamp}@example.invalid'`) === '0', `status=${staffRefused.status}`)
   check('employees: own emergency contacts readable; manager cannot read a report’s', (await reader.call(`/v1/employees/${READER_EMP}/emergency-contacts`)).status === 200 && (await mgr.call(`/v1/employees/${READER_EMP}/emergency-contacts`)).status === 403)
   check('employees: HR reads anyone’s emergency contacts', (await hrm.call(`/v1/employees/${READER_EMP}/emergency-contacts`)).status === 200)
 
