@@ -52,6 +52,19 @@ const get = async (headers, path) => {
 }
 
 mkdirSync(shots, { recursive: true })
+/** The app scrolls inside its layout, so a full-page shot is one screen: take one shot per screen of the scroller. */
+async function screens(page, name) {
+  const scroller = await page.evaluateHandle(() => [...document.querySelectorAll('*')]
+    .filter((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 40)
+    .sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || document.scrollingElement)
+  const { h, ch } = await scroller.evaluate((el) => ({ h: el.scrollHeight, ch: el.clientHeight }))
+  for (let i = 0, y = 0; y < h && i < 8; i++, y += ch - 60) {
+    await scroller.evaluate((el, top) => el.scrollTo(0, top), y)
+    await page.waitForTimeout(250)
+    await page.screenshot({ path: `${shots}/${name}-${i + 1}.png` })
+  }
+  await scroller.evaluate((el) => el.scrollTo(0, 0))
+}
 const browser = await chromium.launch()
 try {
   // ── API: backward compatible, and the past matches the database ─────────────
@@ -99,6 +112,19 @@ try {
     const r = await get(owner, path)
     check(`history endpoint answers: ${path.split('?')[0]}`, r.status === 200, r.status === 200 ? JSON.stringify(r.body).slice(0, 100) : String(r.body).slice(0, 160))
   }
+  // Other roles: a past date answers exactly as far as today's view does (same status, never a new error).
+  for (const email of ['mgr@unifiedtree.demo', 'fin@unifiedtree.demo']) {
+    const who = await token(email)
+    const diffs = []
+    for (const [now, then] of [[`/v1/admin/dashboard/stats?companyId=${company}`, `&date=${MID}`], [`/v1/admin/dashboard/alerts`, `?date=${MID}`],
+      [`/v1/attendance/dashboard?date=${TODAY}`, `&includeLeavers=true`], [`/v1/attendance/dashboard/trend?to=${TODAY}`, `&includeLeavers=true`],
+      [`/v1/admin/dashboard/performers?companyId=${company}`, `&date=${MID}`], [`/v1/admin/dashboard/notices?companyId=${company}&page=0`, `&date=${MID}`],
+      [`/v1/probation/upcoming?days=30`, `&date=${MID}`], [`/v1/hrms/projects?companyId=${company}`, `&date=${MID}`]]) {
+      const a = (await get(who, now)).status, b = (await get(who, now.includes('/attendance/') ? now.replace(TODAY, MID) + then : now + then)).status
+      if (a !== b || b >= 500) diffs.push(`${now.split('?')[0]} ${a}→${b}`)
+    }
+    check(`${email}: past-date requests answer like today's (no new errors)`, diffs.length === 0, diffs.join(', '))
+  }
   const hiringPast = await get(owner, `/v1/admin/dashboard/hiring?companyId=${company}&date=${PAST}`)
   const candidatesSql = Number(sql(`SELECT count(*) FROM hiring_mgmt.candidates c JOIN hiring_mgmt.job_requisitions r ON r.id = c.requisition_id WHERE c.tenant_id='${tenant}' AND r.company_id='${company}' AND c.created_at < (DATE '${PAST}' + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'`))
   check(`${PAST}: candidates = those who had applied by then`, hiringPast.body.stages.reduce((n, s) => n + Number(s.count), 0) === candidatesSql, `sql ${candidatesSql}`)
@@ -136,7 +162,7 @@ try {
   const dated = calls.filter((c) => c.includes('includeLeavers') || (/^\/v1\/(admin\/dashboard|hrms\/projects|probation\/upcoming|audit\/events|reports\/headcount)/.test(c) && /[?&](date|asOf|to)=/.test(c)))
   check('today: the same requests as before (no date, no includeLeavers)', dated.length === 0, dated.join(' | ').slice(0, 200))
   check('today: weekly trend says Last 7 days', (await page.getByText('Last 7 days · IST').count()) > 0)
-  await page.screenshot({ path: `${shots}/dashboard-today-1440.png`, fullPage: true })
+  await screens(page, 'dashboard-today-1440')
 
   // A day in the previous year, straight from the URL.
   calls.length = 0
@@ -146,13 +172,16 @@ try {
   check(`${PAST}: the banner names the day`, (await page.getByRole('status').filter({ hasText: `Viewing Fri, ${PAST_LABEL}` }).count()) > 0)
   await page.waitForTimeout(1500)
   const pastTile = await tileValue('Active employees')
-  check(`${PAST}: Active employees tile shows that day's count (${pastActive})`, new RegExp(`Active employees\\s*${pastActive}(?!\\d)`).test(pastTile), pastTile.slice(0, 90))
+  // The value is followed by the sub-line "<joined> joined · <left> left, 1–14 Mar 2025".
+  check(`${PAST}: Active employees tile shows that day's count (${pastActive})`, pastTile.trim().startsWith(`Active employees${pastActive}${statsPast.body.joinedInMonth} joined · ${statsPast.body.leftInMonth} left`), pastTile.slice(0, 90))
   check(`${PAST}: the tile tells the month's joiners and leavers`, /joined · \d+ left, 1–14 Mar 2025/.test(pastTile), pastTile.slice(0, 120))
   const payTile = await page.getByRole('button', { name: /Finalized payroll/ }).first().textContent().catch(() => '')
   check(`${PAST}: payroll tile is that month's`, /Finalized payroll · 2025-03/.test(payTile || '') && (pastRun !== '0' || /Not finalized/.test(payTile || '')), (payTile || '').slice(0, 80))
   const asOf = page.getByText('As of today', { exact: false })
   const seatsShown = (await page.getByText('Seats used', { exact: false }).count()) > 0
   check('"As of today" labels the seats (no history)', seatsShown ? (await asOf.count()) > 0 : (await asOf.count()) === 0, seatsShown ? 'seats tile shown' : 'no seats tile for this workspace')
+  const runsUpTo = Number(sql(`SELECT count(*) FROM payroll.runs WHERE tenant_id='${tenant}' AND company_id='${company}' AND status IN ('LOCKED','PAID') AND (period_year * 100 + period_month) <= 202503`))
+  check(`${PAST}: the payroll chart ends at that month`, runsUpTo > 0 ? (await page.getByText(/Mar 2025$/).count()) > 0 : (await page.getByText('Up to Mar 2025').count()) > 0, `finalized months up to it: ${runsUpTo}`)
   check(`${PAST}: weekly trend ends on the day`, (await page.getByText(`7 days to ${PAST_LABEL} · IST`).count()) > 0)
   check(`${PAST}: activity is up to the day`, (await page.getByText(`Activity up to ${PAST_LABEL}`).count()) > 0)
   check(`${PAST}: notices are those up that day`, (await page.getByText(noticesSql ? `up on ${PAST_LABEL}` : `No company notices were up on ${PAST_LABEL}.`).count()) > 0)
@@ -162,7 +191,7 @@ try {
   check(`${PAST}: every card asks for that day`, missing.length === 0, missing.join(', '))
   check(`${PAST}: attendance asks for the team as it was`, calls.some((c) => c.startsWith(`/v1/attendance/dashboard?date=${PAST}&includeLeavers=true`)) && calls.some((c) => c.includes('/dashboard/trend') && c.includes(`to=${PAST}`)))
   check(`${PAST}: activity asks for events up to the day`, calls.some((c) => c.startsWith('/v1/audit/events') && c.includes('to=2025-03-14T18%3A29%3A59.999Z')))
-  await page.screenshot({ path: `${shots}/dashboard-past-1440.png`, fullPage: true })
+  await screens(page, 'dashboard-past-1440')
 
   // The export carries the date in its name and inside.
   const [download] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.getByRole('button', { name: /Export headcount/ }).click()])
@@ -186,9 +215,10 @@ try {
 
   // A date after today can't be shown.
   await page.goto(`${base}/dashboard?date=2031-01-01`)
+  // The note is a toast: look for it as soon as the page opens (it fades after a few seconds).
+  const said = await page.getByText('not a date after today', { exact: false }).first().waitFor({ timeout: 10000 }).then(() => true, () => false)
   await page.waitForLoadState('networkidle')
-  await page.waitForTimeout(800)
-  check('a date after today shows today, and says so', !page.url().includes('date=') && (await page.getByText('not a date after today', { exact: false }).count()) > 0 && (await page.getByRole('status').filter({ hasText: 'Viewing' }).count()) === 0)
+  check('a date after today shows today, and says so', said && !page.url().includes('date=') && (await page.getByRole('status').filter({ hasText: 'Viewing' }).count()) === 0, page.url().replace(base, ''))
 
   check('no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
   check('no failed API calls', failed.length === 0, failed.slice(0, 4).join(' | '))
@@ -201,7 +231,7 @@ try {
   await phone.waitForTimeout(1500)
   const overflow = await phone.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   check('phone: no sideways scroll on a past day', overflow <= 1, `overflow ${overflow}px`)
-  await phone.screenshot({ path: `${shots}/dashboard-past-390.png`, fullPage: true })
+  await screens(phone, 'dashboard-past-390')
 } catch (e) {
   check('script completed', false, String(e.stack || e).slice(0, 300))
 } finally {

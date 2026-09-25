@@ -182,7 +182,7 @@ const DERIVED = {
       ['Last 7 days · IST</span>', '{{ trendChip }}</span>'],
       ['{{ urgentPulse }}Needs your action</h3>', '{{ urgentPulse }}{{ alertsTitle }}</h3>'],
       ['>Nothing is waiting on you.</p>', '>{{ caughtUpText }}</p>'],
-      ['<div style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column"><dc-import name="SeatsTile"', '<div style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column"><sc-if value="{{ seatsAsOf }}" hint-placeholder-val="{{ false }}"><div style="display:flex;justify-content:flex-end;margin-bottom:6px">{{ asOfToday }}</div></sc-if><dc-import name="SeatsTile"'],
+      ['<div style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column"><dc-import name="SeatsTile"', '<div style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column"><sc-if value="{{ seatsAsOf }}" hint-placeholder-val="{{ false }}"><div style="position:relative;height:0"><div style="position:absolute;top:-11px;right:14px;z-index:1">{{ asOfToday }}</div></div></sc-if><dc-import name="SeatsTile"'],
       ['Active employees by department. Click a bar to filter the directory.</p>', '{{ deptSub }}</p>'],
       ['>Average rating across submitted reviews.</p>', '>{{ performersSub }}</p>'],
       ['>Runs in progress · tasks completed.</p>', '>{{ onboardingSub }}</p>'],

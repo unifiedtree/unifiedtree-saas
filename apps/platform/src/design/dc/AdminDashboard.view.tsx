@@ -244,8 +244,10 @@ export function AdminDashboardView({ v }: { v: any }) {
               <div style={{flex: "1 1 260px", minWidth: "0", display: "flex", flexDirection: "column"}}>
                 {v.seatsAsOf ? (
                   <>
-                    <div style={{display: "flex", justifyContent: "flex-end", marginBottom: "6px"}}>
-                      {txt(v.asOfToday)}
+                    <div style={{position: "relative", height: "0"}}>
+                      <div style={{position: "absolute", top: "-11px", right: "14px", zIndex: "1"}}>
+                        {txt(v.asOfToday)}
+                      </div>
                     </div>
                   </>
                 ) : null}

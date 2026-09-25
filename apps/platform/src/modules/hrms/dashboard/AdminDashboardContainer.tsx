@@ -357,7 +357,8 @@ export function AdminDashboardContainer() {
         exportName={exportName}
         quickActions={quickActions}
         payRange={(() => {
-          if (!d.payroll.length) return ''
+          // A past date with no finalized months up to it still says which months the chart covers.
+          if (!d.payroll.length) return isPast ? `Up to ${MON[Number(sel.slice(5, 7)) - 1]} ${sel.slice(0, 4)}` : ''
           const first = d.payroll[0], last = d.payroll[d.payroll.length - 1]
           return `${first.month.slice(0, 4) === last.month.slice(0, 4) ? first.label : first.title} – ${last.title}`
         })()}

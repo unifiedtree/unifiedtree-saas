@@ -284,7 +284,7 @@ export class AdminDashboard extends DCLogic {
       alertsTitle: isToday ? 'Needs your action' : `Waiting on ${fmtShort(sel)}`,
       caughtUpText: isToday ? 'Nothing is waiting on you.' : 'Nothing was waiting that day.',
       seatsAsOf: !isToday,
-      asOfToday: createElement('span', { 'data-tip': 'Seats keep no history, so this is today’s count', style: { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: '#475569', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' } }, ic('clock', 12), 'As of today'),
+      asOfToday: createElement('span', { 'data-tip': 'Seats keep no history, so this is today’s count', style: { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: '#475569', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap', boxShadow: '0 1px 2px rgba(15,23,42,.06)' } }, ic('clock', 12), 'As of today'),
       deptSub: isToday ? 'Active employees by department. Click a bar to filter the directory.' : `Active employees by department on ${fmtShort(sel)}. Click a bar to filter the directory.`,
       performersSub: isToday ? 'Average rating across submitted reviews.' : `Average rating across reviews submitted by ${fmtShort(sel)}.`,
       onboardingSub: isToday ? 'Runs in progress · tasks completed.' : `Runs in progress on ${fmtShort(sel)} · tasks completed by then.`,
