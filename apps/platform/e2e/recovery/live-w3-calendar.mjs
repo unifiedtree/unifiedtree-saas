@@ -96,10 +96,11 @@ try {
   const r1 = await withFrom
   check('picking From refetches the audit list with from=', !!r1 && r1.ok(), r1 ? r1.url().split('/api')[1].slice(0, 120) : 'no request')
   check('From shows the picked day', /\d{1,2} \w{3} \d{4}/.test((await fromField.textContent()) || ''), await fromField.textContent())
-  const withoutFrom = page.waitForResponse((r) => r.url().includes('/v1/audit/events?') && !r.url().includes('from='), { timeout: 15000 }).catch(() => null)
+  check('the list says it is filtered', await page.getByText(/match these filters\./).first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false))
   await page.locator('.utc-field', { has: fromField }).getByRole('button', { name: 'Clear' }).click()
-  const r2 = await withoutFrom
-  check('clearing From refetches without it', !!r2 && r2.ok())
+  // The unfiltered page may come straight from React Query's cache, so check the list, not the network.
+  const unfiltered = await page.getByText(/events? recorded\./).first().waitFor({ timeout: 15000 }).then(() => true).catch(() => false)
+  check('clearing From shows the unfiltered list again', unfiltered)
   check('From is empty again', ((await fromField.textContent()) || '').includes('From'))
 
   check('no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
