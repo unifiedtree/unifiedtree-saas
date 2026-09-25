@@ -49,21 +49,12 @@ Priorities:
 - *Done when:* switching email off stops emails for that user.
 
 **P0-5 File uploads that are placeholders**
-- Expense receipts (§11.3): upload on expense items (same R2 storage as documents); show and download from the claim.
 - Regularization proof (§4): upload and store its URL as `attachmentUrl`; show it on the approval card.
 - *Done when:* the "Coming soon" and "can't attach" notes are gone and the files open for the approver.
 
 **P0-6 Payslip breakdown for the employee** (§11.2)
 - *Build:* `GET /v1/payroll/payslips/me/{runId}` returning the lines.
 - *UI:* open the design's payslip drawer from `/me/payslips`.
-
-**P0-7 Leave and Expenses tabs in the employee workspace** (§7)
-- *Build:* `GET /v1/leave/employees/{id}/balances`, `…/requests` and `GET /v1/expense/employees/{id}/claims`, gated on the HR permissions.
-- *Done when:* HR sees another person's leave and claims on their record.
-
-**P0-8 Record the exit type** (§9)
-- *Now:* exits are marked `EXITED` without a type, so attrition shows most exits as "other".
-- *Build:* resignation / termination / other on the exit flow (UI + column); reports read it.
 
 **P0-9 Enforce one headquarters per company on the server** (§3)
 - *Now:* the UI switches off the old HQ in a second call.
@@ -123,10 +114,6 @@ Priorities:
 **Audit logs** (§11.15)
 - Full server export (CSV) of the filtered trail. Today only the visible page exports.
 
-**Documents and letters** (§11.13)
-- Edit a stored document.
-- Bulk upload.
-
 **Onboarding** (§11.8)
 - Reorder template tasks.
 - Owner role picked from a list.
@@ -155,7 +142,6 @@ Priorities:
 - **Letters**: one "Letters" hub instead of three routes.
 - **Old gaps that are low risk**
   - `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) still has the old "today is absent" and Sat/Sun rules.
-  - Documents RLS isn't FORCEd on `document_mgmt` tables (safe while the app connects as `ut_app`).
 
 ---
 
