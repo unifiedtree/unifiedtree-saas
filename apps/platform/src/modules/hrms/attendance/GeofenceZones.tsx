@@ -1,485 +1,168 @@
+// Geofencing (/hrms/attendance/geofencing), on the module kit: the places
+// staff can punch in from the mobile app. Listing needs attendance.team.read;
+// add / edit / remove need org.geofence.write (the backend enforces both).
+// The list shows active zones only; "Remove" deactivates a zone, which then
+// stops being used for punches and leaves the list.
 import React, { useMemo, useState } from 'react'
-import { MapPin, Plus, Pencil, Trash2, X, Crosshair, Radius, XCircle } from 'lucide-react'
-import { clsx } from 'clsx'
+import { Plus } from 'lucide-react'
 import { usePermission, P } from '@unifiedtree/sdk'
-import { Skeleton } from '@unifiedtree/ui-kit'
-import { EmptyState } from '@/shared/components/EmptyState'
-import { HrPageHeader, HrStatusPill, HrButton } from '@/shared/components/hr'
-import { useToast } from '@/shared/hooks/useToast'
+import { HrStatusPill, HrButton, HrDrawer } from '@/shared/components/hr'
+import { ModulePage, State, Note, StatRow, CARD, HEAD_FONT, useDesignToast } from '@/design/module/ModuleKit'
+import { dashIcon } from '@/design/dc/icons'
 import { useCompanies, useDepartments, useBranches } from '../api/useOrg'
-// Lazy: Leaflet plus its CSS is ~158 kB, and this is the only screen that
-// uses it. Statically imported it landed in the main bundle that every user
-// downloads, including employees who can never open Geofence Zones.
-const LocationMapPicker = React.lazy(() =>
-  import('./LocationMapPicker').then((m) => ({ default: m.LocationMapPicker })))
-import {
-  useGeofenceZones, useCreateGeofenceZone, useUpdateGeofenceZone, useDeleteGeofenceZone,
-  type GeoFenceZone, type GeoFenceZonePayload,
-} from '../api/useGeofence'
+import { useGeofenceZones, useCreateGeofenceZone, useUpdateGeofenceZone, useDeleteGeofenceZone, type GeoFenceZone, type GeoFenceZonePayload } from '../api/useGeofence'
+// Lazy: Leaflet and its CSS are ~158 kB and only this screen uses them.
+const LocationMapPicker = React.lazy(() => import('./LocationMapPicker').then((m) => ({ default: m.LocationMapPicker })))
 
-// Mirrors the mobile geofence CRUD (Attendance_App/app/geofence-zones.tsx) for
-// behaviour. Write actions are gated on org.geofence.write — the same authority
-// the backend enforces (@PreAuthorize) on POST/PUT/DELETE.
-
-// Must stay identical to the mobile Geofence Zones palette
-// (Attendance_App/app/geofence-zones.tsx). The first swatch used to be
-// #059669 here and #0F6E56 there, so a zone created on a phone rendered a
-// green the web picker could not select — it showed as "no swatch chosen"
-// and picking any colour to save silently restyled the zone.
+// Must match the mobile Geofence Zones palette, or a zone made on a phone shows a colour the web can't pick.
 const COLOR_PRESETS = ['#0F6E56', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899']
-// Zones are still CREATED with FACE_RECOGNITION (see the form default) — the
-// column is NOT NULL — but the value is no longer offered as a choice, because
-// nothing reads it. The old three-option list lived here.
+const label = 'mb-1.5 block text-[13px] font-semibold text-text-secondary'
+type Toast = (msg: string, err?: boolean, detail?: string) => void
 
-interface ZoneFormState {
-  name: string
-  latitude: string
-  longitude: string
-  radiusMeters: string
-  // Branch this zone covers. Anil doc-2 issue 1: setting this here is what
-  // populates the Workforce Directory "Branch" column for employees assigned
-  // to the zone (WorkforceEmployeeService derives Employee.branchId from
-  // GeoFenceZone.branchId when HR leaves the employee's Branch blank).
-  branchId: string
-  departmentId: string
-  punchMethod: string
-  colorHex: string
-}
+interface ZoneForm { name: string; latitude: string; longitude: string; radiusMeters: string; branchId: string; departmentId: string; punchMethod: string; colorHex: string }
+// punch_method is NOT NULL but read by nothing at check-in, so it's kept as-is and not offered as a choice.
+const emptyForm = (): ZoneForm => ({ name: '', latitude: '', longitude: '', radiusMeters: '100', branchId: '', departmentId: '', punchMethod: 'FACE_RECOGNITION', colorHex: COLOR_PRESETS[0] })
+const formFromZone = (z: GeoFenceZone): ZoneForm => ({
+  name: z.name ?? '', latitude: z.latitude != null ? String(z.latitude) : '', longitude: z.longitude != null ? String(z.longitude) : '',
+  radiusMeters: z.radiusMeters != null ? String(z.radiusMeters) : '100', branchId: z.branchId ?? '', departmentId: z.departmentId ?? '',
+  punchMethod: z.punchMethod ?? 'FACE_RECOGNITION', colorHex: z.colorHex ?? COLOR_PRESETS[0],
+})
 
-function emptyForm(): ZoneFormState {
-  return {
-    name: '', latitude: '', longitude: '', radiusMeters: '100',
-    branchId: '', departmentId: '', punchMethod: 'FACE_RECOGNITION', colorHex: COLOR_PRESETS[0],
-  }
-}
-
-function formFromZone(z: GeoFenceZone): ZoneFormState {
-  return {
-    name: z.name ?? '',
-    latitude: z.latitude != null ? String(z.latitude) : '',
-    longitude: z.longitude != null ? String(z.longitude) : '',
-    radiusMeters: z.radiusMeters != null ? String(z.radiusMeters) : '100',
-    branchId: z.branchId ?? '',
-    departmentId: z.departmentId ?? '',
-    punchMethod: z.punchMethod ?? 'FACE_RECOGNITION',
-    colorHex: z.colorHex ?? COLOR_PRESETS[0],
-  }
-}
-
-// ── Slide-over form ─────────────────────────────────────────────────────────────
-
-function ZoneFormModal({
-  open, onClose, editing, canWrite,
-}: {
-  open: boolean
-  onClose: () => void
-  editing: GeoFenceZone | null
-  canWrite: boolean
-}) {
-  const { toast } = useToast()
+function ZoneDrawer({ editing, onClose, toast }: { editing: GeoFenceZone | null; onClose: () => void; toast: Toast }) {
   const createZone = useCreateGeofenceZone()
   const updateZone = useUpdateGeofenceZone()
-  const isEditing = !!editing
-
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
   const { data: departments = [] } = useDepartments(companyId)
   const { data: branches = [] } = useBranches(companyId)
-
-  const [form, setForm] = useState<ZoneFormState>(emptyForm())
-  // Bumped when the coordinates change from outside the map — opening an
-  // existing zone, or "use my current location" — so the viewport follows.
-  // Deliberately NOT bumped on a map click: re-centring under the cursor
-  // mid-drag is disorienting.
-  const [recenterKey, setRecenterKey] = useState(0)
-
-  // Re-seed the form whenever the modal opens for a different zone.
-  const seedKey = (open ? 'open' : 'closed') + ':' + (editing?.id ?? 'new')
-  const [seededKey, setSeededKey] = useState('')
-  if (open && seededKey !== seedKey) {
-    setForm(editing ? formFromZone(editing) : emptyForm())
-    setSeededKey(seedKey)
-    setRecenterKey((k) => k + 1)
-  }
-  if (!open && seededKey !== '') setSeededKey('')
-
-  const set = (k: keyof ZoneFormState, v: string) => setForm((p) => ({ ...p, [k]: v }))
-  const isPending = createZone.isPending || updateZone.isPending
-
-
+  const [form, setForm] = useState<ZoneForm>(() => (editing ? formFromZone(editing) : emptyForm()))
+  // Bumped when the coordinates change from outside the map (not on a map click) so the view follows.
+  const [recenterKey, setRecenterKey] = useState(1)
+  const set = (k: keyof ZoneForm, v: string) => setForm((p) => ({ ...p, [k]: v }))
+  const busy = createZone.isPending || updateZone.isPending
   const useCurrentLocation = () => {
-    if (!navigator.geolocation) { toast('Geolocation is not available in this browser', 'error'); return }
+    if (!navigator.geolocation) { toast('This browser can’t share its location', true); return }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        set('latitude', pos.coords.latitude.toFixed(6))
-        set('longitude', pos.coords.longitude.toFixed(6))
-        setRecenterKey((k) => k + 1)
-      },
-      () => toast('Could not get current location', 'error'),
+      (pos) => { set('latitude', pos.coords.latitude.toFixed(6)); set('longitude', pos.coords.longitude.toFixed(6)); setRecenterKey((k) => k + 1) },
+      () => toast('Couldn’t get your location', true),
       { enableHighAccuracy: true, timeout: 8000 },
     )
   }
-
-  const handleSubmit = async () => {
-    if (!form.name.trim()) { toast('Zone name is required', 'error'); return }
-    const lat = parseFloat(form.latitude)
-    const lng = parseFloat(form.longitude)
-    const radius = parseInt(form.radiusMeters, 10)
-    if (Number.isNaN(lat) || Number.isNaN(lng)) { toast('Valid latitude and longitude are required', 'error'); return }
-    if (Number.isNaN(radius) || radius <= 0) { toast('Radius must be a positive number', 'error'); return }
-
-    const payload: GeoFenceZonePayload = {
-      name: form.name.trim(),
-      latitude: lat,
-      longitude: lng,
-      radiusMeters: radius,
-      branchId: form.branchId || undefined,
-      departmentId: form.departmentId || undefined,
-      punchMethod: form.punchMethod || undefined,
-      colorHex: form.colorHex,
-      active: true,
-    }
-
+  const submit = async () => {
+    if (!form.name.trim()) { toast('Name the zone', true); return }
+    const lat = parseFloat(form.latitude), lng = parseFloat(form.longitude), radius = parseInt(form.radiusMeters, 10)
+    if (Number.isNaN(lat) || Number.isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) { toast('Set a valid location on the map or in the boxes', true); return }
+    if (Number.isNaN(radius) || radius <= 0) { toast('The radius must be a positive number of metres', true); return }
+    const payload: GeoFenceZonePayload = { name: form.name.trim(), latitude: lat, longitude: lng, radiusMeters: radius, branchId: form.branchId || undefined, departmentId: form.departmentId || undefined, punchMethod: form.punchMethod || undefined, colorHex: form.colorHex, active: true }
     try {
-      if (isEditing) {
-        await updateZone.mutateAsync({ id: editing!.id, ...payload })
-        toast('Zone updated', 'success')
-      } else {
-        await createZone.mutateAsync(payload)
-        toast('Zone created', 'success')
-      }
+      if (editing) { await updateZone.mutateAsync({ id: editing.id, ...payload }); toast('Zone saved') } else { await createZone.mutateAsync(payload); toast('Zone added') }
       onClose()
-    } catch (err) {
-      toast((err as Error)?.message || 'Failed to save zone', 'error')
-    }
+    } catch (err) { toast('Couldn’t save the zone', true, (err as Error)?.message) }
   }
-
-  if (!open) return null
-
   return (
-    <>
-      <div className="fixed inset-0 z-[100] bg-text-primary/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="ut-card ut-glass ut-card-lg fixed right-0 top-0 bottom-0 z-[110] w-full max-w-md flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border-default">
-          <h3 className="text-text-primary font-semibold">{isEditing ? 'Edit Zone' : 'Add Zone'}</h3>
-          <button onClick={onClose} className="p-1.5 text-text-tertiary hover:text-text-primary rounded-lg hover:bg-bg-surface">
-            <X size={16} />
-          </button>
+    <HrDrawer title={editing ? `Edit ${editing.name}` : 'Add a zone'} onClose={() => { if (!busy) onClose() }} width="max-w-xl"
+      footer={<><HrButton variant="ghost" onClick={onClose} disabled={busy}>Cancel</HrButton><HrButton onClick={submit} disabled={busy}>{busy ? 'Saving…' : editing ? 'Save zone' : 'Add zone'}</HrButton></>}>
+      <div className="space-y-4">
+        <div><label className={label} htmlFor="gz-name">Zone name</label><input id="gz-name" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Hyderabad HQ" className="ut-input" /></div>
+        {/* Two-way bound: typing moves the pin, moving the pin rewrites the boxes. */}
+        <React.Suspense fallback={<div className="h-[260px] animate-pulse rounded-xl border border-border-default bg-bg-base" />}>
+          <LocationMapPicker lat={Number(form.latitude)} lng={Number(form.longitude)} radiusMeters={Number(form.radiusMeters)} recenterKey={recenterKey}
+            onChange={(la, ln) => { set('latitude', la.toFixed(6)); set('longitude', ln.toFixed(6)) }} />
+        </React.Suspense>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+          <div><label className={label} htmlFor="gz-lat">Latitude</label><input id="gz-lat" value={form.latitude} onChange={(e) => { set('latitude', e.target.value); setRecenterKey((k) => k + 1) }} placeholder="17.385044" inputMode="decimal" className="ut-input" /></div>
+          <div><label className={label} htmlFor="gz-lng">Longitude</label><input id="gz-lng" value={form.longitude} onChange={(e) => { set('longitude', e.target.value); setRecenterKey((k) => k + 1) }} placeholder="78.486671" inputMode="decimal" className="ut-input" /></div>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          <div>
-            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Zone Name *</label>
-            <input
-              value={form.name}
-              onChange={(e) => set('name', e.target.value)}
-              placeholder="e.g. Hyderabad HQ"
-              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary transition-colors"
-            />
-          </div>
-
-          {/* 2026-09-13: the app has had a drag-a-pin picker since it shipped;
-              the web offered two numeric boxes, so setting up a site meant
-              copying coordinates out of Google Maps and trusting you had not
-              transposed a digit. A wrong centre is invisible — the zone never
-              matches, nobody at that site can punch in, and nothing says why.
-              Two-way bound: typing moves the pin, moving the pin rewrites the
-              fields. */}
-          <React.Suspense fallback={<div className="h-[260px] animate-pulse rounded-xl border border-border-default bg-bg-base" />}>
-          <LocationMapPicker
-            lat={Number(form.latitude)}
-            lng={Number(form.longitude)}
-            radiusMeters={Number(form.radiusMeters)}
-            recenterKey={recenterKey}
-            onChange={(la, ln) => {
-              // 6dp ≈ 0.1 m, well past what a geofence needs, and keeps the
-              // text boxes readable instead of showing 15 decimal places.
-              set('latitude', la.toFixed(6))
-              set('longitude', ln.toFixed(6))
-            }}
-          />
-          </React.Suspense>
-
-          <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-            <div>
-              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Latitude *</label>
-              <input
-                value={form.latitude}
-                onChange={(e) => set('latitude', e.target.value)}
-                placeholder="17.385044"
-                inputMode="decimal"
-                className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Longitude *</label>
-              <input
-                value={form.longitude}
-                onChange={(e) => set('longitude', e.target.value)}
-                placeholder="78.486671"
-                inputMode="decimal"
-                className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary transition-colors"
-              />
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={useCurrentLocation}
-            className="flex items-center gap-2 text-xs font-medium text-primary hover:text-primary-dark transition-colors"
-          >
-            <Crosshair size={14} /> Use my current location
-          </button>
-
-          <div>
-            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Radius (meters) *</label>
-            <input
-              value={form.radiusMeters}
-              onChange={(e) => set('radiusMeters', e.target.value)}
-              placeholder="100"
-              inputMode="numeric"
-              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary transition-colors"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Assign to Branch</label>
-            <select
-              value={form.branchId}
-              onChange={(e) => set('branchId', e.target.value)}
-              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
-            >
-              <option value="">None (company-wide)</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-text-tertiary">
-              Employees assigned to this zone will be shown under this branch in the Workforce Directory.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Assign to Department</label>
-            <select
-              value={form.departmentId}
-              onChange={(e) => set('departmentId', e.target.value)}
-              className="w-full bg-bg-surface border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary transition-colors"
-            >
-              <option value="">None (company-wide)</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-            {/* The app tells you where to go when the list is empty; the web
-                just showed a dropdown with one useless option. */}
-            {departments.length === 0 && (
-              <p className="mt-1 text-xs text-text-tertiary">
-                No departments available — add one from Departments first.
-              </p>
-            )}
-          </div>
-
-          {/* 2026-09-10: this was three clickable chips (FACE_RECOGNITION /
-              GPS / MANUAL) that appeared to configure how people punch in.
-              They did not. `punch_method` is written to geo_fence_zones and
-              then read by nothing — a repo-wide search finds it only in the
-              entity and the two DTOs, never in the check-in path. Setting a
-              zone to MANUAL changed no behaviour whatsoever, while strongly
-              implying face verification could be switched off.
-              The mobile screen shows this as read-only with an explanation;
-              matching that is both honest and the parity the client asked for.
-              If per-zone punch policy is wanted for real, it needs enforcing
-              in AttendanceService first — then this can become editable. */}
-          <div>
-            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Punch Verification</label>
-            <div className="flex flex-wrap gap-2">
-              {(['GPS location', 'Face recognition'] as const).map((m) => (
-                <span
-                  key={m}
-                  className="rounded-full border border-border-default bg-bg-base px-3 py-1.5 text-xs font-medium text-text-secondary"
-                >
-                  {m}
-                </span>
-              ))}
-            </div>
-            <p className="mt-1.5 text-xs text-text-tertiary">
-              Both are always required — employees must be inside the zone and pass a face check to punch.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Zone Color</label>
-            <div className="flex flex-wrap gap-2.5">
-              {COLOR_PRESETS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => set('colorHex', c)}
-                  style={{ backgroundColor: c }}
-                  className={clsx(
-                    'w-9 h-9 rounded-full flex items-center justify-center transition-transform',
-                    form.colorHex === c ? 'ring-2 ring-offset-2 ring-text-primary scale-105' : 'hover:scale-105'
-                  )}
-                  aria-label={`Select color ${c}`}
-                >
-                  {form.colorHex === c && <span className="text-white text-xs font-bold">✓</span>}
-                </button>
-              ))}
-            </div>
-          </div>
+        <HrButton size="sm" variant="ghost" onClick={useCurrentLocation}>{dashIcon('target', 14)} Use my current location</HrButton>
+        <div><label className={label} htmlFor="gz-radius">Radius (metres)</label><input id="gz-radius" type="number" min={1} value={form.radiusMeters} onChange={(e) => set('radiusMeters', e.target.value)} placeholder="100" className="ut-input" /></div>
+        <div><label className={label} htmlFor="gz-branch">Branch</label>
+          <select id="gz-branch" value={form.branchId} onChange={(e) => set('branchId', e.target.value)} className="ut-select">
+            <option value="">None (company-wide)</option>
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <p className="mt-1 text-xs text-text-tertiary">People assigned to this zone show under this branch in the directory when their own branch is blank.</p>
         </div>
-
-        <div className="flex gap-3 px-5 py-4 border-t border-border-default">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 border border-border-default text-text-secondary hover:text-text-primary rounded-xl text-sm transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!canWrite || isPending}
-            className="flex-1 py-2.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-colors"
-          >
-            {isPending ? 'Saving...' : isEditing ? 'Update Zone' : 'Create Zone'}
-          </button>
+        <div><label className={label} htmlFor="gz-dept">Department</label>
+          <select id="gz-dept" value={form.departmentId} onChange={(e) => set('departmentId', e.target.value)} className="ut-select">
+            <option value="">None (company-wide)</option>
+            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          {departments.length === 0 && <p className="mt-1 text-xs text-text-tertiary">No departments yet; add one under Organization first.</p>}
+        </div>
+        <Note>Punching here always needs both: being inside the zone (GPS) and passing the face check.</Note>
+        <div><span className={label}>Colour on the map</span>
+          <div className="flex flex-wrap gap-2.5">
+            {COLOR_PRESETS.map((c) => (
+              <button key={c} type="button" onClick={() => set('colorHex', c)} aria-label={`Colour ${c}`} aria-pressed={form.colorHex === c}
+                style={{ width: 32, height: 32, borderRadius: 999, background: c, border: 0, cursor: 'pointer', color: '#fff', fontWeight: 800, boxShadow: form.colorHex === c ? '0 0 0 2px #fff, 0 0 0 4px #0f172a' : 'none' }}>
+                {form.colorHex === c ? '✓' : ''}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-    </>
+    </HrDrawer>
   )
 }
 
-// ── Main page ───────────────────────────────────────────────────────────────────
-
 export const GeofenceZones: React.FC = () => {
-  const { toast } = useToast()
+  const { show, node } = useDesignToast()
   const canWrite = usePermission(P.ORG_GEOFENCE_WRITE)
   const { data: zones = [], isLoading, error, refetch } = useGeofenceZones()
   const deleteZone = useDeleteGeofenceZone()
-
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editing, setEditing] = useState<GeoFenceZone | null>(null)
-
+  const [drawer, setDrawer] = useState<{ zone: GeoFenceZone | null } | null>(null)
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
   const { data: departments = [] } = useDepartments(companyId)
-  const deptName = useMemo(() => {
-    const m = new Map(departments.map((d) => [d.id, d.name]))
-    return (id?: string) => (id ? m.get(id) : undefined)
-  }, [departments])
-
-  const openAdd = () => { setEditing(null); setModalOpen(true) }
-  const openEdit = (z: GeoFenceZone) => { setEditing(z); setModalOpen(true) }
-
-  const handleDelete = async (z: GeoFenceZone) => {
-    if (!window.confirm(`Deactivate "${z.name}"? This will remove it from active geofencing.`)) return
-    try {
-      await deleteZone.mutateAsync(z.id)
-      toast('Zone deactivated', 'success')
-    } catch (err) {
-      toast((err as Error)?.message || 'Failed to delete zone', 'error')
-    }
+  const { data: branches = [] } = useBranches(companyId)
+  const names = useMemo(() => ({ dept: new Map(departments.map((d) => [d.id, d.name])), branch: new Map(branches.map((b) => [b.id, b.name])) }), [departments, branches])
+  const remove = async (z: GeoFenceZone) => {
+    if (!window.confirm(`Remove “${z.name}”? It stops being used for punches and leaves this list.`)) return
+    try { await deleteZone.mutateAsync(z.id); show('Zone removed') } catch (err) { show('Couldn’t remove the zone', true, (err as Error)?.message) }
   }
-
+  const covered = zones.filter((z) => z.branchId).length
   return (
-    <div className="max-w-7xl mx-auto space-y-8 p-6 sm:p-8">
-      <HrPageHeader
-        crumb="Attendance & Time"
-        title="Geofencing Zones"
-        subtitle="Define office locations where staff can punch attendance from the mobile app."
-        actions={canWrite && (
-          <HrButton onClick={openAdd}>
-            <Plus size={16} /> Add Zone
-          </HrButton>
-        )}
-      />
-
-      {!canWrite && (
-        <div className="flex items-center gap-2 bg-[#ECFDF5] border border-[#6EE7B7] rounded-xl px-4 py-3">
-          <MapPin size={16} className="text-[#047857]" />
-          <p className="text-sm font-medium text-text-secondary">
-            View only — ask an admin or HR manager to add, edit, or remove zones.
-          </p>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => <Skeleton key={i} className="ut-card h-40 w-full animate-pulse" />)}
-        </div>
-      ) : error ? (
-        <EmptyState icon={XCircle} title="Failed to load zones" description="An error occurred while loading geofence zones." action={{ label: 'Retry', onClick: () => refetch() }} />
-      ) : zones.length === 0 ? (
-        <EmptyState
-          icon={MapPin}
-          title="No geofencing zones yet"
-          description="Add a zone to start tracking attendance locations."
-          action={canWrite ? { label: 'Add Zone', onClick: openAdd } : undefined}
-        />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {zones.map((z) => (
-            <div key={z.id} className="ut-card p-5 flex flex-col">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: z.colorHex || '#059669' }} />
-                  <h3 className="text-base font-bold text-text-primary truncate">{z.name}</h3>
-                </div>
-                <HrStatusPill tone={z.active ? 'ok' : 'gray'}>{z.active ? 'Active' : 'Inactive'}</HrStatusPill>
-              </div>
-
-              <div className="space-y-2 text-sm text-text-secondary flex-1">
-                <div className="flex items-center gap-2">
-                  <Crosshair size={14} className="text-text-tertiary flex-shrink-0" />
-                  <span className="truncate">{z.latitude.toFixed(5)}, {z.longitude.toFixed(5)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Radius size={14} className="text-text-tertiary flex-shrink-0" />
-                  <span>{z.radiusMeters}m radius</span>
-                </div>
-                {/* punch_method is stored but never consulted at check-in (see
-                    the form above), so a card reading "MANUAL" claimed a policy
-                    the system does not apply. Every zone requires GPS + face. */}
-                <div className="flex items-center gap-2">
-                  <MapPin size={14} className="text-text-tertiary flex-shrink-0" />
-                  <span>GPS + face</span>
-                </div>
-                {z.departmentId && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Dept</span>
-                    <span>{deptName(z.departmentId) ?? 'Assigned'}</span>
-                  </div>
-                )}
-              </div>
-
-              {canWrite && (
-                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-border-light">
-                  <button
-                    onClick={() => openEdit(z)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary-light rounded-lg transition-colors"
-                  >
-                    <Pencil size={14} /> Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(z)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger-light rounded-lg transition-colors"
-                  >
-                    <Trash2 size={14} /> Delete
-                  </button>
+    <ModulePage crumb="Attendance" title="Geofencing" subtitle="The places staff can punch in from the mobile app."
+      actions={canWrite ? <HrButton onClick={() => setDrawer({ zone: null })}><Plus size={15} /> Add zone</HrButton> : undefined}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        {!canWrite && <Note>View only. Ask an admin or HR manager to add, change or remove zones.</Note>}
+        {isLoading ? <State kind="loading" height={96} /> : !error && zones.length > 0 && <StatRow tiles={[
+          { icon: 'target', color: 'green', label: 'Active zones', value: String(zones.length), sub: 'Used for punches' },
+          { icon: 'briefcase', color: 'blue', label: 'Tied to a branch', value: String(covered), sub: `${zones.length - covered} company-wide` },
+        ]} />}
+        {isLoading ? <State kind="loading" height={200} />
+          : error ? <State kind="error" title="Couldn’t load the zones" description={(error as Error)?.message} onRetry={() => refetch()} />
+            : zones.length === 0 ? <State kind="empty" icon="target" title="No zones yet" description={canWrite ? 'Add your office locations so staff can punch in from the app.' : 'Zones HR sets up appear here.'} />
+              : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,300px),1fr))', gap: 12 }}>
+                  {zones.map((z) => (
+                    <article key={z.id} style={{ ...CARD, padding: 18, display: 'grid', gap: 12, alignContent: 'start' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: 999, background: z.colorHex || '#0F6E56', flexShrink: 0 }} />
+                        <h3 style={{ margin: 0, flex: 1, minWidth: 0, fontFamily: HEAD_FONT, fontSize: 16, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.name}</h3>
+                        <HrStatusPill tone={z.active ? 'ok' : 'gray'}>{z.active ? 'Active' : 'Inactive'}</HrStatusPill>
+                      </div>
+                      <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 12px', fontSize: 13 }}>
+                        <dt style={{ color: '#64748b' }}>Centre</dt><dd style={{ margin: 0, fontVariantNumeric: 'tabular-nums' }}>{`${z.latitude.toFixed(5)}, ${z.longitude.toFixed(5)}`}</dd>
+                        <dt style={{ color: '#64748b' }}>Radius</dt><dd style={{ margin: 0 }}>{`${z.radiusMeters} m`}</dd>
+                        <dt style={{ color: '#64748b' }}>Branch</dt><dd style={{ margin: 0 }}>{z.branchId ? names.branch.get(z.branchId) ?? 'Assigned' : 'Company-wide'}</dd>
+                        <dt style={{ color: '#64748b' }}>Department</dt><dd style={{ margin: 0 }}>{z.departmentId ? names.dept.get(z.departmentId) ?? 'Assigned' : 'Any'}</dd>
+                        <dt style={{ color: '#64748b' }}>Check</dt><dd style={{ margin: 0 }}>GPS and face</dd>
+                      </dl>
+                      <a href={`https://www.openstreetmap.org/?mlat=${z.latitude}&mlon=${z.longitude}#map=17/${z.latitude}/${z.longitude}`} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, fontWeight: 600, color: '#0f6e56', textDecoration: 'none' }}>View on a map ↗</a>
+                      {canWrite && (
+                        <div style={{ display: 'flex', gap: 8, borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
+                          <HrButton size="sm" variant="ghost" onClick={() => setDrawer({ zone: z })}>Edit</HrButton>
+                          <HrButton size="sm" variant="ghost" disabled={deleteZone.isPending} onClick={() => remove(z)}>Remove</HrButton>
+                        </div>
+                      )}
+                    </article>
+                  ))}
                 </div>
               )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <ZoneFormModal
-        open={modalOpen}
-        onClose={() => { setModalOpen(false); setEditing(null) }}
-        editing={editing}
-        canWrite={canWrite}
-      />
-    </div>
+      </div>
+      {drawer && <ZoneDrawer key={drawer.zone?.id ?? 'new'} editing={drawer.zone} onClose={() => setDrawer(null)} toast={show} />}
+      {node}
+    </ModulePage>
   )
 }

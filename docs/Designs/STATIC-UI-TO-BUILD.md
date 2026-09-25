@@ -653,3 +653,28 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - `live-compliance-modals.mjs` 20/20
   - `live-inspector-browser.mjs` (passes: link, anonymous view, PDF, CSV, revoke)
   - `live-assets-browser.mjs` (passes)
+
+### 11.12 Muster roll, Manual entry and Geofencing (`/hrms/muster-roll`, `/hrms/attendance/manual-entry`, `/hrms/attendance/geofencing`): done
+- **Muster roll:**
+  - On the module kit: a day bar (previous / date / next / Today, plus a department filter), stat tiles, the design's donut in place of the two charts that repeated the same numbers, and the register table.
+  - The CSV export is recorded in the Reports Center's "Recent downloads".
+  - The "Manual entry" row action shows only for people who can save one (`attendance.regularization.approve`).
+- **Fixed (Muster roll):**
+  - **Today no longer calls people "Absent"** just because they haven't punched yet. The tile and rows say "Not marked yet", and past days still say "Absent".
+    - The number is the API's `absent` (no punch and not on leave), not `notMarked`, which also counts people on leave and so double-counted them.
+    - Someone on approved leave without a punch reads "On leave".
+  - The page now opens on `?date=`. Manual entry already sent people back to `?date=…`, but the page always opened on today.
+- **Manual entry:**
+  - On the kit, in three panels: Who, When and Why.
+  - Save failures now show the server's reason.
+- **Fixed (Manual entry):**
+  - The date was parsed as UTC midnight. That's right in India, but it shifts the day in time zones west of UTC; it now uses local time.
+  - Roles without directory access used to fire a directory request that got a 403. They now go straight to their team roster.
+- **Geofencing:**
+  - On the kit: tiles, one card per zone (centre, radius, branch, department, check type, and a "View on a map" link), and a drawer form with the map picker.
+  - "Delete" is now "Remove", with the true effect in its confirmation: the zone is deactivated, stops being used for punches, and leaves the list.
+  - Branch names now show on the cards.
+- **Static / to build:** deactivated zones can't be seen or restored, because the list endpoint returns active zones only.
+- **Checked live:**
+  - `live-design-attendance-admin.mjs` 18/18 (muster today vs a past day, `?date=`, CSV and its record, a manual punch saved at 09:00 local and landing back on that day, zone add / edit / remove, department manager; with cleanup)
+  - `live-design-attendance.mjs` 26/26
