@@ -114,10 +114,12 @@ export class AdminDashboard extends DCLogic {
     const sumLoading = sec.summary.isLoading, sumEmpty = sec.summary.isEmpty
     const payVals = (D.payroll || []).map((m: any) => m.gross)
     const complianceDue = Number(s.complianceDue || 0), complianceDone = Number(s.complianceDone || 0)
+    // A past date: "through today" becomes that day, and Active employees shows the month's joiners and leavers.
+    const through = isToday ? 'this month through today' : `this month through ${fmtShort(sel)}`
     const summaryTiles = [
-      s.active != null && tile('users', 'green', 'Active employees', sumEmpty ? 0 : s.active, 'Excludes exited and on-notice', '/hrms/employees?status=ACTIVE', sumLoading),
-      canHiring && s.openRoles != null && tile('briefcase', 'blue', 'Open roles', sumEmpty ? 0 : s.openRoles, sumEmpty || !s.openRoles ? 'No open requisitions' : s.pipeline != null ? `${s.pipeline} candidates in pipeline` : 'Open requisitions', '/hrms/hiring?tab=requisitions', sumLoading),
-      s.complianceDue != null && tile('shield', 'teal', 'Compliance completion', sumEmpty || !complianceDue ? 'No items due' : Math.round((complianceDone / complianceDue) * 100) + '%', sumEmpty || !complianceDue ? 'Nothing due this month through today' : sub(`${complianceDone} of ${complianceDue} obligations due this month through today completed`, ratio(complianceDone / complianceDue, 'teal', sumLoading, false)), '/hrms/compliance', sumLoading),
+      s.active != null && tile('users', 'green', 'Active employees', sumEmpty ? 0 : s.active, !isToday && s.monthMoves ? s.monthMoves : 'Excludes exited and on-notice', '/hrms/employees?status=ACTIVE', sumLoading),
+      canHiring && s.openRoles != null && tile('briefcase', 'blue', 'Open roles', sumEmpty ? 0 : s.openRoles, sumEmpty || !s.openRoles ? (isToday ? 'No open requisitions' : `No open requisitions on ${fmtShort(sel)}`) : s.pipeline != null ? `${s.pipeline} candidates in pipeline` : 'Open requisitions', '/hrms/hiring?tab=requisitions', sumLoading),
+      s.complianceDue != null && tile('shield', 'teal', 'Compliance completion', sumEmpty || !complianceDue ? 'No items due' : Math.round((complianceDone / complianceDue) * 100) + '%', sumEmpty || !complianceDue ? `Nothing due ${through}` : sub(`${complianceDone} of ${complianceDue} obligations due ${through} completed`, ratio(complianceDone / complianceDue, 'teal', sumLoading, false)), '/hrms/compliance', sumLoading),
       hasPayroll && s.hasPayrollFigure && tile('rupee', 'purple', `Finalized payroll · ${s.payrollMonth || ''}`, sumEmpty || s.payrollGross == null ? 'Not finalized' : inr(s.payrollGross), sub('Gross amount from locked or paid payroll', spark(payVals, 'purple', sumLoading, sumEmpty)), '/hrms/payroll/runs', sumLoading),
     ].filter(Boolean)
 
@@ -217,7 +219,7 @@ export class AdminDashboard extends DCLogic {
     }
     // Company notices, five per page, with a pager when there are more.
     const nTotal = D.noticeTotal ?? notices.length, nPage = Number(p.noticePage || 0), nPages = Math.max(1, Number(p.noticePages || 1))
-    const noticeText = `${nTotal} active ${nTotal === 1 ? 'notice' : 'notices'} · 5 per page`
+    const noticeText = isToday ? `${nTotal} active ${nTotal === 1 ? 'notice' : 'notices'} · 5 per page` : `${nTotal} ${nTotal === 1 ? 'notice was' : 'notices were'} up on ${fmtShort(sel)} · back to today to add or edit`
     const noticePager = nPages > 1
       ? createElement(Fragment, null, `${noticeText} · page ${nPage + 1} of ${nPages} `,
         createElement(HrButton, { size: 'sm', variant: 'ghost', disabled: nPage <= 0, onClick: () => p.onNoticePage && p.onNoticePage(nPage - 1), 'aria-label': 'Newer notices', style: { marginLeft: 8 } } as any, 'Newer'),
@@ -243,15 +245,17 @@ export class AdminDashboard extends DCLogic {
     ]
     const op = D.ops || {}, exceptions = c.late + c.absent + c.notMarked
     const show: Record<ShowKey, boolean> = { ...SHOW_ALL, ...(p.show || {}) }
+    // A past date: the queues as they stood that day; a count with no history says "As of today".
+    const waiting = (n: number, asOfToday: boolean) => (asOfToday ? 'As of today · ' : '') + (!n ? (isToday || asOfToday ? 'Nothing waiting' : `Nothing waiting ${dayWord}`) : `${n} awaiting review${isToday || asOfToday ? '' : ' ' + dayWord}`)
     const ops = [
-      { bigIcon: ic('clock', 84), eyebrow: liveEmpty ? 'No exceptions' : `${exceptions} exceptions ${dayWord}`, title: 'Attendance follow-up', body: "Review today's attendance exceptions and open the employee list behind each count.", cta: 'Review attendance', tip: '→ ' + `/hrms/attendance?tab=team&date=${sel}`, onClick: () => go(`/hrms/attendance?tab=team&date=${sel}`) },
-      { bigIcon: ic('inbox', 84), eyebrow: !op.corrections ? 'Nothing waiting' : `${op.corrections} awaiting review`, title: 'Correction requests', body: 'Approve or reject regularization requests before the payroll cut-off.', cta: 'Review requests', tip: '→ /hrms/attendance?tab=corrections', onClick: () => go('/hrms/attendance?tab=corrections') },
-      { bigIcon: ic('calendarPlus', 84), eyebrow: !op.leave ? 'Nothing waiting' : `${op.leave} awaiting review`, title: 'Leave approvals', body: 'Employees are waiting on a first-level decision for their leave.', cta: 'Open leave approvals', tip: '→ /hrms/leave?tab=approvals', onClick: () => go('/hrms/leave?tab=approvals') },
+      { bigIcon: ic('clock', 84), eyebrow: liveEmpty ? 'No exceptions' : `${exceptions} exceptions ${dayWord}`, title: 'Attendance follow-up', body: isToday ? "Review today's attendance exceptions and open the employee list behind each count." : "Review the day's attendance exceptions and open the employee list behind each count.", cta: 'Review attendance', tip: '→ ' + `/hrms/attendance?tab=team&date=${sel}`, onClick: () => go(`/hrms/attendance?tab=team&date=${sel}`) },
+      { bigIcon: ic('inbox', 84), eyebrow: waiting(op.corrections, !!op.correctionsToday), title: 'Correction requests', body: 'Approve or reject regularization requests before the payroll cut-off.', cta: 'Review requests', tip: '→ /hrms/attendance?tab=corrections', onClick: () => go('/hrms/attendance?tab=corrections') },
+      { bigIcon: ic('calendarPlus', 84), eyebrow: waiting(op.leave, !!op.leaveToday), title: 'Leave approvals', body: 'Employees are waiting on a first-level decision for their leave.', cta: 'Open leave approvals', tip: '→ /hrms/leave?tab=approvals', onClick: () => go('/hrms/leave?tab=approvals') },
     ].filter((_, i) => [show.opsAttendance, show.opsCorrections, show.opsLeave][i])
 
     const calOpen = this.state.calOpen
     const chip = createElement('button', {
-      type: 'button', onClick: () => this.setState({ calOpen: !this.state.calOpen }), 'aria-haspopup': 'dialog', 'aria-expanded': calOpen, 'data-tip': 'Opens calendar · choose the dashboard date',
+      type: 'button', onClick: () => this.setState({ calOpen: !this.state.calOpen }), 'aria-haspopup': 'dialog', 'aria-expanded': calOpen, 'data-tip': 'Opens calendar · choose the dashboard date, today or earlier',
       style: { display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 12px', fontSize: 13, fontWeight: 600, color: isToday ? '#334155' : '#0a5240', background: isToday ? '#fff' : '#ecfdf5', border: `1px solid ${isToday ? '#e2e8f0' : '#6ee7b7'}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', boxShadow: calOpen ? '0 0 0 3px #a7f3d0' : '0 1px 2px rgba(15,23,42,.04)' },
     }, ic('calendarDays', 15, { color: '#0f6e56' }), isToday ? D.todayLabel : `Viewing ${fmtWd(sel)}`, ic('chevronDown', 14, { color: '#64748b' }))
     const headerActions = createElement(Fragment, null, chip,
@@ -274,6 +278,21 @@ export class AdminDashboard extends DCLogic {
       selIso: sel, todayIso: today, daily, holidays: D.holidays || [],
       isPastDate: !isToday && !sec.live.isError,
       selLong: fmtWd(sel),
+      // A past date: each card's wording follows the day (see design-build's AdminDashboard patches).
+      pastNote: 'Every card shows that day as it was. Anything marked “As of today” keeps no history, so it shows today.',
+      trendChip: isToday ? 'Last 7 days · IST' : `7 days to ${fmtShort(sel)} · IST`,
+      alertsTitle: isToday ? 'Needs your action' : `Waiting on ${fmtShort(sel)}`,
+      caughtUpText: isToday ? 'Nothing is waiting on you.' : 'Nothing was waiting that day.',
+      seatsAsOf: !isToday,
+      asOfToday: createElement('span', { 'data-tip': 'Seats keep no history, so this is today’s count', style: { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: '#475569', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' } }, ic('clock', 12), 'As of today'),
+      deptSub: isToday ? 'Active employees by department. Click a bar to filter the directory.' : `Active employees by department on ${fmtShort(sel)}. Click a bar to filter the directory.`,
+      performersSub: isToday ? 'Average rating across submitted reviews.' : `Average rating across reviews submitted by ${fmtShort(sel)}.`,
+      onboardingSub: isToday ? 'Runs in progress · tasks completed.' : `Runs in progress on ${fmtShort(sel)} · tasks completed by then.`,
+      stagesLabel: isToday ? 'Candidates by current stage' : `Applied by ${fmtShort(sel)} · current stage`,
+      activityTitle: isToday ? 'Live Activity Feed' : `Activity up to ${fmtShort(sel)}`,
+      probationTitle: isToday ? 'Upcoming probation confirmations' : `Probation confirmations after ${fmtShort(sel)}`,
+      probationEmpty: isToday ? 'None ending in the next 30 days' : `None ending in the 30 days after ${fmtShort(sel)}`,
+      noticesEmpty: isToday ? 'No current company notices.' : `No company notices were up on ${fmtShort(sel)}.`,
       backToToday: () => setDate(null),
       liveChip: isToday ? 'Today · IST' : `${fmtShort(sel)} · IST`,
       todayTitle: isToday ? "Today's Attendance" : `Attendance · ${fmtShort(sel)}`,

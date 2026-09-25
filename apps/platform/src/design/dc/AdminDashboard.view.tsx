@@ -37,7 +37,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                 <strong>
                   {txt(v.selLong)}
                 </strong>
-                {". Live Overview, the day's attendance and the weekly trend show that date."}
+                {". "}{txt(v.pastNote)}
               </span>
               <HrButton variant="ghost" size="sm" onClick={v.backToToday} data-tip={v.tips?.backToToday}>
                 {"Back to today"}
@@ -138,7 +138,7 @@ export function AdminDashboardView({ v }: { v: any }) {
           <div style={{flex: "1.2 1 300px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "18px 18px 16px", display: "flex", flexDirection: "column", gap: "12px"}}>
             <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
               <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
-                {txt(v.urgentPulse)}{"Needs your action"}
+                {txt(v.urgentPulse)}{txt(v.alertsTitle)}
               </h3>
               {v.alertsList ? (
                 <>
@@ -228,7 +228,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                     {"All caught up"}
                   </p>
                   <p style={{margin: "0", fontSize: "12px", color: "#047857"}}>
-                    {"Nothing is waiting on you."}
+                    {txt(v.caughtUpText)}
                   </p>
                 </div>
               </>
@@ -242,6 +242,13 @@ export function AdminDashboardView({ v }: { v: any }) {
           {v.canBilling ? (
             <>
               <div style={{flex: "1 1 260px", minWidth: "0", display: "flex", flexDirection: "column"}}>
+                {v.seatsAsOf ? (
+                  <>
+                    <div style={{display: "flex", justifyContent: "flex-end", marginBottom: "6px"}}>
+                      {txt(v.asOfToday)}
+                    </div>
+                  </>
+                ) : null}
                 <SeatsTile used={v.seatsUsed} purchased={v.seatsPurchased} onManage={v.goBilling} />
               </div>
             </>
@@ -268,7 +275,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                       {"Weekly Attendance Trend"}
                     </h3>
                     <span style={{fontSize: "12px", color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap"}}>
-                      {"Last 7 days · IST"}
+                      {txt(v.trendChip)}
                     </span>
                   </div>
                   {v.sec?.trend?.isLive ? (
@@ -378,7 +385,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                         {"Dept Distribution"}
                       </h3>
                       <p style={{margin: "0 0 16px", fontSize: "12px", color: "#64748b"}}>
-                        {"Active employees by department. Click a bar to filter the directory."}
+                        {txt(v.deptSub)}
                       </p>
                       {v.sec?.dept?.isLive ? (
                         <>
@@ -442,7 +449,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                         {"Top performers"}
                       </h3>
                       <p style={{margin: "0 0 10px", fontSize: "12px", color: "#64748b"}}>
-                        {"Average rating across submitted reviews."}
+                        {txt(v.performersSub)}
                       </p>
                       {v.sec?.performers?.isLive ? (
                         <>
@@ -480,7 +487,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                         {"Onboarding tracker"}
                       </h3>
                       <p style={{margin: "0 0 10px", fontSize: "12px", color: "#64748b"}}>
-                        {"Runs in progress · tasks completed."}
+                        {txt(v.onboardingSub)}
                       </p>
                       {v.sec?.onboarding?.isLive ? (
                         <>
@@ -579,7 +586,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                           </button>
                         </div>
                         <p style={{margin: "0 0 10px", fontSize: "12px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
-                          {"Candidates by current stage"}
+                          {txt(v.stagesLabel)}
                         </p>
                         <div style={{display: "grid", gap: "8px"}}>
                           {arr(v.hiring?.stages).map((s: any, $index: number) => (
@@ -722,7 +729,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                         <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                           {txt(v.icActivity)}
                         </span>
-                        {"Live Activity Feed"}
+                        {txt(v.activityTitle)}
                       </h3>
                       <button type="button" onClick={v.goAudit} data-tip={v.tips?.goAudit} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
                         {"View all →"}
@@ -828,7 +835,7 @@ export function AdminDashboardView({ v }: { v: any }) {
               ) : null}
               {v.sec?.notices?.notLive ? (
                 <>
-                  <SectionState kind={v.sec?.notices?.state} title="No current company notices." icon="megaphone" height="90" retry={v.sec?.notices?.retry} />
+                  <SectionState kind={v.sec?.notices?.state} title={v.noticesEmpty} icon="megaphone" height="90" retry={v.sec?.notices?.retry} />
                 </>
               ) : null}
             </section>
@@ -904,7 +911,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                     <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
                       {txt(v.icCalendarClock)}
                     </span>
-                    {"Upcoming probation confirmations "}
+                    {txt(v.probationTitle)}{" "}
                     <span style={{background: "#ecfdf5", color: "#0f6e56", borderRadius: "999px", padding: "1px 8px", fontSize: "11px", fontVariantNumeric: "tabular-nums"}}>
                       {txt(v.probationCount)}
                     </span>
@@ -922,7 +929,7 @@ export function AdminDashboardView({ v }: { v: any }) {
                 ) : null}
                 {v.sec?.probations?.notLive ? (
                   <>
-                    <SectionState kind={v.sec?.probations?.state} title="None ending in the next 30 days" icon="calendarClock" height="110" retry={v.sec?.probations?.retry} />
+                    <SectionState kind={v.sec?.probations?.state} title={v.probationEmpty} icon="calendarClock" height="110" retry={v.sec?.probations?.retry} />
                   </>
                 ) : null}
               </div>

@@ -175,6 +175,23 @@ const DERIVED = {
     for (const [marker, flag] of [['<section aria-labelledby="sec-live"', 'show.live'], ['<section aria-labelledby="sec-summary"', 'show.summary'], ['<section aria-labelledby="sec-att"', 'show.att'],
       ['<section aria-labelledby="sec-emp"', 'show.emp'], ['<section aria-label="Recruitment and projects"', 'show.recruit'], ['<section aria-label="Payroll and activity"', 'show.payact'],
       ['<section aria-labelledby="sec-notices"', 'show.notices'], ['<section aria-labelledby="sec-ops"', 'show.ops']]) t = wrapSection(t, marker, flag)
+    // A past date (?date=): every card shows that day, so the fixed "today" wording
+    // follows the date; seats keep no history and say "As of today" (2026-09-26).
+    for (const [from, to] of [
+      ["Live Overview, the day's attendance and the weekly trend show that date.", '{{ pastNote }}'],
+      ['Last 7 days · IST</span>', '{{ trendChip }}</span>'],
+      ['{{ urgentPulse }}Needs your action</h3>', '{{ urgentPulse }}{{ alertsTitle }}</h3>'],
+      ['>Nothing is waiting on you.</p>', '>{{ caughtUpText }}</p>'],
+      ['<div style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column"><dc-import name="SeatsTile"', '<div style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column"><sc-if value="{{ seatsAsOf }}" hint-placeholder-val="{{ false }}"><div style="display:flex;justify-content:flex-end;margin-bottom:6px">{{ asOfToday }}</div></sc-if><dc-import name="SeatsTile"'],
+      ['Active employees by department. Click a bar to filter the directory.</p>', '{{ deptSub }}</p>'],
+      ['>Average rating across submitted reviews.</p>', '>{{ performersSub }}</p>'],
+      ['>Runs in progress · tasks completed.</p>', '>{{ onboardingSub }}</p>'],
+      ['>Candidates by current stage</p>', '>{{ stagesLabel }}</p>'],
+      ['</span>Live Activity Feed</h3>', '</span>{{ activityTitle }}</h3>'],
+      ['</span>Upcoming probation confirmations <span', '</span>{{ probationTitle }} <span'],
+      ['title="None ending in the next 30 days"', 'title="{{ probationEmpty }}"'],
+      ['title="No current company notices."', 'title="{{ noticesEmpty }}"'],
+    ]) t = replaceOnce(t, from, to)
     return '<x-dc>\n' + t + '\n</x-dc>\n'
   },
 }
