@@ -16,19 +16,12 @@ Priorities:
 
 | # | Question | Where | Notes |
 |---|---|---|---|
-| D1 | Should payroll use each company's weekly off days? | `PayrollRunService` ~lines 966 and 985 hard-code Saturday + Sunday | Leave already uses the company's work week (§10 #2). Pay would change for 6-day and Fri–Sat companies, so get sign-off. |
 | D2 | Which fiscal year is the real one? | HR Configuration's fiscal year vs `hrms.companies.fiscal_year_start` | Keep one and read it everywhere (§8). |
 | D3 | Retire the Geofencing page? | `/hrms/attendance/geofencing` vs the branch geofence in Companies & Branches | Two places set punch zones (§1, §4). |
-| D4 | Pay PLI through payroll? | PLI is paid as separate awards today (§5) | If yes, add approved awards to the run's earnings. |
 
 ---
 
 ## P0: finish first
-
-**P0-1 Payroll weekly offs** (after D1)
-- *Now:* runs count Sat/Sun as off for everyone.
-- *Build:* read `settings.hr_configuration.weekend_days` per company, like `LeaveService.resolveOffDays`.
-- *Done when:* a 6-day-week company's run matches the attendance days.
 
 **P0-2 Apply the HR configuration settings that are only saved** (§8)
 - Default probation length: set `probation_end_date = date_of_joining + N months` on employee create when none is given.
@@ -53,10 +46,6 @@ Priorities:
 - Regularization proof (§4): upload and store its URL as `attachmentUrl`; show it on the approval card.
 - *Done when:* the "Coming soon" and "can't attach" notes are gone and the files open for the approver.
 
-**P0-6 Payslip breakdown for the employee** (§11.2)
-- *Build:* `GET /v1/payroll/payslips/me/{runId}` returning the lines.
-- *UI:* open the design's payslip drawer from `/me/payslips`.
-
 **P0-7 Leave and Expenses tabs in the employee workspace** (§7)
 - *Build:* `GET /v1/leave/employees/{id}/balances`, `…/requests` and `GET /v1/expense/employees/{id}/claims`, gated on the HR permissions.
 - *Done when:* HR sees another person's leave and claims on their record.
@@ -80,7 +69,6 @@ Priorities:
 - Grade pay bands (min/max CTC), and designation → grade by id (it's free text today).
 - Contractors: update and restore endpoints; licence expiry, service, deployment sites, worker count; link contract workers to agencies.
 - Classifications API: permission-based `GET` and an update endpoint.
-- Salary components: deactivate, fixed amounts (`percent_value` is `NUMERIC(6,3)`), "show on payslip".
 - Leave types: accrual frequency and encashment in the API; a year-end carry-forward job.
 - Shifts: shift code, flexible core hours, weekly offs per shift.
 - Departments: change parent; honour `branchIds` on create.
@@ -93,11 +81,6 @@ Priorities:
 - Export every salary structure.
 - Issue an advance for someone else.
 - TDS calculation.
-- Statutory dues computed from payroll (not the hand-filled ledger).
-- LWF deduction.
-- Payroll cycle days (not just calendar months).
-- Run "Pay date" / "Working days" and activity names.
-- Per-component totals for runs over 60 people.
 
 **Attendance** (§4)
 - Overtime details (shift end, left at, reason).
