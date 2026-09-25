@@ -36,6 +36,7 @@ import { useEmployeeKpis } from '../api/usePerformance'
 import type { OnboardingRecordData } from '../onboarding/OnboardingRecord'
 import { sendInvite, resendInvite } from './api/useInvitation'
 import { resetFaceEnrollment } from './api/useFaceAdmin'
+import { EmployeeFaceEnrollButton, employeeFaceLine, useEmployeeFaceStatus } from '../attendance/face/FaceEnrollment'
 import { EmployeeForm } from './EmployeeForm'
 import { EmployeePersonal } from './workspace/EmployeePersonal'
 import { EmployeeJob } from './workspace/EmployeeJob'
@@ -87,6 +88,8 @@ export function EmployeeDetail() {
   // ── data ──
   const empQ = useWorkforceEmployee(id)
   const emp = empQ.data
+  // The real face enrollment (the record's own flag isn't kept up to date by face punch-in).
+  const faceQ = useEmployeeFaceStatus(emp?.id, canFace)
   const co = emp?.companyId ?? ''
   const { data: companies = [] } = useCompanies()
   const { data: departments = [] } = useDepartments(co)
@@ -320,15 +323,16 @@ export function EmployeeDetail() {
       ],
       mgr: mgr ? { name: [mgr.firstName, mgr.lastName].filter(Boolean).join(' '), sub: mgrDesig?.title || mgr.employeeCode, seed: seedOf(mgr.id), onOpen: () => navigate(`/hrms/employees/${mgr.id}`) } : null,
       account, face: {
-        sub: emp.faceEnrolled ? 'Enrolled' : 'Not enrolled',
-        onReset: async () => { await resetFaceEnrollment(emp.id); await empQ.refetch(); return 'Face enrollment reset — the employee can enroll again from the mobile app' },
+        sub: employeeFaceLine(faceQ, emp.faceEnrolled ? 'Enrolled' : 'Not enrolled'),
+        onReset: async () => { await resetFaceEnrollment(emp.id); await empQ.refetch(); void faceQ.refetch(); return 'Face enrollment reset — the employee can enroll again from the mobile app' },
+        enroll: canFace && faceQ.data ? <EmployeeFaceEnrollButton employeeId={emp.id} name={name} status={faceQ.data} onEnrolled={() => void faceQ.refetch()} /> : null,
       },
       attention, glance, onboarding: onb,
       can: { shift: canShift, edit: canWrite, lifecycle: canWrite, invite: canInvite && !active, face: canFace },
       shift: shiftD, edit, lifecycle,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emp, empQ.isLoading, empQ.error, companies, departments, designations, branches, types, shiftList, managers, week.data, shift.data, shift.isLoading, shift.error, structure.data, structure.isLoading, structure.error, documents.data, kpis.data, invitation.data, onboarding.data, onboarding.isLoading, onboarding.error, tab, today, canWrite, canInvite, canFace, canShift, canPii, canIdentity, canAttendance, canSalary, canBank, canDocs, canLetters, canPerf, canSkills, canLeave, canLeaveTeam, canClaims, canClaimsTeam, self])
+  }, [emp, empQ.isLoading, empQ.error, companies, departments, designations, branches, types, shiftList, managers, week.data, shift.data, shift.isLoading, shift.error, structure.data, structure.isLoading, structure.error, documents.data, kpis.data, invitation.data, onboarding.data, onboarding.isLoading, onboarding.error, faceQ.data, faceQ.isLoading, tab, today, canWrite, canInvite, canFace, canShift, canPii, canIdentity, canAttendance, canSalary, canBank, canDocs, canLetters, canPerf, canSkills, canLeave, canLeaveTeam, canClaims, canClaimsTeam, self])
 
   return (
     <DesignFrame>
