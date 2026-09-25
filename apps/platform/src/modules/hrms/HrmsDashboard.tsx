@@ -28,6 +28,7 @@ import { usePermission, P, useAuthStore } from '@unifiedtree/sdk'
 // and the gate in agreement. The shell reads the workspace name from here too.
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { useRoles } from '@/shared/hooks/useRoles'
+import { greetingName } from '@/shared/hooks/greetingName'
 import { UpcomingProbations } from './probation/UpcomingProbations'
 import { UpcomingMilestones } from './milestones/UpcomingMilestones'
 // NOTE: the Attendance Overview donut + legend is rendered INLINE in this file
@@ -285,7 +286,8 @@ const RoleDashboard: React.FC = () => {
   // `pendingApprovals > 0` dropped an approver with a clear queue onto "my".
   const leaveTarget = canApproveLeaves ? '/hrms/leave?tab=approvals' : '/hrms/leave?tab=my'
 
-  const firstName = useAuthStore((s) => s.user?.firstName)
+  // The greeting's name: the first name, or the full name when it is just an initial.
+  const firstName = useAuthStore((s) => greetingName(s.user?.firstName, s.user?.lastName))
   const clock = useLiveClock()
 
   const quickActions = [

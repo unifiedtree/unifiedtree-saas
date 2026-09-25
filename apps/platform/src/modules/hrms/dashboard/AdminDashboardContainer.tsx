@@ -10,6 +10,7 @@ import { apiJson } from '@/core/api/client'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { HrDrawer } from '@/shared/components/hr'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { greetingName } from '@/shared/hooks/greetingName'
 import { AdminDashboard, type SectionKey, type SectionStatus, type ShowKey } from '@/design/dc/AdminDashboard'
 import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
 import { istToday, istHour, addDays, dt, fmtShort, fmtLong, MON } from '@/design/dc/dates'
@@ -97,7 +98,8 @@ export function AdminDashboardContainer() {
   const hasPayroll = hasPayrollModule && canRunsRead
   const roles: string[] = useAuthStore((s) => s.user?.roles) ?? []
   const canBilling = roles.some((r) => ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN'].includes(r))
-  const firstName = useAuthStore((s) => s.user?.firstName)
+  // The greeting's name: the first name, or the full name when it is just an initial.
+  const firstName = useAuthStore((s) => greetingName(s.user?.firstName, s.user?.lastName))
 
   // ── data ───────────────────────────────────────────────────────────────────
   const { data: companies = [] } = useCompanies()

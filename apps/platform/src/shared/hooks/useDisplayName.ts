@@ -1,5 +1,6 @@
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
+import { greetingName as greetingNameOf } from './greetingName'
 
 /**
  * Resolve the signed-in user's display identity with a strict fallback chain:
@@ -55,7 +56,8 @@ export function useDisplayName(): DisplayName {
   // reads as a single first word — otherwise it's usually "Firstname Lastname"
   // and we still want "Firstname" for the greeting.
   const greetingName = (() => {
-    if (first) return first
+    // An initial alone ("S.") becomes the full name — see greetingName.ts.
+    if (first) return greetingNameOf(first, last) ?? first
     if (displayName) return displayName.split(/\s+/)[0]
     if (last) return last
     if (emailLocal) return emailLocal

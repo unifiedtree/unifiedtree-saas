@@ -8,6 +8,7 @@ import { P, useAnyPermission, usePermission, useAuthStore as useSdkStore } from 
 import { useAuthStore } from '@/core/auth/authStore'
 import { HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { dashIcon } from '@/design/dc/icons'
+import { greetingName } from '@/shared/hooks/greetingName'
 import { ModulePage, StatRow, Panel, State, Row, Facts, Note, days, range, CARD } from '@/design/module/ModuleKit'
 import { useMonthlyStats } from '../api/useAttendance'
 import { useMyBalances, useMyLeaves } from '../api/useLeave'
@@ -57,7 +58,7 @@ export function EssDashboard() {
   const open = () => navigate('/hrms/attendance')
 
   return (
-    <ModulePage crumb="My workspace" title={`${greeting}, ${user?.firstName || 'there'}`} subtitle={today}
+    <ModulePage crumb="My workspace" title={`${greeting}, ${greetingName(user?.firstName, user?.lastName) || 'there'}`} subtitle={today}
       actions={canLeave ? <HrButton onClick={() => navigate('/hrms/leave?tab=apply')}>{dashIcon('plus', 15)} Apply for leave</HrButton> : undefined}>
       <div style={{ display: 'grid', gap: 12 }}>
         <h2 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: 16, fontWeight: 800 }}>This month</h2>

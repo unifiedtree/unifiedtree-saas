@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { usePermission, P, useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { HrAvatar, HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { dashIcon } from '@/design/dc/icons'
+import { greetingName } from '@/shared/hooks/greetingName'
 import { ModulePage, StatRow, SubHeading, State, RowList, Row, ApprovalList, useDesignToast, todayIso, range, days, stamp } from '@/design/module/ModuleKit'
 import { useTeamDashboard } from '../api/useAttendance'
 import { usePendingApprovals, useLeaveDecision } from '../api/useLeave'
@@ -38,7 +39,7 @@ export function TeamDashboard() {
     try { await decide.mutateAsync({ requestId: id, status, comment: note.trim() || undefined }); show(`Leave ${status === 'APPROVED' ? 'approved' : 'rejected'}`) } catch (e) { show('Couldn’t save the decision', true, (e as Error)?.message) }
   }
   return (
-    <ModulePage crumb="My team" title={`${greeting}, ${user?.firstName || 'there'}`} subtitle={`Your team today, ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}.`}
+    <ModulePage crumb="My team" title={`${greeting}, ${greetingName(user?.firstName, user?.lastName) || 'there'}`} subtitle={`Your team today, ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}.`}
       actions={canTeam ? <HrButton variant="ghost" onClick={() => navigate('/hrms/attendance')}>{dashIcon('clock', 15)} Team attendance</HrButton> : undefined}>
       {canTeam && (team.isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
         { icon: 'userCheck', color: 'green', label: 'Present', value: String(c?.present ?? 0), sub: 'Checked in today' },
