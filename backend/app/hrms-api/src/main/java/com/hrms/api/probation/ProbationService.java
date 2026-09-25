@@ -34,6 +34,8 @@ public class ProbationService {
     private static final Logger log = LoggerFactory.getLogger(ProbationService.class);
     /** NotificationEventCatalog key for these reminders (template + preference gate). */
     private static final String EVENT_KEY = "people.probation_reminder";
+    /** Business dates are India dates: "days left" must not flip at 00:00 UTC (05:30 IST). */
+    private static final java.time.ZoneId IST = java.time.ZoneId.of("Asia/Kolkata");
 
     private final MailService mailService;
     private final JdbcTemplate jdbc;
@@ -111,7 +113,7 @@ public class ProbationService {
     @Transactional
     public List<UpcomingProbationDto> listUpcoming(UUID tenantId, int daysAhead) {
         bindTenant(tenantId);
-        LocalDate windowEnd = LocalDate.now().plusDays(daysAhead);
+        LocalDate windowEnd = LocalDate.now(IST).plusDays(daysAhead);
         List<Map<String, Object>> rows = jdbc.queryForList("""
             SELECT e.id, e.employee_code, e.first_name, e.last_name, e.probation_end_date,
                    d.title AS job_title, m.first_name AS mgr_first, m.last_name AS mgr_last
@@ -127,7 +129,7 @@ public class ProbationService {
         List<UpcomingProbationDto> out = new ArrayList<>();
         for (Map<String, Object> r : rows) {
             LocalDate end = ((java.sql.Date) r.get("probation_end_date")).toLocalDate();
-            long days = ChronoUnit.DAYS.between(LocalDate.now(), end);
+            long days = ChronoUnit.DAYS.between(LocalDate.now(IST), end);
             out.add(new UpcomingProbationDto(
                 (UUID) r.get("id"), (String) r.get("employee_code"),
                 name(r.get("first_name"), r.get("last_name")),
@@ -187,7 +189,7 @@ public class ProbationService {
     public int scanForTenant(UUID tenantId) {
         bindTenant(tenantId);
         ProbationConfigDto config = getConfigInline(tenantId);
-        LocalDate windowEnd = LocalDate.now().plusDays(config.reminderDaysBefore());
+        LocalDate windowEnd = LocalDate.now(IST).plusDays(config.reminderDaysBefore());
         String tenantName = loadTenantName(tenantId);
 
         List<Map<String, Object>> rows = jdbc.queryForList("""
@@ -213,7 +215,7 @@ public class ProbationService {
             if (existing != null && existing > 0) continue;
 
             String empName = name(r.get("first_name"), r.get("last_name"));
-            long daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(), end);
+            long daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(IST), end);
 
             Map<UUID, String> candidates = new LinkedHashMap<>();
             collectRecipients(tenantId, (UUID) r.get("reporting_manager_id"), candidates);

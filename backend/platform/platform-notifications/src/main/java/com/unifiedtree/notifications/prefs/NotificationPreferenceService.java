@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 
 /**
  * Reads and writes people's notification choices
@@ -122,6 +123,29 @@ public class NotificationPreferenceService {
                  WHERE id = ? AND tenant_id = ?
                 """, json, userId, tenantId);
         if (n == 0) throw new IllegalStateException("Account not found");
+    }
+
+    /**
+     * Reads, changes and stores one account's choices in a single transaction,
+     * with the row locked, so two saves at the same moment (two tabs, a double
+     * click) can't overwrite each other's per-event choices.
+     *
+     * @param change gets the stored choices (empty map when none) and returns the map to store;
+     *               an IllegalArgumentException from it aborts the save
+     * @return what was stored
+     * @throws IllegalStateException when the account doesn't exist in this workspace
+     */
+    @Transactional
+    public Map<String, Object> update(UUID tenantId, UUID userId, UnaryOperator<Map<String, Object>> change) {
+        bind(tenantId);
+        List<String> rows = jdbc.queryForList(
+                "SELECT notification_preferences::text FROM auth.user_credentials WHERE id = ? AND tenant_id = ? FOR UPDATE",
+                String.class, userId, tenantId);
+        if (rows.isEmpty()) throw new IllegalStateException("Account not found");
+        Map<String, Object> current = parse(rows.get(0));
+        Map<String, Object> next = change.apply(current == null ? new LinkedHashMap<>() : current);
+        store(tenantId, userId, next);
+        return next;
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

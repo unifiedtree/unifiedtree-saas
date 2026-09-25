@@ -72,12 +72,12 @@ public class NotificationPreferencesController {
         if (req == null) throw bad("Nothing to change.");
         Map<String, Object> merged;
         try {
-            merged = NotificationPreferences.merge(load(ids[0], ids[1]), req.emailEnabled(), req.pushEnabled(), req.events());
+            // Read-merge-write in one transaction with the account row locked, so two
+            // saves at once (two tabs, a double click) can't drop each other's choices.
+            merged = preferences.update(ids[0], ids[1], stored ->
+                    NotificationPreferences.merge(stored, req.emailEnabled(), req.pushEnabled(), req.events()));
         } catch (IllegalArgumentException e) {
             throw bad(e.getMessage());
-        }
-        try {
-            preferences.store(ids[0], ids[1], merged);
         } catch (IllegalStateException e) {
             throw new HrmsException("Your account wasn't found, so nothing was saved.", HttpStatus.NOT_FOUND, "ACCOUNT_NOT_FOUND");
         }

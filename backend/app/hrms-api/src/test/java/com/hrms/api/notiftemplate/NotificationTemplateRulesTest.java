@@ -51,6 +51,22 @@ class NotificationTemplateRulesTest {
     }
 
     @Test
+    void accessEmailsMustKeepTheirLink() {
+        // Without {{resetLink}} / {{inviteLink}} the email can't be acted on: people are locked out.
+        HrmsException reset = assertThrows(HrmsException.class, () -> NotificationTemplateRules.validate(
+                req(NotificationChannel.EMAIL, "account.password_reset", "Reset", "Ask HR for help.")));
+        assertTrue(reset.getMessage().contains("{{resetLink}}"), reset.getMessage());
+        // The link in the subject only doesn't count: it must be in the message.
+        assertThrows(HrmsException.class, () -> NotificationTemplateRules.validate(
+                req(NotificationChannel.EMAIL, "account.invitation", "{{inviteLink}}", "Welcome, {{firstName}}.")));
+        var ok = NotificationTemplateRules.validate(req(NotificationChannel.EMAIL, "account.invitation",
+                "Join {{workspaceName}}", "Hi {{firstName}}, start here: {{inviteLink}}"));
+        assertEquals("account.invitation", ok.eventKey());
+        // Always-sent letters have no link to keep.
+        NotificationTemplateRules.validate(req(NotificationChannel.EMAIL, "letters.letter", null, "Hi {{firstName}}."));
+    }
+
+    @Test
     void publishesEveryEventWithPlaceholdersAndDefaults() {
         var events = NotificationTemplateRules.events();
         var invite = events.stream().filter(e -> e.key().equals("account.invitation")).findFirst().orElseThrow();

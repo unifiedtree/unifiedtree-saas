@@ -101,6 +101,10 @@ export const NotificationTemplates: React.FC = () => {
       const allowed = new Set(ev.placeholders.map((p) => p.name))
       const unknown = usedPlaceholders(f.subject, f.body).filter((n) => !allowed.has(n))
       if (unknown.length) { show('Unknown placeholder', true, `${unknown.map((n) => `{{${n}}}`).join(', ')} can’t be used for “${ev.label}”. Use the ones listed under the message.`); return }
+      // Always-sent emails hand over a link (set / reset a password); without it people are locked out.
+      const inBody = new Set(usedPlaceholders(f.body))
+      const missing = ev.essential && f.channel === 'EMAIL' ? ev.placeholders.filter((p) => p.link && !inBody.has(p.name)) : []
+      if (missing.length) { show('The link is missing', true, `Keep ${missing.map((p) => `{{${p.name}}}`).join(' and ')} in the message, or people can’t act on this email.`); return }
     }
     const payload = { companyId: activeCompany || undefined, name: f.name.trim(), channel: f.channel, eventKey: f.eventKey.trim(), subject: f.subject.trim() || undefined, body: f.body.trim(), active: f.active }
     try {
@@ -191,7 +195,7 @@ export const NotificationTemplates: React.FC = () => {
               <div><label className={label} htmlFor="nt-channel">Channel</label><select id="nt-channel" value={editing.form.channel} onChange={(e) => pickChannel(e.target.value as NotificationChannel)} className="ut-select">{(channelsFor(editingEvent).includes(editing.form.channel) ? channelsFor(editingEvent) : [editing.form.channel, ...channelsFor(editingEvent)]).map((c) => <option key={c} value={c}>{fmtChannel(c)}</option>)}</select></div>
               <div><label className={label} htmlFor="nt-name">Name</label><input id="nt-name" value={editing.form.name} onChange={(e) => setField({ name: e.target.value })} placeholder="e.g. Leave approved (email)" className="ut-input" /></div>
             </div>
-            {editingEvent?.essential && editing.form.channel === 'EMAIL' && <Note tone="amber">This email is always sent, even to people who switched email off, because it’s how they get into their account or receive something HR sent on purpose. Keep any {'{{…Link}}'} placeholder in it, or people won’t be able to act on it.</Note>}
+            {editingEvent?.essential && editing.form.channel === 'EMAIL' && <Note tone="amber">This email is always sent, even to people who switched email off, because it’s how they get into their account or receive something HR sent on purpose.{editingEvent.placeholders.some((p) => p.link) && <> Its {'{{…Link}}'} placeholder must stay in the message: without it people can’t act on the email, so saving is refused.</>}</Note>}
             <div><label className={label} htmlFor="nt-subject">{editing.form.channel === 'EMAIL' ? 'Subject' : 'Title'}</label><input id="nt-subject" value={editing.form.subject} onChange={(e) => setField({ subject: e.target.value })} placeholder={editing.form.channel === 'EMAIL' ? 'Leave blank to keep the built-in subject' : 'Leave blank to keep the built-in title'} className="ut-input" /></div>
             <div>
               <label className={label} htmlFor="nt-body">Message</label>

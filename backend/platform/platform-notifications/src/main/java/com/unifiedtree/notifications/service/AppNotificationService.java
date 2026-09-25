@@ -112,6 +112,10 @@ public class AppNotificationService {
                                    String title, String body, Map<String, Object> data,
                                    boolean inApp, boolean sendPush, String pushTitle, String pushBody) {
         if (tenantId == null || userId == null || type == null || title == null) return null;
+        // notif.notifications.title is VARCHAR(300). A company template title with
+        // long values filled in could exceed it, and the failed INSERT would lose
+        // the notification silently (the listeners log and carry on).
+        title = clampTitle(title);
         if (!inApp) {
             if (sendPush && pushTitle != null) {
                 push.sendAfterCommit(userId, pushTitle, pushBody, data == null ? new HashMap<>() : new HashMap<>(data));
@@ -302,5 +306,14 @@ public class AppNotificationService {
                     tokenRepo.save(t);
                     log.info("Deactivated device token for user={} on sign-out", userId);
                 });
+    }
+
+    /** Max length of notif.notifications.title. */
+    static final int TITLE_MAX = 300;
+
+    /** Shortens a title to fit the column, ending with an ellipsis when cut. */
+    static String clampTitle(String title) {
+        if (title == null || title.length() <= TITLE_MAX) return title;
+        return title.substring(0, TITLE_MAX - 1).stripTrailing() + "…";
     }
 }

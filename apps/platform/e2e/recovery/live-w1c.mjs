@@ -117,6 +117,11 @@ try {
   const resetTpl = await owner.call('/v1/notiftemplate/templates', 'POST', { companyId: company, name: `W1C QA reset ${stamp}`, channel: 'EMAIL', eventKey: 'account.password_reset', subject: 'W1C reset for {{workspaceName}}', body: 'Hello,\n\nReset here: {{resetLink}}\n\nIt expires in {{expiresIn}}.', active: true })
   if (resetTpl.json?.id) createdTemplates.push(resetTpl.json.id)
   check('templates: an email template for the password reset is accepted', resetTpl.status === 201, `status=${resetTpl.status} ${resetTpl.json?.message || ''}`)
+  const noLink = await owner.call('/v1/notiftemplate/templates', 'POST', { companyId: company, name: `W1C QA nolink ${stamp}`, channel: 'EMAIL', eventKey: 'account.password_reset', subject: 'W1C {{resetLink}}', body: 'Ask HR to reset it for you.', active: true })
+  if (noLink.json?.id) createdTemplates.push(noLink.json.id)
+  check('templates: a password-reset email without {{resetLink}} in the message is refused', noLink.status === 400 && String(noLink.json?.message || '').includes('{{resetLink}}'), `status=${noLink.status} ${noLink.json?.message || ''}`)
+  const upNoLink = resetTpl.json?.id ? await owner.call(`/v1/notiftemplate/templates/${resetTpl.json.id}`, 'PUT', { companyId: company, name: `W1C QA reset ${stamp}`, channel: 'EMAIL', eventKey: 'account.password_reset', subject: 'x', body: 'No link here', active: true }) : { status: 0 }
+  check('templates: editing it to drop the link is refused too', upNoLink.status === 400, `status=${upNoLink.status}`)
 
   // ── 3. The template is used ───────────────────────────────────────────────
   const w1 = await reader.call('/v1/wfh', 'POST', { fromDate: dayAhead(base), toDate: dayAhead(base), reason: `W1C QA ${stamp} a` })

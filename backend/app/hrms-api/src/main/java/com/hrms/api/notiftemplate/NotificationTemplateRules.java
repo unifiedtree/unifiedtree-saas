@@ -50,6 +50,22 @@ public final class NotificationTemplateRules {
             throw bad(String.join(", ", unknown) + (unknown.size() == 1 ? " isn't" : " aren't")
                     + " available for \"" + def.label() + "\". You can use: " + allowed + ".");
         }
+        // Always-sent emails exist to hand over a link (set a password, reset it).
+        // A template without that link would send people an email they can't act
+        // on, and they'd be locked out, so the link placeholder is required.
+        if (def.essential() && channel == DeliveryChannel.EMAIL) {
+            Set<String> inBody = TemplateRenderer.placeholders(req.body());
+            List<String> missing = def.placeholders().stream()
+                    .filter(Placeholder::link)
+                    .map(Placeholder::name)
+                    .filter(n -> !inBody.contains(n))
+                    .map(n -> "{{" + n + "}}")
+                    .toList();
+            if (!missing.isEmpty()) {
+                throw bad("\"" + def.label() + "\" is how people get into their account, so the message must include "
+                        + String.join(" and ", missing) + ". Without it the email can't be acted on.");
+            }
+        }
         return new NotificationTemplateRequest(req.companyId(), req.name(), req.channel(), def.key(),
                 req.subject(), req.body(), req.active());
     }
