@@ -23,6 +23,12 @@ public final class LopCalculator {
     /** What a single calendar day resolves to after all rules. */
     public record DayBreakdown(int dayOfMonth, DayStatus status, String resolution, BigDecimal paid, BigDecimal lop) {}
 
+    /**
+     * {@code days.get(0)} is {@code startDate} and each next entry is the
+     * following calendar day. {@code startDate} is the pay period's first day:
+     * the 1st of {@code period} for a calendar-month cycle, or an earlier day
+     * (26 Aug for the September run on a 26th–25th cycle) on a custom cycle.
+     */
     public record LopInput(
         List<DayStatus> days,
         boolean sandwichRuleEnabled,
@@ -30,8 +36,20 @@ public final class LopCalculator {
         int lateMarkCount,
         LocalDate joinDate,         // nullable
         LocalDate exitDate,         // nullable
-        YearMonth period
-    ) {}
+        YearMonth period,
+        LocalDate startDate
+    ) {
+        public LopInput {
+            if (startDate == null && period != null) startDate = period.atDay(1);
+        }
+
+        /** Calendar-month period: the days start on the 1st of {@code period}. */
+        public LopInput(List<DayStatus> days, boolean sandwichRuleEnabled, int lateMarkLopThreshold,
+                        int lateMarkCount, LocalDate joinDate, LocalDate exitDate, YearMonth period) {
+            this(days, sandwichRuleEnabled, lateMarkLopThreshold, lateMarkCount, joinDate, exitDate, period,
+                    period == null ? null : period.atDay(1));
+        }
+    }
 
     public record LopResult(BigDecimal paidDays, BigDecimal lopDays, int totalCalendar, List<DayBreakdown> log) {}
 
@@ -47,8 +65,7 @@ public final class LopCalculator {
         // Resolution per day: "PAID", "LOP", or "HALF".
         String[] resolution = new String[total];
         for (int i = 0; i < total; i++) {
-            int dayOfMonth = i + 1;
-            LocalDate date = in.period().atDay(dayOfMonth);
+            LocalDate date = in.startDate().plusDays(i);
             DayStatus st = in.days().get(i);
 
             boolean preJoin  = in.joinDate() != null && date.isBefore(in.joinDate());
@@ -101,7 +118,7 @@ public final class LopCalculator {
             }
             paid = paid.add(p);
             lop  = lop.add(l);
-            log.add(new DayBreakdown(i + 1, in.days().get(i), resolution[i], p, l));
+            log.add(new DayBreakdown(in.startDate().plusDays(i).getDayOfMonth(), in.days().get(i), resolution[i], p, l));
         }
 
         // Late-mark accrual: every `threshold` late marks = 1 LOP day, moved from paid.
