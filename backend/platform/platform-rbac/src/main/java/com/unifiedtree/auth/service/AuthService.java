@@ -336,7 +336,8 @@ public class AuthService {
         List<String> rolePerms = roleIds.isEmpty()
             ? List.of()
             : rolePermissionRepo.findPermissionCodesByRoleIds(roleIds);
-        List<String> permissions = employeeBaseline.effectiveFor(rolePerms, creds.getEmployeeId());
+        // Per-person overrides (V143.17) are applied last: GRANTs added, DENYs removed.
+        List<String> permissions = employeeBaseline.effectiveFor(rolePerms, creds.getEmployeeId(), creds.getId());
 
         // Mint access token (employee_id claim lets AttendanceController resolve the employee).
         JwtService.IssuedToken access = jwt.issueAccessToken(
@@ -402,7 +403,7 @@ public class AuthService {
         List<String> rolePerms = roleIds.isEmpty()
             ? List.of()
             : rolePermissionRepo.findPermissionCodesByRoleIds(roleIds);
-        List<String> permissions = employeeBaseline.effectiveFor(rolePerms, creds.getEmployeeId());
+        List<String> permissions = employeeBaseline.effectiveFor(rolePerms, creds.getEmployeeId(), userId);
         // ACTIVE modules come straight from platform.tenant_modules — the source
         // of truth for what the workspace selected/activated — NOT derived from
         // permissions. Same query pattern as WorkspaceAccessService.activeModuleKeys

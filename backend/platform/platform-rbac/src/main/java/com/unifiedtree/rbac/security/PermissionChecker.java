@@ -105,6 +105,12 @@ public class PermissionChecker {
         log.debug("Permission cache evicted: {}", key);
     }
 
+    /** Evict one user (e.g. after their per-person overrides change). */
+    public void evictUser(UUID tenantId, UUID userId) {
+        if (tenantId == null || userId == null) return;
+        cache.invalidate(cacheKey(tenantId, userId));
+    }
+
     /** Evict entire tenant (e.g. when a system role's permissions change). */
     public void evictTenant(UUID tenantId) {
         cache.asMap().keySet().removeIf(k -> k.startsWith(tenantId + ":"));
@@ -138,7 +144,8 @@ public class PermissionChecker {
         // a JWT-authority check (hasAuthority) and a bean check (@perm.check)
         // would reach different verdicts for the same user on the same request.
         UUID employeeId = lookupEmployeeId(userId);
-        return Set.copyOf(employeeBaseline.effectiveFor(rolePerms, employeeId));
+        // ...and the same per-person overrides (V143.17): GRANTs added, DENYs removed.
+        return Set.copyOf(employeeBaseline.effectiveFor(rolePerms, employeeId, userId));
     }
 
     /**
