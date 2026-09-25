@@ -24,9 +24,11 @@ import java.util.UUID;
 public class ReportController {
 
     private final ReportService reportService;
+    private final ReportExportLog exportLog;
 
-    public ReportController(ReportService reportService) {
+    public ReportController(ReportService reportService, ReportExportLog exportLog) {
         this.reportService = reportService;
+        this.exportLog = exportLog;
     }
 
     @GetMapping("/headcount")
@@ -34,7 +36,7 @@ public class ReportController {
     @PreAuthorize("@perm.check('hrms.report.headcount')")
     public List<Map<String, Object>> headcount(
             @RequestParam UUID companyId,
-            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now()}")
+            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now(T(java.time.ZoneId).of('Asia/Kolkata'))}")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
         return reportService.headcountReport(companyId, asOf);
     }
@@ -64,7 +66,7 @@ public class ReportController {
     @PreAuthorize("@perm.check('hrms.report.leave')")
     public List<Map<String, Object>> leaveBalance(
             @RequestParam UUID companyId,
-            @RequestParam(defaultValue = "#{T(java.time.Year).now().value}") int year) {
+            @RequestParam(defaultValue = "#{T(java.time.Year).now(T(java.time.ZoneId).of('Asia/Kolkata')).value}") int year) {
         return reportService.leaveBalanceReport(companyId, year);
     }
 
@@ -101,9 +103,9 @@ public class ReportController {
     @PreAuthorize("@perm.check('hrms.report.headcount')")
     public ResponseEntity<byte[]> headcountCsv(
             @RequestParam UUID companyId,
-            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now()}")
+            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now(T(java.time.ZoneId).of('Asia/Kolkata'))}")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
-        return csv("headcount", reportService.headcountReport(companyId, asOf));
+        return csv(ReportKind.HEADCOUNT, companyId, Map.of("asOf", asOf.toString()), reportService.headcountReport(companyId, asOf));
     }
 
     @GetMapping("/attrition/export.csv")
@@ -113,7 +115,7 @@ public class ReportController {
             @RequestParam UUID companyId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return csv("attrition", reportService.attritionReport(companyId, from, to));
+        return csv(ReportKind.ATTRITION, companyId, Map.of("from", from.toString(), "to", to.toString()), reportService.attritionReport(companyId, from, to));
     }
 
     @GetMapping("/attendance-summary/export.csv")
@@ -123,7 +125,7 @@ public class ReportController {
             @RequestParam UUID companyId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return csv("attendance-summary", reportService.attendanceSummaryReport(companyId, from, to));
+        return csv(ReportKind.ATTENDANCE_SUMMARY, companyId, Map.of("from", from.toString(), "to", to.toString()), reportService.attendanceSummaryReport(companyId, from, to));
     }
 
     @GetMapping("/leave-balance/export.csv")
@@ -131,8 +133,8 @@ public class ReportController {
     @PreAuthorize("@perm.check('hrms.report.leave')")
     public ResponseEntity<byte[]> leaveBalanceCsv(
             @RequestParam UUID companyId,
-            @RequestParam(defaultValue = "#{T(java.time.Year).now().value}") int year) {
-        return csv("leave-balance", reportService.leaveBalanceReport(companyId, year));
+            @RequestParam(defaultValue = "#{T(java.time.Year).now(T(java.time.ZoneId).of('Asia/Kolkata')).value}") int year) {
+        return csv(ReportKind.LEAVE_BALANCE, companyId, Map.of("year", year), reportService.leaveBalanceReport(companyId, year));
     }
 
     @GetMapping("/late-marks/export.csv")
@@ -142,14 +144,14 @@ public class ReportController {
             @RequestParam UUID companyId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return csv("late-marks", reportService.lateMarksReport(companyId, from, to));
+        return csv(ReportKind.LATE_MARKS, companyId, Map.of("from", from.toString(), "to", to.toString()), reportService.lateMarksReport(companyId, from, to));
     }
 
     @GetMapping("/diversity/export.csv")
     @Operation(summary = "Diversity report as a CSV download")
     @PreAuthorize("@perm.check('hrms.report.diversity')")
     public ResponseEntity<byte[]> diversityCsv(@RequestParam UUID companyId) {
-        return csv("diversity", reportService.diversityReport(companyId));
+        return csv(ReportKind.DIVERSITY, companyId, Map.of(), reportService.diversityReport(companyId));
     }
 
     /**
@@ -165,8 +167,12 @@ public class ReportController {
      * <p>A UTF-8 BOM is prepended so Excel on Windows opens rupee symbols and
      * non-ASCII names correctly instead of mojibake; every other reader
      * tolerates it.
+     *
+     * <p>Every download is written to the export log (hrms.report_exports),
+     * which the Reports Center's "Recent downloads" reads.
      */
-    private ResponseEntity<byte[]> csv(String reportName, List<Map<String, Object>> rows) {
+    private ResponseEntity<byte[]> csv(ReportKind kind, UUID companyId, Map<String, Object> filters, List<Map<String, Object>> rows) {
+        String reportName = kind.key();
         StringBuilder out = new StringBuilder();
         if (!rows.isEmpty()) {
             List<String> columns = List.copyOf(rows.get(0).keySet());
@@ -180,7 +186,9 @@ public class ReportController {
             }
         }
         byte[] body = ("\uFEFF" + out).getBytes(StandardCharsets.UTF_8);
-        String filename = reportName + "-" + LocalDate.now() + ".csv";
+        String filename = reportName + "-" + LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")) + ".csv";
+        exportLog.record(new ReportExportLog.Entry(kind, "CSV", "SERVER", filename, companyId, null, filters,
+                rows.size(), (long) body.length, null, null));
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(new MediaType("text", "csv", StandardCharsets.UTF_8));
         headers.setContentDispositionFormData("attachment", filename);
