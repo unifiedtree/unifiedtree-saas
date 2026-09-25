@@ -86,7 +86,11 @@ public class EffectiveDayStatusService {
         record Emp(UUID id, UUID companyId, LocalDate joined, LocalDate lastDay, Set<Integer> offs) {}
         Map<UUID, Emp> emps = new HashMap<>();
         String in = in(ids.size());
-        jdbc.query("SELECT id, company_id, date_of_joining, last_working_day, weekly_off_days FROM hrms.employees WHERE id IN (" + in + ")",
+        // No joining date (people added from Users & access often have none): track
+        // from the day the record was created, not from the company's first
+        // attendance record, or every earlier day reads as absent.
+        jdbc.query("SELECT id, company_id, COALESCE(date_of_joining, (created_at AT TIME ZONE 'Asia/Kolkata')::date) AS date_of_joining,"
+                + " last_working_day, weekly_off_days FROM hrms.employees WHERE id IN (" + in + ")",
                 (RowCallbackHandler) rs -> {
                     UUID id = (UUID) rs.getObject("id");
                     Date j = rs.getDate("date_of_joining"), l = rs.getDate("last_working_day");

@@ -114,7 +114,10 @@ public class ShiftController {
     @Operation(summary = "Get an employee's current shift")
     @GetMapping("/employee/{employeeId}")
     @PreAuthorize("hasAuthority('attendance.checkin.self')")
-    public ResponseEntity<EmployeeShiftResponse> current(@PathVariable UUID employeeId) {
+    public ResponseEntity<EmployeeShiftResponse> current(@AuthenticationPrincipal Jwt jwt,
+                                                         @PathVariable UUID employeeId) {
+        // Same rule as the history: yourself, your team, or a workforce admin.
+        assertCanReadShiftHistory(jwt, employeeId);
         return ResponseEntity.ok(shiftService.getCurrentShift(employeeId));
     }
 
