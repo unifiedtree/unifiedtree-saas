@@ -14,9 +14,7 @@ Priorities:
 
 ## Decisions needed before building
 
-| # | Question | Where | Notes |
-|---|---|---|---|
-| D3 | Retire the Geofencing page? | `/hrms/attendance/geofencing` vs the branch geofence in Companies & Branches | Two places set punch zones (§1, §4). |
+No open decisions (D1-D4 were settled on 25 Sep and built in wave 1).
 
 ---
 
@@ -90,7 +88,6 @@ All P0 items are done (wave 1).
   - Milestones "View all" filters.
   - Month filter on payroll runs.
   - A notices pager.
-- **Geofencing**: show and restore deactivated zones (the list API returns active zones only).
 - **Integrations**: real connections (OAuth, keys, sync). Today it's a register only, and the page says so.
 - **Letters**: one "Letters" hub instead of three routes.
 - **Old gaps that are low risk**

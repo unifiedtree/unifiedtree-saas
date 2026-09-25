@@ -44,7 +44,6 @@ const REFERENCE_PAGES: readonly ReferencePage[] = [
   { path: '/hrms/att-analytics',                    name: 'Attendance Analytics',   roles: ['ADMIN', 'HR', 'MGR'] },
   { path: '/hrms/attendance',                       name: 'Daily Tracking',         roles: ['ADMIN', 'HR', 'MGR', 'EMP'] },
   { path: '/hrms/shifts',                           name: 'Shifts & Overtime',      roles: ['ADMIN', 'HR'] },
-  { path: '/hrms/attendance/geofencing',            name: 'Geofencing Zones',       roles: ['ADMIN', 'HR'] },
   { path: '/hrms/attendance/manual-entry',          name: 'Manual Punch',           roles: ['ADMIN', 'HR', 'MGR'] },
   { path: '/hrms/muster-roll',                      name: 'Muster Roll',            roles: ['ADMIN', 'HR'] },
   // Leave

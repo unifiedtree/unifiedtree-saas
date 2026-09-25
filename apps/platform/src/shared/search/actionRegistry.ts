@@ -1,255 +1,107 @@
-import { P } from '@unifiedtree/sdk'
+import type { Access, AccessContext } from '../navigation/access'
 
 /**
- * Quick actions for the ⌘K palette.
- *
- * WHY THIS EXISTS
- * ---------------
- * The client's loudest complaint is "I have to hunt through the app to find
- * things". The palette that was meant to answer it returned `[]` — global
- * search was gutted on 2026-08-10 after it painted invented employees into a
- * live customer's panel, and nothing replaced it. This is the half of the
- * replacement that needs no backend: task-shaped entry points into
- * functionality the user can already reach.
+ * Quick actions for the ⌘K palette: task-shaped entry points ("Apply for
+ * leave", "Run payroll") into screens the person can already reach.
  *
  * RULES FOR ADDING AN ACTION
- * --------------------------
- * 1. The destination must be a REAL route in App.tsx. A palette entry that
- *    404s or dead-ends is worse than no entry — it is the "convincing dead
- *    control" problem the audit called out on the audit-log Export button.
- * 2. Query params must be ones the destination actually reads. Verified at
- *    the time of writing: Leave and Attendance parse `?tab=`; Employees parses
- *    `?add=1`; Attendance parses `?status=`. Expense, Compliance,
- *    DocumentVault, Employees and Performance do NOT parse `?tab=`, so those
- *    entries deep-link to the page only.
- * 3. `permission` is the code the DESTINATION enforces, so the palette can
- *    never offer something that 403s on arrival. Actions with no permission
- *    are reachable by every authenticated user.
- * 4. `keywords` carry the words a user would actually type, including the ones
- *    the label does not contain ("regularize" for corrections, "hire" for
- *    requisitions, "reimburse" for expense claims).
- *
- * This registry is the ONLY list of actions. Pages come from the live
- * navigation in PlatformShell, not from here — see `buildSearchPages`.
+ * 1. The destination is a real route, and any `?tab=` / `?view=` is one the
+ *    page reads (see pageRegistry.ts for each page's tabs).
+ * 2. `access` holds the permissions the destination and the action need, so
+ *    the palette never offers something that 403s or lands on a page where
+ *    the action isn't available.
+ * 3. `keywords` carry the words people actually type ("regularize",
+ *    "reimburse", "wfh").
  */
 export interface QuickAction {
-  /** Stable id — also the React key and the test handle. */
   id: string
   label: string
-  /** Where the label alone is ambiguous. Rendered under the label. */
-  description?: string
-  /** Grouping shown in the palette. */
-  category: 'People' | 'Time' | 'Leave' | 'Pay' | 'Hiring' | 'Documents' | 'Insights' | 'Admin'
-  /** Route to navigate to. Must exist in App.tsx. */
+  description: string
   path: string
-  /**
-   * Permission code the destination enforces. Omit when the route is open to
-   * any authenticated user. `anyOf` when several codes can open it.
-   */
-  permission?: string
-  anyOf?: string[]
-  /** Extra search terms. The label is always searchable; these are additions. */
+  /** Icon name from the design's icon set. */
+  icon: string
+  /** All clauses must pass (see navigation/access.ts). */
+  access: Access[]
   keywords: string[]
 }
 
+const HR = 'hrms'
+const PAY = 'payroll'
+const notAdminRole = (ctx: AccessContext) => !ctx.adminRole
+const REPORTS = ['hrms.report.headcount', 'hrms.report.attrition', 'hrms.report.attendance', 'hrms.report.leave', 'hrms.report.diversity']
+
 export const QUICK_ACTIONS: QuickAction[] = [
-  // ── People ────────────────────────────────────────────────────────────────
-  {
-    id: 'add-employee', label: 'Add Employee', category: 'People',
-    description: 'Open the new-employee form',
-    path: '/hrms/employees?add=1', permission: P.HRMS_EMPLOYEE_WRITE,
-    keywords: ['new', 'create', 'hire', 'onboard', 'staff', 'joiner', 'person'],
-  },
-  {
-    id: 'import-employees', label: 'Import Employees', category: 'People',
-    description: 'Bulk-load employees from a CSV',
-    path: '/hrms/employees/import', permission: P.HRMS_EMPLOYEE_IMPORT,
-    keywords: ['bulk', 'csv', 'upload', 'spreadsheet', 'migrate'],
-  },
-  {
-    id: 'org-setup', label: 'Organization Setup', category: 'People',
-    description: 'Companies, branches, departments and designations',
-    path: '/hrms/organization', permission: P.ORG_COMPANY_WRITE,
-    keywords: ['company', 'branch', 'department', 'designation', 'grade', 'structure', 'org'],
-  },
+  // ── For yourself ──
+  { id: 'apply-leave', label: 'Apply for leave', description: 'Opens the leave form', path: '/hrms/leave?tab=apply', icon: 'calendarPlus',
+    access: [{ allOf: ['leave.request.self'], module: HR, self: true, when: notAdminRole }], keywords: ['request leave', 'time off', 'holiday', 'vacation', 'sick', 'casual'] },
+  { id: 'request-wfh', label: 'Request work from home', description: 'Ask to work from home on a day', path: '/me/wfh', icon: 'home',
+    access: [{ allOf: ['wfh.request.self'], module: HR, self: true }], keywords: ['wfh', 'remote', 'work from home'] },
+  { id: 'fix-attendance', label: 'Ask for an attendance fix', description: 'Forgot to punch? Request a regularization', path: '/hrms/attendance?tab=corrections', icon: 'pencil',
+    access: [{ allOf: ['attendance.checkin.self'], module: HR, self: true }], keywords: ['regularize', 'regularise', 'correction', 'missed punch', 'forgot to punch'] },
+  { id: 'request-shift', label: 'Request a shift change', description: 'Ask HR to move you to another shift', path: '/me/shift-change', icon: 'swap',
+    access: [{ anyOf: ['hrms.ess.read', 'attendance.checkin.self'], module: HR, self: true }], keywords: ['change shift', 'swap shift', 'night shift', 'timing'] },
+  { id: 'submit-expense', label: 'Submit an expense claim', description: 'Claim money you spent for work', path: '/hrms/expenses?tab=submit', icon: 'receipt',
+    access: [{ allOf: ['hrms.expense.claim.self'], module: HR }], keywords: ['expense', 'claim', 'reimburse', 'reimbursement', 'travel', 'bill'] },
+  { id: 'request-advance', label: 'Request a salary advance', description: 'Borrow against your salary', path: '/hrms/advances?tab=request', icon: 'banknote',
+    access: [{ allOf: ['hrms.advance.request.self'], module: HR }], keywords: ['advance', 'loan', 'emi'] },
+  { id: 'my-payslip', label: 'Download my payslip', description: 'Your payslips, month by month', path: '/me/payslips', icon: 'download',
+    access: [{ allOf: ['payroll.payslip.read.self'], module: PAY, self: true }], keywords: ['payslip', 'salary slip', 'pay slip'] },
+  { id: 'upload-document', label: 'Upload a document', description: 'Add an ID proof or certificate to your file', path: '/hrms/documents?view=my', icon: 'fileText',
+    access: [{ allOf: ['hrms.document.write.self', 'hrms.document.read.self'], module: HR }], keywords: ['aadhaar', 'pan', 'certificate', 'id proof', 'upload'] },
 
-  // ── Time & attendance ─────────────────────────────────────────────────────
-  {
-    id: 'who-is-late', label: 'Who is late today', category: 'Time',
-    description: 'Today’s roster, filtered to late arrivals',
-    path: '/hrms/attendance?tab=team&status=LATE', permission: P.ATTENDANCE_TEAM_READ,
-    keywords: ['late', 'tardy', 'arrivals', 'today', 'attendance'],
-  },
-  {
-    id: 'who-is-absent', label: 'Who is absent today', category: 'Time',
-    description: 'Today’s roster, filtered to absentees',
-    path: '/hrms/attendance?tab=team&status=ABSENT', permission: P.ATTENDANCE_TEAM_READ,
-    keywords: ['absent', 'missing', 'away', 'today', 'attendance'],
-  },
-  {
-    id: 'team-attendance', label: 'Team Attendance', category: 'Time',
-    description: 'Who is in today',
-    path: '/hrms/attendance?tab=team', permission: P.ATTENDANCE_TEAM_READ,
-    keywords: ['team', 'roster', 'present', 'today', 'attendance'],
-  },
-  {
-    id: 'regularize-attendance', label: 'Regularize Attendance', category: 'Time',
-    description: 'Raise or review an attendance correction',
-    path: '/hrms/attendance?tab=corrections', permission: P.ATTENDANCE_CHECKIN_SELF,
-    keywords: ['regularize', 'regularise', 'correction', 'fix', 'missed', 'punch', 'amend'],
-  },
-  {
-    id: 'manual-entry', label: 'Manual Attendance Entry', category: 'Time',
-    description: 'Record attendance on someone’s behalf',
-    path: '/hrms/attendance/manual-entry', permission: P.ATTENDANCE_MANUAL_ENTRY_WRITE,
-    keywords: ['manual', 'entry', 'backdate', 'record', 'punch'],
-  },
-  {
-    id: 'shifts-overtime', label: 'Shifts & Overtime', category: 'Time',
-    description: 'Shift roster and overtime',
-    path: '/hrms/shifts', permission: P.HRMS_SHIFT_WRITE,
-    keywords: ['shift', 'roster', 'overtime', 'ot', 'schedule'],
-  },
+  // ── People ──
+  { id: 'add-employee', label: 'Add an employee', description: 'Opens the Workforce Directory, where you add people', path: '/hrms/employees', icon: 'userPlus',
+    access: [{ allOf: ['hrms.employee.write', 'hrms.employee.read'], module: HR }], keywords: ['new employee', 'hire', 'onboard', 'new joiner', 'create employee'] },
+  { id: 'import-employees', label: 'Import employees', description: 'Bulk-load employees from a CSV file', path: '/hrms/employees/import', icon: 'download',
+    access: [{ allOf: ['hrms.employee.import'], module: HR }], keywords: ['bulk', 'csv', 'excel', 'upload employees'] },
+  { id: 'invite-user', label: 'Invite a user', description: 'Give someone a login to this workspace', path: '/users', icon: 'users',
+    access: [{ allOf: ['workspace.users.manage', 'workspace.users.read'] }], keywords: ['invite', 'login', 'access', 'user'] },
+  { id: 'set-punch-zone', label: 'Set a branch punch zone', description: 'Punch zones live on branches, in Companies & Branches', path: '/hrms/companies', icon: 'mapPin',
+    access: [{ allOf: ['org.geofence.write', 'hrms.branch.read'], module: HR }], keywords: ['geofence', 'geofencing', 'punch zone', 'radius', 'location', 'office'] },
 
-  // ── Leave ─────────────────────────────────────────────────────────────────
-  {
-    id: 'apply-leave', label: 'Apply for Leave', category: 'Leave',
-    description: 'Submit a leave request',
-    path: '/hrms/leave?tab=apply', permission: P.LEAVE_REQUEST_SELF,
-    keywords: ['apply', 'request', 'time off', 'holiday', 'vacation', 'absence', 'leave'],
-  },
-  {
-    id: 'leave-approvals', label: 'Approve Leave Requests', category: 'Leave',
-    description: 'Pending leave approvals',
-    path: '/hrms/leave?tab=approvals', permission: P.HRMS_LEAVE_APPROVE_L1,
-    keywords: ['approve', 'approvals', 'pending', 'reject', 'decide', 'leave'],
-  },
-  {
-    id: 'leave-balances', label: 'Leave Balances', category: 'Leave',
-    description: 'Remaining leave by type',
-    path: '/hrms/leave?tab=balances', permission: P.LEAVE_BALANCE_READ,
-    keywords: ['balance', 'remaining', 'entitlement', 'quota', 'leave'],
-  },
+  // ── Time and leave ──
+  { id: 'who-is-late', label: 'Who is late today', description: 'Today’s roster, filtered to late arrivals', path: '/hrms/attendance?tab=team&status=LATE', icon: 'alert',
+    access: [{ allOf: ['attendance.team.read'], module: HR }], keywords: ['late', 'late comers', 'arrivals'] },
+  { id: 'who-is-absent', label: 'Who is absent today', description: 'Today’s roster, filtered to absences', path: '/hrms/attendance?tab=team&status=ABSENT', icon: 'userX',
+    access: [{ allOf: ['attendance.team.read'], module: HR }], keywords: ['absent', 'missing', 'not in'] },
+  { id: 'approve-fixes', label: 'Approve attendance fixes', description: 'Regularization requests waiting for you', path: '/hrms/attendance?tab=corrections', icon: 'inbox',
+    access: [{ allOf: ['attendance.regularization.approve', 'attendance.team.read'], module: HR }], keywords: ['approve regularization', 'corrections', 'pending fixes'] },
+  { id: 'manual-entry', label: 'Record a punch for someone', description: 'Manual attendance entry', path: '/hrms/attendance/manual-entry', icon: 'clock',
+    access: [{ allOf: ['attendance.workforce.admin'], module: HR }], keywords: ['manual entry', 'punch on behalf', 'backdate'] },
+  { id: 'assign-shift', label: 'Change someone’s shift', description: 'Assign shifts on the roster', path: '/hrms/shifts?tab=roster', icon: 'swap',
+    access: [{ allOf: ['attendance.workforce.admin', 'attendance.team.read'], module: HR }], keywords: ['assign shift', 'roster', 'shift change'] },
+  { id: 'approve-leave', label: 'Approve leave requests', description: 'Leave waiting for your decision', path: '/hrms/leave?tab=approvals', icon: 'checkCircle',
+    access: [{ allOf: ['hrms.leave.approve.l1'], module: HR }], keywords: ['approve', 'pending leave', 'reject leave'] },
+  { id: 'add-holiday', label: 'Add a holiday', description: 'The company holiday list', path: '/hrms/leave?tab=holidays', icon: 'sun',
+    access: [{ allOf: ['settings.holidays.write'], module: HR }], keywords: ['holiday list', 'festival', 'public holiday'] },
+  { id: 'approve-expenses', label: 'Approve expense claims', description: 'Claims waiting for your decision', path: '/hrms/expenses?tab=approvals', icon: 'inbox',
+    access: [{ anyOf: ['hrms.expense.claim.approve', 'hrms.expense.reimbursement'], module: HR }], keywords: ['approve claim', 'reimbursement', 'pending claims'] },
+  { id: 'review-documents', label: 'Review uploaded documents', description: 'Verify or reject what employees uploaded', path: '/hrms/documents/pending', icon: 'shield',
+    access: [{ allOf: ['hrms.document.verify'], module: HR }], keywords: ['verify documents', 'pending documents'] },
 
-  // ── Pay ───────────────────────────────────────────────────────────────────
-  {
-    id: 'run-payroll', label: 'Run Payroll', category: 'Pay',
-    description: 'Payroll runs and processing',
-    path: '/hrms/payroll/runs', permission: P.PAYROLL_RUNS_READ,
-    keywords: ['payroll', 'run', 'process', 'salary', 'pay', 'cycle', 'payslip'],
-  },
-  {
-    id: 'salary-structure', label: 'Salary Structure', category: 'Pay',
-    description: 'Employee salary structures',
-    path: '/hrms/salary-structure', permission: P.PAYROLL_STRUCTURE_READ,
-    keywords: ['salary', 'ctc', 'structure', 'components', 'pay'],
-  },
-  {
-    id: 'bank-disbursement', label: 'Bank Disbursement', category: 'Pay',
-    description: 'Generate the bank transfer file',
-    path: '/hrms/bank-disbursement', permission: P.PAYROLL_DISBURSEMENT_INITIATE,
-    keywords: ['bank', 'disbursement', 'neft', 'transfer', 'payout', 'file'],
-  },
-  {
-    id: 'my-payslips', label: 'My Payslips', category: 'Pay',
-    description: 'Download your payslips',
-    path: '/me/payslips', permission: P.PAYROLL_PAYSLIP_READ_SELF,
-    keywords: ['payslip', 'salary slip', 'my pay', 'download', 'payslips'],
-  },
-  {
-    id: 'advances', label: 'Advances & Loans', category: 'Pay',
-    description: 'Salary advances and recovery',
-    path: '/hrms/advances',
-    keywords: ['advance', 'loan', 'emi', 'recovery', 'salary advance'],
-  },
-  {
-    id: 'expense-claims', label: 'Expense Claims', category: 'Pay',
-    description: 'Submit or approve expense claims',
-    path: '/hrms/expenses',
-    keywords: ['expense', 'claim', 'reimburse', 'reimbursement', 'travel', 'receipt', 'spend'],
-  },
+  // ── Pay ──
+  { id: 'run-payroll', label: 'Run payroll', description: 'Create and process this month’s run', path: '/hrms/payroll/runs', icon: 'rupee',
+    access: [{ allOf: ['payroll.runs.manage', 'payroll.runs.read'], module: PAY }], keywords: ['payroll', 'process salary', 'pay run', 'salary'] },
+  { id: 'bank-file', label: 'Prepare the bank transfer file', description: 'Bank disbursement for a payroll run', path: '/hrms/bank-disbursement', icon: 'banknote',
+    access: [{ allOf: ['payroll.runs.read', 'hrms.disbursement.build'], module: PAY }], keywords: ['bank file', 'neft', 'disbursement', 'salary transfer'] },
+  { id: 'revise-salary', label: 'Revise someone’s salary', description: 'Salary structures', path: '/hrms/salary-structure', icon: 'creditCard',
+    access: [{ allOf: ['payroll.runs.read', 'payroll.structure.manage'], module: PAY }], keywords: ['ctc revision', 'increment', 'hike', 'salary structure'] },
 
-  // ── Hiring ────────────────────────────────────────────────────────────────
-  {
-    id: 'hiring-pipeline', label: 'Hiring Pipeline', category: 'Hiring',
-    description: 'Requisitions and candidates',
-    path: '/hrms/hiring', permission: P.HRMS_HIRING_READ,
-    keywords: ['hiring', 'recruit', 'requisition', 'candidate', 'job', 'opening', 'vacancy', 'applicant'],
-  },
-  {
-    id: 'onboarding', label: 'Onboarding', category: 'Hiring',
-    description: 'Onboarding instances and tasks',
-    path: '/hrms/onboarding/instances', permission: P.HRMS_ONBOARDING_INSTANCE_READ,
-    keywords: ['onboard', 'onboarding', 'joining', 'new joiner', 'checklist', 'tasks'],
-  },
+  // ── Hiring, performance and letters ──
+  { id: 'new-requisition', label: 'Open a job requisition', description: 'Hiring requisitions', path: '/hrms/hiring?tab=requisitions', icon: 'briefcase',
+    access: [{ allOf: ['hrms.hiring.write', 'hrms.hiring.read'], module: HR }], keywords: ['job opening', 'vacancy', 'post a job', 'hire'] },
+  { id: 'start-onboarding', label: 'Start onboarding a new hire', description: 'Opens the onboarding form', path: '/hrms/onboarding/instances/new', icon: 'clipboard',
+    access: [{ allOf: ['hrms.onboarding.instance.write'], module: HR }], keywords: ['onboard', 'joining', 'new joiner checklist'] },
+  { id: 'review-cycle', label: 'Start a review cycle', description: 'Performance review cycles', path: '/hrms/performance?view=cycles', icon: 'target',
+    access: [{ allOf: ['hrms.performance.write', 'hrms.performance.read'], module: HR }], keywords: ['appraisal', 'review cycle', 'performance review'] },
+  { id: 'generate-letter', label: 'Generate a letter', description: 'Offer, experience and other letters', path: '/hrms/letters/generated', icon: 'filePen',
+    access: [{ allOf: ['hrms.letters.generate', 'hrms.letters.read'], module: HR }], keywords: ['offer letter', 'experience letter', 'relieving letter'] },
+  { id: 'export-headcount', label: 'Export headcount', description: 'Headcount report with CSV download', path: '/hrms/reports/headcount', icon: 'download',
+    access: [{ allOf: ['hrms.report.headcount'], module: HR }], keywords: ['headcount csv', 'employee count', 'download report'] },
+  { id: 'open-reports', label: 'View reports', description: 'Headcount, attrition, attendance and more', path: '/hrms/reports', icon: 'chart',
+    access: [{ anyOf: REPORTS, module: HR }], keywords: ['report', 'analytics', 'export'] },
 
-  // ── Documents & letters ───────────────────────────────────────────────────
-  {
-    id: 'employee-vault', label: 'Employee Documents', category: 'Documents',
-    description: 'The document vault',
-    path: '/hrms/documents',
-    keywords: ['document', 'vault', 'file', 'contract', 'id proof', 'certificate', 'upload'],
-  },
-  {
-    id: 'generate-letter', label: 'Generated Letters', category: 'Documents',
-    description: 'Offer, experience and other letters',
-    path: '/hrms/letters/generated', permission: P.HRMS_LETTERS_READ,
-    keywords: ['letter', 'offer', 'experience', 'relieving', 'generate', 'issue'],
-  },
-  {
-    id: 'letter-templates', label: 'Letter Templates', category: 'Documents',
-    description: 'Manage letter templates',
-    path: '/hrms/letters/templates', permission: P.HRMS_LETTERS_TEMPLATE_READ,
-    keywords: ['template', 'letter', 'merge', 'draft'],
-  },
-
-  // ── Insights ──────────────────────────────────────────────────────────────
-  {
-    id: 'reports', label: 'Reports', category: 'Insights',
-    description: 'Headcount, attrition, attendance and more',
-    anyOf: [P.HRMS_REPORT_HEADCOUNT, P.HRMS_REPORT_ATTRITION, P.HRMS_REPORT_ATTENDANCE,
-            P.HRMS_REPORT_LEAVE, P.HRMS_REPORT_DIVERSITY],
-    path: '/hrms/reports',
-    keywords: ['report', 'headcount', 'attrition', 'diversity', 'export', 'csv', 'analytics'],
-  },
-  {
-    id: 'workforce-analytics', label: 'Workforce Analytics', category: 'Insights',
-    description: 'Headcount, diversity and attrition trends',
-    // The same codes the route admits (any one of the three reports it shows).
-    anyOf: [P.HRMS_REPORT_HEADCOUNT, P.HRMS_REPORT_ATTRITION, P.HRMS_REPORT_DIVERSITY],
-    path: '/hrms/workforce-analytics',
-    keywords: ['analytics', 'workforce', 'trend', 'insight', 'chart'],
-  },
-
-  // ── Admin ─────────────────────────────────────────────────────────────────
-  {
-    id: 'audit-logs', label: 'Audit Logs', category: 'Admin',
-    description: 'Who did what, and when',
-    path: '/audit-logs', permission: P.AUDIT_READ,
-    keywords: ['audit', 'log', 'trail', 'history', 'who', 'security', 'compliance'],
-  },
-  {
-    id: 'users', label: 'Workspace Users', category: 'Admin',
-    description: 'Invite and manage portal users',
-    path: '/users', permission: P.WORKSPACE_USERS_READ,
-    keywords: ['user', 'invite', 'access', 'account', 'login'],
-  },
-  {
-    id: 'roles', label: 'Roles & Permissions', category: 'Admin',
-    description: 'Role definitions and permission grants',
-    path: '/roles', anyOf: [P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN],
-    keywords: ['role', 'permission', 'rbac', 'access', 'authorisation', 'authorization'],
-  },
-  {
-    id: 'hr-settings', label: 'HR Configuration', category: 'Admin',
-    description: 'Probation, notice period and HR defaults',
-    path: '/hrms/settings', anyOf: [P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE],
-    keywords: ['setting', 'configuration', 'config', 'probation', 'notice', 'policy'],
-  },
-  {
-    id: 'my-profile', label: 'My Profile', category: 'People',
-    description: 'Your own details',
-    path: '/profile',
-    keywords: ['profile', 'me', 'my details', 'account', 'personal'],
-  },
+  // ── Workspace ──
+  { id: 'manage-plan', label: 'Add a module', description: 'Opens your plan, where you add modules', path: '/plan', icon: 'grid',
+    access: [{ when: (ctx) => ctx.planAdmin }], keywords: ['request module', 'upgrade', 'crm', 'accounts', 'inventory', 'plan'] },
 ]

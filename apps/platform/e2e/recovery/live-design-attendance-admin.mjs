@@ -1,12 +1,13 @@
-// Live check of the redesigned Muster roll, Manual entry and Geofencing pages:
+// Live check of the redesigned Muster roll and Manual entry pages:
 //  - Muster roll: today says "Not marked yet" (not "Absent"), a past day says
 //    "Absent"; ?date= opens that day; the CSV export downloads and is recorded
 //    for the Reports Center; the row shortcut opens Manual entry.
 //  - Manual entry: saves a punch for the employee on a past day with no record
 //    and lands back on the muster roll for that same day.
-//  - Geofencing: add a zone (map shown), edit it, remove it.
+//  - Geofencing (retired 25 Sep): the old page now opens Companies & Branches,
+//    where punch zones live on each branch.
 //  - Department manager: muster roll opens with no refused calls.
-// The manual punch and the QA zone are removed at the end.
+// The manual punch is removed at the end.
 //
 //   node e2e/recovery/live-design-attendance-admin.mjs
 import { execFileSync } from 'node:child_process'
@@ -43,7 +44,6 @@ for (let back = 20; back < 60 && !day; back++) {
   const iso = localIso(d)
   if (sql(`select count(*) from attendance.records where employee_id='${readerId}' and attendance_date='${iso}'`) === '0') day = iso
 }
-const zoneName = `QA zone ${Date.now()}`
 try {
   const o = await session('owner@unifiedtree.demo')
   await o.page.goto(base + '/hrms/muster-roll'); await settle(o.page)
@@ -74,27 +74,8 @@ try {
   }
 
   await o.page.goto(base + '/hrms/attendance/geofencing'); await settle(o.page)
-  await o.page.getByRole('button', { name: /Add zone/ }).first().click()
-  const dlg = o.page.getByRole('dialog')
-  await dlg.getByLabel('Zone name').fill(zoneName)
-  await dlg.getByLabel('Latitude').fill('17.385044')
-  await dlg.getByLabel('Longitude').fill('78.486671')
-  check('geofence: the map is shown in the drawer', (await dlg.locator('.leaflet-container').count()) === 1)
-  await dlg.getByRole('button', { name: 'Add zone' }).click()
-  const card = o.page.locator('article').filter({ hasText: zoneName })
-  await card.waitFor({ timeout: 15000 })
-  check('geofence: the new zone appears', (await card.count()) === 1)
-  await card.getByRole('button', { name: 'Edit' }).click()
-  await o.page.getByRole('dialog').getByLabel('Radius (metres)').fill('150')
-  await o.page.getByRole('dialog').getByRole('button', { name: 'Save zone' }).click()
-  await o.page.getByText('Zone saved', { exact: true }).waitFor({ timeout: 15000 }).catch(() => {})
-  await settle(o.page)
-  check('geofence: an edit is saved', (await o.page.locator('article').filter({ hasText: zoneName }).getByText('150 m', { exact: true }).count()) === 1)
-  o.page.once('dialog', (d) => d.accept())
-  await o.page.locator('article').filter({ hasText: zoneName }).getByRole('button', { name: 'Remove' }).click()
-  await o.page.getByText('Zone removed', { exact: true }).waitFor({ timeout: 15000 }).catch(() => {})
-  await settle(o.page)
-  check('geofence: a removed zone leaves the list', (await o.page.locator('article').filter({ hasText: zoneName }).count()) === 0)
+  check('geofencing: the retired page opens Companies & Branches', new URL(o.page.url()).pathname === '/hrms/companies', o.page.url())
+  check('geofencing: no longer in the menu', (await o.page.getByRole('link', { name: 'Geofencing' }).count()) + (await o.page.getByRole('button', { name: 'Geofencing', exact: true }).count()) === 0)
   check('owner: no refused calls or page errors', !o.failed.length && !o.errors.length, o.failed[0] || o.errors[0] || '')
   await o.ctx.close()
 
@@ -112,10 +93,8 @@ try {
       sql(`delete from attendance.records where employee_id='${readerId}' and attendance_date='${day}' and manual_entry`)
     }
   } catch { /* the audit table may not reference zones this way */ }
-  try { sql(`delete from public.geo_fence_zones where name like 'QA zone %'`) } catch (e) { console.log('cleanup:', String(e).split(String.fromCharCode(10))[0]) }
   const leftPunch = day ? sql(`select count(*) from attendance.records where employee_id='${readerId}' and attendance_date='${day}'`) : '0'
-  const leftZone = sql(`select count(*) from public.geo_fence_zones where name like 'QA zone %'`)
-  check('cleanup: QA punch and zone removed', leftPunch === '0' && leftZone === '0', `punch=${leftPunch} zone=${leftZone}`)
+  check('cleanup: QA punch removed', leftPunch === '0', `punch=${leftPunch}`)
   await browser.close()
   const pass = results.filter((x) => x.ok).length
   console.log(`\n${pass}/${results.length} passed`)

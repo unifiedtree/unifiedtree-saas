@@ -217,7 +217,8 @@ test('issues 5+6: /v1/letters/generate returns 201 with <br>/<hr>/<img> body', a
 })
 
 // ── ISSUE 1 — Geofence form now surfaces the branch picker ──────────────────
-test('issue 1: /hrms/attendance/geofencing → Add Zone drawer has Branch picker', async ({ page }, testInfo) => {
+// Geofencing page retired 25 Sep (punch zones live on branches); the route now redirects to Companies & Branches.
+test.skip('issue 1: /hrms/attendance/geofencing → Add Zone drawer has Branch picker', async ({ page }, testInfo) => {
   const { errs } = watch(page)
   await enter(page, '/hrms/attendance/geofencing')
   await page.waitForTimeout(1500)

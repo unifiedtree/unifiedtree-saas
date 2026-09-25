@@ -2,6 +2,7 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Lock, ArrowRight, Sparkles } from 'lucide-react'
 import { useModulePlans, type ModulePlan } from '@/core/api/modulePlans'
+import { useAccessContext } from '@/shared/navigation/useAccess'
 
 const MODULE_LABELS: Record<string, string> = {
   hrms: 'HRMS', crm: 'CRM', accounts: 'Accounts', payroll: 'Payroll',
@@ -32,6 +33,29 @@ export const ModuleNotActivated: React.FC<Props> = ({ moduleKey }) => {
   // Nothing is shown while loading or when no plan covers the module — no
   // placeholder price.
   const price = priceLine(plan)
+  // Only the people who can change the plan are offered it (the menu, launcher
+  // and search already hide modules the workspace doesn't have from everyone
+  // else); anyone else who follows an old link is told who to ask.
+  const { planAdmin } = useAccessContext()
+  if (!planAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
+        <div className="w-20 h-20 bg-emerald-50 border border-emerald-200/80 dark:bg-emerald-950/60 dark:border-emerald-800/40 rounded-3xl flex items-center justify-center mb-6">
+          <Lock size={32} className="text-emerald-700 dark:text-emerald-300" />
+        </div>
+        <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] mb-2">{label} isn’t part of your workspace</h2>
+        <p className="text-[var(--text-secondary)] max-w-md mb-8 leading-relaxed text-sm">
+          Ask your workspace administrator if you need it.
+        </p>
+        <button
+          onClick={() => navigate('/')}
+          className="btn-press inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[var(--border-default)] bg-[var(--bg-surface)] px-5 text-[14.5px] font-semibold text-[var(--text-primary)] shadow-xs hover:bg-[var(--bg-subtle)] hover:border-[var(--border-strong)] transition-all duration-150"
+        >
+          Back to Dashboard
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">

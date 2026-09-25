@@ -16,6 +16,11 @@ export type SectionKey =
   | 'live' | 'summary' | 'alerts' | 'trend' | 'today' | 'dept' | 'performers' | 'onboarding'
   | 'hiring' | 'projects' | 'payroll' | 'activity' | 'notices' | 'milestones' | 'probations'
 export type SectionStatus = 'live' | 'loading' | 'empty' | 'error'
+/** Which sections and cards the viewer may see. A section they have no permission for is hidden, not shown empty. */
+export type ShowKey =
+  | 'live' | 'summary' | 'att' | 'emp' | 'directory' | 'dept' | 'performers' | 'onboarding' | 'recruit' | 'projects'
+  | 'payact' | 'activity' | 'notices' | 'probations' | 'ops' | 'opsAttendance' | 'opsCorrections' | 'opsLeave'
+const SHOW_ALL = Object.fromEntries((['live', 'summary', 'att', 'emp', 'directory', 'dept', 'performers', 'onboarding', 'recruit', 'projects', 'payact', 'activity', 'notices', 'probations', 'ops', 'opsAttendance', 'opsCorrections', 'opsLeave'] as ShowKey[]).map((k) => [k, true])) as Record<ShowKey, boolean>
 
 /** Round a chart's top up to a tidy value and return ticks from top to 0. */
 function niceScale(max: number, steps = 4): { max: number; ticks: number[] } {
@@ -225,11 +230,12 @@ export class AdminDashboard extends DCLogic {
       { key: 'days', header: 'Days', render: (r: any) => createElement(HrStatusPill, { tone: r.days <= 3 ? 'red' : r.days <= 7 ? 'warn' : 'info' } as any, r.days < 0 ? `${-r.days}d overdue` : `${r.days}d left`) },
     ]
     const op = D.ops || {}, exceptions = c.late + c.absent + c.notMarked
+    const show: Record<ShowKey, boolean> = { ...SHOW_ALL, ...(p.show || {}) }
     const ops = [
       { bigIcon: ic('clock', 84), eyebrow: liveEmpty ? 'No exceptions' : `${exceptions} exceptions ${dayWord}`, title: 'Attendance follow-up', body: "Review today's attendance exceptions and open the employee list behind each count.", cta: 'Review attendance', tip: '→ ' + `/hrms/attendance?tab=team&date=${sel}`, onClick: () => go(`/hrms/attendance?tab=team&date=${sel}`) },
       { bigIcon: ic('inbox', 84), eyebrow: !op.corrections ? 'Nothing waiting' : `${op.corrections} awaiting review`, title: 'Correction requests', body: 'Approve or reject regularization requests before the payroll cut-off.', cta: 'Review requests', tip: '→ /hrms/attendance?tab=corrections', onClick: () => go('/hrms/attendance?tab=corrections') },
       { bigIcon: ic('calendarPlus', 84), eyebrow: !op.leave ? 'Nothing waiting' : `${op.leave} awaiting review`, title: 'Leave approvals', body: 'Employees are waiting on a first-level decision for their leave.', cta: 'Open leave approvals', tip: '→ /hrms/leave?tab=approvals', onClick: () => go('/hrms/leave?tab=approvals') },
-    ]
+    ].filter((_, i) => [show.opsAttendance, show.opsCorrections, show.opsLeave][i])
 
     const calOpen = this.state.calOpen
     const chip = createElement('button', {
@@ -243,7 +249,7 @@ export class AdminDashboard extends DCLogic {
     const setDate = (iso: string | null) => p.onDate && p.onDate(iso)
 
     return {
-      sec, hasPayroll, canBilling, canHiring,
+      sec, show, hasPayroll, canBilling, canHiring,
       palette: emerald ? 'emerald' : 'tones',
       greeting: `${D.greetingWord || 'Good morning'}, ${D.firstName || 'there'} 👋`,
       headerActions,

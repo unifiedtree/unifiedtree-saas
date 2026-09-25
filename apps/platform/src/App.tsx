@@ -25,7 +25,6 @@ import { OnboardingForm } from '@/modules/hrms/onboarding/OnboardingForm'
 import { ModuleGate } from '@/shared/components/ModuleGate'
 import { ModulePreview } from '@/shared/components/ModulePreview'
 import { ComingSoon } from '@/shared/components/ComingSoon'
-import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 // Canonical admin-roles SSOT — do NOT redeclare locally. See useRoles.ts.
 import { ADMIN_ROLES } from '@/shared/hooks/useRoles'
 
@@ -55,7 +54,6 @@ const InstanceDetail = lazyPage(() => import('@/modules/hrms/onboarding/Instance
 const MasterModule = lazyPage(() => import('@/modules/hrms/master/MasterContainer').then(m => ({ default: m.MasterContainer })))
 // Attendance & Time (Analytics · Daily Tracking · Shifts & Overtime) — one designed page, three routes.
 const AttendanceModule = lazyPage(() => import('@/modules/hrms/attendance/AttendanceContainer').then(m => ({ default: m.AttendanceContainer })))
-const GeofenceZones = lazyPage(() => import('@/modules/hrms/attendance/GeofenceZones').then(m => ({ default: m.GeofenceZones })))
 const Leave = lazyPage(() => import('@/modules/hrms/Leave').then(m => ({ default: m.Leave })))
 const Companies = lazyPage(() => import('@/modules/hrms/organization/CompaniesPageContainer').then(m => ({ default: m.CompaniesPageContainer })))
 const EmployeeDetail = lazyPage(() => import('@/modules/hrms/employees/EmployeeDetail').then(m => ({ default: m.EmployeeDetail })))
@@ -123,22 +121,31 @@ function RoleAwareLanding() {
  * ADMIN_ROLES is the canonical SSOT imported from useRoles — the earlier
  * local `['SUPER_ADMIN', 'COMPANY_ADMIN']` list omitted OWNER + ADMIN,
  * so an OWNER-only principal hitting /accounts fell through to /dashboard.
- *  - Module ACTIVE for the workspace  → <ComingSoon /> (ModuleGate passes through).
- *  - Module NOT active + admin        → ModuleGate falls back to ModuleNotActivated (upsell).
- *  - Module NOT active + non-admin    → redirect to dashboard (never land on a locked route).
+ *  - Admin, module ACTIVE      → <ComingSoon /> (ModuleGate passes through).
+ *  - Admin, module NOT active  → ModuleGate falls back to ModuleNotActivated (upsell).
+ *  - Anyone else               → redirect to dashboard: coming-soon and locked
+ *    modules are hidden from non-admins everywhere.
  */
 function ComingSoonRoute({ moduleKey }: { moduleKey: string }) {
-  const isActive = useLocalAuthStore(s => s.tenant?.activeModules.includes(moduleKey) ?? false)
   const roles = useSdkStore(s => s.user?.roles ?? [])
   const isAdmin = roles.some(r => (ADMIN_ROLES as readonly string[]).includes(r))
 
-  if (!isActive && !isAdmin) return <Navigate to="/dashboard" replace />
+  // Nobody but an admin sees a module that isn't built yet, owned or not
+  // (client rule, 25 Sep): admins keep the request-module flow (ModuleGate's upsell).
+  if (!isAdmin) return <Navigate to="/dashboard" replace />
 
   return (
     <ModuleGate moduleKey={moduleKey}>
       <ComingSoon module={moduleKey} />
     </ModuleGate>
   )
+}
+
+/** A placeholder for something not built yet: admins see it, everyone else goes home. */
+function ComingSoonForAdmins({ module }: { module: string }) {
+  const roles = useSdkStore(s => s.user?.roles ?? [])
+  const isAdmin = roles.some(r => (ADMIN_ROLES as readonly string[]).includes(r))
+  return isAdmin ? <ComingSoon module={module} /> : <Navigate to="/dashboard" replace />
 }
 
 const InspectorView = lazyPage(() => import('@/modules/hrms/compliance/InspectorView'))
@@ -185,7 +192,7 @@ const ROUTE_TREE = (
         <Route path="/dashboard" element={<Dashboard />} />
         {/* AUTH-ONLY (intentional): Analytics renders mock KPIs (no backend yet) — shows the
             ComingSoon placeholder, not real data. No permission to gate on until it ships. */}
-        <Route path="/analytics" element={<ComingSoon module="analytics" />} />
+        <Route path="/analytics" element={<ComingSoonForAdmins module="analytics" />} />
         {/* Gated on any settings capability so non-admins (e.g. plain EMPLOYEE) get a clean
             "Access Restricted" instead of an empty page; matches the sidebar's Settings gate. */}
         <Route path="/settings"      element={<RouteGuard anyOf={[P.SETTINGS_READ, P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_HOLIDAYS_WRITE, P.HRMS_PROBATION_CONFIG_READ]}><Settings /></RouteGuard>} />
@@ -218,7 +225,7 @@ const ROUTE_TREE = (
         <Route path="/plan"       element={<Plan />} />
         {/* AUTH-ONLY (intentional): Files is fully mock (no backend yet) — shows the
             ComingSoon placeholder, not real data. No permission to gate on until it ships. */}
-        <Route path="/files"     element={<ComingSoon module="files" />} />
+        <Route path="/files"     element={<ComingSoonForAdmins module="files" />} />
 
         {/* Employee self-service landing */}
         <Route
@@ -333,16 +340,10 @@ const ROUTE_TREE = (
             </RouteGuard>
           }
         />
-        {/* Admin/manager geofencing zones. Read needs attendance.team.read,
-            write needs org.geofence.write — backend enforces both. */}
-        <Route
-          path="/hrms/attendance/geofencing"
-          element={
-            <RouteGuard anyOf={[P.ORG_GEOFENCE_WRITE, P.ATTENDANCE_TEAM_READ]}>
-              <ModuleGate moduleKey="hrms"><GeofenceZones /></ModuleGate>
-            </RouteGuard>
-          }
-        />
+        {/* Geofencing page retired (25 Sep, decision D3): punch zones live on each
+            branch (Companies & Branches → branch → Geofence). Old links and
+            bookmarks land there. */}
+        <Route path="/hrms/attendance/geofencing" element={<Navigate to="/hrms/companies" replace />} />
         <Route
           path="/hrms/leave"
           element={

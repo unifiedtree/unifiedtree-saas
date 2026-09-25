@@ -45,65 +45,73 @@ export function AdminDashboardView({ v }: { v: any }) {
             </div>
           </>
         ) : null}
-        <section aria-labelledby="sec-live">
-          <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
-            <h2 id="sec-live" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
-              <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                {txt(v.icClock)}
-              </span>
-              {"Live Overview"}
-            </h2>
-            <span style={{fontSize: "12px", color: "#475569", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums"}}>
-              {txt(v.liveChip)}
-            </span>
-          </div>
-          {v.sec?.live?.tilesOk ? (
-            <>
-              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(max(160px,22%),1fr))", gap: "12px"}}>
-                {arr(v.liveTiles).map((t: any, $index: number) => (
-                  <Fragment key={$index}>
-                    <StatTile tile={t} />
-                  </Fragment>
-                ))}
+        {v.show?.live ? (
+          <>
+            <section aria-labelledby="sec-live">
+              <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
+                <h2 id="sec-live" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
+                  <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
+                    {txt(v.icClock)}
+                  </span>
+                  {"Live Overview"}
+                </h2>
+                <span style={{fontSize: "12px", color: "#475569", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums"}}>
+                  {txt(v.liveChip)}
+                </span>
               </div>
-            </>
-          ) : null}
-          {v.sec?.live?.isError ? (
-            <>
-              <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "8px 22px"}}>
-                <SectionState kind="error" retry={v.sec?.live?.retry} />
+              {v.sec?.live?.tilesOk ? (
+                <>
+                  <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(max(160px,22%),1fr))", gap: "12px"}}>
+                    {arr(v.liveTiles).map((t: any, $index: number) => (
+                      <Fragment key={$index}>
+                        <StatTile tile={t} />
+                      </Fragment>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+              {v.sec?.live?.isError ? (
+                <>
+                  <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "8px 22px"}}>
+                    <SectionState kind="error" retry={v.sec?.live?.retry} />
+                  </div>
+                </>
+              ) : null}
+            </section>
+          </>
+        ) : null}
+        {v.show?.summary ? (
+          <>
+            <section aria-labelledby="sec-summary">
+              <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
+                <h2 id="sec-summary" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
+                  <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
+                    {txt(v.icBuilding)}
+                  </span>
+                  {"Company summary"}
+                </h2>
               </div>
-            </>
-          ) : null}
-        </section>
-        <section aria-labelledby="sec-summary">
-          <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
-            <h2 id="sec-summary" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
-              <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                {txt(v.icBuilding)}
-              </span>
-              {"Company summary"}
-            </h2>
-          </div>
-          {v.sec?.summary?.tilesOk ? (
-            <>
-              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(max(160px,22%),1fr))", gap: "12px"}}>
-                {arr(v.summaryTiles).map((t: any, $index: number) => (
-                  <Fragment key={$index}>
-                    <StatTile tile={t} />
-                  </Fragment>
-                ))}
-              </div>
-            </>
-          ) : null}
-          {v.sec?.summary?.isError ? (
-            <>
-              <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "8px 22px"}}>
-                <SectionState kind="error" retry={v.sec?.summary?.retry} />
-              </div>
-            </>
-          ) : null}
-        </section>
+              {v.sec?.summary?.tilesOk ? (
+                <>
+                  <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(max(160px,22%),1fr))", gap: "12px"}}>
+                    {arr(v.summaryTiles).map((t: any, $index: number) => (
+                      <Fragment key={$index}>
+                        <StatTile tile={t} />
+                      </Fragment>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+              {v.sec?.summary?.isError ? (
+                <>
+                  <div style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "8px 22px"}}>
+                    <SectionState kind="error" retry={v.sec?.summary?.retry} />
+                  </div>
+                </>
+              ) : null}
+            </section>
+          </>
+        ) : null}
         <section aria-label="Quick actions and seats" style={{display: "flex", flexWrap: "wrap", gap: "16px"}}>
           <div style={{flex: "1.5 1 340px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
             <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
@@ -239,549 +247,593 @@ export function AdminDashboardView({ v }: { v: any }) {
             </>
           ) : null}
         </section>
-        <section aria-labelledby="sec-att">
-          <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
-            <h2 id="sec-att" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
-              <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                {txt(v.icActivity)}
-              </span>
-              {"Attendance Analytics"}
-            </h2>
-            <button type="button" onClick={v.goAttendance} data-tip={v.tips?.goAttendance} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
-              {"View attendance →"}
-            </button>
-          </div>
-          <div style={{display: "flex", flexWrap: "wrap", gap: "16px"}}>
-            <div style={{flex: "1.4 1 380px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-              <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
-                <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
-                  {"Weekly Attendance Trend"}
-                </h3>
-                <span style={{fontSize: "12px", color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap"}}>
-                  {"Last 7 days · IST"}
-                </span>
-              </div>
-              {v.sec?.trend?.isLive ? (
-                <>
-                  <AreaChart rows={v.trendRows} series={v.trendSeries} yMin={v.zero} yMax={v.trendMax} yTicks={v.trendTicks} selectedIndex={v.trendSel} onPick={v.trendPick} />
-                  <p style={{margin: "10px 0 0", fontSize: "12px", color: "#64748b"}}>
-                    {"Click a day to load it into the dashboard."}
-                  </p>
-                </>
-              ) : null}
-              {v.sec?.trend?.notLive ? (
-                <>
-                  <SectionState kind={v.sec?.trend?.state} title="No records for this period." icon="chart" height="160" retry={v.sec?.trend?.retry} />
-                </>
-              ) : null}
-            </div>
-            <div style={{flex: "1 1 320px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-              <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
-                <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
-                  {txt(v.todayTitle)}
-                </h3>
-                <span style={{fontSize: "12px", color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums"}}>
-                  {txt(v.rosterTotal)}{" employees · IST"}
-                </span>
-              </div>
-              {v.sec?.today?.isLive ? (
-                <>
-                  <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px"}}>
-                    <div role="img" aria-label={v.donutLabel} style={{position: "relative", width: "150px", height: "150px", flex: "0 0 150px", margin: "0 auto"}}>
-                      <svg viewBox="0 0 42 42" aria-hidden="true" style={{position: "absolute", inset: "0", width: "100%", height: "100%"}}>
-                        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#f1f5f9" strokeWidth="5" />
-                      </svg>
-                      {arr(v.donut).map((d: any, $index: number) => (
-                        <Fragment key={$index}>
-                          <svg viewBox="0 0 42 42" aria-hidden="true" style={{position: "absolute", inset: "0", width: "100%", height: "100%"}}>
-                            <circle cx="21" cy="21" r="15.915" fill="none" stroke={d?.color} strokeWidth="5" strokeDasharray={d?.dash} strokeDashoffset={d?.offset} />
-                          </svg>
-                        </Fragment>
-                      ))}
-                      <div style={{position: "absolute", inset: "0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center"}}>
-                        <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums"}}>
-                          {txt(v.presentCount)}
-                        </span>
-                        <span style={{fontSize: "11px", color: "#64748b", marginTop: "3px"}}>
-                          {"present of "}{txt(v.rosterTotal)}
-                        </span>
-                      </div>
-                    </div>
-                    <div style={{flex: "1 1 220px", minWidth: "0", display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "6px"}}>
-                      {arr(v.todayCounts).map((c: any, $index: number) => (
-                        <Fragment key={$index}>
-                          <button type="button" onClick={c?.onClick} data-tip={c?.tip} style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: "12px", color: "#0f172a", textAlign: "left", minHeight: "44px"}} className="dc-admin-dashboard-0">
-                            <span style={{display: "inline-flex", alignItems: "center", gap: "7px", minWidth: "0"}}>
-                              <svg width="10" height="10" aria-hidden="true" style={{flexShrink: "0"}}>
-                                <circle cx="5" cy="5" r="4" fill={c?.fill} stroke={c?.color} strokeWidth="1.5" />
-                              </svg>
-                              <span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
-                                {txt(c?.label)}
-                              </span>
-                            </span>
-                            <strong style={{fontSize: "14px", fontWeight: "800", fontVariantNumeric: "tabular-nums"}}>
-                              {txt(c?.count)}
-                            </strong>
-                          </button>
-                        </Fragment>
-                      ))}
-                    </div>
-                  </div>
-                  <p style={{margin: "12px 0 0", fontSize: "12px", color: "#64748b", lineHeight: "1.5", textWrap: "pretty"}}>
-                    {"Regular check-ins exclude late, WFH and half-day records. Other categories can overlap. Click a count to see who. Ring also counts "}{txt(v.otherCount)}{" on weekly off or holiday; early departures (hollow dot) overlap other groups."}
-                  </p>
-                </>
-              ) : null}
-              {v.sec?.today?.notLive ? (
-                <>
-                  <SectionState kind={v.sec?.today?.state} title="No records for this period." icon="users" height="160" retry={v.sec?.today?.retry} />
-                </>
-              ) : null}
-            </div>
-          </div>
-        </section>
-        <section aria-labelledby="sec-emp">
-          <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
-            <h2 id="sec-emp" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
-              <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                {txt(v.icUsers)}
-              </span>
-              {"Employee Analytics"}
-            </h2>
-            <button type="button" onClick={v.goEmployees} data-tip={v.tips?.goEmployees} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
-              {"Open directory →"}
-            </button>
-          </div>
-          <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(max(280px,30%),1fr))", gap: "16px"}}>
-            <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-              <h3 style={{margin: "0 0 4px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
-                {"Dept Distribution"}
-              </h3>
-              <p style={{margin: "0 0 16px", fontSize: "12px", color: "#64748b"}}>
-                {"Active employees by department. Click a bar to filter the directory."}
-              </p>
-              {v.sec?.dept?.isLive ? (
-                <>
-                  <div style={{display: "grid", gap: "10px"}}>
-                    {arr(v.departments).map((d: any, $index: number) => (
-                      <Fragment key={$index}>
-                        <button type="button" onClick={d?.onClick} data-tip={d?.tip} style={{display: "grid", gridTemplateColumns: "88px minmax(0,1fr) 28px", alignItems: "center", gap: "10px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit", fontSize: "12px", color: "#334155", textAlign: "left"}} className="dc-admin-dashboard-3">
-                          <span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "right"}}>
-                            {txt(d?.name)}
-                          </span>
-                          <span style={{display: "block", height: "14px", background: "repeating-linear-gradient(90deg,#f1f5f9 0 1px,transparent 1px 20%)"}}>
-                            <svg viewBox="0 0 100 14" preserveAspectRatio="none" aria-hidden="true" style={{display: "block", width: "100%", height: "14px", borderRadius: "0 4px 4px 0"}}>
-                              <rect width={d?.pct} height="14" fill={v.deptColor} />
-                            </svg>
-                          </span>
-                          <strong style={{fontWeight: "700", fontVariantNumeric: "tabular-nums", color: "#0f172a"}}>
-                            {txt(d?.active)}
-                          </strong>
-                        </button>
-                      </Fragment>
-                    ))}
-                    <div style={{display: "grid", gridTemplateColumns: "88px minmax(0,1fr) 28px", gap: "10px", fontSize: "11px", color: "#94a3b8", fontVariantNumeric: "tabular-nums"}}>
-                      <span />
-                      <span style={{display: "flex", justifyContent: "space-between"}}>
-                        <span>
-                          {"0"}
-                        </span>
-                        <span>
-                          {"10"}
-                        </span>
-                        <span>
-                          {"20"}
-                        </span>
-                        <span>
-                          {"30"}
-                        </span>
-                        <span>
-                          {"40"}
-                        </span>
-                        <span>
-                          {"50"}
-                        </span>
-                      </span>
-                      <span />
-                    </div>
-                  </div>
-                </>
-              ) : null}
-              {v.sec?.dept?.notLive ? (
-                <>
-                  <SectionState kind={v.sec?.dept?.state} title="No records for this period." icon="chart" height="120" retry={v.sec?.dept?.retry} />
-                </>
-              ) : null}
-            </div>
-            <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-              <h3 style={{margin: "0 0 4px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "600", fontSize: "14px", color: "#334155"}}>
-                {"Top performers"}
-              </h3>
-              <p style={{margin: "0 0 10px", fontSize: "12px", color: "#64748b"}}>
-                {"Average rating across submitted reviews."}
-              </p>
-              {v.sec?.performers?.isLive ? (
-                <>
-                  <div style={{display: "grid"}}>
-                    {arr(v.performers).map((p: any, $index: number) => (
-                      <Fragment key={$index}>
-                        <button type="button" onClick={v.goPerformance} data-tip={v.tips?.goPerformance} style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "10px 0", border: "0", borderBottom: "1px solid #f1f5f9", background: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", fontSize: "13px", color: "#0f172a"}} className="dc-admin-dashboard-4">
-                          <HrAvatar name={p?.name} sub={p?.meta} />
-                          <span style={{display: "inline-flex", alignItems: "baseline", gap: "2px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
-                            <strong style={{fontSize: "15px", fontWeight: "800", color: "#047857"}}>
-                              {txt(p?.rating)}
-                            </strong>
-                            <span style={{fontSize: "11px", color: "#64748b"}}>
-                              {"/5"}
-                            </span>
-                          </span>
-                        </button>
-                      </Fragment>
-                    ))}
-                  </div>
-                </>
-              ) : null}
-              {v.sec?.performers?.notLive ? (
-                <>
-                  <SectionState kind={v.sec?.performers?.state} title="No completed ratings yet." icon="star" height="120" retry={v.sec?.performers?.retry} />
-                </>
-              ) : null}
-            </div>
-            <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "flex", flexDirection: "column"}}>
-              <h3 style={{margin: "0 0 4px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
-                {"Onboarding tracker"}
-              </h3>
-              <p style={{margin: "0 0 10px", fontSize: "12px", color: "#64748b"}}>
-                {"Runs in progress · tasks completed."}
-              </p>
-              {v.sec?.onboarding?.isLive ? (
-                <>
-                  <div style={{display: "grid", gap: "2px", flex: "1", alignContent: "start"}}>
-                    {arr(v.onboarding).map((o: any, $index: number) => (
-                      <Fragment key={$index}>
-                        <button type="button" onClick={o?.onClick} data-tip={o?.tip} style={{display: "grid", gap: "8px", padding: "10px 0", border: "0", borderBottom: "1px solid #f1f5f9", background: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", fontSize: "13px", color: "#0f172a"}} className="dc-admin-dashboard-4">
-                          <span style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
-                            <span style={{minWidth: "0"}}>
-                              <strong style={{fontWeight: "600"}}>
-                                {txt(o?.name)}
-                              </strong>
-                              {" "}
-                              <span style={{color: "#64748b"}}>
-                                {"· "}{txt(o?.dept)}
-                              </span>
-                            </span>
-                            <span style={{display: "inline-flex", alignItems: "center", gap: "8px", flexShrink: "0"}}>
-                              <span style={{fontSize: "12px", color: "#475569", fontVariantNumeric: "tabular-nums"}}>
-                                {txt(o?.tasks)}
-                              </span>
-                              <HrStatusPill tone={o?.tone}>
-                                {txt(o?.statusLabel)}
-                              </HrStatusPill>
-                            </span>
-                          </span>
-                          <span style={{display: "block", height: "6px", borderRadius: "999px", background: "#f1f5f9", overflow: "hidden"}}>
-                            <svg viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" style={{display: "block", width: "100%", height: "6px"}}>
-                              <rect width={o?.pct} height="6" fill={o?.color} />
-                            </svg>
-                          </span>
-                        </button>
-                      </Fragment>
-                    ))}
-                  </div>
-                  <button type="button" onClick={v.goOnboarding} data-tip={v.tips?.goOnboarding} style={{marginTop: "12px", alignSelf: "flex-start", color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
-                    {"View all onboardings →"}
-                  </button>
-                </>
-              ) : null}
-              {v.sec?.onboarding?.notLive ? (
-                <>
-                  <SectionState kind={v.sec?.onboarding?.state} title="No onboarding runs in progress." icon="clipboard" height="120" retry={v.sec?.onboarding?.retry} />
-                </>
-              ) : null}
-            </div>
-          </div>
-        </section>
-        <section aria-label="Recruitment and projects" style={{display: "flex", flexWrap: "wrap", gap: "16px"}}>
-          {v.canHiring ? (
-            <>
-              <div style={{flex: "1.4 1 380px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-                <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
-                  <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
-                    <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                      {txt(v.icBriefcase)}
-                    </span>
-                    {"Recruitment & Pipeline"}
-                  </h3>
-                  <button type="button" onClick={v.goHiring} data-tip={v.tips?.goHiring} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
-                    {"Open hiring →"}
-                  </button>
-                </div>
-                {v.sec?.hiring?.isLive ? (
-                  <>
-                    <div style={{display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "10px", marginBottom: "18px"}}>
-                      <button type="button" onClick={v.goOpenRoles} data-tip={v.tips?.goOpenRoles} style={{display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "14px 8px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit"}} className="dc-admin-dashboard-5">
-                        <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#0f172a", fontVariantNumeric: "tabular-nums"}}>
-                          {txt(v.hiring?.openJobs)}
-                        </span>
-                        <span style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b", textAlign: "center"}}>
-                          {"Open roles"}
-                        </span>
-                      </button>
-                      <button type="button" onClick={v.goCandidates} data-tip={v.tips?.goCandidates} style={{display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "14px 8px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit"}} className="dc-admin-dashboard-5">
-                        <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#1d4ed8", fontVariantNumeric: "tabular-nums"}}>
-                          {txt(v.hiring?.pipeline)}
-                        </span>
-                        <span style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b", textAlign: "center"}}>
-                          {"In pipeline"}
-                        </span>
-                      </button>
-                      <button type="button" onClick={v.goInterviews} data-tip={v.tips?.goInterviews} style={{display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "14px 8px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit"}} className="dc-admin-dashboard-5">
-                        <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#047857", fontVariantNumeric: "tabular-nums"}}>
-                          {txt(v.hiring?.interviews)}
-                        </span>
-                        <span style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b", textAlign: "center"}}>
-                          {"Interviewing"}
-                        </span>
-                      </button>
-                    </div>
-                    <p style={{margin: "0 0 10px", fontSize: "12px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
-                      {"Candidates by current stage"}
-                    </p>
-                    <div style={{display: "grid", gap: "8px"}}>
-                      {arr(v.hiring?.stages).map((s: any, $index: number) => (
-                        <Fragment key={$index}>
-                          <button type="button" onClick={s?.onClick} data-tip={s?.tip} style={{display: "grid", gridTemplateColumns: "78px minmax(0,1fr) 28px", alignItems: "center", gap: "10px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit", fontSize: "13px", color: "#334155", textAlign: "left"}} className="dc-admin-dashboard-3">
-                            <span>
-                              {txt(s?.label)}
-                            </span>
-                            <span style={{display: "block", height: "16px", borderRadius: "6px", background: "#f1f5f9", overflow: "hidden"}}>
-                              <svg viewBox="0 0 100 16" preserveAspectRatio="none" aria-hidden="true" style={{display: "block", width: "100%", height: "16px"}}>
-                                <rect width={s?.pct} height="16" fill={s?.color} />
-                              </svg>
-                            </span>
-                            <strong style={{fontWeight: "700", fontVariantNumeric: "tabular-nums", textAlign: "right", color: "#0f172a"}}>
-                              {txt(s?.count)}
-                            </strong>
-                          </button>
-                        </Fragment>
-                      ))}
-                    </div>
-                  </>
-                ) : null}
-                {v.sec?.hiring?.notLive ? (
-                  <>
-                    <SectionState kind={v.sec?.hiring?.state} title="No candidates recorded." icon="briefcase" height="110" retry={v.sec?.hiring?.retry} />
-                  </>
-                ) : null}
-              </div>
-            </>
-          ) : null}
-          <div style={{flex: "1 1 300px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-            <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "12px"}}>
-              <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "600", fontSize: "14px", color: "#334155"}}>
-                {"Projects & Productivity"}
-              </h3>
-              <button type="button" onClick={v.goProjects} data-tip={v.tips?.goProjects} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
-                {"Manage projects →"}
-              </button>
-            </div>
-            {v.sec?.projects?.isLive ? (
-              <>
-                <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "18px"}}>
-                  <div role="img" aria-label={v.ringLabel} style={{position: "relative", width: "112px", height: "112px", flex: "0 0 112px"}}>
-                    <svg viewBox="0 0 42 42" aria-hidden="true" style={{position: "absolute", inset: "0", width: "100%", height: "100%", transform: "rotate(-90deg)"}}>
-                      <circle cx="21" cy="21" r="15.915" fill="none" stroke="#e2e8f0" strokeWidth="4" />
-                      <circle cx="21" cy="21" r="15.915" fill="none" stroke={v.ringColor} strokeWidth="4" strokeLinecap="round" strokeDasharray={v.ringDash} />
-                    </svg>
-                    <div style={{position: "absolute", inset: "0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center"}}>
-                      <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "22px", fontWeight: "800", lineHeight: "1", fontVariantNumeric: "tabular-nums"}}>
-                        {txt(v.projects?.completion)}{"%"}
-                      </span>
-                      <span style={{fontSize: "10px", color: "#64748b", marginTop: "3px"}}>
-                        {"tasks done"}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{flex: "1 1 150px", minWidth: "0", display: "grid", gap: "8px"}}>
-                    <div style={{display: "flex", justifyContent: "space-between", gap: "8px", padding: "10px 12px", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: "10px", fontSize: "13px"}}>
-                      <span style={{color: "#475569"}}>
-                        {"Active projects"}
-                      </span>
-                      <strong style={{fontVariantNumeric: "tabular-nums"}}>
-                        {txt(v.projects?.active)}
-                      </strong>
-                    </div>
-                    <div style={{display: "flex", justifyContent: "space-between", gap: "8px", padding: "10px 12px", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: "10px", fontSize: "13px"}}>
-                      <span style={{color: "#475569"}}>
-                        {"Tasks completed"}
-                      </span>
-                      <strong style={{fontVariantNumeric: "tabular-nums"}}>
-                        {txt(v.projects?.completedTasks)}
-                      </strong>
-                    </div>
-                    <div style={{display: "flex", justifyContent: "space-between", gap: "8px", padding: "10px 12px", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: "10px", fontSize: "13px"}}>
-                      <span style={{color: "#475569"}}>
-                        {"Tasks open"}
-                      </span>
-                      <strong style={{fontVariantNumeric: "tabular-nums"}}>
-                        {txt(v.projects?.openTasks)}
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : null}
-            {v.sec?.projects?.notLive ? (
-              <>
-                <SectionState kind={v.sec?.projects?.state} title="No projects yet." icon="briefcase" height="70" retry={v.sec?.projects?.retry} />
-              </>
-            ) : null}
-          </div>
-        </section>
-        <section aria-label="Payroll and activity" style={{display: "flex", flexWrap: "wrap", gap: "16px"}}>
-          {v.hasPayroll ? (
-            <>
-              <div style={{flex: "2 1 420px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-                <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "4px"}}>
-                  <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
-                    <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                      {txt(v.icRupee)}
-                    </span>
-                    {"Monthly payroll expense"}
-                  </h3>
-                  <span style={{fontSize: "12px", color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap"}}>
-                    {txt(v.payRange)}
+        {v.show?.att ? (
+          <>
+            <section aria-labelledby="sec-att">
+              <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
+                <h2 id="sec-att" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
+                  <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
+                    {txt(v.icActivity)}
                   </span>
+                  {"Attendance Analytics"}
+                </h2>
+                <button type="button" onClick={v.goAttendance} data-tip={v.tips?.goAttendance} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
+                  {"View attendance →"}
+                </button>
+              </div>
+              <div style={{display: "flex", flexWrap: "wrap", gap: "16px"}}>
+                <div style={{flex: "1.4 1 380px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
+                  <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
+                    <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
+                      {"Weekly Attendance Trend"}
+                    </h3>
+                    <span style={{fontSize: "12px", color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap"}}>
+                      {"Last 7 days · IST"}
+                    </span>
+                  </div>
+                  {v.sec?.trend?.isLive ? (
+                    <>
+                      <AreaChart rows={v.trendRows} series={v.trendSeries} yMin={v.zero} yMax={v.trendMax} yTicks={v.trendTicks} selectedIndex={v.trendSel} onPick={v.trendPick} />
+                      <p style={{margin: "10px 0 0", fontSize: "12px", color: "#64748b"}}>
+                        {"Click a day to load it into the dashboard."}
+                      </p>
+                    </>
+                  ) : null}
+                  {v.sec?.trend?.notLive ? (
+                    <>
+                      <SectionState kind={v.sec?.trend?.state} title="No records for this period." icon="chart" height="160" retry={v.sec?.trend?.retry} />
+                    </>
+                  ) : null}
                 </div>
-                <p style={{margin: "0 0 14px", fontSize: "12px", color: "#64748b"}}>
-                  {"Gross payroll from locked and paid runs. Amounts in INR."}
-                </p>
-                {v.sec?.payroll?.isLive ? (
+                <div style={{flex: "1 1 320px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
+                  <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
+                    <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
+                      {txt(v.todayTitle)}
+                    </h3>
+                    <span style={{fontSize: "12px", color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums"}}>
+                      {txt(v.rosterTotal)}{" employees · IST"}
+                    </span>
+                  </div>
+                  {v.sec?.today?.isLive ? (
+                    <>
+                      <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px"}}>
+                        <div role="img" aria-label={v.donutLabel} style={{position: "relative", width: "150px", height: "150px", flex: "0 0 150px", margin: "0 auto"}}>
+                          <svg viewBox="0 0 42 42" aria-hidden="true" style={{position: "absolute", inset: "0", width: "100%", height: "100%"}}>
+                            <circle cx="21" cy="21" r="15.915" fill="none" stroke="#f1f5f9" strokeWidth="5" />
+                          </svg>
+                          {arr(v.donut).map((d: any, $index: number) => (
+                            <Fragment key={$index}>
+                              <svg viewBox="0 0 42 42" aria-hidden="true" style={{position: "absolute", inset: "0", width: "100%", height: "100%"}}>
+                                <circle cx="21" cy="21" r="15.915" fill="none" stroke={d?.color} strokeWidth="5" strokeDasharray={d?.dash} strokeDashoffset={d?.offset} />
+                              </svg>
+                            </Fragment>
+                          ))}
+                          <div style={{position: "absolute", inset: "0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center"}}>
+                            <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums"}}>
+                              {txt(v.presentCount)}
+                            </span>
+                            <span style={{fontSize: "11px", color: "#64748b", marginTop: "3px"}}>
+                              {"present of "}{txt(v.rosterTotal)}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{flex: "1 1 220px", minWidth: "0", display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "6px"}}>
+                          {arr(v.todayCounts).map((c: any, $index: number) => (
+                            <Fragment key={$index}>
+                              <button type="button" onClick={c?.onClick} data-tip={c?.tip} style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: "10px", background: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: "12px", color: "#0f172a", textAlign: "left", minHeight: "44px"}} className="dc-admin-dashboard-0">
+                                <span style={{display: "inline-flex", alignItems: "center", gap: "7px", minWidth: "0"}}>
+                                  <svg width="10" height="10" aria-hidden="true" style={{flexShrink: "0"}}>
+                                    <circle cx="5" cy="5" r="4" fill={c?.fill} stroke={c?.color} strokeWidth="1.5" />
+                                  </svg>
+                                  <span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                                    {txt(c?.label)}
+                                  </span>
+                                </span>
+                                <strong style={{fontSize: "14px", fontWeight: "800", fontVariantNumeric: "tabular-nums"}}>
+                                  {txt(c?.count)}
+                                </strong>
+                              </button>
+                            </Fragment>
+                          ))}
+                        </div>
+                      </div>
+                      <p style={{margin: "12px 0 0", fontSize: "12px", color: "#64748b", lineHeight: "1.5", textWrap: "pretty"}}>
+                        {"Regular check-ins exclude late, WFH and half-day records. Other categories can overlap. Click a count to see who. Ring also counts "}{txt(v.otherCount)}{" on weekly off or holiday; early departures (hollow dot) overlap other groups."}
+                      </p>
+                    </>
+                  ) : null}
+                  {v.sec?.today?.notLive ? (
+                    <>
+                      <SectionState kind={v.sec?.today?.state} title="No records for this period." icon="users" height="160" retry={v.sec?.today?.retry} />
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          </>
+        ) : null}
+        {v.show?.emp ? (
+          <>
+            <section aria-labelledby="sec-emp">
+              <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
+                <h2 id="sec-emp" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
+                  <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
+                    {txt(v.icUsers)}
+                  </span>
+                  {"Employee Analytics"}
+                </h2>
+                {v.show?.directory ? (
                   <>
-                    <AreaChart rows={v.payRows} series={v.paySeries} yMin={v.payMin} yMax={v.payMax} yTicks={v.payTicks} selectedIndex={v.payLast} onPick={v.payPick} />
-                    <button type="button" onClick={v.goPayroll} data-tip={v.tips?.goPayroll} style={{marginTop: "14px", color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
-                      {"Open payroll →"}
+                    <button type="button" onClick={v.goEmployees} data-tip={v.tips?.goEmployees} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
+                      {"Open directory →"}
                     </button>
                   </>
                 ) : null}
-                {v.sec?.payroll?.notLive ? (
+              </div>
+              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(max(280px,30%),1fr))", gap: "16px"}}>
+                {v.show?.dept ? (
                   <>
-                    <SectionState kind={v.sec?.payroll?.state} title="No finalized payroll runs." icon="rupee" height="160" retry={v.sec?.payroll?.retry} />
+                    <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
+                      <h3 style={{margin: "0 0 4px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
+                        {"Dept Distribution"}
+                      </h3>
+                      <p style={{margin: "0 0 16px", fontSize: "12px", color: "#64748b"}}>
+                        {"Active employees by department. Click a bar to filter the directory."}
+                      </p>
+                      {v.sec?.dept?.isLive ? (
+                        <>
+                          <div style={{display: "grid", gap: "10px"}}>
+                            {arr(v.departments).map((d: any, $index: number) => (
+                              <Fragment key={$index}>
+                                <button type="button" onClick={d?.onClick} data-tip={d?.tip} style={{display: "grid", gridTemplateColumns: "88px minmax(0,1fr) 28px", alignItems: "center", gap: "10px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit", fontSize: "12px", color: "#334155", textAlign: "left"}} className="dc-admin-dashboard-3">
+                                  <span style={{overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "right"}}>
+                                    {txt(d?.name)}
+                                  </span>
+                                  <span style={{display: "block", height: "14px", background: "repeating-linear-gradient(90deg,#f1f5f9 0 1px,transparent 1px 20%)"}}>
+                                    <svg viewBox="0 0 100 14" preserveAspectRatio="none" aria-hidden="true" style={{display: "block", width: "100%", height: "14px", borderRadius: "0 4px 4px 0"}}>
+                                      <rect width={d?.pct} height="14" fill={v.deptColor} />
+                                    </svg>
+                                  </span>
+                                  <strong style={{fontWeight: "700", fontVariantNumeric: "tabular-nums", color: "#0f172a"}}>
+                                    {txt(d?.active)}
+                                  </strong>
+                                </button>
+                              </Fragment>
+                            ))}
+                            <div style={{display: "grid", gridTemplateColumns: "88px minmax(0,1fr) 28px", gap: "10px", fontSize: "11px", color: "#94a3b8", fontVariantNumeric: "tabular-nums"}}>
+                              <span />
+                              <span style={{display: "flex", justifyContent: "space-between"}}>
+                                <span>
+                                  {"0"}
+                                </span>
+                                <span>
+                                  {"10"}
+                                </span>
+                                <span>
+                                  {"20"}
+                                </span>
+                                <span>
+                                  {"30"}
+                                </span>
+                                <span>
+                                  {"40"}
+                                </span>
+                                <span>
+                                  {"50"}
+                                </span>
+                              </span>
+                              <span />
+                            </div>
+                          </div>
+                        </>
+                      ) : null}
+                      {v.sec?.dept?.notLive ? (
+                        <>
+                          <SectionState kind={v.sec?.dept?.state} title="No records for this period." icon="chart" height="120" retry={v.sec?.dept?.retry} />
+                        </>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+                {v.show?.performers ? (
+                  <>
+                    <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
+                      <h3 style={{margin: "0 0 4px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "600", fontSize: "14px", color: "#334155"}}>
+                        {"Top performers"}
+                      </h3>
+                      <p style={{margin: "0 0 10px", fontSize: "12px", color: "#64748b"}}>
+                        {"Average rating across submitted reviews."}
+                      </p>
+                      {v.sec?.performers?.isLive ? (
+                        <>
+                          <div style={{display: "grid"}}>
+                            {arr(v.performers).map((p: any, $index: number) => (
+                              <Fragment key={$index}>
+                                <button type="button" onClick={v.goPerformance} data-tip={v.tips?.goPerformance} style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "10px 0", border: "0", borderBottom: "1px solid #f1f5f9", background: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", fontSize: "13px", color: "#0f172a"}} className="dc-admin-dashboard-4">
+                                  <HrAvatar name={p?.name} sub={p?.meta} />
+                                  <span style={{display: "inline-flex", alignItems: "baseline", gap: "2px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap"}}>
+                                    <strong style={{fontSize: "15px", fontWeight: "800", color: "#047857"}}>
+                                      {txt(p?.rating)}
+                                    </strong>
+                                    <span style={{fontSize: "11px", color: "#64748b"}}>
+                                      {"/5"}
+                                    </span>
+                                  </span>
+                                </button>
+                              </Fragment>
+                            ))}
+                          </div>
+                        </>
+                      ) : null}
+                      {v.sec?.performers?.notLive ? (
+                        <>
+                          <SectionState kind={v.sec?.performers?.state} title="No completed ratings yet." icon="star" height="120" retry={v.sec?.performers?.retry} />
+                        </>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+                {v.show?.onboarding ? (
+                  <>
+                    <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px", display: "flex", flexDirection: "column"}}>
+                      <h3 style={{margin: "0 0 4px", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a"}}>
+                        {"Onboarding tracker"}
+                      </h3>
+                      <p style={{margin: "0 0 10px", fontSize: "12px", color: "#64748b"}}>
+                        {"Runs in progress · tasks completed."}
+                      </p>
+                      {v.sec?.onboarding?.isLive ? (
+                        <>
+                          <div style={{display: "grid", gap: "2px", flex: "1", alignContent: "start"}}>
+                            {arr(v.onboarding).map((o: any, $index: number) => (
+                              <Fragment key={$index}>
+                                <button type="button" onClick={o?.onClick} data-tip={o?.tip} style={{display: "grid", gap: "8px", padding: "10px 0", border: "0", borderBottom: "1px solid #f1f5f9", background: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", fontSize: "13px", color: "#0f172a"}} className="dc-admin-dashboard-4">
+                                  <span style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"}}>
+                                    <span style={{minWidth: "0"}}>
+                                      <strong style={{fontWeight: "600"}}>
+                                        {txt(o?.name)}
+                                      </strong>
+                                      {" "}
+                                      <span style={{color: "#64748b"}}>
+                                        {"· "}{txt(o?.dept)}
+                                      </span>
+                                    </span>
+                                    <span style={{display: "inline-flex", alignItems: "center", gap: "8px", flexShrink: "0"}}>
+                                      <span style={{fontSize: "12px", color: "#475569", fontVariantNumeric: "tabular-nums"}}>
+                                        {txt(o?.tasks)}
+                                      </span>
+                                      <HrStatusPill tone={o?.tone}>
+                                        {txt(o?.statusLabel)}
+                                      </HrStatusPill>
+                                    </span>
+                                  </span>
+                                  <span style={{display: "block", height: "6px", borderRadius: "999px", background: "#f1f5f9", overflow: "hidden"}}>
+                                    <svg viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" style={{display: "block", width: "100%", height: "6px"}}>
+                                      <rect width={o?.pct} height="6" fill={o?.color} />
+                                    </svg>
+                                  </span>
+                                </button>
+                              </Fragment>
+                            ))}
+                          </div>
+                          <button type="button" onClick={v.goOnboarding} data-tip={v.tips?.goOnboarding} style={{marginTop: "12px", alignSelf: "flex-start", color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
+                            {"View all onboardings →"}
+                          </button>
+                        </>
+                      ) : null}
+                      {v.sec?.onboarding?.notLive ? (
+                        <>
+                          <SectionState kind={v.sec?.onboarding?.state} title="No onboarding runs in progress." icon="clipboard" height="120" retry={v.sec?.onboarding?.retry} />
+                        </>
+                      ) : null}
+                    </div>
                   </>
                 ) : null}
               </div>
-            </>
-          ) : null}
-          <div style={{flex: "1 1 300px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-            <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
-              <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
-                <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                  {txt(v.icActivity)}
-                </span>
-                {"Live Activity Feed"}
-              </h3>
-              <button type="button" onClick={v.goAudit} data-tip={v.tips?.goAudit} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
-                {"View all →"}
-              </button>
-            </div>
-            {v.sec?.activity?.isLive ? (
-              <>
-                <ol style={{listStyle: "none", margin: "0", padding: "0 0 0 6px", display: "grid", gap: "12px", borderLeft: "2px solid #f1f5f9", marginLeft: "7px"}}>
-                  {arr(v.activity).map((e: any, $index: number) => (
-                    <Fragment key={$index}>
-                      <li style={{position: "relative", paddingLeft: "16px"}}>
-                        <svg width="14" height="14" aria-hidden="true" style={{position: "absolute", left: "-15px", top: "1px"}}>
-                          <circle cx="7" cy="7" r="5" fill="#ffffff" stroke={e?.color} strokeWidth="2.5" />
-                        </svg>
-                        <p style={{margin: "0 0 5px", fontSize: "11px", fontWeight: "600", color: "#64748b", fontVariantNumeric: "tabular-nums"}}>
-                          {txt(e?.rel)}{" · "}{txt(e?.time)}
-                        </p>
-                        <p style={{margin: "0", padding: "9px 12px", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: "10px", fontSize: "13px", lineHeight: "1.5", color: "#0f172a", textWrap: "pretty"}}>
-                          <strong style={{fontWeight: "700"}}>
-                            {txt(e?.actor)}
-                          </strong>
-                          {" "}{txt(e?.action)}{" "}
-                          <button type="button" onClick={e?.onClick} data-tip={e?.tip} style={{background: "none", border: "0", padding: "0", font: "inherit", color: "#0f6e56", fontWeight: "600", cursor: "pointer", textDecoration: "underline", textDecorationColor: "#a7f3d0", textUnderlineOffset: "2px"}}>
-                            {txt(e?.record)}
+            </section>
+          </>
+        ) : null}
+        {v.show?.recruit ? (
+          <>
+            <section aria-label="Recruitment and projects" style={{display: "flex", flexWrap: "wrap", gap: "16px"}}>
+              {v.canHiring ? (
+                <>
+                  <div style={{flex: "1.4 1 380px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
+                    <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
+                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+                        <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
+                          {txt(v.icBriefcase)}
+                        </span>
+                        {"Recruitment & Pipeline"}
+                      </h3>
+                      <button type="button" onClick={v.goHiring} data-tip={v.tips?.goHiring} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
+                        {"Open hiring →"}
+                      </button>
+                    </div>
+                    {v.sec?.hiring?.isLive ? (
+                      <>
+                        <div style={{display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "10px", marginBottom: "18px"}}>
+                          <button type="button" onClick={v.goOpenRoles} data-tip={v.tips?.goOpenRoles} style={{display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "14px 8px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit"}} className="dc-admin-dashboard-5">
+                            <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#0f172a", fontVariantNumeric: "tabular-nums"}}>
+                              {txt(v.hiring?.openJobs)}
+                            </span>
+                            <span style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b", textAlign: "center"}}>
+                              {"Open roles"}
+                            </span>
                           </button>
+                          <button type="button" onClick={v.goCandidates} data-tip={v.tips?.goCandidates} style={{display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "14px 8px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit"}} className="dc-admin-dashboard-5">
+                            <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#1d4ed8", fontVariantNumeric: "tabular-nums"}}>
+                              {txt(v.hiring?.pipeline)}
+                            </span>
+                            <span style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b", textAlign: "center"}}>
+                              {"In pipeline"}
+                            </span>
+                          </button>
+                          <button type="button" onClick={v.goInterviews} data-tip={v.tips?.goInterviews} style={{display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "14px 8px", border: "1px solid #e2e8f0", borderRadius: "12px", background: "#f8fafc", cursor: "pointer", fontFamily: "inherit"}} className="dc-admin-dashboard-5">
+                            <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "26px", fontWeight: "800", lineHeight: "1", color: "#047857", fontVariantNumeric: "tabular-nums"}}>
+                              {txt(v.hiring?.interviews)}
+                            </span>
+                            <span style={{fontSize: "11px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b", textAlign: "center"}}>
+                              {"Interviewing"}
+                            </span>
+                          </button>
+                        </div>
+                        <p style={{margin: "0 0 10px", fontSize: "12px", fontWeight: "700", letterSpacing: ".06em", textTransform: "uppercase", color: "#64748b"}}>
+                          {"Candidates by current stage"}
                         </p>
-                      </li>
-                    </Fragment>
-                  ))}
-                </ol>
-              </>
-            ) : null}
-            {v.sec?.activity?.notLive ? (
-              <>
-                <SectionState kind={v.sec?.activity?.state} title="No records for this period." icon="activity" height="150" retry={v.sec?.activity?.retry} />
-              </>
-            ) : null}
-          </div>
-        </section>
-        <section aria-labelledby="sec-notices" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-          <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "6px"}}>
-            <h2 id="sec-notices" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
-              <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                {txt(v.icMegaphone)}
-              </span>
-              {"Company notices"}
-            </h2>
-            {v.canManageNotices ? (
-              <>
-                <HrButton size="sm" onClick={v.openNotice} data-tip={v.tips?.openNotice}>
-                  {txt(v.icPlus)}{" Add notice"}
-                </HrButton>
-              </>
-            ) : null}
-          </div>
-          {v.sec?.notices?.isLive ? (
-            <>
-              <div style={{display: "grid"}}>
-                {arr(v.notices).map((n: any, $index: number) => (
-                  <Fragment key={$index}>
-                    <article style={{display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "10px 16px", padding: "14px 0", borderBottom: "1px solid #f1f5f9"}}>
-                      <div style={{flex: "1 1 320px", minWidth: "0"}}>
-                        <h3 style={{margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#0f172a"}}>
-                          {txt(n?.title)}
-                        </h3>
-                        <p style={{margin: "0 0 6px", fontSize: "13px", color: "#475569", lineHeight: "1.55", whiteSpace: "pre-wrap", textWrap: "pretty"}}>
-                          {txt(n?.body)}
-                        </p>
-                        <p style={{margin: "0", fontSize: "12px", color: "#64748b"}}>
-                          {txt(n?.meta)}
-                        </p>
-                      </div>
-                      <div style={{display: "flex", gap: "8px", alignItems: "flex-start"}}>
-                        {v.canManageNotices ? (
-                          <>
-                            <HrButton size="sm" variant="ghost" onClick={n?.onEdit} data-tip={n?.editTip}>
-                              {"Edit"}
-                            </HrButton>
-                          </>
-                        ) : null}
-                        {v.canManageNotices ? (
-                          <>
-                            <HrButton size="sm" variant="ghost" onClick={n?.onArchive} data-tip={n?.archiveTip}>
-                              {"Archive"}
-                            </HrButton>
-                          </>
-                        ) : null}
-                      </div>
-                    </article>
-                  </Fragment>
-                ))}
+                        <div style={{display: "grid", gap: "8px"}}>
+                          {arr(v.hiring?.stages).map((s: any, $index: number) => (
+                            <Fragment key={$index}>
+                              <button type="button" onClick={s?.onClick} data-tip={s?.tip} style={{display: "grid", gridTemplateColumns: "78px minmax(0,1fr) 28px", alignItems: "center", gap: "10px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit", fontSize: "13px", color: "#334155", textAlign: "left"}} className="dc-admin-dashboard-3">
+                                <span>
+                                  {txt(s?.label)}
+                                </span>
+                                <span style={{display: "block", height: "16px", borderRadius: "6px", background: "#f1f5f9", overflow: "hidden"}}>
+                                  <svg viewBox="0 0 100 16" preserveAspectRatio="none" aria-hidden="true" style={{display: "block", width: "100%", height: "16px"}}>
+                                    <rect width={s?.pct} height="16" fill={s?.color} />
+                                  </svg>
+                                </span>
+                                <strong style={{fontWeight: "700", fontVariantNumeric: "tabular-nums", textAlign: "right", color: "#0f172a"}}>
+                                  {txt(s?.count)}
+                                </strong>
+                              </button>
+                            </Fragment>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                    {v.sec?.hiring?.notLive ? (
+                      <>
+                        <SectionState kind={v.sec?.hiring?.state} title="No candidates recorded." icon="briefcase" height="110" retry={v.sec?.hiring?.retry} />
+                      </>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+              {v.show?.projects ? (
+                <>
+                  <div style={{flex: "1 1 300px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
+                    <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "12px"}}>
+                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "600", fontSize: "14px", color: "#334155"}}>
+                        {"Projects & Productivity"}
+                      </h3>
+                      <button type="button" onClick={v.goProjects} data-tip={v.tips?.goProjects} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
+                        {"Manage projects →"}
+                      </button>
+                    </div>
+                    {v.sec?.projects?.isLive ? (
+                      <>
+                        <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", gap: "18px"}}>
+                          <div role="img" aria-label={v.ringLabel} style={{position: "relative", width: "112px", height: "112px", flex: "0 0 112px"}}>
+                            <svg viewBox="0 0 42 42" aria-hidden="true" style={{position: "absolute", inset: "0", width: "100%", height: "100%", transform: "rotate(-90deg)"}}>
+                              <circle cx="21" cy="21" r="15.915" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                              <circle cx="21" cy="21" r="15.915" fill="none" stroke={v.ringColor} strokeWidth="4" strokeLinecap="round" strokeDasharray={v.ringDash} />
+                            </svg>
+                            <div style={{position: "absolute", inset: "0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center"}}>
+                              <span style={{fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontSize: "22px", fontWeight: "800", lineHeight: "1", fontVariantNumeric: "tabular-nums"}}>
+                                {txt(v.projects?.completion)}{"%"}
+                              </span>
+                              <span style={{fontSize: "10px", color: "#64748b", marginTop: "3px"}}>
+                                {"tasks done"}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{flex: "1 1 150px", minWidth: "0", display: "grid", gap: "8px"}}>
+                            <div style={{display: "flex", justifyContent: "space-between", gap: "8px", padding: "10px 12px", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: "10px", fontSize: "13px"}}>
+                              <span style={{color: "#475569"}}>
+                                {"Active projects"}
+                              </span>
+                              <strong style={{fontVariantNumeric: "tabular-nums"}}>
+                                {txt(v.projects?.active)}
+                              </strong>
+                            </div>
+                            <div style={{display: "flex", justifyContent: "space-between", gap: "8px", padding: "10px 12px", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: "10px", fontSize: "13px"}}>
+                              <span style={{color: "#475569"}}>
+                                {"Tasks completed"}
+                              </span>
+                              <strong style={{fontVariantNumeric: "tabular-nums"}}>
+                                {txt(v.projects?.completedTasks)}
+                              </strong>
+                            </div>
+                            <div style={{display: "flex", justifyContent: "space-between", gap: "8px", padding: "10px 12px", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: "10px", fontSize: "13px"}}>
+                              <span style={{color: "#475569"}}>
+                                {"Tasks open"}
+                              </span>
+                              <strong style={{fontVariantNumeric: "tabular-nums"}}>
+                                {txt(v.projects?.openTasks)}
+                              </strong>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+                    {v.sec?.projects?.notLive ? (
+                      <>
+                        <SectionState kind={v.sec?.projects?.state} title="No projects yet." icon="briefcase" height="70" retry={v.sec?.projects?.retry} />
+                      </>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+            </section>
+          </>
+        ) : null}
+        {v.show?.payact ? (
+          <>
+            <section aria-label="Payroll and activity" style={{display: "flex", flexWrap: "wrap", gap: "16px"}}>
+              {v.hasPayroll ? (
+                <>
+                  <div style={{flex: "2 1 420px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
+                    <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "4px"}}>
+                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+                        <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
+                          {txt(v.icRupee)}
+                        </span>
+                        {"Monthly payroll expense"}
+                      </h3>
+                      <span style={{fontSize: "12px", color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "999px", padding: "3px 10px", whiteSpace: "nowrap"}}>
+                        {txt(v.payRange)}
+                      </span>
+                    </div>
+                    <p style={{margin: "0 0 14px", fontSize: "12px", color: "#64748b"}}>
+                      {"Gross payroll from locked and paid runs. Amounts in INR."}
+                    </p>
+                    {v.sec?.payroll?.isLive ? (
+                      <>
+                        <AreaChart rows={v.payRows} series={v.paySeries} yMin={v.payMin} yMax={v.payMax} yTicks={v.payTicks} selectedIndex={v.payLast} onPick={v.payPick} />
+                        <button type="button" onClick={v.goPayroll} data-tip={v.tips?.goPayroll} style={{marginTop: "14px", color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
+                          {"Open payroll →"}
+                        </button>
+                      </>
+                    ) : null}
+                    {v.sec?.payroll?.notLive ? (
+                      <>
+                        <SectionState kind={v.sec?.payroll?.state} title="No finalized payroll runs." icon="rupee" height="160" retry={v.sec?.payroll?.retry} />
+                      </>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+              {v.show?.activity ? (
+                <>
+                  <div style={{flex: "1 1 300px", minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
+                    <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
+                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+                        <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
+                          {txt(v.icActivity)}
+                        </span>
+                        {"Live Activity Feed"}
+                      </h3>
+                      <button type="button" onClick={v.goAudit} data-tip={v.tips?.goAudit} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
+                        {"View all →"}
+                      </button>
+                    </div>
+                    {v.sec?.activity?.isLive ? (
+                      <>
+                        <ol style={{listStyle: "none", margin: "0", padding: "0 0 0 6px", display: "grid", gap: "12px", borderLeft: "2px solid #f1f5f9", marginLeft: "7px"}}>
+                          {arr(v.activity).map((e: any, $index: number) => (
+                            <Fragment key={$index}>
+                              <li style={{position: "relative", paddingLeft: "16px"}}>
+                                <svg width="14" height="14" aria-hidden="true" style={{position: "absolute", left: "-15px", top: "1px"}}>
+                                  <circle cx="7" cy="7" r="5" fill="#ffffff" stroke={e?.color} strokeWidth="2.5" />
+                                </svg>
+                                <p style={{margin: "0 0 5px", fontSize: "11px", fontWeight: "600", color: "#64748b", fontVariantNumeric: "tabular-nums"}}>
+                                  {txt(e?.rel)}{" · "}{txt(e?.time)}
+                                </p>
+                                <p style={{margin: "0", padding: "9px 12px", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: "10px", fontSize: "13px", lineHeight: "1.5", color: "#0f172a", textWrap: "pretty"}}>
+                                  <strong style={{fontWeight: "700"}}>
+                                    {txt(e?.actor)}
+                                  </strong>
+                                  {" "}{txt(e?.action)}{" "}
+                                  <button type="button" onClick={e?.onClick} data-tip={e?.tip} style={{background: "none", border: "0", padding: "0", font: "inherit", color: "#0f6e56", fontWeight: "600", cursor: "pointer", textDecoration: "underline", textDecorationColor: "#a7f3d0", textUnderlineOffset: "2px"}}>
+                                    {txt(e?.record)}
+                                  </button>
+                                </p>
+                              </li>
+                            </Fragment>
+                          ))}
+                        </ol>
+                      </>
+                    ) : null}
+                    {v.sec?.activity?.notLive ? (
+                      <>
+                        <SectionState kind={v.sec?.activity?.state} title="No records for this period." icon="activity" height="150" retry={v.sec?.activity?.retry} />
+                      </>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+            </section>
+          </>
+        ) : null}
+        {v.show?.notices ? (
+          <>
+            <section aria-labelledby="sec-notices" style={{background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
+              <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "6px"}}>
+                <h2 id="sec-notices" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+                  <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
+                    {txt(v.icMegaphone)}
+                  </span>
+                  {"Company notices"}
+                </h2>
+                {v.canManageNotices ? (
+                  <>
+                    <HrButton size="sm" onClick={v.openNotice} data-tip={v.tips?.openNotice}>
+                      {txt(v.icPlus)}{" Add notice"}
+                    </HrButton>
+                  </>
+                ) : null}
               </div>
-              <p style={{margin: "10px 0 0", fontSize: "12px", color: "#64748b"}}>
-                {txt(v.noticeCountLabel)}
-              </p>
-            </>
-          ) : null}
-          {v.sec?.notices?.notLive ? (
-            <>
-              <SectionState kind={v.sec?.notices?.state} title="No current company notices." icon="megaphone" height="90" retry={v.sec?.notices?.retry} />
-            </>
-          ) : null}
-        </section>
+              {v.sec?.notices?.isLive ? (
+                <>
+                  <div style={{display: "grid"}}>
+                    {arr(v.notices).map((n: any, $index: number) => (
+                      <Fragment key={$index}>
+                        <article style={{display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "10px 16px", padding: "14px 0", borderBottom: "1px solid #f1f5f9"}}>
+                          <div style={{flex: "1 1 320px", minWidth: "0"}}>
+                            <h3 style={{margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#0f172a"}}>
+                              {txt(n?.title)}
+                            </h3>
+                            <p style={{margin: "0 0 6px", fontSize: "13px", color: "#475569", lineHeight: "1.55", whiteSpace: "pre-wrap", textWrap: "pretty"}}>
+                              {txt(n?.body)}
+                            </p>
+                            <p style={{margin: "0", fontSize: "12px", color: "#64748b"}}>
+                              {txt(n?.meta)}
+                            </p>
+                          </div>
+                          <div style={{display: "flex", gap: "8px", alignItems: "flex-start"}}>
+                            {v.canManageNotices ? (
+                              <>
+                                <HrButton size="sm" variant="ghost" onClick={n?.onEdit} data-tip={n?.editTip}>
+                                  {"Edit"}
+                                </HrButton>
+                              </>
+                            ) : null}
+                            {v.canManageNotices ? (
+                              <>
+                                <HrButton size="sm" variant="ghost" onClick={n?.onArchive} data-tip={n?.archiveTip}>
+                                  {"Archive"}
+                                </HrButton>
+                              </>
+                            ) : null}
+                          </div>
+                        </article>
+                      </Fragment>
+                    ))}
+                  </div>
+                  <p style={{margin: "10px 0 0", fontSize: "12px", color: "#64748b"}}>
+                    {txt(v.noticeCountLabel)}
+                  </p>
+                </>
+              ) : null}
+              {v.sec?.notices?.notLive ? (
+                <>
+                  <SectionState kind={v.sec?.notices?.state} title="No current company notices." icon="megaphone" height="90" retry={v.sec?.notices?.retry} />
+                </>
+              ) : null}
+            </section>
+          </>
+        ) : null}
         <section aria-label="Upcoming" style={{display: "grid", gap: "16px"}}>
           <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
             <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
@@ -844,67 +896,75 @@ export function AdminDashboardView({ v }: { v: any }) {
               </>
             ) : null}
           </div>
-          <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px 12px"}}>
-            <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "8px 12px", marginBottom: "10px"}}>
-              <h2 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
-                <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                  {txt(v.icCalendarClock)}
-                </span>
-                {"Upcoming probation confirmations "}
-                <span style={{background: "#ecfdf5", color: "#0f6e56", borderRadius: "999px", padding: "1px 8px", fontSize: "11px", fontVariantNumeric: "tabular-nums"}}>
-                  {txt(v.probationCount)}
-                </span>
-              </h2>
-              <button type="button" onClick={v.goProbationList} data-tip={v.tips?.goProbationList} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap"}}>
-                {"View all on probation →"}
-              </button>
-            </div>
-            {v.sec?.probations?.isLive ? (
-              <>
-                <div data-row-tips={v.probationTips} style={{margin: "0 -22px", overflowX: "auto"}}>
-                  <DataTable columns={v.probationColumns} data={v.probations} keyField="id" onRowClick={v.openEmployeeRow} />
+          {v.show?.probations ? (
+            <>
+              <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px 12px"}}>
+                <div style={{display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "8px 12px", marginBottom: "10px"}}>
+                  <h2 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
+                    <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
+                      {txt(v.icCalendarClock)}
+                    </span>
+                    {"Upcoming probation confirmations "}
+                    <span style={{background: "#ecfdf5", color: "#0f6e56", borderRadius: "999px", padding: "1px 8px", fontSize: "11px", fontVariantNumeric: "tabular-nums"}}>
+                      {txt(v.probationCount)}
+                    </span>
+                  </h2>
+                  <button type="button" onClick={v.goProbationList} data-tip={v.tips?.goProbationList} style={{color: "#0f6e56", fontWeight: "600", fontSize: "13px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap"}}>
+                    {"View all on probation →"}
+                  </button>
                 </div>
-              </>
-            ) : null}
-            {v.sec?.probations?.notLive ? (
-              <>
-                <SectionState kind={v.sec?.probations?.state} title="None ending in the next 30 days" icon="calendarClock" height="110" retry={v.sec?.probations?.retry} />
-              </>
-            ) : null}
-          </div>
+                {v.sec?.probations?.isLive ? (
+                  <>
+                    <div data-row-tips={v.probationTips} style={{margin: "0 -22px", overflowX: "auto"}}>
+                      <DataTable columns={v.probationColumns} data={v.probations} keyField="id" onRowClick={v.openEmployeeRow} />
+                    </div>
+                  </>
+                ) : null}
+                {v.sec?.probations?.notLive ? (
+                  <>
+                    <SectionState kind={v.sec?.probations?.state} title="None ending in the next 30 days" icon="calendarClock" height="110" retry={v.sec?.probations?.retry} />
+                  </>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </section>
-        <section aria-labelledby="sec-ops">
-          <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
-            <h2 id="sec-ops" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
-              <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                {txt(v.icInbox)}
-              </span>
-              {"Operational insights"}
-            </h2>
-          </div>
-          <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(max(260px,30%),1fr))", gap: "16px"}}>
-            {arr(v.ops).map((o: any, $index: number) => (
-              <Fragment key={$index}>
-                <div style={{position: "relative", overflow: "hidden", minWidth: "0", background: "#0a5240", borderRadius: "16px", padding: "22px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "0 12px 28px -18px rgba(10,82,64,.9)"}}>
-                  <p style={{margin: "0", fontSize: "11px", fontWeight: "700", letterSpacing: ".1em", textTransform: "uppercase", color: "#6ee7b7", fontVariantNumeric: "tabular-nums"}}>
-                    {txt(o?.eyebrow)}
-                  </p>
-                  <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", lineHeight: "1.3", color: "#fff"}}>
-                    {txt(o?.title)}
-                  </h3>
-                  <p style={{margin: "0", fontSize: "13px", color: "rgba(255,255,255,.82)", lineHeight: "1.55", flex: "1", textWrap: "pretty"}}>
-                    {txt(o?.body)}
-                  </p>
-                  <div>
-                    <HrButton variant="ghost" size="sm" onClick={o?.onClick} data-tip={o?.tip}>
-                      {txt(o?.cta)}
-                    </HrButton>
-                  </div>
-                </div>
-              </Fragment>
-            ))}
-          </div>
-        </section>
+        {v.show?.ops ? (
+          <>
+            <section aria-labelledby="sec-ops">
+              <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", margin: "0 0 14px", paddingBottom: "10px", borderBottom: "1px solid #e2e8f0"}}>
+                <h2 id="sec-ops" style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", color: "#0f172a", letterSpacing: "-.01em", display: "flex", alignItems: "center", gap: "8px"}}>
+                  <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
+                    {txt(v.icInbox)}
+                  </span>
+                  {"Operational insights"}
+                </h2>
+              </div>
+              <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(max(260px,30%),1fr))", gap: "16px"}}>
+                {arr(v.ops).map((o: any, $index: number) => (
+                  <Fragment key={$index}>
+                    <div style={{position: "relative", overflow: "hidden", minWidth: "0", background: "#0a5240", borderRadius: "16px", padding: "22px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "0 12px 28px -18px rgba(10,82,64,.9)"}}>
+                      <p style={{margin: "0", fontSize: "11px", fontWeight: "700", letterSpacing: ".1em", textTransform: "uppercase", color: "#6ee7b7", fontVariantNumeric: "tabular-nums"}}>
+                        {txt(o?.eyebrow)}
+                      </p>
+                      <h3 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "17px", lineHeight: "1.3", color: "#fff"}}>
+                        {txt(o?.title)}
+                      </h3>
+                      <p style={{margin: "0", fontSize: "13px", color: "rgba(255,255,255,.82)", lineHeight: "1.55", flex: "1", textWrap: "pretty"}}>
+                        {txt(o?.body)}
+                      </p>
+                      <div>
+                        <HrButton variant="ghost" size="sm" onClick={o?.onClick} data-tip={o?.tip}>
+                          {txt(o?.cta)}
+                        </HrButton>
+                      </div>
+                    </div>
+                  </Fragment>
+                ))}
+              </div>
+            </section>
+          </>
+        ) : null}
       </div>
       {v.calMobile ? (
         <>
