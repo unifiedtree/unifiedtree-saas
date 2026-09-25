@@ -207,7 +207,10 @@ public class UserProfileController {
         }
         if (req.notificationPreferences() != null) {
             // Cast to jsonb so Postgres stores it structured, not as a string.
-            sql.append(", notification_preferences = CAST(? AS jsonb)");
+            // Merged (top-level ||), not replaced: the Profile page sends only the
+            // email/push master switches, and must not wipe the per-event choices
+            // saved through /v1/me/notification-preferences.
+            sql.append(", notification_preferences = COALESCE(notification_preferences, '{}'::jsonb) || CAST(? AS jsonb)");
             try {
                 args.add(mapper.writeValueAsString(req.notificationPreferences()));
             } catch (Exception e) {

@@ -45,8 +45,9 @@ public class NotificationTemplateController {
     @PostMapping("/templates")
     @PreAuthorize("hasAuthority('hrms.notiftemplate.write')")
     public ResponseEntity<NotificationTemplateResponse> create(
-            @Valid @RequestBody NotificationTemplateRequest request,
+            @Valid @RequestBody NotificationTemplateRequest body,
             @AuthenticationPrincipal Jwt jwt) {
+        NotificationTemplateRequest request = NotificationTemplateRules.validate(body);
         UUID companyId = request.companyId();
         if (companyId == null) {
             UUID employeeId = extractEmployeeId(jwt);
@@ -86,7 +87,14 @@ public class NotificationTemplateController {
     public ResponseEntity<NotificationTemplateResponse> update(
             @PathVariable UUID id,
             @Valid @RequestBody NotificationTemplateRequest request) {
-        return ResponseEntity.ok(templateService.updateTemplate(id, request));
+        return ResponseEntity.ok(templateService.updateTemplate(id, NotificationTemplateRules.validate(request)));
+    }
+
+    @Operation(summary = "Every notification event: its key, who gets it, channels, placeholders and built-in wording")
+    @GetMapping("/events")
+    @PreAuthorize("hasAnyAuthority('hrms.notiftemplate.read','hrms.notiftemplate.write')")
+    public ResponseEntity<java.util.List<NotificationTemplateRules.EventDto>> events() {
+        return ResponseEntity.ok(NotificationTemplateRules.events());
     }
 
     @Operation(summary = "Delete a notification template")

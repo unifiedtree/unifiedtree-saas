@@ -13,6 +13,7 @@ import com.hrms.hiring.repository.CandidateRepository;
 import com.hrms.hiring.repository.HiringOfferRepository;
 import com.hrms.hiring.service.HiringService;
 import com.hrms.letters.service.PdfRenderer;
+import com.unifiedtree.notifications.template.NotificationEmailComposer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -58,20 +59,29 @@ public class OfferDeliveryService {
     private final MailService mail;
     private final OfferEmailAttemptStore attempts;
     private final TransactionOperations tx;
+    /** The company's "hiring.offer" email template (a cover message above the offer); null in unit tests. */
+    private final NotificationEmailComposer composer;
 
     @Autowired
     public OfferDeliveryService(HiringOfferRepository offers, CandidateRepository candidates, HiringService hiring,
             WorkforceCompanyRepository companies, PdfRenderer pdf, MailService mail,
-            OfferEmailAttemptStore attempts, PlatformTransactionManager txManager) {
-        this(offers, candidates, hiring, companies, pdf, mail, attempts, new TransactionTemplate(txManager));
+            OfferEmailAttemptStore attempts, PlatformTransactionManager txManager,
+            NotificationEmailComposer composer) {
+        this(offers, candidates, hiring, companies, pdf, mail, attempts, new TransactionTemplate(txManager), composer);
     }
 
     OfferDeliveryService(HiringOfferRepository offers, CandidateRepository candidates, HiringService hiring,
             WorkforceCompanyRepository companies, PdfRenderer pdf, MailService mail,
             OfferEmailAttemptStore attempts, TransactionOperations tx) {
+        this(offers, candidates, hiring, companies, pdf, mail, attempts, tx, null);
+    }
+
+    OfferDeliveryService(HiringOfferRepository offers, CandidateRepository candidates, HiringService hiring,
+            WorkforceCompanyRepository companies, PdfRenderer pdf, MailService mail,
+            OfferEmailAttemptStore attempts, TransactionOperations tx, NotificationEmailComposer composer) {
         this.offers = offers; this.candidates = candidates; this.hiring = hiring;
         this.companies = companies; this.pdf = pdf; this.mail = mail;
-        this.attempts = attempts; this.tx = tx;
+        this.attempts = attempts; this.tx = tx; this.composer = composer;
     }
 
     private record Prepared(HiringOfferResponse alreadySubmitted, UUID attemptId, EmailMessage message) {}
@@ -133,10 +143,28 @@ public class OfferDeliveryService {
         var company = companies.findById(offer.getCompanyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Company", offer.getCompanyId()));
         String name = company.getLegalName() == null ? company.getName() : company.getLegalName();
-        String html = OfferDocumentController.documentHtml(hiring.getOffer(id), name);
+        HiringOfferResponse details = hiring.getOffer(id);
+        String html = OfferDocumentController.documentHtml(details, name);
         byte[] attachment = pdf.render(html);
+        // With a "hiring.offer" email template, the admin's message goes first and the
+        // offer follows it (still attached as a PDF). Without one: the offer on its own.
+        String subject = "Employment offer";
+        String body = html;
+        if (composer != null) {
+            java.util.Map<String, String> values = new java.util.HashMap<>();
+            values.put("candidateName", offer.getCandidateName());
+            values.put("roleTitle", details.roleTitle());
+            values.put("companyName", name);
+            values.put("joiningDate", details.joiningDate() == null ? "" : details.joiningDate().toString());
+            values.put("offeredCtc", details.offeredCtc() == null ? "" : details.offeredCtc().toPlainString());
+            var composed = composer.compose(offer.getTenantId(), offer.getCompanyId(), "hiring.offer", values, subject, html);
+            if (composed.templated()) {
+                subject = composed.subject();
+                body = composed.html() + "<hr />" + html;
+            }
+        }
         UUID attemptId = attempts.start(id, email, actor);
-        EmailMessage message = new EmailMessage(email, offer.getCandidateName(), "Employment offer", html, null, List.of(),
+        EmailMessage message = new EmailMessage(email, offer.getCandidateName(), subject, body, null, List.of(),
                 List.of(new EmailMessage.Attachment("offer-" + id + ".pdf", "application/pdf", attachment)));
         return new Prepared(null, attemptId, message);
     }

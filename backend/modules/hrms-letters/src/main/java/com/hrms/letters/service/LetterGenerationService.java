@@ -19,6 +19,7 @@ import com.hrms.letters.repository.GeneratedLetterRepository;
 import com.hrms.letters.repository.LetterTemplateRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -46,6 +47,8 @@ public class LetterGenerationService {
     private final PdfRenderer                pdfRenderer;
     private final LetterStorageService       storageService;
     private final LetterEmailService         emailService;
+    /** Words the email with the company's "letters.letter" template when one is active (optional). */
+    private final ObjectProvider<LetterEmailComposer> emailComposer;
 
     public LetterGenerationService(
             LetterTemplateRepository templateRepo,
@@ -57,7 +60,8 @@ public class LetterGenerationService {
             MergeFieldResolver mergeFieldResolver,
             PdfRenderer pdfRenderer,
             LetterStorageService storageService,
-            LetterEmailService emailService) {
+            LetterEmailService emailService,
+            ObjectProvider<LetterEmailComposer> emailComposer) {
         this.templateRepo    = templateRepo;
         this.generatedRepo   = generatedRepo;
         this.employeeRepo    = employeeRepo;
@@ -68,6 +72,7 @@ public class LetterGenerationService {
         this.pdfRenderer     = pdfRenderer;
         this.storageService  = storageService;
         this.emailService    = emailService;
+        this.emailComposer   = emailComposer;
     }
 
     @Transactional
@@ -250,7 +255,21 @@ public class LetterGenerationService {
 
     private void sendLetterInternal(GeneratedLetter letter, String toEmail, String ccEmail, byte[] pdfBytes) {
         String filename = letter.getType().toLowerCase() + "_" + letter.getEmployeeId() + ".pdf";
-        emailService.send(toEmail, ccEmail, letter.getSubject(), letter.getBodyHtmlRendered(), pdfBytes, filename);
+        String subject = letter.getSubject();
+        String html = letter.getBodyHtmlRendered();
+        LetterEmailComposer composer = emailComposer.getIfAvailable();
+        if (composer != null) {
+            try {
+                LetterEmailComposer.Content content = composer.compose(letter);
+                if (content != null) {
+                    subject = content.subject();
+                    html = content.html();
+                }
+            } catch (Exception e) {
+                log.warn("Letter email template not applied for letter {}: {}", letter.getId(), e.getMessage());
+            }
+        }
+        emailService.send(toEmail, ccEmail, subject, html, pdfBytes, filename);
         letter.setStatus("SENT");
         letter.setSentAt(Instant.now());
         letter.setSentToEmail(toEmail);

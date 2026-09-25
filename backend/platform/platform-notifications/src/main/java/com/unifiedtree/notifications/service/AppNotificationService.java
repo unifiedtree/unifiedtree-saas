@@ -7,7 +7,12 @@ import com.unifiedtree.notifications.dto.RegisterDeviceRequest;
 import com.unifiedtree.notifications.entity.AppNotification;
 import com.unifiedtree.notifications.entity.DeviceToken;
 import com.unifiedtree.notifications.enums.AppNotificationType;
+import com.unifiedtree.notifications.prefs.NotificationPreferenceService;
+import com.unifiedtree.notifications.prefs.NotificationPreferences;
+import com.unifiedtree.notifications.prefs.NotificationPreferences.Delivery;
 import com.unifiedtree.notifications.repository.AppNotificationRepository;
+import com.unifiedtree.notifications.template.NotificationEventCatalog;
+import com.unifiedtree.notifications.template.NotificationEventCatalog.EventDef;
 import com.unifiedtree.notifications.repository.DeviceTokenRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,13 +49,16 @@ public class AppNotificationService {
     private final AppNotificationRepository repo;
     private final DeviceTokenRepository tokenRepo;
     private final ExpoPushSender push;
+    private final NotificationPreferenceService preferences;
 
     public AppNotificationService(AppNotificationRepository repo,
                                   DeviceTokenRepository tokenRepo,
-                                  ExpoPushSender push) {
+                                  ExpoPushSender push,
+                                  NotificationPreferenceService preferences) {
         this.repo = repo;
         this.tokenRepo = tokenRepo;
         this.push = push;
+        this.preferences = preferences;
     }
 
     /**
@@ -84,6 +92,34 @@ public class AppNotificationService {
                     tenantId, userId, type);
             return null;
         }
+        // Honour the recipient's notification choices (in-app / push). Essential
+        // types (billing) skip the lookup and always go out.
+        EventDef def = NotificationEventCatalog.forType(type);
+        Delivery d = def.essential()
+                ? NotificationPreferences.decide(def, null)
+                : NotificationPreferences.decide(def, preferences.recipient(tenantId, userId).prefs());
+        return deliver(tenantId, userId, type, title, body, data, d.inApp(), d.push(), title, body);
+    }
+
+    /**
+     * Persists the in-app row (when {@code inApp}) and schedules the push (when
+     * {@code push}) for after this transaction commits. The caller has already
+     * applied the recipient's preferences — {@link NotificationDispatcher} does,
+     * and so does {@link #create}.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public AppNotification deliver(UUID tenantId, UUID userId, AppNotificationType type,
+                                   String title, String body, Map<String, Object> data,
+                                   boolean inApp, boolean sendPush, String pushTitle, String pushBody) {
+        if (tenantId == null || userId == null || type == null || title == null) return null;
+        if (!inApp) {
+            if (sendPush && pushTitle != null) {
+                push.sendAfterCommit(userId, pushTitle, pushBody, data == null ? new HashMap<>() : new HashMap<>(data));
+            } else {
+                log.info("Notification {} for user={} not delivered: switched off in their notification settings", type, userId);
+            }
+            return null;
+        }
         AppNotification n = new AppNotification();
         n.setTenantId(tenantId);
         n.setUserId(userId);
@@ -97,7 +133,10 @@ public class AppNotificationService {
         // Fire the push AFTER the current tx commits so a rollback in the
         // caller (e.g. leave-apply fails validation post-save) cannot leave
         // a phantom push behind.
-        push.sendAfterCommit(userId, title, body, saved.getData());
+        if (sendPush) {
+            push.sendAfterCommit(userId, pushTitle != null ? pushTitle : title,
+                    pushTitle != null ? pushBody : body, saved.getData());
+        }
         return saved;
     }
 
