@@ -81,7 +81,39 @@ public class UserPermissionService {
 
     private record Catalog(String code, String displayName, String module, String risk, String warning) {}
 
-    private record Existing(String code, String effect, String reason, OffsetDateTime expiresAt) {}
+    record Existing(String code, String effect, String reason, OffsetDateTime expiresAt) {}
+
+    /** What a PUT changes, and which of those changes give access (and so are checked like a grant). */
+    record Plan(List<String> added, List<String> changed, List<String> removed, Set<String> givesAccess) {}
+
+    /**
+     * Compare the stored overrides with the wanted list. Giving access means: a
+     * new or changed GRANT, and also clearing or changing a DENY (that hands the
+     * permission back). Untouched rows are not re-checked.
+     */
+    static Plan plan(Map<String, Existing> existing, Map<String, OverrideInput> wanted) {
+        List<String> added = new ArrayList<>(), changed = new ArrayList<>(), removed = new ArrayList<>();
+        Set<String> givesAccess = new TreeSet<>();
+        for (OverrideInput in : wanted.values()) {
+            Existing old = existing.get(in.permissionCode());
+            if (old == null) {
+                added.add(in.permissionCode());
+                if (PermissionOverrides.GRANT.equals(in.effect())) givesAccess.add(in.permissionCode());
+            } else if (differs(old, in)) {
+                changed.add(in.permissionCode());
+                if (PermissionOverrides.GRANT.equals(in.effect()) || PermissionOverrides.DENY.equals(old.effect())) {
+                    givesAccess.add(in.permissionCode());
+                }
+            }
+        }
+        for (Existing old : existing.values()) {
+            if (!wanted.containsKey(old.code())) {
+                removed.add(old.code());
+                if (PermissionOverrides.DENY.equals(old.effect())) givesAccess.add(old.code());
+            }
+        }
+        return new Plan(added, changed, removed, givesAccess);
+    }
 
     // ── Read ────────────────────────────────────────────────────────────────
 
@@ -169,27 +201,9 @@ public class UserPermissionService {
         Map<String, OverrideInput> wanted = validate(req == null ? null : req.overrides(), catalog);
         Map<String, Existing> existing = loadExisting(targetUserId);
 
-        // What changes, and which of those changes give access (checked like a grant).
-        List<String> added = new ArrayList<>(), changed = new ArrayList<>(), removedCodes = new ArrayList<>();
-        Set<String> givesAccess = new TreeSet<>();
-        for (OverrideInput in : wanted.values()) {
-            Existing old = existing.get(in.permissionCode());
-            if (old == null) {
-                added.add(in.permissionCode());
-                if (PermissionOverrides.GRANT.equals(in.effect())) givesAccess.add(in.permissionCode());
-            } else if (differs(old, in)) {
-                changed.add(in.permissionCode());
-                if (PermissionOverrides.GRANT.equals(in.effect()) || PermissionOverrides.DENY.equals(old.effect())) {
-                    givesAccess.add(in.permissionCode());
-                }
-            }
-        }
-        for (Existing old : existing.values()) {
-            if (!wanted.containsKey(old.code())) {
-                removedCodes.add(old.code());
-                if (PermissionOverrides.DENY.equals(old.effect())) givesAccess.add(old.code());
-            }
-        }
+        Plan plan = plan(existing, wanted);
+        List<String> added = plan.added(), changed = plan.changed(), removedCodes = plan.removed();
+        Set<String> givesAccess = plan.givesAccess();
         if (added.isEmpty() && changed.isEmpty() && removedCodes.isEmpty()) {
             return view(targetUserId, actorId);
         }
