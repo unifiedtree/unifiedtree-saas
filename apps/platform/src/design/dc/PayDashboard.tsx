@@ -1,6 +1,6 @@
 // Payroll Dashboard — ported from the design component PayDashboard.dc.html.
 // Figures come from the payroll runs, dashboard KPIs, disbursement batches and
-// statutory filings (see PayrollContainer). TDS isn't calculated by payroll yet,
+// statutory dues worked out from locked runs (see PayrollContainer). TDS isn't calculated by payroll yet,
 // so its tile says so instead of showing a number.
 import { DCLogic, dc } from './dc-runtime'
 import { PayDashboardView } from './PayDashboard.view'
@@ -72,7 +72,7 @@ export class PayDashboard extends DCLogic {
       runCta: !run ? `Create ${label} run` : step === 'paid' ? `View ${label} run` : `Continue ${label} run`,
       companyName: D?.companyName || '', runLabel: label, runTip: run ? `Opens the ${label} payroll run` : 'Opens Processing & Payslips',
       openRunLabel: run ? `Open ${label} run` : 'All payroll runs', progressLabel: `${label} progress`,
-      dues, noDues: dues.length === 0, duesEmpty: 'No statutory filings are due. They’re tracked under Compliance → Statutory Filings.',
+      dues, noDues: dues.length === 0, duesEmpty: 'Nothing due. PF, ESI, PT and LWF are added up from locked payroll runs; filings are recorded under Compliance → Statutory Filings.',
       recent, noRecent: recent.length === 0, recentEmpty: 'No paid runs yet.',
       openRun, goRuns: () => go('runs'), goSalary: () => go('salary'),
       errIcon: dashIconComponent('circleX'), emptyIcon: dashIconComponent('receipt'), retry: { label: 'Retry', onClick: () => p.onRetry && p.onRetry() }, emptyAction: { label: 'Open Salary Structure', onClick: () => go('salary') },

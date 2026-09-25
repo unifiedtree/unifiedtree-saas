@@ -24,6 +24,41 @@ export interface PayrollRun {
   processedAt?: string | null
   lockedAt?: string | null
   createdAt: string
+  /** Planned pay date (the processing day in Payroll Settings), yyyy-mm-dd. */
+  payDate?: string | null
+  /** Days in the pay period that aren't the company's weekly off or a holiday. */
+  workingDays?: number | null
+  createdByName?: string | null
+  processedByName?: string | null
+  lockedByName?: string | null
+  paidByName?: string | null
+}
+
+/** One salary component's total across a run's payslips. */
+export interface ComponentTotal {
+  code: string
+  name: string
+  category: 'EARNING' | 'DEDUCTION' | 'EMPLOYER_CONTRIBUTION' | 'REIMBURSEMENT'
+  amount: number
+  employees: number
+}
+
+/** PF / ESI / PT / LWF owed for a month, from locked and paid runs. */
+export interface StatutoryDue {
+  period: string
+  periodYear: number
+  periodMonth: number
+  companyId: string
+  companyName?: string | null
+  scheme: 'PF' | 'ESI' | 'PT' | 'LWF'
+  employeeShare: number
+  employerShare: number
+  total: number
+  /** Legal due date where it's the same everywhere (PF, ESI); null for PT and LWF. */
+  dueDate?: string | null
+  filingId?: string | null
+  filingStatus?: string | null
+  filingDueDate?: string | null
 }
 
 export interface EligibleEmployee {
@@ -67,6 +102,10 @@ export interface PayslipDetail {
   gross: number
   totalDeductions: number
   netPay: number
+  department?: string | null
+  /** Days in the pay period ("paid days X of Y"). */
+  totalDays?: number | null
+  runStatus?: RunStatus | null
 }
 
 export interface MyPayslip {
@@ -162,6 +201,15 @@ export function useMyPayslips() {
   return useQuery({
     queryKey: ['hrms', 'payroll', 'me', 'payslips'],
     queryFn: () => apiJson<MyPayslip[]>('/v1/payroll/payslips/me'),
+  })
+}
+
+/** The signed-in employee's own payslip lines for one locked or paid run. */
+export function useMyPayslip(runId: string | null) {
+  return useQuery({
+    queryKey: ['hrms', 'payroll', 'me', 'payslips', runId],
+    queryFn: () => apiJson<PayslipDetail>(`/v1/payroll/payslips/me/${runId}`),
+    enabled: !!runId,
   })
 }
 

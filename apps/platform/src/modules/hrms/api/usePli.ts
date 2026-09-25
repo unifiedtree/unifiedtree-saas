@@ -17,6 +17,13 @@ export interface PliAward {
   status: PliStatus
   notes?: string
   createdAt: string
+  /** When it was approved; the next payroll run whose period ends after this pays it. */
+  approvedAt?: string | null
+  /** The payroll run that pays it (approved awards are paid through payroll). */
+  payrollRunId?: string | null
+  /** That run's month, e.g. "Sep 2026". */
+  payrollPeriod?: string | null
+  paidAt?: string | null
 }
 
 export interface Page<T> {

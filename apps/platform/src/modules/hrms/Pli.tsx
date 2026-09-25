@@ -9,13 +9,20 @@ import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
   useAllAwards, useMyIncentives, useCreateAward, usePliDecision, usePayAward,
-  usePliTargets, useCreatePliTarget, inr, PLI_PAGE_SIZE, type PliStatus,
+  usePliTargets, useCreatePliTarget, inr, PLI_PAGE_SIZE, type PliStatus, type PliAward,
 } from './api/usePli'
 
 const STATUS_TONE: Record<PliStatus, PillTone> = {
   PROPOSED: 'warn', APPROVED: 'ok', PAID: 'teal', REJECTED: 'red',
 }
 const STATUS_LABEL: Record<PliStatus, string> = { PROPOSED: 'Proposed', APPROVED: 'Approved', PAID: 'Paid', REJECTED: 'Not approved' }
+/**
+ * Approved awards are paid through payroll (client decision, 25 Sep 2026): a
+ * processed run includes them, and locking it marks them paid.
+ */
+const awardLabel = (a: PliAward) => a.payrollRunId && a.payrollPeriod
+  ? (a.status === 'PAID' ? `Paid with ${a.payrollPeriod} payroll` : `In ${a.payrollPeriod} payroll`)
+  : STATUS_LABEL[a.status] ?? a.status
 
 type Tab = 'all' | 'my' | 'targets'
 
@@ -32,7 +39,7 @@ export const Pli: React.FC = () => {
   const onlyMine = !canReadAll
   return (
     <ModulePage crumb="Payroll" title={onlyMine ? 'My incentives' : 'Incentives'}
-      subtitle={onlyMine ? 'Performance-linked incentives proposed for you, and where each one stands.' : 'Propose, approve and pay out performance-linked incentives.'}>
+      subtitle={onlyMine ? 'Performance-linked incentives proposed for you, and where each one stands.' : 'Propose and approve performance-linked incentives. Approved ones are paid with salaries in the next payroll run.'}>
       <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
         {tabs.length > 1 && <Views items={tabs} active={tab} onChange={setTab} label="Incentive views" />}
         {tabs.length === 0 && <State kind="empty" icon="lock" title="No incentive access" description="Ask an admin if you should see incentives." />}
@@ -71,7 +78,7 @@ export function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
   const onPay = async (id: string) => {
     try {
       await pay.mutateAsync(id)
-      toast('Award marked paid', 'success')
+      toast('Award marked paid outside payroll', 'success')
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed', 'error')
     }
@@ -108,7 +115,7 @@ export function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
                 <td className="text-text-primary">{a.planName}</td>
                 <td className="hidden sm:table-cell text-text-secondary">{a.period || '—'}</td>
                 <td className="font-semibold tabular-nums text-text-primary">{inr(a.amount)}</td>
-                <td><HrStatusPill tone={STATUS_TONE[a.status]}>{a.status}</HrStatusPill></td>
+                <td><HrStatusPill tone={STATUS_TONE[a.status]}>{awardLabel(a)}</HrStatusPill></td>
                 {canWrite && (
                   <td>
                     <div className="flex items-center justify-end gap-2">
@@ -118,8 +125,11 @@ export function AllAwardsTab({ canWrite }: { canWrite: boolean }) {
                           <HrButton size="sm" variant="ghost" onClick={() => onDecide(a.id, false)} disabled={decide.isPending}><X size={14} /> Reject</HrButton>
                         </>
                       )}
-                      {a.status === 'APPROVED' && (
-                        <HrButton size="sm" onClick={() => onPay(a.id)} disabled={pay.isPending}><Banknote size={14} /> Pay</HrButton>
+                      {a.status === 'APPROVED' && !a.payrollRunId && (
+                        <HrButton size="sm" variant="ghost" onClick={() => onPay(a.id)} disabled={pay.isPending}
+                          data-tip="Only if you paid it outside payroll (cash, cheque, separate transfer). Otherwise leave it: the next payroll run adds it to salary. Marking it paid here takes it out of payroll for good.">
+                          <Banknote size={14} /> Paid outside payroll
+                        </HrButton>
                       )}
                     </div>
                   </td>
@@ -279,7 +289,7 @@ function MyIncentivesTab() {
                       <td className="font-semibold text-text-primary">{a.planName}</td>
                       <td className="hidden sm:table-cell text-text-secondary">{a.period || '—'}</td>
                       <td className="font-semibold tabular-nums text-text-primary">{inr(a.amount)}</td>
-                      <td><HrStatusPill tone={STATUS_TONE[a.status]}>{STATUS_LABEL[a.status] ?? a.status}</HrStatusPill></td>
+                      <td><HrStatusPill tone={STATUS_TONE[a.status]}>{awardLabel(a)}</HrStatusPill></td>
                       <td className="hidden sm:table-cell text-text-secondary">{a.createdAt ? dmy(a.createdAt) : '—'}</td>
                     </tr>
                   ))}
@@ -287,7 +297,7 @@ function MyIncentivesTab() {
               </table>
             </TableCard>
           )}
-      <Note>Ask HR if an incentive looks wrong or is missing.</Note>
+      <Note>Approved incentives are paid with your salary in the next payroll run. Ask HR if one looks wrong or is missing.</Note>
     </div>
   )
 }
