@@ -7,16 +7,19 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AttendanceBucketsTest {
-    @Test void workspaceOwnersAndAdminsGetCompanyScopeButManagersDoNot() {
-        for (String role : List.of("OWNER", "ADMIN", "COMPANY_ADMIN", "HR_MANAGER")) {
-            var jwt = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("test").header("alg", "none")
-                    .claim("roles", List.of(role)).build();
-            assertTrue(AttendanceController.isAdmin(jwt), role);
-        }
+    // Permission-based since V143.17 (w1h): company scope follows attendance.workforce.admin,
+    // team scope follows attendance.team.read, whatever the role is called.
+    @Test void companyScopeFollowsWorkforceAdminAndTeamScopeFollowsTeamRead() {
+        var admin = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("test").header("alg", "none")
+                .claim("roles", List.of("ANY_ROLE")).claim("permissions", List.of("attendance.workforce.admin", "attendance.team.read")).build();
+        assertTrue(AttendanceController.isAdmin(admin));
         var manager = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("test").header("alg", "none")
-                .claim("roles", List.of("MANAGER")).build();
-        assertFalse(AttendanceController.isAdmin(manager));
+                .claim("roles", List.of("OWNER")).claim("permissions", List.of("attendance.team.read")).build();
+        assertFalse(AttendanceController.isAdmin(manager), "a role name alone no longer grants company scope");
         assertTrue(AttendanceController.isManagerOrAdmin(manager));
+        var employee = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("test").header("alg", "none")
+                .claim("roles", List.of("MANAGER")).claim("permissions", List.of("attendance.checkin.self")).build();
+        assertFalse(AttendanceController.isManagerOrAdmin(employee));
     }
     private AttendanceRecord record(String status, String type, boolean punched) {
         AttendanceRecord row = new AttendanceRecord();

@@ -147,6 +147,7 @@ page('att-daily', 'Daily Tracking', '/hrms/attendance', 'Attendance & Time', 'at
 tab('att-daily', 'team', 'Daily Logs', 'tab=team', 'attendance/daily-logs', [any('attendance.team.read')], { aliases: ['attendance/logs', 'attendance/today', 'attendance/roster-today'], keywords: ['who is in', 'present', 'late', 'absent', 'not marked'] })
 tab('att-daily', 'face', 'Face Punch', 'tab=face', 'attendance/face-punch', [{ allOf: ['attendance.team.read', 'attendance.face.admin.read'] }], { aliases: ['attendance/face'], keywords: ['face', 'kiosk', 'selfie'] })
 tab('att-daily', 'corrections', 'Regularization', 'tab=corrections', 'attendance/regularization', [], { aliases: ['attendance/corrections', 'attendance/fix', 'attendance/fixes'], keywords: ['regularize', 'regularise', 'correction', 'missed punch', 'fix'] })
+tab('att-daily', 'review', 'Review', 'tab=review', 'attendance/review', [{ allOf: ['attendance.team.read', 'attendance.status.review'] }], { aliases: ['attendance/exceptions', 'attendance/status-review'], keywords: ['excuse', 'change status', 'late', 'half day', 'absent', 'no check-out', 'outside zone'] })
 tab('att-daily', 'my', 'My Attendance', 'tab=my', 'attendance/my-attendance', [any('attendance.checkin.self')], { aliases: ['attendance/my', 'attendance/mine'] })
 page('att-shifts', 'Shifts & Overtime', '/hrms/shifts', 'Attendance & Time', 'attendance/shifts', [{ ...any('attendance.team.read', 'attendance.checkin.self'), module: HR }], { aliases: ['attendance/shifts-overtime', 'shifts'], keywords: ['shift', 'overtime', 'ot', 'roster'] })
 tab('att-shifts', 'schedules', 'Shift Schedules', 'tab=schedules', 'attendance/shift-schedules', [any('attendance.team.read')], { aliases: ['attendance/schedules'], keywords: ['shift timings', 'general shift', 'night shift'] })
@@ -241,12 +242,12 @@ tab('fnf', 'settled', 'Settled settlements', 'tab=settled', 'exit/fnf-settled', 
 tab('fnf', 'create', 'Create a settlement', 'tab=create', 'exit/fnf-create', [any('hrms.fnf.process')], { keywords: ['new settlement'] })
 
 // ── HR setup ───────────────────────────────────────────────────────────────
-page('hr-config', 'HR Configuration', '/hrms/settings', 'HR Setup', 'hr-setup/configuration', [{ anyOf: ['settings.hrconfig.write', 'settings.read', 'hrms.probation.config.read'], module: HR }], { aliases: ['hr-setup/hr-configuration', 'hr-config'], keywords: ['probation', 'notice period', 'work week', 'employee id format', 'fiscal year'] })
+page('hr-config', 'HR Configuration', '/hrms/settings', 'HR Setup', 'hr-setup/configuration', [{ anyOf: ['settings.hrconfig.write', 'settings.read', 'hrms.probation.config.read', 'attendance.policy.manage'], module: HR }], { aliases: ['hr-setup/hr-configuration', 'hr-config'], keywords: ['probation', 'notice period', 'work week', 'employee id format', 'fiscal year'] })
 page('notif-templates', 'Notification templates', '/hrms/notification-templates', 'HR Setup', 'hr-setup/notification-templates', [{ ...any('hrms.notiftemplate.read', 'hrms.notiftemplate.write'), module: HR }], { aliases: ['hr-setup/templates'], keywords: ['email template', 'message'] })
 page('hr-integrations', 'HR integrations', '/hrms/integrations', 'HR Setup', 'hr-setup/integrations', [{ ...any('hrms.integration.read', 'hrms.integration.write'), module: HR }], { keywords: ['biometric', 'connect'] })
 
 // ── Workspace settings ─────────────────────────────────────────────────────
-page('s-branding', 'Branding', '/settings/branding', 'Workspace settings', 'settings/branding', [{ anyOf: SETTINGS, when: planAdminOnly }], { keywords: ['logo', 'brand'] })
+page('s-branding', 'Branding', '/settings/branding', 'Workspace settings', 'settings/branding', [any('settings.branding.write')], { keywords: ['logo', 'brand'] })
 page('s-security', 'Security', '/settings/security', 'Workspace settings', 'settings/security', [{ anyOf: SETTINGS }], { keywords: ['password reset', 'two-factor', 'sessions'] })
 page('s-notifications', 'Notification settings', '/settings/notifications', 'Workspace settings', 'settings/notifications', [{ anyOf: SETTINGS }], { keywords: ['email', 'alerts'] })
 page('s-billing', 'Billing & Plan', '/settings/billing', 'Workspace settings', 'settings/billing', [{ allOf: ['workspace.billing.manage'], when: planAdminOnly }], { aliases: ['billing'], keywords: ['invoice', 'plan', 'seats', 'subscription'] })

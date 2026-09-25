@@ -625,13 +625,18 @@ public class DomainEventListener {
                         ? "Your attendance for %s was reviewed%s and set to %s.".formatted(day, by, to)
                         : "Your attendance for %s was changed from %s to %s%s.".formatted(day, from, to, by);
             };
-            if (e.reason() != null && !e.reason().isBlank()) body += " Reason: " + e.reason().trim();
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.ATTENDANCE_STATUS_CHANGED.name());
             data.put("date", e.date() != null ? e.date().toString() : null);
             data.put("route", "/attendance-history");
-            service.create(e.tenantId(), e.employeeId(), AppNotificationType.ATTENDANCE_STATUS_CHANGED,
-                    "Attendance updated", body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), "attendance.status_changed", vars(
+                    "message", body,
+                    "date", day,
+                    "fromStatus", from,
+                    "toStatus", to,
+                    "changedBy", e.changedBy(),
+                    "reason", e.reason(),
+                    "reasonText", reasonText(e.reason())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish ATTENDANCE_STATUS_CHANGED for employee {} on {}: {}",
                     e.employeeId(), e.date(), ex.getMessage());
@@ -713,9 +718,6 @@ public class DomainEventListener {
             String title = e.daysLeft() <= 0
                     ? who + " reaches retirement age today"
                     : "%s retires in %d %s".formatted(who, e.daysLeft(), e.daysLeft() == 1 ? "day" : "days");
-            String body = "Reaches the retirement age of %d on %s%s. Plan the handover and the final settlement."
-                    .formatted(e.retirementAge(), fmt(e.retirementDate()),
-                            e.department() != null && !e.department().isBlank() ? " (" + e.department() + ")" : "");
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.RETIREMENT_DUE.name());
             data.put("employeeId", e.employeeId().toString());
@@ -724,9 +726,18 @@ public class DomainEventListener {
             // Mobile: the milestones screen lists upcoming retirements. The web
             // bell opens the person's record instead (notificationStore).
             data.put("route", "/milestones");
+            String department = e.department() != null && !e.department().isBlank() ? e.department() : "";
+            Map<String, String> values = vars(
+                    "employeeName", who,
+                    "retirementTitle", title,
+                    "daysLeft", String.valueOf(e.daysLeft()),
+                    "retirementAge", String.valueOf(e.retirementAge()),
+                    "retirementDate", fmt(e.retirementDate()),
+                    "department", department,
+                    "departmentText", department.isEmpty() ? "" : " (" + department + ")");
             for (UUID recipient : e.recipientEmployeeIds()) {
                 try {
-                    service.create(e.tenantId(), recipient, AppNotificationType.RETIREMENT_DUE, title, body, data);
+                    dispatcher.dispatch(e.tenantId(), recipient, "people.retirement_due", values, data);
                 } catch (Exception ex) {
                     log.warn("Failed to publish RETIREMENT_DUE to {} for {}: {}", recipient, e.employeeId(), ex.getMessage());
                 }

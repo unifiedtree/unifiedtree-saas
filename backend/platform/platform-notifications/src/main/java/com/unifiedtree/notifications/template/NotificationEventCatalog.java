@@ -179,6 +179,12 @@ public final class NotificationEventCatalog {
                 "Sent to the employee when their face enrolment fails.",
                 "Face enrolment failed", "{{reason}}",
                 ph("reason", "Why it failed, or a request to ask their manager to reset the enrolment")));
+        add(inApp("attendance.status_changed", AppNotificationType.ATTENDANCE_STATUS_CHANGED, "Attendance", "Attendance status changed", "Employee",
+                "Sent to the employee when a reviewer changes or excuses a day's attendance status, or confirms or rejects their face punch.",
+                "Attendance updated", "{{message}}{{reasonText}}",
+                ph("message", "What happened, as a sentence, for example \"Your attendance for 5 Jul 2026 was changed from Late to Present by Priya.\""),
+                DATE, ph("fromStatus", "The status before the change, for example Late"), ph("toStatus", "The status now, for example Present"),
+                ph("changedBy", "Who made the change (empty when unknown)"), REASON, REASON_TEXT));
 
         // ── Shifts ───────────────────────────────────────────────────────────
         add(inApp("shift.change_submitted", AppNotificationType.SHIFT_CHANGE_SUBMITTED, "Shifts", "Shift change requested", "Approver",
@@ -257,6 +263,12 @@ public final class NotificationEventCatalog {
                 "{{employeeName}} completes {{yearsText}}", "Work anniversary today{{departmentText}}.",
                 EMPLOYEE_NAME, ph("years", "Completed years, for example 3"), ph("yearsText", "\"1 year\" or \"3 years\""),
                 DEPARTMENT, DEPARTMENT_TEXT));
+        add(inApp("people.retirement_due", AppNotificationType.RETIREMENT_DUE, "People", "Retirement coming up", "HR",
+                "Sent to people who get retirement alerts 90 days and again 30 days before someone reaches the company's retirement age.",
+                "{{retirementTitle}}", "Reaches the retirement age of {{retirementAge}} on {{retirementDate}}{{departmentText}}. Plan the handover and the final settlement.",
+                EMPLOYEE_NAME, ph("retirementTitle", "\"Priya Rao retires in 30 days\" style text"), ph("daysLeft", "Days left, for example 30"),
+                ph("retirementAge", "The company's retirement age, for example 60"), ph("retirementDate", "The day they reach it, for example 5 Jul 2026"),
+                DEPARTMENT, ph("departmentText", "\" (Sales)\" style text, or nothing when they have no department")));
         add(email("people.probation_reminder", "People", "Probation ending soon", "Manager and HR",
                 "Emailed to the person's manager and HR a few days before their probation ends.",
                 false, false,
