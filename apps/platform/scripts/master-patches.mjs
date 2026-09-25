@@ -118,6 +118,8 @@ export const PATCHES = {
     ["status:isEdit?emp.status:(v.type==='Intern'?'Active':'Probation')});", "status:isEdit?emp.status:'Probation'});"],
     ["toast(isEdit?'Saved changes to '+name:name+' added as '+next);", "toast(isEdit?'Saved changes to '+name:name+(act.nextCode?' added as '+next:' added'));"],
     ["sub={isEdit?emp.id+' · changes apply from the next payroll run'", "sub={isEdit?emp.code+' · changes apply from the next payroll run'"],
+    // Add employee → Access (roles and single permissions), drawn by the container for people who can give them.
+    ["sections={sections} initial={initial} onSave={onSave} onClose={onClose} preview={preview} cta={isEdit?'Save changes':'Add employee'}", "sections={!isEdit&&act.accessStep?sections.concat([{title:'Access',fields:[{k:'access',type:'custom',render:(v,set)=>act.accessStep(v.access,x=>set('access',x))}]}]):sections} initial={initial} onSave={onSave} onClose={onClose} preview={preview} cta={isEdit?'Save changes':'Add employee'}"],
     // Contractor Master (V143.22): edit, renew, reactivate; licence, service and sites are stored; worker counts come from contract workers linked on their employee record.
     ['const {db,update,toast}=useApp();const M=useMaps();const [form,setForm]=React.useState(null);const [end,setEnd]', 'const {db,update,toast,act}=useApp();const M=useMaps();const [form,setForm]=React.useState(null);const [end,setEnd]'],
     ["onClick={()=>toast('Exported '+A.length+' agencies to CSV')}", "onClick={()=>act.exportAgencies(A)}"],

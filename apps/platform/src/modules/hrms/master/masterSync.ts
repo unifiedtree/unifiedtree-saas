@@ -7,6 +7,7 @@
 import { apiJson } from '@/core/api/client'
 import { assignEmployeeShift } from '../api/useOrg'
 import { sendInvite } from '../employees/api/useInvitation'
+import { applyNewPersonAccess, isDefaultAccess, type AccessDraft } from '@/modules/rbac/api/newPersonAccess'
 import type { PayrollSettings } from '../api/usePayroll'
 import { TYPE_CODE, TONE_HEX, LEAVE_CAT_CODE, COMP_CAT_CODE, COMP_METHOD_CODE, BRANCH_KIND_CODE, ACCRUAL_CODE, WEEK, pretty, type Rec } from './masterData'
 
@@ -83,7 +84,11 @@ async function saveEmployee(o: Rec, r: Rec, env: SyncEnv) {
   }
 }
 async function employees({ added, changed }: Diff, env: SyncEnv) {
+  let accessSet = false
   for (const r of added) {
+    // Add employee → Access: roles and single permissions chosen in the drawer (absent: Employee only, as before).
+    const access = r.access as AccessDraft | undefined
+    const wantsAccess = !isDefaultAccess(access)
     const body = {
       companyId: r.co, firstName: String(r.first || '').trim(), lastName: blank(r.last), email: blank(r.email), phone: blank(r.phone),
       departmentId: r.dept || undefined, designationId: r.desig || undefined, branchId: r.branch || undefined,
@@ -99,12 +104,21 @@ async function employees({ added, changed }: Diff, env: SyncEnv) {
     if (r.type === 'Contract' && r.agency) {
       try { await apiJson(`/v1/hrms/contractors/${r.agency}/workers/${created.id}`, json('PUT')) } catch (e) { env.warn(`${name} was added, but couldn’t be linked to the agency: ${errMsg(e)}`) }
     }
+    let invited = false
     if (env.canInvite && created.email) {
-      try { await sendInvite(created.id) } catch { env.warn(`${name} was added, but the invitation couldn’t be sent — resend it from Users & Access`) }
+      try { await sendInvite(created.id); invited = true } catch { env.warn(`${name} was added, but the invitation couldn’t be sent — resend it from Users & Access${wantsAccess ? ', then set their roles and permissions there' : ''}`) }
+    }
+    // Roles and single permissions go on the login the invitation just created; the employee stays added whatever happens here.
+    if (wantsAccess && invited) {
+      accessSet = true
+      const out = await applyNewPersonAccess(created.id, created.email, access!)
+      if (out.problems.length) env.warn(`${name} was added, but ${out.problems.join('; ')}. Set their access in Users & Access.`)
+    } else if (wantsAccess && !(env.canInvite && created.email)) {
+      env.warn(`${name} was added without a login, so their roles and permissions weren’t set. Invite them from their profile, then set access in Users & Access.`)
     }
   }
   await each(changed, ([o, r]) => saveEmployee(o, r, env), 'employees')
-  return [['hrms', 'employees'], ['hrms', 'employee'], ['hrms', 'employee-counts'], ['master', 'schedule'], ['shifts', 'employee'], ['master', 'contractors']]
+  return [['hrms', 'employees'], ['hrms', 'employee'], ['hrms', 'employee-counts'], ['master', 'schedule'], ['shifts', 'employee'], ['master', 'contractors'], ...(accessSet ? [['rbac', 'workspace']] : [])]
 }
 
 // ── organisation ─────────────────────────────────────────────────────────────

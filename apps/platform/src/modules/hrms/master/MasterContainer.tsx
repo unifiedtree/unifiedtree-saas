@@ -28,6 +28,8 @@ import {
   TYPE_LABEL, type Contractor, type Rec,
 } from './masterData'
 import { SYNC, diff, type SyncEnv } from './masterSync'
+import { MasterAccessStep } from './MasterAccessStep'
+import { useNewPersonAccessRights, type AccessDraft } from '@/modules/rbac/api/newPersonAccess'
 import { saveAndRecord } from '@/shared/export/fileExport'
 
 // The generated design module is untyped JavaScript; these are the pieces used here.
@@ -117,6 +119,8 @@ export function MasterContainer() {
   const canGradeWrite = usePermission(P.HRMS_GRADE_WRITE), canTypeWrite = usePermission(P.HRMS_EMPLOYMENT_TYPE_WRITE)
   const canShiftAdmin = usePermission('attendance.workforce.admin'), canTeam = usePermission(P.ATTENDANCE_TEAM_READ)
   const canLeaveWrite = usePermission(P.LEAVE_TYPE_WRITE)
+  // Add employee → Access: roles and single permissions, for people who can give them.
+  const accessRights = useNewPersonAccessRights()
   // Pay bands are salary data (V143.22); linking a contract worker to an agency is part of their record.
   const canBands = usePermission('hrms.grade.band.read'), canAgencyLink = canContrWrite || canEmpWrite
   const canPolicyRead = usePermission('hrms.policy.read'), canPolicyWrite = usePermission('hrms.policy.write')
@@ -284,6 +288,10 @@ export function MasterContainer() {
   const act = {
     defaultCo, canAssignShift: canShiftAdmin, nextCode: nextCodeQ.data?.preview || '', noticeDays: hrDefault?.defaultNoticePeriodDays,
     canBands, showAgency: canContrRead, canAgency: canAgencyLink,
+    /** Add employee → Access: draws the drawer's Access field (null: the drawer is as before). */
+    accessStep: accessRights.visible
+      ? (value: AccessDraft | undefined, onChange: (next: AccessDraft) => void) => <MasterAccessStep value={value} onChange={onChange} canInvite={canInvite} />
+      : null,
     /** The Branches page's status filter lives in the URL (?archived=1). */
     showArchivedBranches: (on: boolean, co: string) => navigate(MASTER_ROUTES.branches + '?' + new URLSearchParams(Object.entries({ co, archived: on ? '1' : '' }).filter(([, v]) => v)).toString()),
     importEmployees: () => (canImport ? navigate('/hrms/employees/import') : show('You don’t have access to import employees', 'error')),
