@@ -1,14 +1,15 @@
 import React, { useMemo, useState } from 'react'
 import {
-  Plus, Trash2, Receipt, Check, X, Wallet, Clock, BadgeCheck,
+  Plus, Trash2, Check, X, Wallet,
   ChevronDown, ChevronRight, AlertTriangle, ExternalLink, Pencil, RotateCcw,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, HrDrawer, type PillTone,
+  HrButton, HrStatusPill, TableCard, HrDrawer, HrSelect, type PillTone,
 } from '@/shared/components/hr'
+import { ModulePage, Views, useView, StatRow, SubHeading, State, DecisionCard, Panel, Note, todayIso } from '@/design/module/ModuleKit'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { DataTable } from '@/shared/components/DataTable'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
@@ -30,6 +31,11 @@ const fmtCat = (c: string) => c.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g
 
 type Tab = 'my' | 'submit' | 'approvals' | 'policies' | 'batches'
 
+// Expenses (/hrms/expenses) in the design language of the redesigned modules
+// (design/module/ModuleKit). Views by permission: My claims + Submit
+// (hrms.expense.claim.self), Approvals (claim.approve or reimbursement: approve
+// submitted claims, mark approved ones paid), Reimbursement batches
+// (reimb_batch.read), Policies (policy.read; editing needs policy.write).
 export const Expense: React.FC = () => {
   const canApprove = usePermission('hrms.expense.claim.approve')
   const canReimburse = usePermission('hrms.expense.reimbursement')
@@ -37,64 +43,47 @@ export const Expense: React.FC = () => {
   const canPolicyWrite = usePermission('hrms.expense.policy.write')
   const canSelf = usePermission('hrms.expense.claim.self')
   const canBatches = usePermission('hrms.reimb_batch.read')
-  const [tab, setTab] = useState<Tab>(canApprove || canReimburse ? 'approvals' : canBatches ? 'batches' : canSelf ? 'my' : canPolicyRead ? 'policies' : 'my')
-
-  const tabs: { key: Tab; label: string }[] = [
-    ...(canSelf ? [{ key: 'my' as Tab, label: 'My Claims' }, { key: 'submit' as Tab, label: 'Submit Claim' }] : []),
-    // Reimbursement-only roles (finance) need this tab too — it's where
-    // APPROVED claims are marked paid (2026-09-08 audit).
-    ...(canApprove || canReimburse ? [{ key: 'approvals' as Tab, label: 'Approvals' }] : []),
-    ...(canBatches ? [{ key: 'batches' as Tab, label: 'Reimbursement batches' }] : []),
-    ...(canPolicyRead ? [{ key: 'policies' as Tab, label: 'Policies' }] : []),
+  const approver = canApprove || canReimburse
+  const stats = useExpenseDashboardStats(approver)
+  const waiting = stats.data?.pendingApprovals ?? 0
+  const views = [
+    ...(approver ? [{ key: 'approvals', label: 'Approvals', icon: 'inbox', count: waiting || undefined, urgent: waiting > 0 }] : []),
+    ...(canSelf ? [{ key: 'my', label: 'My claims', icon: 'receipt' }, { key: 'submit', label: 'Submit a claim', icon: 'plus' }] : []),
+    ...(canBatches ? [{ key: 'batches', label: 'Reimbursement batches', icon: 'banknote' }] : []),
+    ...(canPolicyRead ? [{ key: 'policies', label: 'Policies', icon: 'shield' }] : []),
   ]
-
+  const [tab, setTab] = useView(views.map((v) => v.key), 'tab') as [Tab, (k: string) => void]
   return (
-    <div className="mx-auto max-w-[1440px] p-4 sm:p-6">
-      <HrPageHeader crumb="Expense Management" title="Expense Center" subtitle="Submit, approve, and reimburse employee expenses" />
-      <ExpenseDashboardCards enabled={canApprove || canReimburse} />
-
-      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
-      {tabs.length === 0 && <p className="ut-card p-5 text-sm text-text-secondary">Your role does not have expense access.</p>}
-
-      {tab === 'my' && canSelf && <HrTabPanel tabKey="my"><MyClaimsTab /></HrTabPanel>}
-      {/* canPolicyRead is threaded into the submit form so it can show the
-          category cap that will be enforced on save. GET /v1/expense/policies
-          is gated on hrms.expense.policy.read, so without it the form must not
-          fire the request at all — see SubmitTab. */}
-      {tab === 'submit' && canSelf && <HrTabPanel tabKey="submit"><SubmitTab canPolicyRead={canPolicyRead} onSubmitted={() => setTab('my')} /></HrTabPanel>}
-      {tab === 'approvals' && (canApprove || canReimburse) && <HrTabPanel tabKey="approvals"><ApprovalsTab canApprove={canApprove} canReimburse={canReimburse} /></HrTabPanel>}
-      {tab === 'policies' && canPolicyRead && <HrTabPanel tabKey="policies"><PoliciesTab canWrite={canPolicyWrite} /></HrTabPanel>}
-      {tab === 'batches' && canBatches && <HrTabPanel tabKey="batches"><ReimbursementBatches /></HrTabPanel>}
-    </div>
+    <ModulePage crumb="Expense Management" title="Expenses" subtitle={approver ? 'Approve and reimburse claims, and set the limits they’re checked against.' : 'Claim back what you spent for work, and track each claim.'}
+      actions={canSelf && tab !== 'submit' ? <HrButton onClick={() => setTab('submit')}><Plus size={15} /> New claim</HrButton> : undefined}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        {views.length > 0 && <Views items={views} active={tab} onChange={setTab} label="Expense views" />}
+        {views.length === 0 && <State kind="empty" icon="lock" title="No expense access" description="Your role can’t submit or review expense claims." />}
+        {tab === 'approvals' && approver && <><ExpenseDashboardCards stats={stats} /><ApprovalsTab canApprove={canApprove} canReimburse={canReimburse} /></>}
+        {tab === 'my' && canSelf && <MyClaimsTab />}
+        {/* canPolicyRead gates the cap hint in the form (GET /v1/expense/policies needs it). */}
+        {tab === 'submit' && canSelf && <SubmitTab canPolicyRead={canPolicyRead} onSubmitted={() => setTab('my')} />}
+        {tab === 'batches' && canBatches && <ReimbursementBatches />}
+        {tab === 'policies' && canPolicyRead && <PoliciesTab canWrite={canPolicyWrite} />}
+      </div>
+    </ModulePage>
   )
 }
 
 // ── My Claims ────────────────────────────────────────────────────────────────
 
 
-function ExpenseDashboardCards({ enabled }: { enabled: boolean }) {
-  const { data, isLoading, isError, refetch } = useExpenseDashboardStats(enabled)
-  if (!enabled) return null
-  if (isError) {
-    return (
-      <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700">
-        Couldn't load the expense summary.{' '}
-        <button onClick={() => refetch()} className="font-semibold underline">Retry</button>
-      </div>
-    )
-  }
-  const toBeReimbursed = data?.toBeReimbursed ?? 0
-  const reimbursedThisMonth = data?.reimbursedThisMonth ?? 0
+function ExpenseDashboardCards({ stats }: { stats: ReturnType<typeof useExpenseDashboardStats> }) {
+  const { data, isLoading, isError, refetch } = stats
+  if (isError) return <State kind="error" title="Couldn’t load the expense summary" onRetry={() => refetch()} />
+  if (isLoading) return <State kind="loading" height={96} />
+  const toBe = data?.toBeReimbursed ?? 0, paid = data?.reimbursedThisMonth ?? 0
   return (
-    <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-      <HrStatCard icon={<Clock size={18} />} color="orange" value={data?.pendingApprovals ?? 0} label="Pending Approvals" loading={isLoading}
-        sub={`${inr(data?.pendingApprovalAmount ?? 0)} awaiting decision`} />
-      <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(data?.toBeReimbursedAmount ?? 0)} label="To Be Reimbursed" loading={isLoading}
-        sub={`${toBeReimbursed} approved claim${toBeReimbursed === 1 ? '' : 's'}`} />
-      {/* reimbursedThisMonth* already come back on GET /v1/expense/dashboard-stats. */}
-      <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={inr(data?.reimbursedThisMonthAmount ?? 0)} label="Reimbursed this month" loading={isLoading}
-        sub={`${reimbursedThisMonth} claim${reimbursedThisMonth === 1 ? '' : 's'} paid`} />
-    </div>
+    <StatRow tiles={[
+      { icon: 'clock', color: 'orange', label: 'Waiting for approval', value: String(data?.pendingApprovals ?? 0), sub: `${inr(data?.pendingApprovalAmount ?? 0)} claimed` },
+      { icon: 'creditCard', color: 'teal', label: 'To be reimbursed', value: inr(data?.toBeReimbursedAmount ?? 0), sub: `${toBe} approved ${toBe === 1 ? 'claim' : 'claims'}` },
+      { icon: 'checkCircle', color: 'green', label: 'Reimbursed this month', value: inr(data?.reimbursedThisMonthAmount ?? 0), sub: `${paid} ${paid === 1 ? 'claim' : 'claims'} paid` },
+    ]} />
   )
 }
 
@@ -102,7 +91,7 @@ function MyClaimsTab() {
   const [page, setPage] = useState(0)
   const { data, isLoading, isError, refetch } = useMyClaims(page, 20)
   useClampedPage(page, data?.totalPages, setPage)
-  const claims = data?.content ?? []
+  const claims = useMemo(() => data?.content ?? [], [data])
   const total = data?.totalElements ?? claims.length
   // Which row's detail panel is open. One at a time — the detail fetches per
   // claim, so expanding every row at once would be a needless N fan-out.
@@ -117,23 +106,16 @@ function MyClaimsTab() {
     return { pending, approved, reimbursed, claimed }
   }, [claims])
 
-  if (isError) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
-        Couldn't load your expense claims.{' '}
-        <button onClick={() => refetch()} className="font-semibold underline">Retry</button>
-      </div>
-    )
-  }
+  if (isError) return <State kind="error" title="Couldn’t load your claims" onRetry={() => refetch()} />
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<Receipt size={18} />} color="blue" value={total} label="Total Claims" loading={isLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending on this page" loading={isLoading} />
-        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved on this page" loading={isLoading} />
-        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.reimbursed)} label="Reimbursed on this page" loading={isLoading} />
-      </div>
+    <div style={{ display: 'grid', gap: 16 }}>
+      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        { icon: 'receipt', color: 'blue', label: 'Claims', value: String(total), sub: `${inr(stats.claimed)} on this page` },
+        { icon: 'clock', color: 'orange', label: 'Waiting', value: String(stats.pending), sub: 'Submitted, not decided (this page)' },
+        { icon: 'checkCircle', color: 'green', label: 'Approved', value: String(stats.approved), sub: 'Waiting to be paid (this page)' },
+        { icon: 'creditCard', color: 'teal', label: 'Reimbursed', value: inr(stats.reimbursed), sub: 'Paid back (this page)' },
+      ]} />}
 
       <TableCard footer={hrPaginationFooter({ page, pageSize: 20, totalElements: total, totalPages: data?.totalPages ?? 0, onPageChange: setPage })}>
         <DataTable
@@ -181,7 +163,7 @@ interface DraftItem {
 }
 
 const emptyItem = (): DraftItem => ({
-  category: 'TRAVEL', amount: '', expenseDate: new Date().toISOString().slice(0, 10), description: '', merchantName: '',
+  category: 'TRAVEL', amount: '', expenseDate: todayIso(), description: '', merchantName: '',
 })
 
 /**
@@ -292,9 +274,8 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
   const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
   return (
-    <div className="max-w-2xl space-y-5">
-      <div className="ut-card p-5">
-        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Submit Claim</h3>
+    <div style={{ display: 'grid', gap: 16, maxWidth: 760 }}>
+      <Panel title="Submit a claim" sub="Add each expense as a line. Your approver is notified when you submit.">
         {/* Multi-company tenants get an explicit picker. Single-company
             tenants don't need one — the server falls back to the employee's
             own company when companyId is omitted. */}
@@ -309,13 +290,15 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
             </select>
           </div>
         )}
-        <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Claim Title *</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Client visit — Mumbai" className="ut-input" />
-      </div>
+        <div>
+          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Claim title *</label>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Client visit — Mumbai" className="ut-input" />
+        </div>
+      </Panel>
 
       <div className="space-y-3">
         {items.map((it, i) => (
-          <div key={i} className="ut-card p-4">
+          <div key={i} className="ut-card p-4" style={{ borderRadius: 16 }}>
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Line item {i + 1}</span>
               {items.length > 1 && (
@@ -366,10 +349,12 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
         </button>
       </div>
 
-      <div className="ut-card p-5">
-        <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Notes</label>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional context for the approver" className={inputCls} />
-      </div>
+      <Panel>
+        <label className="block text-[13px] font-semibold text-text-secondary">Notes for your approver
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional" className={inputCls + ' mt-1.5'} />
+        </label>
+        <Note>Receipts can’t be attached yet; keep them in case your approver asks.</Note>
+      </Panel>
 
       {capBreaches.length > 0 && (
         <div className="flex items-start gap-2.5 rounded-2xl border border-[#FCA5A5] bg-[#FEF2F2] px-5 py-4">
@@ -474,62 +459,41 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
     }
   }
 
+  const waiting = claims.filter((c) => c.status === 'SUBMITTED'), toPay = claims.filter((c) => c.status === 'APPROVED'), other = claims.filter((c) => c.status !== 'SUBMITTED' && c.status !== 'APPROVED')
+  const card = (c: ExpenseClaim) => (
+    <DecisionCard key={c.id} name={c.employeeName || 'Employee'} sub={c.employeeCode}
+      status={[EXPENSE_STATUS_LABEL[c.status] ?? c.status, STATUS_TONE[c.status] || 'gray']}
+      facts={[{ k: 'Claim', v: c.title }, { k: 'Amount', v: inr(c.totalAmount) }, { k: 'Submitted', v: c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—' }]}
+      details={canReadClaim ? (
+        <div>
+          <button type="button" onClick={() => setExpandedId(expandedId === c.id ? null : c.id)} aria-expanded={expandedId === c.id}
+            className="inline-flex items-center gap-1.5 text-left text-[13px] font-semibold text-[#047857] hover:text-[#064E3B]">
+            {expandedId === c.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{expandedId === c.id ? 'Hide line items' : 'Show line items'}
+          </button>
+          {expandedId === c.id && <div className="mt-2 overflow-x-auto rounded-xl border border-border-default"><ClaimDetailPanel claimId={c.id} /></div>}
+        </div>
+      ) : undefined}
+      actions={<>
+        {c.status === 'SUBMITTED' && canApprove && <>
+          <HrButton variant="ghost" onClick={() => setRejecting(c)} disabled={decide.isPending}><X size={14} /> Reject</HrButton>
+          <HrButton onClick={() => onDecide(c.id, true)} disabled={decide.isPending}><Check size={14} /> Approve</HrButton>
+        </>}
+        {c.status === 'APPROVED' && canReimburse && <HrButton onClick={() => onReimburse(c.id)} disabled={reimburse.isPending}><Wallet size={14} /> Mark reimbursed</HrButton>}
+      </>} />
+  )
   return (
     <>
-      <TableCard
-        footer={hrPaginationFooter({
-          page, pageSize, totalElements: total, totalPages, onPageChange: goToPage,
-          onPageSizeChange: setPageSize,
-        })}
-      >
-        <DataTable
-          columns={[
-            { key: 'employee', header: 'Employee', render: (c: any) => <HrAvatar name={c.employeeName || 'Employee'} sub={c.employeeCode} seed={c.id} /> },
-            { key: 'claim', header: 'Claim', render: (c: any) => (
-              canReadClaim ? (
-                <button
-                  type="button"
-                  onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                  aria-expanded={expandedId === c.id}
-                  aria-label={`${expandedId === c.id ? 'Hide' : 'Show'} line items for ${c.title}`}
-                  className="inline-flex items-center gap-1.5 text-left font-medium text-[#047857] hover:text-[#064E3B]"
-                >
-                  {expandedId === c.id ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
-                  {c.title}
-                </button>
-              ) : c.title
-            ) },
-            { key: 'amount', header: 'Amount', render: (c: any) => <span className="font-semibold text-text-primary">{inr(c.totalAmount)}</span> },
-            { key: 'status', header: 'Status', render: (c: any) => <HrStatusPill tone={STATUS_TONE[c.status as ExpenseStatus] || 'gray'}>{EXPENSE_STATUS_LABEL[c.status as ExpenseStatus] ?? c.status}</HrStatusPill> },
-            { key: 'action', header: 'Action', render: (c: any) => (
-              <div className="flex items-center justify-end gap-2 w-full text-right">
-                {c.status === 'SUBMITTED' && canApprove && (
-                  <>
-                    <HrButton size="sm" onClick={() => onDecide(c.id, true)} disabled={decide.isPending}><Check size={14} /> Approve</HrButton>
-                    <HrButton size="sm" variant="ghost" onClick={() => setRejecting(c)} disabled={decide.isPending}><X size={14} /> Reject</HrButton>
-                  </>
-                )}
-                {c.status === 'APPROVED' && canReimburse && (
-                  <HrButton size="sm" onClick={() => onReimburse(c.id)} disabled={reimburse.isPending}><Wallet size={14} /> Mark Reimbursed</HrButton>
-                )}
-                {((c.status === 'SUBMITTED' && !canApprove) || (c.status === 'APPROVED' && !canReimburse)) && (
-                  <span className="text-xs text-text-tertiary">—</span>
-                )}
+      {isLoading ? <State kind="loading" />
+        : isError ? <State kind="error" title="Couldn’t load the approvals queue" onRetry={() => refetch()} />
+          : claims.length === 0 ? <State kind="empty" icon="checkCircle" title="Nothing waiting" description="Submitted claims wait here to be approved; approved claims wait here to be paid." />
+            : (
+              <div style={{ display: 'grid', gap: 16 }}>
+                {waiting.length > 0 && <div style={{ display: 'grid', gap: 10 }}><SubHeading>Waiting for your OK</SubHeading>{waiting.map(card)}</div>}
+                {toPay.length > 0 && <div style={{ display: 'grid', gap: 10 }}><SubHeading>Approved, to be paid</SubHeading>{toPay.map(card)}</div>}
+                {other.length > 0 && <div style={{ display: 'grid', gap: 10 }}>{other.map(card)}</div>}
               </div>
-            ) }
-          ]}
-          data={claims}
-          keyField="id"
-          loading={isLoading}
-          emptyMessage={isError ? "Couldn't load the approvals queue. Try again" : "Nothing awaiting action. Submitted claims wait here for approval; approved claims wait here to be reimbursed."}
-          expandedRowIds={expandedId ? [expandedId] : []}
-          renderSubRow={(c: any) => (
-            <div className="bg-bg-base/40 p-4">
-              <ClaimDetailPanel claimId={c.id} />
-            </div>
-          )}
-        />
-      </TableCard>
+            )}
+      {totalPages > 1 && <TableCard footer={hrPaginationFooter({ page, pageSize, totalElements: total, totalPages, onPageChange: goToPage, onPageSizeChange: setPageSize })}><div /></TableCard>}
       {rejecting && (
         <HrDrawer
           title="Reject claim"
@@ -722,15 +686,12 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
   return (
     <div className="space-y-4">
       {companies.length > 1 && (
-        <div className="w-56">
-          <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm">
-            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
+        <div className="w-64"><HrSelect value={activeCompany} onChange={setCompanyId} options={companies.map((c) => ({ value: c.id, label: c.name }))} size="sm" /></div>
       )}
+      <Note>A claim is checked against the tightest active limit for each category it includes (the total per category, not each line).</Note>
 
       {canWrite && (
-        <div className="ut-card flex flex-wrap items-end gap-2 p-4">
+        <div className="ut-card flex flex-wrap items-end gap-2 p-4" style={{ borderRadius: 16 }}>
           <div className="flex-1 min-w-[160px]">
             <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Policy name</label>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Domestic travel cap" className="ut-input ut-input-sm" />
@@ -745,7 +706,8 @@ function PoliciesTab({ canWrite }: { canWrite: boolean }) {
             <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Max / claim (₹)</label>
             <input type="number" min={0} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} placeholder="No cap" className="ut-input ut-input-sm" />
           </div>
-          <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Add Policy</HrButton>
+          <HrButton onClick={onCreate} disabled={create.isPending || update.isPending}>{editingId ? 'Save policy' : <><Plus size={15} /> Add policy</>}</HrButton>
+          {editingId && <HrButton variant="ghost" onClick={onCancelEdit}>Cancel</HrButton>}
         </div>
       )}
 

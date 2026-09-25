@@ -485,3 +485,18 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
 - **Salary:** CTC, gross, deductions and take-home tiles, the tax regime and PF, then earnings and deductions tables (monthly and yearly).
 - **Work from home:** request form with the same rules as the mobile app. A panel explains what an approved day changes (check in from anywhere, marked WFH). Cancel asks first.
 - **Shift change:** current and scheduled shift as fact tiles, the request form, and past requests with HR's notes. Same rules as before.
+
+### 11.3 Expenses (`/hrms/expenses`) and salary advances for non-admins (`/hrms/advances`): done
+- **Expenses:**
+  - **Views by permission:** Approvals (approve or reimbursement), My claims and Submit (`claim.self`), Reimbursement batches, and Policies.
+  - **Approvals:** stat tiles, then decision cards: "Waiting for your OK" (Approve or Reject; Reject asks for an optional reason in a drawer), then "Approved, to be paid" (Mark reimbursed). Each card opens its line items.
+  - **Submit:** form panels with the per-category limit hints as before.
+  - **Policies:** a note on how limits are checked, and an edit form with Save and Cancel (edit used to share the Add button).
+- **Advances** (people without the payroll admin view; admins keep the designed page):
+  - My advances: tiles and rows with the amount left to repay.
+  - Request: a form showing the monthly deduction.
+  - Approvals: decision cards with the existing approve and disburse actions.
+- **New kit part:** `DecisionCard`, the ApprovalCard's look with slots for details and custom actions.
+- **Fixed:** a new expense line's default date was the UTC date (yesterday before 05:30 IST).
+- **Static, noted:** receipts can't be attached to claims yet. The line items have a Receipt column but there's no upload; the Submit form now says so. *Needs:* receipt upload on expense items.
+- **Checked live:** `e2e/recovery/live-design-expenses.mjs`, 11/11. The employee sees only their views and submits a claim; the owner opens its line items, approves it and marks it reimbursed; batches and policies render. The claim is removed afterwards.

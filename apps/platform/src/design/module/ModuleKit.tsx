@@ -6,7 +6,7 @@
 // (Leave, Expenses, Hiring…) are assembled from these parts so every page
 // speaks the same visual language as the designed ones.
 import { createElement as h, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { HrPageHeader } from '@/shared/components/hr'
+import { HrAvatar, HrPageHeader, HrStatusPill } from '@/shared/components/hr'
 import { DesignFrame } from '@/design/dc/DesignFrame'
 import { SubTabs } from '@/design/dc/SubTabs'
 import { StatTile } from '@/design/dc/StatTile'
@@ -108,6 +108,37 @@ export function ApprovalList({ items, onDecide, busy, approveLabel, approveTip, 
     <div style={{ display: 'grid', gap: 10 }}>
       {items.map((r) => h(ApprovalCard as any, { key: r.id, request: { status: 'PENDING', ...r }, busy, onDecide, onAttachment, approveLabel, approveTip, canDecide: typeof canDecide === 'function' ? canDecide(r) : canDecide }))}
     </div>
+  )
+}
+
+/**
+ * The ApprovalCard's look with open slots: for requests that need more than
+ * approve/reject with a note (expense line items, "Mark reimbursed", disburse…).
+ */
+export function DecisionCard({ name, sub, status, facts, reason, raised, details, actions }: {
+  name: string; sub?: string; status?: [string, string]; facts: { k: string; v: ReactNode }[]; reason?: ReactNode; raised?: string; details?: ReactNode; actions?: ReactNode
+}) {
+  return (
+    <article style={{ display: 'flex', flexWrap: 'wrap', gap: '14px 20px', alignItems: 'flex-start', padding: '16px 18px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, fontFamily: FONT, color: '#0f172a' }}>
+      <div style={{ flex: '1 1 260px', minWidth: 0, display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          {h(HrAvatar as any, { name, sub })}
+          {status && h(HrStatusPill as any, { tone: status[1] }, status[0])}
+        </div>
+        <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: '8px 14px', fontSize: 13 }}>
+          {facts.map((x) => (
+            <div key={x.k}>
+              <dt style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#64748b' }}>{x.k}</dt>
+              <dd style={{ margin: '3px 0 0', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{x.v}</dd>
+            </div>
+          ))}
+        </dl>
+        {reason ? <p style={{ margin: 0, fontSize: 13, color: '#334155', lineHeight: 1.5 }}>{reason}</p> : null}
+        {raised ? <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>Raised {raised}</p> : null}
+        {details}
+      </div>
+      {actions ? <div style={{ flex: '0 0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: 8, alignSelf: 'center' }}>{actions}</div> : null}
+    </article>
   )
 }
 

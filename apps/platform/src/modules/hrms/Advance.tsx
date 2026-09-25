@@ -1,191 +1,141 @@
+// Salary advances for people without the payroll admin view (/hrms/advances;
+// admins get the designed PayAdvances). Module kit style. Views by permission:
+// My advances + Request (hrms.advance.request.self), Approvals (advance.approve
+// or advance.disburse), Company advances (advance.read).
 import React, { useMemo, useState } from 'react'
-import { Wallet, Clock, BadgeCheck, HandCoins } from 'lucide-react'
-import { format } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
-import { useToast } from '@/shared/hooks/useToast'
-import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
-import { AdvanceAdmin, AdvanceDecisionActions, AdvanceError, advanceLabel } from './advance/AdvanceAdmin'
-import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
-} from '@/shared/components/hr'
-import { DataTable } from '@/shared/components/DataTable'
-import {
-  useMyAdvances, usePendingAdvanceApprovals, useRequestAdvance,
-  inr, type AdvanceStatus, type AdvanceRequest,
-} from './api/useAdvance'
+import { Field, Input } from '@unifiedtree/ui-kit'
+import { HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { HrPagination, useClampedPage } from '@/shared/components/HrPagination'
+import { dashIcon } from '@/design/dc/icons'
+import { ModulePage, Views, useView, StatRow, State, RowList, Row, Panel, Note, DecisionCard, SubHeading, useDesignToast, dmy } from '@/design/module/ModuleKit'
+import { AdvanceAdmin, AdvanceDecisionActions, advanceLabel } from './advance/AdvanceAdmin'
+import { useMyAdvances, usePendingAdvanceApprovals, useRequestAdvance, inr, type AdvanceStatus } from './api/useAdvance'
 
-const STATUS_TONE: Record<AdvanceStatus, PillTone> = {
-  REQUESTED: 'warn', APPROVED: 'ok', REJECTED: 'red', DISBURSED: 'teal', CLOSED: 'gray',
-}
-
-type Tab = 'my' | 'request' | 'approvals' | 'company'
+const TONE: Record<AdvanceStatus, PillTone> = { REQUESTED: 'warn', APPROVED: 'ok', REJECTED: 'red', DISBURSED: 'teal', CLOSED: 'gray' }
 
 export const Advance: React.FC = () => {
   const canRead = usePermission('hrms.advance.read')
   const canRequest = usePermission('hrms.advance.request.self')
   const canApprove = usePermission('hrms.advance.approve')
   const canDisburse = usePermission('hrms.advance.disburse')
-  const [tab, setTab] = useState<Tab>(canRead ? 'company' : canApprove || canDisburse ? 'approvals' : 'my')
-
-  const tabs: { key: Tab; label: string }[] = [
-    ...(canRead ? [{ key: 'company' as Tab, label: canDisburse ? 'Company Advances' : 'Assigned Advances' }] : []),
-    ...(canRequest ? [{ key: 'my' as Tab, label: 'My Advances' }] : []),
-    ...(canRequest ? [{ key: 'request' as Tab, label: 'Request Advance' }] : []),
-    ...(canApprove || canDisburse ? [{ key: 'approvals' as Tab, label: 'Approvals' }] : []),
+  const { show, node } = useDesignToast()
+  const views = [
+    ...(canApprove || canDisburse ? [{ key: 'approvals', label: 'Approvals', icon: 'inbox' }] : []),
+    ...(canRequest ? [{ key: 'my', label: 'My advances', icon: 'banknote' }, { key: 'request', label: 'Request an advance', icon: 'plus' }] : []),
+    ...(canRead ? [{ key: 'company', label: canDisburse ? 'Company advances' : 'Assigned advances', icon: 'users' }] : []),
   ]
-
+  const [tab, setTab] = useView(views.map((v) => v.key), 'tab')
   return (
-    <div className="mx-auto max-w-7xl p-6 sm:p-8">
-      <HrPageHeader crumb="Advance Management" title="Salary Advances" subtitle="Request, approve, and disburse employee salary advances" />
-
-      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
-
-      {tab === 'company' && canRead && <HrTabPanel tabKey="company"><AdvanceAdmin companyWide={canDisburse} /></HrTabPanel>}
-      {tab === 'my' && canRequest && <HrTabPanel tabKey="my"><MyAdvancesTab /></HrTabPanel>}
-      {tab === 'request' && canRequest && <HrTabPanel tabKey="request"><RequestTab onSubmitted={() => setTab('my')} /></HrTabPanel>}
-      {tab === 'approvals' && (canApprove || canDisburse) && <HrTabPanel tabKey="approvals"><ApprovalsTab /></HrTabPanel>}
-    </div>
+    <ModulePage crumb="Payroll" title="Salary advances" subtitle={canRequest ? 'Borrow against your salary and repay it in monthly deductions.' : 'Approve advances and record their payment.'}
+      actions={canRequest && tab !== 'request' ? <HrButton onClick={() => setTab('request')}>{dashIcon('plus', 15)} Request an advance</HrButton> : undefined}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        {views.length > 1 && <Views items={views} active={tab} onChange={setTab} label="Advance views" />}
+        {views.length === 0 && <State kind="empty" icon="lock" title="No advance access" description="Your role can’t request or review salary advances." />}
+        {tab === 'approvals' && <ApprovalsTab />}
+        {tab === 'my' && <MyAdvancesTab />}
+        {tab === 'request' && <RequestTab onSubmitted={() => setTab('my')} toast={show} />}
+        {tab === 'company' && <AdvanceAdmin companyWide={canDisburse} />}
+      </div>
+      {node}
+    </ModulePage>
   )
 }
-
-// ── My Advances ────────────────────────────────────────────────────────────────
 
 function MyAdvancesTab() {
   const [page, setPage] = useState(0)
   const { data, isLoading, isError, refetch } = useMyAdvances(page, 20)
   useClampedPage(page, data?.totalPages, setPage)
-  const advances = data?.content ?? []
-  const total = data?.totalElements ?? advances.length
-
-  const stats = useMemo(() => {
-    const pending = advances.filter((a) => a.status === 'REQUESTED').length
-    const approved = advances.filter((a) => a.status === 'APPROVED').length
-    const outstanding = advances
-      .filter((a) => a.status === 'DISBURSED')
-      .reduce((s, a) => s + (a.outstandingAmount ?? 0), 0)
-    return { pending, approved, outstanding }
-  }, [advances])
-
-  if (isError) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
-        Couldn't load your advances.{' '}
-        <button onClick={() => refetch()} className="font-semibold underline">Retry</button>
-      </div>
-    )
-  }
-
+  const list = useMemo(() => data?.content ?? [], [data])
+  const total = data?.totalElements ?? list.length
+  const s = useMemo(() => ({
+    pending: list.filter((a) => a.status === 'REQUESTED').length,
+    approved: list.filter((a) => a.status === 'APPROVED').length,
+    outstanding: list.filter((a) => a.status === 'DISBURSED').reduce((n, a) => n + (a.outstandingAmount ?? 0), 0),
+  }), [list])
+  if (isError) return <State kind="error" title="Couldn’t load your advances" onRetry={() => refetch()} />
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<HandCoins size={18} />} color="blue" value={total} label="Total Requests" loading={isLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending on this page" loading={isLoading} />
-        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={stats.approved} label="Approved on this page" loading={isLoading} />
-        <HrStatCard icon={<Wallet size={18} />} color="teal" value={inr(stats.outstanding)} label="Outstanding on this page" loading={isLoading} />
-      </div>
-
-      <TableCard footer={data && hrPaginationFooter({ page, pageSize: 20, totalElements: data.totalElements, totalPages: data.totalPages, onPageChange: setPage })}>
-        <DataTable
-          columns={[
-            { key: 'amount', header: 'Amount', render: (a: any) => <span className="font-semibold text-text-primary">{inr(a.amount)}</span> },
-            { key: 'monthly', header: 'Monthly', render: (a: any) => <span className="text-text-secondary">{inr(a.monthlyDeduction)}</span> },
-            { key: 'months', header: 'Months', render: (a: any) => <span className="text-text-secondary">{a.repaymentMonths}</span> },
-            { key: 'status', header: 'Status', render: (a: any) => <HrStatusPill tone={STATUS_TONE[a.status as AdvanceStatus]}>{advanceLabel(a)}</HrStatusPill> },
-            { key: 'requested', header: 'Requested', render: (a: any) => <span className="text-text-secondary">{a.createdAt ? format(new Date(a.createdAt), 'd MMM yyyy') : '—'}</span> }
-          ]}
-          data={advances}
-          keyField="id"
-          loading={isLoading}
-          emptyMessage="No advance requests yet. Use 'Request Advance' to raise your first request."
-        />
-      </TableCard>
+    <div style={{ display: 'grid', gap: 16 }}>
+      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        { icon: 'banknote', color: 'blue', label: 'Requests', value: String(total), sub: 'All time' },
+        { icon: 'clock', color: 'orange', label: 'Waiting', value: String(s.pending), sub: 'Not decided yet (this page)' },
+        { icon: 'checkCircle', color: 'green', label: 'Approved', value: String(s.approved), sub: 'Waiting to be paid (this page)' },
+        { icon: 'creditCard', color: 'teal', label: 'Still to repay', value: inr(s.outstanding), sub: 'Deducted from salary (this page)' },
+      ]} />}
+      <SubHeading>Your requests</SubHeading>
+      {isLoading ? <State kind="loading" />
+        : list.length === 0 ? <State kind="empty" icon="banknote" title="No advance requests yet" description="Requests you make appear here with how much is left to repay." />
+          : (
+            <RowList>
+              {list.map((a) => (
+                <Row key={a.id} title={`${inr(a.amount)} · ${a.repaymentMonths} ${a.repaymentMonths === 1 ? 'month' : 'months'}`}
+                  meta={`${inr(a.monthlyDeduction)} a month${a.status === 'DISBURSED' && a.outstandingAmount != null ? ` · ${inr(a.outstandingAmount)} left to repay` : ''} · asked ${dmy(a.createdAt?.slice(0, 10))}`}
+                  note={a.reason ? `“${a.reason}”` : undefined}
+                  trail={<HrStatusPill tone={TONE[a.status]}>{advanceLabel(a)}</HrStatusPill>} />
+              ))}
+            </RowList>
+          )}
+      {data && data.totalPages > 1 && <HrPagination page={page} pageSize={20} totalElements={data.totalElements} totalPages={data.totalPages} onPageChange={setPage} />}
     </div>
   )
 }
 
-// ── Request Advance ───────────────────────────────────────────────────────────
-
-function RequestTab({ onSubmitted }: { onSubmitted: () => void }) {
-  const { toast } = useToast()
+function RequestTab({ onSubmitted, toast }: { onSubmitted: () => void; toast: (m: string, err?: boolean, d?: string) => void }) {
   const request = useRequestAdvance()
   const [amount, setAmount] = useState('')
   const [months, setMonths] = useState('6')
   const [reason, setReason] = useState('')
-
-  const amountNum = parseFloat(amount) || 0
-  const monthsNum = parseInt(months, 10) || 0
-  const monthlyDeduction = monthsNum > 0 ? amountNum / monthsNum : 0
-
-  const handleSubmit = async () => {
-    if (amountNum <= 0) { toast('Enter an advance amount', 'error'); return }
-    if (!Number.isInteger(Number(months)) || monthsNum < 1 || monthsNum > 60) { toast('Repayment must be between 1 and 60 whole months', 'error'); return }
-    try {
-      await request.mutateAsync({
-        amount: amountNum,
-        repaymentMonths: monthsNum,
-        reason: reason.trim() || undefined,
-      })
-      toast('Advance request submitted', 'success')
-      onSubmitted()
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to submit request', 'error')
-    }
+  const amt = parseFloat(amount) || 0, m = parseInt(months, 10) || 0
+  const monthly = m > 0 ? amt / m : 0
+  const problem = amt <= 0 ? 'Enter how much you need.' : !Number.isInteger(Number(months)) || m < 1 || m > 60 ? 'Repay over 1 to 60 whole months.' : null
+  const submit = async () => {
+    if (problem) return
+    try { await request.mutateAsync({ amount: amt, repaymentMonths: m, reason: reason.trim() || undefined }); toast('Advance request sent'); onSubmitted() } catch (e) { toast('Couldn’t send the request', true, (e as Error)?.message) }
   }
-
-  const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20'
-
   return (
-    <div className="max-w-2xl">
-      <div className="ut-card p-5">
-        <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Request Advance</h3>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-          <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Advance Amount (₹) *</label>
-            <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 50000" className="ut-input" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Repayment (months) *</label>
-            <input type="number" min={1} max={60} step="1" value={months} onChange={(e) => setMonths(e.target.value)} className="ut-input" />
-          </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,340px),1fr))', gap: 16, alignItems: 'start' }}>
+      <Panel title="Request an advance" sub="Your approver is notified as soon as you send it.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,150px),1fr))', gap: 12 }}>
+          <Field label="Amount (₹) *"><Input type="number" min={0} step="0.01" value={amount} onChange={(e: any) => setAmount(e.target.value)} placeholder="e.g. 50000" /></Field>
+          <Field label="Repay over (months) *"><Input type="number" min={1} max={60} step="1" value={months} onChange={(e: any) => setMonths(e.target.value)} /></Field>
         </div>
-        <div className="mt-4">
-          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Reason</label>
-          <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Why do you need this advance?" className={inputCls} />
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Reason</span>
+          <textarea value={reason} rows={3} onChange={(e) => setReason(e.target.value)} placeholder="Why do you need it? (optional)"
+            style={{ font: 'inherit', fontSize: 14, padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 10, outline: 'none', resize: 'vertical' }} />
+        </label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingTop: 4, borderTop: '1px solid #f1f5f9' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: problem ? '#64748b' : '#0f6e56' }}>{problem || `${inr(monthly)} a month for ${m} ${m === 1 ? 'month' : 'months'}`}</span>
+          <HrButton onClick={submit} disabled={!!problem || request.isPending}>{request.isPending ? 'Sending…' : 'Send request'}</HrButton>
         </div>
-
-        <div className="mt-5 flex items-center justify-between gap-4 border-t border-border-default pt-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">Monthly Deduction</p>
-            <p className="text-2xl font-bold tabular-nums text-text-primary">{inr(monthlyDeduction)}</p>
-            <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">{monthsNum > 0 ? `${inr(amountNum)} recovered over ${monthsNum} month${monthsNum > 1 ? 's' : ''}` : 'Set an amount and term'}</p>
-          </div>
-          <HrButton onClick={handleSubmit} disabled={request.isPending}>
-            {request.isPending ? 'Submitting…' : 'Submit Request'}
-          </HrButton>
-        </div>
-      </div>
+      </Panel>
+      <Panel title="How it’s repaid" sub="From your salary, a little each month">
+        <Note>Once it’s approved and paid to you, the monthly amount is deducted from your salary until the advance is cleared.</Note>
+      </Panel>
     </div>
   )
 }
 
-// ── Approvals ──────────────────────────────────────────────────────────────
-
 function ApprovalsTab() {
   const [page, setPage] = useState(0)
-  const query = usePendingAdvanceApprovals(page)
-  useClampedPage(page, query.data?.totalPages, setPage)
-  if (query.isError) return <AdvanceError message="Unable to load advances awaiting action." retry={() => query.refetch()} />
-  return <div className="space-y-4">
-    <p className="text-sm text-text-secondary">Requested advances wait for approval. Approved advances remain here until their payment is recorded.</p>
-    <TableCard footer={query.data && hrPaginationFooter({ page, pageSize: 20, totalElements: query.data.totalElements, totalPages: query.data.totalPages, onPageChange: setPage })}>
-      <DataTable<AdvanceRequest> columns={[
-        { key: 'employee', header: 'Employee', render: a => <HrAvatar name={a.employeeName || 'Employee'} sub={a.employeeCode} /> },
-        { key: 'amount', header: 'Amount', render: a => <span className="font-semibold">{inr(a.amount)}</span> },
-        { key: 'reason', header: 'Reason', render: a => <p className="max-w-xs whitespace-pre-wrap text-sm text-text-secondary">{a.reason || 'No reason provided'}</p> },
-        { key: 'monthly', header: 'Monthly', render: a => <span>{inr(a.monthlyDeduction)}</span> },
-        { key: 'status', header: 'Status', render: a => <HrStatusPill tone={STATUS_TONE[a.status]}>{advanceLabel(a)}</HrStatusPill> },
-        { key: 'action', header: 'Action', render: a => <AdvanceDecisionActions advance={a} /> },
-      ]} data={query.data?.content ?? []} keyField="id" loading={query.isPending} emptyMessage="No advances awaiting action." />
-    </TableCard>
-  </div>
+  const q = usePendingAdvanceApprovals(page)
+  useClampedPage(page, q.data?.totalPages, setPage)
+  const list = q.data?.content ?? []
+  if (q.isError) return <State kind="error" title="Couldn’t load advances waiting for action" onRetry={() => q.refetch()} />
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <Note>Requested advances wait here for approval; approved ones stay until their payment is recorded.</Note>
+      {q.isPending ? <State kind="loading" />
+        : list.length === 0 ? <State kind="empty" icon="checkCircle" title="Nothing waiting" description="No advances need your approval or a payment record." />
+          : list.map((a) => (
+            <DecisionCard key={a.id} name={a.employeeName || 'Employee'} sub={a.employeeCode}
+              status={[advanceLabel(a), TONE[a.status]]}
+              facts={[{ k: 'Amount', v: inr(a.amount) }, { k: 'Repay over', v: `${a.repaymentMonths} months` }, { k: 'A month', v: inr(a.monthlyDeduction) }]}
+              reason={<><span style={{ color: '#64748b' }}>Reason:</span> {a.reason || 'None given'}</>}
+              raised={a.createdAt ? dmy(a.createdAt.slice(0, 10)) : undefined}
+              actions={<AdvanceDecisionActions advance={a} />} />
+          ))}
+      {q.data && q.data.totalPages > 1 && <HrPagination page={page} pageSize={20} totalElements={q.data.totalElements} totalPages={q.data.totalPages} onPageChange={setPage} />}
+    </div>
+  )
 }
