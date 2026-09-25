@@ -70,6 +70,8 @@ try {
   await open(p, '/modules')
   await wsBtn.click(); await settle(p)
   check('apps: Workspace settings opens the workspace profile', here(p) === '/settings/profile', here(p))
+  await h1(p, 'Workspace profile').waitFor({ timeout: 20_000 }).catch(() => {})
+  await p.screenshot({ path: `${shots}/settings-workspace-1440.png` })
 
   // ── Workspace settings: its tabs, and each page opens ──
   const wsTabs = await tabs(p, 'Settings sections')

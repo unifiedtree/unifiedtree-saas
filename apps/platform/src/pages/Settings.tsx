@@ -31,7 +31,7 @@ const TAB_META: Record<TabKey, { label: string; desc: string }> = {
   notifications: { label: 'Notifications',  desc: 'Which notifications reach you, and how: email, in the app or on your phone.' },
   billing:       { label: 'Billing & Plan', desc: 'Your subscription, plan and invoices.' },
   integrations:  { label: 'Integrations',   desc: 'Connect external tools and services.' },
-  documents:     { label: 'Document Types', desc: 'Which documents employees must upload, and the rules for each.' },
+  documents:     { label: 'Document types', desc: 'Which documents employees must upload, and the rules for each.' },
   danger:        { label: 'Danger Zone',    desc: 'Export all data, or schedule a reset or deletion of the workspace.' },
 }
 const VALID_TABS = Object.keys(TAB_META) as TabKey[]
