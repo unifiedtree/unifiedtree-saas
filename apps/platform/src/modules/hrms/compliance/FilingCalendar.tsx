@@ -1,30 +1,72 @@
+// A month view of compliance deadlines (GET /v1/compliance/calendar-events,
+// hrms.compliance.read), in the module kit's panel style. Click a day to list
+// only its deadlines.
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { addMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, getDay } from 'date-fns'
 import { apiJson } from '@/core/api/client'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
+import { Panel, State, RowList, Row, dmy, todayIso } from '@/design/module/ModuleKit'
 
 interface CalendarEvent { id: string; title: string; type: string; date: string; status: string; category?: string }
+const words = (v: string) => v.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
+const STATUS_WORD: Record<string, string> = { LATE: 'Filed late' }
+
 export function FilingCalendar({ companyId }: { companyId: string }) {
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   const [selected, setSelected] = useState<string>()
   const from = format(startOfMonth(month), 'yyyy-MM-dd'), to = format(endOfMonth(month), 'yyyy-MM-dd')
-  const query = useQuery({ queryKey: ['hrms', 'compliance', 'calendar', companyId, from, to],
-    queryFn: () => apiJson<CalendarEvent[]>(`/v1/compliance/calendar-events?companyId=${encodeURIComponent(companyId)}&from=${from}&to=${to}`), enabled: !!companyId })
+  const query = useQuery({
+    queryKey: ['hrms', 'compliance', 'calendar', companyId, from, to],
+    queryFn: () => apiJson<CalendarEvent[]>(`/v1/compliance/calendar-events?companyId=${encodeURIComponent(companyId)}&from=${from}&to=${to}`),
+    enabled: !!companyId,
+  })
   const days = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) })
-  const visible = query.data?.filter(event => !selected || event.date === selected) ?? []
+  const visible = query.data?.filter((e) => !selected || e.date === selected) ?? []
   const move = (n: number) => { setMonth(addMonths(month, n)); setSelected(undefined) }
-  return <section className="ut-card space-y-4 p-5" aria-label="Filing calendar">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">{format(month, 'MMMM yyyy')}</h3><div className="flex gap-2"><HrButton variant="ghost" onClick={() => move(-1)}>Previous month</HrButton><HrButton variant="ghost" onClick={() => { setMonth(startOfMonth(new Date())); setSelected(undefined) }}>Today</HrButton><HrButton variant="ghost" onClick={() => move(1)}>Next month</HrButton></div></div>
-    {query.isError ? <div role="alert"><p>{query.error.message}</p><HrButton onClick={() => query.refetch()}>Retry</HrButton></div> : query.isLoading ? <p role="status">Loading filing deadlines...</p> : <>
-      <div className="grid grid-cols-7 gap-1">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div key={day} className="p-1 text-center text-xs text-text-secondary">{day}</div>)}
-        {Array.from({ length: getDay(startOfMonth(month)) }, (_, i) => <div key={`blank-${i}`} />)}
-        {days.map(day => { const date = format(day, 'yyyy-MM-dd'); const count = query.data?.filter(event => event.date === date).length ?? 0
-          return <button key={date} aria-label={`${format(day, 'd MMMM')}: ${count} deadlines`} aria-pressed={selected === date} onClick={() => setSelected(selected === date ? undefined : date)} className={`min-h-16 rounded-lg border p-1 text-center sm:p-3 ${selected === date ? 'border-primary bg-primary/10' : 'border-border-default hover:bg-bg-subtle'}`}><span>{format(day, 'd')}</span>{count > 0 && <span className="mt-1 block text-xs font-semibold text-primary">{count} due</span>}</button>
-        })}
-      </div>
-      <div className="flex justify-between"><p className="text-sm font-semibold">{selected ? `Deadlines on ${selected}` : 'This month'} · {visible.length}</p>{selected && <button onClick={() => setSelected(undefined)} className="text-sm text-primary">Show month</button>}</div>
-      {!visible.length ? <p className="text-sm text-text-secondary">No recorded deadlines for this period.</p> : <ul className="divide-y divide-border-default">{visible.map(event => <li key={event.id} className="flex flex-wrap items-center justify-between gap-2 py-3"><div><p className="font-medium">{event.title}</p><p className="text-xs text-text-secondary">{event.date} · {event.category || event.type.replaceAll('_', ' ')}</p></div><HrStatusPill tone={event.status === 'DONE' || event.status === 'FILED' ? 'ok' : event.status === 'OVERDUE' || event.status === 'LATE' ? 'red' : 'warn'}>{event.status}</HrStatusPill></li>)}</ul>}
-    </>}
-  </section>
+  const today = todayIso()
+  return (
+    <section aria-label="Filing calendar">
+      <Panel title={format(month, 'MMMM yyyy')} sub="Every obligation and filing due this month." aside={
+        <div style={{ display: 'flex', gap: 6 }}>
+          <HrButton size="sm" variant="ghost" onClick={() => move(-1)}>← Previous</HrButton>
+          <HrButton size="sm" variant="ghost" onClick={() => { setMonth(startOfMonth(new Date())); setSelected(undefined) }}>This month</HrButton>
+          <HrButton size="sm" variant="ghost" onClick={() => move(1)}>Next →</HrButton>
+        </div>}>
+        {query.isError ? <State kind="error" title="Couldn’t load the deadlines" description={query.error.message} onRetry={() => query.refetch()} />
+          : query.isLoading ? <State kind="loading" height={220} /> : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(0,1fr))', gap: 4 }}>
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d} style={{ padding: 4, textAlign: 'center', fontSize: 11.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: '#64748b' }}>{d}</div>)}
+                {Array.from({ length: getDay(startOfMonth(month)) }, (_, i) => <div key={`blank-${i}`} />)}
+                {days.map((day) => {
+                  const date = format(day, 'yyyy-MM-dd')
+                  const count = query.data?.filter((e) => e.date === date).length ?? 0
+                  const on = selected === date, isToday = date === today
+                  return (
+                    <button key={date} type="button" aria-label={`${format(day, 'd MMMM')}: ${count} deadlines`} aria-pressed={on} onClick={() => setSelected(on ? undefined : date)}
+                      style={{ minHeight: 56, borderRadius: 10, border: `1px solid ${on ? '#059669' : isToday ? '#a7f3d0' : '#eef2f6'}`, background: on ? '#ecfdf5' : count ? '#fffbeb' : '#fff', cursor: 'pointer', padding: 6, fontFamily: 'inherit', display: 'grid', alignContent: 'start', justifyItems: 'center', gap: 2 }}>
+                      <span style={{ fontSize: 13, fontWeight: isToday ? 800 : 600, color: isToday ? '#0f6e56' : '#0f172a' }}>{format(day, 'd')}</span>
+                      {count > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: '#b45309' }}>{`${count} due`}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <strong style={{ fontSize: 13.5 }}>{`${selected ? `Due on ${dmy(selected)}` : 'This month'} · ${visible.length}`}</strong>
+                {selected && <HrButton size="sm" variant="ghost" onClick={() => setSelected(undefined)}>Show the whole month</HrButton>}
+              </div>
+              {!visible.length ? <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>Nothing due in this period.</p> : (
+                <RowList>
+                  {visible.map((e) => (
+                    <Row key={e.id} title={e.title} meta={`${dmy(e.date)} · ${e.category || words(e.type)}`}
+                      trail={<HrStatusPill tone={e.status === 'DONE' || e.status === 'FILED' ? 'ok' : e.status === 'OVERDUE' || e.status === 'LATE' ? 'red' : 'warn'}>{STATUS_WORD[e.status] || words(e.status)}</HrStatusPill>} />
+                  ))}
+                </RowList>
+              )}
+            </>
+          )}
+      </Panel>
+    </section>
+  )
 }

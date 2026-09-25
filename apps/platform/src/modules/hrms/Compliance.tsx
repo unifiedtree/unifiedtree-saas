@@ -1,14 +1,12 @@
 import { InspectorSessions } from './compliance/InspectorSessions'
 import { FilingCalendar } from './compliance/FilingCalendar'
 import React, { useId, useMemo, useState } from 'react'
-import { Plus, Check, ShieldAlert, CalendarClock, FileCheck2, Lock, AlertTriangle, BadgeCheck, RotateCw } from 'lucide-react'
-import { format } from 'date-fns'
+import { Plus, Check, FileCheck2, RotateCw } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { Modal } from '@unifiedtree/ui-kit'
 import { useToast } from '@/shared/hooks/useToast'
-import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrTabs, HrTabPanel, HrDrawer, type PillTone,
-} from '@/shared/components/hr'
+import { HrButton, HrStatusPill, TableCard, HrDrawer, type PillTone } from '@/shared/components/hr'
+import { ModulePage, Views, useView, StatRow, State, Note, dmy, todayIso } from '@/design/module/ModuleKit'
 import { hrPaginationFooter } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
@@ -34,8 +32,9 @@ const POSH_LABEL: Record<PoshStatus, string> = {
   RECEIVED: 'Received', UNDER_INQUIRY: 'Under inquiry', RESOLVED: 'Resolved', DISMISSED: 'Dismissed',
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
-const fmtDate = (d?: string) => (d ? format(new Date(d), 'd MMM yyyy') : '—')
+// Today in the browser's calendar: toISOString() is UTC and gave yesterday before 5:30 am IST.
+const today = todayIso
+const fmtDate = (d?: string | null) => (d ? dmy(d) : '—')
 const errMessage = (e: unknown, fallback: string) => (e as Error)?.message || fallback
 
 type Tab = 'calendar' | 'filings' | 'posh' | 'inspector'
@@ -57,17 +56,14 @@ export const Compliance: React.FC = () => {
   // /v1/compliance/items 403s, and see a permanently empty calendar instead
   // of the POSH tab they do have access to.
   //
-  // canWrite is treated as an implicit read too — you cannot write to
-  // something you cannot see, and every seeded role pairs the two.
-  const canSeeCalendarOrFilings = canRead || canWrite
-  const tabs: { key: Tab; label: string }[] = [
-    ...(canSeeCalendarOrFilings ? [{ key: 'calendar' as Tab, label: 'Compliance Calendar' }] : []),
-    ...(canSeeCalendarOrFilings ? [{ key: 'filings'  as Tab, label: 'Statutory Filings' }] : []),
-    ...(canPosh                 ? [{ key: 'posh'     as Tab, label: 'POSH' }] : []),
-    ...(canRead || canInspectorRead ? [{ key: 'inspector' as Tab, label: 'Inspector View' }] : []),
+  // The list endpoints (items, filings, calendar-events) all need
+  // hrms.compliance.read, so write alone doesn't open these views.
+  const tabs = [
+    ...(canRead ? [{ key: 'calendar', label: 'Compliance calendar', icon: 'calendarDays' }, { key: 'filings', label: 'Statutory filings', icon: 'fileText' }] : []),
+    ...(canPosh ? [{ key: 'posh', label: 'POSH register', icon: 'shield' }] : []),
+    ...(canRead || canInspectorRead ? [{ key: 'inspector', label: 'Inspector access', icon: 'lock' }] : []),
   ]
-  const [tab, setTab] = useState<Tab | null>(null)
-  const activeTab = tab && tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key
+  const [activeTab, setTab] = useView(tabs.map((t) => t.key)) as [Tab, (k: string) => void]
 
   // The add forms used to sit permanently open above each table. They now
   // live in a drawer opened from the header's primary action, which follows
@@ -82,32 +78,23 @@ export const Compliance: React.FC = () => {
     : undefined
 
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
-      <HrPageHeader crumb="Compliance" title="Statutory Compliance" subtitle="Compliance calendar, statutory filings, and the POSH register" actions={headerAction} />
-
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <HrTabs tabs={tabs} active={activeTab ?? ''} onChange={(k) => { setTab(k as Tab); setAdding(null) }} />
-        {companies.length > 1 && (
-          <div className="mt-1 w-56">
-            <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm" aria-label="Company">
+    <ModulePage crumb="Compliance" title="Statutory compliance" subtitle="Due dates, statutory filings, the POSH register and read-only access for inspectors." actions={headerAction}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          {tabs.length > 1 ? <Views items={tabs} active={activeTab} onChange={(k) => { setTab(k); setAdding(null) }} label="Compliance views" /> : <span />}
+          {companies.length > 1 && (
+            <select value={activeCompany} onChange={(e) => setCompanyId(e.target.value)} className="ut-select ut-select-sm w-56" aria-label="Company">
               {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-          </div>
-        )}
-      </div>
-
-      {tabs.length === 0 && (
-        <div className="ut-card p-10 text-center">
-          <p className="text-sm font-semibold text-text-secondary">No compliance access for this role</p>
-          <p className="mt-1 text-xs text-text-tertiary">Ask an administrator to grant a Compliance permission.</p>
+          )}
         </div>
-      )}
-
-      {activeTab === 'calendar' && <HrTabPanel tabKey="calendar"><CalendarTab companyId={activeCompany} canWrite={canWrite} adding={adding === 'calendar'} onAddClose={closeAdd} /></HrTabPanel>}
-      {activeTab === 'filings' && <HrTabPanel tabKey="filings"><FilingsTab companyId={activeCompany} canWrite={canWrite} adding={adding === 'filings'} onAddClose={closeAdd} /></HrTabPanel>}
-      {activeTab === 'posh' && <HrTabPanel tabKey="posh">{canPosh ? <PoshTab companyId={activeCompany} adding={adding === 'posh'} onAddClose={closeAdd} /> : <PoshDenied />}</HrTabPanel>}
-      {activeTab === 'inspector' && <HrTabPanel tabKey="inspector">{activeCompany ? <InspectorSessions key={activeCompany} companyId={activeCompany} /> : <p role="status">Loading company...</p>}</HrTabPanel>}
-    </div>
+        {tabs.length === 0 && <State kind="empty" icon="lock" title="No compliance access" description="Ask an admin if you look after statutory compliance." />}
+        {activeTab === 'calendar' && <CalendarTab companyId={activeCompany} canWrite={canWrite} adding={adding === 'calendar'} onAddClose={closeAdd} />}
+        {activeTab === 'filings' && <FilingsTab companyId={activeCompany} canWrite={canWrite} adding={adding === 'filings'} onAddClose={closeAdd} />}
+        {activeTab === 'posh' && (canPosh ? <PoshTab companyId={activeCompany} adding={adding === 'posh'} onAddClose={closeAdd} /> : <PoshDenied />)}
+        {activeTab === 'inspector' && (activeCompany ? <InspectorSessions key={activeCompany} companyId={activeCompany} /> : <State kind="loading" />)}
+      </div>
+    </ModulePage>
   )
 }
 
@@ -172,7 +159,7 @@ function CalendarTab({ companyId, canWrite, adding, onAddClose }: {
   const [pageSize, setPageSize] = useState(COMPLIANCE_PAGE_SIZE)
   const { data, isLoading, isError, refetch } = useComplianceItems(companyId || undefined, page, pageSize)
   const markDone = useMarkComplianceDone()
-  const items = data?.content ?? []
+  const items = useMemo(() => data?.content ?? [], [data])
   const total = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
 
@@ -206,12 +193,12 @@ function CalendarTab({ companyId, canWrite, adding, onAddClose }: {
   const cols = canWrite ? 6 : 5
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <HrStatCard icon={<CalendarClock size={18} />} color="orange" value={isError ? '—' : stats.pending} label="Pending" sub={pageScoped} loading={isLoading} />
-        <HrStatCard icon={<AlertTriangle size={18} />} color="red" value={isError ? '—' : stats.overdue} label="Overdue" sub={pageScoped} loading={isLoading} />
-        <HrStatCard icon={<BadgeCheck size={18} />} color="green" value={isError ? '—' : stats.done} label="Completed" sub={pageScoped} loading={isLoading} />
-      </div>
+    <div style={{ display: 'grid', gap: 16 }}>
+      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        { icon: 'clock', color: 'orange', label: 'Pending', value: isError ? '—' : String(stats.pending), sub: pageScoped || 'Not yet due or done' },
+        { icon: 'alertTriangle', color: 'red', label: 'Overdue', value: isError ? '—' : String(stats.overdue), sub: pageScoped || 'Past the due date' },
+        { icon: 'checkCircle', color: 'green', label: 'Completed', value: isError ? '—' : String(stats.done), sub: pageScoped || 'Marked done' },
+      ]} />}
 
       <TableCard
         footer={isError ? undefined : hrPaginationFooter({
@@ -236,7 +223,7 @@ function CalendarTab({ companyId, canWrite, adding, onAddClose }: {
             ) : isError ? (
               <TableErrorRow colSpan={cols} what="compliance items" onRetry={() => refetch()} />
             ) : items.length === 0 ? (
-              <tr><td colSpan={cols} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No compliance items yet</p><p className="mt-1 text-xs text-text-tertiary">Track statutory due dates so nothing is missed.</p></td></tr>
+              <tr><td colSpan={cols} className="!p-0"><State kind="empty" icon="calendarDays" title="No obligations yet" description="Track statutory due dates here so nothing is missed." /></td></tr>
             ) : items.map((i) => (
               <tr key={i.id}>
                 <td className="font-medium text-text-primary">{i.title}</td>
@@ -393,7 +380,7 @@ function FilingsTab({ companyId, canWrite, adding, onAddClose }: {
   const cols = canWrite ? 8 : 7
 
   return (
-    <div className="space-y-5">
+    <div style={{ display: 'grid', gap: 16 }}>
       <TableCard
         footer={isError ? undefined : hrPaginationFooter({
           page, pageSize, totalElements: total, totalPages, onPageChange: setPage,
@@ -419,7 +406,7 @@ function FilingsTab({ companyId, canWrite, adding, onAddClose }: {
             ) : isError ? (
               <TableErrorRow colSpan={cols} what="statutory filings" onRetry={() => refetch()} />
             ) : filings.length === 0 ? (
-              <tr><td colSpan={cols} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No filings recorded</p><p className="mt-1 text-xs text-text-tertiary">Schedule PF / ESI / TDS filings to track deadlines.</p></td></tr>
+              <tr><td colSpan={cols} className="!p-0"><State kind="empty" icon="fileText" title="No filings recorded" description="Schedule PF, ESI and TDS filings to track their deadlines." /></td></tr>
             ) : filings.map((f) => (
               <tr key={f.id}>
                 <td><HrStatusPill tone="info">{f.filingType}</HrStatusPill></td>
@@ -588,24 +575,11 @@ function MarkFiledModal({ filing, onClose }: { filing: StatutoryFiling | null; o
 // ── POSH register ────────────────────────────────────────────────────────────
 
 function PoshDenied() {
-  return (
-    <div className="ut-card ut-card-lg flex flex-col items-center justify-center py-16 text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#FEE2E2] text-[#B91C1C]">
-        <Lock size={22} />
-      </div>
-      <p className="text-sm font-semibold text-text-secondary">Restricted area</p>
-      <p className="mt-1 max-w-sm text-xs text-text-tertiary">The POSH complaints register holds sensitive information. You need the POSH access permission to view it.</p>
-    </div>
-  )
+  return <State kind="empty" icon="lock" title="Restricted register" description="The POSH complaints register holds sensitive information. It needs the POSH access permission." />
 }
 
 function PoshNotice() {
-  return (
-    <div className="flex items-start gap-2 rounded-2xl border border-[#6EE7B7] bg-[#ECFDF5] px-4 py-3">
-      <ShieldAlert size={16} className="mt-0.5 shrink-0 text-[#047857]" />
-      <p className="text-xs text-text-secondary">This register is confidential. Record only what is necessary and handle every entry in line with your POSH policy.</p>
-    </div>
-  )
+  return <Note tone="green">This register is confidential. Record only what is necessary and handle every entry in line with your POSH policy.</Note>
 }
 
 function PoshTab({ companyId, adding, onAddClose }: { companyId: string; adding: boolean; onAddClose: () => void }) {
@@ -640,7 +614,7 @@ function PoshTab({ companyId, adding, onAddClose }: { companyId: string; adding:
   }
 
   return (
-    <div className="space-y-5">
+    <div style={{ display: 'grid', gap: 16 }}>
       <PoshNotice />
 
       <TableCard
@@ -666,7 +640,7 @@ function PoshTab({ companyId, adding, onAddClose }: { companyId: string; adding:
             ) : isError ? (
               <TableErrorRow colSpan={6} what="the POSH register" onRetry={() => refetch()} />
             ) : complaints.length === 0 ? (
-              <tr><td colSpan={6} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No complaints on record</p><p className="mt-1 text-xs text-text-tertiary">Registered complaints appear here with their inquiry status.</p></td></tr>
+              <tr><td colSpan={6} className="!p-0"><State kind="empty" icon="shield" title="No complaints on record" description="Registered complaints appear here with their inquiry status." /></td></tr>
             ) : complaints.map((c) => (
               <tr key={c.id}>
                 <td className="font-medium text-text-primary">{c.complaintNo}</td>

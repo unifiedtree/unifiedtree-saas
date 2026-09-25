@@ -70,7 +70,7 @@ try {
   pageErrors.length = 0; failedApi.length = 0
 
   await page.goto(base + '/hrms/compliance')
-  await page.getByRole('heading', { name: 'Statutory Compliance' }).waitFor({ timeout: 30_000 })
+  await page.getByRole('heading', { name: 'Statutory compliance' }).waitFor({ timeout: 30_000 })
   check('page renders at /hrms/compliance', true)
 
   // Calendar tab: the add form is no longer always open; it sits behind the header action.
@@ -88,7 +88,7 @@ try {
   await drawer.waitFor({ state: 'detached', timeout: 10_000 })
 
   // Filings tab: schedule a filing through the drawer.
-  await page.getByRole('tab', { name: 'Statutory Filings' }).click()
+  await page.locator('[aria-label="Compliance views"]').getByRole('button', { name: /^Statutory filings/ }).click()
   await page.getByRole('button', { name: 'Schedule filing' }).waitFor({ timeout: 10_000 })
   check('filings: add form is not rendered inline', (await page.getByLabel('Period').count()) === 0)
   await page.getByRole('button', { name: 'Schedule filing' }).click()
@@ -148,7 +148,7 @@ try {
     filed ? `${filed.status} ${filed.referenceNo} ${filed.filedDate}` : 'not found')
 
   // POSH: header action opens the drawer; cancel without writing to the register.
-  await page.getByRole('tab', { name: 'POSH' }).click()
+  await page.locator('[aria-label="Compliance views"]').getByRole('button', { name: /^POSH register/ }).click()
   await page.getByRole('button', { name: 'Register complaint' }).click()
   drawer = page.getByRole('dialog')
   await drawer.getByLabel('Filed date').waitFor({ timeout: 10_000 })
@@ -164,7 +164,7 @@ try {
   check('employee login cannot mark a filing filed', denied.status === 403, `${denied.status}`)
 
   mkdirSync('test-results/recovery', { recursive: true })
-  await page.getByRole('tab', { name: 'Statutory Filings' }).click()
+  await page.locator('[aria-label="Compliance views"]').getByRole('button', { name: /^Statutory filings/ }).click()
   await page.getByRole('row').filter({ hasText: period }).waitFor({ timeout: 10_000 })
   await page.screenshot({ path: 'test-results/recovery/compliance-modals-live.png', fullPage: true })
   check('no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '))

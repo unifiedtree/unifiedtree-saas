@@ -630,3 +630,26 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Its geofence step was dropped, because `live-design-companies.mjs` covers the branch drawer.
   - It now removes its certificate and project.
 - **Checked live:** `live-design-learning.mjs` 16/16 (owner, employee and department manager, with cleanup) and `live-new-admin-browser.mjs` (passes).
+
+### 11.11 Statutory compliance (`/hrms/compliance`): done
+- **Layout:** on the module kit, with four views (`?view=`) and the company picker beside them:
+  - **Compliance calendar:** stat tiles and the obligations table, with a month grid underneath. Today and days with something due are highlighted, and clicking a day lists its deadlines.
+  - **Statutory filings**
+  - **POSH register:** its confidentiality note is in the kit's green style.
+  - **Inspector access:**
+    - A panel to give access, and a link panel with Copy.
+    - Each inspection's shared PDFs open in a panel, with sizes shown.
+    - Revoking now asks for confirmation first.
+- **Fixed:**
+  - New obligations, filings and complaints defaulted to yesterday before 5:30 am, because "today" was taken in UTC. It now uses the local date.
+  - The calendar and filings views opened for anyone with `compliance.write`, but their endpoints need `compliance.read`, so a write-only role got 403s. They now require `compliance.read`.
+  - Inspectors' shared documents can be listed by anyone who can read inspections, which matches the API. Only managing them needs write.
+  - The access-end field is now limited to the next 7 days in the picker, the same as the server.
+- **Fixed (tests):**
+  - `live-inspector-browser.mjs` and `live-assets-browser.mjs` left their inspection, PDF and asset behind. They now remove them.
+  - Six older "UI verification laptop" assets from earlier runs were deleted from local data.
+  - `live-assets-browser.mjs` was updated for the new Assets drawers (it should have been in §11.8).
+- **Checked live:**
+  - `live-compliance-modals.mjs` 20/20
+  - `live-inspector-browser.mjs` (passes: link, anonymous view, PDF, CSV, revoke)
+  - `live-assets-browser.mjs` (passes)
