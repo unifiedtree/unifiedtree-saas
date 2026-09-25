@@ -21,7 +21,8 @@ export function CompaniesPageContainer() {
   const canGeofence = usePermission('org.geofence.write' as any)
 
   const companiesQ = useCompanies()
-  const branchesQ = useBranches()
+  // Archived branches too, for the "Inactive" filter (they come back with active: false).
+  const branchesQ = useBranches(undefined, { includeArchived: true })
   const [picked, setPicked] = useState<string | undefined>()
   const companiesRaw = useMemo(() => companiesQ.data ?? [], [companiesQ.data])
   const selectedId = picked && companiesRaw.some((c) => c.id === picked) ? picked : companiesRaw[0]?.id
@@ -42,11 +43,14 @@ export function CompaniesPageContainer() {
     status: c.active === false ? 'INACTIVE' : 'ACTIVE',
   })), [companiesRaw])
 
-  const branches = useMemo(() => (branchesQ.data ?? []).map((b) => ({
+  const allBranches = useMemo(() => (branchesQ.data ?? []).map((b) => ({
     id: b.id, companyId: b.companyId, name: b.name, code: b.code || '', city: b.city || '', state: b.state || '', country: b.country || 'India',
     employees: b.employeeCount ?? 0, hq: !!b.headquarters, status: b.active === false ? 'INACTIVE' : 'ACTIVE',
     geo: { on: !!b.geoFenceEnforced, lat: b.latitude ?? '', lng: b.longitude ?? '', radius: b.geoFenceRadiusMeters || 100 },
   })), [branchesQ.data])
+  // Active branches drive the cards, counts and the headquarters; archived ones show under "Inactive".
+  const branches = useMemo(() => allBranches.filter((b) => b.status === 'ACTIVE'), [allBranches])
+  const archivedBranches = useMemo(() => allBranches.filter((b) => b.status !== 'ACTIVE'), [allBranches])
 
   const cfg = hrConfig.data
   const format = cfg ? { prefix: cfg.employeeCodePrefix || 'EMP', next: String(cfg.employeeCodeNextNumber ?? 1).padStart(cfg.employeeCodePadding ?? 4, '0') } : null
@@ -61,6 +65,7 @@ export function CompaniesPageContainer() {
         canEdit={canEdit}
         companies={companies}
         branches={branches}
+        archivedBranches={archivedBranches}
         branchesLoading={branchesQ.isLoading}
         branchesError={branchesQ.isError}
         companyId={selectedId}
@@ -88,14 +93,14 @@ export function CompaniesPageContainer() {
             return true
           } catch (e) { toast.error('Could not save the employee ID format', { description: errText(e) }); return false }
         }}
-        onSaveBranch={async (b: any, currentHq: any) => {
+        onSaveBranch={async (b: any) => {
           try {
             const fields = { name: b.name, code: b.code || undefined, city: b.city, state: b.state, country: b.country, isHeadquarters: !!b.hq }
             let id: string = b.id
+            // One headquarters per company: the server switches the previous one
+            // off in this same save ("Replaces X as the headquarters").
             if (id) await updateBranch.mutateAsync({ id, ...fields })
             else id = (await createBranch.mutateAsync({ companyId: b.companyId, ...fields })).id
-            // One headquarters per company: the previous one steps down.
-            if (b.hq && currentHq && currentHq.id !== id) await updateBranch.mutateAsync({ id: currentHq.id, isHeadquarters: false })
             const g = b.geo || {}
             const hasPin = g.lat !== '' && g.lng !== '' && g.lat != null && g.lng != null
             if (hasPin) {
@@ -105,6 +110,13 @@ export function CompaniesPageContainer() {
             toast.success(b.id ? 'Branch updated' : `${b.name} created`)
             return true
           } catch (e) { toast.error('Could not save the branch', { description: errText(e) }); return false }
+        }}
+        onRestoreBranch={async (b: { id: string; name: string }) => {
+          try {
+            await updateBranch.mutateAsync({ id: b.id, isActive: true })
+            toast.success(`${b.name} restored`, { description: 'It shows in lists and pickers again.' })
+            return true
+          } catch (e) { toast.error('Could not restore the branch', { description: errText(e) }); return false }
         }}
         onArchive={async (kind: 'branch' | 'company', id: string) => {
           try {

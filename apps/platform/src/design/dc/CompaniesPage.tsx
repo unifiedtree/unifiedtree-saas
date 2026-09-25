@@ -48,10 +48,13 @@ export class CompaniesPage extends DCLogic {
     const st = p.state || 'live', canEdit = !!p.canEdit, mobile = !!p.mobile
     const nav = p.onNavigate || (() => {})
     const companies: any[] = p.companies || [], branches: any[] = p.branches || []
+    // Archived branches (API includeArchived) show only under the "Inactive" filter, with Restore.
+    const archived: any[] = p.archivedBranches || []
     const isEmpty = st === 'empty', isLoading = st === 'loading', isError = st === 'error'
     const list = isEmpty ? [] : companies
     const co0 = list.find((c) => c.id === p.companyId) || list[0] || null
     const coB = co0 ? branches.filter((b) => b.companyId === co0.id) : []
+    const coArch = co0 ? archived.filter((b) => b.companyId === co0.id) : []
     const valOf = (v: any) => (v && v.target ? v.target.value : v)
     const initials = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
     const geoCount = coB.filter((b) => b.geo.on).length
@@ -76,7 +79,8 @@ export class CompaniesPage extends DCLogic {
     })
     const q = this.state.q.trim().toLowerCase(), sf = this.state.status, cf = this.state.city
     const empUrl = (b: any) => `/hrms/employees?companyId=${b.companyId}&branchId=${b.id}`
-    const rows = coB
+    const pool = sf === 'INACTIVE' ? coArch : coB
+    const rows = pool
       .filter((b) => (!q || `${b.name} ${b.city} ${b.code}`.toLowerCase().includes(q)) && (!sf || b.status === sf) && (!cf || b.city === cf))
       .sort((a, b) => (b.hq ? 1 : 0) - (a.hq ? 1 : 0) || a.name.localeCompare(b.name))
       .map((b) => ({
@@ -86,7 +90,11 @@ export class CompaniesPage extends DCLogic {
         onEmployees: () => nav(empUrl(b)), employeesTip: `→ ${empUrl(b)}`,
         onManage: () => this.setState({ drawer: { type: 'branch', id: b.id } }),
         manageTip: canEdit ? 'Opens Edit branch' : 'Opens branch details', manageLabel: canEdit ? 'Manage' : 'View',
-        onArchive: () => this.setState({ confirm: { kind: 'branch', id: b.id, name: b.name } }),
+        archiveLabel: b.status === 'ACTIVE' ? 'Archive' : 'Restore',
+        archiveTip: b.status === 'ACTIVE' ? 'Archives this branch' : 'Restores this branch to lists and pickers',
+        onArchive: b.status === 'ACTIVE'
+          ? () => this.setState({ confirm: { kind: 'branch', id: b.id, name: b.name } })
+          : () => this.run(() => p.onRestoreBranch && p.onRestoreBranch(b), {}),
       }))
     const columns = [
       { key: 'name', header: 'Branch', render: (b: any) => createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } }, createElement('strong', { style: { fontWeight: 700, color: '#0f172a' } }, b.name), b.hq ? createElement(HrStatusPill, { tone: 'warn' } as any, 'HQ') : null) },
@@ -97,12 +105,12 @@ export class CompaniesPage extends DCLogic {
       {
         key: 'actions', header: '', render: (b: any) => createElement('div', { style: { display: 'flex', gap: 6, justifyContent: 'flex-end' }, onClick: (e: any) => e.stopPropagation() },
           createElement(HrButton, { size: 'sm', variant: 'ghost', onClick: b.onManage, 'data-tip': b.manageTip } as any, canEdit ? 'Edit' : 'View'),
-          canEdit ? createElement(HrButton, { size: 'sm', variant: 'ghost', onClick: b.onArchive, 'data-tip': 'Archives this branch' } as any, 'Archive') : null),
+          canEdit ? createElement(HrButton, { size: 'sm', variant: 'ghost', onClick: b.onArchive, 'data-tip': b.archiveTip } as any, b.archiveLabel) : null),
       },
     ]
-    const cities = [...new Set(coB.map((b) => b.city).filter(Boolean))].sort()
+    const cities = [...new Set(pool.map((b) => b.city).filter(Boolean))].sort()
     const view = mobile ? 'cards' : this.state.view
-    const hasList = !isLoading && !isError && coB.length > 0
+    const hasList = !isLoading && !isError && pool.length > 0
     const d = this.state.drawer
     const drawerBranch = d && d.type === 'branch' ? (d.id ? branches.find((b) => b.id === d.id) || null : null) : null
     const drawerCompany = d && d.type === 'company' ? (d.id ? { ...(companies.find((c) => c.id === d.id) || {}), prefix: fmt?.prefix, next: fmt?.next } : null) : null
@@ -128,8 +136,9 @@ export class CompaniesPage extends DCLogic {
       cityOptions: [{ value: '', label: 'All cities' }, ...cities.map((c) => ({ value: c, label: c }))],
       clearFilters: () => this.setState({ q: '', status: '', city: '' }),
       listLoading: isLoading || !!p.branchesLoading, listError: isError || !!p.branchesError,
-      listEmpty: !isLoading && !isError && !p.branchesLoading && coB.length === 0,
-      listNoMatch: hasList && rows.length === 0,
+      listEmpty: !isLoading && !isError && !p.branchesLoading && pool.length === 0 && sf !== 'INACTIVE',
+      // "Inactive" with nothing archived: say so rather than "No branches yet".
+      listNoMatch: (hasList && rows.length === 0) || (!isLoading && !isError && !p.branchesLoading && sf === 'INACTIVE' && pool.length === 0),
       showCards: hasList && rows.length > 0 && view === 'cards', showTable: hasList && rows.length > 0 && view === 'table',
       showAddMore: hasList && rows.length > 0 && canEdit,
       rows, columns, rowClick: (b: any) => b.onManage(),

@@ -387,8 +387,8 @@ export function CompaniesPageView({ v }: { v: any }) {
                                 </HrButton>
                                 {v.canEdit ? (
                                   <>
-                                    <HrButton variant="ghost" size="sm" onClick={b?.onArchive} data-tip="Archives this branch">
-                                      {"Archive"}
+                                    <HrButton variant="ghost" size="sm" onClick={b?.onArchive} data-tip={b?.archiveTip}>
+                                      {txt(b?.archiveLabel)}
                                     </HrButton>
                                   </>
                                 ) : null}
