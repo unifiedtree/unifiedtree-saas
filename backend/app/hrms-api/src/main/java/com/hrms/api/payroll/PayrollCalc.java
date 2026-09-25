@@ -35,7 +35,7 @@ public final class PayrollCalc {
      * the component catalogue, whatever their computation type says.
      */
     public static final Set<String> PAYROLL_MANAGED = Set.of(
-            "ADVANCE_RECOVERY", "PLI_INCENTIVE", "LWF_EMPLOYEE", "LWF_EMPLOYER",
+            "ADVANCE_RECOVERY", "PLI_INCENTIVE", "LEAVE_ENCASHMENT", "LWF_EMPLOYEE", "LWF_EMPLOYER",
             "PF_EMPLOYEE", "PF_EMPLOYER", "ESI_EMPLOYEE", "ESI_EMPLOYER", "PT");
 
     // ── Weekly offs and working days ───────────────────────────────────────────
@@ -103,6 +103,84 @@ public final class PayrollCalc {
             days.add(s);
         }
         return days;
+    }
+
+    // ── Attendance → pay (the effective day status, V143.10) ───────────────────
+
+    /** How one attendance day enters payroll: its day status (null = no attendance input) and whether it is a late mark. */
+    public record AttendancePay(DayStatus status, boolean lateMark) {}
+
+    /**
+     * The attendance record's stored status, as payroll read it before the
+     * attendance policy existed: PRESENT / LATE / PENDING_REGULARIZATION paid,
+     * ABSENT loss of pay, HALF_DAY half, HOLIDAY holiday; anything else (ON_TIME,
+     * NOT_MARKED, WFH, ON_LEAVE, WEEKEND, no record) is null so leave, holidays,
+     * weekly offs and the exception-based "present" decide.
+     */
+    public static DayStatus legacyAttendance(String recordStatus) {
+        if (recordStatus == null) return null;
+        return switch (recordStatus) {
+            case "PRESENT", "LATE", "PENDING_REGULARIZATION" -> DayStatus.PRESENT;
+            case "ABSENT" -> DayStatus.UNAUTHORIZED_ABSENT;
+            case "HALF_DAY" -> DayStatus.HALF_DAY_LEAVE;
+            case "HOLIDAY" -> DayStatus.HOLIDAY;
+            default -> null;
+        };
+    }
+
+    /**
+     * One day's attendance input to payroll, from the stored record status and
+     * the day's effective status (EffectiveDayStatusService: the company's
+     * timing policy plus reviewers' changes). Conservative on purpose, so a
+     * company that never set the policy is paid as before:
+     * <ol>
+     *   <li>No effective status (policy service not available): the stored status, as before.</li>
+     *   <li>A reviewer's manual status wins.</li>
+     *   <li>A status HR stored on the record itself (manual entry: ABSENT, HALF_DAY,
+     *       HOLIDAY) is kept.</li>
+     *   <li>A day without a punch keeps the old rule (no record = present), except a
+     *       punch HR rejected ("not them"), which is an absence. Payroll does not turn
+     *       "no punch" into an absence by itself.</li>
+     *   <li>A day with a punch follows the policy: PRESENT as before; LATE = paid
+     *       plus a late mark, or loss of pay when the policy says so (then no late
+     *       mark too, it is already unpaid); HALF_DAY = half day; ABSENT (worked under
+     *       the half-day minimum) = loss of pay.</li>
+     * </ol>
+     * Approved leave keeps precedence (dayStatuses reads leave first), and
+     * holidays / weekly offs stay payroll's own rule.
+     *
+     * @param effStatus     EffectiveDay.status, null when unknown
+     * @param manual        a reviewer set or excused the day
+     * @param punched       the day has a check-in that wasn't rejected
+     * @param punchRejected HR rejected the day's face punch-in
+     * @param lossOfPay     a late arrival past the allowance counted as loss of pay
+     */
+    public static AttendancePay attendanceDay(String recordStatus, String effStatus, boolean manual,
+                                              boolean punched, boolean punchRejected, boolean lossOfPay) {
+        DayStatus legacy = legacyAttendance(recordStatus);
+        AttendancePay asBefore = new AttendancePay(legacy, "LATE".equals(recordStatus));
+        if (effStatus == null) return asBefore;
+        if (!manual) {
+            if ("ABSENT".equals(recordStatus) || "HALF_DAY".equals(recordStatus) || "HOLIDAY".equals(recordStatus)) {
+                return new AttendancePay(legacy, false);
+            }
+            if (!punched) {
+                if (punchRejected && "ABSENT".equals(effStatus)) return new AttendancePay(DayStatus.UNAUTHORIZED_ABSENT, false);
+                return asBefore;
+            }
+        }
+        return switch (effStatus) {
+            // Not late (on time, inside the allowance, or worked on a day off):
+            // what the record said, without a late mark. A reviewer's "present"
+            // is present.
+            case "PRESENT" -> new AttendancePay(manual ? DayStatus.PRESENT : legacy, false);
+            case "LATE" -> lossOfPay && !manual
+                    ? new AttendancePay(DayStatus.UNAUTHORIZED_ABSENT, false)
+                    : new AttendancePay(DayStatus.PRESENT, true);
+            case "HALF_DAY" -> new AttendancePay(DayStatus.HALF_DAY_LEAVE, false);
+            case "ABSENT" -> new AttendancePay(DayStatus.UNAUTHORIZED_ABSENT, false);
+            default -> asBefore;
+        };
     }
 
     // ── Pay period and pay date ────────────────────────────────────────────────

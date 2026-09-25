@@ -94,6 +94,13 @@ public class EffectiveDayStatusService {
                             l != null ? l.toLocalDate() : null, parseOffs(rs.getString("weekly_off_days"))));
                 }, ids.toArray());
         if (emps.isEmpty()) return result;
+        // Weekly offs: own, else the shift's, else the company's, else Sat+Sun
+        // (AttendanceCalendar), the rule the rest of attendance uses.
+        Map<UUID, Set<Integer>> offs = com.hrms.attendance.service.AttendanceCalendar.resolveWeeklyOffDays(jdbc, emps.keySet(), today);
+        for (Emp e : new ArrayList<>(emps.values())) {
+            Set<Integer> o = offs.get(e.id());
+            if (o != null && !o.isEmpty()) emps.put(e.id(), new Emp(e.id(), e.companyId(), e.joined(), e.lastDay(), o));
+        }
         List<UUID> empIds = new ArrayList<>(emps.keySet());
         String ein = in(empIds.size());
         Set<UUID> companyIds = new HashSet<>();
@@ -160,7 +167,11 @@ public class EffectiveDayStatusService {
         // Shift assignments overlapping the window
         Map<UUID, List<Assign>> assigns = new HashMap<>();
         jdbc.query("""
-                SELECT esa.employee_id, esa.effective_from, esa.effective_to, sp.name, sp.start_time, sp.end_time, sp.grace_period_minutes
+                SELECT esa.employee_id, esa.effective_from, esa.effective_to, sp.name, sp.end_time,
+                       -- A FLEXIBLE shift with core hours is late after core start with no
+                       -- grace (w2d, V143.23); -1 tells the evaluator "no grace, not even the company's".
+                       CASE WHEN sp.shift_type = 'FLEXIBLE' AND sp.core_start_time IS NOT NULL THEN sp.core_start_time ELSE sp.start_time END AS start_time,
+                       CASE WHEN sp.shift_type = 'FLEXIBLE' AND sp.core_start_time IS NOT NULL THEN -1 ELSE sp.grace_period_minutes END AS grace_period_minutes
                   FROM attendance.employee_shift_assignments esa
                   JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id
                  WHERE esa.employee_id IN (%s) AND sp.is_active = TRUE

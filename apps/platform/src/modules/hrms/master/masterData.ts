@@ -195,7 +195,7 @@ function statNote(code: string, s: PayrollSettings | null | undefined) {
 /** The months payroll deducts LWF in, e.g. "June and December". */
 const lwfMonths = (s: PayrollSettings) => lwfMonthsLabel((s.lwfDeductionMonths?.length ? [...s.lwfDeductionMonths].sort((a, b) => a - b) : [6, 12]).join(','))
 /** Lines payroll works out itself: no amount of their own, and they say where they come from. */
-const MANAGED: Record<string, string> = { ADVANCE_RECOVERY: 'Salary advance instalments', PLI_INCENTIVE: 'Approved PLI awards' }
+const MANAGED: Record<string, string> = { ADVANCE_RECOVERY: 'Salary advance instalments', PLI_INCENTIVE: 'Approved PLI awards', LEAVE_ENCASHMENT: 'Approved leave encashments' }
 export function componentRec(c: SalaryComponent, s: PayrollSettings | null | undefined): Rec {
   const method = COMP_METHOD[c.computationType] || 'formula'
   return {

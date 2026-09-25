@@ -231,4 +231,20 @@ class AttendancePolicyEvaluatorTest {
         assertEquals(MON.minusDays(1), AttendancePolicyEvaluator.periodStart(week, MON.plusDays(2)));
         assertEquals(LocalDate.of(2026, 9, 1), AttendancePolicyEvaluator.periodStart(AttendanceTimingPolicy.defaults(CO), MON));
     }
+
+    @Test
+    void aFlexibleShiftsCoreStartHasNoGrace() {
+        // EffectiveDayStatusService passes a flexible shift with core hours as its
+        // core start and grace -1 (w2d, V143.23): late one minute after core start,
+        // and the company's 15-minute grace does not apply.
+        ShiftSlot core = new ShiftSlot("Flexi", LocalTime.of(10, 0), LocalTime.of(19, 0), -1);
+        Map<LocalDate, EffectiveDay> r = AttendancePolicyEvaluator.evaluate(CTX, List.of(
+                new DayFacts(MON, ist(MON, 10, 0), ist(MON, 19, 0), "OFFICE", false, false, core, false, false, null, null),
+                new DayFacts(MON.plusDays(1), ist(MON.plusDays(1), 10, 5), ist(MON.plusDays(1), 19, 0), "OFFICE", false, false, core, false, false, null, null)),
+                AttendanceTimingPolicy.defaults(CO), TODAY);
+        assertEquals(EffectiveDay.PRESENT, r.get(MON).status());
+        assertEquals(EffectiveDay.LATE, r.get(MON.plusDays(1)).status());
+        assertEquals(5, r.get(MON.plusDays(1)).lateMinutes());
+        assertEquals(0, r.get(MON.plusDays(1)).graceMinutes());
+    }
 }

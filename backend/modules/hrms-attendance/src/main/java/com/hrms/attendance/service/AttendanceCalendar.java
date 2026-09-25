@@ -91,6 +91,68 @@ public final class AttendanceCalendar {
         return out;
     }
 
+    /**
+     * Weekly offs of the shift each person is on, on {@code onDate}
+     * ({@code attendance.shift_policies.weekly_off_days}, V143.23). Only people
+     * whose shift has weekly offs set are in the map. Empty on failure.
+     */
+    public static Map<UUID, Set<Integer>> shiftWeeklyOffDays(JdbcTemplate jdbc, Collection<UUID> employeeIds, LocalDate onDate) {
+        Map<UUID, Set<Integer>> out = new HashMap<>();
+        if (jdbc == null || employeeIds == null || employeeIds.isEmpty() || onDate == null) return out;
+        List<Object> args = new java.util.ArrayList<>(employeeIds);
+        args.add(java.sql.Date.valueOf(onDate));
+        args.add(java.sql.Date.valueOf(onDate));
+        String in = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
+        try {
+            jdbc.query("SELECT DISTINCT ON (esa.employee_id) esa.employee_id, sp.weekly_off_days "
+                            + "FROM attendance.employee_shift_assignments esa "
+                            + "JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id "
+                            + "WHERE esa.employee_id IN (" + in + ") AND esa.effective_from <= ? "
+                            + "AND (esa.effective_to IS NULL OR esa.effective_to >= ?) AND sp.is_active = TRUE "
+                            + "ORDER BY esa.employee_id, esa.effective_from DESC",
+                    (RowCallbackHandler) rs -> {
+                        Set<Integer> set = parseOffDays(rs.getString("weekly_off_days"));
+                        if (!set.isEmpty()) out.put((UUID) rs.getObject("employee_id"), set);
+                    }, args.toArray());
+        } catch (RuntimeException ex) {
+            // no shift step
+        }
+        return out;
+    }
+
+    /**
+     * The weekly off days attendance and its reports use, for many people: their
+     * own {@code weekly_off_days}; else their shift's (w2d, V143.23); else their
+     * company's from HR Configuration (w2i); else Saturday and Sunday.
+     */
+    public static Map<UUID, Set<Integer>> resolveWeeklyOffDays(JdbcTemplate jdbc, Collection<UUID> employeeIds, LocalDate onDate) {
+        Map<UUID, Set<Integer>> out = new HashMap<>();
+        if (employeeIds == null || employeeIds.isEmpty()) return out;
+        for (UUID id : employeeIds) out.put(id, DEFAULT_OFF_DAYS);
+        if (jdbc == null) return out;
+        List<UUID> withoutOwn = new java.util.ArrayList<>(employeeIds);
+        String in = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
+        try {
+            jdbc.query("SELECT id, weekly_off_days FROM hrms.employees WHERE id IN (" + in + ")",
+                    (RowCallbackHandler) rs -> {
+                        Set<Integer> own = parseOffDays(rs.getString("weekly_off_days"));
+                        if (!own.isEmpty()) {
+                            UUID id = (UUID) rs.getObject("id");
+                            out.put(id, own);
+                            withoutOwn.remove(id);
+                        }
+                    }, employeeIds.toArray());
+        } catch (RuntimeException ex) {
+            return out;
+        }
+        if (withoutOwn.isEmpty()) return out;
+        Map<UUID, Set<Integer>> shift = shiftWeeklyOffDays(jdbc, withoutOwn, onDate);
+        out.putAll(shift);
+        withoutOwn.removeAll(shift.keySet());
+        if (!withoutOwn.isEmpty()) out.putAll(weeklyOffDays(jdbc, withoutOwn));
+        return out;
+    }
+
     /** Active company holidays (Settings → Holidays) in [start, end] for the person's company. Empty on failure. */
     public static Set<LocalDate> holidayDates(JdbcTemplate jdbc, UUID employeeId, LocalDate start, LocalDate end) {
         Set<LocalDate> dates = new HashSet<>();

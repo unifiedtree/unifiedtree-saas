@@ -42,6 +42,9 @@ public class DefaultComponentSeeder {
         {"PLI_INCENTIVE",     "Performance incentive",     "EARNING",                false, true,  "FORMULA",          null,  45},
         {"LWF_EMPLOYEE",      "Labour Welfare Fund (Employee)", "DEDUCTION",         true,  false, "STATUTORY",        null,  95},
         {"LWF_EMPLOYER",      "Labour Welfare Fund (Employer)", "EMPLOYER_CONTRIBUTION", true, false, "STATUTORY",      null,  96},
+        // V143_33 (wave 2): approved leave encashment is paid through payroll as
+        // one earnings line (LeaveEncashmentService payroll hook), like PLI.
+        {"LEAVE_ENCASHMENT",  "Leave encashment",          "EARNING",                false, true,  "FORMULA",          null,  46},
     };
 
     /** Returns the number of components after seeding (always 9 for a fresh tenant). */

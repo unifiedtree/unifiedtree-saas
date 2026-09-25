@@ -102,7 +102,10 @@ public final class AttendancePolicyEvaluator {
 
         // Expected times: the shift's, or the company start time for people without one.
         ShiftSlot shift = d.shift();
-        int grace = shift != null && shift.graceMinutes() > 0 ? shift.graceMinutes() : policy.graceMinutes();
+        // A shift's own grace wins when it is more than 0; -1 means none at all
+        // (a flexible shift measured from its core start, V143.23).
+        int grace = shift != null && shift.graceMinutes() < 0 ? 0
+                : shift != null && shift.graceMinutes() > 0 ? shift.graceMinutes() : policy.graceMinutes();
         LocalTime start = shift != null ? shift.start() : policy.defaultStartTime();
         Instant expectedStart = date.atTime(start).atZone(IST).toInstant();
         Instant expectedEnd = shift != null ? ShiftTiming.expectedEnd(date, shift.start(), shift.end()) : null;

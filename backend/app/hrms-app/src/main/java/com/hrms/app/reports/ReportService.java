@@ -24,6 +24,30 @@ public class ReportService {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Each day's effective attendance status (w1a, V143.10: the company's timing
+     * policy plus reviewers' changes). The attendance summary and late-marks
+     * reports count late days from it, so a late arrival inside the company's
+     * allowance, or one a reviewer excused, is not reported as late. Optional:
+     * without it (unit tests) the reports read the stored record status.
+     */
+    private com.hrms.attendance.policy.EffectiveDayStatusService effectiveDays;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setEffectiveDays(com.hrms.attendance.policy.EffectiveDayStatusService effectiveDays) {
+        this.effectiveDays = effectiveDays;
+    }
+
+    private Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> effective(
+            java.util.Collection<UUID> employeeIds, LocalDate from, LocalDate to) {
+        if (effectiveDays == null || employeeIds.isEmpty() || from == null || to == null) return Map.of();
+        return effectiveDays.effectiveStatuses(employeeIds, from, to);
+    }
+
+    private static UUID uuid(Object o) {
+        return o instanceof UUID u ? u : o == null ? null : UUID.fromString(o.toString());
+    }
+
     // ── 1. Headcount Report ───────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
@@ -143,6 +167,7 @@ public class ReportService {
     public List<Map<String, Object>> attendanceSummaryReport(UUID companyId, LocalDate fromDate, LocalDate toDate) {
         String sql = """
                 SELECT
+                    e.id                                                 AS employee_id,
                     e.employee_code,
                     -- COALESCE is load-bearing: in Postgres `x || NULL` is NULL,
                     -- so an employee with no last_name produced employee_name = null,
@@ -160,10 +185,35 @@ public class ReportService {
                    AND ar.attendance_date BETWEEN ? AND ?
                 WHERE e.company_id = ?
                   AND e.employment_status = 'ACTIVE'
-                GROUP BY e.employee_code, e.first_name, e.last_name, d.name
+                GROUP BY e.id, e.employee_code, e.first_name, e.last_name, d.name
                 ORDER BY late_days DESC, e.last_name
                 """;
-        return jdbc.queryForList(sql, fromDate, toDate, companyId);
+        List<Map<String, Object>> rows = jdbc.queryForList(sql, fromDate, toDate, companyId);
+        applyEffectiveSummary(rows, effective(
+                rows.stream().map(r -> uuid(r.get("employee_id"))).filter(java.util.Objects::nonNull).toList(), fromDate, toDate));
+        return rows;
+    }
+
+    /**
+     * With effective statuses: present_days = days the person came in (present,
+     * late or half day; a punch HR rejected doesn't count) and late_days = days
+     * that are effectively late. Rows keep their columns (employee_id is only
+     * used here) and are re-sorted by late days. Package-visible for tests.
+     */
+    static void applyEffectiveSummary(List<Map<String, Object>> rows,
+                                      Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> eff) {
+        for (Map<String, Object> r : rows) {
+            UUID id = uuid(r.remove("employee_id"));
+            if (eff.isEmpty() || id == null) continue;
+            Map<LocalDate, com.hrms.attendance.policy.EffectiveDay> days = eff.getOrDefault(id, Map.of());
+            long worked = days.values().stream().filter(com.hrms.attendance.policy.EffectiveDay::worked).count();
+            long late = days.values().stream().filter(d -> com.hrms.attendance.policy.EffectiveDay.LATE.equals(d.status())).count();
+            r.put("present_days", worked);
+            r.put("late_days", late);
+        }
+        if (!eff.isEmpty()) {
+            rows.sort(java.util.Comparator.comparingLong((Map<String, Object> r) -> ((Number) r.get("late_days")).longValue()).reversed());
+        }
     }
 
     // ── 4. Leave Balance Report ───────────────────────────────────────────────
@@ -200,8 +250,12 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> lateMarksReport(UUID companyId, LocalDate fromDate, LocalDate toDate) {
+        boolean policy = effectiveDays != null;
+        // With the policy every checked-in day is a candidate (the policy's start
+        // time and grace decide), without it the stored LATE status, as before.
         String sql = """
                 SELECT
+                    ar.employee_id,
                     e.employee_code,
                     -- COALESCE is load-bearing: in Postgres `x || NULL` is NULL,
                     -- so an employee with no last_name produced employee_name = null,
@@ -216,10 +270,38 @@ public class ReportService {
                 LEFT JOIN hrms.departments d ON d.id = e.department_id
                 WHERE e.company_id = ?
                   AND ar.attendance_date BETWEEN ? AND ?
-                  AND ar.attendance_status = 'LATE'
+                  AND %s
                 ORDER BY ar.late_by_minutes DESC, ar.attendance_date
-                """;
-        return jdbc.queryForList(sql, companyId, fromDate, toDate);
+                """.formatted(policy ? "ar.check_in_at IS NOT NULL" : "ar.attendance_status = 'LATE'");
+        List<Map<String, Object>> rows = jdbc.queryForList(sql, companyId, fromDate, toDate);
+        if (!policy) {
+            rows.forEach(r -> r.remove("employee_id"));
+            return rows;
+        }
+        return effectiveLateRows(rows, effective(
+                rows.stream().map(r -> uuid(r.get("employee_id"))).filter(java.util.Objects::nonNull).distinct().toList(), fromDate, toDate));
+    }
+
+    /**
+     * Keeps the days that are effectively LATE, with the policy's late minutes,
+     * newest-longest first; drops the helper employee_id column. Package-visible for tests.
+     */
+    static List<Map<String, Object>> effectiveLateRows(List<Map<String, Object>> rows,
+                                                       Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> eff) {
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (Map<String, Object> r : rows) {
+            UUID id = uuid(r.remove("employee_id"));
+            Object dateObj = r.get("attendance_date");
+            LocalDate date = dateObj instanceof java.sql.Date sd ? sd.toLocalDate()
+                    : dateObj instanceof LocalDate ld ? ld : dateObj == null ? null : LocalDate.parse(dateObj.toString());
+            com.hrms.attendance.policy.EffectiveDay d = id == null || date == null ? null : eff.getOrDefault(id, Map.of()).get(date);
+            if (d == null || !com.hrms.attendance.policy.EffectiveDay.LATE.equals(d.status())) continue;
+            if (d.lateMinutes() != null) r.put("late_by_minutes", d.lateMinutes());
+            out.add(r);
+        }
+        out.sort(java.util.Comparator.comparingInt((Map<String, Object> r) -> r.get("late_by_minutes") instanceof Number n ? n.intValue() : 0)
+                .reversed());
+        return out;
     }
 
     // ── 6. Org Diversity Report ───────────────────────────────────────────────

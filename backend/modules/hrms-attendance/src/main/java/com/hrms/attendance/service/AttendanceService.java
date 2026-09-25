@@ -478,54 +478,6 @@ public class AttendanceService {
                 .getOrDefault(employeeId, new java.util.HashSet<>(AttendanceCalendar.DEFAULT_OFF_DAYS));
     }
 
-    /** "6,7" → {6, 7}; junk and out-of-range values are skipped. */
-    private static java.util.Set<Integer> parseOffCsv(String csv) {
-        java.util.Set<Integer> set = new java.util.HashSet<>();
-        if (csv == null) return set;
-        for (String tok : csv.split(",")) {
-            try {
-                int d = Integer.parseInt(tok.trim());
-                if (d >= 1 && d <= 7) set.add(d);
-            } catch (NumberFormatException ignored) { /* skip junk */ }
-        }
-        return set;
-    }
-
-    /**
-     * Weekly offs of the shift each employee is on, on {@code onDate}
-     * (attendance.shift_policies.weekly_off_days, V143.23). Only employees whose
-     * shift has weekly offs set are in the map. Used for people who have no
-     * weekly offs of their own.
-     */
-    private java.util.Map<UUID, java.util.Set<Integer>> shiftWeeklyOffSetsFor(java.util.List<UUID> employeeIds, LocalDate onDate) {
-        java.util.Map<UUID, java.util.Set<Integer>> out = new java.util.HashMap<>();
-        if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) return out;
-        String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
-        Object[] args = new Object[employeeIds.size() + 2];
-        for (int i = 0; i < employeeIds.size(); i++) args[i] = employeeIds.get(i);
-        args[employeeIds.size()] = onDate;
-        args[employeeIds.size() + 1] = onDate;
-        try {
-            jdbcTemplate.query("""
-                    SELECT DISTINCT ON (esa.employee_id) esa.employee_id, sp.weekly_off_days
-                      FROM attendance.employee_shift_assignments esa
-                      JOIN attendance.shift_policies sp ON sp.id = esa.shift_policy_id
-                     WHERE esa.employee_id IN (%s)
-                       AND esa.effective_from <= ?
-                       AND (esa.effective_to IS NULL OR esa.effective_to >= ?)
-                       AND sp.is_active = TRUE
-                     ORDER BY esa.employee_id, esa.effective_from DESC
-                    """.formatted(inClause),
-                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
-                        java.util.Set<Integer> set = parseOffCsv(rs.getString("weekly_off_days"));
-                        if (!set.isEmpty()) out.put((UUID) rs.getObject("employee_id"), set);
-                    }, args);
-        } catch (Exception ex) {
-            log.debug("Shift weekly-off lookup failed: {}", ex.getMessage());
-        }
-        return out;
-    }
-
     /**
      * Bulk version of {@link #resolveWeeklyOffSet} for the team dashboard: one
      * query for a list of employees (same rule; missing rows get Sat+Sun). Used
@@ -536,27 +488,9 @@ public class AttendanceService {
     public java.util.Map<UUID, java.util.Set<Integer>> weeklyOffSetsFor(java.util.List<UUID> employeeIds) {
         java.util.Map<UUID, java.util.Set<Integer>> out = new java.util.HashMap<>();
         if (jdbcTemplate == null || employeeIds == null || employeeIds.isEmpty()) return out;
-        java.util.Set<Integer> fallback = new java.util.HashSet<>(AttendanceCalendar.DEFAULT_OFF_DAYS);
-        for (UUID id : employeeIds) out.put(id, fallback);
-        String inClause = String.join(",", Collections.nCopies(employeeIds.size(), "?"));
-        java.util.List<UUID> withoutOwn = new java.util.ArrayList<>(employeeIds);
-        try {
-            jdbcTemplate.query(
-                    "SELECT id, weekly_off_days FROM hrms.employees WHERE id IN (" + inClause + ")",
-                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
-                        UUID id = (UUID) rs.getObject("id");
-                        java.util.Set<Integer> set = parseOffCsv(rs.getString("weekly_off_days"));
-                        if (!set.isEmpty()) { out.put(id, set); withoutOwn.remove(id); }
-                    },
-                    employeeIds.toArray());
-        } catch (Exception ex) { /* keep the fallback map */ }
-        if (withoutOwn.isEmpty()) return out;
-        // No weekly offs of their own: their shift's, when it has some (V143.23)...
-        java.util.Map<UUID, java.util.Set<Integer>> shift = shiftWeeklyOffSetsFor(withoutOwn, LocalDate.now(IST));
-        out.putAll(shift);
-        withoutOwn.removeAll(shift.keySet());
-        // ...else their company's weekly offs from HR Configuration, else Sat+Sun (AttendanceCalendar).
-        if (!withoutOwn.isEmpty()) out.putAll(AttendanceCalendar.weeklyOffDays(jdbcTemplate, withoutOwn));
+        // Own, else the shift's (V143.23), else the company's (HR Configuration), else Sat+Sun.
+        AttendanceCalendar.resolveWeeklyOffDays(jdbcTemplate, employeeIds, LocalDate.now(IST))
+                .forEach((id, set) -> out.put(id, new java.util.HashSet<>(set)));
         return out;
     }
 

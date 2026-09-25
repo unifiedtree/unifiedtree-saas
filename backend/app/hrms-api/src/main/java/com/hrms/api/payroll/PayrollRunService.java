@@ -382,6 +382,9 @@ public class PayrollRunService {
                 DELETE FROM advance_mgmt.advance_ledger_entries
                  WHERE payroll_run_id = ? AND entry_type = 'REPAYMENT'
                 """, runId);
+        // Leave encashment (w2d): detach what this run paid last time, so the
+        // re-process below picks up the current approved set exactly once.
+        if (leaveEncashment != null) leaveEncashment.rewindRun(runId);
 
         List<EligibleEmployeeDto> eligible = queryEligible(run.companyId(), period.start(), period.end());
 
@@ -407,6 +410,19 @@ public class PayrollRunService {
         Map<UUID, BigDecimal> pliByEmp = reservePliAwards(runId, empIds, period.end());
         if (!pliByEmp.isEmpty()) components = ensureComponent(tenantId, components, "PLI_INCENTIVE");
 
+        // ── Leave encashment through payroll (w2d, V143.23) ──────────────────
+        // Every approved, unpaid encashment of someone in this run is attached to
+        // the run and paid as one "Leave encashment" earning, like PLI: in full,
+        // outside the PF/ESI base. Locking marks them paid; reopening or
+        // re-processing detaches them (rewindRun).
+        Map<UUID, BigDecimal> encashByEmp = new HashMap<>();
+        if (leaveEncashment != null && !empIds.isEmpty()) {
+            for (var enc : leaveEncashment.applyForRun(runId, empIds)) {
+                if (enc.amount() != null && enc.amount().signum() > 0) encashByEmp.merge(enc.employeeId(), enc.amount(), BigDecimal::add);
+            }
+        }
+        if (!encashByEmp.isEmpty()) components = ensureComponent(tenantId, components, "LEAVE_ENCASHMENT");
+
         // ── Labour Welfare Fund (deducted only in the configured months) ────
         boolean lwfDue = PayrollCalc.lwfDue(Boolean.TRUE.equals(settings.get("lwf_enabled")),
                 intArraySetting(settings, "lwf_deduction_months"), run.periodMonth());
@@ -416,7 +432,7 @@ public class PayrollRunService {
             components = ensureComponent(tenantId, components, "LWF_EMPLOYEE");
             components = ensureComponent(tenantId, components, "LWF_EMPLOYER");
         }
-        RunInputs inputs = new RunInputs(period, pliByEmp, lwfEmp, lwfEr);
+        RunInputs inputs = new RunInputs(period, pliByEmp, encashByEmp, lwfEmp, lwfEr);
 
         // Accumulate rows for the two batch writes so we emit them as one
         // batchUpdate per table — one round-trip against Postgres for all
@@ -545,6 +561,10 @@ public class PayrollRunService {
                  WHERE payroll_run_id = ? AND status = 'APPROVED'
                 """, runId);
             if (paid > 0) log.info("Payroll run {} locked: {} PLI award(s) marked paid through payroll", runId, paid);
+            if (leaveEncashment != null) {
+                int enc = leaveEncashment.markPaidForRun(runId);
+                if (enc > 0) log.info("Payroll run {} locked: {} leave encashment(s) marked paid", runId, enc);
+            }
         }
         return getRun(tenantId, runId);
     }
@@ -617,6 +637,9 @@ public class PayrollRunService {
                    SET status = 'APPROVED', paid_at = NULL, updated_at = now(), version = version + 1
                  WHERE payroll_run_id = ? AND status = 'PAID'
                 """, runId);
+        // Leave encashments paid by this run are unpaid again and detached;
+        // re-processing attaches the approved ones again.
+        if (leaveEncashment != null) leaveEncashment.rewindRun(runId);
         log.info("Payroll run {} reopened by {} — reason: {}", runId, actorTag, reason);
         return getRun(tenantId, runId);
     }
@@ -689,6 +712,26 @@ public class PayrollRunService {
             Integer.class, runId, employeeId);
         if (mine == null || mine == 0) throw new BusinessRuleException("No payslip for this period", "PAYSLIP_NOT_FOUND");
         return pdfRenderer.render(withLetterhead(renderPayslipHtml(buildPayslip(runId, employeeId)), tenantId, runId));
+    }
+
+    /**
+     * The day's effective attendance status (w1a, V143.10): the company's timing
+     * policy plus reviewers' changes. Optional so unit tests that build this
+     * service by hand keep the stored-status behaviour.
+     */
+    private com.hrms.attendance.policy.EffectiveDayStatusService effectiveDays;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setEffectiveDays(com.hrms.attendance.policy.EffectiveDayStatusService effectiveDays) {
+        this.effectiveDays = effectiveDays;
+    }
+
+    /** Approved leave encashment paid through payroll (w2d, V143.23). Optional for the same reason. */
+    private com.hrms.leave.service.LeaveEncashmentService leaveEncashment;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setLeaveEncashment(com.hrms.leave.service.LeaveEncashmentService leaveEncashment) {
+        this.leaveEncashment = leaveEncashment;
     }
 
     /** Optional: the workspace's own letterhead (logo + company name) on payslips. */
@@ -916,6 +959,12 @@ public class PayrollRunService {
             flatEarnings.add(new PayrollEngine.FlatLine(
                     new ComponentDef(pliMeta.code(), pliMeta.name(), "EARNING", false, pliMeta.displayOrder()), pli));
         }
+        BigDecimal encash = inputs.encashmentByEmp().get(employeeId);
+        CompMeta encashMeta = components.get("LEAVE_ENCASHMENT");
+        if (encash != null && encash.signum() > 0 && encashMeta != null) {
+            flatEarnings.add(new PayrollEngine.FlatLine(
+                    new ComponentDef(encashMeta.code(), encashMeta.name(), "EARNING", false, encashMeta.displayOrder()), encash));
+        }
         PayrollEngine.Extras extras = new PayrollEngine.Extras(flatEarnings, pay.flatDeductions(),
                 inputs.lwfEmployee(), inputs.lwfEmployer());
 
@@ -1012,6 +1061,7 @@ public class PayrollRunService {
 
     /** What processRun works out once for the whole run (V143.11). */
     private record RunInputs(PayrollCalc.Period period, Map<UUID, BigDecimal> pliByEmp,
+                             Map<UUID, BigDecimal> encashmentByEmp,
                              BigDecimal lwfEmployee, BigDecimal lwfEmployer) {}
 
     private record EmployeeMeta(LocalDate dateOfJoining, LocalDate lastWorkingDay, String weeklyOffDays) {}
@@ -1092,8 +1142,8 @@ public class PayrollRunService {
             });
         }
 
-        // Attendance records for the whole period.
-        Map<UUID, Map<LocalDate, DayStatus>> attendanceByEmp = new HashMap<>(empIds.size() * 2);
+        // Attendance records for the whole period (their stored status).
+        Map<UUID, Map<LocalDate, String>> recordStatus = new HashMap<>(empIds.size() * 2);
         jdbc.query("""
                 SELECT employee_id, attendance_date, attendance_status::text AS st
                   FROM attendance.records
@@ -1104,13 +1154,41 @@ public class PayrollRunService {
             ps.setObject(2, periodStart);
             ps.setObject(3, periodEnd);
         }, rs -> {
-            UUID eid = rs.getObject("employee_id", UUID.class);
-            LocalDate d = rs.getObject("attendance_date", LocalDate.class);
-            DayStatus s = mapAttendance(rs.getString("st"));
-            if (s != null) {
-                attendanceByEmp.computeIfAbsent(eid, k -> new HashMap<>()).put(d, s);
+            String st = rs.getString("st");
+            if (st != null) {
+                recordStatus.computeIfAbsent(rs.getObject("employee_id", UUID.class), k -> new HashMap<>())
+                        .put(rs.getObject("attendance_date", LocalDate.class), st);
             }
         });
+
+        // w1a hook: each day's effective status (the company's attendance
+        // timing policy plus reviewers' changes) decides late / half day / loss
+        // of pay on days with a punch; PayrollCalc.attendanceDay has the rules.
+        // Late marks are the days that are effectively LATE, so late arrivals
+        // inside the company's allowance, or excused, no longer count. Runs in
+        // this transaction with the tenant bound; a failure fails the run
+        // loudly rather than paying on a partial picture.
+        Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> effective =
+                effectiveDays == null ? Map.of() : effectiveDays.effectiveStatuses(empIds, periodStart, periodEnd);
+        Map<UUID, Map<LocalDate, DayStatus>> attendanceByEmp = new HashMap<>(empIds.size() * 2);
+        Map<UUID, Integer> lateMarkCountByEmp = new HashMap<>();
+        for (UUID eid : empIds) {
+            Map<LocalDate, String> recs = recordStatus.getOrDefault(eid, Map.of());
+            Map<LocalDate, com.hrms.attendance.policy.EffectiveDay> eff = effective.getOrDefault(eid, Map.of());
+            Set<LocalDate> dates = new TreeSet<>(recs.keySet());
+            dates.addAll(eff.keySet());
+            int late = 0;
+            for (LocalDate d : dates) {
+                if (d.isBefore(periodStart) || d.isAfter(periodEnd)) continue;
+                com.hrms.attendance.policy.EffectiveDay e = eff.get(d);
+                PayrollCalc.AttendancePay ap = e == null
+                        ? PayrollCalc.attendanceDay(recs.get(d), null, false, false, false, false)
+                        : PayrollCalc.attendanceDay(recs.get(d), e.status(), e.manual(), e.hasPunch(), e.punchRejected(), e.lossOfPay());
+                if (ap.status() != null) attendanceByEmp.computeIfAbsent(eid, k -> new HashMap<>()).put(d, ap.status());
+                if (ap.lateMark()) late++;
+            }
+            if (late > 0) lateMarkCountByEmp.put(eid, late);
+        }
 
         // Approved leave requests that overlap the period.
         Map<UUID, Map<LocalDate, DayStatus>> leaveByEmp = new HashMap<>(empIds.size() * 2);
@@ -1158,40 +1236,9 @@ public class PayrollRunService {
                             rs.getBigDecimal("monthly_tax")));
         });
 
-        // B3 FIX (audit 2026-08-15, corrected 2026-08-17): late-mark counts
-        // per employee. The canonical marker for a late arrival is the
-        // attendance.records.attendance_status column being 'LATE' — there is
-        // no is_late boolean column on the table (the earlier version referred
-        // to one and every payroll run silently caught the "column does not
-        // exist" and returned zeros). late_by_minutes exists too but is not a
-        // reliable predicate on its own, so we key strictly on status.
-        Map<UUID, Integer> lateMarkCountByEmp = new HashMap<>();
-        try {
-            jdbc.query("""
-                    SELECT employee_id, COUNT(*) AS n
-                      FROM attendance.records
-                     WHERE employee_id = ANY (?)
-                       AND attendance_date BETWEEN ? AND ?
-                       AND attendance_status = 'LATE'
-                     GROUP BY employee_id
-                    """, ps -> {
-                ps.setArray(1, idsArray);
-                ps.setObject(2, periodStart);
-                ps.setObject(3, periodEnd);
-            }, rs -> {
-                lateMarkCountByEmp.put(rs.getObject("employee_id", UUID.class),
-                        rs.getInt("n"));
-            });
-        } catch (RuntimeException e) {
-            // Surface, don't swallow. If the schema drifts again a payroll run
-            // must FAIL loudly in staging rather than silently zeroing every
-            // late-mark deduction across every employee (the exact failure mode
-            // this fix corrects). ERROR tag is distinctive so log alerts can
-            // catch it before it reaches customer runs.
-            log.error("LATE_MARK_LOAD_FAIL preloadRunData: late-mark count query failed for period {}..{}: {}",
-                    periodStart, periodEnd, e.getMessage(), e);
-            throw e;
-        }
+        // Late marks (B3 FIX, audit 2026-08-15) are counted above from the
+        // effective statuses; without the policy service, from records whose
+        // stored status is LATE, as before.
 
         return new PreloadedRunData(employees, structures, structureLines,
                 attendanceByEmp, leaveByEmp, holidays, ptSlabsByState,
@@ -1321,17 +1368,6 @@ public class PayrollRunService {
     // Built per employee by PayrollCalc.dayStatuses over the run's pay period
     // and the employee's own weekly offs (V143.11; was Sat+Sun for everyone).
 
-    private static DayStatus mapAttendance(String status) {
-        if (status == null) return null;
-        return switch (status) {
-            case "PRESENT", "LATE", "PENDING_REGULARIZATION" -> DayStatus.PRESENT;
-            case "ABSENT"   -> DayStatus.UNAUTHORIZED_ABSENT;
-            case "HALF_DAY" -> DayStatus.HALF_DAY_LEAVE;
-            case "HOLIDAY"  -> DayStatus.HOLIDAY;
-            // ON_LEAVE → let the leave query decide; WEEKEND → let weekend logic decide.
-            default -> null;
-        };
-    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
