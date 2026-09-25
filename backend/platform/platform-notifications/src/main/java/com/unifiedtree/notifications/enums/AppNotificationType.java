@@ -53,6 +53,10 @@ public enum AppNotificationType {
     POLICY_PUBLISHED,
     /** A reminder to acknowledge a policy (manual "Remind" or the automatic one). */
     POLICY_REMINDER,
+    // Hiring interviews (V143.20): sent to the interviewers.
+    INTERVIEW_SCHEDULED,
+    INTERVIEW_RESCHEDULED,
+    INTERVIEW_CANCELLED,
     WELCOME,
     TRIAL_ENDING_SOON,
     TRIAL_EXPIRED,

@@ -1,6 +1,7 @@
 // One onboarding checklist (/hrms/onboarding/instances/:id) on the module kit.
-// HR sees whose it is and can hold / resume / reopen it; the new hire (the API
-// only lets them open their own) sees "Your onboarding". Ticking a task off
+// HR sees whose it is and can hold / resume / reopen it and edit the hire
+// details; the new hire (the API only lets them open their own) sees "Your
+// onboarding", including their hiring manager and buddy. Ticking a task off
 // needs hrms.onboarding.task.complete; required tasks can't be skipped.
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -13,6 +14,7 @@ import type { OnboardingInstanceTask, OnboardingInstanceStatus } from './api/use
 import { useEmployeesByIds } from '../api/useWorkforce'
 import { statusLabel, statusTone } from './Instances'
 import { roleLabel } from './TemplateDetail'
+import { HireDetailsPanel } from './HireDetails'
 
 type Toast = (msg: string, err?: boolean, detail?: string) => void
 
@@ -107,6 +109,7 @@ export const InstanceDetail: React.FC = () => {
                     <HrAvatar name={name || 'Employee'} sub={[emp.employeeCode, emp.email].filter(Boolean).join(' · ')} />
                   </Panel>
                 )}
+                <HireDetailsPanel instanceId={instance.id} isHr={isHr} toast={show} />
                 <Facts items={[
                   { k: 'Status', v: <HrStatusPill tone={statusTone(instance.status)}>{statusLabel(instance.status)}</HrStatusPill> },
                   { k: 'Progress', v: `${pct}%` },

@@ -46,15 +46,18 @@ public class HiringController {
     private final EmployeeRepository employeeRepository;
     private final com.hrms.employee.workforce.repository.WorkforceCompanyRepository companies;
     private final CandidateConversionService conversions;
+    private final ConversionOnboardingStarter onboardingStarter;
 
     public HiringController(HiringService hiringService,
                             EmployeeRepository employeeRepository,
                             com.hrms.employee.workforce.repository.WorkforceCompanyRepository companies,
-                            CandidateConversionService conversions) {
+                            CandidateConversionService conversions,
+                            ConversionOnboardingStarter onboardingStarter) {
         this.hiringService = hiringService;
         this.employeeRepository = employeeRepository;
         this.companies = companies;
         this.conversions = conversions;
+        this.onboardingStarter = onboardingStarter;
     }
 
     @Operation(summary = "List hiring offers")
@@ -181,9 +184,30 @@ public class HiringController {
     // Creates an hrms.employees row, so it needs the employee-write grant as
     // well as the hiring one — conversion must not be a way round either gate.
     @PreAuthorize("hasAuthority('hrms.hiring.candidate.write') and hasAuthority('hrms.employee.write')")
-    public ResponseEntity<CandidateConversionService.ConversionResult> convertCandidate(@PathVariable UUID id) {
-        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(conversions.convert(id));
+    public ResponseEntity<ConversionResponse> convertCandidate(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        CandidateConversionService.ConversionResult result = conversions.convert(id);
+        // The onboarding starts after the conversion has committed, in its own
+        // transaction, and only for someone who may start onboardings: if no
+        // checklist template fits or it fails, the new employee still stands.
+        ConversionOnboardingStarter.Started started = null;
+        java.util.List<String> perms = jwt == null ? null : jwt.getClaimAsStringList("permissions");
+        if (perms != null && perms.contains("hrms.onboarding.instance.write")) {
+            try {
+                started = onboardingStarter.start(result.employee());
+            } catch (RuntimeException e) {
+                org.slf4j.LoggerFactory.getLogger(HiringController.class)
+                        .warn("Onboarding not started for converted employee {}: {}", result.employee().id(), e.getMessage());
+            }
+        }
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(new ConversionResponse(
+                result.candidate(), result.employee(),
+                started == null ? null : started.instanceId(), started == null ? null : started.templateName()));
     }
+
+    /** The conversion, plus the onboarding it started (both null when none was started). */
+    public record ConversionResponse(CandidateResponse candidate,
+                                     com.hrms.employee.workforce.dto.WorkforceDtos.WorkforceEmployeeResponse employee,
+                                     UUID onboardingInstanceId, String onboardingTemplateName) {}
 
     // ─── Hiring-manager identity enrichment ──────────────────────────────────
     // The hiring module has no dependency on hrms-employee, so the hiring

@@ -24,6 +24,7 @@ import com.unifiedtree.notifications.events.DocumentRejectedEvent;
 import com.unifiedtree.notifications.events.RetirementDueEvent;
 import com.unifiedtree.notifications.events.LeaveEncashmentDecidedEvent;
 import com.unifiedtree.notifications.events.LeaveEncashmentSubmittedEvent;
+import com.unifiedtree.notifications.events.InterviewNotificationEvent;
 import com.unifiedtree.notifications.events.WfhCancelledEvent;
 import com.unifiedtree.notifications.events.WfhDecidedEvent;
 import com.unifiedtree.notifications.events.WfhRequestSubmittedEvent;
@@ -842,6 +843,34 @@ public class DomainEventListener {
                     e.approved() ? "Leave encashment approved" : "Leave encashment rejected", body, data);
         } catch (Exception ex) {
             log.warn("Failed to publish LEAVE_ENCASHMENT decision notification for {}: {}", e.requestId(), ex.getMessage());
+        }
+    }
+
+    // ─── Hiring interviews (V143.20) ───────────────────────────────────────
+    // Each interviewer is told when they are put on an interview, when its
+    // time, place or mode changes, when it is cancelled and when they are taken
+    // off it. The event carries every detail, so nothing is read here.
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onInterview(InterviewNotificationEvent e) {
+        if (e.recipientEmployeeIds() == null || e.recipientEmployeeIds().isEmpty()) return;
+        AppNotificationType type = switch (e.kind() == null ? "" : e.kind()) {
+            case "RESCHEDULED" -> AppNotificationType.INTERVIEW_RESCHEDULED;
+            case "CANCELLED", "REMOVED" -> AppNotificationType.INTERVIEW_CANCELLED;
+            default -> AppNotificationType.INTERVIEW_SCHEDULED;
+        };
+        String title = InterviewNotificationText.title(e.kind());
+        String body = InterviewNotificationText.body(e);
+        for (UUID recipient : e.recipientEmployeeIds()) {
+            try {
+                Map<String, Object> data = new HashMap<>();
+                data.put("type", type.name());
+                data.put("interviewId", e.interviewId().toString());
+                data.put("route", "/me/interviews");
+                service.create(e.tenantId(), recipient, type, title, body, data);
+            } catch (Exception ex) {
+                log.warn("Failed to publish {} notification for interview {} to {}: {}",
+                        type, e.interviewId(), recipient, ex.getMessage());
+            }
         }
     }
 

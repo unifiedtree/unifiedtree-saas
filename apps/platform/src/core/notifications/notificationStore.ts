@@ -36,6 +36,10 @@ export type AppNotificationType =
   | 'SHIFT_CHANGE_REJECTED'
   // A reviewer changed or excused a day, or checked a face punch (V143.10).
   | 'ATTENDANCE_STATUS_CHANGED'
+  // Hiring interviews (V143.20), sent to the interviewers; data.route is /me/interviews.
+  | 'INTERVIEW_SCHEDULED'
+  | 'INTERVIEW_RESCHEDULED'
+  | 'INTERVIEW_CANCELLED'
   | 'WELCOME'
   | 'TRIAL_ENDING_SOON'
   | 'TRIAL_EXPIRED'
@@ -233,6 +237,7 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   // to anyone without the admin view) and their salary structure.
   if (type === 'ADVANCE_RAISED_FOR_YOU') return '/hrms/advances'
   if (type === 'SALARY_REVISED') return '/me/salary'
+  if (type.startsWith('INTERVIEW_')) return '/me/interviews'
 
   if (type === 'WELCOME') return '/'
   // Retirement alerts (HR): the retiring person's record.

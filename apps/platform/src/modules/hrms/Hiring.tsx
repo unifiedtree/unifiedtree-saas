@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Plus, Pencil, UserPlus, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { useToast } from '@/shared/hooks/useToast'
@@ -10,12 +10,13 @@ import {
 } from '@/shared/components/hr'
 import { ModulePage, Views, useView, StatRow, State, Panel, CARD, HEAD_FONT } from '@/design/module/ModuleKit'
 import { OffersTab } from './hiring/OffersTab'
+import { CandidateDrawer, InterviewsTab, scorecardLine } from './hiring/Interviews'
 import { useCompanies } from './api/useOrg'
 import {
   useRequisitions, useRequisition, useCreateRequisition, useUpdateRequisition, useCloseRequisition,
-  useCandidates, useAddCandidate, useUpdateCandidateStage, useConvertCandidate,
-  inr, CANDIDATE_STAGES, EMPLOYMENT_TYPES,
-  type RequisitionStatus, type CandidateStage, type EmploymentType, type JobRequisition, type Candidate,
+  useCandidateBoard, useAddCandidate, useUpdateCandidateStage, useConvertCandidate,
+  inr, istWhen, canMoveStage, CANDIDATE_STAGES, EMPLOYMENT_TYPES,
+  type RequisitionStatus, type CandidateStage, type EmploymentType, type JobRequisition, type CandidateCard,
 } from './api/useHiring'
 
 const STATUS_TONE: Record<RequisitionStatus, PillTone> = {
@@ -23,12 +24,12 @@ const STATUS_TONE: Record<RequisitionStatus, PillTone> = {
 }
 
 const STAGE_TONE: Record<CandidateStage, PillTone> = {
-  APPLIED: 'gray', SCREENING: 'info', INTERVIEW: 'purple', OFFER: 'warn', HIRED: 'green', REJECTED: 'red',
+  APPLIED: 'gray', SCREENING: 'info', INTERVIEW: 'purple', OFFER: 'warn', HIRED: 'green', REJECTED: 'red', WITHDRAWN: 'gray',
 }
 
 const fmtEnum = (c: string) => c.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase())
 
-type Tab = 'requisitions' | 'pipeline' | 'offers'
+type Tab = 'requisitions' | 'pipeline' | 'interviews' | 'offers'
 
 // Hiring (/hrms/hiring) in the design language of the redesigned modules
 // (design/module/ModuleKit). Requisitions and the pipeline need
@@ -40,10 +41,19 @@ export const Hiring: React.FC = () => {
   const canCandidateWrite = usePermission('hrms.hiring.candidate.write')
   const canOfferRead = usePermission('hrms.hiring.offer.read')
   const views = [
-    ...(canRead ? [{ key: 'pipeline', label: 'Pipeline', icon: 'workflow' }, { key: 'requisitions', label: 'Requisitions', icon: 'briefcase' }] : []),
+    ...(canRead ? [{ key: 'pipeline', label: 'Pipeline', icon: 'workflow' }, { key: 'requisitions', label: 'Requisitions', icon: 'briefcase' }, { key: 'interviews', label: 'Interviews', icon: 'calendarClock' }] : []),
     ...(canOfferRead ? [{ key: 'offers', label: 'Offers', icon: 'fileText' }] : []),
   ]
+  // The dashboard links to ?tab=candidates&stage=…: "candidates" is the pipeline board.
   const [tab, setTab] = useView(views.map((v) => v.key), 'tab') as [Tab, (k: string) => void]
+  // Links inside this page (a requisition's "Pipeline", an interview's "Open
+  // pipeline") navigate within the same route, and useView only reads the URL
+  // when the page loads, so follow ?tab= on every in-app navigation.
+  const location = useLocation()
+  useEffect(() => {
+    const next = new URLSearchParams(location.search).get('tab')
+    if (next && next !== tab && views.some((v) => v.key === next)) setTab(next)
+  }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <ModulePage crumb="Recruitment" title="Hiring" subtitle="Open roles, move candidates through the stages, and make offers.">
       <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
@@ -51,6 +61,7 @@ export const Hiring: React.FC = () => {
           : <State kind="empty" icon="lock" title="No hiring access" description="Ask an admin if you should see open roles or candidates." />}
         {tab === 'requisitions' && canRead && <RequisitionsTab canWrite={canWrite} />}
         {tab === 'pipeline' && canRead && <PipelineTab canCandidateWrite={canCandidateWrite} />}
+        {tab === 'interviews' && canRead && <InterviewsTab />}
         {tab === 'offers' && canOfferRead && <OffersTab />}
       </div>
     </ModulePage>
@@ -335,14 +346,27 @@ function RequisitionsTab({ canWrite }: { canWrite: boolean }) {
 
 // ── Pipeline ─────────────────────────────────────────────────────────────────
 
+const ALL_ROLES = 'all'
+
 function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
   const { toast } = useToast()
   const { data } = useRequisitions(0)
   const requisitions = useMemo(() => data?.content ?? [], [data])
-  // ?role=<requisition id> opens that role's pipeline (the Requisitions list links here).
+  // ?role=<requisition id> opens that role's pipeline (the Requisitions list links here);
+  // ?stage=<STAGE> shows only that stage (the dashboard's hiring rows link here, for every role).
   const [params, setParams] = useSearchParams()
-  const [requisitionId, setRequisitionIdState] = useState(params.get('role') || '')
-  const setRequisitionId = (id: string) => { setRequisitionIdState(id); setParams((p) => { const n = new URLSearchParams(p); n.set('role', id); return n }, { replace: true }) }
+  const stageParam = (params.get('stage') || '').toUpperCase()
+  const stage = (CANDIDATE_STAGES as string[]).includes(stageParam) ? (stageParam as CandidateStage) : ''
+  const [requisitionId, setRequisitionIdState] = useState(params.get('role') || (stage ? ALL_ROLES : ''))
+  // Starts from the address bar, not the router's copy: the view tabs change
+  // ?tab= outside the router, and a stale tab here would switch the view back.
+  const setParam = (key: string, value: string) => setParams(() => { const n = new URLSearchParams(window.location.search); if (value) n.set(key, value); else n.delete(key); return n }, { replace: true })
+  const setRequisitionId = (id: string) => { setRequisitionIdState(id); setParam('role', id) }
+  const setStage = (st: string) => setParam('stage', st)
+  const [openCard, setOpenCard] = useState<CandidateCard | null>(null)
+  // Drag and drop between stage columns: the same stage API as the "Move to" select.
+  const [dragging, setDragging] = useState<CandidateCard | null>(null)
+  const [overStage, setOverStage] = useState<CandidateStage | null>(null)
 
   useEffect(() => {
     if (!requisitionId && requisitions.length > 0) {
@@ -351,8 +375,9 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
     }
   }, [requisitions, requisitionId])
 
-  const selected: JobRequisition | undefined = requisitions.find((r) => r.id === requisitionId)
-  const { data: candidates = [], isLoading } = useCandidates(requisitionId || undefined)
+  const allRoles = requisitionId === ALL_ROLES
+  const selected: JobRequisition | undefined = allRoles ? undefined : requisitions.find((r) => r.id === requisitionId)
+  const { data: candidates = [], isLoading } = useCandidateBoard({ requisitionId: allRoles ? undefined : requisitionId || undefined, stage: stage || undefined }, !!requisitionId)
   const addCandidate = useAddCandidate()
   const updateStage = useUpdateCandidateStage()
   const convert = useConvertCandidate()
@@ -388,40 +413,52 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
     }
   }
 
-  const onStage = async (id: string, stage: CandidateStage) => {
+  const onStage = async (id: string, to: CandidateStage) => {
     try {
-      await updateStage.mutateAsync({ id, stage })
+      await updateStage.mutateAsync({ id, stage: to })
       toast('Stage updated', 'success')
     } catch (e) {
       toast((e as Error)?.message ?? 'Failed', 'error')
     }
   }
+  const onDrop = (to: CandidateStage) => {
+    const c = dragging
+    setDragging(null); setOverStage(null)
+    if (c && c.stage !== to && canMoveStage(c.stage, to)) void onStage(c.id, to)
+  }
 
-  const onConvert = async (c: Candidate) => {
+  const onConvert = async (c: CandidateCard) => {
+    const role = selected?.title || c.requisitionTitle
     const ok = await confirm({
       title: `Convert ${c.fullName} to an employee?`,
-      body: `Creates their employee record in the company of ${selected?.title ? `the "${selected.title}" requisition` : 'this requisition'}, with the name, email and phone on file, plus the department, role, joining date and CTC from the requisition and accepted offer where recorded. It uses one workspace seat. Complete the rest on their profile.`,
+      body: `Creates their employee record in the company of ${role ? `the "${role}" requisition` : 'this requisition'}, with the name, email and phone on file, plus the department, role, joining date and CTC from the requisition and accepted offer where recorded. It uses one workspace seat. If a checklist template fits their department, their onboarding starts too, with the offer accepted date, hiring manager, recruiter and source filled in. Complete the rest on their profile.`,
       confirmLabel: 'Create employee',
     })
     if (!ok) return
     try {
       const result = await convert.mutateAsync(c.id)
-      toast(`${c.fullName} is now employee ${result.employee.employeeCode}`, 'success')
+      toast(result.onboardingInstanceId
+        ? `${c.fullName} is now employee ${result.employee.employeeCode}. Onboarding started with “${result.onboardingTemplateName}”.`
+        : `${c.fullName} is now employee ${result.employee.employeeCode}`, 'success')
       navigate(`/hrms/employees/${result.employee.id}`)
     } catch (e) {
       toast((e as Error)?.message ?? 'Could not convert the candidate', 'error')
     }
   }
 
+  const columns = stage ? [stage] : CANDIDATE_STAGES
   const byStage = new Map(CANDIDATE_STAGES.map((st) => [st, candidates.filter((c) => c.stage === st)]))
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Role</span>
         <div style={{ minWidth: 280 }}><HrSelect value={requisitionId} onChange={setRequisitionId} size="sm" placeholder={requisitions.length ? 'Choose a role' : 'No requisitions yet'}
-          options={requisitions.map((r) => ({ value: r.id, label: `${r.title} · ${fmtEnum(r.status)}` }))} /></div>
+          options={[{ value: ALL_ROLES, label: 'All roles' }, ...requisitions.map((r) => ({ value: r.id, label: `${r.title} · ${fmtEnum(r.status)}` }))]} /></div>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Stage</span>
+        <div style={{ minWidth: 180 }}><HrSelect value={stage} onChange={setStage} size="sm"
+          options={[{ value: '', label: 'All stages' }, ...CANDIDATE_STAGES.map((st) => ({ value: st, label: fmtEnum(st) }))]} /></div>
         {selected && <HrStatusPill tone={STATUS_TONE[selected.status]}>{`${selected.openings} ${selected.openings === 1 ? 'opening' : 'openings'}`}</HrStatusPill>}
-        {selected && <span style={{ fontSize: 12.5, color: '#64748b' }}>{`${candidates.length} ${candidates.length === 1 ? 'candidate' : 'candidates'}`}</span>}
+        {(selected || allRoles) && <span style={{ fontSize: 12.5, color: '#64748b' }}>{`${candidates.length} ${candidates.length === 1 ? 'candidate' : 'candidates'}`}</span>}
       </div>
 
       {canAdd && (
@@ -452,23 +489,45 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
         : isLoading ? <State kind="loading" height={220} />
           : (
             <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
-              <div role="list" aria-label="Pipeline by stage" style={{ display: 'grid', gridTemplateColumns: `repeat(${CANDIDATE_STAGES.length}, minmax(220px, 1fr))`, gap: 12, minWidth: CANDIDATE_STAGES.length * 232 }}>
-                {CANDIDATE_STAGES.map((st) => {
+              <div role="list" aria-label="Pipeline by stage" style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, minmax(220px, 1fr))`, gap: 12, minWidth: columns.length * 232 }}>
+                {columns.map((st) => {
                   const list = byStage.get(st) || []
+                  const dropOk = !!dragging && canMoveStage(dragging.stage, st)
                   return (
-                    <section key={st} role="listitem" aria-label={`${fmtEnum(st)}: ${list.length}`} style={{ ...CARD, background: '#f8fafc', padding: 10, display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', alignContent: 'start', gap: 8, minHeight: 180, minWidth: 0 }}>
+                    <section key={st} role="listitem" aria-label={`${fmtEnum(st)}: ${list.length}`}
+                      onDragOver={(e) => { if (!dropOk) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (overStage !== st) setOverStage(st) }}
+                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null) && overStage === st) setOverStage(null) }}
+                      onDrop={(e) => { e.preventDefault(); onDrop(st) }}
+                      style={{ ...CARD, background: '#f8fafc', padding: 10, display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', alignContent: 'start', gap: 8, minHeight: 180, minWidth: 0, ...(dropOk ? { borderColor: overStage === st ? '#059669' : '#a7f3d0' } : null) }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px 6px' }}>
                         <h3 style={{ margin: 0, flex: 1, fontFamily: HEAD_FONT, fontSize: 14, fontWeight: 800 }}>{fmtEnum(st)}</h3>
                         <HrStatusPill tone={STAGE_TONE[st]}>{String(list.length)}</HrStatusPill>
                       </div>
                       {list.length === 0 && <p style={{ margin: 0, padding: '14px 6px', fontSize: 12.5, color: '#94a3b8', textAlign: 'center', border: '1px dashed #e2e8f0', borderRadius: 10 }}>No one here</p>}
-                      {list.map((c, i) => (
-                        <article key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 12px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 8, minWidth: 0, overflow: 'hidden' }}>
-                          <HrAvatar name={c.fullName} sub={c.email} seed={i} />
+                      {list.map((c, i) => {
+                        const movable = canCandidateWrite && c.stage !== 'REJECTED' && c.stage !== 'WITHDRAWN'
+                        const cards = scorecardLine(c.scorecards)
+                        return (
+                        <article key={c.id} draggable={movable}
+                          onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.id); setDragging(c) }}
+                          onDragEnd={() => { setDragging(null); setOverStage(null) }}
+                          aria-grabbed={dragging?.id === c.id ? true : undefined}
+                          style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 12px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 8, minWidth: 0, overflow: 'hidden', cursor: movable ? 'grab' : undefined, opacity: dragging?.id === c.id ? 0.6 : 1 }}>
+                          <button type="button" onClick={() => setOpenCard(c)} aria-label={`Open ${c.fullName}: interviews and scorecards`}
+                            style={{ border: 0, padding: 0, margin: 0, background: 'transparent', font: 'inherit', color: 'inherit', textAlign: 'left', cursor: 'pointer', minWidth: 0 }}>
+                            <HrAvatar name={c.fullName} sub={c.email} seed={i} />
+                          </button>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 12, color: '#64748b' }}>
-                            {c.source && <span>{c.source}</span>}
+                            {allRoles && c.requisitionTitle && <span>{c.requisitionTitle}</span>}
+                            {c.source && <span>{allRoles && c.requisitionTitle ? '· ' : ''}{c.source}</span>}
                             {c.expectedCtc != null && <span>· expects {inr(c.expectedCtc)}</span>}
                           </div>
+                          {(c.nextInterviewAt || cards) && (
+                            <div style={{ display: 'grid', gap: 2, fontSize: 12, color: '#64748b' }}>
+                              {c.nextInterviewAt && <span>{`Interview ${istWhen(c.nextInterviewAt)} IST${c.upcomingInterviews > 1 ? ` (+${c.upcomingInterviews - 1} more)` : ''}`}</span>}
+                              {cards && <span>{cards}</span>}
+                            </div>
+                          )}
                           {canCandidateWrite && (
                             <select value={c.stage} onChange={(e) => onStage(c.id, e.target.value as CandidateStage)} disabled={updateStage.isPending}
                               className="ut-select ut-select-sm" aria-label={`Move ${c.fullName} to stage`}>
@@ -480,14 +539,17 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
                             : c.stage === 'HIRED' && canConvert
                               ? <HrButton size="sm" variant="ghost" disabled={convert.isPending} onClick={() => onConvert(c)}><UserPlus size={14} /> Convert to employee</HrButton>
                               : null}
+                          <HrButton size="sm" variant="ghost" onClick={() => setOpenCard(c)}>Interviews & scorecards</HrButton>
                         </article>
-                      ))}
+                        )
+                      })}
                     </section>
                   )
                 })}
               </div>
             </div>
           )}
+      {openCard && <CandidateDrawer card={candidates.find((c) => c.id === openCard.id) ?? openCard} onClose={() => setOpenCard(null)} />}
     </div>
   )
 }

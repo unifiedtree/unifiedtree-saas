@@ -173,6 +173,7 @@ const MODULE_ITEMS: NavItemDef[] = [
       { label: 'Salary', path: '/me/salary', icon: <Wallet size={15} />, visibleForRoles: R_ESS },
       { label: 'Work from home', path: '/me/wfh', icon: <Home size={15} />, visibleForRoles: R_ESS },
       { label: 'Shift change', path: '/me/shift-change', icon: <Clock size={15} />, visibleForRoles: R_ESS },
+      { label: 'My assets', path: '/me/assets', icon: <Package size={15} />, visibleForRoles: R_ESS },
       { label: 'Team Attendance', path: '/team', icon: <Users size={15} />, visibleForRoles: ['DEPT_MANAGER'] },
     ],
   },

@@ -30,9 +30,11 @@ import java.util.UUID;
 public class OnboardingController {
 
     private final OnboardingService onboardingService;
+    private final OnboardingHireDetailsService hireDetails;
 
-    public OnboardingController(OnboardingService onboardingService) {
+    public OnboardingController(OnboardingService onboardingService, OnboardingHireDetailsService hireDetails) {
         this.onboardingService = onboardingService;
+        this.hireDetails = hireDetails;
     }
 
 
@@ -125,6 +127,20 @@ public class OnboardingController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/templates/{templateId}/tasks/order")
+    @Operation(summary = "Put a template's tasks in a new order (every task exactly once); onboardings already started keep theirs")
+    @PreAuthorize("hasAuthority('hrms.onboarding.template.write')")
+    public OnboardingTemplate reorderTasks(@PathVariable UUID templateId, @Valid @RequestBody ReorderTasksRequest req) {
+        return onboardingService.reorderTasks(templateId, req.taskIds());
+    }
+
+    @GetMapping("/owner-roles")
+    @Operation(summary = "The workspace's roles a checklist task can be owned by")
+    @PreAuthorize("hasAnyAuthority('hrms.onboarding.template.read','hrms.onboarding.template.write')")
+    public List<java.util.Map<String, Object>> ownerRoles() {
+        return onboardingService.ownerRoles();
+    }
+
     // ── Instances ─────────────────────────────────────────────────────────
 
     // 2026-09-08 audit: horizontal privilege escalation. V038 seeds the base
@@ -183,6 +199,26 @@ public class OnboardingController {
         }
         // Was IN_PROGRESS-only; a finished run then read as "no onboarding".
         return onboardingService.getLatestInstanceForEmployee(employeeId);
+    }
+
+    @GetMapping("/instances/{instanceId}/hire-details")
+    @Operation(summary = "Offer accepted date, hiring manager, recruiter, source and buddy of an onboarding")
+    @PreAuthorize("hasAuthority('hrms.onboarding.instance.read')")
+    public OnboardingHireDetailsService.HireDetails getHireDetails(@PathVariable UUID instanceId,
+                                                                  @AuthenticationPrincipal Jwt jwt) {
+        if (!isHrOrAdmin(jwt) && !hireDetails.employeeOf(instanceId).equals(extractEmployeeId(jwt))) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "You can only view your own onboarding.");
+        }
+        return hireDetails.get(instanceId);
+    }
+
+    @PutMapping("/instances/{instanceId}/hire-details")
+    @Operation(summary = "Change the hire details of an onboarding")
+    @PreAuthorize("hasAuthority('hrms.onboarding.instance.write')")
+    public OnboardingHireDetailsService.HireDetails updateHireDetails(@PathVariable UUID instanceId,
+                                                                     @RequestBody OnboardingHireDetailsService.UpdateRequest req) {
+        return hireDetails.update(instanceId, req);
     }
 
     @GetMapping("/instances/{instanceId}/tasks")
@@ -259,4 +295,6 @@ public class OnboardingController {
     public record CompleteTaskRequest(String notes) {}
 
     public record UpdateInstanceStatusRequest(@NotBlank String status) {}
+
+    public record ReorderTasksRequest(@NotNull List<UUID> taskIds) {}
 }
