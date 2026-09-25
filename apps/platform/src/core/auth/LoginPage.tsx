@@ -4,8 +4,12 @@ import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Camera, Eye, EyeOff } from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
-import { apiJson, AuthResponse, currentSubdomain, WorkspaceStatus } from '@/core/api/client'
+import { apiJson, AuthResponse, currentSubdomain, HttpError, WorkspaceStatus } from '@/core/api/client'
 import { markWelcomeIntent } from '@/core/auth/WelcomeSplash'
+
+/** /login's answer when the password was right but a two-factor code is needed. */
+type MfaChallenge = { mfaRequired?: boolean; mfaSetupRequired?: boolean; mfaToken?: string }
+type MfaSetupInfo = { secret: string; qrSvg: string; issuer: string }
 
 /** Workspace slugs are lowercase alphanumeric + hyphens, like a DNS label. */
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/
@@ -43,6 +47,13 @@ export const LoginPage: React.FC = () => {
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
   const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus | null>(null)
+  // Two-factor step (after a correct password): the challenge, the code typed,
+  // the QR when the workspace requires set-up, and the recovery codes shown
+  // once after set-up before the session starts.
+  const [mfa, setMfa] = useState<{ token: string; setup: boolean; status: WorkspaceStatus } | null>(null)
+  const [mfaCode, setMfaCode] = useState('')
+  const [setupInfo, setSetupInfo] = useState<MfaSetupInfo | null>(null)
+  const [recovery, setRecovery] = useState<{ codes: string[]; auth: AuthResponse; status: WorkspaceStatus } | null>(null)
 
   const subdomain = useMemo(() => currentSubdomain(), [])
   const needsWorkspace = !subdomain
@@ -105,11 +116,33 @@ export const LoginPage: React.FC = () => {
         return
       }
 
-      const auth = await apiJson<AuthResponse>('/v1/canonical-auth/login', {
+      // mfaCapable: this page can show the two-factor step, so the server
+      // answers with a challenge instead of refusing the sign-in.
+      const auth = await apiJson<AuthResponse & MfaChallenge>('/v1/canonical-auth/login', {
         method: 'POST',
-        body: JSON.stringify({ tenantId: status.tenantId, email, password }),
+        body: JSON.stringify({ tenantId: status.tenantId, email, password, mfaCapable: true }),
       })
+      if ((auth.mfaRequired || auth.mfaSetupRequired) && auth.mfaToken) {
+        setMfaCode('')
+        setSetupInfo(null)
+        setMfa({ token: auth.mfaToken, setup: !!auth.mfaSetupRequired, status })
+        if (auth.mfaSetupRequired) {
+          setSetupInfo(await apiJson<MfaSetupInfo>('/v1/canonical-auth/login/mfa/setup', {
+            method: 'POST', body: JSON.stringify({ mfaToken: auth.mfaToken }),
+          }))
+        }
+        return
+      }
+      finishLogin(auth, status)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to sign in')
+    } finally {
+      setLoading(false)
+    }
+  }
 
+  /** Start the session (shared by password-only and two-factor sign-in). */
+  const finishLogin = (auth: AuthResponse, status: WorkspaceStatus) => {
       loginWithCredentials({
         token:         auth.accessToken,
         userId:        auth.userId || auth.employeeId || '',
@@ -131,11 +164,53 @@ export const LoginPage: React.FC = () => {
       // afterwards stay silent.
       markWelcomeIntent()
       navigate('/')
+  }
+
+  /** The two-factor step: a code from the app, a recovery code, or the first code after set-up. */
+  const handleMfaSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!mfa) return
+    setLoading(true)
+    setError('')
+    try {
+      const res = await apiJson<AuthResponse & { recoveryCodes?: string[] }>('/v1/canonical-auth/login/mfa', {
+        method: 'POST',
+        body: JSON.stringify({ mfaToken: mfa.token, code: mfaCode.trim() }),
+      })
+      if (res.recoveryCodes && res.recoveryCodes.length > 0) {
+        setRecovery({ codes: res.recoveryCodes, auth: res, status: mfa.status })
+        return
+      }
+      finishLogin(res, mfa.status)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to sign in')
+      if (err instanceof HttpError && err.status === 401) {
+        // The step expired (10 minutes): start again from the password.
+        setMfa(null)
+        setSetupInfo(null)
+        setPassword('')
+      }
+      setError(err instanceof Error ? err.message : 'That code didn’t work')
     } finally {
       setLoading(false)
     }
+  }
+
+  const backToPassword = () => {
+    setMfa(null)
+    setSetupInfo(null)
+    setMfaCode('')
+    setError('')
+  }
+
+  const downloadCodes = (codes: string[]) => {
+    const url = URL.createObjectURL(new Blob([`Recovery codes (each works once)\n\n${codes.join('\n')}\n`], { type: 'text/plain;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'recovery-codes.txt'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }
 
   const inputClass =
@@ -200,7 +275,80 @@ export const LoginPage: React.FC = () => {
           </motion.div>
         )}
 
-        {needsWorkspace ? (
+        {recovery ? (
+          /* Two-factor was just set up: the recovery codes are shown once. */
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <p className={labelClass}>Save your recovery codes</p>
+              <p className="text-[13px] leading-relaxed text-gray-600">
+                If you lose your phone, each code signs you in once instead of the 6-digit code. They are shown only now; keep them somewhere safe that isn&apos;t your phone.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 rounded-[10px] border border-gray-200 bg-gray-50/50 px-4 py-3 font-mono text-sm font-semibold tracking-wide text-gray-900">
+              {recovery.codes.map((c) => <span key={c}>{c}</span>)}
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => { void navigator.clipboard?.writeText(recovery.codes.join('\n')) }} className="h-10 flex-1 rounded-xl border border-gray-200 bg-white text-[13.5px] font-semibold text-gray-700 hover:bg-gray-50">Copy</button>
+              <button type="button" onClick={() => downloadCodes(recovery.codes)} className="h-10 flex-1 rounded-xl border border-gray-200 bg-white text-[13.5px] font-semibold text-gray-700 hover:bg-gray-50">Download</button>
+            </div>
+            <button
+              type="button"
+              onClick={() => finishLogin(recovery.auth, recovery.status)}
+              className="mt-2 flex h-[46px] w-full items-center justify-center rounded-xl bg-emerald-600 text-[15px] font-bold text-white shadow-sm transition-all duration-200 hover:bg-emerald-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-[0.98]"
+            >
+              I&apos;ve saved them, continue
+            </button>
+          </div>
+        ) : mfa ? (
+          /* Two-factor step: the password was right; now the code. */
+          <form onSubmit={handleMfaSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <p className={labelClass}>{mfa.setup ? 'Set up two-factor sign-in' : 'Two-factor sign-in'}</p>
+              <p className="text-[13px] leading-relaxed text-gray-600">
+                {mfa.setup
+                  ? 'Your workspace requires a code from an authenticator app when you sign in. Scan this with Google Authenticator, Microsoft Authenticator or a similar app, then enter the 6-digit code it shows.'
+                  : 'Enter the 6-digit code from your authenticator app. Lost your phone? Enter one of your recovery codes instead.'}
+              </p>
+            </div>
+            {mfa.setup && (setupInfo ? (
+              <div className="flex flex-col items-center gap-2">
+                <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(setupInfo.qrSvg)}`} alt="QR code to scan with your authenticator app" width={168} height={168} className="rounded-[10px] border border-gray-200 bg-white p-1" />
+                <p className="text-center text-[12.5px] text-gray-500">Can&apos;t scan? Enter this setup key:</p>
+                <p className="break-all text-center font-mono text-[13px] font-bold tracking-wider text-gray-900">{setupInfo.secret.match(/.{1,4}/g)?.join(' ')}</p>
+              </div>
+            ) : (
+              <p className="text-center text-[13px] text-gray-500">Preparing your QR code…</p>
+            ))}
+            <div className="space-y-1.5">
+              <label className={labelClass} htmlFor="mfa-code">{mfa.setup ? '6-digit code' : 'Code'}</label>
+              <input
+                id="mfa-code"
+                type="text"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                className={`${inputClass} font-mono tracking-widest`}
+                placeholder="123456"
+                inputMode={mfa.setup ? 'numeric' : 'text'}
+                autoComplete="one-time-code"
+                maxLength={mfa.setup ? 7 : 11}
+                autoFocus
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading || !mfaCode.trim() || (mfa.setup && !setupInfo)}
+              className="mt-6 flex h-[46px] w-full items-center justify-center rounded-xl bg-emerald-600 text-[15px] font-bold text-white shadow-sm transition-all duration-200 hover:bg-emerald-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-[0.98] disabled:opacity-70"
+            >
+              {loading ? 'Checking…' : mfa.setup ? 'Turn on and sign in' : 'Verify'}
+            </button>
+            <p className="pt-1 text-center">
+              <button type="button" onClick={backToPassword} className="text-[13.5px] font-medium text-[var(--text-link)] hover:underline">
+                Back to sign in
+              </button>
+            </p>
+          </form>
+        ) : needsWorkspace ? (
           /* No subdomain: ask only which workspace, then hand off to its own
              branded login. No credentials are collected on this screen. */
           <form onSubmit={handleWorkspaceContinue} className="space-y-4">
