@@ -343,8 +343,11 @@ public class AccountService {
                    AND aw.auth_user_id = ?
                    AND aw.status = 'ACTIVE'
                 """, rs -> rs.next() ? mapMembership(rs) : null, tenantId, authUserId);
-        String role = membership != null ? membership.role() : roleFromJwt(tenantJwt);
-        if (!"OWNER".equals(role)) {
+        // Permission, not the membership role name (V143.17): the endpoint is
+        // already gated on workspace.modules.buy, which only OWNER holds and
+        // which is CRITICAL (only an owner can give it to anyone else).
+        List<String> tokenPermissions = tenantJwt.getClaimAsStringList("permissions");
+        if (tokenPermissions == null || !tokenPermissions.contains("workspace.modules.buy")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the workspace owner can buy modules");
         }
 
@@ -368,7 +371,8 @@ public class AccountService {
                     requested_at = now()
                 """, UUID.randomUUID(), tenantId, normalizedModule);
 
-        return membership != null ? workspaceForMembership(membership) : workspaceForTenantFallback(tenantId, role);
+        return membership != null ? workspaceForMembership(membership)
+                : workspaceForTenantFallback(tenantId, roleFromJwt(tenantJwt));
     }
 
     private List<WorkspaceSummary> workspacesForAccount(UUID accountId) {

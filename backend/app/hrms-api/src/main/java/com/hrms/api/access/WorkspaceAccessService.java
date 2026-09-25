@@ -44,9 +44,10 @@ public class WorkspaceAccessService {
     private static final List<String> MODULE_PRIORITY =
         List.of("hrms", "crm", "accounts", "attendance", "leave");
 
-    // Roles that must NOT be assignable through this admin surface.
-    private static final Set<String> EXCLUDED_ROLES =
-        Set.of("SUPER_ADMIN", "OWNER", "ADMIN", "MANAGER", "PLATFORM_SUPER_ADMIN");
+    // Who may give which role is decided by AccessPolicy (the "levels" rules:
+    // only what you hold, CRITICAL and OWNER / SUPER_ADMIN only by an OWNER,
+    // never your own access). Platform roles and the legacy MANAGER role are
+    // never offered.
 
     private final UserCredentialsRepository credRepo;
     private final UserRoleRepository userRoleRepo;
@@ -54,19 +55,25 @@ public class WorkspaceAccessService {
     private final InvitationService invitationService;
     private final WorkforceEmployeeService workforceService;
     private final JdbcTemplate jdbc;
+    private final AccessGuard guard;
+    private final AccessAudit audit;
 
     public WorkspaceAccessService(UserCredentialsRepository credRepo,
                                   UserRoleRepository userRoleRepo,
                                   RoleRepository roleRepo,
                                   InvitationService invitationService,
                                   WorkforceEmployeeService workforceService,
-                                  JdbcTemplate jdbc) {
+                                  JdbcTemplate jdbc,
+                                  AccessGuard guard,
+                                  AccessAudit audit) {
         this.credRepo = credRepo;
         this.userRoleRepo = userRoleRepo;
         this.roleRepo = roleRepo;
         this.invitationService = invitationService;
         this.workforceService = workforceService;
         this.jdbc = jdbc;
+        this.guard = guard;
+        this.audit = audit;
     }
 
     // ── DTOs ────────────────────────────────────────────────────────────────
@@ -80,8 +87,16 @@ public class WorkspaceAccessService {
         // Latest invitation email delivery state: PENDING | SENT | FAILED | null (never invited)
         String invitationSendStatus, String lastSendError) {}
 
+    /**
+     * A role the Manage access drawer lists. {@code canGrant} / {@code grantBlockedReason}
+     * say whether the signed-in admin may give it (AccessPolicy), and
+     * {@code riskLevel} is the highest risk among its permissions, so the UI
+     * can ask for confirmation before giving a HIGH / CRITICAL role.
+     */
     public record AssignableRoleDto(
-        String roleCode, String displayName, String module, boolean moduleActive) {}
+        String roleCode, String displayName, String module, boolean moduleActive,
+        String description, boolean systemRole, String riskLevel,
+        boolean canGrant, String grantBlockedReason, int permissionCount) {}
 
     public record InviteRequest(
         String email, String firstName, String lastName,
@@ -136,16 +151,23 @@ public class WorkspaceAccessService {
     }
 
     @Transactional
-    public List<AssignableRoleDto> listAssignableRoles(UUID tenantId) {
+    public List<AssignableRoleDto> listAssignableRoles(UUID tenantId, UUID actorId) {
         bindTenant(tenantId);
         Set<String> active = activeModuleKeys(tenantId);
+        AccessPolicy.Actor actor = guard.actor(actorId);
+        Map<String, String> risk = guard.riskByCode();
         List<AssignableRoleDto> out = new ArrayList<>();
         for (Role role : roleRepo.findAllByOrderByCodeAsc()) {
-            if (EXCLUDED_ROLES.contains(role.getCode())) continue;
+            if (AccessPolicy.NEVER_ASSIGNABLE_ROLES.contains(role.getCode())) continue;
+            List<String> perms = guard.permissionsOfRole(role.getId());
+            if (perms.stream().anyMatch(AccessPolicy::isPlatform)) continue;
             Set<String> gated = gatedModulesForRole(role.getId());
             String module = primaryModule(gated);
             boolean moduleActive = gated.isEmpty() || active.containsAll(gated);
-            out.add(new AssignableRoleDto(role.getCode(), role.getDisplayName(), module, moduleActive));
+            String blocked = AccessPolicy.grantBlockedReason(actor, role.getCode(), role.getDisplayName(), perms, risk);
+            out.add(new AssignableRoleDto(role.getCode(), role.getDisplayName(), module, moduleActive,
+                role.getDescription(), role.isSystemRole(), AccessPolicy.highestRisk(perms, risk),
+                blocked == null, blocked, perms.size()));
         }
         return out;
     }
@@ -158,12 +180,25 @@ public class WorkspaceAccessService {
         Role role = resolveAssignableRole(roleCode);
         gateModuleActive(tenantId, role);
 
-        credRepo.findById(userId)
+        UserCredentials target = credRepo.findById(userId)
             .orElseThrow(() -> new BusinessRuleException("User not found", "USER_NOT_FOUND"));
 
         boolean already = userRoleRepo.findAllByUserId(userId).stream()
             .anyMatch(ur -> ur.getRoleId().equals(role.getId()));
-        if (!already) grant(tenantId, userId, role.getId(), actorId);
+        if (already) return;
+
+        // Levels: never your own access, an OWNER's access only by an OWNER,
+        // only roles whose permissions you hold, CRITICAL / OWNER roles only by an OWNER.
+        AccessPolicy.Actor actor = requireManager(actorId);
+        AccessPolicy.requireCanChangeUser(actor, userId, guard.isOwner(userId));
+        AccessPolicy.requireCanGrantRole(actor, role.getCode(), role.getDisplayName(),
+            guard.permissionsOfRole(role.getId()), guard.riskByCode());
+
+        grant(tenantId, userId, role.getId(), actorId);
+        audit.record(actor.userId(), AccessAudit.PERMISSION_CHANGE, "USER", userId,
+            "Gave the " + role.getDisplayName() + " role to " + target.getEmail(),
+            Map.of("user", target.getEmail(), "roleGiven", role.getCode()));
+        guard.evict(userId);
     }
 
     @Transactional
@@ -171,20 +206,38 @@ public class WorkspaceAccessService {
         bindTenant(tenantId);
         Role role = roleRepo.findByCode(roleCode)
             .orElseThrow(() -> new BusinessRuleException("Unknown role", "ROLE_NOT_FOUND"));
+        boolean held = userRoleRepo.findAllByUserId(userId).stream()
+            .anyMatch(ur -> ur.getRoleId().equals(role.getId()));
+        if (!held) return;
 
-        // Self-lockout guard: caller may not remove their OWN last admin-capable role.
-        if (userId.equals(actorId) && roleHasPermission(role.getId(), "workspace.users.manage")) {
-            long remainingAdmin = userRoleRepo.findAllByUserId(userId).stream()
-                .filter(ur -> !ur.getRoleId().equals(role.getId()))
-                .filter(ur -> roleHasPermission(ur.getRoleId(), "workspace.users.manage"))
-                .count();
-            if (remainingAdmin == 0) {
-                throw new BusinessRuleException(
-                    "You cannot remove your own last admin role.", "CANNOT_REMOVE_OWN_ADMIN");
-            }
-        }
-        // Removing a user's last role (not self-lockout) IS allowed — they fall to No-Access.
+        // Nobody removes their own roles (which also stops an admin locking
+        // themselves out), and OWNER / SUPER_ADMIN, or an OWNER's roles, are
+        // changed only by an OWNER. Removing someone's last role IS allowed:
+        // they fall to No-Access.
+        AccessPolicy.Actor actor = requireManager(actorId);
+        AccessPolicy.requireCanChangeUser(actor, userId, guard.isOwner(userId));
+        AccessPolicy.requireCanRevokeRole(actor, role.getCode(), role.getDisplayName());
+
         userRoleRepo.deleteById(new UserRole.PK(tenantId, userId, role.getId()));
+        String email = credRepo.findById(userId).map(UserCredentials::getEmail).orElse(userId.toString());
+        audit.record(actor.userId(), AccessAudit.PERMISSION_CHANGE, "USER", userId,
+            "Took the " + role.getDisplayName() + " role away from " + email,
+            Map.of("user", email, "roleRemoved", role.getCode()));
+        guard.evict(userId);
+    }
+
+    /**
+     * The acting admin, who must hold a role-management permission right now
+     * (not just in their token): workspace.users.manage (Users &amp; access) or
+     * rbac.role.write (Roles &amp; permissions → Who has which role).
+     */
+    private AccessPolicy.Actor requireManager(UUID actorId) {
+        AccessPolicy.Actor actor = guard.actor(actorId);
+        if (!actor.holds(UserPermissionService.MANAGE_USERS) && !actor.holds("rbac.role.write")) {
+            throw AccessPolicy.refused("You need the “Manage workspace users” permission to change roles.",
+                "PERMISSION_REQUIRED");
+        }
+        return actor;
     }
 
     @Transactional
@@ -195,13 +248,26 @@ public class WorkspaceAccessService {
         }
         boolean createEmp = req.createEmployee() == null || req.createEmployee();
 
-        // Resolve + module-gate all requested roles up front (fail fast).
+        // Resolve + module-gate all requested roles up front (fail fast), and
+        // apply the same levels as assignRole: you may only invite someone into
+        // roles you could give them.
         List<String> roleCodes = req.roleCodes() == null ? List.of() : req.roleCodes();
         List<Role> roles = new ArrayList<>();
+        AccessPolicy.Actor actor = roleCodes.isEmpty() ? null : guard.actor(actorId);
+        Map<String, String> risk = roleCodes.isEmpty() ? Map.of() : guard.riskByCode();
         for (String code : roleCodes) {
             Role role = resolveAssignableRole(code);
             gateModuleActive(tenantId, role);
+            if (!"EMPLOYEE".equals(role.getCode())) {
+                AccessPolicy.requireCanGrantRole(actor, role.getCode(), role.getDisplayName(),
+                    guard.permissionsOfRole(role.getId()), risk);
+            }
             roles.add(role);
+        }
+        if (!roles.isEmpty()) {
+            audit.record(actorId, AccessAudit.PERMISSION_CHANGE, "USER", null,
+                "Invited " + req.email() + " with the roles " + roles.stream().map(Role::getDisplayName).toList(),
+                Map.of("user", req.email(), "rolesGiven", roles.stream().map(Role::getCode).toList()));
         }
 
         if (createEmp) {
@@ -279,7 +345,7 @@ public class WorkspaceAccessService {
     private Role resolveAssignableRole(String roleCode) {
         Role role = roleRepo.findByCode(roleCode)
             .orElseThrow(() -> new BusinessRuleException("Unknown role: " + roleCode, "ROLE_NOT_FOUND"));
-        if (EXCLUDED_ROLES.contains(role.getCode())) {
+        if (AccessPolicy.NEVER_ASSIGNABLE_ROLES.contains(role.getCode())) {
             throw new BusinessRuleException("Role not assignable here", "ROLE_NOT_ASSIGNABLE");
         }
         return role;
@@ -345,13 +411,6 @@ public class WorkspaceAccessService {
         return new HashSet<>(jdbc.queryForList(
             "SELECT module_key FROM platform.tenant_modules WHERE tenant_id = ? AND status = 'ACTIVE'",
             String.class, tenantId));
-    }
-
-    private boolean roleHasPermission(UUID roleId, String permCode) {
-        Integer c = jdbc.queryForObject(
-            "SELECT count(*) FROM rbac.role_permissions WHERE role_id = ? AND permission_code = ?",
-            Integer.class, roleId, permCode);
-        return c != null && c > 0;
     }
 
     private static String deriveStatus(Boolean active, Object invitedAt, String passwordHash) {

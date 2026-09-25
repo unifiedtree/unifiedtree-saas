@@ -47,7 +47,7 @@ public class TenantController {
 
     @Operation(summary = "Create a new company within the current tenant")
     @PostMapping("/companies")
-    @PreAuthorize("hasAnyRole('COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('org.company.write')")
     public ResponseEntity<CompanyResponse> createCompany(@Valid @RequestBody CompanyRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(tenantService.createCompany(request, TenantContext.getTenantId()));
@@ -55,14 +55,14 @@ public class TenantController {
 
     @Operation(summary = "Get a company by ID")
     @GetMapping("/companies/{companyId}")
-    @PreAuthorize("hasAnyRole('COMPANY_ADMIN','SUPER_ADMIN','HR_MANAGER')")
+    @PreAuthorize("hasAuthority('org.company.read')")
     public ResponseEntity<CompanyResponse> getCompany(@PathVariable UUID companyId) {
         return ResponseEntity.ok(tenantService.getCompany(companyId));
     }
 
     @Operation(summary = "List companies in this tenant")
     @GetMapping("/companies")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','COMPANY_ADMIN')")
+    @PreAuthorize("hasAuthority('org.company.read')")
     public ResponseEntity<PageResponse<CompanyResponse>> listCompanies(
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(tenantService.listCompanies(pageable));
@@ -72,7 +72,7 @@ public class TenantController {
 
     @Operation(summary = "Create a department")
     @PostMapping("/departments")
-    @PreAuthorize("hasAnyRole('COMPANY_ADMIN','SUPER_ADMIN','HR_MANAGER')")
+    @PreAuthorize("hasAuthority('hrms.department.write')")
     public ResponseEntity<DepartmentResponse> createDepartment(
             @Valid @RequestBody DepartmentRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -88,7 +88,7 @@ public class TenantController {
 
     @Operation(summary = "Assign a department head")
     @PostMapping("/departments/{deptId}/head")
-    @PreAuthorize("hasAnyRole('COMPANY_ADMIN','SUPER_ADMIN','HR_MANAGER')")
+    @PreAuthorize("hasAuthority('hrms.department.write')")
     public ResponseEntity<Void> assignHead(
             @PathVariable UUID deptId,
             @RequestParam UUID employeeId) {
@@ -100,7 +100,7 @@ public class TenantController {
 
     @Operation(summary = "Create a branch / office location")
     @PostMapping("/branches")
-    @PreAuthorize("hasAnyRole('COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('org.company.write')")
     public ResponseEntity<BranchResponse> createBranch(@Valid @RequestBody BranchRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(branchService.createBranch(request));
     }

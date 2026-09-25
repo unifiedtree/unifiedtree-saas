@@ -233,10 +233,9 @@ public class LegacyAttendanceExtrasController {
         return employees;
     }
 
+    /** Company-wide view: the attendance.workforce.admin permission (was role names; V143.17). */
     private boolean isAdmin(Jwt jwt) {
-        List<String> roles = jwt.getClaimAsStringList("roles");
-        return roles != null && roles.stream()
-                .anyMatch(r -> r.equals("HR_MANAGER") || r.equals("COMPANY_ADMIN") || r.equals("SUPER_ADMIN"));
+        return AttendanceController.isAdmin(jwt);
     }
 
     private UUID extractEmployeeId(Jwt jwt) {

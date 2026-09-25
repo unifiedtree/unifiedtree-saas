@@ -754,6 +754,13 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
 - **Added (Audit logs):** "Export this page" writes the rows on screen to a CSV and records it in the Reports Center. The page says it's one page only.
   - **Static / to build:** there's no server export of the full trail.
 - **Checked live:** `live-design-access.mjs` 16/16 (users tiles, filter and search; a temporary role granted and removed from the drawer; built-in roles read-only; catalogue view and search; the audit day filter matching the API over the full local day; CSV export; event details; the temporary role removed).
+- **Done (w1h, migrations `V143_17`, `V143_17_1`): per-person permissions, duplicate roles, levels, descriptions, no role-name bypasses.**
+  - Manage access drawer: new "Extra and removed permissions" section (search the catalogue, reason required, optional end date) and "What they can do" with the source of every permission (role, every employee, extra). API `GET/PUT /v1/workspace/users/{id}/permissions`, new permission `rbac.access.manage-overrides` (critical). Effective = (roles + employee baseline + extras) − removed, in the sign-in token, `/me` and `@perm`.
+  - Roles: "Duplicate role" (`POST /v1/rbac/roles/{id}/duplicate`) opens the copy's permissions next; delete says who holds the role; errors show the server's reason.
+  - Levels: nobody changes their own access; only the owner changes the owner; you only give roles or permissions you hold; critical permissions and the Owner / Super admin roles only from the owner; high-risk grants ask for confirmation (the server insists). Every change is in the audit log.
+  - Every permission has a description and a risk level (Low / Medium / High / Critical); High and Critical carry a warning. Shown in the catalogue, the role editor and the drawer.
+  - Role-name checks replaced by permissions across `/v1/employees`, settings, tenant compat, milestones, attendance and performance scope, plan and module buying (new `hrms.employee.team.manage` for department managers). Built-in roles keep their access.
+  - Live test: `live-w1h.mjs` (API only).
 
 ### 11.16 PLI for employees, Employee import, Bank profiles & payment tools: done
 - **PLI (`/hrms/pli` for people without the admin view):**

@@ -17,8 +17,8 @@ import java.util.stream.Collectors;
  * Whose performance data (reviews, cycle progress, KPIs, the rating
  * directory) the caller may see. Decided 2026-09-25 with the client:
  * <ul>
- *   <li>Admin / HR roles ({@link KpiAccessScope#ADMIN_ROLES}): the whole company.</li>
- *   <li>DEPT_MANAGER / MANAGER: <b>their team</b>, defined exactly like the My team
+ *   <li>Admin / HR ({@link KpiAccessScope#ADMIN_PERMISSIONS}): the whole company.</li>
+ *   <li>Managers ({@link KpiAccessScope#TEAM_PERMISSION}): <b>their team</b>, defined exactly like the My team
  *       page ({@link TeamEmployeeScope}): everyone in the department(s) they head,
  *       or their direct reports if they head none. Never themselves; their own
  *       reviews and goals are on the self-service endpoints.</li>

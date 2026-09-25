@@ -99,7 +99,10 @@ public class MilestonesController {
      */
     @Operation(summary = "Send today's milestone reminders for this workspace now (idempotent)")
     @PostMapping("/send-reminders")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','OWNER','COMPANY_ADMIN','HR_MANAGER')")
+    // Was role names SUPER_ADMIN / OWNER / HR_MANAGER. Exactly those roles hold
+    // hrms.notiftemplate.write: whoever manages the workspace's messages may
+    // send today's milestone messages now (V143.17).
+    @PreAuthorize("hasAuthority('hrms.notiftemplate.write')")
     public SendRemindersResponse sendReminders(
             @RequestParam(value = "date", required = false) String date) {
         UUID tenantId = TenantContext.getTenantId();

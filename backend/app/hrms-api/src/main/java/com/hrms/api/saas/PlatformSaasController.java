@@ -38,7 +38,7 @@ public class PlatformSaasController {
     @Operation(summary = "List tenant signup requests")
     @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/tenant-requests")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('platform.tenant.read')")
     public ResponseEntity<List<TenantRequestSummary>> tenantRequests(
             @RequestParam(required = false) String status) {
         return ResponseEntity.ok(saasPlatformService.tenantRequests(status));
@@ -47,7 +47,7 @@ public class PlatformSaasController {
     @Operation(summary = "Approve requested tenant modules")
     @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/tenant-requests/{tenantId}/approve")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('platform.tenant.approve')")
     public ResponseEntity<TenantRequestSummary> approve(
             @PathVariable UUID tenantId,
             @Valid @RequestBody ApprovalRequest request,
@@ -58,7 +58,7 @@ public class PlatformSaasController {
     @Operation(summary = "Reject a tenant signup request")
     @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/tenant-requests/{tenantId}/reject")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('platform.tenant.reject')")
     public ResponseEntity<TenantRequestSummary> reject(
             @PathVariable UUID tenantId,
             @Valid @RequestBody RejectionRequest request,

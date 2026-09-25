@@ -49,7 +49,9 @@ class WorkspaceAccessResendTest {
             mock(RoleRepository.class),
             invitationService,
             mock(WorkforceEmployeeService.class),
-            mock(JdbcTemplate.class));
+            mock(JdbcTemplate.class),
+            mock(com.hrms.api.access.AccessGuard.class),
+            mock(com.hrms.api.access.AccessAudit.class));
     }
 
     private UserCredentials creds(boolean active, UUID employeeId) {

@@ -21,9 +21,11 @@ import java.util.UUID;
 public class WorkspaceAccessController {
 
     private final WorkspaceAccessService service;
+    private final UserPermissionService permissions;
 
-    public WorkspaceAccessController(WorkspaceAccessService service) {
+    public WorkspaceAccessController(WorkspaceAccessService service, UserPermissionService permissions) {
         this.service = service;
+        this.permissions = permissions;
     }
 
     @GetMapping("/users")
@@ -34,8 +36,35 @@ public class WorkspaceAccessController {
 
     @GetMapping("/assignable-roles")
     @PreAuthorize("hasAuthority('workspace.users.read')")
-    public List<WorkspaceAccessService.AssignableRoleDto> assignableRoles() {
-        return service.listAssignableRoles(TenantContext.getTenantId());
+    public List<WorkspaceAccessService.AssignableRoleDto> assignableRoles(@AuthenticationPrincipal Jwt jwt) {
+        return service.listAssignableRoles(TenantContext.getTenantId(), UUID.fromString(jwt.getSubject()));
+    }
+
+    /**
+     * One person's access: their roles, every permission they end up with and
+     * where it comes from, their individual extra / removed permissions, and
+     * whether the caller may change them (and which permissions they could give).
+     */
+    @GetMapping("/users/{userId}/permissions")
+    @PreAuthorize("hasAnyAuthority('workspace.users.read','rbac.access.manage-overrides')")
+    public UserPermissionService.UserPermissionsView userPermissions(@PathVariable UUID userId,
+                                                                    @AuthenticationPrincipal Jwt jwt) {
+        return permissions.view(userId, UUID.fromString(jwt.getSubject()));
+    }
+
+    /**
+     * Replace one person's individual permission overrides with this list
+     * (GRANT = extra, DENY = removed; reason required, end date optional).
+     * Levels apply: never your own access, only what you hold, CRITICAL only by
+     * the owner, HIGH / CRITICAL only with {@code acknowledgeRisk}.
+     */
+    @PutMapping("/users/{userId}/permissions")
+    @PreAuthorize("hasAuthority('rbac.access.manage-overrides')")
+    public UserPermissionService.UserPermissionsView replaceUserPermissions(
+            @PathVariable UUID userId,
+            @RequestBody UserPermissionService.PutPermissionsRequest req,
+            @AuthenticationPrincipal Jwt jwt) {
+        return permissions.replace(userId, UUID.fromString(jwt.getSubject()), req);
     }
 
     @PostMapping("/users/{userId}/roles")

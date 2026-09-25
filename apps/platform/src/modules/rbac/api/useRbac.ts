@@ -12,12 +12,23 @@ export interface RbacRole {
   createdAt: string
 }
 
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+
 export interface RbacPermission {
   code: string
   displayName: string
   module: string
-  description: string
+  /** Plain-English: what this lets a person do. */
+  description: string | null
+  /** LOW · MEDIUM · HIGH (money, everyone's salary, personal data, deletions) · CRITICAL (who can do what, billing; owner-only to give). */
+  riskLevel: RiskLevel
+  /** Shown before granting a HIGH / CRITICAL permission. */
+  warning: string | null
 }
+
+export const RISK_LABEL: Record<RiskLevel, string> = { LOW: 'Low risk', MEDIUM: 'Medium risk', HIGH: 'High risk', CRITICAL: 'Critical' }
+export const RISK_TONE: Record<RiskLevel, 'gray' | 'info' | 'warn' | 'red'> = { LOW: 'gray', MEDIUM: 'info', HIGH: 'warn', CRITICAL: 'red' }
+export const isRisky = (r?: string | null) => r === 'HIGH' || r === 'CRITICAL'
 
 const ROLES_KEY = ['rbac', 'roles'] as const
 const PERMISSIONS_KEY = ['rbac', 'permissions'] as const
@@ -44,13 +55,17 @@ export function useRolePermissions(roleId: string) {
   })
 }
 
+/**
+ * Replace a custom role's permissions. Adding a HIGH / CRITICAL permission
+ * needs `acknowledgeRisk` (the page shows the warnings first).
+ */
 export function useSetRolePermissions(roleId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (permissionCodes: string[]) =>
-      apiJson<void>(`/v1/rbac/roles/${roleId}/permissions`, {
+    mutationFn: ({ codes, acknowledgeRisk = false }: { codes: string[]; acknowledgeRisk?: boolean }) =>
+      apiJson<string[]>(`/v1/rbac/roles/${roleId}/permissions?acknowledgeRisk=${acknowledgeRisk}`, {
         method: 'PUT',
-        body: JSON.stringify(permissionCodes),
+        body: JSON.stringify(codes),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ROLES_KEY })
@@ -65,6 +80,22 @@ export function useCreateRole() {
     mutationFn: (body: { code: string; displayName: string; description?: string; cloneFromRoleId?: string }) =>
       apiJson<RbacRole>('/v1/rbac/roles', { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
+  })
+}
+
+/** "Duplicate role": copy a built-in or custom role into a new custom role you can change. */
+export function useDuplicateRole() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ roleId, displayName, code, description }: { roleId: string; displayName: string; code?: string; description?: string }) =>
+      apiJson<RbacRole>(`/v1/rbac/roles/${roleId}/duplicate`, {
+        method: 'POST',
+        body: JSON.stringify({ displayName, code, description }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ROLES_KEY })
+      qc.invalidateQueries({ queryKey: ['rbac', 'workspace', 'assignable-roles'] })
+    },
   })
 }
 
@@ -84,7 +115,10 @@ export function useDeleteRole() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (roleId: string) => apiJson<void>(`/v1/rbac/roles/${roleId}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ROLES_KEY }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ROLES_KEY })
+      qc.invalidateQueries({ queryKey: ['rbac', 'workspace'] })
+    },
   })
 }
 

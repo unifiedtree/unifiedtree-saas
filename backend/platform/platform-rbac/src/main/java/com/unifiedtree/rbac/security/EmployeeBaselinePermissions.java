@@ -59,6 +59,7 @@ public class EmployeeBaselinePermissions {
     private static final String CACHE_KEY = "baseline";
 
     private final JdbcTemplate jdbc;
+    private final PermissionOverrides overrides;
 
     private final Cache<String, Set<String>> cache = Caffeine.newBuilder()
             .expireAfterWrite(5, TimeUnit.MINUTES)
@@ -72,8 +73,9 @@ public class EmployeeBaselinePermissions {
      */
     private volatile Set<String> lastKnownGood = Set.of();
 
-    public EmployeeBaselinePermissions(JdbcTemplate jdbc) {
+    public EmployeeBaselinePermissions(JdbcTemplate jdbc, PermissionOverrides overrides) {
         this.jdbc = jdbc;
+        this.overrides = overrides;
     }
 
     /**
@@ -128,6 +130,22 @@ public class EmployeeBaselinePermissions {
             effective.addAll(baseline());
         }
         return List.copyOf(effective);
+    }
+
+    /**
+     * Effective permissions for one user, including their per-person overrides
+     * (V143.17): {@code (roles ∪ baseline ∪ GRANT overrides) − DENY overrides}.
+     * This is the set the JWT claim, {@code /me} and the {@code @perm} bean all
+     * resolve, so the three can never disagree about one person.
+     *
+     * @param userId the credential id whose overrides apply; {@code null} skips them
+     */
+    public List<String> effectiveFor(java.util.Collection<String> rolePermissions,
+                                     java.util.UUID employeeId,
+                                     java.util.UUID userId) {
+        List<String> base = effectiveFor(rolePermissions, employeeId);
+        if (userId == null || overrides == null) return base;
+        return PermissionOverrides.apply(base, overrides.activeFor(userId));
     }
 
     /** Drop the cached baseline; call after re-granting the EMPLOYEE role. */

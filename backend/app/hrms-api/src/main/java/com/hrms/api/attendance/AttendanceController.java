@@ -711,20 +711,8 @@ public class AttendanceController {
         }
         UUID caller = extractEmployeeId(jwt);
         if (targetEmployeeId.equals(caller)) return;
-        var auth = org.springframework.security.core.context.SecurityContextHolder
-                .getContext().getAuthentication();
-        if (auth != null) {
-            for (var ga : auth.getAuthorities()) {
-                String a = ga.getAuthority();
-                if ("hrms.employees.read.all".equals(a)
-                        || "attendance.admin.read".equals(a)
-                        || "ROLE_HR_MANAGER".equals(a)
-                        || "ROLE_COMPANY_ADMIN".equals(a)
-                        || "ROLE_OWNER".equals(a)
-                        || "ROLE_ADMIN".equals(a)
-                        || "ROLE_SUPER_ADMIN".equals(a)) return;
-            }
-        }
+        // Company-wide attendance admins (permission, not role name: V143.17).
+        if (isAdmin(jwt)) return;
         Employee target = employeeRepository.findById(targetEmployeeId).orElse(null);
         if (target != null && caller.equals(target.getManagerId())) return;
         throw new org.springframework.security.access.AccessDeniedException(
@@ -735,19 +723,26 @@ public class AttendanceController {
         return new TeamEmployeeScope(employeeRepository, departmentRepository).resolve(jwt, departmentId);
     }
 
+    // Permission-based since V143.17; these used to test role names, which the
+    // Roles & permissions screen (and per-person overrides) could not change.
+    /** Sees a team: holds attendance.team.read (the My team page permission). */
     static boolean isManagerOrAdmin(Jwt jwt) {
-        List<String> roles = jwt.getClaimAsStringList("roles");
-        return roles != null && roles.stream()
-                .anyMatch(role -> role.equals("DEPT_MANAGER") || role.equals("HR_MANAGER")
-                        || role.equals("MANAGER") || role.equals("OWNER") || role.equals("ADMIN")
-                        || role.equals("COMPANY_ADMIN") || role.equals("SUPER_ADMIN"));
+        return hasPermission(jwt, "attendance.team.read");
     }
 
+    /**
+     * Company-wide attendance: holds attendance.workforce.admin. Exactly the
+     * roles that used to pass by name (HR_MANAGER, ADMIN, OWNER, SUPER_ADMIN).
+     */
     static boolean isAdmin(Jwt jwt) {
-        List<String> roles = jwt.getClaimAsStringList("roles");
-        return roles != null && roles.stream()
-                .anyMatch(role -> role.equals("HR_MANAGER") || role.equals("COMPANY_ADMIN") || role.equals("SUPER_ADMIN")
-                        || role.equals("OWNER") || role.equals("ADMIN"));
+        return hasPermission(jwt, "attendance.workforce.admin");
+    }
+
+    /** The token's permissions claim (the same set Spring Security checks with hasAuthority). */
+    static boolean hasPermission(Jwt jwt, String permission) {
+        if (jwt == null) return false;
+        List<String> permissions = jwt.getClaimAsStringList("permissions");
+        return permissions != null && permissions.contains(permission);
     }
 
     private Map<UUID, String> departmentNames(List<Employee> employees) {
