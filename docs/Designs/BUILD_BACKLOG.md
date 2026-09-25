@@ -17,7 +17,6 @@ Priorities:
 | # | Question | Where | Notes |
 |---|---|---|---|
 | D1 | Should payroll use each company's weekly off days? | `PayrollRunService` ~lines 966 and 985 hard-code Saturday + Sunday | Leave already uses the company's work week (§10 #2). Pay would change for 6-day and Fri–Sat companies, so get sign-off. |
-| D2 | Which fiscal year is the real one? | HR Configuration's fiscal year vs `hrms.companies.fiscal_year_start` | Keep one and read it everywhere (§8). |
 | D3 | Retire the Geofencing page? | `/hrms/attendance/geofencing` vs the branch geofence in Companies & Branches | Two places set punch zones (§1, §4). |
 | D4 | Pay PLI through payroll? | PLI is paid as separate awards today (§5) | If yes, add approved awards to the run's earnings. |
 
@@ -31,10 +30,8 @@ Priorities:
 - *Done when:* a 6-day-week company's run matches the attendance days.
 
 **P0-2 Apply the HR configuration settings that are only saved** (§8)
-- Default probation length: set `probation_end_date = date_of_joining + N months` on employee create when none is given.
 - Late arrival (company grace, automatic deduction): wire it into the late-mark and LOP logic, or remove the fields.
 - Attendance rules (geofence on mobile, WFH allowed): read them per company in `AttendanceController.checkIn` and `WfhController`.
-- Retirement age: a "retirement due" list or alert.
 - *Done when:* each switch changes behaviour, and the page's "saved, not applied" notes are gone.
 
 **P0-3 Notification templates are used** (§11.14)
@@ -64,10 +61,6 @@ Priorities:
 **P0-8 Record the exit type** (§9)
 - *Now:* exits are marked `EXITED` without a type, so attrition shows most exits as "other".
 - *Build:* resignation / termination / other on the exit flow (UI + column); reports read it.
-
-**P0-9 Enforce one headquarters per company on the server** (§3)
-- *Now:* the UI switches off the old HQ in a second call.
-- *Build:* a unique rule or transactional swap in the branch service.
 
 **P0-10 Face punch review** (§4)
 - *Build:* an API for HR to confirm or reject a low-confidence face punch ("Yes, it's …" / "Not them"), recorded on the event.
