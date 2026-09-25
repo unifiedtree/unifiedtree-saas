@@ -9,6 +9,7 @@ import com.unifiedtree.attendance.face.dto.FaceDtos.EnrollmentSampleResponse;
 import com.unifiedtree.attendance.face.dto.FaceDtos.EnrollmentStartRequest;
 import com.unifiedtree.attendance.face.dto.FaceDtos.EnrollmentStartResponse;
 import com.unifiedtree.attendance.face.dto.FaceDtos.EnrollmentStatusResponse;
+import com.unifiedtree.attendance.face.dto.FaceDtos.PersonEnrollmentStatusResponse;
 import com.unifiedtree.attendance.face.dto.FaceDtos.VerifyRequest;
 import com.unifiedtree.attendance.face.dto.FaceDtos.VerifyResponse;
 import com.unifiedtree.attendance.face.service.FaceService;
@@ -43,10 +44,17 @@ import java.util.UUID;
  *   GET  /v1/attendance/face/admin/employees       (manager)
  *   GET  /v1/attendance/face/admin/events          (manager)
  *   POST /v1/attendance/face/admin/{employeeId}/reset
+ *
+ *   GET  /v1/attendance/face/admin/employees/{employeeId}/enrollment-status
+ *   POST /v1/attendance/face/admin/employees/{employeeId}/enroll/start
+ *   POST /v1/attendance/face/admin/employees/{employeeId}/enroll/sample
+ *   POST /v1/attendance/face/admin/employees/{employeeId}/enroll/complete
  * </pre>
  *
  * Tenant + employee identity ALWAYS come from the JWT. The body's
- * employeeId is never trusted.
+ * employeeId is never trusted. The {@code admin/employees/{employeeId}/…}
+ * routes are HR enrolling someone else from the web: their {employeeId} is
+ * the HR employee record id, mapped server-side to that person's login.
  */
 @RestController
 public class FaceController {
@@ -121,6 +129,43 @@ public class FaceController {
                                            @AuthenticationPrincipal Jwt jwt) {
         face.adminReset(tenantId(jwt), employeeId, userId(jwt), reason);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+    }
+
+    // -------- HR / admin: someone else's face, by HR employee record ------
+    // Enrolling for someone else is the reset permission's job ("Reset /
+    // re-enroll an employee face"), held by HR managers, admins and owners.
+
+    @GetMapping("/v1/attendance/face/admin/employees/{employeeId}/enrollment-status")
+    @PreAuthorize("hasAuthority('attendance.face.admin.read') or hasAuthority('attendance.face.admin.reset')")
+    public PersonEnrollmentStatusResponse personStatus(@PathVariable UUID employeeId,
+                                                       @AuthenticationPrincipal Jwt jwt) {
+        return face.personStatus(tenantId(jwt), employeeId);
+    }
+
+    @PostMapping("/v1/attendance/face/admin/employees/{employeeId}/enroll/start")
+    @PreAuthorize("hasAuthority('attendance.face.admin.reset')")
+    public EnrollmentStartResponse adminStartEnroll(@PathVariable UUID employeeId,
+                                                    @Valid @RequestBody EnrollmentStartRequest req,
+                                                    @AuthenticationPrincipal Jwt jwt) {
+        UUID tenant = tenantId(jwt);
+        return face.adminStartEnrollment(tenant, face.requireLoginFor(tenant, employeeId), req);
+    }
+
+    @PostMapping("/v1/attendance/face/admin/employees/{employeeId}/enroll/sample")
+    @PreAuthorize("hasAuthority('attendance.face.admin.reset')")
+    public EnrollmentSampleResponse adminSubmitSample(@PathVariable UUID employeeId,
+                                                      @Valid @RequestBody EnrollmentSampleRequest req,
+                                                      @AuthenticationPrincipal Jwt jwt) {
+        UUID tenant = tenantId(jwt);
+        return face.submitSample(tenant, face.requireLoginFor(tenant, employeeId), req);
+    }
+
+    @PostMapping("/v1/attendance/face/admin/employees/{employeeId}/enroll/complete")
+    @PreAuthorize("hasAuthority('attendance.face.admin.reset')")
+    public EnrollmentCompleteResponse adminCompleteEnroll(@PathVariable UUID employeeId,
+                                                          @AuthenticationPrincipal Jwt jwt) {
+        UUID tenant = tenantId(jwt);
+        return face.completeEnrollment(tenant, face.requireLoginFor(tenant, employeeId), userId(jwt));
     }
 
     private static UUID tenantId(Jwt jwt) {

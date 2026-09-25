@@ -37,6 +37,23 @@ public final class FaceDtos {
             Instant enrolledAt
     ) {}
 
+    /**
+     * GET /v1/attendance/face/admin/employees/{employeeId}/enrollment-status:
+     * another person's enrollment, asked for by their HR employee record (the
+     * id the web profile has). {@code hasLogin} is false when the record has no
+     * active sign-in: face data belongs to a login, so there is nothing to
+     * enroll yet and the other fields are the "not enrolled" defaults.
+     */
+    public record PersonEnrollmentStatusResponse(
+            boolean hasLogin,
+            EnrollmentStatus status,
+            int samplesRequired,
+            int samplesCaptured,
+            List<CaptureAngle> remainingAngles,
+            boolean lockedRequiresManagerReset,
+            Instant enrolledAt
+    ) {}
+
     /** POST /v1/attendance/face/enroll/start request body. */
     public record EnrollmentStartRequest(
             /** Optional opaque device fingerprint for audit + lockouts. */

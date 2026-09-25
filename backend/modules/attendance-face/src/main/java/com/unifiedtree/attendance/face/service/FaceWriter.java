@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -213,5 +214,50 @@ public class FaceWriter {
                    version = version + 1
              WHERE tenant_id = ? AND employee_id = ?
             """, actingAdminId, reason, tenantId, employeeId);
+    }
+
+    /**
+     * One audit.events row for a finished face enrollment, written the way the
+     * access audit writes its rows: who did it, whose face, and whether it
+     * replaced an earlier one (the templates of any earlier enrollment are kept
+     * inactive, so their presence says so). The entry points at the person's
+     * employee record when the login has one, so the Audit logs page names and
+     * links them.
+     */
+    @Transactional
+    public void recordEnrollmentAudit(UUID tenantId, UUID loginId, UUID actorId) {
+        boolean replaced = Boolean.TRUE.equals(jdbc.queryForObject("""
+            SELECT EXISTS (SELECT 1 FROM attendance.face_embedding_templates
+                            WHERE tenant_id = ? AND employee_id = ? AND is_active = FALSE)
+            """, Boolean.class, tenantId, loginId));
+        Map<String, Object> who = jdbc.queryForMap("""
+            SELECT uc.employee_id,
+                   COALESCE(NULLIF(btrim(concat_ws(' ', e.first_name, e.last_name)), ''),
+                            NULLIF(btrim(uc.display_name), ''), uc.email) AS name
+              FROM auth.user_credentials uc
+              LEFT JOIN hrms.employees e ON e.id = uc.employee_id
+             WHERE uc.id = ? AND uc.tenant_id = ?
+            """, loginId, tenantId);
+        UUID employeeId = who.get("employee_id") == null ? null : UUID.fromString(who.get("employee_id").toString());
+        String name = String.valueOf(who.get("name"));
+        boolean self = loginId.equals(actorId);
+        String summary = self
+                ? (replaced ? "Re-enrolled their own face. The earlier face record was replaced."
+                            : "Enrolled their own face for face punch-in.")
+                : (replaced ? "Re-enrolled " + name + "'s face. The earlier face record was replaced."
+                            : "Enrolled " + name + "'s face for face punch-in.");
+        jdbc.update("""
+                INSERT INTO audit.events
+                    (id, tenant_id, occurred_at, occurred_date, actor_user_id, actor_email,
+                     module, action, entity_type, entity_id, summary)
+                VALUES (gen_random_uuid(), ?, now(), (now() AT TIME ZONE 'Asia/Kolkata')::date, ?,
+                        (SELECT email FROM auth.user_credentials WHERE id = ?),
+                        'attendance', ?, ?, ?, ?)
+                """,
+                tenantId, actorId, actorId,
+                replaced ? "FACE_REENROLLED" : "FACE_ENROLLED",
+                employeeId != null ? "employee" : "user",
+                employeeId != null ? employeeId : loginId,
+                summary);
     }
 }
