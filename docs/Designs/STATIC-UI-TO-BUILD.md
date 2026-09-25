@@ -580,3 +580,53 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Picking the owner role from a list. It is typed in for now.
   - A "my assets" view for employees. The asset API is company-wide and only for asset readers, so employees don't see what they hold.
 - **Checked live:** `live-design-onboarding.mjs` 34/34 (owner, employee and department manager, with cleanup) and `live-onboarding.mjs` (passes and cleans up).
+
+### 11.9 Performance (`/hrms/performance`): done
+- **Layout:** on the module kit.
+  - HR and managers see three views: Review cycles, Employee reviews, and Goals & KPIs. The old page listed these three twice under a second set of names ("Employee Performance", "Appraisals & 360 Feedback", "KPI Tracking"), each opening the same screen.
+  - Anyone who writes their own review also gets My reviews and My goals.
+  - The chosen view stays in `?view=`.
+- **My reviews** is split into "To write" and "Reviews and feedback".
+  - Each card says what it is: your self review, feedback from a named reviewer, or your review of a named colleague.
+  - A missed review explains that the cycle closed before it was submitted.
+- **My goals:** stat tiles, a panel to add a goal, and one card per goal. Company KPIs assigned to you are marked, and only the performance admin updates them.
+- **Admin views:**
+  - Kit headings, and statuses in sentence case ("At risk", "Closed", "Missed").
+  - Dates read like "1 Sep 2026".
+  - Raw employee and reviewer UUIDs are no longer shown when a name or code is missing.
+- **Permissions:** each view follows the API. Listing cycles, reviews and KPIs needs `hrms.performance.read`. Creating a cycle needs `hrms.performance.write`, assigning or closing one needs `hrms.appraisal.initiate`, and managing KPIs needs `hrms.kpi.manage`.
+- **Open questions (your call, not changed):**
+  - **ADMIN** holds `appraisal.initiate` and `kpi.manage` but not `performance.read`, so it can't list the cycles and KPIs it's allowed to manage. It needs either `performance.read` or neither of the other two.
+  - **DEPT_MANAGER** has `performance.read` (V071, on purpose). The API then returns every review and KPI in the company, not just their team's. If managers should see only their team, the list endpoints need scoping.
+- **Fixed (tests):** `performance-admin-live.mjs` left a KPI and a review cycle behind on every run, which is where the "Browser review cycle …" rows come from. It now deletes them.
+- **Checked live:**
+  - `live-design-performance.mjs` 18/18 (owner, department manager and employee; adds a goal and saves its progress)
+  - `performance-admin-live.mjs` (passes and cleans up)
+
+### 11.10 Learning (`/hrms/learning`): done
+- **Layout:** on the module kit, with four views: Programs, My training, Skill matrix and Certifications (`?view=`).
+  - **Programs:**
+    - Tiles, plus a panel for a new program, which now lets you pick the company when there's more than one. It used to take the first company silently.
+    - Status and enrollment labels are in words.
+    - Programs you're already in show "You're enrolled" instead of an Enroll button that the server would refuse.
+    - HR opens each program's roster from a "Roster" button.
+  - **My training:** tiles, your programs as rows with Leave, and your own skills.
+  - **Skill matrix / Certifications:**
+    - A "whose record?" picker first, then the table, then an add/update panel.
+    - The duplicate proficiency card that repeated the table was removed.
+    - An expired certification shows a red "Expired" pill.
+- **Fixed:**
+  - Employees and managers could enroll in training but had no way to reach Learning. The sidebar item was limited to HR roles and `skill.read` holders. It now also shows for `hrms.learning.enroll.self`.
+- **Permissions (unchanged):**
+  - Catalogue: `learning.read`
+  - Enroll, My training and your own skills: `learning.enroll.self`
+  - Colleagues' skills: `learning.skill.read`
+  - Create programs, change status, roster and edit skills: `learning.write`
+- **Static / to build:**
+  - Programs have no detail page or edit. Title, dates and seats can't be changed after creation; only the status can.
+  - There's no self-assessment of skills. Employees can see their skills but not propose changes.
+- **Fixed (tests):** `live-new-admin-browser.mjs` was stale since the Company redesign and never cleaned up.
+  - It now uses the Learning views and opens the dashboard's Projects drawer.
+  - Its geofence step was dropped, because `live-design-companies.mjs` covers the branch drawer.
+  - It now removes its certificate and project.
+- **Checked live:** `live-design-learning.mjs` 16/16 (owner, employee and department manager, with cleanup) and `live-new-admin-browser.mjs` (passes).

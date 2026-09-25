@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { useEmployeeDirectory, type WorkforceEmployee } from '../api/useWorkforce'
-import { HrButton } from '@/shared/components/hr'
+import { State, Note } from '@/design/module/ModuleKit'
 import { HrPagination } from '@/shared/components/HrPagination'
 
+/** A load failure (with retry) as the kit's error state; a failed action (no retry) as an inline red note. */
 export function PerformanceError({ error, retry }: { error: unknown; retry?: () => void }) {
-  return <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-    <p>{error instanceof Error ? error.message : 'Unable to load performance information.'}</p>
-    {retry && <HrButton className="mt-3" size="sm" variant="ghost" onClick={retry}>Try again</HrButton>}
-  </div>
+  const message = error instanceof Error ? error.message : 'Unable to load performance information.'
+  if (retry) return <State kind="error" title="Couldn’t load this" description={message} onRetry={retry} />
+  return <Note tone="red">{message}</Note>
 }
 
 /** Server-searched, paged picker. Never silently truncates the company to its first 200 employees. */

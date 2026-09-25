@@ -1,16 +1,19 @@
-import { PerformanceEmployeePicker as EmployeePicker } from './performance/PerformanceEmployeePicker'
-import { HrPagination } from '@/shared/components/HrPagination'
+// Learning (/hrms/learning) on the module kit.
+//   - hrms.learning.read: the program catalogue (every employee can browse).
+//   - hrms.learning.enroll.self: enroll, My training, your own skills.
+//   - hrms.learning.skill.read: colleagues' skills and certifications (V116 —
+//     deliberately narrower than learning.read so the whole company's
+//     proficiency scores aren't visible to everyone).
+//   - hrms.learning.write: create programs, change their status, the roster
+//     (enroll others, complete with a score, drop) and editing skills.
 import React, { useMemo, useState } from 'react'
-import {
-  Plus, GraduationCap, Users, CheckCircle2, Award, BookOpen, Star,
-  ChevronDown, ChevronRight, UserMinus, UserPlus, LogOut,
-} from 'lucide-react'
-import { format } from 'date-fns'
+import { Plus } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
-import { useToast } from '@/shared/hooks/useToast'
-import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, HrAvatar, HrTabs, HrTabPanel, type PillTone,
-} from '@/shared/components/hr'
+import { HrButton, HrStatusPill, TableCard, HrAvatar, HrSelect, type PillTone } from '@/shared/components/hr'
+import { HrPagination } from '@/shared/components/HrPagination'
+import { ModulePage, Views, useView, StatRow, State, Panel, SubHeading, Note, RowList, Row, useDesignToast, dmy, todayIso } from '@/design/module/ModuleKit'
+import { dashIcon } from '@/design/dc/icons'
+import { PerformanceEmployeePicker as EmployeePicker } from './performance/PerformanceEmployeePicker'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
 import {
@@ -22,23 +25,25 @@ import {
   type ProgramStatus, type EnrollmentStatus, type TrainingProgram, type Enrollment,
 } from './api/useLearning'
 
-const PROGRAM_TONE: Record<ProgramStatus, PillTone> = {
-  PLANNED: 'info', ONGOING: 'warn', COMPLETED: 'ok', CANCELLED: 'red',
-}
-const ENROLLMENT_TONE: Record<EnrollmentStatus, PillTone> = {
-  ENROLLED: 'warn', IN_PROGRESS: 'info', COMPLETED: 'ok', DROPPED: 'gray',
-}
-
-/** score is NUMERIC(5,2) in V073 — anything larger is a Postgres numeric
- *  overflow, which surfaces as a 500 rather than a readable 400. */
+type Toast = (msg: string, err?: boolean, detail?: string) => void
+const PROGRAM_TONE: Record<ProgramStatus, PillTone> = { PLANNED: 'info', ONGOING: 'warn', COMPLETED: 'ok', CANCELLED: 'red' }
+const ENROLLMENT_TONE: Record<EnrollmentStatus, PillTone> = { ENROLLED: 'warn', IN_PROGRESS: 'info', COMPLETED: 'ok', DROPPED: 'gray' }
+const PROGRAM_LABEL: Record<ProgramStatus, string> = { PLANNED: 'Planned', ONGOING: 'Ongoing', COMPLETED: 'Completed', CANCELLED: 'Cancelled' }
+const ENROLLMENT_LABEL: Record<EnrollmentStatus, string> = { ENROLLED: 'Enrolled', IN_PROGRESS: 'In progress', COMPLETED: 'Completed', DROPPED: 'Dropped' }
+/** score is NUMERIC(5,2) (V073); anything larger overflows into a 500. */
 const MAX_SCORE = 999.99
-
-/** Rows an admin can still act on. COMPLETED and DROPPED are terminal: the
- *  service answers ENROLLMENT_CLOSED for complete(), and admin-drop on an
- *  already-dropped row updates nothing and returns 200, i.e. a silent no-op. */
+/** COMPLETED and DROPPED are final: complete() answers ENROLLMENT_CLOSED, and admin-drop on a dropped row is a silent no-op. */
 const isOpenEnrollment = (s: EnrollmentStatus) => s === 'ENROLLED' || s === 'IN_PROGRESS'
+const schedule = (p: TrainingProgram) => (p.startDate ? `${dmy(p.startDate)}${p.endDate ? ` – ${dmy(p.endDate)}` : ''}` : 'Dates not set')
+const label = 'mb-1.5 block text-[13px] font-semibold text-text-secondary'
 
-const fmtDate = (d?: string) => (d ? format(new Date(d), 'd MMM yyyy') : '—')
+function Bar({ value, max }: { value: number; max: number }) {
+  return (
+    <span aria-hidden="true" style={{ display: 'inline-block', width: 110, height: 7, borderRadius: 999, background: '#eef2f6', overflow: 'hidden', verticalAlign: 'middle' }}>
+      <span style={{ display: 'block', height: '100%', width: `${(Math.min(Math.max(value, 0), max) / max) * 100}%`, background: '#059669', borderRadius: 999 }} />
+    </span>
+  )
+}
 
 type Tab = 'programs' | 'my' | 'skills' | 'certifications'
 
@@ -46,330 +51,169 @@ export const Learning: React.FC = () => {
   const canRead = usePermission('hrms.learning.read')
   const canWrite = usePermission('hrms.learning.write')
   const canEnroll = usePermission('hrms.learning.enroll.self')
-  // Reading colleagues' proficiency + certifications is its own permission
-  // (V116). hrms.learning.read is held by every employee so they can browse
-  // the catalogue — gating the matrix on it would expose the whole company's
-  // skill records to everyone. Admins widen this per role in Settings.
   const canViewSkills = usePermission('hrms.learning.skill.read')
-
-  const tabs: { key: Tab; label: string }[] = [
-    ...(canRead ? [{ key: 'programs' as Tab, label: 'Programs' }] : []),
-    ...(canEnroll ? [{ key: 'my' as Tab, label: 'My Training' }] : []),
-    ...(canViewSkills ? [{ key: 'skills' as Tab, label: 'Skill Matrix' }] : []),
-    ...(canViewSkills ? [{ key: 'certifications' as Tab, label: 'Certifications' }] : []),
+  const views = [
+    ...(canRead ? [{ key: 'programs', label: 'Programs', icon: 'briefcase' }] : []),
+    ...(canEnroll ? [{ key: 'my', label: 'My training', icon: 'checkCircle' }] : []),
+    ...(canViewSkills ? [{ key: 'skills', label: 'Skill matrix', icon: 'chart' }, { key: 'certifications', label: 'Certifications', icon: 'shield' }] : []),
   ]
-
-  // Land on the first tab this role actually has. The old default hard-coded
-  // 'programs' or 'my', so a role granted only the skill matrix opened the
-  // page on a tab that was not in the list and saw an empty body.
-  const [tab, setTab] = useState<Tab | null>(null)
-  const activeTab = tab && tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key
-
+  const [tab, setTab] = useView(views.map((v) => v.key)) as [Tab, (k: string) => void]
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
-      <HrPageHeader crumb="Learning & Development" title="Learning Center" subtitle="Run training programs, track enrollments, and map team skills" />
-
-      <HrTabs tabs={tabs} active={activeTab ?? ''} onChange={(k) => setTab(k as Tab)} />
-
-      {tabs.length === 0 && (
-        <div className="ut-card p-10 text-center">
-          <p className="text-sm font-semibold text-text-secondary">No access to Learning</p>
-          <p className="mt-1 text-xs text-text-tertiary">Ask your administrator to grant a Learning permission.</p>
-        </div>
-      )}
-
-      {activeTab === 'programs' && canRead && <HrTabPanel tabKey="programs"><ProgramsTab canWrite={canWrite} canEnroll={canEnroll} /></HrTabPanel>}
-      {activeTab === 'my' && canEnroll && <HrTabPanel tabKey="my"><MyTrainingTab /></HrTabPanel>}
-      {activeTab === 'skills' && canViewSkills && <HrTabPanel tabKey="skills"><SkillMatrixTab canWrite={canWrite} /></HrTabPanel>}
-      {activeTab === 'certifications' && canViewSkills && <HrTabPanel tabKey="certifications"><SkillMatrixTab canWrite={canWrite} certificationsOnly /></HrTabPanel>}
-    </div>
+    <ModulePage crumb="Learning" title="Learning"
+      subtitle={canWrite ? 'Run training programs, follow enrollments and keep the team’s skills on record.' : 'Browse training, enroll, and see your own progress and skills.'}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        {views.length > 1 && <Views items={views} active={tab} onChange={setTab} label="Learning views" />}
+        {views.length === 0 && <State kind="empty" icon="lock" title="No learning access" description="Ask an admin if you should see training programs." />}
+        {tab === 'programs' && canRead && <ProgramsTab canWrite={canWrite} canEnroll={canEnroll} />}
+        {tab === 'my' && canEnroll && <MyTrainingTab />}
+        {tab === 'skills' && canViewSkills && <SkillMatrixTab canWrite={canWrite} />}
+        {tab === 'certifications' && canViewSkills && <SkillMatrixTab canWrite={canWrite} certificationsOnly />}
+      </div>
+    </ModulePage>
   )
 }
 
-// ── Programs ──────────────────────────────────────────────────────────────────
+// ── Programs ───────────────────────────────────────────────────────────────
+function NewProgramPanel({ onDone, toast }: { onDone: () => void; toast: Toast }) {
+  const { data: companies = [] } = useCompanies()
+  const create = useCreateProgram()
+  const [f, setF] = useState({ companyId: '', title: '', category: '', trainer: '', startDate: '', endDate: '', capacity: '', description: '' })
+  const set = (k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }))
+  const companyId = f.companyId || (companies.length === 1 ? companies[0].id : '')
+  const onCreate = async () => {
+    if (!f.title.trim()) { toast('Give the program a title', true); return }
+    if (!companyId) { toast('Choose a company', true); return }
+    if (f.startDate && f.endDate && f.endDate < f.startDate) { toast('The end date is before the start date', true); return }
+    try {
+      await create.mutateAsync({ companyId, title: f.title.trim(), category: f.category.trim() || undefined, trainer: f.trainer.trim() || undefined, startDate: f.startDate || undefined, endDate: f.endDate || undefined, capacity: f.capacity ? parseInt(f.capacity, 10) : null, description: f.description.trim() || undefined })
+      toast('Program created'); onDone()
+    } catch (e) { toast('Couldn’t create the program', true, (e as Error)?.message) }
+  }
+  return (
+    <Panel title="New training program" aside={<HrButton size="sm" variant="ghost" onClick={onDone}>Cancel</HrButton>}>
+      <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+        {companies.length > 1 && <div className="sm:col-span-2"><span className={label}>Company</span><HrSelect value={companyId} onChange={(v) => set('companyId', v)} placeholder="Choose a company" options={companies.map((c) => ({ value: c.id, label: c.name }))} /></div>}
+        <div className="sm:col-span-2"><label className={label} htmlFor="lp-title">Title</label><input id="lp-title" value={f.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Advanced React workshop" className="ut-input" /></div>
+        <div><label className={label} htmlFor="lp-cat">Category</label><input id="lp-cat" value={f.category} onChange={(e) => set('category', e.target.value)} placeholder="e.g. Technical" className="ut-input" /></div>
+        <div><label className={label} htmlFor="lp-trainer">Trainer</label><input id="lp-trainer" value={f.trainer} onChange={(e) => set('trainer', e.target.value)} placeholder="Optional" className="ut-input" /></div>
+        <div><label className={label} htmlFor="lp-start">Starts</label><input id="lp-start" type="date" value={f.startDate} onChange={(e) => set('startDate', e.target.value)} className="ut-input" /></div>
+        <div><label className={label} htmlFor="lp-end">Ends</label><input id="lp-end" type="date" min={f.startDate || undefined} value={f.endDate} onChange={(e) => set('endDate', e.target.value)} className="ut-input" /></div>
+        <div><label className={label} htmlFor="lp-cap">Seats</label><input id="lp-cap" type="number" min={0} value={f.capacity} onChange={(e) => set('capacity', e.target.value)} placeholder="Unlimited" className="ut-input" /></div>
+        <div className="sm:col-span-2"><label className={label} htmlFor="lp-desc">Description</label><textarea id="lp-desc" value={f.description} onChange={(e) => set('description', e.target.value)} rows={2} placeholder="Optional" className="ut-input resize-y" /></div>
+      </div>
+      <div className="flex justify-end"><HrButton onClick={onCreate} disabled={create.isPending}>{create.isPending ? 'Creating…' : 'Create program'}</HrButton></div>
+    </Panel>
+  )
+}
 
 function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: boolean }) {
-  const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
+  const { show, node } = useDesignToast()
   const [page, setPage] = useState(0)
-  const { data, isLoading, isError, refetch } = useTrainingPrograms(page)
-  const create = useCreateProgram()
+  const { data, isLoading, isError, error, refetch } = useTrainingPrograms(page)
+  const mine = useMyEnrollments(canEnroll)
   const changeStatus = useChangeProgramStatus()
   const enroll = useEnroll()
-  const programs = data?.content ?? []
-
+  const programs = useMemo(() => data?.content ?? [], [data])
   const [showForm, setShowForm] = useState(false)
-  // Which program's roster is open. One at a time — the roster pulls the
-  // enrollment list plus a 200-row employee directory, so expanding every row
-  // at once would be a needless fan-out.
+  // One roster open at a time: it pulls the enrollment list plus a directory page.
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [title, setTitle] = useState('')
-  const [category, setCategory] = useState('')
-  const [trainer, setTrainer] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [capacity, setCapacity] = useState('')
-  const [description, setDescription] = useState('')
-
-  const stats = useMemo(() => {
-    const ongoing = programs.filter((p) => p.status === 'ONGOING').length
-    const completed = programs.filter((p) => p.status === 'COMPLETED').length
-    const seats = programs.reduce((s, p) => s + (p.enrolledCount ?? 0), 0)
-    return { ongoing, completed, seats }
-  }, [programs])
-
-  const resetForm = () => {
-    setTitle(''); setCategory(''); setTrainer(''); setStartDate(''); setEndDate(''); setCapacity(''); setDescription('')
+  const enrolledIn = useMemo(() => new Set((mine.data ?? []).filter((e) => isOpenEnrollment(e.status)).map((e) => e.programId)), [mine.data])
+  const stats = useMemo(() => ({
+    ongoing: programs.filter((p) => p.status === 'ONGOING').length,
+    planned: programs.filter((p) => p.status === 'PLANNED').length,
+    seats: programs.reduce((s, p) => s + (p.enrolledCount ?? 0), 0),
+  }), [programs])
+  const onEnroll = async (p: TrainingProgram) => {
+    try { await enroll.mutateAsync(p.id); show(`You’re enrolled in ${p.title}`) } catch (e) { show('Couldn’t enroll you', true, (e as Error)?.message) }
   }
-
-  const onCreate = async () => {
-    if (!title.trim()) { toast('Program title is required', 'error'); return }
-    try {
-      await create.mutateAsync({
-        companyId: companies[0]?.id,
-        title: title.trim(),
-        category: category.trim() || undefined,
-        trainer: trainer.trim() || undefined,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
-        capacity: capacity ? parseInt(capacity, 10) : null,
-        description: description.trim() || undefined,
-      })
-      toast('Training program created', 'success')
-      resetForm(); setShowForm(false)
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to create program', 'error')
-    }
-  }
-
-  const onEnroll = async (id: string) => {
-    try {
-      await enroll.mutateAsync(id)
-      toast('Enrolled successfully', 'success')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to enroll', 'error')
-    }
-  }
-
   const onStatus = async (id: string, status: ProgramStatus) => {
-    try {
-      await changeStatus.mutateAsync({ id, status })
-      toast('Status updated', 'success')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to update status', 'error')
-    }
+    try { await changeStatus.mutateAsync({ id, status }); show(`Program marked ${PROGRAM_LABEL[status].toLowerCase()}`) } catch (e) { show('Couldn’t change the status', true, (e as Error)?.message) }
   }
-
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <HrStatCard icon={<BookOpen size={18} />} color="blue" value={data?.totalElements ?? 0} label="All programs" loading={isLoading} />
-        <HrStatCard icon={<GraduationCap size={18} />} color="orange" value={stats.ongoing} label="Ongoing on this page" loading={isLoading} />
-        <HrStatCard icon={<CheckCircle2 size={18} />} color="green" value={stats.completed} label="Completed on this page" loading={isLoading} />
-        <HrStatCard icon={<Users size={18} />} color="teal" value={stats.seats} label="Enrollments on this page" loading={isLoading} />
-      </div>
-
-      {canWrite && (
-        <div className="flex justify-end">
-          <HrButton variant={showForm ? 'ghost' : 'primary'} onClick={() => setShowForm((s) => !s)}>
-            <Plus size={15} /> {showForm ? 'Close' : 'New Program'}
-          </HrButton>
-        </div>
-      )}
-
-      {canWrite && showForm && (
-        <div className="ut-card p-5">
-          <h3 className="mb-4 text-[15px] font-semibold text-text-primary">New Training Program</h3>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Program Title *</label>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Advanced React Workshop" className="ut-input" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Category</label>
-              <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Technical" className="ut-input" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Trainer</label>
-              <input value={trainer} onChange={(e) => setTrainer(e.target.value)} placeholder="Optional" className="ut-input" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Start Date</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="ut-input" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">End Date</label>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="ut-input" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Capacity</label>
-              <input type="number" min={0} value={capacity} onChange={(e) => setCapacity(e.target.value)} placeholder="Unlimited" className="ut-input" />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Description</label>
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Optional" className="w-full rounded-xl border border-border-default bg-white px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20" />
-            </div>
-          </div>
-          <div className="mt-5 flex justify-end border-t border-border-default pt-4">
-            <HrButton onClick={onCreate} disabled={create.isPending}>{create.isPending ? 'Creating…' : 'Create Program'}</HrButton>
-          </div>
-        </div>
-      )}
-
-      {isError && <div role="alert" className="ut-card p-4 text-sm">Training programs could not be loaded. <button className="text-primary underline" onClick={() => refetch()}>Try again</button></div>}
-      <TableCard footer={data ? <HrPagination page={page} pageSize={20} totalElements={data.totalElements} totalPages={data.totalPages} onPageChange={setPage} /> : undefined}>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Program</th>
-              <th className="hidden sm:table-cell">Trainer</th>
-              <th className="hidden sm:table-cell">Schedule</th>
-              <th>Seats</th>
-              <th>Status</th>
-              <th className="text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(4)].map((_, i) => <tr key={i}><td colSpan={6} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : programs.length === 0 ? (
-              <tr><td colSpan={6} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">No training programs yet</p><p className="mt-1 text-xs text-text-tertiary">{canWrite ? 'Use “New Program” to schedule your first training.' : 'Programs scheduled by HR will appear here.'}</p></td></tr>
-            ) : programs.map((p) => {
-              const full = p.capacity != null && p.enrolledCount >= p.capacity
-              const closed = p.status === 'COMPLETED' || p.status === 'CANCELLED'
-              const open = expandedId === p.id
-              return (
-                <React.Fragment key={p.id}>
-                <tr>
-                  <td>
-                    {/* The roster is the only way to see WHO enrolled and to
-                        mark anyone complete, so the title doubles as the
-                        expander for anyone who can manage programs. */}
-                    {canWrite ? (
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId(open ? null : p.id)}
-                        aria-expanded={open}
-                        aria-label={`${open ? 'Hide' : 'Show'} enrolled employees for ${p.title}`}
-                        className="inline-flex items-center gap-1.5 text-left font-medium text-[#047857] hover:text-[#064E3B]"
-                      >
-                        {open ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
-                        {p.title}
-                      </button>
-                    ) : (
-                      <div className="font-medium text-text-primary">{p.title}</div>
-                    )}
-                    {p.category && <div className="text-xs text-text-tertiary">{p.category}</div>}
-                  </td>
-                  <td className="hidden sm:table-cell text-text-secondary">{p.trainer || '—'}</td>
-                  <td className="hidden sm:table-cell text-text-secondary">{p.startDate ? `${fmtDate(p.startDate)} → ${fmtDate(p.endDate)}` : '—'}</td>
-                  <td className="text-text-secondary">{p.enrolledCount}{p.capacity != null ? ` / ${p.capacity}` : ''}</td>
-                  <td>
-                    {canWrite && !closed ? (
-                      <select
-                        value={p.status}
-                        onChange={(e) => onStatus(p.id, e.target.value as ProgramStatus)}
-                        disabled={changeStatus.isPending}
-                        className="ut-select ut-select-sm w-auto"
-                        aria-label="Change program status"
-                      >
-                        {ALLOWED_TRANSITIONS[p.status].map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    ) : (
-                      <HrStatusPill tone={PROGRAM_TONE[p.status]}>{p.status}</HrStatusPill>
-                    )}
-                  </td>
-                  <td>
-                    <div className="flex justify-end">
-                      {canEnroll && !closed && (
-                        <HrButton size="sm" onClick={() => onEnroll(p.id)} disabled={enroll.isPending || full}>
-                          {full ? 'Full' : 'Enroll'}
-                        </HrButton>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-                {open && canWrite && (
-                  <tr>
-                    <td colSpan={6} className="bg-bg-base/40 p-0">
-                      <ProgramRoster program={p} />
-                    </td>
-                  </tr>
-                )}
-                </React.Fragment>
-              )
-            })}
-          </tbody>
-        </table>
-      </TableCard>
+    <div style={{ display: 'grid', gap: 16 }}>
+      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        { icon: 'briefcase', color: 'blue', label: 'Programs', value: String(data?.totalElements ?? 0), sub: 'In the catalogue' },
+        { icon: 'clock', color: 'orange', label: 'Ongoing', value: String(stats.ongoing), sub: `${stats.planned} planned · on this page` },
+        { icon: 'users', color: 'teal', label: 'Enrollments', value: String(stats.seats), sub: 'On this page' },
+        ...(canEnroll ? [{ icon: 'checkCircle', color: 'green' as const, label: 'You’re enrolled in', value: String(enrolledIn.size), sub: 'Open programs' }] : []),
+      ]} />}
+      <SubHeading aside={canWrite && !showForm ? <HrButton size="sm" onClick={() => setShowForm(true)}><Plus size={14} /> New program</HrButton> : undefined}>Programs</SubHeading>
+      {canWrite && showForm && <NewProgramPanel onDone={() => setShowForm(false)} toast={show} />}
+      {isError ? <State kind="error" title="Couldn’t load programs" description={(error as Error)?.message} onRetry={() => refetch()} />
+        : isLoading ? <State kind="loading" height={220} />
+          : programs.length === 0 ? <State kind="empty" icon="briefcase" title="No training programs yet" description={canWrite ? 'Use “New program” to schedule the first one.' : 'Programs HR schedules appear here.'} />
+            : (
+              <TableCard footer={data && data.totalPages > 1 ? <HrPagination page={page} pageSize={20} totalElements={data.totalElements} totalPages={data.totalPages} onPageChange={setPage} /> : undefined}>
+                <table className="hr-table">
+                  <thead><tr><th>Program</th><th className="hidden sm:table-cell">Trainer</th><th className="hidden md:table-cell">When</th><th>Seats</th><th>Status</th><th className="text-right"><span className="sr-only">Actions</span></th></tr></thead>
+                  <tbody>
+                    {programs.map((p) => {
+                      const full = p.capacity != null && p.enrolledCount >= p.capacity
+                      const closed = p.status === 'COMPLETED' || p.status === 'CANCELLED'
+                      const open = expandedId === p.id
+                      const isIn = enrolledIn.has(p.id)
+                      return (
+                        <React.Fragment key={p.id}>
+                          <tr>
+                            <td>
+                              <div className="font-semibold text-text-primary">{p.title}</div>
+                              <div className="text-xs text-text-tertiary">{[p.category, p.description].filter(Boolean).join(' · ') || '—'}</div>
+                            </td>
+                            <td className="hidden sm:table-cell text-text-secondary">{p.trainer || '—'}</td>
+                            <td className="hidden md:table-cell text-text-secondary whitespace-nowrap">{schedule(p)}</td>
+                            <td className="text-text-secondary tabular-nums">{p.capacity != null ? `${p.enrolledCount} / ${p.capacity}` : `${p.enrolledCount}`}</td>
+                            <td>
+                              {canWrite && !closed ? (
+                                <select value={p.status} onChange={(e) => onStatus(p.id, e.target.value as ProgramStatus)} disabled={changeStatus.isPending} className="ut-select ut-select-sm w-auto" aria-label={`Status of ${p.title}`}>
+                                  {ALLOWED_TRANSITIONS[p.status].map((s) => <option key={s} value={s}>{PROGRAM_LABEL[s]}</option>)}
+                                </select>
+                              ) : <HrStatusPill tone={PROGRAM_TONE[p.status]}>{PROGRAM_LABEL[p.status]}</HrStatusPill>}
+                            </td>
+                            <td>
+                              <div className="flex flex-wrap justify-end gap-1.5">
+                                {canEnroll && !closed && (isIn ? <HrStatusPill tone="ok">You’re enrolled</HrStatusPill>
+                                  : <HrButton size="sm" onClick={() => onEnroll(p)} disabled={enroll.isPending || full}>{full ? 'Full' : 'Enroll'}</HrButton>)}
+                                {canWrite && <HrButton size="sm" variant="ghost" aria-expanded={open} onClick={() => setExpandedId(open ? null : p.id)}>{open ? 'Hide roster' : 'Roster'}</HrButton>}
+                              </div>
+                            </td>
+                          </tr>
+                          {open && canWrite && <tr><td colSpan={6} className="!p-0" style={{ background: '#f8fafc' }}><ProgramRoster program={p} toast={show} /></td></tr>}
+                        </React.Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </TableCard>
+            )}
+      {node}
     </div>
   )
 }
 
 /**
- * Enrollment roster for one program, fetched only when its row is expanded.
- *
- * Why this exists: useProgramEnrollments and useCompleteEnrollment had ZERO
- * callers (2026-09-09 dead-hook sweep). HR could create a program and staff
- * could self-enrol, but nobody could ever see who was on it, mark anyone
- * complete, record a score, or enrol somebody who had not enrolled themselves.
- * The training lifecycle dead-ended at "ENROLLED" and no score was ever
- * written by any code path in the product.
- *
- * Permissions used here, all read off LearningController:
+ * Enrollment roster for one program (learning.write only: learning.read is
+ * held by every employee, and the roster carries colleagues' scores).
  *   GET  /v1/learning/programs/{id}/enrollments      hrms.learning.read
  *   POST /v1/learning/programs/{id}/enrollments/bulk hrms.learning.write
  *   POST /v1/learning/enrollments/{id}/complete      hrms.learning.write
  *   POST /v1/learning/enrollments/{id}/admin-drop    hrms.learning.write
- *
- * The caller mounts this only for hrms.learning.write holders — deliberately
- * narrower than the hrms.learning.read the list endpoint enforces. learning.read
- * is granted to EMPLOYEE and DEPT_MANAGER (V073) so everyone can browse the
- * catalogue; opening the roster to it would put every colleague's training
- * score in front of the whole company, which is the exact leak the narrower
- * skill.read (V116) was introduced to close. Being stricter than the server can
- * only ever show less — it can never produce a 403.
  */
-function ProgramRoster({ program }: { program: TrainingProgram }) {
-  const { toast } = useToast()
+function ProgramRoster({ program, toast }: { program: TrainingProgram; toast: Toast }) {
   const { data: enrollments = [], isLoading, isError, refetch } = useProgramEnrollments(program.id)
   const complete = useCompleteEnrollment()
   const adminDrop = useAdminDropEnrollment()
   const bulkEnroll = useBulkEnroll()
-
-  // Score box per row, held as raw strings so a half-typed "8." is not coerced
-  // to a number mid-keystroke. Score is optional — blank submits null.
+  // Raw strings so a half-typed "8." isn't coerced mid-keystroke; blank = no score.
   const [scores, setScores] = useState<Record<string, string>>({})
   const [picked, setPicked] = useState<string[]>([])
   const [empQuery, setEmpQuery] = useState('')
-
-  // enroll()/bulkEnroll() both throw PROGRAM_CLOSED on a COMPLETED or
-  // CANCELLED program, so the picker is hidden rather than offered as a
-  // control that is guaranteed to fail.
+  // enroll/bulkEnroll throw PROGRAM_CLOSED on a finished program, so the picker is hidden.
   const closed = program.status === 'COMPLETED' || program.status === 'CANCELLED'
-
-  // Search is pushed to the server rather than filtered client-side: the
-  // directory is paged and a tenant with more than 200 employees would
-  // otherwise have people who simply never appear in the picker, with no hint
-  // that the list was truncated. useEmployeeDirectory keeps the previous page
-  // while the next one loads, so the box does not lose focus per keystroke.
-  const { data: dir } = useEmployeeDirectory(
-    { companyId: program.companyId, search: empQuery.trim() || undefined, pageSize: 200 },
-    { enabled: !!program.companyId && !closed },
-  )
-
-  // DROPPED rows do not occupy a seat server-side (enrolledCount excludes them
-  // and the dedupe check ignores them), so a dropped employee is offerable again.
-  const seatedIds = useMemo(
-    () => new Set(enrollments.filter((e) => e.status !== 'DROPPED').map((e) => e.employeeId)),
-    [enrollments],
-  )
-
-  const candidates = useMemo(
-    () => (dir?.content ?? []).filter((e) => !seatedIds.has(e.id)),
-    [dir, seatedIds],
-  )
-
+  // Server-side search: the directory is paged, so client filtering would silently miss people.
+  const { data: dir } = useEmployeeDirectory({ companyId: program.companyId, search: empQuery.trim() || undefined, pageSize: 200 }, { enabled: !!program.companyId && !closed })
+  // Dropped rows don't hold a seat, so a dropped employee can be enrolled again.
+  const seatedIds = useMemo(() => new Set(enrollments.filter((e) => e.status !== 'DROPPED').map((e) => e.employeeId)), [enrollments])
+  const candidates = useMemo(() => (dir?.content ?? []).filter((e) => !seatedIds.has(e.id)), [dir, seatedIds])
   const seatsLeft = program.capacity == null ? null : Math.max(program.capacity - program.enrolledCount, 0)
 
   const onComplete = async (e: Enrollment) => {
@@ -377,455 +221,239 @@ function ProgramRoster({ program }: { program: TrainingProgram }) {
     let score: number | null = null
     if (raw) {
       const n = Number(raw)
-      if (!Number.isFinite(n) || n < 0 || n > MAX_SCORE) {
-        toast(`Score must be a number between 0 and ${MAX_SCORE}`, 'error'); return
-      }
-      // NUMERIC(5,2) keeps two decimals; round here so what the user typed and
-      // what the row shows after the refetch agree.
+      if (!Number.isFinite(n) || n < 0 || n > MAX_SCORE) { toast(`Score must be a number from 0 to ${MAX_SCORE}`, true); return }
       score = Math.round(n * 100) / 100
     }
     try {
       await complete.mutateAsync({ id: e.id, score })
-      toast(score == null ? 'Marked complete' : `Marked complete · score ${score}`, 'success')
+      toast(score == null ? 'Marked complete' : `Marked complete · score ${score}`)
       setScores((s) => { const next = { ...s }; delete next[e.id]; return next })
-    } catch (err) {
-      toast((err as Error)?.message ?? 'Failed to complete enrollment', 'error')
-    }
+    } catch (err) { toast('Couldn’t mark it complete', true, (err as Error)?.message) }
   }
-
   const onDrop = async (e: Enrollment) => {
     const who = e.employeeName || 'this employee'
-    if (!window.confirm(`Drop ${who} from “${program.title}”? The enrollment is kept as DROPPED for audit, and they can be enrolled again afterwards.`)) return
-    try {
-      await adminDrop.mutateAsync(e.id)
-      toast(`${who} dropped from the program`, 'success')
-    } catch (err) {
-      toast((err as Error)?.message ?? 'Failed to drop enrollment', 'error')
-    }
+    if (!window.confirm(`Drop ${who} from “${program.title}”? The enrollment is kept as dropped, and they can be enrolled again.`)) return
+    try { await adminDrop.mutateAsync(e.id); toast(`${who} dropped`) } catch (err) { toast('Couldn’t drop the enrollment', true, (err as Error)?.message) }
   }
-
   const onBulkEnroll = async () => {
-    if (picked.length === 0) { toast('Select at least one employee to enrol', 'error'); return }
+    if (!picked.length) { toast('Pick at least one person', true); return }
     try {
       const r = await bulkEnroll.mutateAsync({ programId: program.id, employeeIds: picked })
-      // The endpoint returns counts instead of throwing on a partial or total
-      // rejection, so a batch that enrolled nobody would otherwise look like a
-      // success. Report all three numbers and treat "0 enrolled" as an error.
+      // Counts, not errors, for partial rejections: "0 enrolled" is reported as a failure.
       const parts = [`${r.enrolled} enrolled`]
       if (r.alreadyEnrolled) parts.push(`${r.alreadyEnrolled} already enrolled`)
-      if (r.rejectedForCapacity) parts.push(`${r.rejectedForCapacity} rejected — program full`)
-      toast(parts.join(' · '), r.enrolled > 0 ? 'success' : 'error')
-      setPicked([])
-      setEmpQuery('')
-    } catch (err) {
-      toast((err as Error)?.message ?? 'Failed to enrol employees', 'error')
-    }
+      if (r.rejectedForCapacity) parts.push(`${r.rejectedForCapacity} turned away, program full`)
+      toast(parts.join(' · '), r.enrolled === 0)
+      setPicked([]); setEmpQuery('')
+    } catch (err) { toast('Couldn’t enroll them', true, (err as Error)?.message) }
   }
-
-  const togglePicked = (id: string) =>
-    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
-
+  const active = enrollments.filter((e) => e.status !== 'DROPPED').length
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[13px] font-semibold text-text-primary">
-          Enrolled employees
-          <span className="ml-2 font-normal text-text-tertiary">
-            {enrollments.filter((e) => e.status !== 'DROPPED').length} active
-            {seatsLeft != null && ` · ${seatsLeft} seat${seatsLeft === 1 ? '' : 's'} left`}
-          </span>
-        </p>
-      </div>
-
-      {isLoading ? (
-        <div className="h-5 w-full animate-pulse rounded bg-bg-base" />
-      ) : isError ? (
-        <p className="py-4 text-center text-xs text-red-700">
-          Couldn&rsquo;t load the enrollment list.{' '}
-          <button type="button" onClick={() => refetch()} className="font-semibold underline underline-offset-2">Try again</button>
-        </p>
-      ) : enrollments.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border-default px-3 py-4 text-center text-xs text-text-tertiary">
-          Nobody has enrolled yet.{!closed && ' Use “Enrol employees” below to add them.'}
-        </p>
-      ) : (
-        <table className="hr-table [&_tbody_td]:!py-2">
-          <thead>
-            <tr>
-              <th>Employee</th>
-              <th>Status</th>
-              <th>Score</th>
-              <th className="hidden sm:table-cell">Completed</th>
-              <th className="text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {enrollments.map((e, i) => (
-              <tr key={e.id}>
-                <td><HrAvatar name={e.employeeName || 'Employee'} seed={i} /></td>
-                <td><HrStatusPill tone={ENROLLMENT_TONE[e.status]}>{e.status}</HrStatusPill></td>
-                <td>
-                  {isOpenEnrollment(e.status) ? (
-                    <input
-                      type="number"
-                      min={0}
-                      max={MAX_SCORE}
-                      step="0.01"
-                      value={scores[e.id] ?? ''}
-                      onChange={(ev) => setScores((s) => ({ ...s, [e.id]: ev.target.value }))}
-                      placeholder="Score"
-                      aria-label={`Score for ${e.employeeName || 'employee'} (optional)`}
-                      className="ut-input ut-input-sm w-24"
-                    />
-                  ) : (
-                    <span className="text-text-secondary">{e.score != null ? e.score : '—'}</span>
-                  )}
-                </td>
-                <td className="hidden sm:table-cell text-text-secondary">{e.completedAt ? fmtDate(e.completedAt) : '—'}</td>
-                <td>
-                  <div className="flex items-center justify-end gap-2">
-                    {isOpenEnrollment(e.status) ? (
-                      <>
-                        <HrButton size="sm" onClick={() => onComplete(e)} disabled={complete.isPending}>
-                          <CheckCircle2 size={14} /> Complete
-                        </HrButton>
-                        <HrButton size="sm" variant="ghost" onClick={() => onDrop(e)} disabled={adminDrop.isPending}>
-                          <UserMinus size={14} /> Drop
-                        </HrButton>
-                      </>
-                    ) : (
-                      <span className="text-xs text-text-tertiary">—</span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {closed ? (
-        <p className="text-xs text-text-tertiary">
-          This program is {program.status} — no further enrollments are accepted.
-        </p>
-      ) : (
-        <div className="rounded-xl border border-border-default bg-white p-4">
-          <p className="mb-2 text-[13px] font-semibold text-text-secondary">Enrol employees</p>
-          <input
-            value={empQuery}
-            onChange={(ev) => setEmpQuery(ev.target.value)}
-            placeholder="Search name or code…"
-            aria-label="Search employees to enrol"
-            className="ut-input ut-input-sm mb-2"
-          />
+    <div style={{ display: 'grid', gap: 12, padding: 16 }}>
+      <SubHeading>{`Roster · ${active} enrolled${seatsLeft != null ? ` · ${seatsLeft} ${seatsLeft === 1 ? 'seat' : 'seats'} left` : ''}`}</SubHeading>
+      {isLoading ? <State kind="loading" height={80} />
+        : isError ? <State kind="error" title="Couldn’t load the roster" onRetry={() => refetch()} />
+          : enrollments.length === 0 ? <Note>{`Nobody has enrolled yet.${closed ? '' : ' Add people below.'}`}</Note>
+            : (
+              <div className="overflow-x-auto rounded-xl border border-border-default bg-white">
+                <table className="hr-table [&_tbody_td]:!py-2">
+                  <thead><tr><th>Employee</th><th>Status</th><th>Score</th><th className="hidden sm:table-cell">Completed</th><th className="text-right"><span className="sr-only">Actions</span></th></tr></thead>
+                  <tbody>
+                    {enrollments.map((e, i) => (
+                      <tr key={e.id}>
+                        <td><HrAvatar name={e.employeeName || 'Employee'} seed={i} /></td>
+                        <td><HrStatusPill tone={ENROLLMENT_TONE[e.status]}>{ENROLLMENT_LABEL[e.status]}</HrStatusPill></td>
+                        <td>{isOpenEnrollment(e.status)
+                          ? <input type="number" min={0} max={MAX_SCORE} step="0.01" value={scores[e.id] ?? ''} onChange={(ev) => setScores((s) => ({ ...s, [e.id]: ev.target.value }))} placeholder="Optional" aria-label={`Score for ${e.employeeName || 'employee'} (optional)`} className="ut-input ut-input-sm w-24" />
+                          : <span className="text-text-secondary">{e.score != null ? e.score : '—'}</span>}</td>
+                        <td className="hidden sm:table-cell text-text-secondary">{e.completedAt ? dmy(e.completedAt) : '—'}</td>
+                        <td>
+                          <div className="flex items-center justify-end gap-2">
+                            {isOpenEnrollment(e.status) ? <>
+                              <HrButton size="sm" onClick={() => onComplete(e)} disabled={complete.isPending}>Complete</HrButton>
+                              <HrButton size="sm" variant="ghost" onClick={() => onDrop(e)} disabled={adminDrop.isPending}>Drop</HrButton>
+                            </> : <span className="text-xs text-text-tertiary">—</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+      {closed ? <Note>{`This program is ${PROGRAM_LABEL[program.status].toLowerCase()}, so it takes no more enrollments.`}</Note> : (
+        <Panel title="Enroll people" pad={16}>
+          <input value={empQuery} onChange={(ev) => setEmpQuery(ev.target.value)} placeholder="Search name or code" aria-label="Search employees to enroll" className="ut-input ut-input-sm" />
           <div className="max-h-48 overflow-y-auto rounded-lg border border-border-default">
             {candidates.length === 0 ? (
-              <p className="px-3 py-4 text-center text-xs text-text-tertiary">
-                {(dir?.content ?? []).length === 0
-                  ? (empQuery.trim() ? 'No employees match that search.' : 'No employees in this company.')
-                  : 'Everyone matching is already enrolled.'}
-              </p>
+              <p className="px-3 py-4 text-center text-xs text-text-tertiary">{(dir?.content ?? []).length === 0 ? (empQuery.trim() ? 'No one matches that search.' : 'No employees in this company.') : 'Everyone matching is already enrolled.'}</p>
             ) : candidates.map((emp) => (
               <label key={emp.id} className="flex cursor-pointer items-center gap-2 border-b border-border-default px-3 py-2 text-sm text-text-secondary last:border-b-0 hover:bg-bg-base/60">
-                <input
-                  type="checkbox"
-                  checked={picked.includes(emp.id)}
-                  onChange={() => togglePicked(emp.id)}
-                  className="h-4 w-4 rounded border-border-default text-[#059669] focus:ring-[#059669]"
-                />
+                <input type="checkbox" checked={picked.includes(emp.id)} onChange={() => setPicked((p) => (p.includes(emp.id) ? p.filter((x) => x !== emp.id) : [...p, emp.id]))} className="h-4 w-4 accent-[#059669]" />
                 <span className="text-text-primary">{`${emp.firstName} ${emp.lastName ?? ''}`.trim()}</span>
-                {emp.employeeCode && <span className="text-xs text-text-tertiary">({emp.employeeCode})</span>}
+                {emp.employeeCode && <span className="text-xs text-text-tertiary">{emp.employeeCode}</span>}
               </label>
             ))}
           </div>
-          <div className="mt-3 flex items-center justify-between">
-            <span className="text-xs text-text-tertiary">{picked.length} selected</span>
-            <HrButton size="sm" onClick={onBulkEnroll} disabled={bulkEnroll.isPending || picked.length === 0}>
-              <UserPlus size={14} /> {bulkEnroll.isPending ? 'Enrolling…' : 'Enrol selected'}
-            </HrButton>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-text-tertiary">{`${picked.length} picked`}</span>
+            <HrButton size="sm" onClick={onBulkEnroll} disabled={bulkEnroll.isPending || picked.length === 0}>{bulkEnroll.isPending ? 'Enrolling…' : 'Enroll picked'}</HrButton>
           </div>
-        </div>
+        </Panel>
       )}
     </div>
   )
 }
 
-// ── My Training ──────────────────────────────────────────────────────────────
-
+// ── My training ──────────────────────────────────────────────────────────────
 function MyTrainingTab() {
-  const { toast } = useToast()
-  const { data: enrollments = [], isLoading } = useMyEnrollments()
-  // POST /v1/learning/enrollments/{id}/drop is gated on
-  // hrms.learning.enroll.self — the same permission that gates this whole tab
-  // in Learning above, so reaching this component already implies it. The
-  // service also rejects dropping an enrollment that is not the caller's own
-  // (the 2026-08-11 IDOR fix), so this can only ever leave your own program.
+  const { show, node } = useDesignToast()
+  const { data: enrollments = [], isLoading, isError, error, refetch } = useMyEnrollments()
+  // /enrollments/{id}/drop is enroll.self, and the service only lets you leave your own.
   const drop = useDropEnrollment()
-
-  const stats = useMemo(() => {
-    const active = enrollments.filter((e) => isOpenEnrollment(e.status)).length
-    const completed = enrollments.filter((e) => e.status === 'COMPLETED').length
-    return { active, completed }
-  }, [enrollments])
-
+  const active = enrollments.filter((e) => isOpenEnrollment(e.status))
+  const completed = enrollments.filter((e) => e.status === 'COMPLETED')
   const onDrop = async (e: Enrollment) => {
     const what = e.programTitle || 'this program'
-    if (!window.confirm(`Leave “${what}”? Your enrollment is kept as DROPPED and you can enrol again while the program is open.`)) return
-    try {
-      await drop.mutateAsync(e.id)
-      toast('You have left the program', 'success')
-    } catch (err) {
-      toast((err as Error)?.message ?? 'Failed to leave the program', 'error')
-    }
+    if (!window.confirm(`Leave “${what}”? You can enroll again while it’s open.`)) return
+    try { await drop.mutateAsync(e.id); show(`You’ve left ${what}`) } catch (err) { show('Couldn’t leave the program', true, (err as Error)?.message) }
   }
-
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <HrStatCard icon={<BookOpen size={18} />} color="blue" value={enrollments.length} label="Enrolled Programs" loading={isLoading} />
-        <HrStatCard icon={<GraduationCap size={18} />} color="orange" value={stats.active} label="In Progress" loading={isLoading} />
-        <HrStatCard icon={<CheckCircle2 size={18} />} color="green" value={stats.completed} label="Completed" loading={isLoading} />
-      </div>
-
-      <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Program</th>
-              <th>Status</th>
-              <th className="hidden sm:table-cell">Score</th>
-              <th className="hidden sm:table-cell">Completed</th>
-              <th className="text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(3)].map((_, i) => <tr key={i}><td colSpan={5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : enrollments.length === 0 ? (
-              <tr><td colSpan={5} className="py-14 text-center"><p className="text-sm font-semibold text-text-secondary">You are not enrolled in any training</p><p className="mt-1 text-xs text-text-tertiary">Enroll from the Programs tab to start learning.</p></td></tr>
-            ) : enrollments.map((e) => (
-              <tr key={e.id}>
-                <td className="font-medium text-text-primary">{e.programTitle || 'Program'}</td>
-                <td><HrStatusPill tone={ENROLLMENT_TONE[e.status]}>{e.status}</HrStatusPill></td>
-                <td className="hidden sm:table-cell text-text-secondary">{e.score != null ? e.score : '—'}</td>
-                <td className="hidden sm:table-cell text-text-secondary">{e.completedAt ? fmtDate(e.completedAt) : '—'}</td>
-                <td>
-                  <div className="flex justify-end">
-                    {isOpenEnrollment(e.status) ? (
-                      <HrButton size="sm" variant="ghost" onClick={() => onDrop(e)} disabled={drop.isPending}>
-                        <LogOut size={14} /> Leave
-                      </HrButton>
-                    ) : (
-                      <span className="text-xs text-text-tertiary">—</span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
-
+    <div style={{ display: 'grid', gap: 16 }}>
+      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        { icon: 'briefcase', color: 'blue', label: 'Programs', value: String(enrollments.filter((e) => e.status !== 'DROPPED').length), sub: 'You’ve enrolled in' },
+        { icon: 'clock', color: 'orange', label: 'In progress', value: String(active.length), sub: 'Still going' },
+        { icon: 'checkCircle', color: 'green', label: 'Completed', value: String(completed.length), sub: 'Finished' },
+      ]} />}
+      <SubHeading>My programs</SubHeading>
+      {isError ? <State kind="error" title="Couldn’t load your training" description={(error as Error)?.message} onRetry={() => refetch()} />
+        : isLoading ? <State kind="loading" />
+          : enrollments.length === 0 ? <State kind="empty" icon="briefcase" title="You’re not enrolled in any training" description="Enroll from Programs to get started." />
+            : (
+              <RowList>
+                {enrollments.map((e) => (
+                  <Row key={e.id} muted={e.status === 'DROPPED'} title={e.programTitle || 'Program'}
+                    meta={[e.completedAt ? `Completed ${dmy(e.completedAt)}` : `Enrolled ${dmy(e.createdAt)}`, e.score != null ? `score ${e.score}` : null].filter(Boolean).join(' · ')}
+                    trail={<>
+                      <HrStatusPill tone={ENROLLMENT_TONE[e.status]}>{ENROLLMENT_LABEL[e.status]}</HrStatusPill>
+                      {isOpenEnrollment(e.status) && <HrButton size="sm" variant="ghost" onClick={() => onDrop(e)} disabled={drop.isPending}>Leave</HrButton>}
+                    </>} />
+                ))}
+              </RowList>
+            )}
       <MySkillsPanel />
+      {node}
     </div>
   )
 }
 
-/**
- * The employee's own skill record.
- *
- * Gating the Skill Matrix on hrms.learning.skill.read (V116) was right — it
- * stopped every employee reading the whole company's proficiency scores — but
- * it left employees with no way to see their OWN, and /skills/me existed with
- * no caller at all. Reading your own record needs no extra permission: the
- * endpoint is gated on hrms.learning.enroll.self, which is exactly what this
- * tab already requires, and it resolves the employee from the token rather
- * than a path parameter, so it cannot be pointed at anyone else.
- *
- * Read-only on purpose: writing skills is POST /v1/learning/skills, which the
- * backend gates on hrms.learning.write. Rendering an editor here would be an
- * affordance that 403s for the very people it is shown to.
- */
+/** Your own skills: /skills/me resolves you from the token (enroll.self), read-only (writing is learning.write). */
 function MySkillsPanel() {
-  const { data: skills = [], isLoading } = useMySkills()
-
-  // Nothing recorded and nothing loading — say so once, inside the tab, rather
-  // than showing an empty table that reads like a failure.
-  if (!isLoading && skills.length === 0) {
-    return (
-      <div className="ut-card p-5">
-        <p className="text-sm font-semibold text-text-primary">My Skills</p>
-        <p className="mt-1 text-xs text-text-tertiary">
-          No skills recorded for you yet. HR maintains this from the Skill Matrix.
-        </p>
-      </div>
-    )
-  }
-
+  const { data: skills = [], isLoading, isError, refetch } = useMySkills()
   return (
-    <div className="ut-card p-5">
-      <p className="mb-3 text-sm font-semibold text-text-primary">My Skills</p>
-      {isLoading ? (
-        <div className="space-y-2">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-5 w-full animate-pulse rounded bg-bg-base" />)}
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {skills.map((s) => (
-            <li key={s.id} className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-text-primary">{s.skillName}</p>
-                {s.certified && (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
-                    <Award size={12} className="text-[#047857]" />
-                    {s.certificationName || 'Certified'}
-                    {s.certifiedOn && <span className="text-text-tertiary">· {fmtDate(s.certifiedOn)}</span>}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <div className="flex h-2 w-24 overflow-hidden rounded-full bg-bg-base">
-                  <div
-                    className="h-full rounded-full bg-[#059669]"
-                    style={{ width: `${(Math.min(Math.max(s.proficiency, 0), 5) / 5) * 100}%` }}
-                  />
-                </div>
-                <span className="text-xs font-semibold text-text-secondary">{s.proficiency}/5</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <Panel title="My skills" sub="HR keeps this up to date from the skill matrix.">
+      {isLoading ? <State kind="loading" height={80} />
+        : isError ? <State kind="error" title="Couldn’t load your skills" onRetry={() => refetch()} />
+          : skills.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>No skills recorded for you yet.</p>
+            : (
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 10 }}>
+                {skills.map((s) => (
+                  <li key={s.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <span style={{ minWidth: 0 }}>
+                      <strong style={{ fontSize: 13.5 }}>{s.skillName}</strong>
+                      {s.certified && <span style={{ display: 'block', fontSize: 12, color: '#64748b' }}>{`${s.certificationName || 'Certified'}${s.certifiedOn ? ` · ${dmy(s.certifiedOn)}` : ''}`}</span>}
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Bar value={s.proficiency} max={5} /><span style={{ fontSize: 12.5, fontWeight: 700, color: '#475569' }}>{`${s.proficiency}/5`}</span></span>
+                  </li>
+                ))}
+              </ul>
+            )}
+    </Panel>
   )
 }
 
-// ── Skill Matrix ─────────────────────────────────────────────────────────────
-
+// ── Skill matrix / certifications ────────────────────────────────────────────
 function SkillMatrixTab({ canWrite, certificationsOnly = false }: { canWrite: boolean; certificationsOnly?: boolean }) {
-  const { toast } = useToast()
+  const { show, node } = useDesignToast()
   const [employeeId, setEmployeeId] = useState('')
   const [employeeName, setEmployeeName] = useState('')
-  const activeEmployee = employeeId
-  const { data: allSkills = [], isLoading, isError, error, refetch } = useEmployeeSkills(activeEmployee)
-  const skills = certificationsOnly ? allSkills.filter(s => s.certified) : allSkills
+  const { data: allSkills = [], isLoading, isError, error, refetch } = useEmployeeSkills(employeeId)
+  const skills = certificationsOnly ? allSkills.filter((s) => s.certified) : allSkills
   const upsert = useUpsertSkill()
-
+  const today = todayIso()
   const [skillName, setSkillName] = useState('')
   const [proficiency, setProficiency] = useState('3')
   const [certified, setCertified] = useState(certificationsOnly)
   const [certificationName, setCertificationName] = useState('')
   const [expiresOn, setExpiresOn] = useState('')
   const [certifiedOn, setCertifiedOn] = useState('')
-
-  const onAdd = async () => {
-    if (!activeEmployee) { toast('Select an employee first', 'error'); return }
-    if (!skillName.trim()) { toast('Skill name is required', 'error'); return }
+  const reset = () => { setSkillName(''); setProficiency('3'); setCertified(certificationsOnly); setCertificationName(''); setCertifiedOn(''); setExpiresOn('') }
+  const onSave = async () => {
+    if (!skillName.trim()) { show('Name the skill', true); return }
+    if (certifiedOn && expiresOn && expiresOn < certifiedOn) { show('The expiry is before the certification date', true); return }
     try {
-      await upsert.mutateAsync({
-        employeeId: activeEmployee,
-        skillName: skillName.trim(),
-        proficiency: parseInt(proficiency, 10),
-        certified: certificationsOnly || certified,
-        certificationName: certified ? certificationName.trim() || undefined : undefined,
-        certifiedOn: certifiedOn || undefined,
-        expiresOn: expiresOn || undefined,
-      })
-      toast('Skill saved', 'success')
-      setSkillName(''); setProficiency('3'); setCertified(certificationsOnly); setCertificationName(''); setCertifiedOn(''); setExpiresOn('')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to save skill', 'error')
-    }
+      const isCert = certificationsOnly || certified
+      await upsert.mutateAsync({ employeeId, skillName: skillName.trim(), proficiency: parseInt(proficiency, 10), certified: isCert, certificationName: isCert ? certificationName.trim() || undefined : undefined, certifiedOn: isCert ? certifiedOn || undefined : undefined, expiresOn: isCert ? expiresOn || undefined : undefined })
+      show('Skill saved'); reset()
+    } catch (e) { show('Couldn’t save the skill', true, (e as Error)?.message) }
   }
-
   return (
-    <div className="space-y-5">
-      <div className="ut-card p-5"><EmployeePicker value={employeeId} selectedLabel={employeeName} onChange={e => { setEmployeeId(e.id); setEmployeeName(`${e.firstName} ${e.lastName || ''}`) }} /></div>
-      {isError && <div role="alert" className="ut-card p-4"><p>{error.message}</p><HrButton onClick={() => refetch()}>Retry</HrButton></div>}
-      {!certificationsOnly && activeEmployee && <div className="ut-card p-5"><h3 className="mb-3 font-semibold">Skill proficiency: {employeeName}</h3>
-        {!skills.length ? <p>No recorded skills.</p> : skills.map(skill => <div key={skill.id} className="mb-3"><div className="flex justify-between text-sm"><span>{skill.skillName}</span><span>{skill.proficiency}/5</span></div><div className="h-2 rounded bg-bg-base"><div className="h-2 rounded bg-primary" style={{ width: `${skill.proficiency / 5 * 100}%` }} /></div></div>)}
-      </div>}
-      {canWrite && activeEmployee && (
-        <div className="ut-card space-y-3 p-5">
-          <h3 className="text-[15px] font-semibold text-text-primary">Add / update skill for {employeeName}</h3>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Skill name</label>
-              <input aria-label="Skill name" maxLength={120} value={skillName} onChange={(e) => setSkillName(e.target.value)} placeholder="e.g. TypeScript" className="ut-input" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Proficiency (1–5)</label>
-              <select aria-label="Proficiency" value={proficiency} onChange={(e) => setProficiency(e.target.value)} className="ut-select">
-                {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </div>
+    <div style={{ display: 'grid', gap: 16 }}>
+      <Panel title={certificationsOnly ? 'Whose certifications?' : 'Whose skills?'} sub={employeeId ? `Showing ${employeeName.trim()}` : 'Find a colleague to see their record.'}>
+        <EmployeePicker value={employeeId} selectedLabel={employeeName} onChange={(e) => { setEmployeeId(e.id); setEmployeeName(`${e.firstName} ${e.lastName || ''}`); reset() }} />
+      </Panel>
+      {!employeeId ? <State kind="empty" icon={certificationsOnly ? 'shield' : 'chart'} title="No one picked yet" description="Search above to open someone’s record." />
+        : isError ? <State kind="error" title="Couldn’t load their skills" description={(error as Error)?.message} onRetry={() => refetch()} />
+          : isLoading ? <State kind="loading" />
+            : skills.length === 0 ? <State kind="empty" icon={certificationsOnly ? 'shield' : 'chart'} title={certificationsOnly ? 'No certifications recorded' : 'No skills recorded'} description={canWrite ? 'Add the first one below.' : undefined} />
+              : (
+                <TableCard>
+                  <table className="hr-table">
+                    <thead><tr><th>Skill</th><th>Proficiency</th><th>Certification</th>{canWrite && <th><span className="sr-only">Actions</span></th>}</tr></thead>
+                    <tbody>
+                      {skills.map((s) => {
+                        const expired = !!s.expiresOn && s.expiresOn < today
+                        return (
+                          <tr key={s.id}>
+                            <td className="font-semibold text-text-primary">{s.skillName}</td>
+                            <td><span className="inline-flex items-center gap-2"><Bar value={s.proficiency} max={5} /><span className="text-xs font-semibold text-text-secondary">{`${s.proficiency}/5`}</span></span></td>
+                            <td>{s.certified ? (
+                              <span className="inline-flex flex-wrap items-center gap-1.5 text-sm text-text-primary">
+                                <span className="text-[#047857]" aria-hidden="true">{dashIcon('shield', 14)}</span>
+                                {s.certificationName || 'Certified'}
+                                {s.certifiedOn && <span className="text-xs text-text-tertiary">{`· ${dmy(s.certifiedOn)}`}</span>}
+                                {s.expiresOn && <HrStatusPill tone={expired ? 'red' : 'gray'}>{`${expired ? 'Expired' : 'Expires'} ${dmy(s.expiresOn)}`}</HrStatusPill>}
+                              </span>
+                            ) : <span className="text-xs text-text-tertiary">Not certified</span>}</td>
+                            {canWrite && <td><HrButton size="sm" variant="ghost" onClick={() => { setSkillName(s.skillName); setProficiency(String(s.proficiency)); setCertified(s.certified); setCertificationName(s.certificationName || ''); setCertifiedOn(s.certifiedOn || ''); setExpiresOn(s.expiresOn || '') }}>Edit</HrButton></td>}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </TableCard>
+              )}
+      {canWrite && employeeId && (
+        <Panel title={`Add or update a ${certificationsOnly ? 'certification' : 'skill'} for ${employeeName.trim()}`} sub="Saving a skill name that already exists updates it.">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+            <div><label className={label} htmlFor="sk-name">Skill</label><input id="sk-name" aria-label="Skill name" maxLength={120} value={skillName} onChange={(e) => setSkillName(e.target.value)} placeholder="e.g. TypeScript" className="ut-input" /></div>
+            <div><label className={label} htmlFor="sk-prof">Proficiency (1–5)</label><select id="sk-prof" aria-label="Proficiency" value={proficiency} onChange={(e) => setProficiency(e.target.value)} className="ut-select">{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-text-secondary">
-            <input type="checkbox" disabled={certificationsOnly} checked={certified} onChange={(e) => setCertified(e.target.checked)} className="h-4 w-4 rounded border-border-default text-[#059669] focus:ring-[#059669]" />
-            Certified
-          </label>
-          {certified && (
-            <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Certification name</label>
-                <input aria-label="Certification name" maxLength={200} value={certificationName} onChange={(e) => setCertificationName(e.target.value)} placeholder="e.g. AWS Solutions Architect" className="ut-input" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Certified on</label>
-                <input aria-label="Certified on" type="date" value={certifiedOn} onChange={(e) => setCertifiedOn(e.target.value)} className="ut-input" />
-              </div>
+          {!certificationsOnly && <label className="flex items-center gap-2 text-sm text-text-secondary"><input type="checkbox" checked={certified} onChange={(e) => setCertified(e.target.checked)} className="h-4 w-4 accent-[#059669]" /> Certified</label>}
+          {(certified || certificationsOnly) && (
+            <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-3">
+              <div><label className={label} htmlFor="sk-cert">Certification</label><input id="sk-cert" aria-label="Certification name" maxLength={200} value={certificationName} onChange={(e) => setCertificationName(e.target.value)} placeholder="e.g. AWS Solutions Architect" className="ut-input" /></div>
+              <div><label className={label} htmlFor="sk-on">Certified on</label><input id="sk-on" aria-label="Certified on" type="date" max={today} value={certifiedOn} onChange={(e) => setCertifiedOn(e.target.value)} className="ut-input" /></div>
+              <div><label className={label} htmlFor="sk-exp">Expires on</label><input id="sk-exp" aria-label="Certification expiry" type="date" min={certifiedOn || undefined} value={expiresOn} onChange={(e) => setExpiresOn(e.target.value)} className="ut-input" /></div>
             </div>
           )}
-      {(certified || certificationsOnly) && canWrite && activeEmployee && <label className="block text-sm">Certification expiry<input className="ut-input max-w-xs" type="date" value={expiresOn} min={certifiedOn || undefined} onChange={e => setExpiresOn(e.target.value)} /></label>}
-          <div className="flex justify-end border-t border-border-default pt-4">
-            <HrButton onClick={onAdd} disabled={upsert.isPending}><Plus size={15} /> {upsert.isPending ? 'Saving…' : 'Save Skill'}</HrButton>
+          <div className="flex justify-end gap-2">
+            {skillName && <HrButton variant="ghost" onClick={reset}>Clear</HrButton>}
+            <HrButton onClick={onSave} disabled={upsert.isPending}>{upsert.isPending ? 'Saving…' : 'Save'}</HrButton>
           </div>
-        </div>
+        </Panel>
       )}
-
-      <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Skill</th>
-              <th>Proficiency</th>
-              <th>Certification</th>{canWrite && <th>Action</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(3)].map((_, i) => <tr key={i}><td colSpan={canWrite ? 4 : 3} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>)
-            ) : skills.length === 0 ? (
-              <tr><td colSpan={canWrite ? 4 : 3} className="py-14 text-center text-sm text-text-tertiary">No skills recorded for this employee yet.</td></tr>
-            ) : skills.map((s) => (
-              <tr key={s.id}>
-                <td className="font-medium text-text-primary">{s.skillName}</td>
-                <td>
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-2 w-28 overflow-hidden rounded-full bg-bg-base">
-                      <div className="h-full rounded-full bg-[#059669]" style={{ width: `${(Math.min(Math.max(s.proficiency, 0), 5) / 5) * 100}%` }} />
-                    </div>
-                    <span className="text-xs font-semibold text-text-secondary">{s.proficiency}/5</span>
-                  </div>
-                </td>
-                <td>
-                  {s.certified ? (
-                    <span className="inline-flex items-center gap-1.5 text-sm text-text-primary">
-                      <Award size={14} className="text-[#047857]" />
-                      {s.certificationName || 'Certified'}
-                      {s.expiresOn && <span className={s.expiresOn < format(new Date(), 'yyyy-MM-dd') ? 'text-red-700' : 'text-text-secondary'}>{s.expiresOn < format(new Date(), 'yyyy-MM-dd') ? 'Expired' : 'Expires'} {fmtDate(s.expiresOn)}</span>}
-                      {s.certifiedOn && <span className="text-xs text-text-tertiary">· {fmtDate(s.certifiedOn)}</span>}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs text-text-tertiary"><Star size={12} /> Not certified</span>
-                  )}
-                </td>
-                {canWrite && <td><HrButton variant="ghost" onClick={() => { setSkillName(s.skillName); setProficiency(String(s.proficiency)); setCertified(s.certified); setCertificationName(s.certificationName || ''); setCertifiedOn(s.certifiedOn || ''); setExpiresOn(s.expiresOn || '') }}>Edit</HrButton></td>}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
+      {node}
     </div>
   )
 }

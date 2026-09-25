@@ -197,11 +197,12 @@ export function useProgramEnrollments(programId: string | undefined, enabled = t
 }
 
 /** Backend route is /enrollments/me — /my-enrollments never existed (404). */
-export function useMyEnrollments() {
+export function useMyEnrollments(enabled = true) {
   return useQuery({
     queryKey: ['hrms', 'learning', 'my-enrollments'],
     queryFn: () => apiJson<Enrollment[]>('/v1/learning/enrollments/me'),
     staleTime: 30_000,
+    enabled,
   })
 }
 

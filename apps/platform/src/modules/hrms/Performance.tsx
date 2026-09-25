@@ -1,271 +1,225 @@
+// Performance (/hrms/performance) on the module kit.
+//   - hrms.performance.read: Review cycles, Employee reviews, Goals & KPIs.
+//     (The page used to list these three twice under a second set of names.)
+//   - hrms.performance.review.self: My goals and My reviews. "My reviews" is
+//     what the API returns for /reviews/my: reviews the viewer has to write,
+//     and reviews written about them.
 import React, { useMemo, useState } from 'react'
-import { Plus, Target, Star, Check, TrendingUp, CheckCircle2 } from 'lucide-react'
-import { format } from 'date-fns'
+import { Plus } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
-import { useToast } from '@/shared/hooks/useToast'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
+import { HrButton, HrStatusPill, type PillTone } from '@/shared/components/hr'
+import { ModulePage, Views, useView, StatRow, State, Panel, SubHeading, Note, useDesignToast, dmy, CARD, HEAD_FONT } from '@/design/module/ModuleKit'
+import { dashIcon } from '@/design/dc/icons'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, HrTabs, HrTabPanel, type PillTone,
-} from '@/shared/components/hr'
-import {
-  useMyReviews, useSubmitReview,
-  useMyGoals, useCreateGoal, useUpdateGoalProgress,
+  useMyReviews, useSubmitReview, useMyGoals, useCreateGoal, useUpdateGoalProgress,
   type ReviewStatus, type GoalStatus, type PerformanceReview,
 } from './api/usePerformance'
-
 import { AdminKpis } from './performance/AdminKpis'
 import { AdminCycles } from './performance/AdminCycles'
 import { AdminReviews } from './performance/AdminReviews'
-import { PerformanceError } from './performance/PerformanceEmployeePicker'
-const REVIEW_TONE: Record<ReviewStatus, PillTone> = { PENDING: 'warn', IN_PROGRESS: 'info', MISSED: 'red', SUBMITTED: 'ok', ACKNOWLEDGED: 'teal' }
-const GOAL_TONE: Record<GoalStatus, PillTone> = { ACTIVE: 'info', AT_RISK: 'warn', COMPLETED: 'ok', DROPPED: 'gray' }
 
-const inputCls = 'w-full rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
+export const REVIEW_TONE: Record<ReviewStatus, PillTone> = { PENDING: 'warn', IN_PROGRESS: 'info', MISSED: 'red', SUBMITTED: 'ok', ACKNOWLEDGED: 'teal' }
+export const GOAL_TONE: Record<GoalStatus, PillTone> = { ACTIVE: 'info', AT_RISK: 'warn', COMPLETED: 'ok', DROPPED: 'gray' }
+/** "AT_RISK" → "At risk" */
+export const words = (v?: string | null) => (v || '').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
 
-type Tab = 'goals' | 'reviews' | 'cycles' | 'admin' | 'kpis' | 'emp-performance' | 'appraisals' | 'kpi-tracking'
+type Tab = 'cycles' | 'reviews' | 'kpis' | 'my-goals' | 'my-reviews'
 
 export const Performance: React.FC = () => {
   const canSelf = usePermission('hrms.performance.review.self')
   const canRead = usePermission('hrms.performance.read')
-
-  const tabs: { key: Tab; label: string }[] = [
+  const views = [
     ...(canRead ? [
-      { key: 'emp-performance' as Tab, label: 'Employee Performance' },
-      { key: 'appraisals' as Tab, label: 'Appraisals & 360 Feedback' },
-      { key: 'kpi-tracking' as Tab, label: 'KPI Tracking' },
-      { key: 'cycles' as Tab, label: 'Review cycles' },
-      { key: 'kpis' as Tab, label: 'Goals & KPIs' },
-      { key: 'admin' as Tab, label: 'Employee reviews' }
+      { key: 'cycles', label: 'Review cycles', icon: 'calendarDays' },
+      { key: 'reviews', label: 'Employee reviews', icon: 'clipboard' },
+      { key: 'kpis', label: 'Goals & KPIs', icon: 'target' },
     ] : []),
-    ...(canSelf ? [{ key: 'goals' as Tab, label: 'My Goals' }, { key: 'reviews' as Tab, label: 'My Reviews' }] : []),
+    ...(canSelf ? [{ key: 'my-reviews', label: 'My reviews', icon: 'fileText' }, { key: 'my-goals', label: 'My goals', icon: 'checkCircle' }] : []),
   ]
-
-  const [tab, setTab] = useState<Tab>(canRead ? 'cycles' : tabs[0]?.key ?? 'goals')
-
+  const [tab, setTab] = useView(views.map((v) => v.key)) as [Tab, (k: string) => void]
   return (
-    <div className="mx-auto max-w-[1440px] p-4 sm:p-6">
-      <HrPageHeader crumb="Performance Management" title="Performance Center" subtitle="Track goals, run review cycles, and manage performance reviews" />
-
-      {tabs.length === 0 && <p className="ut-card p-5 text-sm text-text-secondary">Your role does not have performance access.</p>}
-      <HrTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as Tab)} />
-
-      {tab === 'goals' && canSelf && <HrTabPanel tabKey="goals"><MyGoalsTab /></HrTabPanel>}
-      {tab === 'reviews' && canSelf && <HrTabPanel tabKey="reviews"><MyReviewsTab /></HrTabPanel>}
-      {tab === 'cycles' && canRead && <HrTabPanel tabKey="cycles"><AdminCycles /></HrTabPanel>}
-      {tab === 'kpis' && canRead && <HrTabPanel tabKey="kpis"><AdminKpis /></HrTabPanel>}
-      {tab === 'admin' && canRead && <HrTabPanel tabKey="admin"><AdminReviews /></HrTabPanel>}
-      {tab === 'emp-performance' && canRead && <HrTabPanel tabKey="emp-performance"><AdminReviews /></HrTabPanel>}
-      {tab === 'appraisals' && canRead && <HrTabPanel tabKey="appraisals"><AdminCycles /></HrTabPanel>}
-      {tab === 'kpi-tracking' && canRead && <HrTabPanel tabKey="kpi-tracking"><AdminKpis /></HrTabPanel>}
-    </div>
+    <ModulePage crumb="Performance" title="Performance"
+      subtitle={canRead ? 'Run review cycles, read feedback and track company goals.' : 'Your reviews and the goals you’re working towards.'}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        {views.length > 1 && <Views items={views} active={tab} onChange={setTab} label="Performance views" />}
+        {views.length === 0 && <State kind="empty" icon="lock" title="No performance access" description="Ask an admin if you should see reviews or goals." />}
+        {tab === 'cycles' && canRead && <AdminCycles />}
+        {tab === 'reviews' && canRead && <AdminReviews />}
+        {tab === 'kpis' && canRead && <AdminKpis />}
+        {tab === 'my-reviews' && canSelf && <MyReviews />}
+        {tab === 'my-goals' && canSelf && <MyGoals />}
+      </div>
+    </ModulePage>
   )
 }
 
-// ── My Goals ───────────────────────────────────────────────────────────────
+function Bar({ pct }: { pct: number }) {
+  return (
+    <span aria-hidden="true" style={{ display: 'block', height: 8, borderRadius: 999, background: '#eef2f6', overflow: 'hidden' }}>
+      <span style={{ display: 'block', height: '100%', width: `${Math.max(0, Math.min(100, pct))}%`, background: '#059669', borderRadius: 999 }} />
+    </span>
+  )
+}
 
-function MyGoalsTab() {
-  const { toast } = useToast()
+// ── My goals ─────────────────────────────────────────────────────────────────
+function MyGoals() {
+  const { show, node } = useDesignToast()
   const { data: goals = [], isLoading, isError, error, refetch } = useMyGoals()
   const create = useCreateGoal()
   const updateProgress = useUpdateGoalProgress()
-
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [weight, setWeight] = useState('')
   const [drafts, setDrafts] = useState<Record<string, number>>({})
-
-  const stats = useMemo(() => {
-    const active = goals.filter((g) => g.status === 'ACTIVE').length
-    const completed = goals.filter((g) => g.status === 'COMPLETED').length
-    const avg = goals.length ? Math.round(goals.reduce((s, g) => s + (g.progress ?? 0), 0) / goals.length) : 0
-    return { active, completed, avg }
-  }, [goals])
-
+  const stats = useMemo(() => ({
+    active: goals.filter((g) => g.status === 'ACTIVE' || g.status === 'AT_RISK').length,
+    completed: goals.filter((g) => g.status === 'COMPLETED').length,
+    avg: goals.length ? Math.round(goals.reduce((s, g) => s + (g.progress ?? 0), 0) / goals.length) : 0,
+  }), [goals])
   const onCreate = async () => {
-    if (!title.trim()) { toast('Give the goal a title', 'error'); return }
-    if (weight && (!Number.isInteger(Number(weight)) || Number(weight) < 0 || Number(weight) > 100)) { toast('Weight must be a whole number between 0 and 100', 'error'); return }
+    if (!title.trim()) { show('Give the goal a title', true); return }
+    if (weight && (!Number.isInteger(Number(weight)) || Number(weight) < 0 || Number(weight) > 100)) { show('Weight must be a whole number from 0 to 100', true); return }
     try {
-      await create.mutateAsync({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        weight: weight ? parseInt(weight, 10) : undefined,
-      })
-      toast('Goal added', 'success')
-      setTitle(''); setDescription(''); setWeight('')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to add goal', 'error')
-    }
+      await create.mutateAsync({ title: title.trim(), description: description.trim() || undefined, weight: weight ? parseInt(weight, 10) : undefined })
+      show('Goal added'); setTitle(''); setDescription(''); setWeight('')
+    } catch (e) { show('Couldn’t add the goal', true, (e as Error)?.message) }
   }
-
-  const onSaveProgress = async (id: string, progress: number) => {
+  const onSave = async (id: string, progress: number) => {
     try {
       await updateProgress.mutateAsync({ id, progress })
-      toast('Progress updated', 'success')
-      setDrafts((p) => { const n = { ...p }; delete n[id]; return n })
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed', 'error')
-    }
+      show('Progress saved'); setDrafts((p) => { const n = { ...p }; delete n[id]; return n })
+    } catch (e) { show('Couldn’t save progress', true, (e as Error)?.message) }
   }
-
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-3 gap-3">
-        <HrStatCard icon={<Target size={18} />} color="blue" value={goals.length} label="Total Goals" loading={isLoading} />
-        <HrStatCard icon={<CheckCircle2 size={18} />} color="green" value={stats.completed} label="Completed" loading={isLoading} />
-        <HrStatCard icon={<TrendingUp size={18} />} color="orange" value={`${stats.avg}%`} label="Avg Progress" loading={isLoading} />
-      </div>
-
-      <div className="ut-card flex flex-wrap items-end gap-2 p-4">
-        <div className="flex-1 min-w-[180px]">
-          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Goal title</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ship the billing revamp" className="ut-input" />
+    <div style={{ display: 'grid', gap: 16 }}>
+      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        { icon: 'target', color: 'blue', label: 'Goals', value: String(goals.length), sub: `${stats.active} in progress` },
+        { icon: 'checkCircle', color: 'green', label: 'Completed', value: String(stats.completed), sub: 'Reached' },
+        { icon: 'chart', color: 'orange', label: 'Average progress', value: `${stats.avg}%`, sub: 'Across all your goals' },
+      ]} />}
+      <Panel title="Add a goal" sub="Your own goals. Company KPIs assigned to you appear here too, and are updated by your performance admin.">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[180px] flex-1"><label className="mb-1.5 block text-[13px] font-semibold text-text-secondary" htmlFor="goal-title">Goal</label><input id="goal-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ship the billing revamp" className="ut-input" /></div>
+          <div className="min-w-[180px] flex-1"><label className="mb-1.5 block text-[13px] font-semibold text-text-secondary" htmlFor="goal-desc">Description</label><input id="goal-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" className="ut-input" /></div>
+          <div><label className="mb-1.5 block text-[13px] font-semibold text-text-secondary" htmlFor="goal-weight">Weight</label><input id="goal-weight" type="number" min={0} max={100} value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0–100" className="ut-input w-24" /></div>
+          <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Add goal</HrButton>
         </div>
-        <div className="flex-1 min-w-[180px]">
-          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Description</label>
-          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" className="ut-input" />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Weight</label>
-          <input type="number" min={0} max={100} value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0" className="ut-input w-24" />
-        </div>
-        <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> Add Goal</HrButton>
-      </div>
-
-      <div className="space-y-3">
-        {isError ? <PerformanceError error={error} retry={() => refetch()} /> : isLoading ? (
-          [...Array(3)].map((_, i) => <div key={i} className="ut-card ut-card-sm h-20 animate-pulse" />)
-        ) : goals.length === 0 ? (
-          <div className="ut-card py-14 text-center">
-            <p className="text-sm font-semibold text-text-secondary">No goals yet</p>
-            <p className="mt-1 text-xs text-text-tertiary">Add your first goal above to start tracking progress.</p>
-          </div>
-        ) : goals.map((g) => {
-          const value = drafts[g.id] ?? g.progress
-          const dirty = drafts[g.id] !== undefined && drafts[g.id] !== g.progress
-          return (
-            <div key={g.id} className="ut-card ut-card-sm p-4">
-              <div className="mb-2 flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-text-primary">{g.title}</p>
-                  {g.description && <p className="mt-0.5 text-sm text-text-secondary">{g.description}</p>}
-                </div>
-                <div className="flex items-center gap-2">
-                  {g.weight > 0 && <span className="text-xs font-medium text-text-tertiary">Weight {g.weight}</span>}
-                  <HrStatusPill tone={GOAL_TONE[g.status]}>{g.status}</HrStatusPill>
-                </div>
+      </Panel>
+      {isError ? <State kind="error" title="Couldn’t load your goals" description={(error as Error)?.message} onRetry={() => refetch()} />
+        : isLoading ? <State kind="loading" />
+          : goals.length === 0 ? <State kind="empty" icon="target" title="No goals yet" description="Add your first goal above to start tracking progress." />
+            : (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {goals.map((g) => {
+                  const value = drafts[g.id] ?? g.progress
+                  const dirty = drafts[g.id] !== undefined && drafts[g.id] !== g.progress
+                  const kpi = g.targetValue != null
+                  return (
+                    <article key={g.id} style={{ ...CARD, padding: '14px 18px', display: 'grid', gap: 10 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 10 }}>
+                        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+                          <h3 style={{ margin: 0, fontFamily: HEAD_FONT, fontSize: 15, fontWeight: 700 }}>{g.title}</h3>
+                          {g.description && <p style={{ margin: '3px 0 0', fontSize: 13, color: '#64748b' }}>{g.description}</p>}
+                        </div>
+                        {kpi && <HrStatusPill tone="purple">Company KPI</HrStatusPill>}
+                        {g.weight > 0 && <span style={{ fontSize: 12.5, color: '#64748b' }}>{`Weight ${g.weight}`}</span>}
+                        <HrStatusPill tone={GOAL_TONE[g.status]}>{words(g.status)}</HrStatusPill>
+                      </div>
+                      {kpi ? (
+                        <div style={{ display: 'grid', gap: 6 }}>
+                          <Bar pct={g.progress} />
+                          <span style={{ fontSize: 12.5, color: '#475569' }}>{`${g.currentValue ?? 0} of ${g.targetValue} ${g.unit || ''} · ${g.progress}%`.trim()}</span>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <input type="range" min={0} max={100} value={value} aria-label={`Progress on ${g.title}`} disabled={g.status === 'DROPPED'}
+                            onChange={(e) => setDrafts((p) => ({ ...p, [g.id]: parseInt(e.target.value, 10) }))} className="h-2 flex-1 cursor-pointer accent-[#059669]" />
+                          <span style={{ width: 44, textAlign: 'right', fontSize: 13.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{`${value}%`}</span>
+                          <HrButton size="sm" variant={dirty ? 'primary' : 'ghost'} onClick={() => onSave(g.id, value)} disabled={!dirty || updateProgress.isPending || g.status === 'DROPPED'}>Save</HrButton>
+                        </div>
+                      )}
+                    </article>
+                  )
+                })}
               </div>
-              {g.targetValue != null ? <div className="rounded-md bg-[#E6F4F1] p-3 text-sm"><p className="font-semibold text-[#0A5240]">{g.currentValue ?? 0} / {g.targetValue} {g.unit} · {g.progress}%</p><p className="mt-1 text-xs text-text-secondary">Your performance administrator records measured KPI updates.</p></div> : <div className="flex items-center gap-3">
-                <input
-                  type="range" min={0} max={100} value={value}
-                  disabled={g.status === 'DROPPED'}
-                  onChange={(e) => setDrafts((p) => ({ ...p, [g.id]: parseInt(e.target.value, 10) }))}
-                  className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-bg-base accent-[#059669]"
-                />
-                <span className="w-10 text-right text-sm font-semibold text-text-primary">{value}%</span>
-                <HrButton size="sm" variant={dirty ? 'primary' : 'ghost'} onClick={() => onSaveProgress(g.id, value)} disabled={!dirty || updateProgress.isPending || g.status === 'DROPPED'}>
-                  <Check size={14} /> Save
-                </HrButton>
-              </div>}
-            </div>
-          )
-        })}
-      </div>
+            )}
+      {node}
     </div>
   )
 }
 
-// ── My Reviews ───────────────────────────────────────────────────────────────
-
-function MyReviewsTab() {
+// ── My reviews ───────────────────────────────────────────────────────────────
+function MyReviews() {
   const { data: reviews = [], isLoading, isError, error, refetch } = useMyReviews()
-  const currentUser = useCurrentUser()
-
+  const me = useCurrentUser().data?.employeeId ?? undefined
+  // Mine to write: I'm the reviewer, or it's my self review (no separate reviewer).
+  const mineToWrite = (r: PerformanceReview) => !!me && (r.reviewerId || r.employeeId) === me
+  const toWrite = reviews.filter((r) => mineToWrite(r) && r.status === 'PENDING')
+  const rest = reviews.filter((r) => !toWrite.includes(r))
+  if (isError) return <State kind="error" title="Couldn’t load your reviews" description={(error as Error)?.message} onRetry={() => refetch()} />
+  if (isLoading) return <State kind="loading" />
+  if (!reviews.length) return <State kind="empty" icon="fileText" title="No reviews yet" description="When a review cycle starts, the reviews you need to write and the feedback about you appear here." />
   return (
-    <div className="space-y-3">
-      {isError ? <PerformanceError error={error} retry={() => refetch()} /> : isLoading ? (
-        [...Array(3)].map((_, i) => <div key={i} className="ut-card h-24 animate-pulse" />)
-      ) : reviews.length === 0 ? (
-        <div className="ut-card py-14 text-center">
-          <p className="text-sm font-semibold text-text-secondary">No reviews assigned</p>
-          <p className="mt-1 text-xs text-text-tertiary">Your performance reviews will appear here once a cycle is opened.</p>
-        </div>
-      ) : reviews.map((r) => <MyReviewCard key={r.id} review={r} employeeId={currentUser.data?.employeeId ?? undefined} />)}
+    <div style={{ display: 'grid', gap: 16 }}>
+      <SubHeading>{`To write${toWrite.length ? ` · ${toWrite.length}` : ''}`}</SubHeading>
+      {toWrite.length === 0 ? <State kind="empty" icon="checkCircle" title="Nothing to write" description="You’ve submitted every review assigned to you." />
+        : <div style={{ display: 'grid', gap: 10 }}>{toWrite.map((r) => <ReviewCard key={r.id} review={r} me={me} canWrite />)}</div>}
+      {rest.length > 0 && <>
+        <SubHeading>Reviews and feedback</SubHeading>
+        <div style={{ display: 'grid', gap: 10 }}>{rest.map((r) => <ReviewCard key={r.id} review={r} me={me} canWrite={false} />)}</div>
+      </>}
     </div>
   )
 }
 
-function MyReviewCard({ review, employeeId }: { review: PerformanceReview; employeeId?: string }) {
-  const { toast } = useToast()
+function ReviewCard({ review, me, canWrite }: { review: PerformanceReview; me?: string; canWrite: boolean }) {
+  const { show, node } = useDesignToast()
   const submit = useSubmitReview()
   const [rating, setRating] = useState('')
   const [strengths, setStrengths] = useState('')
   const [improvements, setImprovements] = useState('')
-  const canSubmit = !!employeeId && (review.reviewerId || review.employeeId) === employeeId
-
+  const aboutMe = review.employeeId === me
+  const self = aboutMe && (!review.reviewerId || review.reviewerId === me)
+  const who = self ? 'Your self review' : aboutMe ? `Feedback from ${review.reviewerName || 'a reviewer'}` : `Review of ${review.employeeName || 'a colleague'}${review.employeeCode ? ` (${review.employeeCode})` : ''}`
   const onSubmit = async () => {
     const value = parseFloat(rating)
-    if (!(value >= 0 && value <= 5)) { toast('Enter a rating between 0 and 5', 'error'); return }
+    if (!(value >= 0 && value <= 5)) { show('Enter a rating from 0 to 5', true); return }
     try {
-      await submit.mutateAsync({
-        id: review.id,
-        overallRating: value,
-        strengths: strengths.trim() || undefined,
-        improvements: improvements.trim() || undefined,
-      })
-      toast('Review submitted', 'success')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to submit review', 'error')
-    }
+      await submit.mutateAsync({ id: review.id, overallRating: value, strengths: strengths.trim() || undefined, improvements: improvements.trim() || undefined })
+      show('Review submitted')
+    } catch (e) { show('Couldn’t submit the review', true, (e as Error)?.message) }
   }
-
   return (
-    <div className="ut-card p-5">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">{review.cycleName || 'Performance review'}</p>
-          <p className="font-semibold text-text-primary">
-            {review.employeeName || 'Employee review'}{review.employeeCode ? ` (${review.employeeCode})` : ''}
-          </p>
-          <p className="mt-1 text-sm text-text-secondary">{review.reviewerName ? `Reviewer: ${review.reviewerName}` : 'Self review'}</p>
-          <p className="mt-0.5 text-xs text-text-tertiary">Opened {format(new Date(review.createdAt), 'd MMM yyyy')}</p>
+    <article style={{ ...CARD, padding: '16px 18px', display: 'grid', gap: 12 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ flex: '1 1 240px', minWidth: 0, display: 'grid', gap: 2 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#0f6e56' }}>{review.cycleName || 'Performance review'}</span>
+          <h3 style={{ margin: 0, fontFamily: HEAD_FONT, fontSize: 15.5, fontWeight: 700 }}>{who}</h3>
+          <span style={{ fontSize: 12.5, color: '#64748b' }}>{`Opened ${dmy(review.createdAt)}${review.submittedAt ? ` · submitted ${dmy(review.submittedAt)}` : ''}`}</span>
         </div>
-        <HrStatusPill tone={REVIEW_TONE[review.status]}>{review.status}</HrStatusPill>
+        <HrStatusPill tone={REVIEW_TONE[review.status]}>{words(review.status)}</HrStatusPill>
       </div>
-
-      {review.status === 'PENDING' && canSubmit ? (
-        <div className="space-y-3 border-t border-border-default pt-3">
-          <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-3">
-            <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Overall rating (0–5)</label>
-              <input type="number" min={0} max={5} step="0.1" value={rating} onChange={(e) => setRating(e.target.value)} className="ut-input" />
-            </div>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Strengths</label>
-            <textarea value={strengths} onChange={(e) => setStrengths(e.target.value)} rows={2} placeholder="What went well" className={inputCls} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Areas to improve</label>
-            <textarea value={improvements} onChange={(e) => setImprovements(e.target.value)} rows={2} placeholder="What to focus on next" className={inputCls} />
-          </div>
-          <div className="flex justify-end">
-            <HrButton onClick={onSubmit} disabled={submit.isPending}>
-              {submit.isPending ? 'Submitting…' : 'Submit Review'}
-            </HrButton>
-          </div>
+      {canWrite ? (
+        <div style={{ display: 'grid', gap: 12, borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
+          <div style={{ maxWidth: 200 }}><label className="mb-1.5 block text-[13px] font-semibold text-text-secondary" htmlFor={`rating-${review.id}`}>Overall rating (0–5)</label>
+            <input id={`rating-${review.id}`} type="number" min={0} max={5} step="0.1" value={rating} onChange={(e) => setRating(e.target.value)} className="ut-input" /></div>
+          <div><label className="mb-1.5 block text-[13px] font-semibold text-text-secondary" htmlFor={`str-${review.id}`}>Strengths</label>
+            <textarea id={`str-${review.id}`} value={strengths} onChange={(e) => setStrengths(e.target.value)} rows={2} placeholder="What went well" className="ut-input resize-y" /></div>
+          <div><label className="mb-1.5 block text-[13px] font-semibold text-text-secondary" htmlFor={`imp-${review.id}`}>Areas to improve</label>
+            <textarea id={`imp-${review.id}`} value={improvements} onChange={(e) => setImprovements(e.target.value)} rows={2} placeholder="What to focus on next" className="ut-input resize-y" /></div>
+          <div className="flex justify-end"><HrButton onClick={onSubmit} disabled={submit.isPending}>{submit.isPending ? 'Submitting…' : 'Submit review'}</HrButton></div>
         </div>
       ) : (
-        <div className="space-y-2 border-t border-border-default pt-3 text-sm">
-          {review.status === 'PENDING' && <p className="text-text-secondary">Awaiting the assigned reviewer's feedback.</p>}
-          {review.overallRating != null && (
-            <p className="flex items-center gap-1.5 font-semibold text-text-primary">
-              <Star size={15} className="text-[#059669]" /> {review.overallRating} / 5
-            </p>
-          )}
-          {review.strengths && <p className="text-text-secondary"><span className="font-medium text-text-primary">Strengths: </span>{review.strengths}</p>}
-          {review.improvements && <p className="text-text-secondary"><span className="font-medium text-text-primary">Improvements: </span>{review.improvements}</p>}
+        <div style={{ display: 'grid', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 12, fontSize: 13.5 }}>
+          {review.status === 'PENDING' && <Note>Waiting for the reviewer’s feedback.</Note>}
+          {review.status === 'MISSED' && <Note tone="amber">The cycle closed before this review was submitted.</Note>}
+          {review.overallRating != null && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#0f6e56' }}>{dashIcon('target', 15)}{`${review.overallRating} / 5`}</span>}
+          {review.strengths && <p style={{ margin: 0, color: '#334155' }}><strong>Strengths: </strong>{review.strengths}</p>}
+          {review.improvements && <p style={{ margin: 0, color: '#334155' }}><strong>To improve: </strong>{review.improvements}</p>}
         </div>
       )}
-    </div>
+      {node}
+    </article>
   )
 }

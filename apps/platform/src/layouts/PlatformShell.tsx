@@ -179,7 +179,7 @@ const MODULE_ITEMS: NavItemDef[] = [
     key: 'performance', label: 'Performance & Learning', icon: <Target size={18} />, module: 'hrms',
     children: [
       { label: 'Performance Center', path: '/hrms/performance', icon: <Target size={15} />, visibleForRoles: [...R_ADMIN_MGR, ...R_ESS, ...R_HR] },
-      { label: 'Learning & Skills', path: '/hrms/learning', icon: <Award size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.learning.skill.read'] },
+      { label: 'Learning & Skills', path: '/hrms/learning', icon: <Award size={15} />, visibleForRoles: R_HR, visibleWithAnyPermission: ['hrms.learning.skill.read', 'hrms.learning.enroll.self'] },
     ],
   },
   {
