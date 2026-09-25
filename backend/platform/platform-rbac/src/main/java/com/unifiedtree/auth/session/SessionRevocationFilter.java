@@ -41,7 +41,7 @@ public class SessionRevocationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain)
             throws ServletException, IOException {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getPrincipal() instanceof Jwt jwt && !req.getRequestURI().contains("/v1/canonical-auth/")) {
+        if (auth != null && auth.getPrincipal() instanceof Jwt jwt && !isSignInPath(req.getRequestURI())) {
             UUID sid = uuid(jwt.getClaimAsString("sid"));
             UUID tenantId = uuid(jwt.getClaimAsString("tenant_id"));
             if (sid != null && tenantId != null && !sessions.isActive(tenantId, sid)) {
@@ -54,6 +54,15 @@ public class SessionRevocationFilter extends OncePerRequestFilter {
             }
         }
         chain.doFilter(req, res);
+    }
+
+    /** Sign-in, refresh and sign-out carry their own credentials and must always be reachable. */
+    static boolean isSignInPath(String uri) {
+        if (uri == null) return false;
+        int i = uri.indexOf("/v1/canonical-auth/");
+        if (i < 0) return false;
+        String rest = uri.substring(i + "/v1/canonical-auth/".length());
+        return rest.startsWith("login") || rest.startsWith("refresh") || rest.startsWith("logout");
     }
 
     private static UUID uuid(String s) {
