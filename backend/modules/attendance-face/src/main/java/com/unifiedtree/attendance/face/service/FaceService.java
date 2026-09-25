@@ -506,12 +506,29 @@ public class FaceService {
     }
 
     public List<AdminVerificationEvent> adminEvents(UUID tenantId, UUID employeeId, int limit) {
+        // device: what the client sent with the check, else (for a passed
+        // punch-in check made before the punch labelled it, see
+        // FacePunchDevices) the device on the punch it cleared: the same
+        // person's check-in within 15 minutes after it.
         String sql = """
-            SELECT id, employee_id, purpose, result, reason, score_bucket, created_at
-              FROM attendance.face_verification_events
-             WHERE tenant_id = ?
-            """ + (employeeId == null ? "" : " AND employee_id = ?")
-            + " ORDER BY created_at DESC LIMIT " + Math.max(1, Math.min(limit, 500));
+            SELECT fe.id, fe.employee_id, fe.purpose, fe.result, fe.reason, fe.score_bucket, fe.created_at,
+                   COALESCE(NULLIF(btrim(fe.device_fingerprint), ''), punch.device_id) AS device
+              FROM attendance.face_verification_events fe
+              LEFT JOIN LATERAL (
+                   SELECT NULLIF(btrim(r.device_id), '') AS device_id
+                     FROM auth.user_credentials uc
+                     JOIN attendance.records r
+                       ON r.tenant_id = fe.tenant_id AND r.employee_id = uc.employee_id
+                      AND r.attendance_date = (fe.created_at AT TIME ZONE 'Asia/Kolkata')::date
+                      AND r.check_in_at BETWEEN fe.created_at - interval '2 minutes' AND fe.created_at + interval '15 minutes'
+                    WHERE uc.id = fe.employee_id AND uc.tenant_id = fe.tenant_id
+                      AND fe.purpose = 'PUNCH_IN' AND fe.result = 'PASS'
+                      AND NULLIF(btrim(fe.device_fingerprint), '') IS NULL
+                    ORDER BY r.check_in_at
+                    LIMIT 1) punch ON true
+             WHERE fe.tenant_id = ?
+            """ + (employeeId == null ? "" : " AND fe.employee_id = ?")
+            + " ORDER BY fe.created_at DESC LIMIT " + Math.max(1, Math.min(limit, 500));
         Object[] args = employeeId == null ? new Object[]{tenantId} : new Object[]{tenantId, employeeId};
         List<AdminVerificationEvent> rows = new ArrayList<>();
         jdbc.query(sql, rs -> {
@@ -522,7 +539,8 @@ public class FaceService {
                     rs.getString("result"),
                     rs.getString("reason"),
                     rs.getString("score_bucket"),
-                    rs.getTimestamp("created_at").toInstant()));
+                    rs.getTimestamp("created_at").toInstant(),
+                    rs.getString("device")));
         }, args);
         return rows;
     }

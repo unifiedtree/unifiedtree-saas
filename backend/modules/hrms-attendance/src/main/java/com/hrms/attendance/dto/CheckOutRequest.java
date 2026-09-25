@@ -47,5 +47,13 @@ public record CheckOutRequest(
          * that already exists on {@code CheckInRequest}.
          */
         boolean offlineCaptured,
-        Instant capturedAt
+        Instant capturedAt,
+        /**
+         * Optional: why the employee is leaving after their shift ended
+         * ("Month-end closing"). Stored on the day's record
+         * (attendance.records.overtime_reason, V143.25) and shown to the
+         * approver on the overtime list. Never fails the punch: blank is
+         * ignored and anything past 500 characters is cut.
+         */
+        String overtimeReason
 ) {}

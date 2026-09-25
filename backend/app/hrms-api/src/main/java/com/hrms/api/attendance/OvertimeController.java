@@ -19,10 +19,36 @@ public class OvertimeController {
  private final TeamEmployeeScope scope;
  private final JdbcTemplate jdbc;
  private final NamedParameterJdbcTemplate named;
+ private final OvertimeReasons reasons;
  @org.springframework.beans.factory.annotation.Autowired(required=false)
  private org.springframework.context.ApplicationEventPublisher eventPublisher;
- public OvertimeController(TeamEmployeeScope scope,JdbcTemplate jdbc,NamedParameterJdbcTemplate named) {this.scope=scope;this.jdbc=jdbc;this.named=named;}
+ public OvertimeController(TeamEmployeeScope scope,JdbcTemplate jdbc,NamedParameterJdbcTemplate named,OvertimeReasons reasons) {this.scope=scope;this.jdbc=jdbc;this.named=named;this.reasons=reasons;}
  public record Decision(@Size(max=1000) String note) {}
+ /** The employee's own explanation for an overtime entry. */
+ public record ReasonInput(@Size(max=2000) String reason) {}
+ /**
+  * Details on each overtime row (V143.25): the shift in force that day and when it ended, when the person checked in and
+  * out, and the reason. The reason is the employee's own (given at check-out or later), else the reason on an approved
+  * fix request that set the times, else the reason HR gave for a manual entry. reasonSource says which one it is.
+  */
+ static final String DETAILS_SQL = """
+    r.check_in_at AS "checkInAt",r.check_out_at AS "checkOutAt",
+    s.name AS "shiftName",to_char(s.start_time,'HH24:MI') AS "shiftStart",to_char(s.end_time,'HH24:MI') AS "shiftEnd",
+    COALESCE(NULLIF(btrim(r.overtime_reason),''),NULLIF(btrim(r.regularization_reason),''),NULLIF(btrim(r.manual_entry_reason),'')) AS reason,
+    CASE WHEN NULLIF(btrim(r.overtime_reason),'') IS NOT NULL THEN 'EMPLOYEE'
+         WHEN NULLIF(btrim(r.regularization_reason),'') IS NOT NULL THEN 'FIX_REQUEST'
+         WHEN NULLIF(btrim(r.manual_entry_reason),'') IS NOT NULL THEN 'MANUAL_ENTRY' END AS "reasonSource"
+   """;
+ /** The shift assignment in force on the record's date (the same rule as the team schedule). */
+ static final String SHIFT_JOIN = """
+   LEFT JOIN LATERAL (
+     SELECT a.shift_policy_id FROM attendance.employee_shift_assignments a
+     WHERE a.tenant_id=r.tenant_id AND a.employee_id=r.employee_id AND a.effective_from<=r.attendance_date
+       AND (a.effective_to IS NULL OR a.effective_to>=r.attendance_date)
+     ORDER BY a.effective_from DESC,a.created_at DESC LIMIT 1
+   ) sa ON true
+   LEFT JOIN attendance.shift_policies s ON s.id=sa.shift_policy_id AND s.tenant_id=r.tenant_id
+   """;
  @GetMapping
  @PreAuthorize("hasAuthority('attendance.team.read')")
  @Transactional(readOnly=true)
@@ -36,11 +62,12 @@ public class OvertimeController {
    SELECT r.id,r.employee_id AS "employeeId",concat_ws(' ',e.first_name,e.last_name) AS "employeeName",
     r.attendance_date AS date,r.overtime_minutes AS minutes,
     CASE WHEN d.reviewed_minutes=r.overtime_minutes THEN d.status ELSE 'PENDING' END AS status,
-    d.note,d.decided_at AS "decidedAt",NULLIF(concat_ws(' ',reviewer.first_name,reviewer.last_name),'') AS "decidedBy"
+    d.note,d.decided_at AS "decidedAt",NULLIF(concat_ws(' ',reviewer.first_name,reviewer.last_name),'') AS "decidedBy",
+   """+DETAILS_SQL+"""
    FROM attendance.records r JOIN hrms.employees e ON e.id=r.employee_id AND e.tenant_id=r.tenant_id
    LEFT JOIN attendance.overtime_decisions d ON d.record_id=r.id AND d.tenant_id=r.tenant_id
    LEFT JOIN hrms.employees reviewer ON reviewer.id=d.decided_by AND reviewer.tenant_id=r.tenant_id
-   """+where+" ORDER BY r.attendance_date DESC,e.first_name,r.id LIMIT 20 OFFSET :offset",params);
+   """+SHIFT_JOIN+where+" ORDER BY r.attendance_date DESC,e.first_name,r.id LIMIT 20 OFFSET :offset",params);
   Long count=named.queryForObject("SELECT count(*) FROM attendance.records r"+where,params,Long.class);
   return Map.of("content",content,"totalElements",count);
  }
@@ -54,6 +81,16 @@ public class OvertimeController {
  public Map<String,String> reject(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id,@Valid @RequestBody Decision input) {
   if(input.note()==null||input.note().isBlank())throw new BusinessRuleException("Explain why overtime is rejected","OVERTIME_REASON_REQUIRED");
   return decide(jwt,id,input,"REJECTED");
+ }
+ /**
+  * The employee explains their own overtime ("Month-end closing"), while it is still waiting for a decision. The same
+  * reason can also arrive with the check-out (CheckOutRequest.overtimeReason). Only the record's own employee may set it.
+  */
+ @PutMapping("/{id}/reason")
+ @PreAuthorize("hasAuthority('attendance.checkin.self')")
+ public Map<String,Object> setReason(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id,@Valid @RequestBody ReasonInput input) {
+  UUID self=UUID.fromString(jwt.getClaimAsString("employee_id")!=null?jwt.getClaimAsString("employee_id"):jwt.getSubject());
+  return reasons.setByEmployee(id,self,input==null?null:input.reason());
  }
  private Map<String,String> decide(Jwt jwt,UUID id,Decision input,String status) {
   UUID tenant=TenantContext.requireTenantId();

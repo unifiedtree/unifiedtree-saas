@@ -80,6 +80,10 @@ public class AttendanceController {
     private final LeaveRequestRepository leaveRequestRepository;
     @org.springframework.beans.factory.annotation.Autowired
     private ApproverScopeGuard approverScopeGuard;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private OvertimeReasons overtimeReasons;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private FacePunchDevices facePunchDevices;
 
     /** Longest window the trend endpoint will serve; longer requests are clamped. */
     private static final int MAX_TREND_DAYS = 31;
@@ -162,6 +166,11 @@ public class AttendanceController {
                 // the server-clock behaviour byte-for-byte.
                 request.offlineCaptured(),
                 request.capturedAt());
+        // Put the phone / kiosk on the face check that cleared this punch, so
+        // the Face tab can say where it happened (V143.25). Best effort.
+        if (facePunchDevices != null) {
+            facePunchDevices.link(jwt.getSubject(), request.deviceId(), request.checkInMethod());
+        }
         return ResponseEntity.ok(dto);
     }
 
@@ -179,7 +188,7 @@ public class AttendanceController {
         // add a NEW endpoint POST /v1/attendance/team/force-checkout guarded
         // by @PreAuthorize("hasAuthority('attendance.regularization.approve')").
         UUID employeeId = extractEmployeeId(jwt);
-        return ResponseEntity.ok(attendanceService.checkOut(
+        AttendanceDto out = attendanceService.checkOut(
                 employeeId,
                 request != null ? request.latitude() : null,
                 request != null ? request.longitude() : null,
@@ -188,7 +197,12 @@ public class AttendanceController {
                 request != null ? request.zoneName() : null,
                 request != null ? request.deviceId() : null,
                 request != null && request.offlineCaptured(),
-                request != null ? request.capturedAt() : null));
+                request != null ? request.capturedAt() : null);
+        // Why they stayed late, when the app sends it (V143.25). Best effort.
+        if (overtimeReasons != null && request != null && out != null) {
+            overtimeReasons.recordAtCheckout(out.id(), employeeId, request.overtimeReason());
+        }
+        return ResponseEntity.ok(out);
     }
 
     @Operation(summary = "Get checkout confirmation summary for the active session")
@@ -423,7 +437,17 @@ public class AttendanceController {
                         return off == null || !off.contains(dayDow);
                     })
                     .count();
-            series.add(dailyCounts(day, rosterForDay, dayRecords, onLeaveIds));
+            // People (already joined) whose own weekly off is this day. When
+            // that is everyone, the calendar shows the day as a weekly off.
+            int offForDay = (int) employees.stream()
+                    .filter(emp -> {
+                        LocalDate joined = trendJoins.get(emp.getId());
+                        if (joined != null && joined.isAfter(dayFinal)) return false;
+                        java.util.Set<Integer> off = trendOffs.get(emp.getId());
+                        return off != null && off.contains(dayDow);
+                    })
+                    .count();
+            series.add(dailyCounts(day, rosterForDay, offForDay, dayRecords, onLeaveIds));
         }
         return ResponseEntity.ok(series);
     }
@@ -433,10 +457,11 @@ public class AttendanceController {
      * the KPI tiles can never disagree — present excludes late/half-day/WFH,
      * and approved-leave people are removed from absent.
      */
-    private DailyAttendanceCounts dailyCounts(LocalDate date,
-                                              int rosterSize,
-                                              List<AttendanceRecord> dayRecords,
-                                              Set<UUID> onLeaveIds) {
+    static DailyAttendanceCounts dailyCounts(LocalDate date,
+                                             int rosterSize,
+                                             int weeklyOff,
+                                             List<AttendanceRecord> dayRecords,
+                                             Set<UUID> onLeaveIds) {
         long late = dayRecords.stream()
                 .filter(r -> r.getAttendanceStatus() != null && r.getAttendanceStatus().name().equals("LATE"))
                 .count();
@@ -461,9 +486,25 @@ public class AttendanceController {
                 .filter(r -> r.getOvertimeMinutes() != null)
                 .mapToLong(AttendanceRecord::getOvertimeMinutes)
                 .sum();
+        // Everyone who checked in, each person once, and the part of them who
+        // worked from home on time (not late, not half-day). present + late +
+        // halfDay + workFromHomeOnTime = checkedIn, so a WFH-and-late day is no
+        // longer counted twice (V143.25).
+        long checkedIn = markedIds.size();
+        long workFromHomeOnTime = dayRecords.stream()
+                .filter(r -> r.getCheckInAt() != null)
+                .filter(r -> r.getAttendanceType() != null && r.getAttendanceType().name().equals("WFH"))
+                .filter(r -> {
+                    String st = r.getAttendanceStatus() == null ? "" : r.getAttendanceStatus().name();
+                    return !st.equals("LATE") && !st.equals("HALF_DAY");
+                })
+                .map(AttendanceRecord::getEmployeeId)
+                .distinct()
+                .count();
         return new DailyAttendanceCounts(
                 date, present, onLeaveIds.size(), late, halfDay, workFromHome, notMarked, absent,
-                overtimeMinutes);
+                overtimeMinutes, checkedIn, workFromHomeOnTime, rosterSize, weeklyOff,
+                rosterSize == 0 && weeklyOff > 0);
     }
 
     /** One point on the attendance trend chart. */
@@ -477,7 +518,17 @@ public class AttendanceController {
             long notMarked,
             long absent,
             /** Total overtime clocked that day, in minutes, across the roster. */
-            long overtimeMinutes) {}
+            long overtimeMinutes,
+            /** People who checked in that day, each counted once (V143.25). */
+            long checkedIn,
+            /** Of those, the ones who worked from home and were neither late nor half-day. */
+            long workFromHomeOnTime,
+            /** People expected at work that day: joined, and not on their weekly off. */
+            long scheduled,
+            /** People (already joined) whose weekly off is that day. */
+            long weeklyOff,
+            /** True when the day is a weekly off for everyone in scope (nobody scheduled). */
+            boolean weeklyOffDay) {}
 
     /**
      * How today's punches arrived — face, GPS, PIN, biometric device, manual or

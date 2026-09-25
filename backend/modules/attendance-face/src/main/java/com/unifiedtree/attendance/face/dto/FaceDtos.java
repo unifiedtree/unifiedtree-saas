@@ -134,6 +134,10 @@ public final class FaceDtos {
             String result,
             String reason,
             String scoreBucket,
-            Instant createdAt
+            Instant createdAt,
+            /** The phone or kiosk the check was made on, when known (V143.25): the
+             *  deviceFingerprint the client sent, or the device of the punch the
+             *  check cleared. Null for older events with neither. */
+            String device
     ) {}
 }

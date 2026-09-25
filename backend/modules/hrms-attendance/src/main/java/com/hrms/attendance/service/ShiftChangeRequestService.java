@@ -88,7 +88,8 @@ public class ShiftChangeRequestService {
             rs.getTimestamp("decided_at") == null ? null : rs.getTimestamp("decided_at").toInstant(),
             rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toInstant(),
             rs.getObject("requested_effective_date", LocalDate.class),
-            rs.getObject("applied_effective_date", LocalDate.class));
+            rs.getObject("applied_effective_date", LocalDate.class),
+            rs.getString("approver_name"));
 
     private static final String SELECT = """
             SELECT scr.id, scr.employee_id, scr.current_shift_policy_id,
@@ -96,10 +97,13 @@ public class ShiftChangeRequestService {
                    scr.requested_shift_policy_id, req.name AS requested_shift_name,
                    scr.reason, scr.status, scr.approver_id, scr.decision_note,
                    scr.decided_at, scr.created_at,
-                   scr.requested_effective_date, scr.applied_effective_date
+                   scr.requested_effective_date, scr.applied_effective_date,
+                   COALESCE(NULLIF(concat_ws(' ', ap.first_name, ap.last_name), ''), apu.display_name, apu.email) AS approver_name
               FROM attendance.shift_change_requests scr
               LEFT JOIN attendance.shift_policies cur ON cur.id = scr.current_shift_policy_id
               LEFT JOIN attendance.shift_policies req ON req.id = scr.requested_shift_policy_id
+              LEFT JOIN hrms.employees ap ON ap.id = scr.approver_id AND ap.tenant_id = scr.tenant_id
+              LEFT JOIN auth.user_credentials apu ON apu.id = scr.approver_id AND apu.tenant_id = scr.tenant_id
             """;
 
     @Transactional
@@ -205,6 +209,40 @@ public class ShiftChangeRequestService {
                 """, MAPPER, tenantId, today());
     }
 
+    /** Longest look-back the "Already decided" list serves. */
+    public static final int MAX_DECIDED_DAYS = 365;
+    /** Most rows the "Already decided" list returns. */
+    public static final int MAX_DECIDED_ROWS = 200;
+
+    /**
+     * Requests approved or rejected (including the ones that expired) in the
+     * last {@code days} days, newest decision first, with who decided and
+     * their note. Feeds HR's "Already decided" list; the caller narrows it to
+     * the approver's team.
+     */
+    @Transactional(readOnly = true)
+    public List<ShiftChangeRequestResponse> listDecided(int days) {
+        UUID tenantId = TenantContext.getTenantId();
+        int window = Math.max(1, Math.min(days, MAX_DECIDED_DAYS));
+        return jdbc.query(SELECT + """
+                 WHERE scr.tenant_id = ? AND scr.status IN ('APPROVED', 'REJECTED')
+                   AND scr.decided_at >= now() - make_interval(days => ?)
+                 ORDER BY scr.decided_at DESC, scr.created_at DESC
+                 LIMIT """ + MAX_DECIDED_ROWS, MAPPER, tenantId, window);
+    }
+
+    /**
+     * The note kept with the assignment an approval creates, shown in the
+     * employee's shift history: the employee's reason, cut to the column's 500
+     * characters.
+     */
+    static String assignmentNote(String reason) {
+        String base = "Approved shift change request";
+        if (reason == null || reason.isBlank()) return base;
+        String note = base + ": " + reason.trim();
+        return note.length() > 500 ? note.substring(0, 500) : note;
+    }
+
     /**
      * noRollbackFor: approving an expired request rejects it and then reports
      * SHIFT_CHANGE_EXPIRED — the rejection must survive the exception.
@@ -263,7 +301,7 @@ public class ShiftChangeRequestService {
         // On approval, move the employee to the requested shift from the start date.
         if (decision.approved()) {
             shiftService.assignShift(existing.employeeId(),
-                    new AssignShiftRequest(existing.requestedShiftPolicyId(), startDate));
+                    new AssignShiftRequest(existing.requestedShiftPolicyId(), startDate, assignmentNote(existing.reason())));
         }
         log.info("Shift-change request {} {} by {} (starts {})", requestId, newStatus, approverId, startDate);
 

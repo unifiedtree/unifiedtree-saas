@@ -68,10 +68,38 @@ public final class ShiftDtos {
             Boolean overtimeApplicable,
             @DecimalMin("1.0") @DecimalMax("9.99") BigDecimal overtimeMultiplier) {}
 
-    /** Assign a shift to an employee. effectiveFrom defaults to today when null. */
+    /**
+     * Assign a shift to an employee. effectiveFrom defaults to today when null.
+     * {@code note} (optional, up to 500 characters) is why — "Swapped with
+     * Vikram for the quarter" — kept with the assignment and shown in the
+     * employee's shift history (V143.25).
+     */
     public record AssignShiftRequest(
             UUID shiftPolicyId,
-            LocalDate effectiveFrom) {}
+            LocalDate effectiveFrom,
+            String note) {
+        public AssignShiftRequest(UUID shiftPolicyId, LocalDate effectiveFrom) {
+            this(shiftPolicyId, effectiveFrom, null);
+        }
+    }
+
+    /**
+     * One assignment in an employee's shift history, newest first
+     * (GET /v1/shifts/employee/{id}/history). {@code effectiveTo} is null for
+     * the open-ended one. {@code setBy} / {@code setAt} are who made the
+     * assignment and when; {@code note} is why.
+     */
+    public record ShiftAssignmentHistoryItem(
+            UUID id,
+            UUID shiftPolicyId,
+            String shiftName,
+            LocalTime startTime,
+            LocalTime endTime,
+            LocalDate effectiveFrom,
+            LocalDate effectiveTo,
+            String note,
+            String setBy,
+            Instant setAt) {}
 
     /**
      * The employee's shift in force today plus any scheduled change. Policy
@@ -121,7 +149,9 @@ public final class ShiftDtos {
      * A shift-change request row (employeeName resolved client-side, like
      * leave/WFH). {@code requestedEffectiveDate} is what the employee asked
      * for (null on old requests); {@code appliedEffectiveDate} is when the new
-     * shift actually starts (set on approval).
+     * shift actually starts (set on approval). {@code approverName} is who
+     * decided it (null while pending, and for requests that expired on their
+     * own).
      */
     public record ShiftChangeRequestResponse(
             UUID id,
@@ -137,5 +167,6 @@ public final class ShiftDtos {
             Instant decidedAt,
             Instant createdAt,
             LocalDate requestedEffectiveDate,
-            LocalDate appliedEffectiveDate) {}
+            LocalDate appliedEffectiveDate,
+            String approverName) {}
 }

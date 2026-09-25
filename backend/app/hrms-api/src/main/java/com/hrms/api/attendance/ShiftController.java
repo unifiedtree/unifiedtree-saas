@@ -3,12 +3,14 @@ package com.hrms.api.attendance;
 import com.hrms.attendance.dto.ShiftDtos.AssignShiftRequest;
 import com.hrms.attendance.dto.ShiftDtos.CreateShiftChangeRequest;
 import com.hrms.attendance.dto.ShiftDtos.EmployeeShiftResponse;
+import com.hrms.attendance.dto.ShiftDtos.ShiftAssignmentHistoryItem;
 import com.hrms.attendance.dto.ShiftDtos.ShiftChangeDecisionRequest;
 import com.hrms.attendance.dto.ShiftDtos.ShiftChangeRequestResponse;
 import com.hrms.attendance.dto.ShiftDtos.ShiftPolicyRequest;
 import com.hrms.attendance.dto.ShiftDtos.ShiftPolicyResponse;
 import com.hrms.attendance.service.EmployeeShiftService;
 import com.hrms.attendance.service.ShiftChangeRequestService;
+import com.hrms.attendance.service.ShiftHistoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -44,13 +46,16 @@ public class ShiftController {
     private final EmployeeShiftService shiftService;
     private final ShiftChangeRequestService changeRequestService;
     private final TeamEmployeeScope teamScope;
+    private final ShiftHistoryService historyService;
 
     public ShiftController(EmployeeShiftService shiftService,
                            ShiftChangeRequestService changeRequestService,
-                           TeamEmployeeScope teamScope) {
+                           TeamEmployeeScope teamScope,
+                           ShiftHistoryService historyService) {
         this.shiftService = shiftService;
         this.changeRequestService = changeRequestService;
         this.teamScope = teamScope;
+        this.historyService = historyService;
     }
 
     /**
@@ -113,6 +118,39 @@ public class ShiftController {
         return ResponseEntity.ok(shiftService.getCurrentShift(employeeId));
     }
 
+    @Operation(summary = "An employee's shift history: every assignment, newest first, with who made it and their note")
+    @GetMapping("/employee/{employeeId}/history")
+    @PreAuthorize("hasAnyAuthority('attendance.workforce.admin','attendance.team.read','attendance.checkin.self')")
+    public ResponseEntity<List<ShiftAssignmentHistoryItem>> history(@AuthenticationPrincipal Jwt jwt,
+                                                                    @PathVariable UUID employeeId) {
+        assertCanReadShiftHistory(jwt, employeeId);
+        return ResponseEntity.ok(historyService.history(employeeId));
+    }
+
+    /**
+     * Whose shift history the caller may read: their own; anyone's with
+     * {@code attendance.workforce.admin} (they assign shifts to anyone); else
+     * only their team's, by the rule the My team page uses.
+     */
+    private void assertCanReadShiftHistory(Jwt jwt, UUID target) {
+        if (target.equals(employeeId(jwt))) return;
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean workforceAdmin = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "attendance.workforce.admin".equals(a.getAuthority()));
+        if (workforceAdmin) return;
+        boolean teamReader = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "attendance.team.read".equals(a.getAuthority()));
+        if (teamReader) {
+            try {
+                if (teamScope.resolve(jwt, null).stream().anyMatch(e -> target.equals(e.getId()))) return;
+            } catch (IllegalArgumentException noEmployeeRecord) {
+                // falls through to the refusal
+            }
+        }
+        throw new org.springframework.security.access.AccessDeniedException(
+                "You can see the shift history of your own team only.");
+    }
+
     @Operation(summary = "Assign (or reassign) an employee to a shift")
     @PostMapping("/employee/{employeeId}")
     @PreAuthorize("hasAuthority('attendance.workforce.admin')")
@@ -146,6 +184,21 @@ public class ShiftController {
         List<ShiftChangeRequestResponse> pending = changeRequestService.listPending();
         return ResponseEntity.ok(scope == null ? pending
                 : pending.stream().filter(r -> scope.contains(r.employeeId())).toList());
+    }
+
+    @Operation(summary = "Shift-change requests decided in the last N days (HR/manager): who decided, when, and their note")
+    @GetMapping("/change-requests/decided")
+    @PreAuthorize("hasAuthority('attendance.regularization.approve')")
+    public ResponseEntity<List<ShiftChangeRequestResponse>> decidedChangeRequests(@AuthenticationPrincipal Jwt jwt,
+                                                                                  @RequestParam(defaultValue = "30") int days) {
+        if (days < 1 || days > ShiftChangeRequestService.MAX_DECIDED_DAYS) {
+            throw new com.hrms.core.exception.BusinessRuleException(
+                    "Choose between 1 and " + ShiftChangeRequestService.MAX_DECIDED_DAYS + " days", "SHIFT_CHANGE_RANGE_INVALID");
+        }
+        java.util.Set<UUID> scope = approverScope(jwt);
+        List<ShiftChangeRequestResponse> decided = changeRequestService.listDecided(days);
+        return ResponseEntity.ok(scope == null ? decided
+                : decided.stream().filter(r -> scope.contains(r.employeeId())).toList());
     }
 
     @Operation(summary = "Approve or reject a shift-change request (HR/manager)")
