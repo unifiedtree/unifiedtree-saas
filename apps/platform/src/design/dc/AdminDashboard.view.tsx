@@ -8,6 +8,7 @@ import { arr, txt } from './dc-runtime'
 import { AreaChart } from './AreaChart'
 import { DashCalendar } from './DashCalendar'
 import { DatePicker } from './DatePicker'
+import { MilestonesCard } from './MilestonesCard'
 import { SeatsTile } from './SeatsTile'
 import { SectionState } from './SectionState'
 import { StatTile } from './StatTile'
@@ -835,67 +836,7 @@ export function AdminDashboardView({ v }: { v: any }) {
           </>
         ) : null}
         <section aria-label="Upcoming" style={{display: "grid", gap: "16px"}}>
-          <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px"}}>
-            <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px"}}>
-              <h2 style={{margin: "0", fontFamily: "'Plus Jakarta Sans',Inter,sans-serif", fontWeight: "700", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px"}}>
-                <span style={{display: "inline-flex", width: "28px", height: "28px", borderRadius: "8px", background: "#ecfdf5", color: "#0f6e56", alignItems: "center", justifyContent: "center"}}>
-                  {txt(v.icCake)}
-                </span>
-                {"Upcoming milestones"}
-              </h2>
-            </div>
-            {v.sec?.milestones?.isLive ? (
-              <>
-                <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(max(220px,30%),1fr))", gap: "12px"}}>
-                  {arr(v.milestoneCols).map((col: any, $index: number) => (
-                    <Fragment key={$index}>
-                      <div style={{minWidth: "0", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: "12px", padding: "12px 14px", display: "flex", flexDirection: "column"}}>
-                        <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", paddingBottom: "10px", marginBottom: "6px", borderBottom: "1px solid #e2e8f0"}}>
-                          <p style={{margin: "0", display: "flex", alignItems: "center", gap: "7px", fontSize: "13px", fontWeight: "700", color: "#0f172a"}}>
-                            <span style={{color: "#0f6e56", display: "inline-flex"}}>
-                              {txt(col?.icon)}
-                            </span>
-                            {txt(col?.title)}{" "}
-                            <span style={{fontSize: "11px", fontWeight: "700", color: "#64748b", fontVariantNumeric: "tabular-nums"}}>
-                              {txt(col?.count)}
-                            </span>
-                          </p>
-                          <HrStatusPill tone={col?.tone}>
-                            {txt(col?.window)}
-                          </HrStatusPill>
-                        </div>
-                        <div style={{display: "grid", flex: "1", alignContent: "start"}}>
-                          {arr(col?.rows).map((r: any, $index: number) => (
-                            <Fragment key={$index}>
-                              <button type="button" onClick={r?.onClick} data-tip={r?.tip} style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", background: "none", border: "0", padding: "8px 6px", margin: "0 -6px", borderRadius: "8px", cursor: "pointer", fontFamily: "inherit", textAlign: "left"}} className="dc-admin-dashboard-6">
-                                <HrAvatar name={r?.name} sub={r?.dept} />
-                                <span style={{display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "1px", flexShrink: "0", fontVariantNumeric: "tabular-nums"}}>
-                                  <strong style={{fontSize: "12px", fontWeight: "700", color: "#0f172a"}}>
-                                    {txt(r?.when)}
-                                  </strong>
-                                  <span style={{fontSize: "11px", color: "#64748b"}}>
-                                    {txt(r?.date)}
-                                  </span>
-                                </span>
-                              </button>
-                            </Fragment>
-                          ))}
-                        </div>
-                        <button type="button" onClick={col?.onViewAll} data-tip={col?.viewTip} style={{marginTop: "8px", alignSelf: "flex-start", color: "#0f6e56", fontWeight: "600", fontSize: "12px", background: "none", border: "0", padding: "0", cursor: "pointer", fontFamily: "inherit"}}>
-                          {"View all →"}
-                        </button>
-                      </div>
-                    </Fragment>
-                  ))}
-                </div>
-              </>
-            ) : null}
-            {v.sec?.milestones?.notLive ? (
-              <>
-                <SectionState kind={v.sec?.milestones?.state} title="No birthdays in the next 14 days, anniversaries in the next month, or retirements in the next six months." icon="cake" height="110" retry={v.sec?.milestones?.retry} />
-              </>
-            ) : null}
-          </div>
+          <MilestonesCard {...(v.milestonesCard || {})} />
           {v.show?.probations ? (
             <>
               <div style={{minWidth: "0", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "16px", boxShadow: "0 1px 2px rgba(15,23,42,.04)", padding: "20px 22px 12px"}}>

@@ -1,0 +1,13 @@
+/* "Upcoming milestones" card (MilestonesCard.tsx): hover and keyboard focus. */
+.ms-row:hover { background: #fff !important; }
+.ms-link:hover { text-decoration: underline; }
+.ms-pill:hover { filter: brightness(0.97); }
+.ms-opt:hover { background: #f1f5f9; }
+.ms-opt[aria-checked='true']:hover { background: #d1fae5; }
+.ms-row:focus-visible,
+.ms-link:focus-visible,
+.ms-pill:focus-visible,
+.ms-opt:focus-visible {
+  outline: 2px solid #0f6e56;
+  outline-offset: 2px;
+}

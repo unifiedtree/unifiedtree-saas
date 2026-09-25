@@ -82,6 +82,16 @@ public class RetirementService {
      */
     @Transactional(readOnly = true)
     public List<RetirementDue> due(UUID tenantId, LocalDate today, int days, UUID companyId) {
+        return between(tenantId, today, today, today.plusDays(Math.max(0, days)), companyId);
+    }
+
+    /**
+     * People whose retirement date falls between {@code from} and {@code to}
+     * (both included), soonest first: the dashboard card's chosen date range.
+     * {@code daysLeft} still counts from {@code today}.
+     */
+    @Transactional(readOnly = true)
+    public List<RetirementDue> between(UUID tenantId, LocalDate today, LocalDate from, LocalDate to, UUID companyId) {
         List<Object> args = new ArrayList<>();
         StringBuilder sql = new StringBuilder("""
                 SELECT e.id, e.employee_code, e.first_name, e.last_name,
@@ -100,8 +110,8 @@ public class RetirementService {
                    AND %s BETWEEN ? AND ?
                 """.formatted(AGE_SQL, RETIRES_ON_SQL, RETIRES_ON_SQL));
         args.add(tenantId);
-        args.add(today);
-        args.add(today.plusDays(Math.max(0, days)));
+        args.add(from);
+        args.add(to);
         if (companyId != null) {
             sql.append(" AND e.company_id = ?");
             args.add(companyId);

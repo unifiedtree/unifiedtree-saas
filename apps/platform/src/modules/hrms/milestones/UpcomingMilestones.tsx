@@ -1,8 +1,13 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Cake, Award, PartyPopper, type LucideIcon } from 'lucide-react'
 import { usePermission, P } from '@unifiedtree/sdk'
-import { useMilestones, type Milestone } from '../api/useMilestones'
+import type { Milestone } from '../api/useMilestones'
+import { istToday } from '@/design/dc/dates'
+import { emptyText, rangeLabel, rangeOf, rangeReach, type MilestoneKind, type RangeChoice } from '@/design/dc/milestoneRange'
+import {
+  INITIAL_CHOICES, MilestoneCustomRange, MilestoneRangeMenu, useMilestoneColumns, type MilestoneColumn, type RangeTone,
+} from '@/design/dc/MilestonesCard'
 
 /**
  * Upcoming people milestones — birthdays, work anniversaries, retirements.
@@ -14,22 +19,30 @@ import { useMilestones, type Milestone } from '../api/useMilestones'
  *
  * No permission gate — the endpoint is isAuthenticated() and the payload
  * carries no salary or contact PII, only name + department + date.
+ *
+ * Each column has its own date range (its usual window, a preset or a custom
+ * range on the calendar, at most 12 months), with the same menu as the admin
+ * dashboard's card (design/dc/MilestonesCard).
  */
 
 /**
- * Relative day label. The server hands back the NEXT occurrence, so `date` is
- * always today or later and we never render a negative case.
+ * Relative day label. A column's own window only returns today or later; a
+ * custom range can include days already past, which show their date.
  */
 function whenLabel(iso: string): string {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const d = new Date(`${iso}T00:00:00`)
   const days = Math.round((d.getTime() - today.getTime()) / 86_400_000)
-  if (days <= 0) return 'Today'
+  if (days === 0) return 'Today'
   if (days === 1) return 'Tomorrow'
-  if (days <= 30) return `in ${days} days`
+  if (days === -1) return 'Yesterday'
+  if (days > 0 && days <= 30) return `in ${days} days`
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
+
+/** Rows shown before "Show all N": a whole year of birthdays would otherwise fill the page. */
+const MAX_ROWS = 8
 
 /** Deterministic avatar tint so the same person keeps the same colour. */
 const TINTS = [
@@ -46,29 +59,44 @@ function tintFor(id: string): string {
 }
 
 interface ColumnProps {
+  kind: MilestoneKind
   title: string
   icon: LucideIcon
-  items: Milestone[]
-  emptyHint: string
+  tone: RangeTone
+  choice: RangeChoice
+  onChoice: (c: RangeChoice) => void
+  today: string
+  col: MilestoneColumn
   /** Suffix builder for the secondary line, e.g. "3 years". */
   detail?: (m: Milestone) => string | null
-  isLoading: boolean
   onPick: (m: Milestone) => void
 }
 
 const Column: React.FC<ColumnProps> = ({
-  title, icon: Icon, items, emptyHint, detail, isLoading, onPick,
-}) => (
-  <div className="min-w-0 flex-1">
-    <div className="mb-3 flex items-center gap-2">
+  kind, title, icon: Icon, tone, choice, onChoice, today, col, detail, onPick,
+}) => {
+  const { items, isLoading, isError, refetch } = col
+  const range = rangeOf(kind, choice, today)
+  const [all, setAll] = useState(false)
+  useEffect(() => { setAll(false) }, [range.from, range.to])
+  const shown = all ? items : items.slice(0, MAX_ROWS)
+  return (
+  <div className="min-w-0 flex-1" data-milestone-list={kind}>
+    <div className="mb-1 flex flex-wrap items-center gap-2">
       <Icon size={14} className="shrink-0 text-primary" aria-hidden />
-      <h3 className="text-xs font-bold uppercase tracking-wide text-text-secondary">{title}</h3>
-      {items.length > 0 && (
+      <h3 className="min-w-0 truncate text-xs font-bold uppercase tracking-wide text-text-secondary">{title}</h3>
+      {!isLoading && items.length > 0 && (
         <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
           {items.length}
         </span>
       )}
+      <span className="ml-auto">
+        <MilestoneRangeMenu kind={kind} choice={choice} today={today} tone={tone} onChange={onChoice} />
+      </span>
     </div>
+    {choice.preset === 'custom'
+      ? <MilestoneCustomRange kind={kind} value={range} today={today} reach={rangeReach(kind, today)} onChange={(r) => onChoice({ preset: 'custom', ...r })} />
+      : <p className="mb-3 text-[11.5px] tabular-nums text-text-secondary" data-milestone-range>{rangeLabel(range)}</p>}
 
     {isLoading ? (
       <div className="space-y-2" role="status" aria-label={`Loading ${title}`}>
@@ -82,11 +110,15 @@ const Column: React.FC<ColumnProps> = ({
           </div>
         ))}
       </div>
+    ) : isError ? (
+      <p className="text-xs leading-relaxed text-text-secondary" role="alert">
+        Unable to load {title.toLowerCase()}. <button type="button" className="text-primary underline" onClick={refetch}>Try again</button>
+      </p>
     ) : items.length === 0 ? (
-      <p className="text-xs leading-relaxed text-text-secondary">{emptyHint}</p>
+      <p className="text-xs leading-relaxed text-text-secondary">{emptyText(kind, choice)}</p>
     ) : (
       <ul className="space-y-2">
-        {items.map((m) => {
+        {shown.map((m) => {
           const extra = detail?.(m)
           return (
             <li key={`${m.employeeId}-${m.date}`}>
@@ -114,8 +146,14 @@ const Column: React.FC<ColumnProps> = ({
         })}
       </ul>
     )}
+    {!isLoading && !isError && items.length > MAX_ROWS && (
+      <button type="button" className="mt-2 text-xs font-semibold text-text-secondary hover:underline" aria-expanded={all} onClick={() => setAll((a) => !a)}>
+        {all ? 'Show fewer' : `Show all ${items.length}`}
+      </button>
+    )}
   </div>
-)
+  )
+}
 
 export const UpcomingMilestones: React.FC = () => {
   const navigate = useNavigate()
@@ -126,25 +164,20 @@ export const UpcomingMilestones: React.FC = () => {
   // "Access Restricted" (2026-09-08 audit). Only navigate when the target
   // route will actually open; otherwise the row is informational.
   const canOpenEmployee = usePermission(P.HRMS_EMPLOYEE_READ)
-  const { data, isLoading, isError, refetch } = useMilestones({ birthdayDays: 14, anniversaryDays: 31, retirementMonths: 6 })
-
-  const birthdays = data?.birthdays ?? []
-  const anniversaries = data?.anniversaries ?? []
-  const retirements = data?.retirements ?? []
-  const total = birthdays.length + anniversaries.length + retirements.length
-
-  // Nothing at all and nothing loading: stay off the dashboard rather than
-  // render three empty columns. An all-quiet fortnight is the common case for
-  // a small workspace and an empty card reads as broken.
-  if (isError) return <div className="ut-card p-6 text-sm" role="alert">Unable to load milestones. <button className="text-primary underline" onClick={() => refetch()}>Try again</button></div>
-  if (!isLoading && total === 0) return <div className="ut-card p-6 text-sm text-text-secondary">No birthdays in the next 14 days, anniversaries in the next month, or retirements in the next six months.</div>
+  const today = istToday()
+  // Each column's range lives here. Columns show their own loading, error and
+  // empty states, so a quiet list still offers its range menu.
+  const [choices, setChoices] = useState<Record<MilestoneKind, RangeChoice>>(INITIAL_CHOICES)
+  const cols = useMilestoneColumns(choices, { today })
+  const setChoice = (kind: MilestoneKind) => (next: RangeChoice) => setChoices((cur) => ({ ...cur, [kind]: next }))
 
   const open = (m: Milestone) => {
     if (canOpenEmployee) navigate(`/hrms/employees/${m.employeeId}`)
   }
 
   return (
-    <div className="ut-card overflow-hidden">
+    // Not overflow-hidden: each column's range menu opens below the card's edge.
+    <div className="ut-card" data-milestones-staff-card>
       <div className="flex items-center gap-2 border-b border-border-light px-5 py-4">
         <PartyPopper size={16} className="text-primary" aria-hidden />
         <h2 className="text-sm font-bold text-text-primary">Upcoming Milestones</h2>
@@ -152,28 +185,37 @@ export const UpcomingMilestones: React.FC = () => {
 
       <div className="flex flex-col gap-6 p-5 sm:flex-row sm:gap-8">
         <Column
+          kind="birthdays"
           title="Birthdays"
           icon={Cake}
-          items={birthdays}
-          emptyHint="No birthdays in the next 14 days."
-          isLoading={isLoading}
+          tone="warn"
+          choice={choices.birthdays}
+          onChoice={setChoice('birthdays')}
+          today={today}
+          col={cols.birthdays}
           onPick={open}
         />
         <Column
+          kind="anniversaries"
           title="Work Anniversaries"
           icon={Award}
-          items={anniversaries}
-          emptyHint="No work anniversaries in the next month."
+          tone="info"
+          choice={choices.anniversaries}
+          onChoice={setChoice('anniversaries')}
+          today={today}
+          col={cols.anniversaries}
           detail={(m) => (m.years ? `${m.years} year${m.years === 1 ? '' : 's'}` : null)}
-          isLoading={isLoading}
           onPick={open}
         />
         <Column
+          kind="retirements"
           title="Retirements"
           icon={PartyPopper}
-          items={retirements}
-          emptyHint="No retirements in the next 6 months."
-          isLoading={isLoading}
+          tone="ok"
+          choice={choices.retirements}
+          onChoice={setChoice('retirements')}
+          today={today}
+          col={cols.retirements}
           onPick={open}
         />
       </div>
