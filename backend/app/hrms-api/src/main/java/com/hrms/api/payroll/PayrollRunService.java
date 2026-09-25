@@ -24,7 +24,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.TextStyle;
@@ -76,11 +75,35 @@ public class PayrollRunService {
             @jakarta.validation.constraints.NotNull
             @jakarta.validation.constraints.Min(2020) @jakarta.validation.constraints.Max(2099) Integer periodYear) {}
 
+    /**
+     * A payroll run. V143.11 added {@code payDate} (the planned pay date, from
+     * the processing day in Payroll Settings), {@code workingDays} (days in the
+     * pay period that are not the company's weekly off or a holiday; null until
+     * the run is processed or created after V143.11) and the names of the people
+     * who created, processed, locked and paid it, for the run's activity list.
+     */
     public record RunDto(
         UUID id, UUID companyId, String companyName, int periodMonth, int periodYear,
         String periodStart, String periodEnd, String status, int employeeCount,
         BigDecimal totalGross, BigDecimal totalDeductions, BigDecimal totalNet,
-        String processedAt, String lockedAt, String createdAt, int skippedEmployeeCount) {}
+        String processedAt, String lockedAt, String createdAt, int skippedEmployeeCount,
+        String payDate, Integer workingDays,
+        String createdByName, String processedByName, String lockedByName, String paidByName) {}
+
+    /** One salary component's total across every payslip in a run. */
+    public record ComponentTotalDto(String code, String name, String category, BigDecimal amount, int employees) {}
+
+    /**
+     * A statutory amount owed for one month, worked out from locked and paid
+     * runs. {@code dueDate} is the legal due date where it is the same
+     * everywhere (PF and ESI: the 15th of the next month) and null where it
+     * depends on the state (PT, LWF). {@code filing*} is the matching entry of
+     * the Compliance → Statutory Filings ledger, which stays the filing record.
+     */
+    public record StatutoryDueDto(
+        String period, int periodYear, int periodMonth, UUID companyId, String companyName,
+        String scheme, BigDecimal employeeShare, BigDecimal employerShare, BigDecimal total,
+        String dueDate, UUID filingId, String filingStatus, String filingDueDate) {}
 
     public record EligibleEmployeeDto(UUID employeeId, String employeeCode, String employeeName,
                                       BigDecimal ctcMonthly) {}
@@ -91,13 +114,21 @@ public class PayrollRunService {
 
     public record PayslipLineDto(String code, String name, BigDecimal amount) {}
 
+    /**
+     * One employee's payslip. Components switched off "Show on payslip" are
+     * added up into one "Other earnings" / "Other deductions" line, so the lines
+     * still add up to the totals. {@code totalDays} is the number of days in the
+     * pay period ("paid days X of Y"); {@code department} and {@code runStatus}
+     * were added in V143.11 for the employee's own payslip drawer.
+     */
     public record PayslipDto(
         UUID runId, UUID employeeId, String employeeName, String employeeCode,
         String designation, String period, String panMasked, String bankMasked,
         BigDecimal paidDays, BigDecimal lopDays,
         List<PayslipLineDto> earnings, List<PayslipLineDto> deductions,
         List<PayslipLineDto> employerContributions,
-        BigDecimal gross, BigDecimal totalDeductions, BigDecimal netPay) {}
+        BigDecimal gross, BigDecimal totalDeductions, BigDecimal netPay,
+        String department, Integer totalDays, String runStatus) {}
 
     /**
      * ESS payslip row for the "My Payslips" list. Extended in Wave 1
@@ -114,15 +145,38 @@ public class PayrollRunService {
 
     // ── Reads ─────────────────────────────────────────────────────────────────
 
+    /**
+     * Run columns plus the company name and the names of the people who
+     * created, processed, locked and paid the run. A user's name is their
+     * display name, else their employee name, else their e-mail; the actor may
+     * also be an employee id (older tokens), which falls back to that employee.
+     */
+    private static String actorName(String idText) {
+        return "(SELECT q.n FROM ("
+                + "SELECT COALESCE(NULLIF(btrim(u.display_name), ''), "
+                + "NULLIF(btrim(concat_ws(' ', ue.first_name, ue.last_name)), ''), u.email) AS n, 1 AS o "
+                + "FROM auth.user_credentials u LEFT JOIN hrms.employees ue ON ue.id = u.employee_id "
+                + "WHERE u.id::text = " + idText + " "
+                + "UNION ALL SELECT NULLIF(btrim(concat_ws(' ', x.first_name, x.last_name)), ''), 2 "
+                + "FROM hrms.employees x WHERE x.id::text = " + idText
+                + ") q WHERE q.n IS NOT NULL ORDER BY q.o LIMIT 1)";
+    }
+
+    private static final String RUN_SELECT =
+            "SELECT r.*, c.name AS company_name, "
+            + actorName("r.created_by::text") + " AS created_by_name, "
+            + actorName("r.processed_by::text") + " AS processed_by_name, "
+            + actorName("r.locked_by::text") + " AS locked_by_name, "
+            + actorName("pb.updated_by") + " AS paid_by_name "
+            + "FROM payroll.runs r "
+            + "LEFT JOIN org.companies c ON c.id = r.company_id "
+            + "LEFT JOIN LATERAL (SELECT b.updated_by FROM payroll.disbursement_batches b "
+            + "WHERE b.run_id = r.id AND b.status = 'PAID' ORDER BY b.paid_at DESC NULLS LAST LIMIT 1) pb ON TRUE ";
+
     @Transactional
     public List<RunDto> listRuns(UUID tenantId, UUID companyId, Integer year, String status) {
         bindTenant(tenantId);
-        StringBuilder sql = new StringBuilder("""
-            SELECT r.*, c.name AS company_name
-              FROM payroll.runs r
-              LEFT JOIN org.companies c ON c.id = r.company_id
-             WHERE 1=1
-            """);
+        StringBuilder sql = new StringBuilder(RUN_SELECT + " WHERE 1=1\n");
         List<Object> args = new ArrayList<>();
         if (companyId != null) { sql.append(" AND r.company_id = ?"); args.add(companyId); }
         if (year != null)      { sql.append(" AND r.period_year = ?"); args.add(year); }
@@ -134,12 +188,7 @@ public class PayrollRunService {
     @Transactional
     public RunDto getRun(UUID tenantId, UUID runId) {
         bindTenant(tenantId);
-        List<RunDto> rows = jdbc.query("""
-            SELECT r.*, c.name AS company_name
-              FROM payroll.runs r
-              LEFT JOIN org.companies c ON c.id = r.company_id
-             WHERE r.id = ?
-            """, (rs, i) -> toRunDto(rs), runId);
+        List<RunDto> rows = jdbc.query(RUN_SELECT + " WHERE r.id = ?", (rs, i) -> toRunDto(rs), runId);
         if (rows.isEmpty()) throw new BusinessRuleException("Payroll run not found", "RUN_NOT_FOUND");
         return rows.get(0);
     }
@@ -213,16 +262,25 @@ public class PayrollRunService {
             throw new BusinessRuleException("companyId, periodMonth and periodYear are required", "INVALID_RUN");
         }
         YearMonth ym = YearMonth.of(req.periodYear(), req.periodMonth());
-        LocalDate start = ym.atDay(1);
-        LocalDate end = ym.atEndOfMonth();
+        // The pay period follows the cycle start day in Payroll Settings (the
+        // calendar month unless a cycle is configured).
+        Map<String, Object> settings = loadSettings(tenantId);
+        PayrollCalc.Period period = PayrollCalc.cyclePeriod(ym, intSetting(settings, "payroll_cycle_start_day", 1));
+        LocalDate start = period.start();
+        LocalDate end = period.end();
+        LocalDate payDate = PayrollCalc.payDate(end, intSetting(settings, "salary_processing_day", 28));
+        Integer workingDays = PayrollCalc.workingDays(start, end,
+                companyOffDays(req.companyId()), loadHolidays(req.companyId(), start, end));
         UUID id = jdbc.query("""
             INSERT INTO payroll.runs
-                (tenant_id, company_id, period_month, period_year, period_start, period_end, status, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', ?)
+                (tenant_id, company_id, period_month, period_year, period_start, period_end, status, created_by,
+                 pay_date, working_days)
+            VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?)
             ON CONFLICT (tenant_id, company_id, period_year, period_month) DO NOTHING
             RETURNING id
             """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null,
-            tenantId, req.companyId(), req.periodMonth(), req.periodYear(), start, end, createdBy);
+            tenantId, req.companyId(), req.periodMonth(), req.periodYear(), start, end, createdBy,
+            payDate, workingDays);
         if (id == null) {
             id = jdbc.queryForObject("""
                 SELECT id FROM payroll.runs
@@ -263,6 +321,15 @@ public class PayrollRunService {
             }
         }
         Map<String, Object> settings = loadSettings(tenantId);
+
+        // V143.11: the pay period follows the cycle start day in Payroll
+        // Settings (calendar month by default). A run that isn't locked takes
+        // the current setting, so a cycle changed after the draft was created
+        // still applies. The planned pay date follows the processing day.
+        PayrollCalc.Period period = PayrollCalc.cyclePeriod(ym, intSetting(settings, "payroll_cycle_start_day", 1));
+        LocalDate payDate = PayrollCalc.payDate(period.end(), intSetting(settings, "salary_processing_day", 28));
+        jdbc.update("UPDATE payroll.runs SET period_start = ?, period_end = ?, pay_date = ?, updated_at = now() WHERE id = ?",
+                period.start(), period.end(), payDate, runId);
 
         // Idempotent re-process: clear any prior output for this run.
         jdbc.update("DELETE FROM payroll.payslip_lines WHERE run_id = ?", runId);
@@ -307,7 +374,7 @@ public class PayrollRunService {
                  WHERE payroll_run_id = ? AND entry_type = 'REPAYMENT'
                 """, runId);
 
-        List<EligibleEmployeeDto> eligible = queryEligible(run.companyId(), run.periodStart(), run.periodEnd());
+        List<EligibleEmployeeDto> eligible = queryEligible(run.companyId(), period.start(), period.end());
 
         // ── B7 perf (2026-08-14): preload every per-employee input ONCE ──
         // The previous loop ran ~6 sub-queries per employee (structure,
@@ -320,7 +387,27 @@ public class PayrollRunService {
         List<UUID> empIds = new ArrayList<>(eligible.size());
         for (EligibleEmployeeDto e : eligible) empIds.add(e.employeeId());
         PreloadedRunData pre = preloadRunData(
-                run.companyId(), empIds, run.periodStart(), run.periodEnd());
+                run.companyId(), empIds, period.start(), period.end());
+
+        // ── PLI through payroll (client decision, 25 Sep 2026) ────────────────
+        // Every approved award not yet paid, for someone in this run, approved
+        // by the end of the period, is paid by this run as one "Performance
+        // incentive" earnings line. The awards are reserved for this run
+        // (payroll_run_id), so the separate award payout refuses them; locking
+        // the run marks them paid and reopening puts them back to approved.
+        Map<UUID, BigDecimal> pliByEmp = reservePliAwards(runId, run.companyId(), empIds, period.end());
+        if (!pliByEmp.isEmpty()) components = ensureComponent(tenantId, components, "PLI_INCENTIVE");
+
+        // ── Labour Welfare Fund (deducted only in the configured months) ────
+        boolean lwfDue = PayrollCalc.lwfDue(Boolean.TRUE.equals(settings.get("lwf_enabled")),
+                intArraySetting(settings, "lwf_deduction_months"), run.periodMonth());
+        BigDecimal lwfEmp = lwfDue ? (BigDecimal) settings.get("lwf_employee_amount") : null;
+        BigDecimal lwfEr  = lwfDue ? (BigDecimal) settings.get("lwf_employer_amount") : null;
+        if (lwfDue && ((lwfEmp != null && lwfEmp.signum() > 0) || (lwfEr != null && lwfEr.signum() > 0))) {
+            components = ensureComponent(tenantId, components, "LWF_EMPLOYEE");
+            components = ensureComponent(tenantId, components, "LWF_EMPLOYER");
+        }
+        RunInputs inputs = new RunInputs(period, pliByEmp, lwfEmp, lwfEr);
 
         // Accumulate rows for the two batch writes so we emit them as one
         // batchUpdate per table — one round-trip against Postgres for all
@@ -334,7 +421,7 @@ public class PayrollRunService {
         List<Object[]> lopBatch  = new ArrayList<>(eligible.size());
         for (EligibleEmployeeDto emp : eligible) {
             processEmployee(tenantId, runId, emp.employeeId(), ym,
-                    components, settings, pre, lineBatch, lopBatch);
+                    components, settings, pre, inputs, lineBatch, lopBatch);
         }
         flushPayslipLines(lineBatch);
         flushLopDays(lopBatch);
@@ -404,7 +491,8 @@ public class PayrollRunService {
 
         // FIX P1-4: count otherwise-eligible employees skipped for lacking a current
         // salary structure, so the run can surface them instead of silently dropping them.
-        int skipped = countSkipped(run.companyId(), run.periodStart(), run.periodEnd());
+        int skipped = countSkipped(run.companyId(), period.start(), period.end());
+        int workingDays = PayrollCalc.workingDays(period.start(), period.end(), pre.companyOffDays(), pre.holidays());
 
         // Roll up run totals from the persisted lines.
         jdbc.update("""
@@ -419,9 +507,9 @@ public class PayrollRunService {
                                          WHERE run_id = r.id AND category = 'DEDUCTION'), 0),
                 employee_count = (SELECT count(DISTINCT employee_id) FROM payroll.payslip_lines WHERE run_id = r.id),
                 status = 'PROCESSING', processed_at = now(), processed_by = ?,
-                skipped_employee_count = ?, updated_at = now()
+                skipped_employee_count = ?, working_days = ?, updated_at = now()
              WHERE r.id = ?
-            """, processedBy, skipped, runId);
+            """, processedBy, skipped, workingDays, runId);
 
         log.info("Processed payroll run {} for {} employees ({} skipped, no structure)",
             runId, eligible.size(), skipped);
@@ -435,10 +523,20 @@ public class PayrollRunService {
         if (!"PROCESSING".equals(run.status())) {
             throw new BusinessRuleException("Run must be processed before it can be locked", "RUN_NOT_PROCESSED");
         }
-        jdbc.update("""
+        int locked = jdbc.update("""
             UPDATE payroll.runs SET status = 'LOCKED', locked_at = now(), locked_by = ?, updated_at = now()
              WHERE id = ? AND status = 'PROCESSING'
             """, lockedBy, runId);
+        if (locked > 0) {
+            // The PLI awards this run pays are now paid through payroll: the
+            // separate award payout can never pay them again.
+            int paid = jdbc.update("""
+                UPDATE pli_mgmt.pli_awards
+                   SET status = 'PAID', paid_at = now(), updated_at = now(), version = version + 1
+                 WHERE payroll_run_id = ? AND status = 'APPROVED'
+                """, runId);
+            if (paid > 0) log.info("Payroll run {} locked: {} PLI award(s) marked paid through payroll", runId, paid);
+        }
         return getRun(tenantId, runId);
     }
 
@@ -503,6 +601,13 @@ public class PayrollRunService {
                        updated_at = now()
                  WHERE id = ?
                 """, actorTag, reason, runId);
+        // The run's PLI awards are unpaid again (still reserved for this run,
+        // so re-processing pays them and nothing else can in between).
+        jdbc.update("""
+                UPDATE pli_mgmt.pli_awards
+                   SET status = 'APPROVED', paid_at = NULL, updated_at = now(), version = version + 1
+                 WHERE payroll_run_id = ? AND status = 'PAID'
+                """, runId);
         log.info("Payroll run {} reopened by {} — reason: {}", runId, actorTag, reason);
         return getRun(tenantId, runId);
     }
@@ -577,6 +682,121 @@ public class PayrollRunService {
         return pdfRenderer.render(renderPayslipHtml(buildPayslip(runId, employeeId)));
     }
 
+    /**
+     * The signed-in employee's own payslip lines for one run (P0-6). Only a
+     * LOCKED or PAID run, and only a run that has a payslip for this employee:
+     * anything else is a 404, so nobody can probe other people's runs.
+     */
+    @Transactional
+    public PayslipDto getMyPayslip(UUID tenantId, UUID employeeId, UUID runId) {
+        bindTenant(tenantId);
+        String status = jdbc.query("SELECT status FROM payroll.runs WHERE id = ?",
+            rs -> rs.next() ? rs.getString(1) : null, runId);
+        Integer mine = employeeId == null ? 0 : jdbc.queryForObject(
+            "SELECT count(*) FROM payroll.payslip_lines WHERE run_id = ? AND employee_id = ?",
+            Integer.class, runId, employeeId);
+        if (!("LOCKED".equals(status) || "PAID".equals(status)) || mine == null || mine == 0) {
+            throw new com.hrms.core.exception.HrmsException("No payslip for this period",
+                    org.springframework.http.HttpStatus.NOT_FOUND, "PAYSLIP_NOT_FOUND");
+        }
+        return buildPayslip(runId, employeeId);
+    }
+
+    /**
+     * Totals per salary component across every payslip of a run, for the run's
+     * "Pay breakdown by component" (any run size, one query).
+     */
+    @Transactional
+    public List<ComponentTotalDto> componentTotals(UUID tenantId, UUID runId) {
+        bindTenant(tenantId);
+        loadRun(runId); // 404-style error for an unknown run
+        return jdbc.query("""
+            SELECT component_code, component_name, category,
+                   sum(amount) AS total, count(DISTINCT employee_id) AS people
+              FROM payroll.payslip_lines
+             WHERE run_id = ?
+             GROUP BY component_code, component_name, category
+             ORDER BY min(coalesce(display_order, 1000)), component_code
+            """, (rs, i) -> new ComponentTotalDto(rs.getString("component_code"), rs.getString("component_name"),
+                rs.getString("category"), rs.getBigDecimal("total"), rs.getInt("people")), runId);
+    }
+
+    private static final Map<String, String[]> DUE_SCHEMES = new LinkedHashMap<>();
+    static {
+        // scheme → {employee code, employer code, filing type in the compliance ledger}
+        DUE_SCHEMES.put("PF",  new String[]{"PF_EMPLOYEE", "PF_EMPLOYER", "PF"});
+        DUE_SCHEMES.put("ESI", new String[]{"ESI_EMPLOYEE", "ESI_EMPLOYER", "ESI"});
+        DUE_SCHEMES.put("PT",  new String[]{"PT", null, "PT"});
+        DUE_SCHEMES.put("LWF", new String[]{"LWF_EMPLOYEE", "LWF_EMPLOYER", null});
+    }
+
+    /**
+     * Statutory dues (PF, ESI, PT, LWF) for the last {@code months} months,
+     * added up from LOCKED and PAID runs (draft figures can still change). One
+     * row per month, company and scheme with an amount. The Compliance →
+     * Statutory Filings ledger stays the filing record: a filing of the same
+     * type, company and period ("YYYY-MM") is attached so the caller can tell
+     * what has been filed.
+     */
+    @Transactional
+    public List<StatutoryDueDto> statutoryDues(UUID tenantId, int months) {
+        bindTenant(tenantId);
+        int n = Math.max(1, Math.min(24, months));
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        LocalDate from = today.withDayOfMonth(1).minusMonths(n - 1L);
+        Map<String, BigDecimal> byKey = new HashMap<>();
+        Map<String, Object[]> meta = new LinkedHashMap<>();
+        jdbc.query("""
+            SELECT r.period_year, r.period_month, r.company_id, c.name AS company_name,
+                   l.component_code, sum(l.amount) AS total
+              FROM payroll.runs r
+              JOIN payroll.payslip_lines l ON l.run_id = r.id
+              LEFT JOIN org.companies c ON c.id = r.company_id
+             WHERE r.status IN ('LOCKED','PAID')
+               AND make_date(r.period_year, r.period_month, 1) >= ?
+               AND l.component_code IN ('PF_EMPLOYEE','PF_EMPLOYER','ESI_EMPLOYEE','ESI_EMPLOYER','PT',
+                                        'LWF_EMPLOYEE','LWF_EMPLOYER')
+             GROUP BY r.period_year, r.period_month, r.company_id, c.name, l.component_code
+            """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                String k = rs.getInt("period_year") + "|" + rs.getInt("period_month") + "|" + rs.getObject("company_id", UUID.class);
+                meta.putIfAbsent(k, new Object[]{rs.getInt("period_year"), rs.getInt("period_month"),
+                        rs.getObject("company_id", UUID.class), rs.getString("company_name")});
+                byKey.put(k + "|" + rs.getString("component_code"), rs.getBigDecimal("total"));
+            }, from);
+
+        // The ledger's filings for the same window, keyed by company|type|period.
+        Map<String, Object[]> filings = new HashMap<>();
+        jdbc.query("""
+            SELECT id, company_id, filing_type, btrim(period) AS period, status, due_date
+              FROM compliance_mgmt.statutory_filings
+             WHERE filing_type IN ('PF','ESI','PT') AND period IS NOT NULL
+            """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> filings.put(
+                rs.getObject("company_id", UUID.class) + "|" + rs.getString("filing_type") + "|" + rs.getString("period"),
+                new Object[]{rs.getObject("id", UUID.class), rs.getString("status"), String.valueOf(rs.getObject("due_date"))}));
+
+        List<StatutoryDueDto> out = new ArrayList<>();
+        for (Map.Entry<String, Object[]> e : meta.entrySet()) {
+            Object[] m = e.getValue();
+            int y = (Integer) m[0], mo = (Integer) m[1];
+            String period = y + "-" + (mo < 10 ? "0" : "") + mo;
+            for (Map.Entry<String, String[]> s : DUE_SCHEMES.entrySet()) {
+                BigDecimal emp = byKey.getOrDefault(e.getKey() + "|" + s.getValue()[0], BigDecimal.ZERO);
+                BigDecimal er = s.getValue()[1] == null ? BigDecimal.ZERO
+                        : byKey.getOrDefault(e.getKey() + "|" + s.getValue()[1], BigDecimal.ZERO);
+                BigDecimal total = emp.add(er);
+                if (total.signum() <= 0) continue;
+                String dueDate = ("PF".equals(s.getKey()) || "ESI".equals(s.getKey()))
+                        ? YearMonth.of(y, mo).plusMonths(1).atDay(15).toString() : null;
+                Object[] f = s.getValue()[2] == null ? null : filings.get(m[2] + "|" + s.getValue()[2] + "|" + period);
+                out.add(new StatutoryDueDto(period, y, mo, (UUID) m[2], (String) m[3], s.getKey(), emp, er, total,
+                        dueDate, f == null ? null : (UUID) f[0], f == null ? null : (String) f[1], f == null ? null : (String) f[2]));
+            }
+        }
+        out.sort(Comparator.comparing(StatutoryDueDto::period).reversed()
+                .thenComparing(StatutoryDueDto::companyName, Comparator.nullsLast(Comparator.naturalOrder())));
+        return out;
+    }
+
     // ── Per-employee computation ─────────────────────────────────────────────────
 
     /**
@@ -590,6 +810,7 @@ public class PayrollRunService {
                                  Map<String, CompMeta> components,
                                  Map<String, Object> settings,
                                  PreloadedRunData pre,
+                                 RunInputs inputs,
                                  List<Object[]> lineBatch,
                                  List<Object[]> lopBatch) {
         EmployeeMeta empMeta = pre.employees().get(employeeId);
@@ -605,29 +826,31 @@ public class PayrollRunService {
             return;
         }
 
-        // Earning lines (fall back to a single BASIC = ctc_monthly when none defined).
-        List<EarningLine> earnings = new ArrayList<>();
+        // Earnings and fixed deductions (V143.11): the structure's lines minus
+        // switched-off components, a single BASIC = ctc_monthly when the
+        // structure lists no earnings, plus fixed-amount components.
         List<StructureLine> lineRows = pre.structureLines()
                 .getOrDefault(structure.id(), List.of());
-        if (lineRows.isEmpty()) {
-            CompMeta basic = components.get("BASIC");
-            if (basic == null) throw new BusinessRuleException("BASIC component missing; seed defaults", "COMPONENT_NOT_FOUND");
-            earnings.add(new EarningLine(
-                new ComponentDef("BASIC", basic.name(), "EARNING", false, basic.displayOrder()),
-                structure.ctcMonthly()));
-        } else {
-            for (StructureLine r : lineRows) {
-                String cat = r.category();
-                // Only earning-style components carry an amount into the engine.
-                if (!"EARNING".equals(cat) && !"REIMBURSEMENT".equals(cat)) continue;
-                earnings.add(new EarningLine(
-                    new ComponentDef(r.code(), r.name(), cat, r.statutory(), r.displayOrder()),
-                    r.monthlyAmount()));
-            }
+        CompMeta basic = components.get("BASIC");
+        boolean hasEarningLine = lineRows.stream()
+                .anyMatch(r -> "EARNING".equals(r.category()) || "REIMBURSEMENT".equals(r.category()));
+        if (!hasEarningLine && basic == null) {
+            throw new BusinessRuleException("BASIC component missing; seed defaults", "COMPONENT_NOT_FOUND");
         }
+        PayrollCalc.ResolvedPay pay = PayrollCalc.resolvePay(
+                lineRows.stream().map(r -> new PayrollCalc.StructureLine(r.code(), r.name(), r.category(),
+                        r.statutory(), r.displayOrder(), r.monthlyAmount())).toList(),
+                catalog(components), structure.ctcMonthly(),
+                basic == null ? null : new ComponentDef("BASIC", basic.name(), "EARNING", false, basic.displayOrder()));
+        List<EarningLine> earnings = pay.earnings();
 
-        // Day statuses → LOP.
-        List<DayStatus> days = buildDayStatuses(employeeId, ym, pre);
+        // Day statuses → LOP, over the run's pay period and the employee's own
+        // weekly off days (their own setting, else the company's, else Sat+Sun).
+        java.util.Set<Integer> offDays = PayrollCalc.resolveOffDays(empMeta.weeklyOffDays(), pre.companyOffDays());
+        List<DayStatus> days = PayrollCalc.dayStatuses(inputs.period().start(), inputs.period().end(),
+                pre.leaveByEmp().getOrDefault(employeeId, Map.of()),
+                pre.attendanceByEmp().getOrDefault(employeeId, Map.of()),
+                pre.holidays(), offDays);
         boolean sandwich = Boolean.TRUE.equals(settings.get("sandwich_rule_enabled"));
         Integer lateThreshold = (Integer) settings.get("late_mark_lop_threshold");
         // B3 FIX (audit 2026-08-15): actual late-mark count from the preload
@@ -635,7 +858,7 @@ public class PayrollRunService {
         int lateCount = pre.lateMarkCountByEmp().getOrDefault(employeeId, 0);
         LopResult lop = LopCalculator.calculate(new LopInput(
             days, sandwich, lateThreshold == null ? 0 : lateThreshold, lateCount,
-            empMeta.dateOfJoining(), empMeta.lastWorkingDay(), ym));
+            empMeta.dateOfJoining(), empMeta.lastWorkingDay(), ym, inputs.period().start()));
 
         // Statutory config.
         BigDecimal fullGross = earnings.stream()
@@ -658,8 +881,20 @@ public class PayrollRunService {
         EmployeeStructureCfg empCfg = new EmployeeStructureCfg(
             structure.pfStatus(), structure.pfApplicable(), structure.esiApplicable());
 
+        // Paid in full on top of the structure: the approved PLI awards this run
+        // pays; taken in full: fixed deductions and, in its months, LWF.
+        List<PayrollEngine.FlatLine> flatEarnings = new ArrayList<>();
+        BigDecimal pli = inputs.pliByEmp().get(employeeId);
+        CompMeta pliMeta = components.get("PLI_INCENTIVE");
+        if (pli != null && pli.signum() > 0 && pliMeta != null) {
+            flatEarnings.add(new PayrollEngine.FlatLine(
+                    new ComponentDef(pliMeta.code(), pliMeta.name(), "EARNING", false, pliMeta.displayOrder()), pli));
+        }
+        PayrollEngine.Extras extras = new PayrollEngine.Extras(flatEarnings, pay.flatDeductions(),
+                inputs.lwfEmployee(), inputs.lwfEmployer());
+
         PayrollResult result = PayrollEngine.compute(
-            new PayrollEngineInput(earnings, lop, statutory, empCfg, ym));
+            new PayrollEngineInput(earnings, lop, statutory, empCfg, ym), extras);
 
         // Queue payslip lines for the batch flush (catalog is authoritative
         // for id/name/category/order). We deliberately deduplicate by
@@ -686,7 +921,8 @@ public class PayrollRunService {
         lopBatch.add(new Object[]{
                 tenantId, runId, employeeId,
                 lop.paidDays(), lop.lopDays(), lop.totalCalendar(),
-                computationLogJson(lop, result)
+                computationLogJson(lop, result, inputs.period(), offDays,
+                        PayrollCalc.workingDays(inputs.period().start(), inputs.period().end(), offDays, pre.holidays()))
         });
     }
 
@@ -743,9 +979,16 @@ public class PayrollRunService {
              * for the payroll period. Previously PayrollRunService hard-coded
              * lateMarkCount=0 into LopInput, so nobody ever lost pay for late
              * marks regardless of policy. */
-            Map<UUID, Integer> lateMarkCountByEmp) {}
+            Map<UUID, Integer> lateMarkCountByEmp,
+            /* V143.11: the company's weekly off days (HR configuration), the
+             * fallback for employees without their own. */
+            Set<Integer> companyOffDays) {}
 
-    private record EmployeeMeta(LocalDate dateOfJoining, LocalDate lastWorkingDay) {}
+    /** What processRun works out once for the whole run (V143.11). */
+    private record RunInputs(PayrollCalc.Period period, Map<UUID, BigDecimal> pliByEmp,
+                             BigDecimal lwfEmployee, BigDecimal lwfEmployer) {}
+
+    private record EmployeeMeta(LocalDate dateOfJoining, LocalDate lastWorkingDay, String weeklyOffDays) {}
     private record StructureMeta(UUID id, BigDecimal ctcMonthly, boolean pfApplicable,
                                  String pfStatus, boolean esiApplicable, String ptState) {}
     private record StructureLine(String code, String name, String category,
@@ -754,9 +997,11 @@ public class PayrollRunService {
 
     private PreloadedRunData preloadRunData(UUID companyId, List<UUID> empIds,
                                             LocalDate periodStart, LocalDate periodEnd) {
+        Set<Integer> companyOffDays = companyOffDays(companyId);
         if (empIds.isEmpty()) {
             return new PreloadedRunData(Map.of(), Map.of(), Map.of(),
-                    Map.of(), Map.of(), Set.of(), Map.of(), Map.of());
+                    Map.of(), Map.of(), loadHolidays(companyId, periodStart, periodEnd), Map.of(), Map.of(),
+                    companyOffDays);
         }
 
         // Postgres arrays keep us portable across empIds sizes without hand-
@@ -767,12 +1012,13 @@ public class PayrollRunService {
         // Employees: joining / exit dates.
         Map<UUID, EmployeeMeta> employees = new HashMap<>(empIds.size() * 2);
         jdbc.query("""
-                SELECT id, date_of_joining, last_working_day
+                SELECT id, date_of_joining, last_working_day, weekly_off_days
                   FROM hrms.employees WHERE id = ANY (?)
                 """, ps -> ps.setArray(1, idsArray), rs -> {
             employees.put(rs.getObject("id", UUID.class),
                     new EmployeeMeta(toLocalDate(rs.getObject("date_of_joining")),
-                                     toLocalDate(rs.getObject("last_working_day"))));
+                                     toLocalDate(rs.getObject("last_working_day")),
+                                     rs.getString("weekly_off_days")));
         });
 
         // Current salary structures.
@@ -868,18 +1114,9 @@ public class PayrollRunService {
             while (!d.isAfter(last)) { map.put(d, st); d = d.plusDays(1); }
         });
 
-        // Company-wide holidays for the period. Explicit RowCallbackHandler
-        // cast — a bare `rs -> holidays.add(...)` lambda's boolean return
-        // makes it ambiguous with the ResultSetExtractor<T> overload.
-        Set<LocalDate> holidays = new HashSet<>();
-        org.springframework.jdbc.core.RowCallbackHandler holidayRow = rs -> {
-            holidays.add(rs.getObject("holiday_date", LocalDate.class));
-        };
-        jdbc.query("""
-                SELECT holiday_date FROM settings.holiday_calendar
-                 WHERE company_id = ? AND is_active = TRUE
-                   AND holiday_date BETWEEN ? AND ?
-                """, holidayRow, companyId, periodStart, periodEnd);
+        // Company-wide holidays for the period (Settings → Holidays, plus the
+        // leave module's older table, exactly as leave counts them).
+        Set<LocalDate> holidays = loadHolidays(companyId, periodStart, periodEnd);
 
         // PT slabs — grouped by state, cached for the run. resolvePtAmount
         // walks the cached list instead of re-querying per employee.
@@ -932,7 +1169,115 @@ public class PayrollRunService {
 
         return new PreloadedRunData(employees, structures, structureLines,
                 attendanceByEmp, leaveByEmp, holidays, ptSlabsByState,
-                lateMarkCountByEmp);
+                lateMarkCountByEmp, companyOffDays);
+    }
+
+    /**
+     * The company's holidays in [start, end]: Settings → Holidays
+     * ({@code settings.holiday_calendar}) plus anything still in the leave
+     * module's older {@code leave_mgmt.holiday_calendars}, the same two sources
+     * LeaveService counts. Explicit RowCallbackHandler casts: a bare lambda's
+     * boolean return is ambiguous with the ResultSetExtractor overload.
+     */
+    private Set<LocalDate> loadHolidays(UUID companyId, LocalDate start, LocalDate end) {
+        Set<LocalDate> holidays = new HashSet<>();
+        org.springframework.jdbc.core.RowCallbackHandler row =
+                rs -> holidays.add(rs.getObject("holiday_date", LocalDate.class));
+        jdbc.query("""
+                SELECT holiday_date FROM settings.holiday_calendar
+                 WHERE company_id = ? AND is_active = TRUE
+                   AND holiday_date BETWEEN ? AND ?
+                """, row, companyId, start, end);
+        jdbc.query("""
+                SELECT holiday_date FROM leave_mgmt.holiday_calendars
+                 WHERE company_id = ? AND holiday_date BETWEEN ? AND ?
+                """, row, companyId, start, end);
+        return holidays;
+    }
+
+    /** The company's weekly off days from HR configuration; empty when not set. */
+    private Set<Integer> companyOffDays(UUID companyId) {
+        if (companyId == null) return Set.of();
+        Integer[] days = jdbc.query(
+                "SELECT weekend_days FROM settings.hr_configuration WHERE company_id = ?",
+                rs -> {
+                    if (!rs.next()) return null;
+                    java.sql.Array a = rs.getArray(1);
+                    return a == null ? null : (Integer[]) a.getArray();
+                }, companyId);
+        return PayrollCalc.companyOffDays(days);
+    }
+
+    /**
+     * Reserve every approved, unpaid PLI award for this run: awards of the
+     * run's company, for people in the run, approved by the end of the pay
+     * period (India time). First frees awards this run reserved last time, so
+     * re-processing picks up the current set. Returns the total per employee.
+     */
+    private Map<UUID, BigDecimal> reservePliAwards(UUID runId, UUID companyId, List<UUID> empIds, LocalDate periodEnd) {
+        jdbc.update("""
+                UPDATE pli_mgmt.pli_awards
+                   SET payroll_run_id = NULL, updated_at = now(), version = version + 1
+                 WHERE payroll_run_id = ? AND status = 'APPROVED'
+                """, runId);
+        Map<UUID, BigDecimal> out = new HashMap<>();
+        if (empIds.isEmpty()) return out;
+        java.time.OffsetDateTime cutoff = periodEnd.plusDays(1).atStartOfDay(java.time.ZoneId.of("Asia/Kolkata")).toOffsetDateTime();
+        java.sql.Array ids = uuidArray(empIds.toArray(new UUID[0]));
+        jdbc.query("""
+                UPDATE pli_mgmt.pli_awards
+                   SET payroll_run_id = ?, updated_at = now(), version = version + 1
+                 WHERE status = 'APPROVED' AND payroll_run_id IS NULL
+                   AND company_id = ? AND employee_id = ANY (?) AND amount > 0
+                   AND (approved_at IS NULL OR approved_at < ?)
+                RETURNING employee_id, amount
+                """, ps -> {
+            ps.setObject(1, runId);
+            ps.setObject(2, companyId);
+            ps.setArray(3, ids);
+            ps.setObject(4, cutoff);
+        }, rs -> {
+            out.merge(rs.getObject("employee_id", UUID.class), rs.getBigDecimal("amount"), BigDecimal::add);
+        });
+        return out;
+    }
+
+    /** The component, seeding the built-in defaults first when this workspace predates it. */
+    private Map<String, CompMeta> ensureComponent(UUID tenantId, Map<String, CompMeta> components, String code) {
+        if (components.containsKey(code)) return components;
+        log.info("{} component missing for tenant {} — auto-seeding", code, tenantId);
+        if (seeder != null) seeder.seedForTenant(tenantId);
+        Map<String, CompMeta> reloaded = loadComponentsMeta();
+        if (!reloaded.containsKey(code)) {
+            throw new BusinessRuleException("Unable to seed the " + code + " salary component", "COMPONENT_NOT_SEEDED");
+        }
+        return reloaded;
+    }
+
+    private static Map<String, PayrollCalc.ComponentInfo> catalog(Map<String, CompMeta> components) {
+        Map<String, PayrollCalc.ComponentInfo> out = new HashMap<>();
+        for (CompMeta c : components.values()) {
+            out.put(c.code(), new PayrollCalc.ComponentInfo(c.code(), c.name(), c.category(), c.statutory(),
+                    c.displayOrder(), c.computationType(), c.amount(), c.active(), c.showOnPayslip()));
+        }
+        return out;
+    }
+
+    private static int intSetting(Map<String, Object> settings, String key, int fallback) {
+        Object v = settings == null ? null : settings.get(key);
+        return v instanceof Number n ? n.intValue() : fallback;
+    }
+
+    private static List<Integer> intArraySetting(Map<String, Object> settings, String key) {
+        Object v = settings == null ? null : settings.get(key);
+        try {
+            if (v instanceof java.sql.Array a) v = a.getArray();
+        } catch (java.sql.SQLException e) {
+            return List.of();
+        }
+        if (v instanceof Integer[] arr) return Arrays.stream(arr).filter(Objects::nonNull).toList();
+        if (v instanceof Object[] arr) return Arrays.stream(arr).filter(o -> o instanceof Number).map(o -> ((Number) o).intValue()).toList();
+        return List.of();
     }
 
     /**
@@ -944,31 +1289,9 @@ public class PayrollRunService {
                 conn.createArrayOf("uuid", ids));
     }
 
-    // ── Day-status builder (exception-based) ─────────────────────────────────────
-
-    private List<DayStatus> buildDayStatuses(UUID employeeId, YearMonth ym,
-                                             PreloadedRunData pre) {
-        LocalDate start = ym.atDay(1);
-        int total = ym.lengthOfMonth();
-
-        Map<LocalDate, DayStatus> attendance = pre.attendanceByEmp()
-                .getOrDefault(employeeId, Map.of());
-        Map<LocalDate, DayStatus> leave = pre.leaveByEmp()
-                .getOrDefault(employeeId, Map.of());
-        Set<LocalDate> holidays = pre.holidays();
-
-        List<DayStatus> days = new ArrayList<>(total);
-        for (int i = 0; i < total; i++) {
-            LocalDate d = start.plusDays(i);
-            DayStatus s = leave.get(d);
-            if (s == null) s = attendance.get(d);
-            if (s == null && holidays.contains(d)) s = DayStatus.HOLIDAY;
-            if (s == null && isWeekend(d)) s = DayStatus.WEEKEND;
-            if (s == null) s = DayStatus.PRESENT;   // exception-based default: assume present
-            days.add(s);
-        }
-        return days;
-    }
+    // ── Day statuses (exception-based) ─────────────────────────────────────────
+    // Built per employee by PayrollCalc.dayStatuses over the run's pay period
+    // and the employee's own weekly offs (V143.11; was Sat+Sun for everyone).
 
     private static DayStatus mapAttendance(String status) {
         if (status == null) return null;
@@ -982,16 +1305,14 @@ public class PayrollRunService {
         };
     }
 
-    private static boolean isWeekend(LocalDate d) {
-        return d.getDayOfWeek() == DayOfWeek.SATURDAY || d.getDayOfWeek() == DayOfWeek.SUNDAY;
-    }
-
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private record RunRow(UUID id, UUID companyId, int periodMonth, int periodYear,
                           LocalDate periodStart, LocalDate periodEnd, String status) {}
 
-    private record CompMeta(UUID id, String code, String name, String category, int displayOrder) {}
+    private record CompMeta(UUID id, String code, String name, String category, int displayOrder,
+                            boolean statutory, String computationType, BigDecimal amount,
+                            boolean active, boolean showOnPayslip) {}
 
     private RunRow loadRun(UUID runId) {
         Map<String, Object> r;
@@ -1048,10 +1369,16 @@ public class PayrollRunService {
 
     private Map<String, CompMeta> loadComponentsMeta() {
         Map<String, CompMeta> map = new HashMap<>();
-        jdbc.query("SELECT id, code, name, category, display_order FROM payroll.salary_components", rs -> {
+        jdbc.query("""
+                SELECT id, code, name, category, display_order, is_statutory, computation_type,
+                       amount, is_active, show_on_payslip
+                  FROM payroll.salary_components
+                """, rs -> {
             map.put(rs.getString("code"), new CompMeta(
                 rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getString("category"), rs.getInt("display_order")));
+                rs.getString("category"), rs.getInt("display_order"), rs.getBoolean("is_statutory"),
+                rs.getString("computation_type"), rs.getBigDecimal("amount"),
+                rs.getBoolean("is_active"), rs.getBoolean("show_on_payslip")));
         });
         return map;
     }
@@ -1086,7 +1413,7 @@ public class PayrollRunService {
     private PayslipDto buildPayslip(UUID runId, UUID employeeId) {
         Map<String, Object> run;
         try {
-            run = jdbc.queryForMap("SELECT period_month, period_year FROM payroll.runs WHERE id = ?", runId);
+            run = jdbc.queryForMap("SELECT period_month, period_year, status FROM payroll.runs WHERE id = ?", runId);
         } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
             throw new BusinessRuleException("Payroll run not found", "RUN_NOT_FOUND");
         }
@@ -1094,40 +1421,50 @@ public class PayrollRunService {
         try {
             emp = jdbc.queryForMap("""
                 SELECT e.employee_code, coalesce(e.first_name,'') || ' ' || coalesce(e.last_name,'') AS name,
-                       e.pan_number, e.bank_account_number, d.title AS designation
+                       e.pan_number, e.bank_account_number, d.title AS designation, dp.name AS department
                   FROM hrms.employees e
                   LEFT JOIN hrms.designations d ON d.id = e.designation_id
+                  LEFT JOIN hrms.departments dp ON dp.id = e.department_id
                  WHERE e.id = ?
                 """, employeeId);
         } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
             throw new BusinessRuleException("Employee not found", "EMPLOYEE_NOT_FOUND");
         }
 
-        List<PayslipLineDto> earnings = new ArrayList<>();
-        List<PayslipLineDto> deductions = new ArrayList<>();
-        List<PayslipLineDto> employer = new ArrayList<>();
+        // Components switched off "Show on payslip" still count; they print as
+        // one "Other earnings" / "Other deductions" line so the lines add up.
+        List<PayrollCalc.SlipLine> earnRaw = new ArrayList<>();
+        List<PayrollCalc.SlipLine> dedRaw = new ArrayList<>();
+        List<PayrollCalc.SlipLine> erRaw = new ArrayList<>();
         jdbc.query("""
-            SELECT component_code, component_name, category, amount
-              FROM payroll.payslip_lines WHERE run_id = ? AND employee_id = ?
-             ORDER BY display_order
-            """, rs -> {
-                PayslipLineDto l = new PayslipLineDto(
-                    rs.getString("component_code"), rs.getString("component_name"), rs.getBigDecimal("amount"));
+            SELECT l.component_code, l.component_name, l.category, l.amount,
+                   coalesce(c.show_on_payslip, TRUE) AS shown
+              FROM payroll.payslip_lines l
+              LEFT JOIN payroll.salary_components c ON c.id = l.component_id
+             WHERE l.run_id = ? AND l.employee_id = ?
+             ORDER BY l.display_order
+            """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                PayrollCalc.SlipLine l = new PayrollCalc.SlipLine(rs.getString("component_code"),
+                    rs.getString("component_name"), rs.getBigDecimal("amount"), rs.getBoolean("shown"));
                 switch (rs.getString("category")) {
-                    case "DEDUCTION" -> deductions.add(l);
-                    case "EMPLOYER_CONTRIBUTION" -> employer.add(l);
-                    default -> earnings.add(l);
+                    case "DEDUCTION" -> dedRaw.add(l);
+                    case "EMPLOYER_CONTRIBUTION" -> erRaw.add(l);
+                    default -> earnRaw.add(l);
                 }
             }, runId, employeeId);
+        List<PayslipLineDto> earnings = PayrollCalc.foldHidden(earnRaw, "OTHER_EARNINGS", "Other earnings");
+        List<PayslipLineDto> deductions = PayrollCalc.foldHidden(dedRaw, "OTHER_DEDUCTIONS", "Other deductions");
+        List<PayslipLineDto> employer = PayrollCalc.foldHidden(erRaw, "OTHER_EMPLOYER", "Other employer contributions");
 
         BigDecimal gross = earnings.stream().map(PayslipLineDto::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalDed = deductions.stream().map(PayslipLineDto::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Map<String, Object> lopRow = jdbc.query("""
-            SELECT paid_days, lop_days FROM payroll.run_lop_days WHERE run_id = ? AND employee_id = ?
+            SELECT paid_days, lop_days, total_calendar FROM payroll.run_lop_days WHERE run_id = ? AND employee_id = ?
             """, rs -> {
                 if (!rs.next()) return Map.of();
-                return Map.<String, Object>of("paid", rs.getBigDecimal("paid_days"), "lop", rs.getBigDecimal("lop_days"));
+                return Map.<String, Object>of("paid", rs.getBigDecimal("paid_days"), "lop", rs.getBigDecimal("lop_days"),
+                        "total", rs.getInt("total_calendar"));
             }, runId, employeeId);
 
         return new PayslipDto(runId, employeeId, ((String) emp.get("name")).trim(),
@@ -1136,15 +1473,22 @@ public class PayrollRunService {
             maskPan((String) emp.get("pan_number")), maskBank((String) emp.get("bank_account_number")),
             lopRow.isEmpty() ? null : (BigDecimal) lopRow.get("paid"),
             lopRow.isEmpty() ? null : (BigDecimal) lopRow.get("lop"),
-            earnings, deductions, employer, gross, totalDed, gross.subtract(totalDed));
+            earnings, deductions, employer, gross, totalDed, gross.subtract(totalDed),
+            (String) emp.get("department"), lopRow.isEmpty() ? null : (Integer) lopRow.get("total"),
+            (String) run.get("status"));
     }
 
-    private String computationLogJson(LopResult lop, PayrollResult result) {
+    private String computationLogJson(LopResult lop, PayrollResult result, PayrollCalc.Period period,
+                                      Set<Integer> offDays, int workingDays) {
         try {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("paidDays", lop.paidDays());
             m.put("lopDays", lop.lopDays());
             m.put("totalCalendar", lop.totalCalendar());
+            m.put("periodStart", period.start().toString());
+            m.put("periodEnd", period.end().toString());
+            m.put("weeklyOffDays", new ArrayList<>(offDays));
+            m.put("workingDays", workingDays);
             m.put("warnings", result.warnings());
             List<Map<String, Object>> days = new ArrayList<>();
             for (LopCalculator.DayBreakdown b : lop.log()) {
@@ -1165,7 +1509,11 @@ public class PayrollRunService {
             rs.getString("status"), rs.getInt("employee_count"),
             rs.getBigDecimal("total_gross"), rs.getBigDecimal("total_deductions"), rs.getBigDecimal("total_net"),
             ts(rs.getTimestamp("processed_at")), ts(rs.getTimestamp("locked_at")), ts(rs.getTimestamp("created_at")),
-            rs.getInt("skipped_employee_count"));
+            rs.getInt("skipped_employee_count"),
+            rs.getObject("pay_date") == null ? null : String.valueOf(rs.getObject("pay_date")),
+            (Integer) rs.getObject("working_days"),
+            rs.getString("created_by_name"), rs.getString("processed_by_name"),
+            rs.getString("locked_by_name"), rs.getString("paid_by_name"));
     }
 
     private static String renderPayslipHtml(PayslipDto s) {
@@ -1182,7 +1530,8 @@ public class PayrollRunService {
         b.append("<table class='meta'>")
          .append(row2("Employee", esc(s.employeeName()), "Code", esc(s.employeeCode())))
          .append(row2("Designation", esc(nz(s.designation())), "PAN", esc(s.panMasked())))
-         .append(row2("Paid days", s.paidDays() == null ? "—" : s.paidDays().toPlainString(),
+         .append(row2("Paid days", s.paidDays() == null ? "—"
+                           : s.paidDays().toPlainString() + (s.totalDays() == null ? "" : " of " + s.totalDays()),
                        "LOP days", s.lopDays() == null ? "—" : s.lopDays().toPlainString()))
          .append(row2("Bank A/C", esc(s.bankMasked()), "", ""))
          .append("</table>");

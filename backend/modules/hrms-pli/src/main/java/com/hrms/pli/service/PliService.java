@@ -122,6 +122,8 @@ public class PliService {
                     "PLI_NOT_PROPOSED");
         }
         award.setStatus(decision.approved() ? PliStatus.APPROVED : PliStatus.REJECTED);
+        // The next payroll run whose period ends on or after this moment pays it.
+        if (decision.approved()) award.setApprovedAt(java.time.Instant.now());
         award = awardRepository.save(award);
         log.info("PLI award {} decided status={}", awardId, award.getStatus());
         return toResponse(award);
@@ -131,12 +133,20 @@ public class PliService {
     public PliAwardResponse pay(UUID awardId) {
         PliAward award = awardRepository.findById(awardId)
                 .orElseThrow(() -> new ResourceNotFoundException("PliAward", awardId));
+        if (award.getPayrollRunId() != null) {
+            // Paid through payroll (client decision, 25 Sep 2026): once a run
+            // includes the award, only that run pays it — never twice.
+            throw new BusinessRuleException(
+                    "This award is included in a payroll run and is paid with that run's salaries",
+                    "PLI_IN_PAYROLL");
+        }
         if (award.getStatus() != PliStatus.APPROVED) {
             throw new BusinessRuleException(
                     "Only an approved award can be paid (current status: " + award.getStatus() + ")",
                     "PLI_NOT_APPROVED");
         }
         award.setStatus(PliStatus.PAID);
+        award.setPaidAt(java.time.Instant.now());
         award = awardRepository.save(award);
         log.info("PLI award {} marked paid", awardId);
         return toResponse(award);
@@ -162,6 +172,7 @@ public class PliService {
         return new PliAwardResponse(
                 a.getId(), a.getEmployeeId(), null, null, a.getCompanyId(),
                 a.getPlanName(), a.getPeriod(), a.getAmount(), a.getRatingBasis(),
-                a.getStatus(), a.getNotes(), a.getCreatedAt());
+                a.getStatus(), a.getNotes(), a.getCreatedAt(),
+                a.getApprovedAt(), a.getPayrollRunId(), null, a.getPaidAt());
     }
 }

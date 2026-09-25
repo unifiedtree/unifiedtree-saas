@@ -45,11 +45,18 @@ public class PayrollService {
         Boolean sandwichRuleEnabled, Integer lateMarkLopThreshold,
         @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(31) Integer payrollCycleStartDay,
         @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(31) Integer payrollCycleEndDay,
-        @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(31) Integer salaryProcessingDay) {}
+        @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(31) Integer salaryProcessingDay,
+        /** V143.11: the months (1-12) whose payroll runs deduct LWF. Null leaves them as they are. */
+        List<@jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(12) Integer> lwfDeductionMonths) {}
 
+    /**
+     * A salary component. V143.11 added {@code amount} (a FIXED component's
+     * monthly amount, applied by payroll) and {@code showOnPayslip}.
+     */
     public record ComponentDto(
         UUID id, String code, String name, String category, boolean isStatutory, boolean isTaxable,
-        String computationType, BigDecimal percentValue, int displayOrder, boolean isSystem, boolean isActive) {}
+        String computationType, BigDecimal percentValue, int displayOrder, boolean isSystem, boolean isActive,
+        BigDecimal amount, boolean showOnPayslip) {}
 
     public record StructureLineDto(UUID componentId, String componentCode, String componentName,
                                    String category, BigDecimal monthlyAmount) {}
@@ -123,7 +130,14 @@ public class PayrollService {
         @jakarta.validation.constraints.NotBlank
         @jakarta.validation.constraints.Pattern(regexp = "FIXED|PERCENT_OF_BASIC|PERCENT_OF_GROSS|FORMULA|STATUTORY",
             message = "invalid computationType") String computationType,
-        BigDecimal percentValue, Integer displayOrder) {}
+        BigDecimal percentValue, Integer displayOrder,
+        /** Monthly amount of a FIXED component; null for none. */
+        @jakarta.validation.constraints.DecimalMin("0")
+        @jakarta.validation.constraints.Digits(integer = 10, fraction = 2) BigDecimal amount,
+        /** Print it as its own payslip line (true) or inside "Other earnings/deductions". Null keeps it. */
+        Boolean showOnPayslip,
+        /** Switched off components are skipped from the next run. Null keeps it. */
+        Boolean isActive) {}
 
     // ── Settings ────────────────────────────────────────────────────────────
 
@@ -139,6 +153,20 @@ public class PayrollService {
     public SettingsDto updateSettings(UUID tenantId, SettingsDto req) {
         bindTenant(tenantId);
         ensureSettingsRow(tenantId);
+        String lwfMonths = null;
+        if (req.lwfDeductionMonths() != null) {
+            java.util.TreeSet<Integer> months = new java.util.TreeSet<>();
+            for (Integer m : req.lwfDeductionMonths()) {
+                if (m == null || m < 1 || m > 12) {
+                    throw new BusinessRuleException("LWF months must be between 1 and 12", "INVALID_LWF_MONTHS");
+                }
+                months.add(m);
+            }
+            if (months.isEmpty() && Boolean.TRUE.equals(req.lwfEnabled())) {
+                throw new BusinessRuleException("Pick at least one month for LWF to be deducted in", "INVALID_LWF_MONTHS");
+            }
+            lwfMonths = "{" + String.join(",", months.stream().map(String::valueOf).toList()) + "}";
+        }
         // Overlay only non-null fields onto the existing row.
         jdbc.update("""
             UPDATE payroll.settings SET
@@ -161,8 +189,8 @@ public class PayrollService {
                 sandwich_rule_enabled   = COALESCE(?, sandwich_rule_enabled),
                 late_mark_lop_threshold = ?,
                 payroll_cycle_start_day = COALESCE(?, payroll_cycle_start_day),
-                payroll_cycle_end_day   = COALESCE(?, payroll_cycle_end_day),
                 salary_processing_day   = COALESCE(?, salary_processing_day),
+                lwf_deduction_months    = COALESCE(?::integer[], lwf_deduction_months),
                 updated_at = now()
             WHERE tenant_id = ?
             """,
@@ -173,8 +201,18 @@ public class PayrollService {
             req.ptEnabled(), req.ptStateCode(),
             req.lwfEnabled(), req.lwfEmployeeAmount(), req.lwfEmployerAmount(),
             req.sandwichRuleEnabled(), req.lateMarkLopThreshold(),
-            req.payrollCycleStartDay(), req.payrollCycleEndDay(), req.salaryProcessingDay(),
+            req.payrollCycleStartDay(), req.salaryProcessingDay(), lwfMonths,
             tenantId);
+        // V143.11: a cycle is defined by its start day, and runs cover the
+        // start day up to the day before the next start. The end day shown in
+        // Payroll Settings is therefore always the day before the start day
+        // (whatever the request said).
+        jdbc.update("""
+            UPDATE payroll.settings
+               SET payroll_cycle_end_day = CASE WHEN payroll_cycle_start_day = 1 THEN 31
+                                                ELSE payroll_cycle_start_day - 1 END
+             WHERE tenant_id = ?
+            """, tenantId);
         return getSettingsInline(tenantId);
     }
 
@@ -218,7 +256,27 @@ public class PayrollService {
                 rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
                 rs.getString("category"), rs.getBoolean("is_statutory"), rs.getBoolean("is_taxable"),
                 rs.getString("computation_type"), rs.getBigDecimal("percent_value"),
-                rs.getInt("display_order"), rs.getBoolean("is_system"), rs.getBoolean("is_active")));
+                rs.getInt("display_order"), rs.getBoolean("is_system"), rs.getBoolean("is_active"),
+                rs.getBigDecimal("amount"), rs.getBoolean("show_on_payslip")));
+    }
+
+    /**
+     * A component's fixed monthly amount as it will be stored: only FIXED
+     * components that payroll doesn't work out itself take one. Refuses an
+     * amount on anything else rather than silently dropping it.
+     */
+    private static BigDecimal fixedAmount(String code, String computationType, boolean statutory, BigDecimal amount) {
+        if (amount == null) return null;
+        boolean allowed = "FIXED".equals(computationType) && !statutory
+                && !PayrollCalc.PAYROLL_MANAGED.contains(code);
+        if (!allowed) {
+            if (amount.signum() == 0) return null;
+            throw new BusinessRuleException(
+                    "Only a fixed-amount component can have a monthly amount"
+                    + (PayrollCalc.PAYROLL_MANAGED.contains(code) ? " (" + code + " is worked out by payroll)" : ""),
+                    "COMPONENT_AMOUNT_NOT_ALLOWED");
+        }
+        return amount.setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     @Transactional
@@ -234,15 +292,18 @@ public class PayrollService {
         // ON CONFLICT DO NOTHING used to answer 201 for a duplicate that was never
         // saved; now the caller is told.
         String code = req.code() == null ? null : req.code().trim().toUpperCase(Locale.ROOT);
+        BigDecimal amount = fixedAmount(code, req.computationType(), Boolean.TRUE.equals(req.isStatutory()), req.amount());
         int inserted = jdbc.update("""
             INSERT INTO payroll.salary_components
-                (tenant_id, code, name, category, is_statutory, is_taxable, computation_type, percent_value, display_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (tenant_id, code, name, category, is_statutory, is_taxable, computation_type, percent_value, display_order,
+                 amount, show_on_payslip, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (tenant_id, code) DO NOTHING
             """,
             tenantId, code, req.name(), req.category(),
             Boolean.TRUE.equals(req.isStatutory()), req.isTaxable() == null || req.isTaxable(),
-            req.computationType(), req.percentValue(), req.displayOrder() == null ? 100 : req.displayOrder());
+            req.computationType(), req.percentValue(), req.displayOrder() == null ? 100 : req.displayOrder(),
+            amount, req.showOnPayslip() == null || req.showOnPayslip(), req.isActive() == null || req.isActive());
         if (inserted == 0) {
             throw new com.hrms.core.exception.HrmsException(
                     "A salary component with code '" + code + "' already exists",
@@ -260,8 +321,24 @@ public class PayrollService {
         // components (BASIC, HRA, ADVANCE_RECOVERY, ...) must never change
         // category. Allow it only when the row is not system AND has zero
         // payslip lines AND zero structure lines pointing at it.
-        Map<String, Object> existing = jdbc.queryForMap(
-                "SELECT is_system, category FROM payroll.salary_components WHERE id = ?", id);
+        Map<String, Object> existing;
+        try {
+            existing = jdbc.queryForMap(
+                    "SELECT code, is_system, is_statutory, category, computation_type, is_active FROM payroll.salary_components WHERE id = ?", id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
+            throw new com.hrms.core.exception.HrmsException("Component not found",
+                    org.springframework.http.HttpStatus.NOT_FOUND, "COMPONENT_NOT_FOUND");
+        }
+        // Built-in components (Basic, the statutory lines, advance recovery,
+        // PLI, LWF…) can't be switched off: payroll depends on them.
+        if (Boolean.FALSE.equals(req.isActive()) && Boolean.TRUE.equals(existing.get("is_system"))
+                && Boolean.TRUE.equals(existing.get("is_active"))) {
+            throw new BusinessRuleException(
+                    "Built-in components can't be switched off", "SYSTEM_COMPONENT_ACTIVE_LOCKED");
+        }
+        String effType = req.computationType() != null ? req.computationType() : (String) existing.get("computation_type");
+        boolean effStatutory = req.isStatutory() != null ? req.isStatutory() : Boolean.TRUE.equals(existing.get("is_statutory"));
+        BigDecimal amount = fixedAmount((String) existing.get("code"), effType, effStatutory, req.amount());
         if (req.category() != null && !req.category().equals(existing.get("category"))) {
             if (Boolean.TRUE.equals(existing.get("is_system"))) {
                 throw new BusinessRuleException(
@@ -287,11 +364,15 @@ public class PayrollService {
                 computation_type = COALESCE(?, computation_type),
                 percent_value = ?,
                 display_order = COALESCE(?, display_order),
+                amount = ?,
+                show_on_payslip = COALESCE(?, show_on_payslip),
+                is_active = COALESCE(?, is_active),
                 updated_at = now()
             WHERE id = ?
             """,
             req.name(), req.category(), req.isStatutory(), req.isTaxable(),
-            req.computationType(), req.percentValue(), req.displayOrder(), id);
+            req.computationType(), req.percentValue(), req.displayOrder(),
+            amount, req.showOnPayslip(), req.isActive(), id);
     }
 
     @Transactional
@@ -431,23 +512,16 @@ public class PayrollService {
         // component rows, fall back to a single BASIC = ctc_monthly, then run
         // the real engine so PF/ESI/PT land the same way payroll will compute
         // them. A full month with zero LOP makes proration a no-op.
-        boolean derivedFromCtc = lines.stream()
-                .noneMatch(l -> isEarningCategory(l.category()));
-        List<PayrollEngine.EarningLine> engineEarnings = new ArrayList<>();
-        if (derivedFromCtc) {
-            if (ctcMonthly != null && ctcMonthly.signum() > 0) {
-                engineEarnings.add(new PayrollEngine.EarningLine(
-                        new PayrollEngine.ComponentDef("BASIC", "Basic", "EARNING", false, 10),
-                        ctcMonthly));
-            }
-        } else {
-            for (StructureLineDto l : lines) {
-                if (!isEarningCategory(l.category())) continue;
-                engineEarnings.add(new PayrollEngine.EarningLine(
-                        new PayrollEngine.ComponentDef(l.componentCode(), l.componentName(), l.category(), false, 100),
-                        l.monthlyAmount() == null ? BigDecimal.ZERO : l.monthlyAmount()));
-            }
-        }
+        // V143.11: the same rules as the run (PayrollCalc.resolvePay):
+        // switched-off components are skipped and fixed-amount components the
+        // structure doesn't list are added.
+        PayrollCalc.ResolvedPay pay = PayrollCalc.resolvePay(
+                lines.stream().map(l -> new PayrollCalc.StructureLine(l.componentCode(), l.componentName(),
+                        l.category(), false, 100, l.monthlyAmount())).toList(),
+                loadCatalog(), ctcMonthly,
+                new PayrollEngine.ComponentDef("BASIC", "Basic", "EARNING", false, 10));
+        boolean derivedFromCtc = pay.derivedFromCtc();
+        List<PayrollEngine.EarningLine> engineEarnings = new ArrayList<>(pay.earnings());
 
         List<StructureLineDto> earnings = List.of();
         List<StructureLineDto> deductions = List.of();
@@ -504,7 +578,8 @@ public class PayrollService {
                                 (String) r.get("pf_status"),
                                 Boolean.TRUE.equals(r.get("pf_applicable")),
                                 Boolean.TRUE.equals(r.get("esi_applicable"))),
-                        period));
+                        period),
+                        new PayrollEngine.Extras(List.of(), pay.flatDeductions(), null, null));
 
                 earnings        = projectLines(res, PayrollService::isEarningCategory);
                 deductions      = projectLines(res, c -> "DEDUCTION".equals(c));
@@ -525,6 +600,20 @@ public class PayrollService {
             (String) r.get("revision_note"), lines,
             earnings, deductions, employerContrib,
             gross, totalDed, net, employerTotal, derivedFromCtc);
+    }
+
+    /** The component catalogue as payroll reads it (tenant already bound). */
+    private Map<String, PayrollCalc.ComponentInfo> loadCatalog() {
+        Map<String, PayrollCalc.ComponentInfo> out = new HashMap<>();
+        jdbc.query("""
+                SELECT code, name, category, is_statutory, display_order, computation_type,
+                       amount, is_active, show_on_payslip
+                  FROM payroll.salary_components
+                """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> out.put(rs.getString("code"),
+                new PayrollCalc.ComponentInfo(rs.getString("code"), rs.getString("name"), rs.getString("category"),
+                        rs.getBoolean("is_statutory"), rs.getInt("display_order"), rs.getString("computation_type"),
+                        rs.getBigDecimal("amount"), rs.getBoolean("is_active"), rs.getBoolean("show_on_payslip"))));
+        return out;
     }
 
     /** Categories that count toward gross — same set the payroll engine uses. */
@@ -567,6 +656,20 @@ public class PayrollService {
             (Boolean) r.get("lwf_enabled"), (BigDecimal) r.get("lwf_employee_amount"), (BigDecimal) r.get("lwf_employer_amount"),
             (Boolean) r.get("sandwich_rule_enabled"), (Integer) r.get("late_mark_lop_threshold"),
             (Integer) r.get("payroll_cycle_start_day"), (Integer) r.get("payroll_cycle_end_day"),
-            (Integer) r.get("salary_processing_day"));
+            (Integer) r.get("salary_processing_day"), intList(r.get("lwf_deduction_months")));
+    }
+
+    private static List<Integer> intList(Object v) {
+        try {
+            if (v instanceof java.sql.Array a) v = a.getArray();
+        } catch (java.sql.SQLException e) {
+            return List.of();
+        }
+        if (v instanceof Object[] arr) {
+            List<Integer> out = new ArrayList<>();
+            for (Object o : arr) if (o instanceof Number n) out.add(n.intValue());
+            return out;
+        }
+        return List.of();
     }
 }

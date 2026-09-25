@@ -46,4 +46,16 @@ public class PliAward extends BaseEntity {
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
+
+    // V143.11: approved awards are paid through payroll. A run approved-by
+    // cutoff uses approvedAt; payrollRunId is the run that pays the award (set
+    // when that run is processed); paidAt is when that run was locked.
+    @Column(name = "approved_at")
+    private java.time.Instant approvedAt;
+
+    @Column(name = "payroll_run_id")
+    private UUID payrollRunId;
+
+    @Column(name = "paid_at")
+    private java.time.Instant paidAt;
 }
