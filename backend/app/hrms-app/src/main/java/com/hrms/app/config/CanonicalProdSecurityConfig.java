@@ -104,6 +104,13 @@ public class CanonicalProdSecurityConfig {
                     "/actuator/health",
                     "/actuator/info",
                     "/v1/canonical-auth/login",
+                    // Two-factor step of a password sign-in (V143.26). The
+                    // caller has no session yet; the credential is the
+                    // 10-minute challenge token /login returned after a
+                    // correct password, plus the code. Signed with a key
+                    // derived from (never equal to) the access-token key.
+                    "/v1/canonical-auth/login/mfa",
+                    "/v1/canonical-auth/login/mfa/setup",
                     // Firebase phone-auth login (Android app). ID token is
                     // the credential; controller verifies signature +
                     // audience against project unifiedtree-445cd, maps the

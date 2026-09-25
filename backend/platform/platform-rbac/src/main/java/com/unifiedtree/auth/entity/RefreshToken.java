@@ -41,4 +41,24 @@ public class RefreshToken extends BaseEntity {
 
     @Column(name = "revoked_at")
     private OffsetDateTime revokedAt;
+
+    /**
+     * Stable id of the signed-in session (V143.26). Refresh rotates the row, so
+     * the row id changes on every refresh; session_id is carried across
+     * rotations and is the "sid" claim in the access token. Null only on rows
+     * written before V143.26 (then the row id stands in for it).
+     */
+    @Column(name = "session_id")
+    private UUID sessionId;
+
+    /** When the person signed in (first row of the session). */
+    @Column(name = "session_started_at")
+    private OffsetDateTime sessionStartedAt;
+
+    /** Last request seen on this session (touched at most once a minute). */
+    @Column(name = "last_used_at")
+    private OffsetDateTime lastUsedAt;
+
+    @Column(name = "ip_address", length = 64)
+    private String ipAddress;
 }

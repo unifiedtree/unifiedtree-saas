@@ -3,6 +3,9 @@ package com.hrms.api.auth.canonical;
 import com.unifiedtree.auth.dto.AuthDtos.LoginRequest;
 import com.unifiedtree.auth.dto.AuthDtos.LoginResponse;
 import com.unifiedtree.auth.dto.AuthDtos.MeResponse;
+import com.unifiedtree.auth.dto.AuthDtos.MfaChallengeResponse;
+import com.unifiedtree.auth.mfa.MfaChallengeTokens;
+import com.unifiedtree.auth.mfa.MfaService;
 import com.unifiedtree.auth.service.AuthService;
 import com.unifiedtree.security.tenant.TenantContext;
 import jakarta.servlet.http.Cookie;
@@ -22,8 +25,12 @@ import java.util.UUID;
  * Canonical login endpoint. Distinct base path from the legacy auth
  * controller so both can coexist while the migration completes.
  *
- *   POST /v1/canonical-auth/login   -> returns JWT + refresh token
- *   GET  /v1/canonical-auth/me      -> echoes identity from current JWT
+ *   POST /v1/canonical-auth/login           -> returns JWT + refresh token, or the
+ *                                              two-factor step (MfaChallengeResponse)
+ *   POST /v1/canonical-auth/login/mfa       -> two-factor code (or set-up code) -> session
+ *   POST /v1/canonical-auth/login/mfa/setup -> QR code when the workspace requires
+ *                                              two-factor and it isn't set up yet
+ *   GET  /v1/canonical-auth/me              -> echoes identity from current JWT
  */
 @RestController
 @RequestMapping("/v1/canonical-auth")
@@ -54,13 +61,19 @@ public class CanonicalAuthController {
     private final AuthService auth;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
     private final LoginRateLimiter rateLimiter;
+    private final MfaService mfa;
+    private final MfaChallengeTokens mfaChallenges;
 
     public CanonicalAuthController(AuthService auth,
                                    org.springframework.jdbc.core.JdbcTemplate jdbc,
-                                   LoginRateLimiter rateLimiter) {
+                                   LoginRateLimiter rateLimiter,
+                                   MfaService mfa,
+                                   MfaChallengeTokens mfaChallenges) {
         this.auth = auth;
         this.jdbc = jdbc;
         this.rateLimiter = rateLimiter;
+        this.mfa = mfa;
+        this.mfaChallenges = mfaChallenges;
     }
 
     /**
@@ -257,7 +270,7 @@ public class CanonicalAuthController {
      * credential row, and login always returns INVALID_CREDENTIALS.
      */
     @PostMapping("/login")
-    public LoginResponse login(@Valid @RequestBody LoginRequest req, HttpServletResponse res) {
+    public Object login(@Valid @RequestBody LoginRequest req, HttpServletResponse res) {
         // ── Sliding-window rate-limit (Bundle H) ────────────────────────────
         // 5 failed attempts per email per 5 min → 429 with Retry-After. The
         // limiter is keyed BEFORE the tenant is resolved so an attacker who
@@ -294,9 +307,15 @@ public class CanonicalAuthController {
         }
         TenantContext.setTenantId(tenantId);
         com.hrms.core.tenant.TenantContext.setTenantId(tenantId);
-        LoginResponse out;
+        AuthService.LoginOutcome outcome;
         try {
-            out = auth.login(req);
+            outcome = auth.loginWithMfa(req, Boolean.TRUE.equals(req.mfaCapable()));
+        } catch (com.hrms.core.exception.HrmsException e) {
+            // "Two-factor needed, and this client can't ask for it" follows a
+            // CORRECT password: it must not count as a failed attempt, or a
+            // mobile user retrying would be throttled for nothing.
+            if (!isMfaRefusal(e)) rateLimiter.recordFailure(req.email());
+            throw e;
         } catch (RuntimeException e) {
             // Any auth failure (INVALID_CREDENTIALS, ACCOUNT_LOCKED,
             // ACCOUNT_INACTIVE) counts against the limiter — otherwise an
@@ -305,12 +324,138 @@ public class CanonicalAuthController {
             rateLimiter.recordFailure(req.email());
             throw e;
         }
+        if (outcome.needsMfa()) {
+            // Password was right; the session waits for the code. No cookie yet.
+            return new MfaChallengeResponse(
+                    outcome.mfaPurpose() == MfaChallengeTokens.Purpose.VERIFY,
+                    outcome.mfaPurpose() == MfaChallengeTokens.Purpose.SETUP,
+                    outcome.mfaToken(), outcome.email());
+        }
+        LoginResponse out = outcome.session();
         rateLimiter.recordSuccess(req.email());
         // Persist the refresh token so a reload can restore this session. Web
         // clients never touch it (httpOnly); mobile keeps using the copy in
         // the response body.
         writeRefreshCookie(res, tenantId, out.refreshToken());
         return out;
+    }
+
+    private static boolean isMfaRefusal(com.hrms.core.exception.HrmsException e) {
+        return "MFA_REQUIRED".equals(e.getErrorCode()) || "MFA_SETUP_REQUIRED".equals(e.getErrorCode());
+    }
+
+    public record MfaLoginRequest(String mfaToken, String code) {
+        @Override public String toString() { return "MfaLoginRequest[REDACTED]"; }
+    }
+
+    public record MfaSetupRequest(String mfaToken) {
+        @Override public String toString() { return "MfaSetupRequest[REDACTED]"; }
+    }
+
+    /**
+     * The two-factor step of a sign-in. Public (the caller has no session yet):
+     * its credential is the challenge token from /login, which proves the
+     * password was right in the last 10 minutes, plus the code.
+     *
+     * <p>VERIFY: a 6-digit code from the authenticator app, or a recovery code.
+     * SETUP (workspace requires two-factor, not set up yet): the first code from
+     * the app after scanning the QR from /login/mfa/setup; the answer then also
+     * carries the recovery codes, shown once.
+     *
+     * <p>Wrong codes count against the same per-email limiter as passwords and
+     * against the account (5 in a row lock it for 15 minutes).
+     */
+    @PostMapping("/login/mfa")
+    public java.util.Map<String, Object> loginMfa(@RequestBody MfaLoginRequest body, HttpServletResponse res) {
+        MfaChallengeTokens.Challenge ch = mfaChallenges.parse(body == null ? null : body.mfaToken());
+        LoginRateLimiter.CheckResult gate = rateLimiter.check(ch.email());
+        if (!gate.allowed()) {
+            res.setHeader("Retry-After", Long.toString(gate.retryAfterSeconds()));
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many wrong codes. Try again in " + gate.retryAfterSeconds() + "s.");
+        }
+        TenantContext.setTenantId(ch.tenantId());
+        com.hrms.core.tenant.TenantContext.setTenantId(ch.tenantId());
+        String code = body.code() == null ? "" : body.code().trim();
+
+        java.util.List<String> recoveryCodes = null;
+        boolean usedRecovery = false;
+        if (ch.purpose() == MfaChallengeTokens.Purpose.VERIFY) {
+            MfaService.CheckResult r = mfa.verify(ch.tenantId(), ch.userId(), code);
+            throwIfRefused(r, ch.email());
+            usedRecovery = r == MfaService.CheckResult.OK_RECOVERY;
+        } else {
+            MfaService.CodesResult r = mfa.confirmSetup(ch.tenantId(), ch.userId(), code);
+            if (r.result() == MfaService.CheckResult.NO_PENDING) {
+                throw new com.hrms.core.exception.HrmsException(
+                        "The QR code expired. Show a new one and scan it again.",
+                        HttpStatus.CONFLICT, "MFA_SETUP_EXPIRED");
+            }
+            if (r.result() == MfaService.CheckResult.ALREADY_ENABLED) {
+                throw new com.hrms.core.exception.HrmsException(
+                        "Two-factor is already set up for this account. Sign in again and enter a code.",
+                        HttpStatus.CONFLICT, "MFA_ALREADY_ENABLED");
+            }
+            throwIfRefused(r.result(), ch.email());
+            recoveryCodes = r.recoveryCodes();
+        }
+
+        LoginResponse out = auth.completeMfaLogin(ch.tenantId(), ch.userId());
+        rateLimiter.recordSuccess(ch.email());
+        writeRefreshCookie(res, ch.tenantId(), out.refreshToken());
+
+        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("accessToken", out.accessToken());
+        m.put("refreshToken", out.refreshToken());
+        m.put("accessTokenExpiresAt", out.accessTokenExpiresAt() == null ? null : out.accessTokenExpiresAt().toString());
+        m.put("userId", out.userId());
+        m.put("employeeId", out.employeeId());
+        m.put("tenantId", out.tenantId());
+        m.put("email", out.email());
+        m.put("firstName", out.firstName());
+        m.put("lastName", out.lastName());
+        m.put("roles", out.roles());
+        m.put("permissions", out.permissions());
+        m.put("recoveryCodeUsed", usedRecovery);
+        if (recoveryCodes != null) m.put("recoveryCodes", recoveryCodes);
+        return m;
+    }
+
+    /**
+     * QR code for a sign-in that must set two-factor up first (the workspace
+     * requires it). Only a SETUP challenge is accepted.
+     */
+    @PostMapping("/login/mfa/setup")
+    public MfaService.SetupInfo loginMfaSetup(@RequestBody MfaSetupRequest body) {
+        MfaChallengeTokens.Challenge ch = mfaChallenges.parse(body == null ? null : body.mfaToken());
+        if (ch.purpose() != MfaChallengeTokens.Purpose.SETUP) {
+            throw new com.hrms.core.exception.HrmsException(
+                    "Two-factor is already set up for this account. Enter a code from your app.",
+                    HttpStatus.CONFLICT, "MFA_ALREADY_ENABLED");
+        }
+        TenantContext.setTenantId(ch.tenantId());
+        com.hrms.core.tenant.TenantContext.setTenantId(ch.tenantId());
+        return mfa.beginSetup(ch.tenantId(), ch.userId());
+    }
+
+    private void throwIfRefused(MfaService.CheckResult r, String email) {
+        switch (r) {
+            case OK, OK_RECOVERY -> { }
+            case LOCKED -> {
+                rateLimiter.recordFailure(email);
+                throw new com.hrms.core.exception.HrmsException(
+                        "Too many wrong codes. This account is locked for 15 minutes.",
+                        HttpStatus.LOCKED, "MFA_LOCKED");
+            }
+            case NOT_ENABLED -> throw new com.hrms.core.exception.HrmsException(
+                    "This sign-in step has expired. Enter your email and password again.",
+                    HttpStatus.UNAUTHORIZED, "MFA_CHALLENGE_EXPIRED");
+            default -> {
+                rateLimiter.recordFailure(email);
+                throw new com.hrms.core.exception.BusinessRuleException(
+                        "That code isn't right. Check your authenticator app and try again.", "MFA_CODE_INVALID");
+            }
+        }
     }
 
     @GetMapping("/me")

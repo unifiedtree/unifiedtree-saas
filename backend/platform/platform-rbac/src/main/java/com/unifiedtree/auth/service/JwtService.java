@@ -70,6 +70,18 @@ public class JwtService {
     public IssuedToken issueAccessToken(UUID userId, UUID tenantId, String email,
                                         List<String> roleCodes, List<String> permissions,
                                         UUID employeeId) {
+        return issueAccessToken(userId, tenantId, email, roleCodes, permissions, employeeId, null);
+    }
+
+    /**
+     * @param sessionId the signed-in session (refresh-token session_id). Sent as
+     *                  the {@code sid} claim so a session signed out from
+     *                  Settings -> Security stops working at once, instead of
+     *                  when this access token expires (SessionRevocationFilter).
+     */
+    public IssuedToken issueAccessToken(UUID userId, UUID tenantId, String email,
+                                        List<String> roleCodes, List<String> permissions,
+                                        UUID employeeId, UUID sessionId) {
         Instant now = Instant.now();
         Instant exp = now.plus(accessTokenTtl);
         var builder = Jwts.builder()
@@ -83,6 +95,9 @@ public class JwtService {
             .claim("permissions", permissions);
         if (employeeId != null) {
             builder.claim("employee_id", employeeId.toString());
+        }
+        if (sessionId != null) {
+            builder.claim("sid", sessionId.toString());
         }
         return new IssuedToken(builder.signWith(signingKey, Jwts.SIG.HS256).compact(), exp, accessTokenTtl);
     }
