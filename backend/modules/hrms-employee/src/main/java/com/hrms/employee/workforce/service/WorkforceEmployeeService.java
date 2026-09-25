@@ -131,7 +131,10 @@ public class WorkforceEmployeeService {
     /** Longer than any name/code/email column; anything past this is noise. */
     private static final int SEARCH_MAX_QUERY_CHARS = 100;
 
-    private static final String SEARCH_SQL = """
+    /** At most this many words of a query are matched separately (the rest is noise). */
+    static final int SEARCH_MAX_TOKENS = 4;
+
+    private static final String SEARCH_SELECT = """
         SELECT e.id, e.first_name, e.last_name, e.employee_code, e.profile_photo_url,
                d.name  AS department_name,
                g.title AS job_title
@@ -139,11 +142,17 @@ public class WorkforceEmployeeService {
         LEFT JOIN hrms.departments  d ON d.id = e.department_id
         LEFT JOIN hrms.designations g ON g.id = e.designation_id
         WHERE e.is_active = TRUE
-          AND (   lower(e.employee_code) LIKE :contains ESCAPE '\\'
-               OR lower(e.first_name)    LIKE :contains ESCAPE '\\'
-               OR lower(e.last_name)     LIKE :contains ESCAPE '\\'
-               OR lower(concat_ws(' ', e.first_name, e.last_name)) LIKE :contains ESCAPE '\\'
-               OR lower(e.email)         LIKE :contains ESCAPE '\\')
+        """;
+
+    /** The whole query somewhere in a name, the full name, the code or the email. */
+    private static final String SEARCH_WHOLE = """
+              lower(e.employee_code) LIKE :contains ESCAPE '\\'
+           OR lower(e.first_name)    LIKE :contains ESCAPE '\\'
+           OR lower(e.last_name)     LIKE :contains ESCAPE '\\'
+           OR lower(concat_ws(' ', e.first_name, e.last_name)) LIKE :contains ESCAPE '\\'
+           OR lower(e.email)         LIKE :contains ESCAPE '\\'""";
+
+    private static final String SEARCH_ORDER = """
         ORDER BY
           CASE
             WHEN lower(e.employee_code) = :exact
@@ -156,17 +165,56 @@ public class WorkforceEmployeeService {
               OR lower(e.last_name)     LIKE :prefix ESCAPE '\\'
               OR lower(concat_ws(' ', e.first_name, e.last_name)) LIKE :prefix ESCAPE '\\'
               OR lower(e.email)         LIKE :prefix ESCAPE '\\' THEN 1
-            ELSE 2
+            WHEN %s THEN 2
+            ELSE 3
           END,
           e.employee_code, e.id
         LIMIT :limit
         """;
 
     /**
+     * The words of a normalised query, first {@value #SEARCH_MAX_TOKENS} distinct ones.
+     * "rahul verma" → [rahul, verma]; a one-word query gives one token.
+     */
+    public static List<String> searchTokens(String normalized) {
+        if (normalized == null || normalized.isBlank()) return List.of();
+        return java.util.Arrays.stream(normalized.trim().split(" "))
+                .filter(s -> !s.isBlank()).distinct().limit(SEARCH_MAX_TOKENS).toList();
+    }
+
+    /**
+     * The search statement for {@code tokenCount} words. A row matches when the
+     * whole query appears in a name, code or email (as before), or when EVERY
+     * word appears in one of the name, code, email, department or designation
+     * (so "rah ver" finds Rahul Verma and "sales priya" finds Priya in Sales).
+     * Ranking: exact, then prefix, then the whole query inside a name, code or
+     * email, then word-by-word matches. Only named parameters are concatenated
+     * (:t0 … :t3), never user text.
+     */
+    public static String searchSql(int tokenCount) {
+        int n = Math.max(0, Math.min(tokenCount, SEARCH_MAX_TOKENS));
+        StringBuilder words = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            String p = ":t" + i;
+            words.append(i == 0 ? "" : " AND ")
+                 .append("(lower(e.employee_code) LIKE ").append(p).append(" ESCAPE '\\'")
+                 .append(" OR lower(e.first_name) LIKE ").append(p).append(" ESCAPE '\\'")
+                 .append(" OR lower(e.last_name) LIKE ").append(p).append(" ESCAPE '\\'")
+                 .append(" OR lower(e.email) LIKE ").append(p).append(" ESCAPE '\\'")
+                 .append(" OR lower(coalesce(d.name, '')) LIKE ").append(p).append(" ESCAPE '\\'")
+                 .append(" OR lower(coalesce(g.title, '')) LIKE ").append(p).append(" ESCAPE '\\')");
+        }
+        String whole = "(" + SEARCH_WHOLE + ")";
+        String where = n == 0 ? whole : "(" + whole + " OR (" + words + "))";
+        return SEARCH_SELECT + "  AND " + where + "\n" + SEARCH_ORDER.formatted(whole);
+    }
+
+    /**
      * Typeahead over first name, last name, full name, employee code and work
-     * email. Case-insensitive; exact matches rank first, then prefix, then
-     * substring; ties break on employee code so the order is stable between
-     * keystrokes.
+     * email, and word by word over those plus department and designation (see
+     * {@link #searchSql}). Case-insensitive; exact matches rank first, then
+     * prefix, then substring, then word-by-word; ties break on employee code
+     * so the order is stable between keystrokes.
      *
      * @param rawQuery user text; must normalise to at least
      *                 {@link #SEARCH_MIN_QUERY_CHARS} characters (the
@@ -184,6 +232,7 @@ public class WorkforceEmployeeService {
         int limit = Math.max(1, Math.min(requestedLimit, SEARCH_MAX_LIMIT));
         String escaped = escapeLike(q);
 
+        List<String> tokens = searchTokens(q);
         var params = new MapSqlParameterSource()
                 .addValue("exact",    q)
                 .addValue("prefix",   escaped + "%")
@@ -191,8 +240,9 @@ public class WorkforceEmployeeService {
                 // Fetch one past the page so the client can say "narrow your
                 // search" without a second COUNT(*) round-trip.
                 .addValue("limit",    limit + 1);
+        for (int i = 0; i < tokens.size(); i++) params.addValue("t" + i, "%" + escapeLike(tokens.get(i)) + "%");
 
-        List<EmployeeSearchHit> rows = namedJdbc.query(SEARCH_SQL, params, (rs, i) -> new EmployeeSearchHit(
+        List<EmployeeSearchHit> rows = namedJdbc.query(searchSql(tokens.size()), params, (rs, i) -> new EmployeeSearchHit(
                 rs.getObject("id", UUID.class),
                 displayName(rs.getString("first_name"), rs.getString("last_name")),
                 rs.getString("employee_code"),
