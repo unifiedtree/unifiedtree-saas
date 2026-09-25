@@ -44,7 +44,20 @@ public class RbacService {
 
     @Transactional(readOnly = true)
     public List<Role> listVisibleRoles() {
-        return roleRepo.findAllByOrderByCodeAsc();
+        // PLATFORM_* roles belong to the people who run the platform, not to a
+        // customer's workspace: nobody inside a workspace can hold or grant one.
+        // Listing them leaked the vendor's name into a customer's Roles &
+        // permissions page ("Platform Super Admin — UnifiedTree platform-level
+        // administrator"), which the client's white-label rule forbids.
+        boolean platformAdmin = hasAuthority("platform.admin");
+        return roleRepo.findAllByOrderByCodeAsc().stream()
+            .filter(r -> platformAdmin || r.getCode() == null || !r.getCode().startsWith("PLATFORM_"))
+            .toList();
+    }
+
+    private static boolean hasAuthority(String code) {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream().anyMatch(a -> code.equals(a.getAuthority()));
     }
 
     @Transactional(readOnly = true)
