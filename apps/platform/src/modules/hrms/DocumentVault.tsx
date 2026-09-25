@@ -192,7 +192,9 @@ function EditDocumentDrawer({ doc, onClose, toast }: { doc: EmployeeDocumentV2; 
   const all = types.data ?? []
   // Active types to choose from, plus the document's own type if HR has since switched it off.
   const options = all.filter((t) => t.active || t.id === doc.documentTypeId)
-  const storedFile = !!doc.contentType || !!doc.originalFilename
+  // An uploaded file (vs a pasted link). Older uploads carry no file facts, but their link is
+  // either absent (storage not set up here) or a signed storage link, never a link HR typed.
+  const storedFile = !!doc.contentType || !!doc.originalFilename || !doc.fileUrl || /[?&]X-Amz-Signature=/i.test(doc.fileUrl)
   const [typeId, setTypeId] = useState(doc.documentTypeId || '')
   const [title, setTitle] = useState(doc.title)
   const [category, setCategory] = useState<DocumentCategory>(doc.category)
@@ -213,7 +215,8 @@ function EditDocumentDrawer({ doc, onClose, toast }: { doc: EmployeeDocumentV2; 
       await edit.mutateAsync({
         id: doc.id, title: title.trim(), category, documentTypeId: typeId || null,
         issuedDate: issuedDate || null, expiryDate: expiryDate || null, notes: notes.trim() || null,
-        fileUrl: !storedFile && !file && link.trim() ? link.trim() : undefined, file,
+        // Only a link HR actually changed is sent; the server keeps the stored one otherwise.
+        fileUrl: !storedFile && !file && link.trim() && link.trim() !== (doc.fileUrl || '') ? link.trim() : undefined, file,
       })
       toast('Document updated', false, file ? 'The new file replaced the old one and is marked verified.' : undefined)
       onClose()
