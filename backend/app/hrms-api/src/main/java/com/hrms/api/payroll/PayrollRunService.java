@@ -404,7 +404,7 @@ public class PayrollRunService {
         // incentive" earnings line. The awards are reserved for this run
         // (payroll_run_id), so the separate award payout refuses them; locking
         // the run marks them paid and reopening puts them back to approved.
-        Map<UUID, BigDecimal> pliByEmp = reservePliAwards(runId, run.companyId(), empIds, period.end());
+        Map<UUID, BigDecimal> pliByEmp = reservePliAwards(runId, empIds, period.end());
         if (!pliByEmp.isEmpty()) components = ensureComponent(tenantId, components, "PLI_INCENTIVE");
 
         // ── Labour Welfare Fund (deducted only in the configured months) ────
@@ -1218,12 +1218,12 @@ public class PayrollRunService {
     }
 
     /**
-     * Reserve every approved, unpaid PLI award for this run: awards of the
-     * run's company, for people in the run, approved by the end of the pay
+     * Reserve every approved, unpaid PLI award for this run: awards for the
+     * people in the run, approved by the end of the pay
      * period (India time). First frees awards this run reserved last time, so
      * re-processing picks up the current set. Returns the total per employee.
      */
-    private Map<UUID, BigDecimal> reservePliAwards(UUID runId, UUID companyId, List<UUID> empIds, LocalDate periodEnd) {
+    private Map<UUID, BigDecimal> reservePliAwards(UUID runId, List<UUID> empIds, LocalDate periodEnd) {
         jdbc.update("""
                 UPDATE pli_mgmt.pli_awards
                    SET payroll_run_id = NULL, updated_at = now(), version = version + 1
@@ -1237,14 +1237,16 @@ public class PayrollRunService {
                 UPDATE pli_mgmt.pli_awards
                    SET payroll_run_id = ?, updated_at = now(), version = version + 1
                  WHERE status = 'APPROVED' AND payroll_run_id IS NULL
-                   AND company_id = ? AND employee_id = ANY (?) AND amount > 0
+                   AND employee_id = ANY (?) AND amount > 0
                    AND (approved_at IS NULL OR approved_at < ?)
                 RETURNING employee_id, amount
                 """, ps -> {
+            // Matched on the people in this run (who all belong to the run's
+            // company), not on the award's own company field: an award filed
+            // under another company must still be paid, and only once.
             ps.setObject(1, runId);
-            ps.setObject(2, companyId);
-            ps.setArray(3, ids);
-            ps.setObject(4, cutoff);
+            ps.setArray(2, ids);
+            ps.setObject(3, cutoff);
         }, rs -> {
             out.merge(rs.getObject("employee_id", UUID.class), rs.getBigDecimal("amount"), BigDecimal::add);
         });

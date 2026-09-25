@@ -111,6 +111,18 @@ class PayrollEngineExtrasTest {
     }
 
     @Test
+    void nothingPaidMeansNoLwfAndNoFixedDeduction() {
+        // A whole period unpaid: LWF and fixed deductions come out of wages, so
+        // there is nothing to take them from (and net pay must not go negative).
+        PayrollResult r = run(paidDays(0), new Extras(List.of(),
+            List.of(new FlatLine(CANTEEN, bd("300"))), bd("25"), bd("75")));
+        assertThat(r.gross()).isEqualByComparingTo("0.00");
+        assertThat(amt(r, "LWF_EMPLOYEE")).isNull();
+        assertThat(amt(r, "LWF_EMPLOYER")).isNull();
+        assertThat(amt(r, "CANTEEN")).isNull();
+    }
+
+    @Test
     void linesKeepAFixedOrder() {
         PayrollResult r = run(paidDays(30), new Extras(
             List.of(new FlatLine(PLI, bd("1000"))), List.of(new FlatLine(CANTEEN, bd("100"))), bd("10"), bd("20")));

@@ -208,18 +208,23 @@ public final class PayrollEngine {
         }
 
         // ── 4b. Labour Welfare Fund (flat, only in the months it's due) ──────
-        if (ex.lwfEmployee() != null && ex.lwfEmployee().signum() > 0) {
+        // LWF and fixed deductions come out of wages paid: someone with no pay
+        // for the period (a whole month unpaid, or joining after it) owes
+        // neither, and must not end up with negative net pay (which halts the
+        // whole run).
+        boolean paidThisPeriod = gross.signum() > 0;
+        if (paidThisPeriod && ex.lwfEmployee() != null && ex.lwfEmployee().signum() > 0) {
             lines.add(new PayslipLine(LWF_EMPLOYEE, "Labour Welfare Fund (Employee)", CAT_DEDUCTION,
                 ex.lwfEmployee().setScale(SCALE, RM), 95));
         }
-        if (ex.lwfEmployer() != null && ex.lwfEmployer().signum() > 0) {
+        if (paidThisPeriod && ex.lwfEmployer() != null && ex.lwfEmployer().signum() > 0) {
             lines.add(new PayslipLine(LWF_EMPLOYER, "Labour Welfare Fund (Employer)", CAT_EMPLOYER,
                 ex.lwfEmployer().setScale(SCALE, RM), 96));
         }
 
         // ── 4c. Fixed-amount deductions (flat, never pro-rated) ──────────────
         for (FlatLine fl : ex.flatDeductions()) {
-            if (fl.amount() == null || fl.amount().signum() <= 0) continue;
+            if (!paidThisPeriod || fl.amount() == null || fl.amount().signum() <= 0) continue;
             ComponentDef c = fl.component();
             lines.add(new PayslipLine(c.code(), c.name(), CAT_DEDUCTION, fl.amount().setScale(SCALE, RM), c.displayOrder()));
         }

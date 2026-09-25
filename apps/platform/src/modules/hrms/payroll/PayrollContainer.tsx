@@ -234,7 +234,10 @@ export function PayrollContainer() {
         note: [monthOf(d.period), companies.length > 1 ? d.companyName || '' : '', due && due < today ? 'overdue' : ''].filter(Boolean).join(' · '),
       }
     })
-    const ledgerDues = (filingsQ.data?.content ?? []).filter((f) => f.status === 'DUE' && !['PF', 'ESI', 'PT'].includes(f.filingType))
+    // Ledger entries a computed due already stands for are not listed twice; any
+    // other open entry (TDS, gratuity, or a PF/ESI/PT month payroll didn't run) still shows.
+    const matched = new Set((duesQ.data ?? []).map((d) => d.filingId).filter(Boolean))
+    const ledgerDues = (filingsQ.data?.content ?? []).filter((f) => f.status === 'DUE' && !matched.has(f.id))
       .map((f) => ({ sort: f.dueDate, what: LBL[f.filingType] || f.filingType, when: fmtShort(f.dueDate), amount: f.amount ? num(f.amount) : null, note: [f.period, f.dueDate < today ? 'overdue' : ''].filter(Boolean).join(' · ') }))
     const data: PayDashData = {
       companyName, monthLabel: `${MON[m - 1]} ${y}`, monthShort: MON[m - 1],

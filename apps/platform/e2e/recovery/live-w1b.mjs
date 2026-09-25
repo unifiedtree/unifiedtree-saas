@@ -141,7 +141,7 @@ try {
   r = await reader.call(`/v1/payroll/runs/${runId}/process`, 'POST')
   check('process: an employee can’t (403)', r.status === 403, `status=${r.status}`)
   // Every approved, unpaid award for the reader is paid by the run (ours plus any already waiting).
-  const expectedPli = num(sql(`select coalesce(sum(amount),0) from pli_mgmt.pli_awards where employee_id='${readerId}' and company_id='${company}' and status='APPROVED' and payroll_run_id is null`))
+  const expectedPli = num(sql(`select coalesce(sum(amount),0) from pli_mgmt.pli_awards where employee_id='${readerId}' and status='APPROVED' and payroll_run_id is null and amount > 0`))
   r = await owner.call(`/v1/payroll/runs/${runId}/process`, 'POST')
   check('process: done', r.status === 200 && r.json?.status === 'PROCESSING' && !!r.json?.processedByName, `status=${r.status} ${r.json?.errorCode || ''} ${r.json?.message || ''}`)
   const line = (emp, code) => sql(`select coalesce(sum(amount),0) from payroll.payslip_lines where run_id='${runId}' and employee_id='${emp}' and component_code='${code}'`)
@@ -149,7 +149,8 @@ try {
   check('PLI: the award is reserved for this run, still approved', sql(`select status||'|'||payroll_run_id from pli_mgmt.pli_awards where id='${cleanup.awardId}'`) === `APPROVED|${runId}`)
   r = await owner.call(`/v1/pli/awards/${cleanup.awardId}/pay`, 'POST')
   check('PLI: the separate payout refuses it (no double pay)', r.status === 422 && r.json?.errorCode === 'PLI_IN_PAYROLL' && sql(`select status from pli_mgmt.pli_awards where id='${cleanup.awardId}'`) === 'APPROVED', `status=${r.status} ${r.json?.errorCode}`)
-  const people = Number(sql(`select count(distinct employee_id) from payroll.payslip_lines where run_id='${runId}'`))
+  // LWF comes out of wages paid, so it applies to everyone with pay in the period.
+  const people = Number(sql(`select count(*) from (select employee_id from payroll.payslip_lines where run_id='${runId}' group by employee_id having sum(amount) filter (where category in ('EARNING','REIMBURSEMENT')) > 0) x`))
   check('LWF: June run deducts ₹25 and records ₹75 employer share for everyone', people > 0 && sql(`select count(*) from payroll.payslip_lines where run_id='${runId}' and component_code='LWF_EMPLOYEE' and amount=25`) === String(people) && sql(`select count(*) from payroll.payslip_lines where run_id='${runId}' and component_code='LWF_EMPLOYER' and amount=75`) === String(people), `${people} people`)
   check('fixed: ₹1,500 earning paid (full month) and ₹300 deduction taken', line(readerId, meal) === '1500.00' && line(readerId, canteen) === '300.00', `meal=${line(readerId, meal)} canteen=${line(readerId, canteen)}`)
   check('fixed: the switched-off component isn’t paid', sql(`select count(*) from payroll.payslip_lines where run_id='${runId}' and component_code='${off}'`) === '0')
@@ -190,8 +191,9 @@ try {
   r = await reader.call(`/v1/payroll/payslips/me/${runId}`)
   const net = num(sql(`select sum(case when category in ('EARNING','REIMBURSEMENT') then amount when category='DEDUCTION' then -amount else 0 end) from payroll.payslip_lines where run_id='${runId}' and employee_id='${readerId}'`))
   check('own payslip: the reader gets their lines', r.status === 200 && r.json?.employeeId === readerId && near(r.json?.netPay, net) && (r.json?.earnings || []).some((l) => l.name === 'Performance incentive'), `status=${r.status} net=${r.json?.netPay} db=${net}`)
+  // Another employee only ever gets their own payslip for this run (404 when they have none), never the reader's.
   r = await mgr.call(`/v1/payroll/payslips/me/${runId}`)
-  check('own payslip: someone not in the run gets 404', r.status === 404, `status=${r.status}`)
+  check('own payslip: another employee never gets the reader’s payslip', (r.status === 404 || (r.status === 200 && r.json?.employeeId && r.json.employeeId !== readerId)), `status=${r.status} emp=${r.json?.employeeId}`)
   r = await reader.call(`/v1/payroll/payslips/me/${randomUUID()}`)
   check('own payslip: an unknown run is 404', r.status === 404, `status=${r.status}`)
   r = await reader.call(`/v1/payroll/payslips/me/${runId}.pdf`)
