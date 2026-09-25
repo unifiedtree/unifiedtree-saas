@@ -18,7 +18,6 @@ Priorities:
 |---|---|---|---|
 | D1 | Should payroll use each company's weekly off days? | `PayrollRunService` ~lines 966 and 985 hard-code Saturday + Sunday | Leave already uses the company's work week (§10 #2). Pay would change for 6-day and Fri–Sat companies, so get sign-off. |
 | D2 | Which fiscal year is the real one? | HR Configuration's fiscal year vs `hrms.companies.fiscal_year_start` | Keep one and read it everywhere (§8). |
-| D3 | Retire the Geofencing page? | `/hrms/attendance/geofencing` vs the branch geofence in Companies & Branches | Two places set punch zones (§1, §4). |
 | D4 | Pay PLI through payroll? | PLI is paid as separate awards today (§5) | If yes, add approved awards to the run's earnings. |
 
 ---
@@ -150,7 +149,6 @@ Priorities:
   - Milestones "View all" filters.
   - Month filter on payroll runs.
   - A notices pager.
-- **Geofencing**: show and restore deactivated zones (the list API returns active zones only).
 - **Integrations**: real connections (OAuth, keys, sync). Today it's a register only, and the page says so.
 - **Letters**: one "Letters" hub instead of three routes.
 - **Old gaps that are low risk**

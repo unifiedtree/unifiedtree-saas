@@ -16,13 +16,13 @@ Status key: **Needs backend** = shown, but the data or action isn't available ye
 | Item | Status | Detail |
 |---|---|---|
 | Icon rail, green top bar, section tabs, mobile bar and drawer | Done | Exact styles from the design. Role-based menus unchanged. |
-| Search field | Done | Opens the existing ⌘K search palette. |
+| Search field | Done | Opens the ⌘K search palette, rebuilt 25 Sep (people, pages and tabs, actions, recent; "/" path navigation). See §11.18. |
 | Notifications bell | Kept | The design has no notifications panel ("not designed yet"). The existing panel is kept, and the amber dot shows only when something is unread. |
 | Profile button | Kept | The design goes straight to `/profile`. The app keeps its menu (My Profile, My Apps, Settings, **Sign out**). There's no other way to sign out. |
 | Settings (gear) | Done | Same pattern as the design: the rail stays, the gear lights up, and the settings pages become tabs. The app lists all 10 real settings pages (the design showed 5). |
 | Route tooltips ("→ /hrms/…") and the bottom-right "Prototype" pill | Not shipped | Navigation aids for the prototype only. Human-readable tooltips are kept. |
 | Leaves added after the design (e.g. "Docs to Review" under Hiring) | Kept | Still in the menu. |
-| Geofencing (`/hrms/attendance/geofencing`) | Kept, **decision needed** | The design moved branch geofences into Companies & Branches and has no Geofencing tab. The page is kept and reachable. Decide whether to retire it once Companies & Branches is built. |
+| Geofencing (`/hrms/attendance/geofencing`) | Done (retired 25 Sep) | Decision D3: punch zones live on branches. The route redirects to Companies & Branches; it's gone from the menu and search. See §11.18. |
 
 ## 2. Company Admin Dashboard (`/dashboard`): done
 
@@ -45,7 +45,7 @@ Checked live: `e2e/recovery/live-design-dashboard.mjs`, 12/12 (calendar, past-da
 | Date calendar colours | Partial | The trend API caps at 31 days, so only the last month is coloured. Early departures for past days show 0 (the trend API doesn't return them). Today's figures are exact. |
 | Today's Absence / Not Marked, donut, "exceptions" | Changed | Same one-bucket-per-person numbers as Attendance & Time (`attendance/attendanceBuckets.ts`). Today, someone with no punch and no leave is **Not Marked**, and Absence stays 0 until the day is over. The donut and the exceptions count no longer count them twice (the API's "not marked" also contains the absent and people on leave). |
 | Seats tile | Partial | Shown only to billing admins (Owner, Super Admin, Company Admin), and once the seats data has loaded. |
-| Sections the viewer has no permission for | Partial | They show an empty state. The design's rule is to hide them. This only affects admin roles missing a specific permission. |
+| Sections the viewer has no permission for | Done (25 Sep) | Hidden, as the design intends: each section and card shows only when the viewer holds the permission its endpoint checks. See §11.18. |
 | Chart colours | Decision | The prototype's default "tones" palette (multi-colour) is used. The prototype also has an "emerald only" option, which is one switch (`chartPalette="emerald"`) if you prefer it. |
 
 ## 3. Companies & Branches (`/hrms/companies`): done
@@ -105,7 +105,7 @@ Checked live: `e2e/recovery/live-design-attendance.mjs`, 26/26. As HR it checks 
 | Past days' "came in" (trend, calendar) | Partial | A person who worked from home **and** was late or half-day is counted twice, because the trend API has no per-day checked-in total. Today is exact. |
 | Weekly off on the calendar | Partial | The design greys out Sundays. The numbers already leave out each person's own week-offs (the API does that), but other week-off days still show as working days. |
 | HR without the face-log permission | Partial | The Face tab shows its empty state. The design has no "no access" state for it. |
-| Geofencing | Kept | Not in the design's section bar. Still at `/hrms/attendance/geofencing`, reachable from search (⌘K). See §1. |
+| Geofencing | Retired (25 Sep) | `/hrms/attendance/geofencing` redirects to Companies & Branches, where each branch holds its punch zone. See §1 and §11.18. |
 | Old pages (`Attendance.tsx`, `AttendanceAnalytics.tsx`, `ShiftsAndOt.tsx` and their parts) | Removed | Replaced by the designed page. Manual entry, Muster roll, Geofencing and `/me/shift-change` are untouched. |
 
 ## 5. Payroll (`/hrms/payroll-dashboard`, `/hrms/salary-structure`, `/hrms/payroll/runs[/:id]`, `/hrms/payroll/settings`, `/hrms/pli`, `/hrms/advances`, `/hrms/bank-disbursement`): done
@@ -674,7 +674,7 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - On the kit: tiles, one card per zone (centre, radius, branch, department, check type, and a "View on a map" link), and a drawer form with the map picker.
   - "Delete" is now "Remove", with the true effect in its confirmation: the zone is deactivated, stops being used for punches, and leaves the list.
   - Branch names now show on the cards.
-- **Static / to build:** deactivated zones can't be seen or restored, because the list endpoint returns active zones only.
+- **Static / to build:** none now. The Geofencing page was retired on 25 Sep (punch zones live on branches, §11.18), so restoring deactivated zones is no longer planned.
 - **Checked live:**
   - `live-design-attendance-admin.mjs` 18/18 (muster today vs a past day, `?date=`, CSV and its record, a manual punch saved at 09:00 local and landing back on that day, zone add / edit / remove, department manager; with cleanup)
   - `live-design-attendance.mjs` 26/26
@@ -802,3 +802,25 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Nothing shows the per-employee performance directory; the endpoint works and is now scoped.
   - Employees can't see their KPI's progress history, only current against target.
   - A review doesn't show the reviewee's KPIs while it's being written.
+
+### 11.18 Search palette, "/" navigation, permission-only menus, hidden dashboard sections, Geofencing retired (25 Sep): done
+- **Search palette (⌘K / Ctrl+K, and the top-bar field):** same blurred backdrop; the modal itself is rebuilt on the kit's tokens.
+  - Groups: **Pages** (every page and sub-tab the person may open), **Actions** (apply leave, request WFH, ask for an attendance fix, run payroll, add an employee, set a branch punch zone… only those the person can complete), **People** (`GET /v1/search`, directory permission) and **Recent** (shown when the box is empty, with Clear).
+  - Matching is partial and forgiving: prefixes, initials ("wfh", "fnf"), one typo per word, letters in order; the matched part is highlighted.
+  - Keyboard: ↑ ↓ (wrap), ↵ opens, Tab completes a "/" path, Esc closes. The footer shows the keys. Empty, no-results, people-loading, people-error and too-many-people states each say what's happening.
+  - People search now matches word by word on the server: "rah ver" finds Rahul Verma, "sales priya" finds Priya in Sales (name, code, email, department, designation). Ranking and the `hrms.employee.read` gate are unchanged.
+  - Recent items stay in this browser per person and workspace, and are re-checked against the current permissions before they're shown.
+- **"/" navigation:** typing "/" switches to path mode.
+  - `/attendance` opens the first Attendance & Time page the person may open (Analytics for HR, Daily Tracking for an employee); `/attendance/daily-logs`, `/attendance/dailylogs` and `/attendance/daily logs` open that tab; `/attendance/daily-tracking` opens Daily Tracking. Every module and tab has a path (`/leave/approvals`, `/payroll/runs`, `/settings/users`…), and real routes (`/hrms/leave`) work too.
+  - Suggestions list only permitted paths as you type; "/" alone lists every area you can open.
+- **One registry:** `src/shared/navigation/pageRegistry.ts` lists every page and tab with the permissions its route and tab check and the module it sits behind (built from App.tsx and each page's `?tab=` / `?view=` rules). The menu, launcher, search and "/" paths all read it. When a route or tab changes, change it there.
+- **Menus are permission-only:** a link shows when the person holds its page's permission and the workspace has its module; role names no longer decide. Self-service ("Me") shows for anyone with their own employee record and the self permissions (so HR and managers get their own leave and payslips too); "My team" is for team-scoped approvers (approve leave or read team attendance, without the full directory). The Settings gear follows the settings permissions. Consequences worth knowing:
+  - Links that used to show but then said "Access Restricted" are gone (e.g. Companies & Branches for ADMIN, which lacks `hrms.branch.read`).
+  - Roles holding a permission now see its page (e.g. HR sees Payroll Dashboard, Salary Structure and F&F because it holds `payroll.runs.read` and `hrms.fnf.*`; managers see Shifts & Overtime and Muster roll). Change the role's permissions in Roles & Permissions to change what they see.
+- **Coming-soon and locked modules are admin-only everywhere:** the launcher, menu, search and the routes themselves show them only to plan admins (Owner, Super Admin, Company Admin), who keep the request-module flow. Anyone else is sent home, and an old link to a module the workspace doesn't have says to ask an administrator instead of offering to buy it.
+- **Dashboard sections without permission are hidden:** each section and card (Live overview, Company summary, Attendance analytics, Dept distribution, Top performers, Onboarding, Hiring, Projects, Payroll, Activity, Notices, Probations, Operational insights) shows only with the permission its endpoint checks; the "Open directory" link needs the directory. Built by `scripts/design-build.mjs` (no hand edits to the generated view). Dashboard quick actions show only when they can be used.
+- **Geofencing retired (decision D3):** `/hrms/attendance/geofencing` redirects to Companies & Branches; it's gone from the menu and search, and "geofence" in search leads to Companies & Branches. Branch geofences (`PUT /v1/hrms/branches/{id}/geofence`) and the punch check that reads them are unchanged. Existing per-employee zone overrides keep working and stay editable from the employee form.
+- **Checked:**
+  - Unit tests: `src/shared/navigation/pageRegistry.test.ts` (11) and `src/shared/search/search.test.ts` (13) pass; backend `EmployeeSearchQueryTest` (4) passes.
+  - `e2e/recovery/live-w1g.mjs` (API only, not yet run): word-by-word people search against the database, 403 for roles without the directory, each menu rule's endpoint answering exactly the roles the link shows for, each dashboard section's endpoint refusing exactly the roles it's hidden from, coming-soon modules, and a branch geofence saved by HR (refused for manager and employee) and used by the employee's punch check, then restored.
+  - `live-design-attendance-admin.mjs` now checks the Geofencing redirect instead of adding a zone.
