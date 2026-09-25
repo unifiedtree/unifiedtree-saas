@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+// Canonical admin-role list — do NOT redeclare locally. See useRoles.ts.
+import { ADMIN_ROLES } from '@/shared/hooks/useRoles'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Users, Calendar, Clock, Building2, ClipboardList,
@@ -348,16 +350,42 @@ function matchPath(pathname: string, p?: string) {
   return !!p && (pathname === p || pathname.startsWith(p + '/'))
 }
 
+/**
+ * Close a menu on an outside click or Escape.
+ *
+ * Returns a *registrar*, not a single ref, because the shell renders the same
+ * menu in more than one place (the top bar, the desktop header and the mobile
+ * header) and only one of them is visible at a time — the others stay mounted,
+ * hidden by CSS. With one shared ref object only the last-mounted copy was
+ * remembered, so a click INSIDE the menu the person could actually see counted
+ * as "outside" and closed it on mousedown. The button was unmounted before the
+ * click landed, so nothing in the profile menu worked — Sign out included.
+ *
+ * Every copy registers itself under its own key; the menu closes only when the
+ * click is outside all of them.
+ */
 function useDismiss(open: boolean, onClose: () => void) {
-  const ref = useRef<HTMLDivElement>(null)
+  const nodes = useRef(new Map<string, HTMLElement>())
+  const register = useCallback(
+    (key: string) => (el: HTMLDivElement | null) => {
+      // React calls a ref callback with null when that copy unmounts.
+      if (el) nodes.current.set(key, el)
+      else nodes.current.delete(key)
+    },
+    [],
+  )
   useEffect(() => {
     if (!open) return
-    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as Node
+      for (const el of nodes.current.values()) if (el.contains(target)) return
+      onClose()
+    }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('mousedown', onClick); document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey) }
   }, [open, onClose])
-  return ref
+  return register
 }
 
 /**
@@ -409,7 +437,16 @@ export function PlatformShell() {
   // who land on the "add this module" page; nobody else sees locked or
   // coming-soon modules. The `visibleForRoles` lists above are no longer read.
   const accessCtx = useAccessContext()
+  // Employee Self Service is the staff member's own corner of the product: their
+  // attendance, leave, payslips, assets. Since V143.18 an owner or company admin
+  // holds EVERY permission, self-service ones included, so a permission gate
+  // alone cannot tell "runs the workspace" from "works here" — and an owner who
+  // never clocks in was shown a "Me" tab reporting them absent 18 days with a 0%
+  // score. Administrators administer; this section is not theirs. Everyone else
+  // who is a member of staff (HR, finance, managers, employees) keeps it.
+  const administersWorkspace = userRoles.some(r => (ADMIN_ROLES as readonly string[]).includes(r))
   function isVisible(item: { path?: string }, group?: string): boolean {
+    if (group === 'ess' && administersWorkspace) return false
     const rule = item.path ? menuRule(item.path, group) : undefined
     if (rule) return accessState(rule, accessCtx) !== 'hidden'
     // Links the registry doesn't know are the not-yet-built apps' own pages.
@@ -446,9 +483,9 @@ export function PlatformShell() {
     return { flat, groups: [] }
   })()
 
-  const profileRef = useDismiss(profileOpen, () => setProfileOpen(false))
-  const headerProfileRef = useDismiss(profileOpen, () => setProfileOpen(false))
-  const notifRef = useDismiss(notifOpen, () => setNotifOpen(false))
+  // One registrar per menu; each place the menu is rendered registers itself.
+  const profileAnchor = useDismiss(profileOpen, () => setProfileOpen(false))
+  const notifAnchor = useDismiss(notifOpen, () => setNotifOpen(false))
 
   // ─── Icon-rail model: top-level sections only ───────────────────────────────
   // Groups collapse to a single icon; their children become the in-page tab row
@@ -577,7 +614,7 @@ export function PlatformShell() {
               The logo chip and the role badge were both removed at the client's
               request; the spacer keeps the avatar pinned right. */}
           <span aria-hidden />
-          <div className="relative flex items-center gap-1.5" ref={profileRef}>
+          <div className="relative flex items-center gap-1.5" ref={profileAnchor('topbar')}>
             <button onClick={() => setProfileOpen(v => !v)} className="flex h-9 items-center gap-2 rounded-lg pl-1 pr-2 transition-colors hover:bg-white/10">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/95 text-sm font-bold text-[#047857] shadow-sm">{initials}</span>
               <span className="hidden text-[13px] font-semibold text-white sm:block">{fullName}</span>
@@ -681,11 +718,11 @@ export function PlatformShell() {
               </HeaderIconButton>
             )}
             <HeaderIconButton label="All apps" onClick={() => navigate('/modules')}>{dashIcon('grid', 19)}</HeaderIconButton>
-            <div className="relative" ref={notifRef}>
+            <div className="relative" ref={notifAnchor('desktop')}>
               <ShellNotificationBell open={notifOpen} onToggle={() => setNotifOpen(v => !v)} onNavigate={(to) => { setNotifOpen(false); navigate(to) }} />
             </div>
             <HeaderDivider />
-            <div className="relative" ref={headerProfileRef}>
+            <div className="relative" ref={profileAnchor('desktop')}>
               <HeaderProfileButton initials={initials} name={fullName} role={roleBadgeText || 'Employee'} expanded={profileOpen} onClick={() => setProfileOpen(v => !v)} />
               {profileDropdown}
             </div>
@@ -694,9 +731,9 @@ export function PlatformShell() {
         <DesignMobileHeader
           onMenu={() => setMobileOpen(true)}
           onSearch={() => setSearchOpen(true)}
-          bell={<div className="relative"><ShellNotificationBell mobile open={notifOpen} onToggle={() => setNotifOpen(v => !v)} onNavigate={(to) => { setNotifOpen(false); navigate(to) }} /></div>}
+          bell={<div className="relative" ref={notifAnchor('mobile')}><ShellNotificationBell mobile open={notifOpen} onToggle={() => setNotifOpen(v => !v)} onNavigate={(to) => { setNotifOpen(false); navigate(to) }} /></div>}
           avatar={
-            <div className="relative" ref={profileRef}>
+            <div className="relative" ref={profileAnchor('mobile')}>
               <button type="button" aria-label="Profile" onClick={() => setProfileOpen(v => !v)}
                 style={{ width: '44px', height: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '0', background: 'transparent', cursor: 'pointer' }}>
                 <span style={{ width: '32px', height: '32px', borderRadius: '999px', background: '#0a5240', boxShadow: '0 0 0 2px rgba(255,255,255,.3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: '#fff' }}>{initials}</span>
