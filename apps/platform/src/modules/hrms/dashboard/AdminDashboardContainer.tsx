@@ -18,7 +18,7 @@ import { useTeamDashboard, useAttendanceTrend, useCorrectionApprovals } from '..
 import { dayBuckets, trendBuckets, type DayBuckets } from '../attendance/attendanceBuckets'
 import { useLeaveOverview } from '../api/useLeave'
 import { useHeadcountReport } from '../api/useReports'
-import { useActivityFeed, activityActor } from '../api/useActivity'
+import { useActivityFeed, activityActor, activityRecord } from '../api/useActivity'
 import { useSeatsUsage } from '../api/useSeats'
 import { useHolidays } from '../api/useSettings'
 import { useMilestones, type Milestone } from '../api/useMilestones'
@@ -100,7 +100,7 @@ export function AdminDashboardContainer() {
   const seats = useSeatsUsage({ enabled: canBilling })
   const holidays = useHolidays(companyId ?? '', Number(today.slice(0, 4)))
   const headcount = useHeadcountReport(canReadEmployees && canExport ? (companyId ?? null) : null)
-  const performers = useQuery({ queryKey: ['admin-dashboard', 'performers', companyId], queryFn: () => apiJson<{ id: string; name: string; rating: number; reviews: number }[]>(`/v1/admin/dashboard/performers?companyId=${companyId}`), enabled: canReadPerformance && !!companyId })
+  const performers = useQuery({ queryKey: ['admin-dashboard', 'performers', companyId], queryFn: () => apiJson<{ id: string; name: string; department?: string | null; rating: number; reviews: number }[]>(`/v1/admin/dashboard/performers?companyId=${companyId}`), enabled: canReadPerformance && !!companyId })
   const onboarding = useQuery({ queryKey: ['admin-dashboard', 'onboarding', companyId], queryFn: () => apiJson<{ id: string; name: string; status: string; completed: number; total: number }[]>(`/v1/admin/dashboard/onboarding?companyId=${companyId}`), enabled: canReadOnboarding && !!companyId })
   const hiring = useQuery({ queryKey: ['admin-dashboard', 'hiring', companyId], queryFn: () => apiJson<{ openJobs: number; stages: { stage: string; count: number }[] }>(`/v1/admin/dashboard/hiring?companyId=${companyId}`), enabled: canReadHiring && !!companyId })
   const projects = useQuery({ queryKey: ['hrms', 'projects', companyId], queryFn: () => apiJson<Project[]>(`/v1/hrms/projects?companyId=${companyId}`), enabled: canReadProjects && !!companyId })
@@ -153,13 +153,17 @@ export function AdminDashboardContainer() {
 
     const st = stats.data
     const payrollMonths = new Map<string, number>()
+    const monthRun = new Map<string, string>()
     for (const run of runs.data ?? []) {
       if (run.status !== 'LOCKED' && run.status !== 'PAID') continue
       const m = `${run.periodYear}-${String(run.periodMonth).padStart(2, '0')}`
       payrollMonths.set(m, (payrollMonths.get(m) || 0) + Number(run.totalGross || 0))
+      if (!monthRun.has(m)) monthRun.set(m, run.id)
     }
+    // A month's bar opens that month's run (the runs list has no month filter).
     const payroll = [...payrollMonths].sort(([a], [b]) => a.localeCompare(b)).slice(-6).map(([month, gross]) => ({
       month, gross, label: MON[Number(month.slice(5, 7)) - 1], title: `${MON[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`,
+      path: monthRun.has(month) ? `/hrms/payroll/runs/${monthRun.get(month)}` : '/hrms/payroll/runs',
     }))
     const pj = projects.data ?? []
     const done = pj.reduce((n, x) => n + (x.completed || 0), 0), all = pj.reduce((n, x) => n + (x.total || 0), 0)
@@ -181,8 +185,9 @@ export function AdminDashboardContainer() {
       alerts: alerts.data ?? [],
       seats: seats.data ? { used: seats.data.current, purchased: seats.data.purchased } : { used: 0, purchased: 0 },
       holidays: (holidays.data ?? []).filter((h) => h.active !== false).map((h) => ({ date: h.holidayDate, name: h.holidayName })),
-      departments: (headcount.data ?? []).map((r) => ({ name: r.department ?? 'Unassigned', active: Number(r.active ?? 0) })).filter((d) => d.active > 0),
-      performers: (performers.data ?? []).map((x) => ({ id: x.id, name: x.name, dept: '', reviews: x.reviews, rating: x.rating })),
+      // department_id lets a bar open the directory filtered to that department.
+      departments: (headcount.data ?? []).map((r) => ({ id: r.department_id ?? null, name: r.department ?? 'Unassigned', active: Number(r.active ?? 0) })).filter((d) => d.active > 0),
+      performers: (performers.data ?? []).map((x) => ({ id: x.id, name: x.name, dept: x.department || '', reviews: x.reviews, rating: x.rating })),
       onboarding: (onboarding.data ?? []).map((o) => ({ ...o, statusLabel: o.status === 'IN_PROGRESS' ? 'In progress' : o.status.charAt(0) + o.status.slice(1).toLowerCase().replace(/_/g, ' ') })),
       hiring: hiring.data ? { openJobs: hiring.data.openJobs, stages: hiring.data.stages.map((x) => ({ ...x, label: STAGE_LABEL[x.stage] || x.stage })) } : { openJobs: 0, stages: [] },
       projects: { active: pj.filter((x) => x.status === 'ACTIVE').length, completedTasks: done, openTasks: Math.max(0, all - done), completion: all ? Math.round((done / all) * 100) : 0 },
@@ -191,7 +196,8 @@ export function AdminDashboardContainer() {
         const act = (e.action || '').toLowerCase()
         const type = /approv/.test(act) ? 'approve' : /regulari|correct/.test(act) ? 'regularize' : /payroll|lock|process/.test(act) || (e.module || '').includes('payroll') ? 'payroll' : /onboard/.test(act) ? 'onboard' : 'update'
         const words = e.summary?.trim() || `${humanise(e.action || 'updated')}${e.resourceType ? ' ' + humanise(e.resourceType) : ''}`
-        return { id: e.id, type, actor: activityActor(e), action: words, record: '', path: '/audit-logs', rel: relTime(e.occurredAt), time: clock(e.occurredAt) }
+        const rec = activityRecord(e, canReadEmployees)
+        return { id: e.id, type, actor: activityActor(e), action: words, record: rec.name, path: rec.path, rel: relTime(e.occurredAt), time: clock(e.occurredAt) }
       }),
       notices: (notices.data?.content ?? []).map((n) => ({ id: n.id, title: n.title, body: n.body, published: fmtShort(n.createdAt.slice(0, 10)), until: n.expiresOn ? fmtShort(n.expiresOn) : null, expiryIso: n.expiresOn || '' })),
       noticeTotal: notices.data?.totalElements,
@@ -203,7 +209,7 @@ export function AdminDashboardContainer() {
       probations: (probations.data ?? []).map((p) => ({ id: p.employeeId, code: p.employeeCode, name: p.employeeName, title: p.jobTitle || '', manager: p.managerName || '—', end: fmtShort(p.probationEndDate), days: p.daysRemaining })),
       ops: { corrections: corrections.data?.totalElements ?? 0, leave: leaveOverview.data?.pendingApprovals ?? 0 },
     }
-  }, [team.data, trend.data, directory.data, stats.data, alerts.data, seats.data, holidays.data, headcount.data, performers.data, onboarding.data, hiring.data, projects.data, runs.data, activity.data, notices.data, milestones.data, probations.data, corrections.data, leaveOverview.data, sel, today, firstName])
+  }, [team.data, trend.data, directory.data, stats.data, alerts.data, seats.data, holidays.data, headcount.data, performers.data, onboarding.data, hiring.data, projects.data, runs.data, activity.data, notices.data, milestones.data, probations.data, corrections.data, leaveOverview.data, sel, today, firstName, canReadEmployees])
 
   const d = data
   const sec: Record<SectionKey, { state: SectionStatus; retry: () => void }> = {

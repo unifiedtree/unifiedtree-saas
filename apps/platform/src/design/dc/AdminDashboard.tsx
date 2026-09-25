@@ -158,7 +158,7 @@ export class AdminDashboard extends DCLogic {
     const deptMax = Math.max(1, ...((D.departments || []) as any[]).map((d) => d.active))
     const departments = ((D.departments || []) as any[]).map((d) => ({
       ...d, pct: Math.round((d.active / deptMax) * 100),
-      tip: '→ ' + `/hrms/employees?department=${encodeURIComponent(d.name)}`,
+      tip: '→ ' + (d.id ? `/hrms/employees?departmentId=${encodeURIComponent(d.id)}` : '/hrms/employees'),
       onClick: () => go(d.id ? `/hrms/employees?departmentId=${encodeURIComponent(d.id)}` : '/hrms/employees'),
     }))
     const performers = ((D.performers || []) as any[]).map((x) => ({ ...x, meta: `${x.dept ? x.dept + ' · ' : ''}${x.reviews} completed reviews`, rating: Number(x.rating).toFixed(1) }))
@@ -177,7 +177,7 @@ export class AdminDashboard extends DCLogic {
     }
     const pj = D.projects || {}
     const pr = (D.payroll || []) as any[]
-    const payRows = pr.map((m) => ({ label: m.label, title: m.title || m.label, values: [m.gross], display: [inr(m.gross)], month: m.month, tip: '→ /hrms/payroll/runs?month=' + m.month }))
+    const payRows = pr.map((m) => ({ label: m.label, title: m.title || m.label, values: [m.gross], display: [inr(m.gross)], month: m.month, path: m.path || '/hrms/payroll/runs', tip: '→ ' + (m.path || '/hrms/payroll/runs') }))
     const payVals2 = pr.map((m) => Number(m.gross) || 0)
     const payLo = payVals2.length ? Math.min(...payVals2) : 0, payHi = payVals2.length ? Math.max(...payVals2) : 0
     const payPad = Math.max((payHi - payLo) * 0.25, payHi * 0.04, 1)
@@ -291,7 +291,7 @@ export class AdminDashboard extends DCLogic {
       projects: pj, ringColor: P.ring, ringDash: `${pj.completion || 0} ${100 - (pj.completion || 0)}`, ringLabel: `${pj.completion || 0}% of tasks completed`,
       payRows, paySeries: [{ label: 'Gross payroll', short: ' gross', color: P.pay, area: true }],
       payMin, payMax, payTicks, payLast: payRows.length - 1,
-      payPick: (i: number) => { const r = payRows[i]; if (r) go(`/hrms/payroll/runs?month=${r.month}`) },
+      payPick: (i: number) => { const r = payRows[i]; if (r) go(r.path) },
       activity, notices,
       noticeCountLabel: `${D.noticeTotal ?? notices.length} active ${(D.noticeTotal ?? notices.length) === 1 ? 'notice' : 'notices'} · 5 per page`,
       canManageNotices: !!p.canManageNotices,

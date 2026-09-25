@@ -42,14 +42,16 @@ public class AdminDashboardController {
             teamFilter = " AND e.id IN (" + String.join(",", Collections.nCopies(team.size(), "?")) + ")";
             args.addAll(team);
         }
+        // department: the person's current department name (null when they have none).
         return jdbc.queryForList("""
-            SELECT e.id, concat_ws(' ', e.first_name, e.last_name) AS name,
+            SELECT e.id, concat_ws(' ', e.first_name, e.last_name) AS name, d.name AS department,
                    round(avg(r.overall_rating)::numeric, 2) AS rating, count(*) AS reviews
             FROM performance_mgmt.performance_reviews r
             JOIN hrms.employees e ON e.id = r.employee_id AND e.tenant_id = r.tenant_id
+            LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
             WHERE r.tenant_id = ? AND e.company_id = ? AND r.status IN ('SUBMITTED','ACKNOWLEDGED') AND r.overall_rating IS NOT NULL
             """ + teamFilter + """
-             GROUP BY e.id, e.first_name, e.last_name ORDER BY rating DESC, name LIMIT 5
+             GROUP BY e.id, e.first_name, e.last_name, d.name ORDER BY rating DESC, name LIMIT 5
             """, args.toArray());
     }
 

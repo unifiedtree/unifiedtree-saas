@@ -78,8 +78,13 @@ public class AuditController {
         // page so the feed says who did it instead of printing a raw UUID.
         java.util.Map<UUID, String[]> actors = actorDetails(events.stream()
                 .map(AuditEvent::getActorUserId).filter(java.util.Objects::nonNull).distinct().toList());
+        // And the record's own name (an employee, a letter distribution…) so the
+        // feed can say what was changed, not just its type.
+        java.util.Map<UUID, String[]> resources = resourceDetails(events);
         List<AuditEventDto> data = events.stream()
-                .map(e -> toDto(e, actors.get(e.getActorUserId())))
+                // Null ids never reach get(): Map.of() (no actors on the page) throws on a null key.
+                .map(e -> toDto(e, e.getActorUserId() != null ? actors.get(e.getActorUserId()) : null,
+                        e.getEntityId() != null ? resources.get(e.getEntityId()) : null))
                 .toList();
 
         return new AuditPageResponse(data, new PageMeta(page, effectiveSize, result.getTotalElements()));
@@ -105,7 +110,52 @@ public class AuditController {
         }
     }
 
-    private AuditEventDto toDto(AuditEvent e, String[] actor) {
+    /**
+     * The types whose records have a name: entity type (lower case) -> SQL
+     * returning (id, name, parent_id) for ids IN (...). Read under the caller's
+     * tenant (RLS). parent_id is where the record is shown (a distribution
+     * recipient opens its distribution); null when the record has its own page.
+     */
+    static final java.util.Map<String, String> RESOURCE_NAME_SQL = java.util.Map.of(
+            "distribution_job",
+            "SELECT id, title AS name, NULL::uuid AS parent_id FROM letters.distribution_jobs WHERE id IN (%s)",
+            "distribution_recipient",
+            "SELECT r.id, NULLIF(btrim(concat_ws(' ', e.first_name, e.last_name)), '') AS name, r.job_id AS parent_id "
+                    + "FROM letters.distribution_recipients r "
+                    + "LEFT JOIN hrms.employees e ON e.id = r.employee_id AND e.tenant_id = r.tenant_id WHERE r.id IN (%s)",
+            "employee",
+            "SELECT id, NULLIF(btrim(concat_ws(' ', first_name, last_name)), '') AS name, NULL::uuid AS parent_id "
+                    + "FROM hrms.employees WHERE id IN (%s)");
+
+    /** record id -> {name, parent id}; missing for unknown types and on any failure. */
+    private java.util.Map<UUID, String[]> resourceDetails(List<AuditEvent> events) {
+        java.util.Map<String, List<UUID>> byType = new java.util.HashMap<>();
+        for (AuditEvent e : events) {
+            if (e.getEntityId() == null || e.getEntityType() == null) continue;
+            String type = e.getEntityType().toLowerCase(java.util.Locale.ROOT);
+            if (!RESOURCE_NAME_SQL.containsKey(type)) continue;
+            List<UUID> ids = byType.computeIfAbsent(type, k -> new java.util.ArrayList<>());
+            if (!ids.contains(e.getEntityId())) ids.add(e.getEntityId());
+        }
+        java.util.Map<UUID, String[]> out = new java.util.HashMap<>();
+        byType.forEach((type, ids) -> {
+            try {
+                String in = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+                jdbc.query(RESOURCE_NAME_SQL.get(type).formatted(in),
+                        rs -> {
+                            Object parent = rs.getObject("parent_id");
+                            out.put(rs.getObject("id", UUID.class),
+                                    new String[] { rs.getString("name"), parent != null ? parent.toString() : null });
+                        },
+                        ids.toArray());
+            } catch (RuntimeException ex) {
+                // no names for this type
+            }
+        });
+        return out;
+    }
+
+    private AuditEventDto toDto(AuditEvent e, String[] actor, String[] resource) {
         String name = actor != null && actor[0] != null && !actor[0].isBlank() ? actor[0] : null;
         String email = e.getActorEmail() != null ? e.getActorEmail() : (actor != null ? actor[1] : null);
         return new AuditEventDto(
@@ -122,7 +172,9 @@ public class AuditController {
                 e.getCorrelationId(),
                 e.getModule(),
                 e.getSummary(),
-                name
+                name,
+                resource != null ? resource[0] : null,
+                resource != null ? resource[1] : null
         );
     }
 
@@ -169,7 +221,11 @@ public class AuditController {
              */
             String summary,
             /** The actor's display name, resolved from their user id. Null for system events. */
-            String actorName) {}
+            String actorName,
+            /** The changed record's name (employee, letter distribution…). Null when its type has no name or it's gone. */
+            String resourceName,
+            /** Where the record is shown when it has no page of its own: a distribution recipient's distribution id. */
+            String resourceParentId) {}
 
     public record PageMeta(int page, int size, long total) {}
 

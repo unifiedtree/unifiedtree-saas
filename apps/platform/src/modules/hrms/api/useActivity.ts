@@ -25,6 +25,10 @@ export interface AuditEventDto {
   summary: string | null
   /** Display name resolved server-side from the actor's user id. */
   actorName?: string | null
+  /** The changed record's name (employee, letter distribution…), resolved server-side. */
+  resourceName?: string | null
+  /** Where a record without its own page is shown (a distribution recipient's distribution id). */
+  resourceParentId?: string | null
 }
 
 export interface AuditPageResponse {
@@ -72,4 +76,20 @@ export function useActivityFeed(size: number = 8, enabled: boolean = true) {
     refetchInterval: 120_000,
     enabled,
   })
+}
+
+/**
+ * The record an event changed, as the feed links it: its name (left out when
+ * the summary already says it) and the page that shows it. Anything without a
+ * page of its own opens Audit Logs.
+ */
+export function activityRecord(event: AuditEventDto, canReadEmployees: boolean): { name: string; path: string } {
+  const type = (event.resourceType || '').toLowerCase()
+  const name = event.resourceName?.trim() || ''
+  const summary = event.summary || ''
+  const path = type === 'distribution_job' && event.resourceId ? `/hrms/letters/distributions/${event.resourceId}`
+    : type === 'distribution_recipient' && event.resourceParentId ? `/hrms/letters/distributions/${event.resourceParentId}`
+      : type === 'employee' && event.resourceId && canReadEmployees ? `/hrms/employees/${event.resourceId}`
+        : '/audit-logs'
+  return { name: name && !summary.includes(name) ? name : '', path }
 }
