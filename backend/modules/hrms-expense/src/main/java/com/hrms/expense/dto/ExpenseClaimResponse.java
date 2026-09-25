@@ -24,5 +24,8 @@ public record ExpenseClaimResponse(
         Instant reimbursedAt,
         String notes,
         Instant createdAt,
-        List<ExpenseItemResponse> items
+        List<ExpenseItemResponse> items,
+        // Line items on the claim and how many carry a receipt (list rows carry no items).
+        int itemCount,
+        int receiptCount
 ) {}

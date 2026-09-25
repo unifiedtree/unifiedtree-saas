@@ -12,6 +12,9 @@ public record ExpenseItemResponse(
         String description,
         BigDecimal amount,
         LocalDate expenseDate,
+        // Stored as "r2://<key>"; the API layer swaps it for a signed link on read
+        // (null when storage isn't set up). hasReceipt says one is attached either way.
         String receiptUrl,
-        String merchantName
+        String merchantName,
+        boolean hasReceipt
 ) {}
