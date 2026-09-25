@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Plus, Pencil, UserPlus, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { useToast } from '@/shared/hooks/useToast'
@@ -46,6 +46,14 @@ export const Hiring: React.FC = () => {
   ]
   // The dashboard links to ?tab=candidates&stage=…: "candidates" is the pipeline board.
   const [tab, setTab] = useView(views.map((v) => v.key), 'tab') as [Tab, (k: string) => void]
+  // Links inside this page (a requisition's "Pipeline", an interview's "Open
+  // pipeline") navigate within the same route, and useView only reads the URL
+  // when the page loads, so follow ?tab= on every in-app navigation.
+  const location = useLocation()
+  useEffect(() => {
+    const next = new URLSearchParams(location.search).get('tab')
+    if (next && next !== tab && views.some((v) => v.key === next)) setTab(next)
+  }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <ModulePage crumb="Recruitment" title="Hiring" subtitle="Open roles, move candidates through the stages, and make offers.">
       <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
@@ -350,7 +358,9 @@ function PipelineTab({ canCandidateWrite }: { canCandidateWrite: boolean }) {
   const stageParam = (params.get('stage') || '').toUpperCase()
   const stage = (CANDIDATE_STAGES as string[]).includes(stageParam) ? (stageParam as CandidateStage) : ''
   const [requisitionId, setRequisitionIdState] = useState(params.get('role') || (stage ? ALL_ROLES : ''))
-  const setParam = (key: string, value: string) => setParams((p) => { const n = new URLSearchParams(p); if (value) n.set(key, value); else n.delete(key); return n }, { replace: true })
+  // Starts from the address bar, not the router's copy: the view tabs change
+  // ?tab= outside the router, and a stale tab here would switch the view back.
+  const setParam = (key: string, value: string) => setParams(() => { const n = new URLSearchParams(window.location.search); if (value) n.set(key, value); else n.delete(key); return n }, { replace: true })
   const setRequisitionId = (id: string) => { setRequisitionIdState(id); setParam('role', id) }
   const setStage = (st: string) => setParam('stage', st)
   const [openCard, setOpenCard] = useState<CandidateCard | null>(null)

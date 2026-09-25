@@ -59,6 +59,17 @@ public final class InterviewRules {
     }
 
     public static CleanSchedule clean(Schedule s, Instant now) {
+        return clean(s, now, null);
+    }
+
+    /**
+     * @param keepTime the interview's current start when it is being changed:
+     *                 keeping that time is allowed even once it has passed, so
+     *                 HR can still fix the panel (for example add the person who
+     *                 actually took the interview, so they can file a scorecard).
+     *                 A new time must still be in the future.
+     */
+    public static CleanSchedule clean(Schedule s, Instant now, Instant keepTime) {
         if (s == null) throw new BusinessRuleException("Interview details are required", "INTERVIEW_FIELDS_REQUIRED");
         String title = trimToNull(s.title());
         if (title == null) title = "Interview";
@@ -66,7 +77,9 @@ public final class InterviewRules {
 
         if (s.scheduledAt() == null) throw new BusinessRuleException("Choose the interview date and time", "INTERVIEW_TIME_REQUIRED");
         Instant at = istToInstant(s.scheduledAt()).truncatedTo(ChronoUnit.MINUTES);
-        if (!at.isAfter(now)) throw new BusinessRuleException("The interview time must be in the future", "INTERVIEW_TIME_PAST");
+        boolean unchanged = keepTime != null && at.equals(keepTime.truncatedTo(ChronoUnit.MINUTES));
+        if (unchanged) at = keepTime; // not a change, so nobody is told it moved
+        else if (!at.isAfter(now)) throw new BusinessRuleException("The interview time must be in the future", "INTERVIEW_TIME_PAST");
         if (at.isAfter(now.plus(366, ChronoUnit.DAYS))) throw new BusinessRuleException("Schedule the interview within the next year", "INTERVIEW_TIME_TOO_FAR");
 
         int duration = s.durationMinutes() == null ? 45 : s.durationMinutes();

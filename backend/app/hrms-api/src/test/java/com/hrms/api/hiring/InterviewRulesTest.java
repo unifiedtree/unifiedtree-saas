@@ -44,6 +44,17 @@ class InterviewRulesTest {
     }
 
     @Test
+    void aStartedInterviewKeepsItsTimeWhenOnlyThePanelChanges() {
+        // The interview began at 10:00 IST today (04:30 UTC); "now" is 11:30 IST.
+        Instant started = Instant.parse("2026-09-25T04:30:00Z");
+        var kept = InterviewRules.clean(schedule(LocalDateTime.parse("2026-09-25T10:00"), "PHONE", null, List.of(A, B)), NOW, started);
+        assertEquals(started, kept.scheduledAt());
+        assertEquals(List.of(A, B), kept.interviewerIds());
+        // Moving it to another past time is still refused.
+        assertEquals("INTERVIEW_TIME_PAST", code(() -> InterviewRules.clean(schedule(LocalDateTime.parse("2026-09-25T09:00"), "PHONE", null, List.of(A)), NOW, started)));
+    }
+
+    @Test
     void modeDecidesWhatLocationIsNeeded() {
         LocalDateTime at = LocalDateTime.parse("2026-09-26T10:00");
         assertEquals("INTERVIEW_LOCATION_REQUIRED", code(() -> InterviewRules.clean(schedule(at, "IN_PERSON", " ", List.of(A)), NOW)));

@@ -133,6 +133,11 @@ try {
   const early = await reader.call('PUT', `/v1/hiring/interviews/${I1}/scorecard`, { ratings: [{ criterion: 'Coding', rating: 4 }, { criterion: 'Communication', rating: 5 }], recommendation: 'YES' })
   check('no scorecard before the interview starts', early.status === 422 && early.json?.errorCode === 'SCORECARD_TOO_EARLY', `${early.status} ${early.json?.errorCode}`)
   sql(`update hiring_mgmt.interviews set scheduled_at = now() - interval '1 hour' where id='${I1}'`) // the interview "happened"
+  const startedIst = (await hrm.call('GET', `/v1/hiring/interviews/${I1}`)).json?.scheduledAtIst
+  const keep = await hrm.call('PUT', `/v1/hiring/interviews/${I1}`, { ...body, scheduledAt: startedIst, interviewerIds: [READER, FIN], notes: 'Panel confirmed after the call' })
+  check('a started interview can still be changed when its time is kept', keep.status === 200 && sql(`select notes from hiring_mgmt.interviews where id='${I1}'`) === 'Panel confirmed after the call', `${keep.status} ${keep.json?.errorCode ?? ''}`)
+  const movedPast = await hrm.call('PUT', `/v1/hiring/interviews/${I1}`, { ...body, scheduledAt: slot(-2, '10:00'), interviewerIds: [READER, FIN] })
+  check('but it cannot be moved to another past time', movedPast.status === 422 && movedPast.json?.errorCode === 'INTERVIEW_TIME_PAST', `${movedPast.status} ${movedPast.json?.errorCode}`)
   const missing = await reader.call('PUT', `/v1/hiring/interviews/${I1}/scorecard`, { ratings: [{ criterion: 'Coding', rating: 4 }], recommendation: 'YES' })
   check('every criterion must be rated', missing.status === 422 && missing.json?.errorCode === 'SCORECARD_RATING_MISSING', `${missing.status} ${missing.json?.errorCode}`)
   const sc1 = await reader.call('PUT', `/v1/hiring/interviews/${I1}/scorecard`, { ratings: [{ criterion: 'Coding', rating: 4 }, { criterion: 'Communication', rating: 5 }], strengths: 'Clear thinker', concerns: 'Little cloud work', recommendation: 'YES' })

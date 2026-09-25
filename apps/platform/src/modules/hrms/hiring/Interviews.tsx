@@ -90,7 +90,7 @@ export function ScheduleInterviewDrawer({ candidateId, candidateName, interview,
         <p className="text-sm text-text-secondary">{`With ${candidateName}. Times are India time (IST).`}</p>
         <div><label className={label} htmlFor="iv-title">Interview name</label><input id="iv-title" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Technical round" className="ut-input" /></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div><label className={label} htmlFor="iv-date">Date</label><input id="iv-date" type="date" required min={todayIso()} value={date} onChange={(e) => setDate(e.target.value)} className="ut-input" /></div>
+          <div><label className={label} htmlFor="iv-date">Date</label><input id="iv-date" type="date" required min={interview ? undefined : todayIso()} value={date} onChange={(e) => setDate(e.target.value)} className="ut-input" /></div>
           <div><label className={label} htmlFor="iv-time">Time (IST)</label><input id="iv-time" type="time" required value={time} onChange={(e) => setTime(e.target.value)} className="ut-input" /></div>
           <div><label className={label} htmlFor="iv-dur">Duration</label>
             <select id="iv-dur" value={duration} onChange={(e) => setDuration(e.target.value)} className="ut-select">
@@ -98,6 +98,7 @@ export function ScheduleInterviewDrawer({ candidateId, candidateName, interview,
             </select>
           </div>
         </div>
+        {interview?.started && <p className="text-xs text-text-tertiary">This interview has already started. Keep its date and time to change only the interviewers (for example to add the person who took it, so they can file a scorecard). A new time must be in the future.</p>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div><label className={label} htmlFor="iv-mode">How</label>
             <select id="iv-mode" value={mode} onChange={(e) => setMode(e.target.value as InterviewMode)} className="ut-select">

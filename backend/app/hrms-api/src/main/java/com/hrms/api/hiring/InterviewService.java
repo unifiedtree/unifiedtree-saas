@@ -200,7 +200,7 @@ public class InterviewService {
         if (scorecardCount(tenant, interviewId) > 0) throw new BusinessRuleException("This interview already has feedback, so it can't be moved. Schedule a new round instead.", "INTERVIEW_HAS_FEEDBACK");
         CandidateFacts candidate = candidateFacts(tenant, current.candidateId());
         InterviewRules.assertStageAllowsScheduling(candidate.stage());
-        InterviewRules.CleanSchedule s = InterviewRules.clean(request, Instant.now());
+        InterviewRules.CleanSchedule s = InterviewRules.clean(request, Instant.now(), current.scheduledAt());
         assertActiveEmployees(tenant, s.interviewerIds());
 
         List<UUID> before = interviewerIds(tenant, interviewId);
