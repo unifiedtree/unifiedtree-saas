@@ -11,7 +11,7 @@ import { EmptyState } from '@/shared/components/EmptyState'
 import { HrAvatar, HrButton, HrStatusPill } from '@/shared/components/hr'
 import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
 import { useCompanies } from '../api/useOrg'
-import { useWeekendDays } from '../api/useSettings'
+import { useWeekendDays, jsWeekendDays } from '../api/useSettings'
 import type { LeaveRequestResponse } from '../api/useLeave'
 import { useLeaveCalendarSelf, useLeaveCalendarTeam } from './useLeaveCalendar'
 
@@ -50,12 +50,8 @@ export function LeaveCalendar() {
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? me?.companyId ?? undefined
   const { data: weekendCfg } = useWeekendDays(companyId)
-  // Same fallback as the Apply tab: tenant HR configuration (Sun=0..Sat=6),
-  // Sat+Sun only when no configuration exists.
-  const weekendDays = useMemo<Set<number>>(() => {
-    const cfg = weekendCfg?.weekendDays
-    return cfg && cfg.length > 0 ? new Set(cfg) : new Set([0, 6])
-  }, [weekendCfg])
+  // The company's weekly off days (stored as ISO days), as getDay() numbers.
+  const weekendDays = useMemo<Set<number>>(() => jsWeekendDays(weekendCfg?.weekendDays), [weekendCfg])
 
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   const monthStart = startOfMonth(month)

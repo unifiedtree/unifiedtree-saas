@@ -88,9 +88,10 @@ export function useCancelWfh() {
  *  when the caller has hrms.leave.approve.l2 — HR/admin). Poll every 30s
  *  like the leave queue so a fresh mobile submission surfaces without a
  *  browser refresh. */
-export function usePendingWfhApprovals(page = 0, size = 20) {
+export function usePendingWfhApprovals(page = 0, size = 20, enabled = true) {
   return useQuery({
     queryKey: ['hrms', 'wfh', 'pending-approvals', page, size],
+    enabled,
     queryFn: () =>
       apiJson<PageResponse<WfhRequestResponse>>(
         `/v1/wfh/pending-approvals?page=${page}&size=${size}`,

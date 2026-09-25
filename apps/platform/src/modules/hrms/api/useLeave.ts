@@ -107,9 +107,10 @@ export function useLeaveTypes(companyId: string) {
   })
 }
 
-export function usePendingApprovals(page = 0) {
+export function usePendingApprovals(page = 0, enabled = true) {
   return useQuery({
     queryKey: ['hrms', 'leave', 'approvals', 'pending', page],
+    enabled,
     queryFn: () =>
       apiJson<{ content: LeaveRequestResponse[]; totalElements: number }>(`/v1/leave/approvals/pending?page=${page}&size=20`),
     staleTime: 30_000,

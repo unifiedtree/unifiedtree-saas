@@ -8,6 +8,7 @@ import { DataTable } from '@/shared/components/DataTable'
 import { useLeaveTypes, useCreateLeaveType, useUpdateLeaveType, useDeactivateLeaveType, type LeaveTypeResponse } from '../api/useLeave'
 import { useCompanies } from '../api/useOrg'
 import { HrPageHeader, HrButton, HrStatusPill, TableCard } from '@/shared/components/hr'
+import { SubHeading } from '@/design/module/ModuleKit'
 
 // Indian standard: PL 1.5/month (18/year) carry-forward max 30;
 // SL 1/month (12/year) no carry-forward; CL 1/month (12/year) no carry-forward.
@@ -320,7 +321,8 @@ export function LeaveTypes({
   crumb = 'Leave Management',
   subtitle = 'Configure leave types available to employees in this company',
   companyId: companyIdProp,
-}: LeaveTypesProps = {}) {
+  embedded,
+}: LeaveTypesProps & { /** Inside another page's view tabs: a slim heading instead of a page header. */ embedded?: boolean } = {}) {
   const { toast } = useToast()
   const { data: companies = [] } = useCompanies()
   const companyId = companyIdProp ?? companies[0]?.id ?? ''
@@ -364,11 +366,7 @@ export function LeaveTypes({
 
   return (
     <div className="space-y-4">
-      <HrPageHeader
-        crumb={crumb}
-        title="Leave Types"
-        subtitle={subtitle}
-        actions={
+      {(() => { const actions = (
           <Can code={P.LEAVE_TYPE_WRITE}>
             {!isLoading && types.length === 0 && (
               <HrButton variant="ghost" onClick={handleSeedDefaults} disabled={seeding}>
@@ -386,8 +384,11 @@ export function LeaveTypes({
               Add Type
             </HrButton>
           </Can>
-        }
-      />
+        )
+        return embedded
+          ? <SubHeading aside={<div style={{ display: 'flex', gap: 8 }}>{actions}</div>}>{`Leave types${isLoading ? '' : ` · ${types.length}`}`}</SubHeading>
+          : <HrPageHeader crumb={crumb} title="Leave Types" subtitle={subtitle} actions={actions} />
+      })()}
 
       {isLoading ? (
         <TableSkeleton />

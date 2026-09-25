@@ -1,905 +1,307 @@
-import React, { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Calendar, Plus, CheckCircle, XCircle, Clock, FileText, Check, X as XIcon } from 'lucide-react'
-import { clsx } from 'clsx'
-import { format } from 'date-fns'
+// Leave (/hrms/leave) in the design language of the redesigned modules
+// (design/module/ModuleKit): view tabs, stat tiles, approval cards and list
+// rows. Views, and who sees them:
+//   My leave · Apply · Balances   everyone except the admin bucket (client rule:
+//                                 admins don't apply for their own leave)
+//   Approvals · Decided           hrms.leave.approve.l1 (WFH rows: wfh.approve)
+//   Calendar · Leave types · Holidays   everyone; editing is permission-gated inside
+// The view lives in ?tab= so notifications and the dashboard can deep-link.
+import { useMemo, useState } from 'react'
+import { usePermission, P } from '@unifiedtree/sdk'
+import { Field, Input, Modal } from '@unifiedtree/ui-kit'
+import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { HrPagination } from '@/shared/components/HrPagination'
-import { useToast } from '@/shared/hooks/useToast'
-import { useVisibleTabs } from '@/shared/hooks/useVisibleTabs'
 import { useRoles } from '@/shared/hooks/useRoles'
-import { usePermission, Can, P } from '@unifiedtree/sdk'
-import { CardSkeleton, Skeleton } from '@unifiedtree/ui-kit'
-import { EmptyState } from '@/shared/components/EmptyState'
+import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
+import { dashIcon } from '@/design/dc/icons'
+import {
+  ModulePage, Views, useView, StatRow, SubHeading, State, ApprovalList, RowList, Row, Panel, Note, Facts, useDesignToast,
+  days, range, todayIso, stamp, CARD, HEAD_FONT, type Tile, type Approval,
+} from '@/design/module/ModuleKit'
 import {
   useMyLeaves, useMyBalances, useLeaveTypes, usePendingApprovals, useApprovalsHistory,
   useApplyLeave, useLeaveDecision, useCancelLeave,
-  type LeaveApprovalStatus, type LeaveDuration,
+  type LeaveApprovalStatus, type LeaveDuration, type LeaveRequestResponse,
 } from './api/useLeave'
 import { usePendingWfhApprovals, useWfhDecision } from './api/useWfh'
 import { useCompanies } from './api/useOrg'
-import { useWeekendDays } from './api/useSettings'
-import { useCurrentUser } from '@/shared/hooks/useCurrentUser'
+import { useWeekendDays, jsWeekendDays } from './api/useSettings'
 import { LeaveTypes } from './leave/LeaveTypes'
 import { HolidayCalendar } from './leave/HolidayCalendar'
 import { LeaveCalendar } from './leave/LeaveCalendar'
-import { HrPageHeader, HrStatusPill, HrTabs, HrTabPanel, type PillTone } from '@/shared/components/hr'
 
-const STATUS_STYLE: Record<LeaveApprovalStatus, { label: string; color: string; bg: string; icon: React.ElementType; tone: PillTone }> = {
-  PENDING:    { label: 'Pending',     color: 'text-[#B45309]', bg: 'bg-[#FEF3C7]', icon: Clock,       tone: 'warn' },
-  APPROVED:   { label: 'Approved',    color: 'text-[#15803D]', bg: 'bg-[#DCFCE7]', icon: CheckCircle, tone: 'ok' },
-  REJECTED:   { label: 'Rejected',    color: 'text-[#B91C1C]', bg: 'bg-[#FEE2E2]', icon: XCircle,     tone: 'red' },
-  CANCELLED:  { label: 'Cancelled',   color: 'text-[#6B7280]', bg: 'bg-[#F4F4F6]', icon: XCircle,     tone: 'gray' },
-  PENDING_L2: { label: 'Awaiting HR', color: 'text-[#7C3AED]', bg: 'bg-[#F3E8FF]', icon: Clock,       tone: 'purple' },
+const STATUS: Record<LeaveApprovalStatus, [string, PillTone]> = {
+  PENDING: ['Pending', 'warn'], APPROVED: ['Approved', 'ok'], REJECTED: ['Rejected', 'red'], CANCELLED: ['Cancelled', 'gray'], PENDING_L2: ['Awaiting HR', 'purple'],
 }
+const pill = (s: LeaveApprovalStatus) => { const [l, t] = STATUS[s] || [s, 'gray']; return <HrStatusPill tone={t}>{l}</HrStatusPill> }
+const TILE_COLORS: Tile['color'][] = ['green', 'blue', 'purple', 'teal', 'orange']
+const errMsg = (e: unknown) => (e instanceof Error && e.message ? e.message : undefined)
 
-// ── My Leaves Tab ─────────────────────────────────────────────────────────────
-
-function MyLeavesTab() {
-  const { toast } = useToast()
+// ── My leave ─────────────────────────────────────────────────────────────────
+function MyLeave({ toast }: { toast: (m: string, err?: boolean, d?: string) => void }) {
   const [page, setPage] = useState(0)
-  // Rows-per-page, seeded from the hook's own default so the initial
-  // request is unchanged.
-  const [pageSize, setPageSize] = useState(20)
-  const { data, isLoading, error: leavesError, refetch: refetchLeaves } = useMyLeaves(page, pageSize)
-  const cancelLeave = useCancelLeave()
-
-  const leaves = data?.content ?? []
-  const total = data?.totalElements ?? 0
-
-  const handleCancel = async (id: string) => {
-    try {
-      await cancelLeave.mutateAsync({ requestId: id, reason: 'Cancelled by employee' })
-      toast('Leave cancelled', 'success')
-    } catch {
-      toast('Failed to cancel leave', 'error')
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      {isLoading ? (
-        <CardSkeleton />
-      ) : leavesError ? (
-        <EmptyState icon={XCircle} title="Failed to load leaves" description={(leavesError as Error).message} action={{ label: 'Retry', onClick: () => refetchLeaves() }} />
-      ) : leaves.length === 0 ? (
-        <div className="text-center py-16">
-          <FileText size={32} className="mx-auto mb-3 text-text-tertiary" />
-          <p className="text-text-secondary text-sm">No leave requests yet</p>
-          <p className="text-text-tertiary text-xs mt-1">Use the Apply tab to request leave</p>
-        </div>
-      ) : (
-        leaves.map((leave) => {
-          const sc = STATUS_STYLE[leave.status] ?? STATUS_STYLE['PENDING']
-          return (
-            <div key={leave.id} className="ut-card ut-card-sm flex items-center gap-4 px-4 py-3">
-              <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', sc.bg)}>
-                <sc.icon size={16} className={sc.color} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-text-primary font-medium text-sm">{leave.leaveTypeName ?? 'Leave'}</p>
-                  <HrStatusPill tone={sc.tone}>{sc.label}</HrStatusPill>
-                </div>
-                <p className="text-text-secondary text-xs mt-0.5">
-                  {format(new Date(leave.startDate), 'd MMM')} – {format(new Date(leave.endDate), 'd MMM yyyy')}
-                  {' · '}{leave.totalDays} day{leave.totalDays !== 1 ? 's' : ''}
-                </p>
-                {leave.reason && <p className="text-text-tertiary text-xs truncate mt-0.5">"{leave.reason}"</p>}
-              </div>
-              {(leave.status === 'PENDING' || leave.status === 'APPROVED') && (
-                <button
-                  onClick={() => handleCancel(leave.id)}
-                  disabled={cancelLeave.isPending}
-                  className="text-xs text-text-secondary hover:text-danger transition-colors disabled:opacity-50 whitespace-nowrap"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-          )
-        })
-      )}
-
-      {/* Shared pager. The hand-rolled one it replaces hardcoded the page size
-          as a literal 20 in TWO places (`total > 20` and `(page + 1) * 20`),
-          which stopped being true the moment rows-per-page became selectable.
-          /v1/leave/my returns only `totalElements`, so totalPages is derived. */}
-      <div className="pt-2">
-        <HrPagination
-          page={page}
-          pageSize={pageSize}
-          totalElements={total}
-          totalPages={Math.max(1, Math.ceil(total / pageSize))}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-        />
-      </div>
-    </div>
-  )
-}
-
-// ── Apply Tab ─────────────────────────────────────────────────────────────────
-
-function ApplyTab() {
-  const { toast } = useToast()
-  const { data: companies = [] } = useCompanies()
-  // useCompanies() self-heals the employee 403 (see its docblock); the extra
-  // `me.companyId` leg keeps this form working even if that list is still
-  // in flight, because without a company id there are no leave types to pick
-  // and the whole form is unusable.
-  const { data: me } = useCurrentUser()
-  const activeCompanyId = companies[0]?.id ?? me?.companyId ?? ''
-  const { data: leaveTypes = [], isLoading: typesLoading } = useLeaveTypes(activeCompanyId)
-  const { data: myLeaves } = useMyLeaves(0)
-  const { data: balances = [] } = useMyBalances(new Date().getFullYear())
-  // 2026-09-10: was useHrConfig, which 403s for plain EMPLOYEE and DEPT_MANAGER
-  // — the primary audience of this form. The failure was silent, so on a
-  // 6-day or Fri+Sat workweek the day-count preview lied. useWeekendDays hits
-  // the authenticated-only weekend-days subset endpoint added the same day.
-  const { data: hrConfig } = useWeekendDays(activeCompanyId || undefined)
-  const applyLeave = useApplyLeave()
-
-  // Weekend/off-days come from the tenant's HR configuration
-  // (V1 /v1/settings/hr-configuration → weekendDays: number[] with
-  // Sun=0..Sat=6). This has to match whatever payroll uses on the server
-  // — a hard-coded Sat+Sun preview lied to tenants on a 6-day workweek
-  // (Sunday-only) or any Middle-East schedule (Fri+Sat). Falls back to
-  // the Indian statutory default of Sat+Sun ONLY when no config exists.
-  const weekendDays = React.useMemo<Set<number>>(() => {
-    const cfg = hrConfig?.weekendDays
-    if (cfg && cfg.length > 0) return new Set(cfg)
-    return new Set([0, 6])
-  }, [hrConfig])
-
-  const [form, setForm] = useState({
-    leaveTypeId: '',
-    startDate: '',
-    endDate: '',
-    duration: 'FULL_DAY' as LeaveDuration,
-    reason: '',
-  })
-
-  const isHalfDay = form.duration === 'HALF_DAY_MORNING' || form.duration === 'HALF_DAY_AFTERNOON'
-
-  // Half-day auto-force: keep endDate == startDate whenever half-day is selected.
-  const effectiveEndDate = isHalfDay ? form.startDate : form.endDate
-
-  // LOCAL today, not UTC. toISOString() is UTC, so in IST (UTC+5:30) every
-  // request made before 05:30 local resolved to *yesterday* — the `min` on the
-  // date input and the past-date guard both let a backdated leave through, and
-  // the mobile app (which uses a local getLocalToday()) disagreed with the web
-  // for those five and a half hours every morning.
-  const todayIso = React.useMemo(() => {
-    const d = new Date()
-    const p = (n: number) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-  }, [])
-
-  // Compute effective days: half-day counts as 0.5, else count business days
-  // (non-weekend) inclusive. Weekend day-numbers are pulled from the tenant's
-  // HR configuration (weekendDays) instead of hard-coded Sat+Sun so a 6-day
-  // workweek or a Fri+Sat schedule computes correctly. This is the frontend
-  // preview only — the backend runs the authoritative calculation including
-  // per-tenant holidays; a preview endpoint would be strictly better and is
-  // flagged for B4 backend.
-  const effectiveDays = React.useMemo(() => {
-    if (!form.startDate || !effectiveEndDate) return 0
-    if (isHalfDay) return 0.5
-    const start = new Date(form.startDate + 'T00:00:00')
-    const end = new Date(effectiveEndDate + 'T00:00:00')
-    const diffMs = end.getTime() - start.getTime()
-    if (isNaN(diffMs) || diffMs < 0) return 0
-    // Walk each calendar day inclusive; skip tenant-configured weekend days.
-    // Cap the loop at 366 iterations so a wildly out-of-order pair can never
-    // spin.
-    let count = 0
-    const cursor = new Date(start)
-    for (let i = 0; i <= 366; i++) {
-      if (cursor.getTime() > end.getTime()) break
-      const dow = cursor.getDay()
-      if (!weekendDays.has(dow)) count += 1
-      cursor.setDate(cursor.getDate() + 1)
-    }
-    return count
-  }, [form.startDate, effectiveEndDate, isHalfDay, weekendDays])
-
-  // Overlap check against existing PENDING/PENDING_L2/APPROVED leaves.
-  const hasOverlap = React.useMemo(() => {
-    if (!form.startDate || !effectiveEndDate) return false
-    const reqStart = form.startDate
-    const reqEnd = effectiveEndDate
-    const existing = myLeaves?.content ?? []
-    return existing.some((lv) => {
-      if (lv.status !== 'PENDING' && lv.status !== 'PENDING_L2' && lv.status !== 'APPROVED') return false
-      // Date-string comparison works because ISO YYYY-MM-DD is lexicographically ordered.
-      return lv.startDate <= reqEnd && lv.endDate >= reqStart
-    })
-  }, [form.startDate, effectiveEndDate, myLeaves])
-
-  // Balance check for the selected leave type.
-  const selectedBalance = balances.find((b) => b.leaveTypeId === form.leaveTypeId)
-  const availableBalance = selectedBalance?.available ?? null
-  const exceedsBalance = availableBalance !== null && effectiveDays > 0 && effectiveDays > availableBalance
-
-  const reasonTrimmedLen = form.reason.trim().length
-  const reasonTooShort = reasonTrimmedLen > 0 && reasonTrimmedLen < 10
-  const reasonMissing = reasonTrimmedLen === 0
-  const REASON_MAX = 500
-
-  // The mobile screen blocks these two in its disabled expression; the web
-  // only toasted about them at click time, so Submit looked live on a form
-  // that could not succeed.
-  const startInPast = !!form.startDate && form.startDate < todayIso
-  const endBeforeStart = !!form.startDate && !!effectiveEndDate && effectiveEndDate < form.startDate
-
-  const submitDisabled =
-    applyLeave.isPending ||
-    hasOverlap ||
-    exceedsBalance ||
-    !form.leaveTypeId ||
-    !form.startDate ||
-    !effectiveEndDate ||
-    startInPast ||
-    endBeforeStart ||
-    reasonMissing ||
-    reasonTooShort
-
-  // First blocking condition, in the order the user fills the form. Overlap
-  // and exceeds-balance are excluded — each already renders its own banner.
-  const disabledReason: string | null =
-    !form.leaveTypeId ? 'Select a leave type to continue.'
-    : !form.startDate ? 'Pick a start date.'
-    : startInPast ? 'Start date cannot be in the past.'
-    : !effectiveEndDate ? 'Pick an end date.'
-    : endBeforeStart ? 'End date must be on or after the start date.'
-    : reasonMissing ? 'A reason is required.'
-    : reasonTooShort ? `Reason needs at least 10 characters (${reasonTrimmedLen}/10).`
-    : null
-
-  const handleSubmit = async () => {
-    if (!form.leaveTypeId || !form.startDate || !effectiveEndDate) {
-      toast('Leave type and dates are required', 'error')
-      return
-    }
-    if (form.startDate < todayIso) {
-      toast('Leave start date cannot be in the past', 'error')
-      return
-    }
-    if (effectiveEndDate < form.startDate) {
-      toast('End date must be after start date', 'error')
-      return
-    }
-    if (reasonMissing) {
-      toast('Reason is required', 'error')
-      return
-    }
-    if (reasonTooShort) {
-      toast('Reason must be at least 10 characters', 'error')
-      return
-    }
-    if (form.reason.length > REASON_MAX) {
-      toast(`Reason must be at most ${REASON_MAX} characters`, 'error')
-      return
-    }
-    if (hasOverlap) {
-      toast('You already have a request for these dates', 'error')
-      return
-    }
-    if (exceedsBalance) {
-      toast('Requested days exceed available balance', 'error')
-      return
-    }
-    try {
-      await applyLeave.mutateAsync({
-        leaveTypeId: form.leaveTypeId,
-        startDate: form.startDate,
-        endDate: effectiveEndDate,
-        duration: form.duration,
-        reason: form.reason,
-        companyId: activeCompanyId || undefined,
-      })
-      toast('Leave request submitted', 'success')
-      setForm({ leaveTypeId: '', startDate: '', endDate: '', duration: 'FULL_DAY', reason: '' })
-    } catch (err: unknown) {
-      toast((err as Error)?.message ?? 'Failed to apply for leave', 'error')
-    }
-  }
-
-  return (
-    <div className="ut-card max-w-lg p-5">
-      <h3 className="mb-4 text-[15px] font-semibold text-text-primary">Apply for Leave</h3>
-      <div className="space-y-4">
-
-      {/* Available-balance strip. The mobile Apply Leave screen opens with this
-          and the web had nothing — balances were fetched only to power the
-          `exceedsBalance` guard, so an employee had to leave the form to find
-          out how many days they had left. */}
-      {balances.length > 0 && (
-        <div className="grid grid-cols-3 gap-2">
-          {balances.slice(0, 3).map((b) => (
-            <div key={b.id} className="rounded-xl border border-border-default bg-bg-base px-3 py-2 text-center">
-              <p className="text-lg font-bold text-text-primary">{b.available}</p>
-              <p className="truncate text-[11px] text-text-secondary" title={b.leaveTypeName}>{b.leaveTypeName}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div>
-        <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Leave Type *</label>
-        {typesLoading ? (
-          <Skeleton className="h-10 w-full rounded-xl" />
-        ) : (
-          <select
-            value={form.leaveTypeId}
-            onChange={(e) => setForm((p) => ({ ...p, leaveTypeId: e.target.value }))}
-            className="ut-select"
-          >
-            <option value="">Select leave type</option>
-            {/* Show REMAINING days, as the mobile picker does. The annual
-                entitlement is the wrong number to decide against — someone
-                with 12 days/year and 1 left was being shown "12". */}
-            {leaveTypes.filter((t) => t.isActive).map((t) => {
-              const bal = balances.find((b) => b.leaveTypeId === t.id)
-              return (
-                <option key={t.id} value={t.id}>
-                  {t.name}{bal ? ` (${bal.available} available)` : ` (${t.annualEntitlement} days/year)`}
-                </option>
-              )
-            })}
-          </select>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-        <div>
-          <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Start Date *</label>
-          <input
-            type="date"
-            min={todayIso}
-            value={form.startDate}
-            onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-            className="ut-input"
-          />
-        </div>
-        <div>
-          <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">End Date *</label>
-          <input
-            type="date"
-            min={form.startDate || todayIso}
-            value={effectiveEndDate}
-            disabled={isHalfDay}
-            onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
-            className="ut-input"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Duration</label>
-        <select
-          value={form.duration}
-          onChange={(e) => setForm((p) => ({ ...p, duration: e.target.value as typeof form.duration }))}
-          className="ut-select"
-        >
-          <option value="FULL_DAY">Full Day</option>
-          <option value="HALF_DAY_MORNING">Half Day (Morning)</option>
-          <option value="HALF_DAY_AFTERNOON">Half Day (Afternoon)</option>
-        </select>
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <label className="block text-[13px] font-semibold text-text-secondary">Reason *</label>
-          <span className={clsx('text-[10px]', form.reason.length > REASON_MAX ? 'text-danger' : 'text-text-tertiary')}>
-            {form.reason.length}/{REASON_MAX}
-          </span>
-        </div>
-        <textarea
-          value={form.reason}
-          onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value.slice(0, REASON_MAX) }))}
-          rows={3}
-          maxLength={REASON_MAX}
-          placeholder="Reason for leave (min 10 characters)"
-          className="w-full bg-white border border-border-default/60 rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-primary resize-none"
-        />
-        {reasonTooShort && (
-          <p className="text-[11px] text-danger mt-1">Reason must be at least 10 characters</p>
-        )}
-      </div>
-
-      {hasOverlap && (
-        <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#B91C1C]">
-          You already have a request for these dates
-        </div>
-      )}
-      {exceedsBalance && availableBalance !== null && (
-        <div className="rounded-xl border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-xs text-[#B91C1C]">
-          Requested {effectiveDays} day{effectiveDays !== 1 ? 's' : ''} exceeds available balance of {availableBalance.toFixed(1)}
-        </div>
-      )}
-      </div>
-
-      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border-default pt-4">
-        {/* Submit is now disabled for a past start date and for end-before-
-            start (it used to stay live and only toast on click). A disabled
-            button with no explanation is its own dead end, so say which
-            condition is blocking — the mobile screen carries the same single
-            hint line. Conditions that already render their own red banner
-            above (overlap, exceeds balance) are deliberately not repeated. */}
-        <p className="text-xs text-text-tertiary">{disabledReason ?? ''}</p>
-        <button
-          onClick={handleSubmit}
-          disabled={submitDisabled}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#059669] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Plus size={16} />
-          {applyLeave.isPending ? 'Submitting...' : 'Apply for Leave'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── Balances Tab ──────────────────────────────────────────────────────────────
-
-function BalancesTab() {
-  const now = new Date()
-  const { data: balances = [], isLoading, error: balError, refetch: refetchBal } = useMyBalances(now.getFullYear())
-
-  return (
-    <div className="space-y-3">
-      {isLoading ? (
-        <CardSkeleton />
-      ) : balError ? (
-        <EmptyState icon={XCircle} title="Failed to load balances" description="An error occurred while loading leave balances." action={{ label: 'Retry', onClick: () => refetchBal() }} />
-      ) : balances.length === 0 ? (
-        <div className="text-center py-16">
-          <Calendar size={32} className="mx-auto mb-3 text-text-tertiary" />
-          <p className="text-text-secondary text-sm">No leave balances found</p>
-          <p className="text-text-tertiary text-xs mt-1">Contact HR to set up leave types for your company</p>
-        </div>
-      ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {balances.map((balance) => {
-            const pct = balance.totalEntitlement > 0 ? (balance.used / balance.totalEntitlement) * 100 : 0
-            return (
-              <div key={balance.id} className="ut-card ut-card-sm p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-text-primary font-semibold text-sm">{balance.leaveTypeName}</p>
-                  <span className="text-lg font-bold text-text-primary">{balance.available.toFixed(1)}</span>
-                </div>
-                <div className="w-full bg-surface-2 rounded-full h-1.5 mb-3">
-                  <div
-                    className={clsx('h-1.5 rounded-full transition-all', pct > 80 ? 'bg-red-500' : pct > 50 ? 'bg-amber-500' : 'bg-emerald-500')}
-                    style={{ width: `${Math.min(pct, 100)}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs text-text-secondary">
-                  <span>{balance.used.toFixed(1)} used</span>
-                  <span>{balance.totalEntitlement.toFixed(1)} total</span>
-                </div>
-                {balance.pending > 0 && (
-                  <p className="text-xs text-[#B45309] mt-1.5">{balance.pending.toFixed(1)} days pending</p>
-                )}
-                {balance.carryForward > 0 && (
-                  <p className="text-xs text-[#1D4ED8] mt-0.5">{balance.carryForward.toFixed(1)} carried forward</p>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Approvals Tab ─────────────────────────────────────────────────────────────
-
-// Approvals tab renders leave + WFH in one merged list — see Anil doc-2 issue 4
-// (2026-09-01). Rows are discriminated by `kind` so decide/reject calls hit the
-// right endpoint. Both queries pageinate independently but the tab is a single
-// scroll; page 0 for now (paging returns if the union grows past 40 rows).
-
-interface MergedApproval {
-  kind: 'leave' | 'wfh'
-  id: string
-  employeeName?: string | null
-  employeeCode?: string | null
-  departmentName?: string | null
-  startDate: string
-  endDate: string
-  totalDays: number
-  // Widened to accept both string|undefined (leave DTO) and string|null (WFH DTO).
-  reason?: string | null
-  leaveTypeName?: string | null // leave only
-  createdAt?: string
-}
-
-// ── Approval History ──────────────────────────────────────────────────────────
-
-/**
- * Everything this approver has already decided.
- *
- * Anil (2026-09-10): "leaves history after submitting the request not
- * displaying". The cause was that the product had no history surface at all —
- * an admin's only leave tabs were Approvals / Leave Types / Holidays, so the
- * instant a request was approved it left the pending queue and was gone. The
- * backend route existed and was never called.
- */
-function ApprovalHistoryTab() {
-  const [page, setPage] = useState(0)
-  const { data, isLoading, error, refetch } = useApprovalsHistory(page)
-  const rows = data?.content ?? []
-  const total = data?.totalElements ?? 0
-
-  return (
-    <div className="space-y-3">
-      {isLoading ? (
-        <CardSkeleton />
-      ) : error ? (
-        <EmptyState icon={XCircle} title="Failed to load history" description={(error as Error).message} action={{ label: 'Retry', onClick: () => refetch() }} />
-      ) : rows.length === 0 ? (
-        <div className="text-center py-16">
-          <FileText size={32} className="mx-auto mb-3 text-text-tertiary" />
-          <p className="text-text-secondary text-sm">No decisions yet</p>
-          <p className="text-text-tertiary text-xs mt-1">Leaves you approve or reject appear here.</p>
-        </div>
-      ) : (
-        rows.map((l) => {
-          const sc = STATUS_STYLE[l.status] ?? STATUS_STYLE['PENDING']
-          return (
-            <div key={l.id} className="ut-card ut-card-sm flex items-center gap-4 px-4 py-3">
-              <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', sc.bg)}>
-                <sc.icon size={16} className={sc.color} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-text-primary font-medium text-sm truncate">
-                    {l.employeeName ?? 'Employee'}
-                    {l.employeeCode ? ` · ${l.employeeCode}` : ''}
-                  </p>
-                  <HrStatusPill tone={sc.tone}>{sc.label}</HrStatusPill>
-                </div>
-                <p className="text-text-secondary text-xs mt-0.5">
-                  {l.leaveTypeName ?? 'Leave'}
-                  {' · '}{format(new Date(l.startDate), 'd MMM')} – {format(new Date(l.endDate), 'd MMM yyyy')}
-                  {' · '}{l.totalDays} day{l.totalDays !== 1 ? 's' : ''}
-                  {l.departmentName ? ` · ${l.departmentName}` : ''}
-                </p>
-                {l.reason && <p className="text-text-tertiary text-xs truncate mt-0.5">"{l.reason}"</p>}
-              </div>
-            </div>
-          )
-        })
-      )}
-
-      {total > 20 && (
-        <div className="flex justify-center gap-3 pt-2">
-          <button onClick={() => setPage((p) => p - 1)} disabled={page === 0} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Prev</button>
-          <span className="text-xs text-text-secondary py-1.5">Page {page + 1}</span>
-          <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * 20 >= total} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Next</button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ApprovalsTab() {
-  const { toast } = useToast()
-  const [page, setPage] = useState(0)
-  const { data, isLoading, error: approvalsError, refetch: refetchApprovals } = usePendingApprovals(page)
-  const { data: wfhData, isLoading: wfhLoading, error: wfhError, refetch: refetchWfh } = usePendingWfhApprovals(page)
-  const decide = useLeaveDecision()
-  const decideWfh = useWfhDecision()
-  const [commenting, setCommenting] = useState<{ id: string; kind: 'leave' | 'wfh'; approved: boolean } | null>(null)
-  const [comment, setComment] = useState('')
-
-  const leaveRows: MergedApproval[] = (data?.content ?? []).map((l) => ({
-    kind: 'leave' as const,
-    id: l.id,
-    employeeName: l.employeeName,
-    employeeCode: l.employeeCode,
-    departmentName: l.departmentName,
-    startDate: l.startDate,
-    endDate: l.endDate,
-    totalDays: l.totalDays,
-    reason: l.reason,
-    leaveTypeName: l.leaveTypeName ?? 'Leave',
-    createdAt: l.createdAt,
+  const [size, setSize] = useState(20)
+  const q = useMyLeaves(page, size)
+  const bal = useMyBalances(new Date().getFullYear())
+  const cancel = useCancelLeave()
+  const [asking, setAsking] = useState<LeaveRequestResponse | null>(null)
+  const rows = q.data?.content ?? [], total = q.data?.totalElements ?? 0
+  const pending = rows.filter((r) => r.status === 'PENDING' || r.status === 'PENDING_L2').length
+  const tiles: Tile[] = (bal.data ?? []).slice(0, 3).map((b, i) => ({
+    icon: 'calendarDays', color: TILE_COLORS[i % TILE_COLORS.length], label: b.leaveTypeName, value: days(b.available),
+    sub: `left of ${days(b.totalEntitlement + b.carryForward)}${b.pending ? ` · ${days(b.pending)} pending` : ''}`,
   }))
-  const wfhRows: MergedApproval[] = (wfhData?.content ?? []).map((w) => {
-    // WFH DTO ships fromDate/toDate (LocalDate). Duration is inclusive-day count.
-    const from = new Date(w.fromDate)
-    const to = new Date(w.toDate)
-    const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1)
-    return {
-      kind: 'wfh' as const,
-      id: w.id,
-      employeeName: w.employeeName,
-      employeeCode: w.employeeCode,
-      departmentName: w.departmentName,
-      startDate: w.fromDate,
-      endDate: w.toDate,
-      totalDays: days,
-      reason: w.reason,
-      leaveTypeName: 'Work From Home',
-      createdAt: w.createdAt,
-    }
-  })
-  // Union then sort by createdAt DESC so freshest requests bubble to the top,
-  // regardless of which endpoint they came from.
-  const approvals: MergedApproval[] = [...leaveRows, ...wfhRows].sort((a, b) => {
-    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
-    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
-    return tb - ta
-  })
-  const total = (data?.totalElements ?? 0) + (wfhData?.totalElements ?? 0)
-
-  const handleDecide = async () => {
-    if (!commenting) return
-    // WFH rejection MUST carry a comment — backend rejects with
-    // WFH_REJECT_REASON_REQUIRED otherwise. Enforce it in the UI too.
-    if (commenting.kind === 'wfh' && !commenting.approved && !comment.trim()) {
-      toast('A rejection reason is required', 'error')
-      return
-    }
-    try {
-      if (commenting.kind === 'leave') {
-        await decide.mutateAsync({
-          requestId: commenting.id,
-          status: commenting.approved ? 'APPROVED' : 'REJECTED',
-          comment: comment || undefined,
-        })
-      } else {
-        await decideWfh.mutateAsync({
-          requestId: commenting.id,
-          approved: commenting.approved,
-          comment: comment || undefined,
-        })
-      }
-      const kindLabel = commenting.kind === 'wfh' ? 'WFH' : 'Leave'
-      toast(commenting.approved ? `${kindLabel} approved` : `${kindLabel} rejected`, 'success')
-      setCommenting(null)
-      setComment('')
-    } catch {
-      toast('Failed to process decision', 'error')
-    }
+  tiles.push({ icon: 'clock', color: 'orange', label: 'Waiting for approval', value: String(pending), sub: pending ? 'Requests not decided yet' : 'Nothing waiting', tip: '' })
+  const doCancel = async () => {
+    if (!asking) return
+    try { await cancel.mutateAsync({ requestId: asking.id, reason: 'Cancelled by employee' }); toast('Leave cancelled'); setAsking(null) } catch (e) { toast('Couldn’t cancel the leave', true, errMsg(e)) }
   }
-
-  const anyLoading = isLoading || wfhLoading
-  const hardError = approvalsError && wfhError // both failed = show error state
   return (
-    <div className="space-y-3">
-      {anyLoading ? (
-        <CardSkeleton />
-      ) : hardError ? (
-        <EmptyState icon={XCircle} title="Failed to load approvals" description="An error occurred while loading approvals." action={{ label: 'Retry', onClick: () => { refetchApprovals(); refetchWfh() } }} />
-      ) : approvals.length === 0 ? (
-        <div className="text-center py-16">
-          <CheckCircle size={32} className="mx-auto mb-3 text-text-tertiary" />
-          <p className="text-text-secondary text-sm">No pending approvals</p>
-        </div>
-      ) : (
-        approvals.map((row) => (
-          <div key={`${row.kind}-${row.id}`} className="ut-card ut-card-sm px-4 py-3">
-            {/* Header row: employee identity on the left, status + inline
-                actions on the right so buttons stay compact and don't grow
-                with the card width. Kind pill (Leave / WFH) sits next to the
-                pending pill so approvers can tell the two apart at a glance. */}
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-text-primary font-medium text-sm">
-                  {row.employeeName ?? 'Employee'}{row.employeeCode ? ` · ${row.employeeCode}` : ''}
-                </p>
-                <p className="text-text-secondary text-xs mt-0.5">
-                  {row.leaveTypeName ?? 'Leave'}
-                  {' · '}{format(new Date(row.startDate), 'd MMM')} – {format(new Date(row.endDate), 'd MMM yyyy')}
-                  {' · '}{row.totalDays} day{row.totalDays !== 1 ? 's' : ''}
-                </p>
-                {row.departmentName && <p className="text-text-tertiary text-xs mt-0.5">{row.departmentName}</p>}
-                {row.reason && <p className="text-text-secondary text-xs mt-1 italic">&ldquo;{row.reason}&rdquo;</p>}
-              </div>
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <HrStatusPill tone={row.kind === 'wfh' ? 'purple' : 'blue'}>
-                  {row.kind === 'wfh' ? 'WFH' : 'Leave'}
-                </HrStatusPill>
-                <HrStatusPill tone="warn">Pending</HrStatusPill>
-                {commenting?.id !== row.id && (
-                  // WFH rows hit /v1/wfh/{id}/approve (wfh.approve); leave rows hit
-                  // the leave decision endpoint (hrms.leave.approve.l1). Gate per row.
-                  <Can code={row.kind === 'wfh' ? P.WFH_APPROVE : P.HRMS_LEAVE_APPROVE_L1}>
-                    <button
-                      onClick={() => setCommenting({ id: row.id, kind: row.kind, approved: false })}
-                      className="inline-flex items-center gap-1 rounded-lg bg-[#FEE2E2] px-2.5 py-1 text-xs font-medium text-[#B91C1C] transition-colors hover:bg-[#FECACA]"
-                      aria-label="Reject"
-                    >
-                      <XIcon size={13} /> Reject
-                    </button>
-                    <button
-                      onClick={() => setCommenting({ id: row.id, kind: row.kind, approved: true })}
-                      className="inline-flex items-center gap-1 rounded-lg bg-[#DCFCE7] px-2.5 py-1 text-xs font-medium text-[#15803D] transition-colors hover:bg-[#BBF7D0]"
-                      aria-label="Approve"
-                    >
-                      <Check size={13} /> Approve
-                    </button>
-                  </Can>
-                )}
-              </div>
-            </div>
-
-            {/* Comment box appears only when the reviewer chose Approve or
-                Reject and needs to add an optional note. Kept below the
-                header so the row above stays compact. */}
-            {commenting?.id === row.id && (
-              <div className="mt-3 space-y-2 border-t border-border-default/40 pt-3">
-                <input
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder={
-                    commenting.approved
-                      ? 'Approval note (optional)'
-                      : commenting.kind === 'wfh'
-                        ? 'Rejection reason (required)'
-                        : 'Rejection reason (optional)'
-                  }
-                  className="ut-input ut-input-sm"
-                />
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => { setCommenting(null); setComment('') }}
-                    className="rounded-lg border border-border-default px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleDecide}
-                    disabled={decide.isPending || decideWfh.isPending}
-                    className={clsx(
-                      'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50',
-                      commenting.approved
-                        ? 'bg-[#15803D] hover:bg-[#166534]'
-                        : 'bg-[#EF4444] hover:bg-[#DC2626]',
-                    )}
-                  >
-                    {commenting.approved ? <Check size={13} /> : <XIcon size={13} />}
-                    {(decide.isPending || decideWfh.isPending) ? 'Working…' : commenting.approved ? 'Confirm Approve' : 'Confirm Reject'}
-                  </button>
-                </div>
-              </div>
+    <div style={{ display: 'grid', gap: 16 }}>
+      {bal.isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={tiles} />}
+      <SubHeading>Your requests</SubHeading>
+      {q.isLoading ? <State kind="loading" />
+        : q.error ? <State kind="error" title="Couldn’t load your leave" description={errMsg(q.error)} onRetry={() => q.refetch()} />
+          : rows.length === 0 ? <State kind="empty" icon="calendarDays" title="No leave requests yet" description="Requests you make appear here with their status." />
+            : (
+              <RowList>
+                {rows.map((r) => (
+                  <Row key={r.id}
+                    lead={<span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 11, background: '#f8fafc', border: '1px solid #eef2f6', color: '#0f6e56', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{dashIcon('calendarDays', 17)}</span>}
+                    title={`${r.leaveTypeName || 'Leave'} · ${range(r.startDate, r.endDate)}`}
+                    meta={`${days(Number(r.totalDays))} · asked ${stamp(r.createdAt)}${r.approverComment ? ` · “${r.approverComment}”` : ''}`}
+                    note={r.reason ? `“${r.reason}”` : undefined}
+                    trail={<>{pill(r.status)}{(r.status === 'PENDING' || r.status === 'APPROVED') && <HrButton size="sm" variant="ghost" onClick={() => setAsking(r)}>Cancel</HrButton>}</>}
+                  />
+                ))}
+              </RowList>
             )}
-          </div>
-        ))
-      )}
-
-      {total > 20 && (
-        <div className="flex justify-center gap-3 pt-2">
-          <button onClick={() => setPage((p) => p - 1)} disabled={page === 0} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Prev</button>
-          <span className="text-xs text-text-secondary py-1.5">Page {page + 1}</span>
-          <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * 20 >= total} className="px-3 py-1.5 text-xs border border-border-default rounded-lg text-text-secondary disabled:opacity-30 hover:text-text-primary transition-colors">Next</button>
+      <HrPagination page={page} pageSize={size} totalElements={total} totalPages={Math.max(1, Math.ceil(total / size))} onPageChange={setPage} onPageSizeChange={setSize} />
+      <Modal open={!!asking} onOpenChange={(o: boolean) => { if (!o) setAsking(null) }} title="Cancel this leave?" description={asking ? `${asking.leaveTypeName || 'Leave'}, ${range(asking.startDate, asking.endDate)} (${days(Number(asking.totalDays))}). The days go back to your balance.` : ''} size="sm">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+          <HrButton variant="ghost" onClick={() => setAsking(null)}>Keep it</HrButton>
+          <HrButton variant="danger" onClick={doCancel} disabled={cancel.isPending}>{cancel.isPending ? 'Cancelling…' : 'Cancel leave'}</HrButton>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }
 
-// ── Main Leave Page ───────────────────────────────────────────────────────────
-
-// Single source of truth for every leave tab — labels, keys, and the
-// permission code that gates each. `useVisibleTabs` filters this list per
-// user against the SDK auth store. Order here is the tab order shown in
-// the UI, so if the URL asks for a tab the user cannot see, we silently
-// fall back to visibleTabs[0] (the leftmost tab they can see).
-//
-// Holidays is intentionally NOT gated at the tab level — every role
-// (EMPLOYEE + MANAGER included) needs to view the calendar. Write
-// actions (Add / Delete) are gated inside HolidayCalendar via canEdit
-// so read-only viewers see the list without buttons.
-//
-// Leave Types is likewise NOT gated at the tab level per client rule:
-// "employees can DISPLAY Leave Types and Holidays but not edit them; only
-// HR/ADMIN can edit." LeaveTypes.tsx wraps every add/edit/delete/seed
-// affordance in <Can code={P.LEAVE_TYPE_WRITE}> so read-only viewers see
-// the list without the mutation buttons. Gating the tab itself hid the
-// screen from the very audience the client asked to see it.
-const ALL_TABS = [
-  { key: 'my',        label: 'My Leaves' },
-  { key: 'apply',     label: 'Apply' },
-  { key: 'balances',  label: 'Balances & Comp-offs' },
-  { key: 'approvals', label: 'Applications & Approvals', requires: P.HRMS_LEAVE_APPROVE_L1 },
-  // Sits next to Approvals and shares its gate: a decided leave used to vanish
-  // from the product entirely once it left the pending queue.
-  { key: 'history',   label: 'History',     requires: P.HRMS_LEAVE_APPROVE_L1 },
-  { key: 'calendar',  label: 'Leave Calendar' },
-  { key: 'types',     label: 'Leave Types' },
-  { key: 'holidays',  label: 'Holidays' },
-] as const
-
-type TabKey = typeof ALL_TABS[number]['key']
-
-
-export const Leave: React.FC = () => {
-  const { isAdmin } = useRoles()
-  // Client rule: ADMIN never applies for their own leave, so the personal
-  // tabs (My Leaves / Apply / Balances) are hidden for the admin bucket.
-  // Non-admin roles keep the full tab set; edit affordances on Leave Types
-  // and Holidays stay permission-gated inside the child components.
-  const roleFilteredTabs = React.useMemo(
-    () => ALL_TABS.filter((t) => !(isAdmin && (t.key === 'my' || t.key === 'apply' || t.key === 'balances'))),
-    [isAdmin],
-  )
-  const visibleTabs = useVisibleTabs([...roleFilteredTabs])
-  const canEditHolidays = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
-
-  // Support deep-linking to a specific tab via ?tab=approvals (etc). Notifications
-  // + the dashboard's "Review leave requests" button rely on this — without it
-  // every entry point dumped the user on 'My Leaves' regardless of the intent.
-  // The URL stays in sync as the user clicks through so the back button works.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const requestedTab = searchParams.get('tab') as TabKey | null
-  const isVisible = (k: string | null | undefined): k is TabKey =>
-    !!k && visibleTabs.some((t) => t.key === k)
-  // Fallback to the first tab the user can actually see. visibleTabs is
-  // never empty in practice — My/Apply/Balances/Holidays have no gate
-  // — but we belt-and-brace to 'my' so a config bug can't crash the page.
-  const fallbackTab: TabKey = (visibleTabs[0]?.key ?? 'my') as TabKey
-  const initialTab: TabKey = isVisible(requestedTab) ? requestedTab : fallbackTab
-  const [tab, setTab] = useState<TabKey>(initialTab)
-
-  // If the URL param changes while the page is mounted (e.g. the same-page
-  // notification click), reflect it in local state without dropping other params.
-  useEffect(() => {
-    if (isVisible(requestedTab) && requestedTab !== tab) {
-      setTab(requestedTab)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedTab])
-
-  // Route-level guard: if a deep link asks for a tab this user is not
-  // allowed to see (e.g. an approvals link forwarded to an employee),
-  // rewrite the URL to the first visible tab instead of crashing or
-  // showing a blank body. `replace: true` keeps the browser back button
-  // pointing at wherever they came from.
-  useEffect(() => {
-    if (requestedTab && !isVisible(requestedTab)) {
-      const p = new URLSearchParams(searchParams)
-      p.set('tab', fallbackTab)
-      setSearchParams(p, { replace: true })
-      setTab(fallbackTab)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedTab, visibleTabs.length])
-
-  const switchTab = (next: TabKey) => {
-    setTab(next)
-    // Keep any other query params intact; only rewrite ?tab=.
-    const p = new URLSearchParams(searchParams)
-    p.set('tab', next)
-    setSearchParams(p, { replace: true })
+// ── Apply ────────────────────────────────────────────────────────────────────
+const REASON_MAX = 500
+function Apply({ onDone, toast }: { onDone: () => void; toast: (m: string, err?: boolean, d?: string) => void }) {
+  const { data: companies = [] } = useCompanies()
+  const { data: me } = useCurrentUser()
+  // useCompanies self-heals the employee 403; me.companyId keeps the form usable meanwhile.
+  const companyId = companies[0]?.id ?? me?.companyId ?? ''
+  const types = useLeaveTypes(companyId)
+  const mine = useMyLeaves(0)
+  const bal = useMyBalances(new Date().getFullYear())
+  const wk = useWeekendDays(companyId || undefined)
+  const apply = useApplyLeave()
+  const off = useMemo(() => jsWeekendDays(wk.data?.weekendDays), [wk.data])
+  const today = todayIso()
+  const [f, setF] = useState({ leaveTypeId: '', startDate: '', endDate: '', duration: 'FULL_DAY' as LeaveDuration, reason: '' })
+  const half = f.duration !== 'FULL_DAY'
+  const end = half ? f.startDate : f.endDate
+  // Preview: calendar days minus the company's weekly off days. The server
+  // also skips company holidays, so the final count can be lower.
+  const count = useMemo(() => {
+    if (!f.startDate || !end || end < f.startDate) return 0
+    if (half) return 0.5
+    let n = 0
+    for (let d = new Date(`${f.startDate}T00:00:00`), stop = new Date(`${end}T00:00:00`), i = 0; d <= stop && i < 367; d.setDate(d.getDate() + 1), i++) if (!off.has(d.getDay())) n++
+    return n
+  }, [f.startDate, end, half, off])
+  const overlap = !!f.startDate && !!end && (mine.data?.content ?? []).some((l) => ['PENDING', 'PENDING_L2', 'APPROVED'].includes(l.status) && l.startDate <= end && l.endDate >= f.startDate)
+  const b = (bal.data ?? []).find((x) => x.leaveTypeId === f.leaveTypeId)
+  const over = !!b && count > 0 && count > b.available
+  const rlen = f.reason.trim().length
+  const problem = !f.leaveTypeId ? 'Choose a leave type.' : !f.startDate ? 'Pick a start date.' : f.startDate < today ? 'The start date can’t be in the past.'
+    : !end ? 'Pick an end date.' : end < f.startDate ? 'The end date must be on or after the start date.' : rlen === 0 ? 'Add a reason.' : rlen < 10 ? `The reason needs at least 10 characters (${rlen}/10).` : null
+  const blocked = !!problem || overlap || over || apply.isPending
+  const submit = async () => {
+    if (blocked) return
+    try {
+      await apply.mutateAsync({ leaveTypeId: f.leaveTypeId, startDate: f.startDate, endDate: end, duration: f.duration, reason: f.reason.trim(), companyId: companyId || undefined })
+      toast('Leave request sent', false, 'Your approver has been notified.')
+      setF({ leaveTypeId: '', startDate: '', endDate: '', duration: 'FULL_DAY', reason: '' })
+      onDone()
+    } catch (e) { toast('Couldn’t send the request', true, errMsg(e)) }
   }
-
+  const active = (types.data ?? []).filter((t) => t.isActive)
   return (
-    <div className="mx-auto max-w-7xl p-6 sm:p-8 space-y-6">
-      <HrPageHeader
-        crumb="Leave Management"
-        title="Leave Management"
-        subtitle="Apply for leave, track balances, and manage approvals"
-      />
-
-      <HrTabs
-        tabs={visibleTabs.map((t) => ({ key: t.key, label: t.label }))}
-        active={tab}
-        onChange={(k) => switchTab(k as TabKey)}
-      />
-
-      {tab === 'my' && <HrTabPanel tabKey="my"><MyLeavesTab /></HrTabPanel>}
-      {tab === 'apply' && <HrTabPanel tabKey="apply"><ApplyTab /></HrTabPanel>}
-      {tab === 'balances' && <HrTabPanel tabKey="balances"><BalancesTab /></HrTabPanel>}
-      {tab === 'approvals' && <HrTabPanel tabKey="approvals"><ApprovalsTab /></HrTabPanel>}
-      {tab === 'history' && <HrTabPanel tabKey="history"><ApprovalHistoryTab /></HrTabPanel>}
-      {tab === 'calendar' && <HrTabPanel tabKey="calendar"><LeaveCalendar /></HrTabPanel>}
-      {tab === 'types' && <HrTabPanel tabKey="types"><LeaveTypes /></HrTabPanel>}
-      {tab === 'holidays' && <HrTabPanel tabKey="holidays"><HolidayCalendar canEdit={canEditHolidays} /></HrTabPanel>}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,320px),1fr))', gap: 16, alignItems: 'start' }}>
+      <Panel title="Apply for leave" sub="Your approver is notified as soon as you send it.">
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Leave type *</span>
+            <HrSelect value={f.leaveTypeId} onChange={(v) => setF({ ...f, leaveTypeId: v })} placeholder={types.isLoading ? 'Loading…' : 'Choose a leave type'}
+              options={active.map((t) => { const x = (bal.data ?? []).find((y) => y.leaveTypeId === t.id); return { value: t.id, label: `${t.name}${x ? ` · ${days(x.available)} left` : ` · ${t.annualEntitlement} days a year`}` } })} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,150px),1fr))', gap: 12 }}>
+            <Field label="From *"><Input type="date" min={today} value={f.startDate} onChange={(e: any) => setF({ ...f, startDate: e.target.value })} /></Field>
+            <Field label="To *"><Input type="date" min={f.startDate || today} value={end} disabled={half} onChange={(e: any) => setF({ ...f, endDate: e.target.value })} /></Field>
+          </div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Duration</span>
+            <HrSelect value={f.duration} onChange={(v) => setF({ ...f, duration: v as LeaveDuration })} options={[{ value: 'FULL_DAY', label: 'Full days' }, { value: 'HALF_DAY_MORNING', label: 'Half day · morning' }, { value: 'HALF_DAY_AFTERNOON', label: 'Half day · afternoon' }]} />
+          </div>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: '#334155' }}>Reason *<span style={{ fontWeight: 500, color: '#94a3b8' }}>{f.reason.length}/{REASON_MAX}</span></span>
+            <textarea value={f.reason} maxLength={REASON_MAX} rows={3} onChange={(e) => setF({ ...f, reason: e.target.value })} placeholder="At least 10 characters"
+              style={{ font: 'inherit', fontSize: 14, padding: '9px 12px', border: '1px solid #cbd5e1', borderRadius: 10, outline: 'none', resize: 'vertical' }} />
+          </label>
+          {overlap && <Note tone="red">You already have leave requested or approved on these dates.</Note>}
+          {over && b && <Note tone="red">That’s {days(count)}, but you have {days(b.available)} of {b.leaveTypeName} left.</Note>}
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingTop: 4, borderTop: '1px solid #f1f5f9' }}>
+            <span style={{ fontSize: 12.5, color: problem ? '#64748b' : '#0f6e56', fontWeight: 600 }}>{problem || `${days(count)} of leave${!half ? ' · weekly offs skipped' : ''}`}</span>
+            <HrButton onClick={submit} disabled={blocked}>{apply.isPending ? 'Sending…' : 'Send request'}</HrButton>
+          </div>
+        </div>
+      </Panel>
+      <Panel title="What you have" sub={`Leave year ${new Date().getFullYear()}`}>
+        {bal.isLoading ? <State kind="loading" height={120} /> : (bal.data ?? []).length === 0
+          ? <Note>No leave balances yet. Ask HR to set up leave types for your company.</Note>
+          : <Facts items={(bal.data ?? []).map((x) => ({ k: x.leaveTypeName, v: `${days(x.available)} left` }))} />}
+        <Note>The count above skips your company’s weekly off days. Company holidays are also left out when you send it, so the final count can be lower.</Note>
+      </Panel>
     </div>
+  )
+}
+
+// ── Balances ─────────────────────────────────────────────────────────────────
+function Balances() {
+  const q = useMyBalances(new Date().getFullYear())
+  if (q.isLoading) return <State kind="loading" height={140} />
+  if (q.error) return <State kind="error" title="Couldn’t load your balances" description={errMsg(q.error)} onRetry={() => q.refetch()} />
+  if (!(q.data ?? []).length) return <State kind="empty" icon="calendarDays" title="No leave balances yet" description="Ask HR to set up leave types for your company." />
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(100%,240px),1fr))', gap: 12 }}>
+      {(q.data ?? []).map((b) => {
+        const total = b.totalEntitlement + b.carryForward, pct = total ? Math.min(100, (b.used / total) * 100) : 0
+        return (
+          <div key={b.id} style={{ ...CARD, padding: '16px 18px', display: 'grid', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+              <strong style={{ fontSize: 14 }}>{b.leaveTypeName}</strong>
+              <span style={{ fontFamily: HEAD_FONT, fontSize: 24, fontWeight: 800, color: '#0f6e56' }}>{Number.isInteger(b.available) ? b.available : b.available.toFixed(1)}</span>
+            </div>
+            <div aria-hidden="true" style={{ height: 6, borderRadius: 4, background: '#f1f5f9', overflow: 'hidden' }}><div style={{ width: `${pct}%`, height: '100%', background: pct > 80 ? '#e11d48' : pct > 50 ? '#f59e0b' : '#0f6e56' }} /></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#64748b' }}><span>{days(b.used)} used</span><span>{days(total)} in all</span></div>
+            {(b.pending > 0 || b.carryForward > 0) && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {b.pending > 0 && <HrStatusPill tone="warn">{`${days(b.pending)} pending`}</HrStatusPill>}
+              {b.carryForward > 0 && <HrStatusPill tone="blue">{`${days(b.carryForward)} carried forward`}</HrStatusPill>}
+            </div>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Approvals (leave + WFH in one queue) ─────────────────────────────────────
+function Approvals({ toast }: { toast: (m: string, err?: boolean, d?: string) => void }) {
+  const [page, setPage] = useState(0)
+  const canLeave = usePermission(P.HRMS_LEAVE_APPROVE_L1), canWfh = usePermission(P.WFH_APPROVE)
+  // Each queue only for people who may decide it (the endpoints refuse everyone else).
+  const lq = usePendingApprovals(page, canLeave), wq = usePendingWfhApprovals(page, 20, canWfh)
+  const decide = useLeaveDecision(), decideWfh = useWfhDecision()
+  const kinds = new Map<string, 'leave' | 'wfh'>()
+  const items: (Approval & { at: string })[] = [
+    ...(lq.data?.content ?? []).map((l) => { kinds.set(l.id, 'leave'); return { id: l.id, at: l.createdAt, name: l.employeeName || 'Employee', sub: [l.employeeCode, l.departmentName].filter(Boolean).join(' · '), facts: [{ k: 'Leave', v: l.leaveTypeName || 'Leave' }, { k: 'Dates', v: range(l.startDate, l.endDate) }, { k: 'Days', v: days(Number(l.totalDays)) }], reason: l.reason || '—', raised: stamp(l.createdAt) } }),
+    ...(wq.data?.content ?? []).map((w) => {
+      kinds.set(w.id, 'wfh')
+      const n = Math.max(1, Math.round((new Date(w.toDate).getTime() - new Date(w.fromDate).getTime()) / 864e5) + 1)
+      return { id: w.id, at: w.createdAt, name: w.employeeName || 'Employee', sub: [w.employeeCode, w.departmentName].filter(Boolean).join(' · '), facts: [{ k: 'Request', v: 'Work from home' }, { k: 'Dates', v: range(w.fromDate, w.toDate) }, { k: 'Days', v: days(n) }], reason: w.reason || '—', raised: stamp(w.createdAt) }
+    }),
+  ].sort((a, b) => (b.at || '').localeCompare(a.at || ''))
+  const total = (lq.data?.totalElements ?? 0) + (wq.data?.totalElements ?? 0)
+  const onDecide = async (id: string, status: 'APPROVED' | 'REJECTED', note: string) => {
+    const kind = kinds.get(id), ok = status === 'APPROVED'
+    // The server refuses a WFH rejection without a reason (WFH_REJECT_REASON_REQUIRED).
+    if (kind === 'wfh' && !ok && !note.trim()) { toast('Add a note to reject a work-from-home request', true); return }
+    try {
+      if (kind === 'wfh') await decideWfh.mutateAsync({ requestId: id, approved: ok, comment: note.trim() || undefined })
+      else await decide.mutateAsync({ requestId: id, status, comment: note.trim() || undefined })
+      toast(`${kind === 'wfh' ? 'Work from home' : 'Leave'} ${ok ? 'approved' : 'rejected'}`)
+    } catch (e) { toast('Couldn’t save the decision', true, errMsg(e)) }
+  }
+  const loading = lq.isLoading || wq.isLoading
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <StatRow tiles={[
+        { icon: 'calendarDays', color: 'orange', label: 'Leave waiting', value: String(lq.data?.totalElements ?? 0), sub: 'Leave requests for you to decide' },
+        { icon: 'home', color: 'purple', label: 'Work from home waiting', value: String(wq.data?.totalElements ?? 0), sub: 'WFH requests for you to decide' },
+      ]} />
+      <SubHeading>Waiting for your OK</SubHeading>
+      {loading ? <State kind="loading" />
+        : lq.error && wq.error ? <State kind="error" title="Couldn’t load requests" description="Leave and work-from-home requests didn’t load." onRetry={() => { lq.refetch(); wq.refetch() }} />
+          : items.length === 0 ? <State kind="empty" icon="checkCircle" title="All caught up" description="No leave or work-from-home requests are waiting for you." />
+            : <ApprovalList items={items} onDecide={onDecide} busy={decide.isPending || decideWfh.isPending} approveLabel="Approve" approveTip="Approves the request and updates their balance"
+              canDecide={(a) => (kinds.get(a.id) === 'wfh' ? canWfh : canLeave)} />}
+      {total > 20 && <HrPagination page={page} pageSize={20} totalElements={total} totalPages={Math.ceil(total / 20)} onPageChange={setPage} />}
+    </div>
+  )
+}
+
+// ── Decided ──────────────────────────────────────────────────────────────────
+function Decided() {
+  const [page, setPage] = useState(0)
+  const q = useApprovalsHistory(page)
+  const rows = q.data?.content ?? [], total = q.data?.totalElements ?? 0
+  if (q.isLoading) return <State kind="loading" />
+  if (q.error) return <State kind="error" title="Couldn’t load decisions" description={errMsg(q.error)} onRetry={() => q.refetch()} />
+  if (!rows.length) return <State kind="empty" icon="fileText" title="No decisions yet" description="Leave you approve or reject is listed here." />
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <RowList>
+        {rows.map((l) => (
+          <Row key={l.id} title={`${l.employeeName || 'Employee'}${l.employeeCode ? ` · ${l.employeeCode}` : ''}`}
+            meta={`${l.leaveTypeName || 'Leave'} · ${range(l.startDate, l.endDate)} · ${days(Number(l.totalDays))}${l.departmentName ? ` · ${l.departmentName}` : ''}`}
+            note={l.approverComment ? `Note: “${l.approverComment}”` : l.reason ? `“${l.reason}”` : undefined} trail={pill(l.status)} />
+        ))}
+      </RowList>
+      {total > 20 && <HrPagination page={page} pageSize={20} totalElements={total} totalPages={Math.ceil(total / 20)} onPageChange={setPage} />}
+    </div>
+  )
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+export function Leave() {
+  const { isAdmin } = useRoles()
+  const canApprove = usePermission(P.HRMS_LEAVE_APPROVE_L1)
+  const canEditHolidays = usePermission(P.SETTINGS_HOLIDAYS_WRITE)
+  const canWfhApprove = usePermission(P.WFH_APPROVE)
+  const pend = usePendingApprovals(0, canApprove), pendWfh = usePendingWfhApprovals(0, 20, canApprove && canWfhApprove)
+  const waiting = canApprove ? (pend.data?.totalElements ?? 0) + (pendWfh.data?.totalElements ?? 0) : 0
+  const { show, node } = useDesignToast()
+  const views = [
+    !isAdmin && { key: 'my', label: 'My leave', icon: 'calendarDays' },
+    !isAdmin && { key: 'apply', label: 'Apply', icon: 'plus' },
+    !isAdmin && { key: 'balances', label: 'Balances', icon: 'chart' },
+    canApprove && { key: 'approvals', label: 'Approvals', icon: 'inbox', count: waiting || undefined, urgent: waiting > 0 },
+    canApprove && { key: 'history', label: 'Decided', icon: 'checkCircle' },
+    { key: 'calendar', label: 'Calendar', icon: 'calendar' },
+    { key: 'types', label: 'Leave types', icon: 'list' },
+    { key: 'holidays', label: 'Holidays', icon: 'sun' },
+  ].filter(Boolean) as { key: string; label: string; icon: string; count?: number; urgent?: boolean }[]
+  const [view, setView] = useView(views.map((v) => v.key), 'tab')
+  const subtitle = isAdmin ? 'Approve requests, and manage leave types and holidays.' : canApprove ? 'Apply for leave, track your balance, and decide your team’s requests.' : 'Apply for leave and track your balance.'
+  return (
+    <ModulePage crumb="Leave Management" title="Leave" subtitle={subtitle}
+      actions={!isAdmin && view !== 'apply' ? <HrButton onClick={() => setView('apply')}>{dashIcon('plus', 15)} Apply for leave</HrButton> : undefined}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        <Views items={views} active={view} onChange={setView} label="Leave views" />
+        {view === 'my' && <MyLeave toast={show} />}
+        {view === 'apply' && <Apply onDone={() => setView('my')} toast={show} />}
+        {view === 'balances' && <Balances />}
+        {view === 'approvals' && <Approvals toast={show} />}
+        {view === 'history' && <Decided />}
+        {view === 'calendar' && <LeaveCalendar />}
+        {view === 'types' && <LeaveTypes embedded />}
+        {view === 'holidays' && <HolidayCalendar canEdit={canEditHolidays} embedded />}
+      </div>
+      {node}
+    </ModulePage>
   )
 }

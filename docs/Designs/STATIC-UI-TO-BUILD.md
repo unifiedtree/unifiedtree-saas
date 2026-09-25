@@ -447,3 +447,29 @@ Found while redesigning the pages above. Fixed in the backend, running locally, 
 - *Payroll* also treats Saturday and Sunday as off for everyone (`PayrollRunService`, lines 966 and 985). Changing how pay is calculated needs a decision first, so it's left as is.
 - The alternate `CanonicalAttendanceService` (only used by the `canonical-jdbc-api` profile) has the same "today is absent" and Sat/Sun rules.
 - A company that had only the old "Standard 9-6" shift no longer gets "General" added automatically. It can be added in Shift Rules.
+
+## 11. Full redesign: the module kit, then module by module
+
+Only Master, Attendance, Payroll, Companies, the employee workspace, settings and reports had designs. Every other module is now rebuilt from the parts those designs use, collected in `src/design/module/ModuleKit.tsx`:
+- the page header on the design's 28px rhythm
+- the design's view tabs (`SubTabs`)
+- stat tiles (`StatTile`)
+- section headings with an icon tile
+- quiet loading, error and empty states (`SectionState`)
+- approval cards (`ApprovalCard`)
+- list rows, form panels, fact tiles, notes, and the dark toast
+
+The same classes of components means these pages match the designed ones and each other.
+
+### 11.1 Leave (`/hrms/leave`): done
+- **Views and who sees them:**
+  - My leave, Apply and Balances: everyone except admins (the client's rule).
+  - Approvals and Decided: people with `hrms.leave.approve.l1`; WFH cards need `wfh.approve` to decide.
+  - Calendar, Leave types and Holidays: everyone; editing stays permission-gated.
+  - The view is in `?tab=`, as before, so notification and dashboard links still land on the right view.
+- **Approvals:** one queue of approval cards for leave and work from home, with a decision note. Rejecting WFH asks for a note (the server requires one). Each queue loads only for people who may decide it; employees used to trigger refused calls here.
+- **Apply:** balance tiles and a form panel. The preview counts days minus the company's weekly off days and says holidays come off when sent. Overlap, balance, past-date and reason checks are as before.
+- **Cancel:** now asks first, in a dialog.
+- **Bug fixed:** the leave form and leave calendar compared the API's ISO weekdays (Sat = 6, Sun = 7) with JavaScript's `getDay()` (Sun = 0). Sunday counted as a working day in the preview, and the calendar greyed out only Saturday. A shared `jsWeekendDays` now converts them.
+- **Navigation fixed:** employees had no Leave entry (the Leave group is for approvers), and "Me" appeared twice. There is now one "Me" with Overview, Attendance, Leave, Payslips, Salary, Work from home and Shift change as tabs. The last three were reachable only through links before.
+- **Checked live:** `e2e/recovery/live-design-leave.mjs`, 11/11. The employee's nav and views are right; a Fri–Mon request previews and saves 2 days; the owner approves it from its card; the employee cancels through the dialog; no refused calls. The request and balance are put back afterwards.

@@ -5,6 +5,7 @@ import { useToast } from '@/shared/hooks/useToast'
 import { usePermission, P } from '@unifiedtree/sdk'
 import { TableSkeleton } from '@unifiedtree/ui-kit'
 import { HrPageHeader, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
+import { SubHeading } from '@/design/module/ModuleKit'
 import { useHolidays, useCreateHoliday, useDeleteHoliday, type HolidayType } from '../api/useSettings'
 import { useCompanies } from '../api/useOrg'
 
@@ -146,7 +147,7 @@ interface HolidayCalendarProps {
   canEdit?: boolean
 }
 
-export function HolidayCalendar({ canEdit }: HolidayCalendarProps = {}) {
+export function HolidayCalendar({ canEdit, embedded }: HolidayCalendarProps & { /** Inside another page's view tabs: a slim heading, full width. */ embedded?: boolean } = {}) {
   const { toast } = useToast()
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
@@ -175,12 +176,8 @@ export function HolidayCalendar({ canEdit }: HolidayCalendarProps = {}) {
   }
 
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
-      <HrPageHeader
-        title="Holiday Calendar"
-        crumb="Leave Management"
-        subtitle={!isLoading ? `${sorted.length} holiday${sorted.length !== 1 ? 's' : ''} in ${year}` : undefined}
-        actions={
+    <div className={embedded ? 'grid gap-4' : 'mx-auto max-w-5xl p-6 sm:p-8'}>
+      {(() => { const actions = (
           <>
             <div className="flex items-center gap-2">
               <label className="text-xs text-text-secondary font-medium">Year</label>
@@ -203,8 +200,12 @@ export function HolidayCalendar({ canEdit }: HolidayCalendarProps = {}) {
               </HrButton>
             )}
           </>
-        }
-      />
+        )
+        const count = !isLoading ? `${sorted.length} holiday${sorted.length !== 1 ? 's' : ''} in ${year}` : undefined
+        return embedded
+          ? <SubHeading aside={<div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{actions}</div>}>{count ? `Holidays · ${count}` : 'Holidays'}</SubHeading>
+          : <HrPageHeader title="Holiday Calendar" crumb="Leave Management" subtitle={count} actions={actions} />
+      })()}
 
       {isLoading ? (
         <TableSkeleton />

@@ -9,7 +9,7 @@ import {
   UserCheck, Star, Receipt, DollarSign, MapPin,
   Database, Target, Wallet, Plug, Award, Shield, AlertTriangle,
   LayoutGrid, ArrowLeft,
-  Image as ImageIcon, Banknote, UserPlus} from 'lucide-react'
+  Image as ImageIcon, Banknote, UserPlus, Home} from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
@@ -63,7 +63,7 @@ const NAV_ITEMS: NavItemDef[] = [
   // so the analytics home was invisible to them even though every widget on
   // it is permission-gated and 403s cleanly for anything they can't see.
   { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} />, path: '/dashboard', visibleForRoles: ['OWNER', 'SUPER_ADMIN', 'COMPANY_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER'] },
-  { key: 'myworkspace', label: 'My Workspace', icon: <UserCircle2 size={18} />, path: '/me', visibleForRoles: ['EMPLOYEE'] },
+  // Employees reach /me through the Self-service group below (one "Me" in the rail, its pages as tabs).
   { key: 'myteam', label: 'My Team', icon: <Users size={18} />, path: '/team', visibleForRoles: ['DEPT_MANAGER'] },
 ]
 
@@ -162,9 +162,16 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     key: 'ess', label: 'Employee Self Service', icon: <UserCircle2 size={18} />, module: 'hrms',
     children: [
-      { label: 'My Attendance & Leaves', path: '/hrms/attendance', icon: <Clock size={15} />, visibleForRoles: R_ESS },
-      { label: 'My Payslip', path: '/me/payslips', icon: <Receipt size={15} />, visibleForRoles: R_ESS },
-      { label: 'My Profile', path: '/me', icon: <UserCircle2 size={15} />, visibleForRoles: R_ESS },
+      // Everything an employee does for themselves, one rail item with these as tabs.
+      // Leave used to be missing here (the Leave group is for approvers), so an
+      // employee could only reach it from links on their workspace.
+      { label: 'Overview', path: '/me', icon: <UserCircle2 size={15} />, visibleForRoles: R_ESS },
+      { label: 'Attendance', path: '/hrms/attendance', icon: <Clock size={15} />, visibleForRoles: R_ESS },
+      { label: 'Leave', path: '/hrms/leave', icon: <Calendar size={15} />, visibleForRoles: R_ESS },
+      { label: 'Payslips', path: '/me/payslips', icon: <Receipt size={15} />, visibleForRoles: R_ESS },
+      { label: 'Salary', path: '/me/salary', icon: <Wallet size={15} />, visibleForRoles: R_ESS },
+      { label: 'Work from home', path: '/me/wfh', icon: <Home size={15} />, visibleForRoles: R_ESS },
+      { label: 'Shift change', path: '/me/shift-change', icon: <Clock size={15} />, visibleForRoles: R_ESS },
       { label: 'Team Attendance', path: '/team', icon: <Users size={15} />, visibleForRoles: ['DEPT_MANAGER'] },
     ],
   },

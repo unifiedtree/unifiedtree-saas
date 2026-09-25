@@ -102,6 +102,17 @@ export function useWeekendDays(companyId: string | undefined) {
   })
 }
 
+/**
+ * The company's weekly off days as JavaScript weekday numbers (Date.getDay():
+ * Sun=0 .. Sat=6). The API stores ISO days (Mon=1 .. Sun=7, see HR
+ * Configuration and the attendance/leave services), so 7 becomes 0. Sat+Sun
+ * when nothing is set. Comparing the ISO values to getDay() directly (as the
+ * leave form and calendar did) treated Sunday as a working day.
+ */
+export function jsWeekendDays(iso?: number[] | null): Set<number> {
+  return new Set((iso && iso.length ? iso : [6, 7]).map((d) => d % 7))
+}
+
 export function useUpdateHrConfig() {
   const qc = useQueryClient()
   return useMutation({
