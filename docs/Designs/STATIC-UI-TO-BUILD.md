@@ -72,6 +72,8 @@ One designed page serves all three routes. Its own section bar (Analytics · Dai
 
 Checked live: `e2e/recovery/live-design-attendance.mjs`, 26/26. As HR it checks the section bar and tabs, that tiles match the table, the status filter, "Fix this day", that the who's-where breakdown adds up, the report link, and adding, editing and deleting a shift, plus the overtime "note required" check. As an employee it checks their tabs and sends a fix request, which HR then rejects. It also checks for no page errors and no failed API calls. Nothing irreversible is approved.
 
+The w2f extras (overtime details, decided shift requests, shift notes and history, roster since, face device, per-day totals, weekly offs; migration `V143_25__attendance_extras.sql`) have an API-level live test: `e2e/recovery/live-w2f.mjs` (every new or changed endpoint, the DB effects, 403s for refused roles, and cleanup).
+
 | Item | Status | Detail |
 |---|---|---|
 | Daily Logs | Done | The real roster for any past day (date picker), tiles, filters, search, person drawer, **Open full profile** and **View history** (`/hrms/employees/{id}?tab=attendance`). The shift reads "General · 9:00 AM–5:00 PM" from the company's shifts. |
