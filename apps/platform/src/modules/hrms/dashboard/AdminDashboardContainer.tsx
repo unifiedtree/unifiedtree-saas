@@ -10,7 +10,7 @@ import { apiJson, apiBlob } from '@/core/api/client'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { HrDrawer } from '@/shared/components/hr'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
-import { AdminDashboard, type SectionKey, type SectionStatus } from '@/design/dc/AdminDashboard'
+import { AdminDashboard, type SectionKey, type SectionStatus, type ShowKey } from '@/design/dc/AdminDashboard'
 import { DesignFrame, useIsMobile } from '@/design/dc/DesignFrame'
 import { istToday, istHour, addDays, dt, fmtShort, fmtLong, MON } from '@/design/dc/dates'
 import { useCompanies } from '../api/useOrg'
@@ -74,6 +74,9 @@ export function AdminDashboardContainer() {
   const canAudit = usePermission(P.AUDIT_READ)
   const canSeeProbation = usePermission(P.HRMS_PROBATION_REMINDERS_READ)
   const canApproveCorrections = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
+  const canApproveLeave = usePermission(P.HRMS_LEAVE_APPROVE_L1)
+  const canShiftAdmin = usePermission('attendance.workforce.admin' as any)
+  const canRequestLeave = usePermission(P.LEAVE_REQUEST_SELF)
   const canExport = usePermission(P.HRMS_REPORT_HEADCOUNT)
   const canAddEmployee = usePermission(P.HRMS_EMPLOYEE_WRITE)
   const canManageOrg = usePermission(P.ORG_COMPANY_WRITE)
@@ -224,10 +227,22 @@ export function AdminDashboardContainer() {
     probations: { state: status(probations, canSeeProbation && canReadEmployees, !d.probations.length), retry: () => probations.refetch() },
   }
 
+  // Sections and cards the viewer has no permission for are hidden rather than shown
+  // empty (the design's rule). Each flag is the permission its endpoint checks.
+  const showDept = canReadEmployees && canExport
+  const show: Record<ShowKey, boolean> = {
+    live: canReadTeam || canReadEmployees, summary: canReadCompany, att: canReadTeam,
+    dept: showDept, performers: canReadPerformance, onboarding: canReadOnboarding, emp: showDept || canReadPerformance || canReadOnboarding, directory: canReadEmployees,
+    projects: canReadProjects, recruit: canReadHiring || canReadProjects,
+    activity: canAudit, payact: hasPayroll || canAudit,
+    notices: canReadCompany, probations: canSeeProbation && canReadEmployees,
+    opsAttendance: canReadTeam, opsCorrections: canApproveCorrections, opsLeave: canApproveLeave, ops: canReadTeam || canApproveCorrections || canApproveLeave,
+  }
+
   const quickActions = [
     canReadTeam && { label: 'Attendance', icon: 'clock', path: '/hrms/attendance' },
-    { label: 'Change shifts', icon: 'swap', path: '/hrms/shifts?tab=roster' },
-    { label: 'Add time-off', icon: 'calendarPlus', path: '/hrms/leave?tab=apply' },
+    canShiftAdmin && canReadTeam && { label: 'Change shifts', icon: 'swap', path: '/hrms/shifts?tab=roster' },
+    canRequestLeave && { label: 'Add time-off', icon: 'calendarPlus', path: '/hrms/leave?tab=apply' },
     hasPayroll && { label: 'Run payroll', icon: 'rupee', path: '/hrms/payroll-dashboard' },
     canViewReports && { label: 'View reports', icon: 'fileText', path: '/hrms/reports' },
     canManageOrg && { label: 'Org setup', icon: 'building', path: '/hrms/organization' },
@@ -243,6 +258,7 @@ export function AdminDashboardContainer() {
       <AdminDashboard
         data={d}
         sec={sec}
+        show={show}
         date={date}
         onDate={setDate}
         mobile={mobile}

@@ -192,6 +192,7 @@ const RoleDashboard: React.FC = () => {
   // backend allows.
   const canWriteEmployee = usePermission(P.HRMS_EMPLOYEE_WRITE)
   const canManageOrg     = usePermission(P.ORG_COMPANY_WRITE)
+  const canRequestLeave  = usePermission(P.LEAVE_REQUEST_SELF)
 
   /* ── Role bucket. Used only for the client rule on workforce-wide tiles
    *  below; every other gate is the permission check above. See useRoles.ts
@@ -293,8 +294,9 @@ const RoleDashboard: React.FC = () => {
     // again). See Employees.tsx which reads the query param and strips it.
     ...(canWriteEmployee ? [{ label: 'Add Employee', icon: UserPlus, path: '/hrms/employees?add=1' }] : []),
     ...(canRunPayroll ? [{ label: 'Run Payroll', icon: Banknote, path: '/hrms/payroll-dashboard' }] : []),
-    { label: 'Attendance', icon: Clock, path: '/hrms/attendance' },
-    { label: 'Add Time-Off', icon: CalendarDays, path: '/hrms/leave' },
+    // Shown only to people who can open them (hidden, never a dead end).
+    ...(canSelfCheckin || canReadTeamAttendance ? [{ label: 'Attendance', icon: Clock, path: '/hrms/attendance' }] : []),
+    ...(canRequestLeave ? [{ label: 'Add Time-Off', icon: CalendarDays, path: '/hrms/leave' }] : []),
     ...(canManageOrg ? [{ label: 'Org Setup', icon: Building2, path: '/hrms/organization' }] : []),
     ...(canViewReports ? [{ label: 'View Reports', icon: FileText, path: '/hrms/reports' }] : []),
   ]

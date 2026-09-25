@@ -71,6 +71,40 @@ function wrapIf(s, marker, flag) {
   const block = xImportBlock(s, s.slice(start, i + marker.length))
   return s.slice(0, start) + `<sc-if value="{{ ${flag} }}">` + block + '</sc-if>' + s.slice(start + block.length)
 }
+/** End index of the <div> element that opens at `start` (balanced). */
+function divEnd(s, start) {
+  const re = /<(\/?)div\b[^>]*>/g
+  re.lastIndex = start
+  let depth = 0, m
+  while ((m = re.exec(s))) { depth += m[1] ? -1 : 1; if (depth === 0) return re.lastIndex }
+  throw new Error('unbalanced div at ' + start)
+}
+/** Wrap the white card (background:#fff, 16px radius) that contains `marker` in <sc-if value="{{ flag }}">. */
+function wrapCard(s, marker, flag) {
+  const i = s.indexOf(marker)
+  if (i < 0) throw new Error('wrapCard marker not found: ' + marker)
+  for (let j = s.lastIndexOf('<div ', i); j >= 0; j = s.lastIndexOf('<div ', j - 1)) {
+    const tag = s.slice(j, s.indexOf('>', j))
+    if (!tag.includes('background:#fff') || !tag.includes('border-radius:16px')) continue
+    const end = divEnd(s, j)
+    if (end > i) return s.slice(0, j) + `<sc-if value="{{ ${flag} }}">` + s.slice(j, end) + '</sc-if>' + s.slice(end)
+  }
+  throw new Error('wrapCard: no card around ' + marker)
+}
+/** Wrap the <tag> element whose opening tag contains `marker` (no nesting of the same tag inside). */
+function wrapTag(s, marker, tag, flag) {
+  const i = s.indexOf(marker)
+  if (i < 0) throw new Error('wrapTag marker not found: ' + marker)
+  const start = s.lastIndexOf('<' + tag, i), end = s.indexOf('</' + tag + '>', i) + tag.length + 3
+  return s.slice(0, start) + `<sc-if value="{{ ${flag} }}">` + s.slice(start, end) + '</sc-if>' + s.slice(end)
+}
+/** Wrap the <section> that opens with `marker`. */
+function wrapSection(s, marker, flag) {
+  const a = s.indexOf(marker)
+  if (a < 0) throw new Error('wrapSection marker not found: ' + marker)
+  const b = s.indexOf('</section>', a) + '</section>'.length
+  return s.slice(0, a) + `<sc-if value="{{ ${flag} }}">` + s.slice(a, b) + '</sc-if>' + s.slice(b)
+}
 /** Replace every occurrence of `{{ token }}`, in order, with the matching key. */
 function sequence(s, token, keys, fmt) {
   const parts = s.split(`{{ ${token} }}`)
@@ -132,6 +166,15 @@ const DERIVED = {
     t = replaceOnce(t, 'min="2026-09-23"', 'min="{{ todayMin }}"')
     // Notice management (add / edit / archive) is for people who may write notices.
     for (const marker of ['sc-camel-on-click="{{ openNotice }}"', 'sc-camel-on-click="{{ n.onEdit }}"', 'sc-camel-on-click="{{ n.onArchive }}"']) t = wrapIf(t, marker, 'canManageNotices')
+    // Sections and cards the viewer has no permission for are hidden, not shown
+    // as an empty box (the design's rule; STATIC-UI-TO-BUILD §2). The container
+    // sets each `show.*` from the permission its endpoint checks.
+    for (const [marker, flag] of [['sec.dept.isLive', 'show.dept'], ['sec.performers.isLive', 'show.performers'], ['sec.onboarding.isLive', 'show.onboarding'],
+      ['sec.projects.isLive', 'show.projects'], ['sec.activity.isLive', 'show.activity'], ['sec.probations.isLive', 'show.probations']]) t = wrapCard(t, marker, flag)
+    t = wrapTag(t, 'sc-camel-on-click="{{ goEmployees }}"', 'button', 'show.directory')
+    for (const [marker, flag] of [['<section aria-labelledby="sec-live"', 'show.live'], ['<section aria-labelledby="sec-summary"', 'show.summary'], ['<section aria-labelledby="sec-att"', 'show.att'],
+      ['<section aria-labelledby="sec-emp"', 'show.emp'], ['<section aria-label="Recruitment and projects"', 'show.recruit'], ['<section aria-label="Payroll and activity"', 'show.payact'],
+      ['<section aria-labelledby="sec-notices"', 'show.notices'], ['<section aria-labelledby="sec-ops"', 'show.ops']]) t = wrapSection(t, marker, flag)
     return '<x-dc>\n' + t + '\n</x-dc>\n'
   },
 }
