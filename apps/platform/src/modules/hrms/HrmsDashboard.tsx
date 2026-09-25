@@ -915,6 +915,6 @@ const RoleDashboard: React.FC = () => {
 
 // Company-admin recovery leaves the existing staff dashboard behavior intact.
 export const HrmsDashboard: React.FC = () => {
-  const { isAdmin } = useRoles()
-  return isAdmin ? <AdminDashboardContainer /> : <RoleDashboard />
+  const { isEmployee } = useRoles()
+  return !isEmployee ? <AdminDashboardContainer /> : <RoleDashboard />
 }

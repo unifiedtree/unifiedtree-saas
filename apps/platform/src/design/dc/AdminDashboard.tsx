@@ -94,7 +94,8 @@ export class AdminDashboard extends DCLogic {
       return { icon: ic(icon, 17), color, label, value: loading ? skel : value, sub: loading ? 'Loading…' : sn.text, chart: loading ? null : sn.extra, tip: '→ ' + path, onClick: () => go(path) }
     }
     const liveTiles = [
-      p.canReadEmployees && tile('users', 'blue', 'Total Employees', c.total, sub(liveEmpty || s.active == null ? 'Employee directory' : `${s.active} active · employee directory`, ratio((s.active ?? 0) / T, 'blue', liveLoading, liveEmpty || s.active == null)), '/hrms/employees', liveLoading),
+      // With no roster in scope today (the attendance API scopes it to a non-HR role's own team), show the directory's active count rather than a contradicting 0.
+      p.canReadEmployees && tile('users', 'blue', 'Total Employees', liveEmpty && s.active != null ? s.active : c.total, sub(liveEmpty || s.active == null ? 'Employee directory' : `${s.active} active · employee directory`, ratio((s.active ?? 0) / T, 'blue', liveLoading, liveEmpty || s.active == null)), '/hrms/employees', liveLoading),
       p.canReadTeam && tile('userCheck', 'green', 'Present', c.present, sub(`Checked in ${dayWord}`, spark(win.map((w) => w.present), 'green', liveLoading, liveEmpty)), att('PRESENT'), liveLoading),
       p.canReadTeam && tile('userMinus', 'orange', 'On Leave', c.onLeave, sub(`Approved leave ${dayWord} · ${pct(c.onLeave)}%`, ratio(c.onLeave / T, 'orange', liveLoading, liveEmpty)), att('ON_LEAVE'), liveLoading),
       p.canReadTeam && tile('alert', 'red', 'Late Arrivals', c.late, sub(liveEmpty || !c.late ? 'No one late' : 'Needs attention · see who', spark(win.map((w) => w.late), 'red', liveLoading, liveEmpty)), att('LATE'), liveLoading),

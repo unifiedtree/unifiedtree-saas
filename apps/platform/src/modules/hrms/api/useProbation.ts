@@ -48,9 +48,11 @@ export function useUpdateProbationConfig() {
   })
 }
 
-export function useUpcomingProbations(days = 30) {
+export function useUpcomingProbations(days = 30, enabled = true) {
   return useQuery({
     queryKey: [...KEY, 'upcoming', days],
+    // GET /v1/probation/upcoming checks hrms.employee.read.
+    enabled,
     queryFn: () => apiJson<UpcomingProbation[]>(`/v1/probation/upcoming?days=${days}`),
     staleTime: 30_000,
   })

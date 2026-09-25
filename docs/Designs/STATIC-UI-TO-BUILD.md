@@ -513,3 +513,15 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - `live-exit-center` 12/12 and `live-employee-exit` pass.
   - `live-fnf-tabs` 27/27. Updated because the view tabs are pressed-state buttons, not ARIA tabs, and a zero count shows no badge.
   - `live-fnf-admin` passes all three steps. This was the open failure: the payer was looking for the approved settlement under Pending approval.
+
+### 11.5 Dashboard for every role (`/dashboard`): done
+- **Who gets which dashboard:**
+  - Before: HR managers, finance leads and department managers got the old role dashboard; only admins had the designed one.
+  - Now: every role except plain employees gets the designed dashboard. Each of its cards was already gated by the permission its data needs.
+  - Plain employees keep their staff dashboard, and their landing page is My workspace.
+- **Fixed:**
+  - Upcoming probations called `/v1/probation/upcoming`, which needs `hrms.employee.read`, for managers who don't hold it (a 403 on every visit). The query and card are now gated.
+  - For a non-HR role with no team roster today, "Total Employees" showed 0 above "6 active". It now shows the directory's active count.
+- **Checked live:**
+  - The manager and finance lead dashboards make no refused calls.
+  - `live-design-dashboard` 12/12 and `live-staff-dashboard` 12/12.

@@ -108,7 +108,7 @@ export function AdminDashboardContainer() {
   const activity = useActivityFeed(5, canAudit)
   const notices = useQuery({ queryKey: ['dashboard', 'notices', companyId, 0], queryFn: () => apiJson<{ content: Notice[]; totalElements: number }>(`/v1/admin/dashboard/notices?companyId=${companyId}&page=0&size=5`), enabled: canReadCompany && !!companyId })
   const milestones = useMilestones({ birthdayDays: 14, anniversaryDays: 31, retirementMonths: 6 })
-  const probations = useUpcomingProbations(30)
+  const probations = useUpcomingProbations(30, canReadEmployees)
   const corrections = useCorrectionApprovals('PENDING', { enabled: canApproveCorrections, size: 1 })
   const leaveOverview = useLeaveOverview()
 
@@ -221,7 +221,7 @@ export function AdminDashboardContainer() {
     activity: { state: status(activity, canAudit, !d.activity.length), retry: () => activity.refetch() },
     notices: { state: status(notices, canReadCompany, !d.notices.length), retry: () => notices.refetch() },
     milestones: { state: status(milestones, true, !(d.milestones.birthdays.length + d.milestones.anniversaries.length + d.milestones.retirements.length)), retry: () => milestones.refetch() },
-    probations: { state: status(probations, canSeeProbation, !d.probations.length), retry: () => probations.refetch() },
+    probations: { state: status(probations, canSeeProbation && canReadEmployees, !d.probations.length), retry: () => probations.refetch() },
   }
 
   const quickActions = [
