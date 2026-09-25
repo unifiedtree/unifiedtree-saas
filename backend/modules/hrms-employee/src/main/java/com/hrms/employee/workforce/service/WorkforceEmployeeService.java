@@ -369,6 +369,10 @@ public class WorkforceEmployeeService {
                 ? req.employmentType() : WorkforceEmployee.EmploymentType.FULL_TIME);
         e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.PROBATION);
         e.setDateOfJoining(req.dateOfJoining());
+        // Default probation (HR Configuration → Probation → Default probation):
+        // the end date is the joining date plus the company's months. 0 months
+        // means new hires start confirmed, without probation.
+        applyDefaultProbation(e, companyProbationMonths(req.companyId()));
         e.setCtcAnnual(req.ctcAnnual());
 
         e.setPanNumber(req.panNumber());
@@ -520,6 +524,34 @@ public class WorkforceEmployeeService {
     // from settings.hr_configuration and atomically increments the counter.
     // Runs inside the surrounding @Transactional so a downstream failure in
     // create() rolls back the counter bump too — no gaps under load.
+    /** Months of probation a new hire gets when none is given (HR Configuration; 6 when the company has no row yet). */
+    static final int DEFAULT_PROBATION_MONTHS = 6;
+
+    /** The company's default probation length in months (HR Configuration), {@value #DEFAULT_PROBATION_MONTHS} when unset. */
+    private int companyProbationMonths(UUID companyId) {
+        if (companyId == null) return DEFAULT_PROBATION_MONTHS;
+        Integer months = jdbc.query(
+                "SELECT probation_period_months FROM settings.hr_configuration WHERE company_id = ?",
+                rs -> rs.next() ? (Integer) rs.getObject(1) : null, companyId);
+        return months == null || months < 0 ? DEFAULT_PROBATION_MONTHS : months;
+    }
+
+    /**
+     * Sets a new hire's probation from the company default, unless a probation
+     * end date is already there. {@code months > 0}: ends on the joining date
+     * plus that many months. {@code months == 0}: no probation, so the person
+     * starts confirmed on their joining date. Nothing changes without a joining date.
+     */
+    static void applyDefaultProbation(WorkforceEmployee e, int months) {
+        if (e.getProbationEndDate() != null || e.getDateOfJoining() == null) return;
+        if (months > 0) {
+            e.setProbationEndDate(e.getDateOfJoining().plusMonths(months));
+        } else {
+            e.setEmploymentStatus(WorkforceEmployee.EmploymentStatus.ACTIVE);
+            e.setConfirmationDate(e.getDateOfJoining());
+        }
+    }
+
     /** The company's weekly off days from HR Configuration as "6,7"; Sat+Sun if it has none. */
     private String companyOffDaysCsv(UUID companyId) {
         if (companyId == null) return "6,7";
