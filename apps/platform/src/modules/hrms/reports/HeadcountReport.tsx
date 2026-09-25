@@ -6,7 +6,7 @@ import { HrStatusPill } from '@/shared/components/hr'
 import { useHeadcountReport } from '@/modules/hrms/api/useReports'
 import { stackedBarsSvg } from '@/shared/export/charts'
 import { useReportCompany } from './useReportCompany'
-import { todayIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, pctOf, sortKey, slug, printHead, printKpis, printTable, type Kpi } from './ReportKit'
+import { todayIso, longDate, ReportPage, KpiRow, KPI_ICON, ReportSection, BarsChart, ReportTable, DateFilter, downloadChart, num, pctOf, sortKey, slug, type Kpi } from './ReportKit'
 
 const SERIES: [string, string][] = [['Active', '#0f6e56'], ['On notice', '#34d399'], ['Probation', '#a7f3d0']]
 const long = longDate
@@ -28,7 +28,8 @@ export function HeadcountReport() {
   }))
   type Row = (typeof rows)[number]
   const t = rows.reduce((a, r) => ({ total: a.total + r.total, active: a.active + r.active, notice: a.notice + r.notice, probation: a.probation + r.probation }), { total: 0, active: 0, notice: 0, probation: 0 })
-  const open = canDirectory ? (r: Row) => navigate(`/hrms/employees?co=${co.company}${r.deptId ? `&departmentId=${r.deptId}` : ''}`) : undefined
+  // "No department" opens the people without one (departmentId=none).
+  const open = canDirectory ? (r: Row) => navigate(`/hrms/employees?co=${co.company}&departmentId=${r.deptId || 'none'}`) : undefined
   const state = q.isLoading ? 'loading' : q.error ? 'error' : rows.length ? 'live' : 'empty'
   const named = rows.filter((r) => !r.none).length
 
@@ -55,13 +56,12 @@ export function HeadcountReport() {
       exports={{
         fileBase, csvParams: { asOf },
         sheets: () => [{ name: 'Summary', widths: [26, 30], rows: [['Headcount report', ''], ['Company', co.companyName], ['As of', long(asOf)], ...kpis.map((k) => [k.label, k.value])] }, { name: 'Departments', widths: [28, 10, 10, 12, 12, 10], rows: [HEAD, ...table(), ['Total', t.total, t.active, t.notice, t.probation, 100]] }],
-        print: () => printHead('Headcount report', `${co.companyName} · as of ${long(asOf)}`) + printKpis(kpis) + `<div class="card">${chart().svg}</div>` + printTable('Departments', HEAD, table(), ['Total', t.total, t.active, t.notice, t.probation, 100]),
       }}>
       <KpiRow items={kpis} />
       <ReportSection title="Headcount by department" pill={<HrStatusPill tone="green">{`${named} ${named === 1 ? 'dept' : 'depts'}`}</HrStatusPill>} legend={SERIES}
-        onDownload={() => downloadChart(`headcount-by-department-${slug(co.companyName)}-${asOf}.png`, chart(), { report: 'Headcount', company: co.companyName })}>
+        onDownload={() => downloadChart(`headcount-by-department-${slug(co.companyName)}-${asOf}.png`, chart(), { report: 'headcount', companyId: co.company, filters: { asOf } })}>
         <BarsChart series={SERIES} footnote="Click to open in directory"
-          bars={rows.map((r) => ({ key: r.id, label: r.dept, none: r.none, parts: [r.active, r.notice, r.probation], onClick: open ? () => open(r) : undefined, hint: open ? (r.none ? 'Open this company’s directory' : `Open ${r.dept} in the directory`) : undefined }))} />
+          bars={rows.map((r) => ({ key: r.id, label: r.dept, none: r.none, parts: [r.active, r.notice, r.probation], onClick: open ? () => open(r) : undefined, hint: open ? (r.none ? 'Open the people without a department' : `Open ${r.dept} in the directory`) : undefined }))} />
       </ReportSection>
       <ReportTable<Row & { sT: string; sA: string; sN: string; sP: string }>
         title="Departments" subtitle={open ? 'Click a department to open it in the Workforce Directory' : undefined}

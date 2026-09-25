@@ -1,13 +1,16 @@
 // Audit logs (/audit-logs), on the module kit: who did what, when, from where.
 // GET /v1/audit/events (audit.read) is paged and filterable by action,
-// resource, actor, resource id and a date range. There's no server export, so
-// "Export this page" writes the rows on screen to a CSV and says so.
+// resource, actor (user id or email), resource id and a date range. "Export
+// all" downloads every matching event from GET /v1/audit/events/export.csv,
+// streamed by the server with the same filters; the export is recorded in the
+// Reports Center's download history and in this trail.
 import React, { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { HrButton, HrStatusPill, TableCard, HrDrawer, type PillTone, type FilterDef } from '@/shared/components/hr'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import { useDebounce } from '@/shared/hooks/useDebounce'
-import { csvBlob, saveAndRecord } from '@/shared/export/fileExport'
+import { apiBlob } from '@/core/api/client'
+import { saveServerFile } from '@/shared/export/fileExport'
 import { ModulePage, State, Facts, Note, useDesignToast, stamp, todayIso } from '@/design/module/ModuleKit'
 import { dashIcon } from '@/design/dc/icons'
 import { useAuditEvents, type AuditEventDto } from '@/modules/hrms/api/useAudit'
@@ -39,6 +42,7 @@ export const AuditLogs: React.FC = () => {
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [selected, setSelected] = useState<AuditEventDto | null>(null)
+  const [exporting, setExporting] = useState(false)
   const debouncedActor = useDebounce(actor, 350)
   const debouncedResourceId = useDebounce(resourceId, 350)
   // The date boxes are whole local days: "to" includes all of that day (it used to stop at its UTC midnight).
@@ -66,18 +70,27 @@ export const AuditLogs: React.FC = () => {
   ]
   useClampedPage(page, totalPages || undefined, setPage)
   const hasFilters = auditFilters.some((f) => f.value !== '')
-  const exportPage = () => {
-    const rows = [['When', 'Who', 'Email', 'Action', 'Resource', 'Record ID', 'IP', 'Trace ID'],
-      ...events.map((e) => [new Date(e.occurredAt).toLocaleString('en-IN'), actorOf(e), e.actorEmail ?? '', e.action, e.resourceType ?? '', e.resourceId ?? '', e.ip ?? '', e.traceId ?? ''])]
-    saveAndRecord(`audit-log-${todayIso()}-page${page + 1}.csv`, csvBlob(rows), { report: 'Audit log (one page)', fmt: 'CSV' })
-    show(`Exported ${events.length} ${events.length === 1 ? 'event' : 'events'}`, false, 'Only the rows on this page. Narrow the filters or raise rows per page to take more.')
+  // Every event matching the filters (not just this page), streamed by the server.
+  const exportAll = async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const qs = new URLSearchParams(Object.entries(filters).filter(([k]) => k !== 'page' && k !== 'size').map(([k, v]) => [k, String(v)]))
+      const blob = await apiBlob(`/v1/audit/events/export.csv${qs.toString() ? `?${qs}` : ''}`)
+      saveServerFile(`audit-log-${todayIso()}.csv`, blob)
+      show('Audit log exported', false, hasFilters ? 'Every event that matches these filters, newest first.' : 'Every event recorded, newest first.')
+    } catch (e) {
+      show('Couldn’t export the audit log', true, (e as Error)?.message)
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
     <ModulePage crumb="Settings" title="Audit logs" subtitle="Who did what, and when: sign-ins, changes, exports and permission updates."
       actions={<>
         <HrButton variant="ghost" onClick={() => refetch()} disabled={isFetching}>{isFetching ? 'Refreshing…' : 'Refresh'}</HrButton>
-        <HrButton onClick={exportPage} disabled={!events.length}>{dashIcon('download', 15)} Export this page</HrButton>
+        <HrButton onClick={exportAll} disabled={!events.length || exporting} title="Downloads every event that matches the filters as a CSV, not just this page">{dashIcon('download', 15)} {exporting ? 'Exporting…' : 'Export all (CSV)'}</HrButton>
       </>}>
       <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
         {meta && <Note>{`${meta.total.toLocaleString('en-IN')} ${meta.total === 1 ? 'event' : 'events'}${hasFilters ? ' match these filters' : ' recorded'}. Click a row for the full details and what changed.`}</Note>}
@@ -98,7 +111,7 @@ export const AuditLogs: React.FC = () => {
                           </td>
                           <td className="text-text-primary">{actorOf(row)}{row.actorName && row.actorEmail && <div className="text-xs text-text-tertiary">{row.actorEmail}</div>}</td>
                           <td><HrStatusPill tone={actionTone(row.action)}>{words(row.action)}</HrStatusPill></td>
-                          <td className="hidden md:table-cell text-text-secondary">{row.resourceType ? words(row.resourceType) : '—'}</td>
+                          <td className="hidden md:table-cell text-text-secondary">{row.resourceType ? words(row.resourceType) : '—'}{row.resourceName && <div className="text-xs text-text-tertiary">{row.resourceName}</div>}</td>
                           <td className="hidden lg:table-cell"><span className="hr-mono text-xs">{row.ip ?? '—'}</span></td>
                           <td className="text-right"><HrButton size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setSelected(row) }}>{row.diff ? 'What changed' : 'Details'}</HrButton></td>
                         </tr>
@@ -125,6 +138,7 @@ function EventDetail({ event }: { event: AuditEventDto }) {
         { k: 'Who', v: [event.actorName, event.actorEmail].filter(Boolean).join(' · ') || (event.actorUserId ? 'A user' : 'System') },
         { k: 'Action', v: <HrStatusPill tone={actionTone(event.action)}>{words(event.action)}</HrStatusPill> },
         { k: 'Resource', v: event.resourceType ? words(event.resourceType) : '—' },
+        ...(event.resourceName ? [{ k: 'Record', v: event.resourceName }] : []),
         { k: 'IP address', v: event.ip ?? '—' },
       ]} />
       <Facts min={260} items={[

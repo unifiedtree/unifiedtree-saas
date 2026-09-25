@@ -17,6 +17,10 @@ export interface AuditEventDto {
   ip?: string | null
   userAgent?: string | null
   traceId?: string | null
+  /** The record's display name (an employee's name, a payroll month…), when the server can resolve it. */
+  resourceName?: string | null
+  /** The app route that opens the record, when it has one. */
+  resourcePath?: string | null
 }
 
 export interface AuditPage {

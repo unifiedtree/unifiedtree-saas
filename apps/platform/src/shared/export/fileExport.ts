@@ -1,8 +1,11 @@
 // Client-side file exports used by the report pages and Workforce Analytics:
-// CSV, a real .xlsx workbook (a small store-only ZIP writer, no dependency),
-// PNG from an SVG chart, a print-ready snapshot (the browser's "Save as PDF")
-// and a list of what this browser downloaded recently. Everything is built from
-// data the page already has; nothing is sent anywhere.
+// CSV, a real .xlsx workbook (a small store-only ZIP writer, no dependency) and
+// PNG from an SVG chart, all built from data the page already has. PDFs come
+// from the server. Every download is recorded in the workspace's export log
+// (hrms.report_exports): the server logs the files it builds, and files built
+// here are recorded with POST /v1/reports/exports, so the Reports Center's
+// "Recent downloads" is shared and auditable.
+import { apiJson } from '@/core/api/client'
 
 export type Cell = string | number | null | undefined
 
@@ -82,7 +85,7 @@ export function xlsxBlob(sheets: Sheet[]): Blob {
   ])
 }
 
-// ── charts and print ─────────────────────────────────────────────────────────
+// ── charts ───────────────────────────────────────────────────────────────────
 /** Rasterises a standalone SVG string (it must carry width/height) to a PNG at 2x. */
 export function svgToPng(svg: string, width: number, height: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -102,53 +105,34 @@ export function svgToPng(svg: string, width: number, height: number): Promise<Bl
 
 export const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-/**
- * Opens a print-ready page (A4, the app's fonts and colours) and the browser's
- * print dialog, where "Save as PDF" makes the file. Returns false when a popup
- * blocker stopped the window.
- */
-export function printDocument(title: string, bodyHtml: string): boolean {
-  const w = window.open('', '_blank', 'noopener=no,width=1024,height=800')
-  if (!w) return false
-  w.document.open()
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
-<style>
-@page { size: A4; margin: 14mm }
-* { box-sizing: border-box }
-body { margin: 0; font-family: 'Plus Jakarta Sans', Inter, -apple-system, Segoe UI, sans-serif; color: #0f172a; font-variant-numeric: tabular-nums; -webkit-print-color-adjust: exact; print-color-adjust: exact }
-h1 { font-size: 22px; margin: 0 0 4px } h2 { font-size: 15px; margin: 0 0 10px }
-.muted { color: #64748b; font-size: 12.5px }
-.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0 }
-.kpi { border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px } .kpi b { display: block; font-size: 20px; margin-top: 2px }
-.card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px 16px; margin: 0 0 12px; break-inside: avoid }
-table { width: 100%; border-collapse: collapse; font-size: 12px } th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #f1f5f9 } th { background: #f8fafc; font-weight: 700 }
-tfoot td { font-weight: 800; border-top: 2px solid #e2e8f0 }
-svg { max-width: 100% }
-</style></head><body>${bodyHtml}<script>window.onload=function(){setTimeout(function(){window.focus();window.print()},250)}</script></body></html>`)
-  w.document.close()
-  return true
-}
+// ── the export log ───────────────────────────────────────────────────────────
+/** Report keys the export log knows (ReportKind on the server). */
+export type ExportReportKey =
+  | 'headcount' | 'attrition' | 'attendance-summary' | 'leave-balance' | 'late-marks' | 'diversity'
+  | 'workforce-analytics' | 'audit-log' | 'employee-directory'
+export type ExportFilters = Record<string, string | number | boolean | null | undefined>
+export interface ExportMeta { report: ExportReportKey; fmt: 'XLSX' | 'CSV' | 'PNG'; companyId?: string; filters?: ExportFilters; rows?: number }
 
-// ── recent downloads (this browser only) ─────────────────────────────────────
-export interface DownloadRecord { id: string; file: string; report: string; fmt: string; at: string; size: number; company?: string }
-const KEY = 'ut.recentDownloads'
+/** Tells an open Reports Center to reload its "Recent downloads". */
+const changed = () => { try { window.dispatchEvent(new Event('ut-downloads')) } catch { /* no window */ } }
 
-export function recentDownloads(): DownloadRecord[] {
-  try { const v = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
-}
-
-/** Saves the file and remembers it in this browser's "Recent downloads" (last 20). */
-export function saveAndRecord(file: string, blob: Blob, meta: { report: string; fmt: string; company?: string }) {
+/** A file the server built (and already logged): just save it. */
+export function saveServerFile(file: string, blob: Blob) {
   downloadBlob(file, blob)
-  try {
-    const rec: DownloadRecord = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, file, report: meta.report, fmt: meta.fmt, company: meta.company, at: new Date().toISOString(), size: blob.size }
-    localStorage.setItem(KEY, JSON.stringify([rec, ...recentDownloads()].slice(0, 20)))
-    window.dispatchEvent(new Event('ut-downloads'))
-  } catch { /* storage full or blocked: the download itself still happened */ }
+  changed()
 }
 
-export function clearRecentDownloads() {
-  try { localStorage.removeItem(KEY); window.dispatchEvent(new Event('ut-downloads')) } catch { /* ignore */ }
+/**
+ * Saves a file built in this browser and records it in the workspace's export
+ * log. The download never waits for (or fails because of) the log entry.
+ */
+export function saveAndRecord(file: string, blob: Blob, meta: ExportMeta) {
+  downloadBlob(file, blob)
+  const filters = Object.fromEntries(Object.entries(meta.filters ?? {}).filter(([, v]) => v !== undefined && v !== ''))
+  apiJson('/v1/reports/exports', {
+    method: 'POST',
+    body: JSON.stringify({ report: meta.report, format: meta.fmt, fileName: file, companyId: meta.companyId || null, filters, rowCount: meta.rows ?? null, sizeBytes: blob.size }),
+  }).then(changed, () => { /* the file is saved; the log entry is best-effort */ })
 }
 
 export const fileSize = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
