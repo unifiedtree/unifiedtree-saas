@@ -50,7 +50,8 @@ public class CompanyService {
         c.setCountry(req.country() != null ? req.country() : "India");
         c.setTimezone(req.timezone() != null ? req.timezone() : "Asia/Kolkata");
         c.setCurrency(req.currency() != null ? req.currency() : "INR");
-        c.setFiscalYearStart(req.fiscalYearStart() != null ? req.fiscalYearStart() : "APRIL");
+        c.setFiscalYearStart(req.fiscalYearStart() != null && !req.fiscalYearStart().isBlank()
+                ? fiscalMonth(req.fiscalYearStart()) : "APRIL");
         c.setActive(true);
         try {
             return toResponse(repository.save(c));
@@ -88,11 +89,27 @@ public class CompanyService {
         if (req.country()            != null) c.setCountry(req.country());
         if (req.timezone()           != null) c.setTimezone(req.timezone());
         if (req.currency()           != null) c.setCurrency(req.currency());
-        if (req.fiscalYearStart()    != null) c.setFiscalYearStart(req.fiscalYearStart());
+        if (req.fiscalYearStart()    != null) c.setFiscalYearStart(fiscalMonth(req.fiscalYearStart()));
         try {
             return toResponse(repository.save(c));
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             throw new BusinessRuleException("Company with this name already exists", "DUPLICATE_COMPANY");
+        }
+    }
+
+    /**
+     * The company record is the one fiscal year (decision D2, V143.14): HR
+     * Configuration writes the same column. Both store an upper-case month
+     * name ("APRIL"), so everything that reads it agrees.
+     */
+    static String fiscalMonth(String value) {
+        String m = value == null ? "" : value.trim().toUpperCase(java.util.Locale.ROOT);
+        try {
+            java.time.Month.valueOf(m);
+            return m;
+        } catch (IllegalArgumentException notAMonth) {
+            throw new BusinessRuleException("Fiscal year start must be a month name, for example APRIL",
+                    "INVALID_FISCAL_YEAR_START");
         }
     }
 

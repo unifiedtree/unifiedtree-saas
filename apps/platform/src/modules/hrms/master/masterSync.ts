@@ -102,21 +102,17 @@ async function companies({ added, changed }: Diff) {
   return [['hrms', 'companies']]
 }
 
-/** Only one head office per company: the others are switched back to branches. */
-async function demoteOtherHq(r: Rec, env: SyncEnv, keep?: string) {
-  for (const b of env.branches) if (b.co === r.co && b.kind === 'Head office' && b._key && b._key !== keep) await apiJson(`/v1/hrms/branches/${b._key}`, json('PUT', { isHeadquarters: false }))
-}
-async function branches({ added, changed }: Diff, env: SyncEnv) {
+// One head office per company: the server switches the previous one back to a
+// branch in the same save (BranchService, V143.14), so no second call is needed.
+async function branches({ added, changed }: Diff) {
   for (const r of added) {
     const hq = r.kind === 'Head office'
-    const b = await apiJson<{ id: string }>('/v1/hrms/branches', json('POST', { companyId: r.co, name: String(r.name).trim(), code: blank(r.code), city: blank(r.city), state: blank(r.state), isHeadquarters: hq }))
-    if (hq) await demoteOtherHq(r, env, b?.id)
+    await apiJson<{ id: string }>('/v1/hrms/branches', json('POST', { companyId: r.co, name: String(r.name).trim(), code: blank(r.code), city: blank(r.city), state: blank(r.state), isHeadquarters: hq }))
   }
   await each(changed, async ([o, r]) => {
     const hq = r.kind === 'Head office'
     if (changedAny(o, r, ['name', 'code', 'city', 'state', 'kind'])) await apiJson(`/v1/hrms/branches/${r._key}`, json('PUT', { name: String(r.name).trim(), code: r.code ?? '', city: r.city ?? '', state: r.state ?? '', isHeadquarters: hq }))
     if (o.status !== r.status) await apiJson(`/v1/hrms/branches/${r._key}`, json('PUT', { isActive: r.status === 'Active' }))
-    if (hq && o.kind !== 'Head office') await demoteOtherHq(r, env, r._key)
   }, 'branches')
   return [['hrms', 'branches']]
 }

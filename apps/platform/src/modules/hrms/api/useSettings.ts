@@ -121,8 +121,11 @@ export function useUpdateHrConfig() {
         method: 'PUT',
         body: JSON.stringify(input.body),
       }),
-    onSuccess: (_, vars) =>
-      qc.invalidateQueries({ queryKey: ['hrms', 'settings', 'hr-config', vars.companyId] }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['hrms', 'settings', 'hr-config', vars.companyId] })
+      // The fiscal year is saved on the company record (one source), so the company list changes too.
+      if (vars.body.fiscalYearStart !== undefined) qc.invalidateQueries({ queryKey: ['hrms', 'companies'] })
+    },
   })
 }
 

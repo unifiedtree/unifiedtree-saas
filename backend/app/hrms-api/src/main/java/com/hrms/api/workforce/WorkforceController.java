@@ -141,8 +141,11 @@ public class WorkforceController {
     // -- Branches ------------------------------------------------------------
     @GetMapping("/branches")
     @PreAuthorize("hasAuthority('org.company.read') or hasAuthority('platform.admin')")
-    public List<BranchResponse> listBranches(@RequestParam(required = false) UUID companyId) {
-        return companyId == null ? branches.listAll() : branches.listForCompany(companyId);
+    public List<BranchResponse> listBranches(@RequestParam(required = false) UUID companyId,
+                                             @RequestParam(defaultValue = "false") boolean includeArchived) {
+        // includeArchived: archived branches too (isActive=false), for the
+        // Companies & Branches "Inactive" filter. Pickers leave it off.
+        return companyId == null ? branches.listAll(includeArchived) : branches.listForCompany(companyId, includeArchived);
     }
 
     @PostMapping("/branches")
@@ -347,7 +350,7 @@ public class WorkforceController {
         for (UUID company : rows.stream().map(WorkforceEmployeeResponse::companyId).filter(java.util.Objects::nonNull).distinct().toList()) {
             departments.listForCompany(company).forEach(d -> departmentNames.put(d.id(), d.name()));
             designations.listForCompany(company, null).forEach(d -> designationNames.put(d.id(), d.title()));
-            branches.listForCompany(company).forEach(b -> branchNames.put(b.id(), b.name()));
+            branches.listForCompany(company, true).forEach(b -> branchNames.put(b.id(), b.name()));
         }
         // Managers are usually in the same export; the rest are looked up once each.
         java.util.Map<UUID, String> managerNames = new java.util.HashMap<>();

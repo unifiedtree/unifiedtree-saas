@@ -7,6 +7,7 @@
 // Late arrival + Attendance rules edit the company's attendance timing policy
 // (/v1/attendance/policy, attendance.policy.manage, V143.10) and the geofence /
 // work-from-home rules the server now applies.
+// The fiscal year is read from and saved to the company record (one source).
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { P, usePermission } from '@unifiedtree/sdk'
@@ -131,7 +132,9 @@ export function HrConfigurationPage() {
             employeeCodePrefix: f.prefix.toUpperCase(), employeeCodeNextNumber: Number(f.next), employeeCodePadding: f.next.length,
             probationPeriodMonths: f.probationMonths === '' ? undefined : Number(f.probationMonths), defaultNoticePeriodDays: f.noticeDays === '' ? undefined : Number(f.noticeDays),
             retirementAge: f.retirementAge === '' ? undefined : Number(f.retirementAge), workweekStartDay: Number(f.weekStart), weekendDays: f.weekend,
-            enforceGeofencingForMobile: f.geofence, allowWorkFromHome: f.wfh, fiscalYearStart: f.fiscal,
+            enforceGeofencingForMobile: f.geofence, allowWorkFromHome: f.wfh,
+            // The fiscal year lives on the company record: send it only when it was changed here.
+            fiscalYearStart: changed.includes('fiscal') ? f.fiscal : undefined,
           },
         })
       }
@@ -211,7 +214,8 @@ export function HrConfigurationPage() {
           </SettingsGrid>
           {(canProbRead || probEdit) && <SettingsToggleRow label="Extend automatically" detail="If nobody confirms a person by the end date, their probation is extended." on={f.autoExtend} onToggle={() => set('autoExtend', !f.autoExtend)} readOnly={pro} />}
           {f.autoExtend && (canProbRead || probEdit) && <SettingsGrid><SettingsInput label="Extend by" value={f.autoExtendDays} onChange={(v) => set('autoExtendDays', digits(3)(v))} readOnly={pro} error={shown('autoExtendDays')} suffix="days" inputMode="numeric" /></SettingsGrid>}
-          <SettingsNote tone="amber">The default length is saved for this company, but a new hire’s probation end date isn’t set from it yet. Set it on the person’s record (Extend on their page).</SettingsNote>
+          <SettingsNote>People added from now on get a probation end date of their joining date plus this many months. Changing it doesn’t move the dates of people already hired; use Extend on their page for that.</SettingsNote>
+          {f.probationMonths === '0' && <SettingsNote tone="amber">With 0 months, new hires start confirmed on their joining date, with no probation and no probation reminders.</SettingsNote>}
           {canReminders && (
             <div style={{ display: 'grid', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -240,7 +244,7 @@ export function HrConfigurationPage() {
             <SettingsInput label="Default notice period" value={f.noticeDays} onChange={(v) => set('noticeDays', digits(3)(v))} readOnly={ro} error={shown('noticeDays')} suffix="days" inputMode="numeric" />
             <SettingsInput label="Retirement age" value={f.retirementAge} onChange={(v) => set('retirementAge', digits(2)(v))} readOnly={ro} error={shown('retirementAge')} suffix="years" inputMode="numeric" />
           </SettingsGrid>
-          <SettingsNote>The notice period is the suggested last working day when you start someone’s exit in Employee Master. Retirement age is saved for reference; nothing is scheduled from it yet.</SettingsNote>
+          <SettingsNote>The notice period is the suggested last working day when you start someone’s exit in Employee Master. Retirement is counted from each person’s date of birth: the dashboard lists who retires in the next six months, and people with the “Get retirement alerts” permission are alerted 90 and 30 days before.</SettingsNote>
         </SettingsSection>
 
         <SettingsSection id="week" icon="calendarDays" title="Work week" summary={`Starts ${DAY_NAME[Number(f.weekStart)]} · ${weekendText} off`}>
@@ -296,6 +300,7 @@ export function HrConfigurationPage() {
             {ro ? <SettingsValue label="Fiscal year starts in" value={title(f.fiscal)} />
               : <div style={{ display: 'grid', gap: 6 }}><span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>Fiscal year starts in</span><HrSelect value={f.fiscal} onChange={(v: string) => set('fiscal', v)} options={MONTHS.map((m) => ({ value: m, label: title(m) }))} /></div>}
           </SettingsGrid>
+          <SettingsNote>Saved on this company’s record, the one fiscal year everything uses (for example, joiners and leavers “this fiscal year” in the headcount export). April is the Indian financial year, April to March.</SettingsNote>
         </SettingsSection>
       </SettingsPage>
       {status === 'live' && location.pathname.endsWith('/work-time') && <ScrollTo id="st-week" />}

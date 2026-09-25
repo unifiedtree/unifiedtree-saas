@@ -16,21 +16,13 @@ Priorities:
 
 | # | Question | Where | Notes |
 |---|---|---|---|
-| D2 | Which fiscal year is the real one? | HR Configuration's fiscal year vs `hrms.companies.fiscal_year_start` | Keep one and read it everywhere (§8). |
 | D3 | Retire the Geofencing page? | `/hrms/attendance/geofencing` vs the branch geofence in Companies & Branches | Two places set punch zones (§1, §4). |
 
 ---
 
 ## P0: finish first
 
-**P0-2 Apply the HR configuration settings that are only saved** (§8)
-- Default probation length: set `probation_end_date = date_of_joining + N months` on employee create when none is given.
-- Retirement age: a "retirement due" list or alert.
-- *Done when:* each switch changes behaviour, and the page's "saved, not applied" notes are gone.
-
-**P0-9 Enforce one headquarters per company on the server** (§3)
-- *Now:* the UI switches off the old HQ in a second call.
-- *Build:* a unique rule or transactional swap in the branch service.
+All P0 items are done (wave 1).
 
 ---
 

@@ -48,6 +48,9 @@ export type AppNotificationType =
   // TODO(billing-ceiling): drop when the Razorpay ceiling flow retires the
   // grandfather.
   | 'BILLING_OVER_CAP'
+  // Someone reaches the company's retirement age in 90 (then 30) days; sent to
+  // people holding hrms.retirement.alerts. Opens that person's record.
+  | 'RETIREMENT_DUE'
   | 'GENERAL'
 
 /** Raw server DTO (see {@code NotificationDtos.NotificationDto}). */
@@ -217,6 +220,8 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   if (type === 'BILLING_OVER_CAP') return '/plan'
 
   if (type === 'WELCOME') return '/'
+  // Retirement alerts (HR): the retiring person's record.
+  if (type === 'RETIREMENT_DUE') return typeof data?.employeeId === 'string' ? `/hrms/employees/${data.employeeId}` : '/dashboard'
   // Unknown / not-yet-mapped types: land the user on their own workspace
   // dashboard instead of returning undefined (which used to render an
   // un-clickable notification card and lose the deep-link intent).

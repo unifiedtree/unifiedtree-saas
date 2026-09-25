@@ -138,3 +138,49 @@ export function useDiversityReport(companyId: string | null, opts?: { enabled?: 
     staleTime: 60_000,
   })
 }
+
+// ── Headcount workbook (dashboard "Export headcount") ─────────────────────────
+// GET /v1/reports/headcount/workbook: names only, never ids. `employees` is null
+// unless the caller holds hrms.employee.read; `byGender` is null unless they
+// hold hrms.report.diversity. Dates are yyyy-MM-dd.
+
+export interface HeadcountGroup { name: string; total: number; active: number; probation: number; onNotice: number }
+
+export interface HeadcountPerson {
+  employeeCode: string
+  name: string
+  department: string
+  designation: string
+  branch: string
+  employmentType: string
+  status: string
+  dateOfJoining: string | null
+  reportingManager: string | null
+  workEmail: string | null
+  probationEnds: string | null
+  noticeLastDay: string | null
+}
+
+export interface HeadcountWorkbookData {
+  companyName: string
+  asOf: string
+  /** True when the as-of date is before today: statuses are worked out from dates. */
+  pastDate: boolean
+  fiscalYear: { startMonth: string; from: string; to: string; label: string }
+  totals: {
+    total: number; active: number; probation: number; onNotice: number; suspended: number
+    joinedThisMonth: number; leftThisMonth: number; joinedThisFiscalYear: number; leftThisFiscalYear: number
+  }
+  byDepartment: HeadcountGroup[]
+  byBranch: HeadcountGroup[]
+  byDesignation: HeadcountGroup[]
+  byEmploymentType: HeadcountGroup[]
+  genderIncluded: boolean
+  byGender: HeadcountGroup[] | null
+  employeesIncluded: boolean
+  employees: HeadcountPerson[] | null
+}
+
+export function fetchHeadcountWorkbook(companyId: string, asOf: string) {
+  return apiJson<HeadcountWorkbookData>(`/v1/reports/headcount/workbook?companyId=${encodeURIComponent(companyId)}&asOf=${encodeURIComponent(asOf)}`)
+}

@@ -149,12 +149,21 @@ export function useArchiveCompany() {
 
 // ── Branches ──────────────────────────────────────────────────────────────────
 
-export function useBranches(companyId?: string) {
+/**
+ * Branches, active ones only unless `includeArchived` (the Companies & Branches
+ * "Inactive" filter): archived branches come back with `active: false`.
+ * Pickers leave it off so archived branches never appear in them.
+ */
+export function useBranches(companyId?: string, opts?: { includeArchived?: boolean }) {
+  const archived = !!opts?.includeArchived
   return useQuery({
-    queryKey: ['hrms', 'branches', companyId ?? 'all'],
+    queryKey: ['hrms', 'branches', companyId ?? 'all', ...(archived ? ['with-archived'] : [])],
     queryFn: () => {
-      const url = companyId ? `/v1/hrms/branches?companyId=${companyId}` : '/v1/hrms/branches'
-      return apiJson<Branch[]>(url)
+      const qs = new URLSearchParams()
+      if (companyId) qs.set('companyId', companyId)
+      if (archived) qs.set('includeArchived', 'true')
+      const q = qs.toString()
+      return apiJson<Branch[]>(`/v1/hrms/branches${q ? `?${q}` : ''}`)
     },
   })
 }
@@ -177,7 +186,12 @@ export function useCreateBranch() {
   })
 }
 
-/** PUT /v1/hrms/branches/{id} — partial update; only the fields sent change. */
+/**
+ * PUT /v1/hrms/branches/{id} — partial update; only the fields sent change.
+ * `isHeadquarters: true` makes it the company's one headquarters: the server
+ * switches the previous one off in the same save. `isActive: true` restores an
+ * archived branch.
+ */
 export function useUpdateBranch() {
   const qc = useQueryClient()
   return useMutation({

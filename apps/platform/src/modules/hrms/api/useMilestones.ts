@@ -73,3 +73,32 @@ export function useMilestones(params: MilestonesParams = {}, options?: { enabled
     enabled: options?.enabled ?? true,
   })
 }
+
+/**
+ * People reaching their company's retirement age (HR Configuration, from their
+ * date of birth) within the next `days` days, soonest first.
+ * Backend: GET /v1/hrms/retirements/due (needs hrms.employee.read).
+ */
+export interface RetirementDue {
+  employeeId: string
+  employeeCode: string
+  name: string
+  initials: string
+  department: string | null
+  designation: string | null
+  companyName: string
+  retirementAge: number
+  /** yyyy-MM-dd: the day they reach the retirement age. */
+  retirementDate: string
+  daysLeft: number
+}
+
+export function useRetirementsDue(days: number, options?: { companyId?: string; enabled?: boolean }) {
+  const companyId = options?.companyId
+  return useQuery({
+    queryKey: ['hrms', 'retirements', 'due', days, companyId ?? 'all'],
+    queryFn: () => apiJson<RetirementDue[]>(`/v1/hrms/retirements/due?days=${days}${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ''}`),
+    staleTime: STALE_MS,
+    enabled: options?.enabled ?? true,
+  })
+}

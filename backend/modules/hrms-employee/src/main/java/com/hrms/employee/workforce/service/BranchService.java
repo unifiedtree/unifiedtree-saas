@@ -28,15 +28,30 @@ public class BranchService {
 
     @Transactional(readOnly = true)
     public List<BranchResponse> listForCompany(UUID companyId) {
+        return listForCompany(companyId, false);
+    }
+
+    /** {@code includeArchived}: also return archived (inactive) branches, for the "Inactive" filter. */
+    @Transactional(readOnly = true)
+    public List<BranchResponse> listForCompany(UUID companyId, boolean includeArchived) {
         Map<UUID, Integer> counts = headcount.byColumn("branch_id");
-        return repository.findAllByCompanyIdAndActiveTrueOrderByNameAsc(companyId)
+        return (includeArchived
+                ? repository.findAllByCompanyIdOrderByNameAsc(companyId)
+                : repository.findAllByCompanyIdAndActiveTrueOrderByNameAsc(companyId))
                 .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
     }
 
     @Transactional(readOnly = true)
     public List<BranchResponse> listAll() {
+        return listAll(false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<BranchResponse> listAll(boolean includeArchived) {
         Map<UUID, Integer> counts = headcount.byColumn("branch_id");
-        return repository.findAllByActiveTrueOrderByNameAsc()
+        return (includeArchived
+                ? repository.findAllByOrderByNameAsc()
+                : repository.findAllByActiveTrueOrderByNameAsc())
                 .stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
     }
 
@@ -53,7 +68,11 @@ public class BranchService {
         b.setLatitude(req.latitude());
         b.setLongitude(req.longitude());
         b.setGeoFenceRadiusMeters(req.geoFenceRadiusMeters() != null ? req.geoFenceRadiusMeters() : 500);
-        b.setHeadquarters(Boolean.TRUE.equals(req.isHeadquarters()));
+        boolean hq = Boolean.TRUE.equals(req.isHeadquarters());
+        // One headquarters per company: the previous one steps down in this
+        // same transaction, before the new one is flagged (V143.14 index).
+        if (hq) repository.clearHeadquarters(req.companyId());
+        b.setHeadquarters(hq);
         b.setActive(true);
         return toResponse(repository.save(b));
     }
@@ -66,6 +85,12 @@ public class BranchService {
     public BranchResponse update(UUID branchId, WorkforceDtos.UpdateBranchRequest req) {
         Branch b = repository.findById(branchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Branch " + branchId + " not found"));
+        boolean active = req.isActive() != null ? req.isActive() : b.isActive();
+        boolean hq = headquartersAfterUpdate(b, req.isHeadquarters(), active);
+        // One headquarters per company, swapped in this transaction: the
+        // previous headquarters steps down BEFORE this branch is flagged, so the
+        // unique index (V143.14) never sees two and the two can't diverge.
+        if (hq) repository.clearHeadquartersExcept(b.getCompanyId(), b.getId());
         if (req.name() != null && !req.name().isBlank()) b.setName(req.name().trim());
         if (req.code() != null)          b.setCode(req.code().isBlank() ? null : req.code().trim());
         if (req.addressLine() != null)   b.setAddressLine(req.addressLine());
@@ -73,9 +98,28 @@ public class BranchService {
         if (req.state() != null)         b.setState(req.state());
         if (req.country() != null)       b.setCountry(req.country());
         if (req.pincode() != null)       b.setPincode(req.pincode());
-        if (req.isHeadquarters() != null) b.setHeadquarters(req.isHeadquarters());
-        if (req.isActive() != null)      b.setActive(req.isActive());
+        b.setHeadquarters(hq);
+        b.setActive(active);
         return toResponse(repository.save(b));
+    }
+
+    /**
+     * Whether the branch is the headquarters after an update.
+     * <ul>
+     *   <li>An inactive (archived) branch is never the headquarters.</li>
+     *   <li>An explicit {@code isHeadquarters} wins; the caller's previous
+     *       headquarters then steps down (see {@link #update}).</li>
+     *   <li>Restoring an old headquarters while another branch has since become
+     *       the headquarters keeps the current one: the restored branch comes
+     *       back as an ordinary branch.</li>
+     * </ul>
+     */
+    boolean headquartersAfterUpdate(Branch b, Boolean requested, boolean activeAfter) {
+        if (!activeAfter) return false;
+        if (requested != null) return requested;
+        if (!b.isHeadquarters()) return false;
+        boolean restoring = !b.isActive();
+        return !(restoring && repository.existsByCompanyIdAndHeadquartersTrueAndActiveTrueAndIdNot(b.getCompanyId(), b.getId()));
     }
 
     public BranchResponse updateGeofence(UUID branchId, UpdateGeofenceRequest req) {
@@ -88,10 +132,12 @@ public class BranchService {
         return toResponse(repository.save(b));
     }
 
+    /** Soft archive. An archived branch is no longer the headquarters; pick another one. */
     public void archive(UUID branchId) {
         Branch b = repository.findById(branchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Branch " + branchId + " not found"));
         b.setActive(false);
+        b.setHeadquarters(false);
         repository.save(b);
     }
 

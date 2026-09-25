@@ -177,6 +177,8 @@ const LITERALS = {
     ['<div style="font-size:15px;font-weight:700">Account</div>', '<h2 style="margin:0;font-size:15px;font-weight:700">Account</h2>'],
     ['<div style="padding:11px 16px;font-size:14px;font-weight:700;border-bottom:1px solid #f1f5f9">Needs attention', '<div role="heading" aria-level="2" style="padding:11px 16px;font-size:14px;font-weight:700;border-bottom:1px solid #f1f5f9">Needs attention'],
   ],
+  // Archived branches are listed under the "Inactive" filter; their card button restores them.
+  CompaniesPage: [['onClick="{{ b.onArchive }}" data-tip="Archives this branch" hint-size="80px,32px">Archive</x-import>', 'onClick="{{ b.onArchive }}" data-tip="{{ b.archiveTip }}" hint-size="80px,32px">{{ b.archiveLabel }}</x-import>']],
   AttCalendar: [['September 2026', '{{ monthLabel }}']],
   AttendancePage: [['September 2026', '{{ monthLabel }}']],
   ShiftOvertime: [['Overtime · September 2026', 'Overtime · {{ monthLabel }}']],

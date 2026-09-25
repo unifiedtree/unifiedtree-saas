@@ -165,7 +165,7 @@ public class MilestoneReminderService {
     }
 
     private static List<Person> withWorkspace(List<Person> people, String workspace) {
-        return people.stream().map(p -> new Person(p.id(), p.name(), p.department(), p.managerId(), p.years(), workspace)).toList();
+        return people.stream().map(p -> new Person(p.id(), p.name(), p.department(), p.company(), p.managerId(), p.years(), workspace)).toList();
     }
 
     private Map<String, Object> payload(String kind, Person p, boolean self) {
@@ -196,10 +196,12 @@ public class MilestoneReminderService {
                 SELECT e.id,
                        TRIM(COALESCE(e.first_name,'') || ' ' || COALESCE(e.last_name,'')) AS name,
                        d.name AS dept,
+                       c.name AS company,
                        e.reporting_manager_id,
                        0 AS years
                   FROM hrms.employees e
                   LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
+                  LEFT JOIN org.companies c ON c.id = e.company_id AND c.tenant_id = e.tenant_id
                  WHERE e.is_active
                    AND e.date_of_birth IS NOT NULL
                    AND EXTRACT(MONTH FROM e.date_of_birth) = EXTRACT(MONTH FROM CAST(? AS date))
@@ -213,10 +215,12 @@ public class MilestoneReminderService {
                 SELECT e.id,
                        TRIM(COALESCE(e.first_name,'') || ' ' || COALESCE(e.last_name,'')) AS name,
                        d.name AS dept,
+                       c.name AS company,
                        e.reporting_manager_id,
                        (EXTRACT(YEAR FROM CAST(? AS date)) - EXTRACT(YEAR FROM e.date_of_joining))::int AS years
                   FROM hrms.employees e
                   LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
+                  LEFT JOIN org.companies c ON c.id = e.company_id AND c.tenant_id = e.tenant_id
                  WHERE e.is_active
                    AND e.date_of_joining IS NOT NULL
                    AND EXTRACT(MONTH FROM e.date_of_joining) = EXTRACT(MONTH FROM CAST(? AS date))
@@ -231,6 +235,7 @@ public class MilestoneReminderService {
                 rs.getObject("id", UUID.class),
                 (name == null || name.isBlank()) ? "A colleague" : name,
                 rs.getString("dept"),
+                rs.getString("company"),
                 rs.getObject("reporting_manager_id", UUID.class),
                 rs.getInt("years"),
                 null);
@@ -277,11 +282,12 @@ public class MilestoneReminderService {
     }
 
     /** One person having a milestone today. */
-    private record Person(UUID id, String name, String department, UUID managerId, int years, String workspace) {
-        /** "Everyone at …": their department, else the workspace's own name (never a product name). */
+    private record Person(UUID id, String name, String department, String company, UUID managerId, int years, String workspace) {
+        /** "Everyone at …": their department, else their company, else the workspace's own name (never a product name: white-label). */
         String orgLabel() {
             if (department != null && !department.isBlank()) return department;
-            return workspace != null && !workspace.isBlank() ? workspace : "work";
+            if (company != null && !company.isBlank()) return company;
+            return workspace != null && !workspace.isBlank() ? workspace : "the team";
         }
     }
 }
