@@ -708,3 +708,25 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - The Letters pages are separate routes linked from the Hiring sub-navigation; there's no single "Letters" hub.
 - **Fixed (tests):** `letters-admin-live.mjs` left its template and letter behind. It now removes them.
 - **Checked live:** `live-design-documents.mjs` 19/19 (HR adds by link → employee sees it → HR deletes; pending card, View file, reject with reason, verify; every letters page; with cleanup) and `letters-admin-live.mjs` (passes).
+
+### 11.14 HR setup: Policies (for non-admins), Notification templates and Integrations: done
+- **Policies (`/hrms/policies`):**
+  - Admins still get the Master module's Policy documents (§6).
+  - Everyone else gets the kit version.
+    - If Policies is all they can open, the page is titled "Policies" and says what it's for. Otherwise it's "Rules & policies", with views for Policies, Shift rules, Leave rules and Manage.
+    - Tiles show "You've acknowledged" and "Still to acknowledge", and each policy card has a To acknowledge / Acknowledged pill.
+- **Fixed (Policies, backend and frontend):**
+  - A role holding only `hrms.policy.acknowledge.self` saw "No policies access", because listing needed `hrms.policy.read`. You can't acknowledge what you can't read.
+  - `GET /v1/policy/policies` and `/{id}` now also accept `acknowledge.self`. The existing rule still limits non-authors to ACTIVE policies, so drafts and archived policies stay author-only (checked: 403).
+  - `useVisibleTabs` now accepts a list of permissions, any one of which will do.
+- **Notification templates:**
+  - On the kit: tiles, the table with paging (it was stuck on page 0), and a drawer to add or edit. There's also an error state, which was missing.
+  - **Static / to build:** templates are saved, but nothing in the sending path reads them. Notifications still use their built-in wording, and the page now says so in an amber note. Using them needs the sender to look up the company's active template by event key and channel.
+- **Integrations:**
+  - On the kit: tiles, a "Record a service" panel, and the table.
+  - "Recorded" now shows the creation date. The old "Registered" column showed `lastSyncedAt`, which nothing ever sets, so it was always blank.
+  - The note that status is set by hand, with no connection or sync, is kept and made more prominent.
+  - **Static / to build:** real connections (OAuth, API keys, sync) don't exist yet. This is a register.
+- **Checked live:**
+  - `live-design-hrsetup.mjs` 17/17, including a real acknowledge-only user: `policy.read` was removed from the local EMPLOYEE role, the test waited out the server's 5-minute cache, then put it back.
+  - `live-design-master.mjs` 41/41

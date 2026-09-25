@@ -39,7 +39,7 @@ export interface NotificationTemplatePayload {
 
 // ── Queries ──────────────────────────────────────────────────────────────────
 
-export function useNotificationTemplates(companyId: string | undefined, page = 0) {
+export function useNotificationTemplates(companyId: string | undefined, page = 0, enabled = true) {
   return useQuery({
     queryKey: ['hrms', 'notiftemplate', 'list', companyId, page],
     queryFn: () => {
@@ -48,6 +48,7 @@ export function useNotificationTemplates(companyId: string | undefined, page = 0
       return apiJson<Page<NotificationTemplate>>(`/v1/notiftemplate/templates?${params.toString()}`)
     },
     staleTime: 30_000,
+    enabled,
   })
 }
 

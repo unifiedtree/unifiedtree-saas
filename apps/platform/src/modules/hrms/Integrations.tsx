@@ -1,190 +1,113 @@
+// Integrations (/hrms/integrations), on the module kit. This is a registry:
+// a record of the third-party services the company uses and whether someone
+// has marked them configured. Adding a record doesn't authorise the provider
+// or sync any data, and the page says so.
+//   read: hrms.integration.read · add / mark / remove: hrms.integration.write
 import React, { useMemo, useState } from 'react'
-import { HrPagination } from '@/shared/components/HrPagination'
-import { Plus, Trash2, Plug, PlugZap, Power, AlertTriangle, Boxes } from 'lucide-react'
-import { format } from 'date-fns'
+import { Plus } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
-import { useToast } from '@/shared/hooks/useToast'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
-import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, TableCard, type PillTone,
-} from '@/shared/components/hr'
+import { HrPagination } from '@/shared/components/HrPagination'
+import { HrButton, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { ModulePage, StatRow, State, Panel, Note, useDesignToast, dmy } from '@/design/module/ModuleKit'
 import { useCompanies } from './api/useOrg'
-import {
-  useIntegrationConnections, useCreateConnection, useToggleConnection, useDeleteConnection,
-  type IntegrationStatus,
-} from './api/useIntegration'
+import { useIntegrationConnections, useCreateConnection, useToggleConnection, useDeleteConnection, type IntegrationStatus } from './api/useIntegration'
 
-const STATUS_TONE: Record<IntegrationStatus, PillTone> = {
-  CONNECTED: 'ok',
-  DISCONNECTED: 'gray',
-  ERROR: 'red',
-}
-
-const fmtStatus = (s: IntegrationStatus) =>
-  s === 'CONNECTED' ? 'Marked configured' : s === 'DISCONNECTED' ? 'Not configured' : 'Needs attention'
+const STATUS: Record<IntegrationStatus, [string, PillTone]> = { CONNECTED: ['Marked configured', 'ok'], DISCONNECTED: ['Not configured', 'gray'], ERROR: ['Needs attention', 'red'] }
+const label = 'mb-1.5 block text-[13px] font-semibold text-text-secondary'
 
 export const Integrations: React.FC = () => {
-  const { toast } = useToast()
+  const { show, node } = useDesignToast()
   const confirm = useConfirmDialog()
   const canWrite = usePermission('hrms.integration.write')
   const { data: companies = [] } = useCompanies()
   const [companyId, setCompanyId] = useState('')
   const activeCompany = companyId || companies[0]?.id || ''
-
   const [page, setPage] = useState(0)
   const { data, isLoading, error, refetch } = useIntegrationConnections(activeCompany || undefined, page)
   const create = useCreateConnection()
   const toggle = useToggleConnection()
   const remove = useDeleteConnection()
-  const connections = data?.content ?? []
-
+  const connections = useMemo(() => data?.content ?? [], [data])
   const [name, setName] = useState('')
   const [provider, setProvider] = useState('')
   const [category, setCategory] = useState('')
-
-  const stats = useMemo(() => {
-    const connected = connections.filter((c) => c.status === 'CONNECTED').length
-    const errored = connections.filter((c) => c.status === 'ERROR').length
-    return { total: connections.length, connected, errored }
-  }, [connections])
+  const stats = useMemo(() => ({ connected: connections.filter((c) => c.status === 'CONNECTED').length, errored: connections.filter((c) => c.status === 'ERROR').length }), [connections])
+  const pageNote = (data?.totalPages ?? 1) > 1 ? 'On this page' : undefined
 
   const onCreate = async () => {
-    if (!activeCompany) { toast('Select a company first', 'error'); return }
-    if (!name.trim()) { toast('Give the integration a name', 'error'); return }
-    if (!provider.trim()) { toast('Provider is required', 'error'); return }
+    if (!activeCompany) { show('Choose a company first', true); return }
+    if (!name.trim()) { show('Name the integration', true); return }
+    if (!provider.trim()) { show('Say which provider it is', true); return }
     try {
-      await create.mutateAsync({
-        companyId: activeCompany,
-        name: name.trim(),
-        provider: provider.trim(),
-        category: category.trim() || undefined,
-      })
-      toast('Integration added', 'success')
-      setName(''); setProvider(''); setCategory('')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed to add integration', 'error')
-    }
+      await create.mutateAsync({ companyId: activeCompany, name: name.trim(), provider: provider.trim(), category: category.trim() || undefined })
+      show('Integration added'); setName(''); setProvider(''); setCategory('')
+    } catch (e) { show('Couldn’t add the integration', true, (e as Error)?.message) }
   }
-
-  const onToggle = async (id: string, status: IntegrationStatus) => {
-    try {
-      await toggle.mutateAsync(id)
-      toast('Integration registry status updated', 'success')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed', 'error')
-    }
+  const onToggle = async (id: string, was: IntegrationStatus) => {
+    try { await toggle.mutateAsync(id); show(was === 'CONNECTED' ? 'Marked not configured' : 'Marked configured') } catch (e) { show('Couldn’t update it', true, (e as Error)?.message) }
   }
-
   const onRemove = async (c: { id: string; name: string; provider: string }) => {
-    const ok = await confirm({
-      title: `Remove ${c.name}?`,
-      body: `The ${c.provider} connection and its stored credentials will be deleted. This cannot be undone.`,
-      confirmLabel: 'Remove',
-      tone: 'danger',
-    })
+    const ok = await confirm({ title: `Remove ${c.name}?`, body: `The ${c.provider} record and anything stored with it are deleted. This can’t be undone.`, confirmLabel: 'Remove', tone: 'danger' })
     if (!ok) return
-    try {
-      await remove.mutateAsync(c.id)
-      toast('Integration removed', 'success')
-    } catch (e) {
-      toast((e as Error)?.message ?? 'Failed', 'error')
-    }
+    try { await remove.mutateAsync(c.id); show('Integration removed') } catch (e) { show('Couldn’t remove it', true, (e as Error)?.message) }
   }
-
-  const inputCls = 'rounded-lg border border-border-default bg-white px-3 py-2 text-sm text-text-primary focus:border-[#059669] focus:outline-none focus:ring-2 focus:ring-[#059669]/20'
 
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
-      <HrPageHeader crumb="Integrations" title="Integrations Directory" subtitle="Track third-party service configuration records" />
-
-      <p className="mb-4 text-sm text-text-secondary">Status is recorded manually. Adding a record here does not authorize the provider or synchronize data.</p>
-      {error && <div role="alert" className="ut-card mb-4 p-4"><p>{error.message}</p><HrButton onClick={() => refetch()}>Retry</HrButton></div>}
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <HrStatCard icon={<Boxes size={18} />} color="blue" value={data?.totalElements ?? 0} label="Registered services" loading={isLoading} />
-        <HrStatCard icon={<PlugZap size={18} />} color="green" value={stats.connected} label="Marked configured (this page)" loading={isLoading} />
-        <HrStatCard icon={<AlertTriangle size={18} />} color="orange" value={stats.errored} label="Needs attention (this page)" loading={isLoading} />
+    <ModulePage crumb="HR setup" title="Integrations" subtitle="A record of the outside services your company uses."
+      actions={companies.length > 1 ? (
+        <select aria-label="Company" value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setPage(0) }} className="ut-select ut-select-sm w-56">
+          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      ) : undefined}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        <Note tone="amber">Status is set by hand. Adding a service here doesn’t connect to it, authorise it or sync any data.</Note>
+        {isLoading ? <State kind="loading" height={96} /> : !error && <StatRow tiles={[
+          { icon: 'workflow', color: 'blue', label: 'Services recorded', value: String(data?.totalElements ?? 0), sub: 'In this company' },
+          { icon: 'checkCircle', color: 'green', label: 'Marked configured', value: String(stats.connected), sub: pageNote || 'Set up by someone' },
+          { icon: 'alertTriangle', color: 'orange', label: 'Needs attention', value: String(stats.errored), sub: pageNote || 'Flagged' },
+        ]} />}
+        {canWrite && (
+          <Panel title="Record a service">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[180px] flex-1"><label className={label} htmlFor="int-name">Name</label><input id="int-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Payroll alerts" className="ut-input" /></div>
+              <div className="min-w-[140px] flex-1"><label className={label} htmlFor="int-provider">Provider</label><input id="int-provider" value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="e.g. Slack" className="ut-input" /></div>
+              <div className="min-w-[140px] flex-1"><label className={label} htmlFor="int-cat">Category</label><input id="int-cat" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Communication" className="ut-input" /></div>
+              <HrButton onClick={onCreate} disabled={create.isPending}><Plus size={15} /> {create.isPending ? 'Adding…' : 'Add'}</HrButton>
+            </div>
+          </Panel>
+        )}
+        {error ? <State kind="error" title="Couldn’t load integrations" description={(error as Error).message} onRetry={() => refetch()} />
+          : isLoading ? <State kind="loading" height={200} />
+            : connections.length === 0 ? <State kind="empty" icon="workflow" title="No services recorded" description={canWrite ? 'Add the tools your company uses so everyone knows what’s in place.' : 'Services an admin records appear here.'} />
+              : (
+                <TableCard footer={(data?.totalPages ?? 0) > 1 ? <HrPagination page={page} pageSize={20} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} onPageChange={setPage} /> : undefined}>
+                  <table className="hr-table">
+                    <thead><tr><th>Service</th><th>Provider</th><th className="hidden sm:table-cell">Category</th><th>Status</th><th className="hidden md:table-cell">Recorded</th>{canWrite && <th><span className="sr-only">Actions</span></th>}</tr></thead>
+                    <tbody>
+                      {connections.map((c) => (
+                        <tr key={c.id}>
+                          <td className="font-semibold text-text-primary">{c.name}{c.configSummary && <p className="mt-0.5 text-xs font-normal text-text-tertiary">{c.configSummary}</p>}</td>
+                          <td className="text-text-secondary">{c.provider}</td>
+                          <td className="hidden sm:table-cell text-text-secondary">{c.category || '—'}</td>
+                          <td><HrStatusPill tone={STATUS[c.status]?.[1] ?? 'gray'}>{STATUS[c.status]?.[0] ?? c.status}</HrStatusPill></td>
+                          <td className="hidden md:table-cell text-text-secondary">{dmy(c.createdAt)}</td>
+                          {canWrite && (
+                            <td>
+                              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                <HrButton size="sm" variant="ghost" onClick={() => onToggle(c.id, c.status)} disabled={toggle.isPending}>{c.status === 'CONNECTED' ? 'Mark not configured' : 'Mark configured'}</HrButton>
+                                <HrButton size="sm" variant="ghost" onClick={() => onRemove(c)} disabled={remove.isPending} aria-label={`Remove ${c.provider} integration ${c.name}`}>Remove</HrButton>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TableCard>
+              )}
       </div>
-
-      {companies.length > 1 && (
-        <div className="mb-4">
-          <select value={activeCompany} onChange={(e) => { setCompanyId(e.target.value); setPage(0) }} className={inputCls}>
-            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
-      )}
-
-      {canWrite && (
-        <div className="ut-card mb-5 flex flex-wrap items-end gap-2 p-4">
-          <div className="min-w-[180px] flex-1">
-            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Payroll Slack alerts" className={`${inputCls} w-full`} />
-          </div>
-          <div className="min-w-[140px] flex-1">
-            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Provider</label>
-            <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="e.g. Slack" className={`${inputCls} w-full`} />
-          </div>
-          <div className="min-w-[140px] flex-1">
-            <label className="mb-1 block text-[13px] font-semibold text-text-secondary">Category</label>
-            <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Communication" className={`${inputCls} w-full`} />
-          </div>
-          <HrButton onClick={onCreate} disabled={create.isPending}>
-            <Plus size={15} /> {create.isPending ? 'Adding…' : 'Add Integration'}
-          </HrButton>
-        </div>
-      )}
-
-      <TableCard>
-        <table className="hr-table">
-          <thead>
-            <tr>
-              <th>Integration</th>
-              <th>Provider</th>
-              <th>Category</th>
-              <th>Status</th>
-              <th className="hidden sm:table-cell">Registered</th>
-              {canWrite && <th className="text-right">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              [...Array(4)].map((_, i) => (
-                <tr key={i}><td colSpan={canWrite ? 6 : 5} className="py-3"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></td></tr>
-              ))
-            ) : connections.length === 0 ? (
-              <tr>
-                <td colSpan={canWrite ? 6 : 5} className="py-14 text-center">
-                  <p className="text-sm font-semibold text-text-secondary">No integrations yet</p>
-                  <p className="mt-1 text-xs text-text-tertiary">{canWrite ? 'Use the form above to add your first connection.' : 'Connections added by an admin will appear here.'}</p>
-                </td>
-              </tr>
-            ) : connections.map((c) => (
-              <tr key={c.id}>
-                <td className="font-medium text-text-primary">
-                  {c.name}
-                  {c.configSummary && <p className="mt-0.5 text-xs font-normal text-text-tertiary">{c.configSummary}</p>}
-                </td>
-                <td className="text-text-secondary">{c.provider}</td>
-                <td className="text-text-secondary">{c.category || '—'}</td>
-                <td><HrStatusPill tone={STATUS_TONE[c.status]}>{fmtStatus(c.status)}</HrStatusPill></td>
-                <td className="hidden sm:table-cell text-text-secondary">{c.lastSyncedAt ? format(new Date(c.lastSyncedAt), 'd MMM yyyy, HH:mm') : '—'}</td>
-                {canWrite && (
-                  <td>
-                    <div className="flex items-center justify-end gap-2">
-                      <HrButton size="sm" variant={c.status === 'CONNECTED' ? 'ghost' : undefined} onClick={() => onToggle(c.id, c.status)} disabled={toggle.isPending}>
-                        {c.status === 'CONNECTED' ? <><Power size={14} /> Mark unconfigured</> : <><Plug size={14} /> Mark configured</>}
-                      </HrButton>
-                      <button onClick={() => onRemove(c)} disabled={remove.isPending} aria-label={`Remove ${c.provider} integration ${c.name}`} className="rounded-lg p-1.5 text-text-tertiary hover:bg-[#FEE2E2] hover:text-[#B91C1C]" title="Remove">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
-      <HrPagination page={page} pageSize={20} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} onPageChange={setPage} />
-    </div>
+      {node}
+    </ModulePage>
   )
 }

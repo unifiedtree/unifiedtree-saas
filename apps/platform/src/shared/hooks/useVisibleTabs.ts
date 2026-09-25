@@ -9,8 +9,8 @@ import { useAuthStore } from '@unifiedtree/sdk'
 export interface VisibleTabDef {
   key: string
   label: string
-  /** Permission code required to see this tab. Omit = always visible. */
-  requires?: string
+  /** Permission code required to see this tab, or a list where any one will do. Omit = always visible. */
+  requires?: string | readonly string[]
 }
 
 /**
@@ -35,6 +35,6 @@ export function useVisibleTabs<T extends VisibleTabDef>(all: T[]): T[] {
   return all.filter((t) => {
     if (!t.requires) return true
     if (hasWildcard) return true
-    return permissions.has(t.requires)
+    return typeof t.requires === 'string' ? permissions.has(t.requires) : t.requires.some((c) => permissions.has(c))
   })
 }

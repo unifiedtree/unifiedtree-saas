@@ -6,11 +6,12 @@ import {
 import { clsx } from 'clsx'
 import { format } from 'date-fns'
 import { usePermission, P } from '@unifiedtree/sdk'
+import { ModulePage, Views, useView, StatRow, State, Note, CARD, HEAD_FONT, dmy } from '@/design/module/ModuleKit'
 import { useToast } from '@/shared/hooks/useToast'
 import { useVisibleTabs } from '@/shared/hooks/useVisibleTabs'
 import { TableSkeleton } from '@unifiedtree/ui-kit'
 import {
-  HrPageHeader, HrButton, HrStatCard, HrStatusPill, HrTabs, HrTabPanel, TableCard, HrAvatar, type PillTone,
+  HrButton, HrStatusPill, TableCard, HrAvatar, type PillTone,
 } from '@/shared/components/hr'
 import { useCompanies } from './api/useOrg'
 import {
@@ -75,7 +76,9 @@ const EMPTY_COPY: Record<PolicyStatus, string> = {
 const ALL_TABS = [
   { key: 'shifts',    label: 'Shift Rules', requires: P.ATTENDANCE_REGULARIZATION_APPROVE },
   { key: 'leaves',    label: 'Leave Rules', requires: P.LEAVE_TYPE_WRITE },
-  { key: 'documents', label: 'Documents',   requires: 'hrms.policy.read' },
+  // Listing active policies is open to read OR acknowledge.self (PolicyController), so someone
+  // who only acknowledges still gets the policies they're asked to agree to.
+  { key: 'documents', label: 'Policies',    requires: ['hrms.policy.read', 'hrms.policy.acknowledge.self'] },
   { key: 'manage',    label: 'Manage',      requires: 'hrms.policy.write' },
 ] as const
 
@@ -86,46 +89,23 @@ export const Policies: React.FC = () => {
   const canWrite = usePermission('hrms.policy.write')
   const canAcknowledge = usePermission('hrms.policy.acknowledge.self')
   const visibleTabs = useVisibleTabs([...ALL_TABS])
-
-  // 'documents' has no `requires`, so visibleTabs is never empty; the ?? guard
-  // is belt-and-braces so a config bug can't render a blank page.
-  const [tab, setTab] = useState<Tab>((visibleTabs[0]?.key ?? 'documents') as Tab)
-  const activeTab: Tab = visibleTabs.some((t) => t.key === tab)
-    ? tab
-    : ((visibleTabs[0]?.key ?? 'documents') as Tab)
-
+  const ICON: Record<Tab, string> = { shifts: 'clock', leaves: 'calendarDays', documents: 'fileText', manage: 'clipboard' }
+  // Employees who only read and acknowledge land on Policies; the view stays in ?view=.
+  const order = [...visibleTabs].sort((a, b) => (a.key === 'documents' ? -1 : b.key === 'documents' ? 1 : 0))
+  const [activeTab, setTab] = useView(order.map((t) => t.key)) as [Tab, (k: string) => void]
+  const onlyPolicies = order.length === 1 && order[0].key === 'documents'
   return (
-    <div className="mx-auto max-w-5xl p-6 sm:p-8">
-      <HrPageHeader
-        crumb="HR Configuration"
-        title="Rules & Policies"
-        subtitle="Configure shift rules and leave-type rules, and publish the policy documents employees acknowledge"
-      />
-
-      <HrTabs
-        tabs={visibleTabs.map((t) => ({ key: t.key, label: t.label }))}
-        active={activeTab}
-        onChange={(k) => setTab(k as Tab)}
-      />
-
-      {/* Every tab now has a `requires`, so an unlucky role could land here
-          with nothing visible. Say so honestly instead of an empty page. */}
-      {visibleTabs.length === 0 && (
-        <div className="ut-card mt-5 p-10 text-center">
-          <p className="text-sm font-semibold text-text-secondary">No policies access for this role</p>
-          <p className="mt-1 text-xs text-text-tertiary">
-            Ask an administrator to grant a Policies permission from Settings → Roles & Permissions.
-          </p>
-        </div>
-      )}
-
-      <HrTabPanel tabKey={activeTab}>
+    <ModulePage crumb="HR setup" title={onlyPolicies ? 'Policies' : 'Rules & policies'}
+      subtitle={onlyPolicies ? 'The company policies you’re asked to read and acknowledge.' : 'Shift and leave rules, and the policy documents employees acknowledge.'}>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        {order.length > 1 && <Views items={order.map((t) => ({ key: t.key, label: t.label, icon: ICON[t.key as Tab] }))} active={activeTab} onChange={setTab} label="Policy views" />}
+        {order.length === 0 && <State kind="empty" icon="lock" title="No policies access" description="Ask an admin to grant a Policies permission from Settings → Roles & permissions." />}
         {activeTab === 'shifts' && <ShiftRulesTab />}
         {activeTab === 'leaves' && <LeaveRulesTab />}
-        {activeTab === 'documents' && canRead && <PoliciesTab canAcknowledge={canAcknowledge} />}
+        {activeTab === 'documents' && (canRead || canAcknowledge) && <PoliciesTab canAcknowledge={canAcknowledge} />}
         {activeTab === 'manage' && canWrite && <ManageTab canWrite={canWrite} />}
-      </HrTabPanel>
-    </div>
+      </div>
+    </ModulePage>
   )
 }
 
@@ -521,7 +501,7 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
   const acknowledge = useAcknowledgePolicy()
   const [openId, setOpenId] = useState<string | null>(null)
 
-  const policies = data?.content ?? []
+  const policies = useMemo(() => data?.content ?? [], [data])
   const totalElements = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
   // 2026-09-10: step back if a mutation shrinks the list below the current
@@ -550,45 +530,42 @@ function PoliciesTab({ canAcknowledge }: { canAcknowledge: boolean }) {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-3 gap-3">
-        {/* Total is the SERVER count (totalElements), not policies.length —
-            the loaded page is at most POLICIES_PAGE_SIZE, so on a large
-            tenant the tile used to under-report every acknowledgement stat. */}
-        <HrStatCard icon={<FileText size={18} />} color="blue" value={totalElements} label="Active Policies" loading={isLoading} />
-        <HrStatCard icon={<CheckCircle2 size={18} />} color="green" value={stats.acknowledged} label="Acknowledged (this page)" loading={isLoading} />
-        <HrStatCard icon={<Clock size={18} />} color="orange" value={stats.pending} label="Pending (this page)" loading={isLoading} />
-      </div>
+    <div style={{ display: 'grid', gap: 16 }}>
+      {/* Total is the server count; the acknowledged / to-do split is worked out from the page on screen. */}
+      {isLoading ? <State kind="loading" height={96} /> : <StatRow tiles={[
+        { icon: 'fileText', color: 'blue', label: 'Active policies', value: String(totalElements), sub: 'Published' },
+        ...(canAcknowledge ? [
+          { icon: 'checkCircle', color: 'green' as const, label: 'You’ve acknowledged', value: String(stats.acknowledged), sub: totalPages > 1 ? 'On this page' : 'Current versions' },
+          { icon: 'clock', color: 'orange' as const, label: 'Still to acknowledge', value: String(stats.pending), sub: totalPages > 1 ? 'On this page' : 'Open one to read it' },
+        ] : []),
+      ]} />}
+      {!canAcknowledge && <Note>Your role can read policies but isn’t asked to acknowledge them.</Note>}
 
       {isLoading ? (
-        <div className="space-y-3">
-          {[...Array(3)].map((_, i) => <div key={i} className="ut-card h-20 w-full animate-pulse" />)}
-        </div>
+        <State kind="loading" height={200} />
       ) : policies.length === 0 ? (
-        <div className="ut-card py-14 text-center">
-          <p className="text-sm font-semibold text-text-secondary">No active policies</p>
-          <p className="mt-1 text-xs text-text-tertiary">Published policies will appear here for you to read and acknowledge.</p>
-        </div>
+        <State kind="empty" icon="fileText" title="No active policies" description="Published policies appear here for you to read and acknowledge." />
       ) : (
-        <div className="space-y-3">
+        <div style={{ display: 'grid', gap: 10 }}>
           {policies.map((p) => {
             const acked = ackSet.has(p.id)
             const open = openId === p.id
             return (
-              <div key={p.id} className="ut-card">
+              <div key={p.id} style={{ ...CARD, overflow: 'hidden' }}>
                 <button
                   onClick={() => setOpenId(open ? null : p.id)}
+                  aria-expanded={open}
                   className="flex w-full items-start justify-between gap-3 p-5 text-left"
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-text-primary">{p.title}</span>
+                      <span style={{ fontFamily: HEAD_FONT, fontSize: 15.5, fontWeight: 700 }}>{p.title}</span>
                       {p.category && <HrStatusPill tone="info">{p.category}</HrStatusPill>}
                       {p.version && <span className="text-xs font-medium text-text-tertiary">{p.version}</span>}
-                      {acked && <HrStatusPill tone="ok">Acknowledged</HrStatusPill>}
+                      {canAcknowledge && (acked ? <HrStatusPill tone="ok">Acknowledged</HrStatusPill> : <HrStatusPill tone="warn">To acknowledge</HrStatusPill>)}
                     </div>
                     <p className="mt-1 text-xs text-text-tertiary">
-                      {p.effectiveDate ? `Effective ${format(new Date(p.effectiveDate), 'd MMM yyyy')}` : 'No effective date'}
+                      {p.effectiveDate ? `Effective ${dmy(p.effectiveDate)}` : 'No effective date'}
                     </p>
                   </div>
                   <span className="mt-0.5 text-text-tertiary">{open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
@@ -685,7 +662,7 @@ function ManageTab({ canWrite }: { canWrite: boolean }) {
   const [draft, setDraft] = useState<DraftPolicy>(emptyDraft())
   const [detailId, setDetailId] = useState<string | null>(null)
 
-  const policies = data?.content ?? []
+  const policies = useMemo(() => data?.content ?? [], [data])
   const totalElements = data?.totalElements ?? 0
   const totalPages = data?.totalPages ?? 1
   useClampedPage(page, totalPages, setPage)

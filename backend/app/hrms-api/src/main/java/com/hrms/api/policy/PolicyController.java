@@ -72,7 +72,9 @@ public class PolicyController {
      */
     @Operation(summary = "List HR policies (defaults to ACTIVE)")
     @GetMapping("/policies")
-    @PreAuthorize("hasAuthority('hrms.policy.read')")
+    // acknowledge.self alone can list too: you can't agree to a policy you
+    // can't read. The status check below keeps such callers on ACTIVE only.
+    @PreAuthorize("hasAnyAuthority('hrms.policy.read','hrms.policy.acknowledge.self')")
     public ResponseEntity<PageResponse<PolicyResponse>> listPolicies(
             @RequestParam(required = false) com.hrms.policy.enums.PolicyStatus status,
             @PageableDefault(size = 50) Pageable pageable,
@@ -107,7 +109,7 @@ public class PolicyController {
 
     @Operation(summary = "Get a single HR policy")
     @GetMapping("/policies/{id}")
-    @PreAuthorize("hasAuthority('hrms.policy.read')")
+    @PreAuthorize("hasAnyAuthority('hrms.policy.read','hrms.policy.acknowledge.self')")
     public ResponseEntity<PolicyResponse> getPolicy(@PathVariable UUID id,
                                                      @AuthenticationPrincipal Jwt jwt) {
         PolicyResponse policy = policyService.getPolicy(id);
