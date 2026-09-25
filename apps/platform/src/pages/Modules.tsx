@@ -142,12 +142,16 @@ export const Modules: React.FC = () => {
       .filter(app => app.built && activeModules.includes(app.key))
       .map((app, index) => ({ key: app.key, label: app.label, description: app.description,
         icon: app.icon, status: 'active', home: app.home, sortOrder: index }))
+    // Coming-soon and locked apps are for admins only (client rule, 25 Sep):
+    // they keep the request-module flow; everyone else sees just the apps
+    // their workspace has and they can open.
+    const mine = isAdmin ? list : list.filter(t => t.status === 'active')
     const q = query.trim().toLowerCase()
     const filtered = q
-      ? list.filter(t => t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q))
-      : list
+      ? mine.filter(t => t.label.toLowerCase().includes(q) || t.description.toLowerCase().includes(q))
+      : mine
     return filtered.slice().sort((a, b) => a.sortOrder - b.sortOrder)
-  }, [plans, query, activeModules])
+  }, [plans, query, activeModules, isAdmin])
 
   const greeting = (() => {
     const h = new Date().getHours()

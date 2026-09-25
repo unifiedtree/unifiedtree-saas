@@ -6,19 +6,19 @@ import {
   Settings, LogOut, ChevronDown,
   UserCircle2, ShieldAlert, FileBarChart2, FileText, Bell,
   TrendingUp, CreditCard, Package, ShoppingCart, HelpCircle, Briefcase,
-  UserCheck, Star, Receipt, DollarSign, MapPin,
+  UserCheck, Star, Receipt, DollarSign,
   Database, Target, Wallet, Plug, Award, Shield, AlertTriangle,
   LayoutGrid, ArrowLeft,
   Image as ImageIcon, Banknote, UserPlus, Home} from 'lucide-react'
 import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
-import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
-import { GlobalSearch, type SearchPage } from '@/shared/components/GlobalSearch'
+import { GlobalSearch } from '@/shared/components/GlobalSearch'
+import { accessState } from '@/shared/navigation/access'
+import { menuRule } from '@/shared/navigation/pageRegistry'
+import { useAccessContext } from '@/shared/navigation/useAccess'
 import { useNotificationStore } from '@/core/notifications/notificationStore'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
 import { formatDistanceToNow } from 'date-fns'
-// Canonical admin-roles SSOT — do NOT redeclare locally. See useRoles.ts.
-import { ADMIN_ROLES as CANONICAL_ADMIN_ROLES } from '@/shared/hooks/useRoles'
 import { dashIcon } from '@/design/dc/icons'
 import { RouteErrorBoundary } from '@/shared/components/RouteErrorBoundary'
 import { PageSkeleton } from '@/shared/components/PageSkeleton'
@@ -115,7 +115,7 @@ const MODULE_ITEMS: NavItemDef[] = [
       { label: 'Attendance Analytics', path: '/hrms/att-analytics', icon: <FileBarChart2 size={15} />, visibleForRoles: R_ADMIN_MGR },
       { label: 'Daily Tracking', path: '/hrms/attendance', icon: <Clock size={15} />, visibleForRoles: R_ADMIN_MGR },
       { label: 'Shifts & Overtime', path: '/hrms/shifts', icon: <Clock size={15} />, visibleForRoles: R_HR },
-      { label: 'Geofencing', path: '/hrms/attendance/geofencing', icon: <MapPin size={15} />, visibleForRoles: R_HR },
+      // Geofencing was retired (25 Sep): punch zones live on each branch in Companies & Branches.
     ],
   },
   {
@@ -358,6 +358,18 @@ function useDismiss(open: boolean, onClose: () => void) {
   return ref
 }
 
+/**
+ * Navigate from the search palette. Pages that keep their tab in the URL with
+ * `useView` read it on mount and on popstate, so a jump to another tab of the
+ * page already open (Leave → Leave › Approvals) also nudges them with a
+ * popstate; the location itself is unchanged by it.
+ */
+function openInApp(navigate: (to: string) => void, path: string) {
+  const samePage = window.location.pathname === path.split('?')[0]
+  navigate(path)
+  if (samePage) window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }))
+}
+
 export function PlatformShell() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -367,13 +379,8 @@ export function PlatformShell() {
   const navigate = useNavigate()
   const logout = useSdkStore(s => s.logout)
   const user = useSdkStore(s => s.user)
-  // Subscribe to activeModules directly (reactive slice) instead of the
-  // stable hasModule function reference — otherwise this shell won't
-  // re-render when a new module activates, and the app-switcher would
-  // keep showing a locked pill until an unrelated re-render triggers.
-  const activeModules = useLocalAuthStore(s => s.tenant?.activeModules ?? [])
-  const hasModule = (k: string) => activeModules.includes(k)
-  const permissions = useSdkStore(s => s.permissions)
+  // Active modules and permissions are read reactively by useAccessContext below,
+  // so the menu updates the moment a module activates.
   const userRoles: string[] = user?.roles ?? []
   const primaryRole = (ROLE_PRIORITY as readonly string[]).find(r => userRoles.includes(r)) ?? null
 
@@ -393,24 +400,21 @@ export function PlatformShell() {
 
   useEffect(() => { setProfileOpen(false); setNotifOpen(false); setMobileOpen(false); setSearchOpen(false) }, [location.pathname])
 
-  // Canonical ADMIN_ROLES from useRoles. The previous local list dropped
-  // OWNER + ADMIN and pulled HR_MANAGER in, so an OWNER-only principal was
-  // treated as non-admin (no Settings tile, blocked from admin fallbacks)
-  // while an HR_MANAGER got admin-only affordances they weren't meant to see.
-  const isAdmin = userRoles.some(r => (CANONICAL_ADMIN_ROLES as readonly string[]).includes(r)) || permissions.has('*')
-  // UNION check against every role the JWT carries — the earlier version
-  // gated on `primaryRole` alone, which HID Employee Self Service from an
-  // HR_MANAGER/admin who was ALSO an employee (their higher-priority role
-  // won primaryRole, and the ESS rows only listed 'EMPLOYEE'). Every role
-  // the user holds should get to reveal every menu it grants.
-  function isVisible(item: { visibleForRoles?: string[]; visibleWithAnyPermission?: string[] }): boolean {
-    if (item.visibleWithAnyPermission?.some(code => permissions.has(code) || permissions.has('*'))) return true
-    if (!item.visibleForRoles || item.visibleForRoles.length === 0) return true
-    if (!userRoles.length) return false
-    return item.visibleForRoles.some((r) => userRoles.includes(r)
-      || (r === 'COMPANY_ADMIN' && userRoles.includes('ADMIN'))
-      || (r === 'DEPT_MANAGER' && userRoles.includes('MANAGER')))
+  // Menus are permission-only (client rule, 25 Sep): a link shows when the person
+  // holds the permission its page needs and the workspace has the page's module
+  // (shared/navigation/pageRegistry.ts, the same rules the ⌘K search uses). A
+  // link into a module the workspace doesn't have shows only to plan admins,
+  // who land on the "add this module" page; nobody else sees locked or
+  // coming-soon modules. The `visibleForRoles` lists above are no longer read.
+  const accessCtx = useAccessContext()
+  function isVisible(item: { path?: string }, group?: string): boolean {
+    const rule = item.path ? menuRule(item.path, group) : undefined
+    if (rule) return accessState(rule, accessCtx) !== 'hidden'
+    // Links the registry doesn't know are the not-yet-built apps' own pages.
+    return accessCtx.planAdmin
   }
+  // The Settings gear: any workspace-settings page beyond your own profile.
+  const canSettings = SETTINGS_NAV.some(i => i.key !== 's-profile' && isVisible(i))
 
   // ─── Which app owns the current route → drives the scoped sidebar ───────────
   const scope: string = (() => {
@@ -429,11 +433,11 @@ export function PlatformShell() {
     // Settings pages keep the HRMS rail (the gear lights up and the settings
     // pages become section tabs) — Claude Design prototype.
     if (scope === 'hrms' || scope === 'admin') {
-      const groups = HRMS_GROUPS.map(m => ({ ...m, children: m.children?.filter(isVisible) })).filter(m => (m.children ? m.children.length > 0 : true))
-      return { flat: NAV_ITEMS.filter(isVisible), groups }
+      const groups = HRMS_GROUPS.map(m => ({ ...m, children: m.children?.filter(c => isVisible(c, m.key)) })).filter(m => (m.children ? m.children.length > 0 : true))
+      return { flat: NAV_ITEMS.filter(i => isVisible(i)), groups }
     }
     const m = NON_HRMS.find(x => x.module === scope)
-    if (!m) return { flat: NAV_ITEMS.filter(isVisible), groups: HRMS_GROUPS }
+    if (!m) return { flat: NAV_ITEMS.filter(i => isVisible(i)), groups: HRMS_GROUPS }
     const flat: NavItemDef[] = m.children
       ? m.children.map(c => ({ key: c.path, label: c.label, icon: c.icon, path: c.path }))
       : [{ key: m.key, label: m.label, icon: m.icon, path: m.path }]
@@ -462,7 +466,7 @@ export function PlatformShell() {
       })
     }
     for (const g of scoped.groups) {
-      const kids = (g.children ?? []).filter(isVisible)
+      const kids = (g.children ?? []).filter(c => isVisible(c, g.key))
       if (!kids.length) continue
       list.push({
         key: g.key,
@@ -479,7 +483,7 @@ export function PlatformShell() {
 
   // Fetch the code of every page this person can reach from the rail and its sections while the
   // browser is idle, so opening one doesn't wait on a download (lazyPage.ts).
-  const reachable = [...railItems.flatMap(i => [i.target, ...(i.children ?? []).map(c => c.path)]), ...(isAdmin ? SETTINGS_NAV.filter(isVisible).filter(i => i.path).map(t => t.path!) : [])].join('|')
+  const reachable = [...railItems.flatMap(i => [i.target, ...(i.children ?? []).map(c => c.path)]), ...(canSettings ? SETTINGS_NAV.filter(i => isVisible(i)).filter(i => i.path).map(t => t.path!) : [])].join('|')
   useEffect(() => {
     if (!reachable) return
     const t = window.setTimeout(() => preloadPathsWhenIdle(reachable.split('|')), 1200)
@@ -488,57 +492,6 @@ export function PlatformShell() {
 
 
   // Several nav children intentionally share a route (e.g. the compliance
-  /* ── Pages for the ⌘K palette ─────────────────────────────────────────────
-   *
-   * Derived from the SAME nav arrays the sidebar renders and filtered through
-   * the SAME `isVisible`, so the palette can never offer a page the sidebar
-   * hides — and there is no second list of routes to drift out of sync. That
-   * drift is exactly what sank the earlier `shared/layouts/navigation.tsx`,
-   * which ended up with 14 entries against the shell's 46 and nine paths that
-   * pointed at routes which no longer existed.
-   *
-   * Deduped by path because several nav children intentionally share a route
-   * (the compliance views all land on /hrms/compliance). */
-  const searchPages: SearchPage[] = React.useMemo(() => {
-    const out: SearchPage[] = []
-    const seen = new Set<string>()
-    /* Keywords are derived from the ROUTE, not hand-written, so they stay a
-       by-product of the one source of truth. This matters because the nav
-       labels are HR jargon and users type plain words: the directory is
-       labelled "Workforce Directory" but everyone searches "employee", and
-       "Leave Operations Center" is looked for as "leave". The path segments
-       carry exactly those plain nouns (/hrms/employees, /hrms/leave). */
-    const keywordsFor = (path: string, group?: string) => {
-      const fromPath = path
-        .split(/[/?=&]/)
-        .filter((seg) => seg && seg !== 'hrms' && seg !== 'v1' && !/^\d+$/.test(seg))
-        .flatMap((seg) => seg.split('-'))
-      const fromGroup = (group ?? '').toLowerCase().split(/[\s&]+/).filter(Boolean)
-      return Array.from(new Set([...fromPath, ...fromGroup]))
-    }
-    const push = (label: string, path: string, group?: string) => {
-      if (!path || seen.has(path)) return
-      seen.add(path)
-      out.push({ id: path, label, path, group, keywords: keywordsFor(path, group) })
-    }
-    for (const item of [...NAV_ITEMS, ...PLATFORM_ITEMS, ...SETTINGS_NAV]) {
-      if (!isVisible(item) || !item.path) continue
-      push(item.label, item.path)
-    }
-    for (const group of MODULE_ITEMS) {
-      // Only modules the workspace actually owns — an unsold SKU's pages are
-      // not reachable, so offering them would be a dead end.
-      if (group.module && group.module !== 'hrms' && !hasModule(group.module)) continue
-      if (!isVisible(group)) continue
-      for (const child of group.children ?? []) {
-        if (!isVisible(child)) continue
-        push(child.label, child.path, group.label)
-      }
-    }
-    return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userRoles.join('|'), activeModules.join('|'), permissions])
-
   // views all land on /hrms/compliance) — dedupe by path or every duplicate
   // tab would render "active" at once.
   const subTabs: NavChild[] | null = (() => {
@@ -567,7 +520,7 @@ export function PlatformShell() {
       <div className="p-1.5">
         <button onClick={() => navigate('/profile')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><UserCircle2 size={16} /> My Profile</button>
         <button onClick={() => navigate('/modules')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><LayoutGrid size={16} /> My Apps</button>
-        {isAdmin && (
+        {canSettings && (
           <button onClick={() => navigate('/settings')} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"><Settings size={16} /> Settings</button>
         )}
       </div>
@@ -583,7 +536,7 @@ export function PlatformShell() {
         <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[12vh]">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSearchOpen(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <motion.div initial={{ opacity: 0, scale: 0.96, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: -10 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="ut-card ut-card-lg relative w-full max-w-2xl overflow-hidden">
-            <GlobalSearch pages={searchPages} onSelect={(res) => { navigate(res.path); setSearchOpen(false) }} />
+            <GlobalSearch onSelect={(res) => { openInApp(navigate, res.path); setSearchOpen(false) }} />
           </motion.div>
         </div>
       )}
@@ -643,7 +596,7 @@ export function PlatformShell() {
   const railTop = railItems.filter(i => i.key !== 'hrsettings').map(railEntry)
   const railBottom = railItems.filter(i => i.key === 'hrsettings').map(railEntry)
 
-  const settingsTabs = SETTINGS_NAV.filter(isVisible).filter(i => i.path)
+  const settingsTabs = SETTINGS_NAV.filter(i => isVisible(i)).filter(i => i.path)
   const sectionTabs: { label: string; items: SubNavEntry[] } | null = (() => {
     if (scope === 'admin') {
       return {
@@ -675,7 +628,7 @@ export function PlatformShell() {
       active: scope !== 'admin' && i.key === litKey,
       onClick: () => navigate(i.target),
     })),
-    ...(isAdmin ? [{ key: 'settings', label: 'Settings', icon: dashIcon('settings', 18), active: scope === 'admin', onClick: () => navigate('/settings') }] : []),
+    ...(canSettings ? [{ key: 'settings', label: 'Settings', icon: dashIcon('settings', 18), active: scope === 'admin', onClick: () => navigate('/settings') }] : []),
   ]
 
   const profileDropdown = (
@@ -699,7 +652,7 @@ export function PlatformShell() {
         <DesignHeader
           search={<HeaderSearch onOpen={() => setSearchOpen(true)} />}
           right={<>
-            {isAdmin && (
+            {canSettings && (
               <HeaderIconButton label="Settings" active={scope === 'admin'} onClick={() => navigate('/settings')}>
                 {dashIcon('settings', 19)}
               </HeaderIconButton>
