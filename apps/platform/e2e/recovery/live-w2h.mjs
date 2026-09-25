@@ -50,7 +50,7 @@ async function login(email) {
 const startedAt = sql('select now()')
 const company = sql(`select id from org.companies where tenant_id='${tenant}' order by created_at limit 1`)
 const today = sql(`select (now() at time zone 'Asia/Kolkata')::date`)
-const created = { schedules: [], notices: [], employee: null }
+const created = { schedules: [], notices: [], employee: null, direct: null }
 const since = (extra = '') => `tenant_id='${tenant}' and created_at >= '${startedAt}'${extra}`
 
 try {
@@ -183,6 +183,16 @@ try {
     && Number(later.active) === Number(baseLater.active) + 1 && Number(later.probation) === Number(baseLater.probation) && Number(now.on_notice) >= 1,
     `Feb 2025 probation ${basePast.probation}→${past.probation}, Jun 2025 active ${baseLater.active}→${later.active}, today on notice ${now.on_notice}`)
 
+  // Straight from active to exited with a last working day still to come: on notice until then.
+  const beforeDirect = await headcountOn(today)
+  created.direct = sql(`insert into hrms.employees (id, tenant_id, company_id, employee_code, first_name, last_name, employment_type, employment_status, date_of_joining)
+    values (gen_random_uuid(), '${tenant}', '${company}', '${code}D', 'W2h', 'Direct', 'FULL_TIME', 'ACTIVE', date '2025-01-06') returning id`).split(/\s/)[0]
+  sql(`update hrms.employees set employment_status='EXITED', last_working_day=(date '${today}' + 10) where id='${created.direct}'`)
+  const afterDirect = await headcountOn(today)
+  check('headcount: an exit still to come counts as on notice, not active',
+    Number(afterDirect.on_notice) === Number(beforeDirect.on_notice) + 1 && Number(afterDirect.active) === Number(beforeDirect.active),
+    `on notice ${beforeDirect.on_notice}→${afterDirect.on_notice}, active ${beforeDirect.active}→${afterDirect.active}`)
+
   // ── 6. directory filters, performers, notices ──────────────────────────────
   const noDept = await owner.call(`/v1/hrms/employees?noDepartment=true&pageSize=200`)
   const dbNoDept = Number(sql(`select count(*) from hrms.employees where tenant_id='${tenant}' and is_active and department_id is null`))
@@ -217,6 +227,7 @@ try {
     for (const id of created.schedules) sql(`delete from hrms.report_schedules where id='${id}'`)
     if (created.notices.length) sql(`delete from hrms.company_notices where id in (${created.notices.map((x) => `'${x}'`).join(',')})`)
     if (created.employee) sql(`delete from hrms.employees where id='${created.employee}'`)
+    if (created.direct) sql(`delete from hrms.employees where id='${created.direct}'`)
     sql(`delete from hrms.report_exports where ${since()}`)
     sql(`delete from audit.events where tenant_id='${tenant}' and occurred_at >= '${startedAt}' and entity_type in ('report_schedule','audit_log')`)
     const left = sql(`select (select count(*) from hrms.report_exports where ${since()}) + (select count(*) from hrms.employee_status_history where employee_id='${created.employee || '00000000-0000-0000-0000-000000000000'}')`)

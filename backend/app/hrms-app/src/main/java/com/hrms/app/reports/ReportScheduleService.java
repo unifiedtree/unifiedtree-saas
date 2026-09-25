@@ -160,6 +160,11 @@ public class ReportScheduleService {
 
     public Map<String, Object> update(UUID id, Request req, Set<String> held) {
         Map<String, Object> cur = row(id);
+        // Same rule as delete and send now: you can only change an email for a report you can open.
+        ReportKind existing = ReportKind.fromKey((String) cur.get("report")).orElse(null);
+        if (existing != null && !existing.openableWith(held)) {
+            throw new AccessDeniedException("You can't open the " + existing.label().toLowerCase() + ", so you can't change its email");
+        }
         Checked c = check(req, held);
         boolean active = req.active() == null ? Boolean.TRUE.equals(cur.get("active")) : req.active();
         boolean sameTiming = c.frequency().name().equals(cur.get("frequency"))
