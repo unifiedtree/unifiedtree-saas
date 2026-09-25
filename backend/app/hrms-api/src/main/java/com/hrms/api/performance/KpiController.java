@@ -18,8 +18,9 @@ import java.util.UUID;
  * <ul>
  *   <li>Read  → {@code hrms.performance.read}</li>
  *   <li>Manage (create / update / delete) → {@code hrms.kpi.manage}</li>
- *   <li>Progress bump → {@code hrms.performance.write} (matches goal-progress
- *       from the existing PerformanceController)</li>
+ *   <li>Progress bump → {@code hrms.performance.write}, or {@code hrms.kpi.progress}
+ *       (department managers, V143.9) — the service limits both to the caller's
+ *       scope, so a manager can only record progress for their own team.</li>
  * </ul>
  */
 @RestController
@@ -74,7 +75,7 @@ public class KpiController {
     }
 
     @PutMapping("/{id}/progress")
-    @PreAuthorize("hasAuthority('hrms.performance.write')")
+    @PreAuthorize("hasAnyAuthority('hrms.performance.write','hrms.kpi.progress')")
     public KpiService.KpiRowDto updateProgress(
             @PathVariable UUID id,
             @Valid @RequestBody KpiService.ProgressUpdateRequest req,

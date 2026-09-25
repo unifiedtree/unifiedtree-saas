@@ -42,8 +42,8 @@ class KpiAccessScopeTest {
         for (String role : List.of("OWNER", "ADMIN", "COMPANY_ADMIN", "HR_MANAGER", "SUPER_ADMIN")) {
             assertEquals(KpiAccessScope.Kind.ADMIN, KpiAccessScope.from(authentication(role, null)).kind(), role);
         }
-        assertEquals(KpiAccessScope.Kind.DIRECT_REPORTS, KpiAccessScope.from(authentication("MANAGER", employee)).kind());
-        assertEquals(KpiAccessScope.Kind.DIRECT_REPORTS, KpiAccessScope.from(authentication("DEPT_MANAGER", employee)).kind());
+        assertEquals(KpiAccessScope.Kind.TEAM, KpiAccessScope.from(authentication("MANAGER", employee)).kind());
+        assertEquals(KpiAccessScope.Kind.TEAM, KpiAccessScope.from(authentication("DEPT_MANAGER", employee)).kind());
         assertEquals(KpiAccessScope.Kind.SELF, KpiAccessScope.from(authentication("EMPLOYEE", employee)).kind());
         assertEquals(KpiAccessScope.Kind.SELF, KpiAccessScope.from(authentication("CUSTOM_REVIEWER", employee)).kind());
     }
@@ -62,13 +62,37 @@ class KpiAccessScopeTest {
         assertEquals(List.of(tenant, employee), args);
     }
 
+    /** A team scope that resolves the manager's team to exactly {@code members}. */
+    private PerformanceTeamScope team(UUID... members) {
+        PerformanceTeamScope scope = mock(PerformanceTeamScope.class);
+        when(scope.teamOf(any())).thenReturn(java.util.Set.of(members));
+        return scope;
+    }
+
     @Test void suppliedManagerFilterCannotReplaceManagerObjectScope() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        UUID forgedManager = UUID.randomUUID();
+        UUID forgedManager = UUID.randomUUID(), teammate = UUID.randomUUID();
         SecurityContextHolder.getContext().setAuthentication(authentication("MANAGER", employee));
-        new KpiService(jdbc).list(tenant, null, forgedManager, null, null, 0, 25);
-        verify(jdbc).queryForObject(contains("scoped.reporting_manager_id = ?"), eq(Long.class),
-                eq(tenant), eq(employee), eq(forgedManager));
+        new KpiService(jdbc, team(teammate)).list(tenant, null, forgedManager, null, null, 0, 25);
+        verify(jdbc).queryForObject(contains("g.employee_id IN (?)"), eq(Long.class),
+                eq(tenant), eq(teammate), eq(forgedManager));
+    }
+
+    @Test void managerWithNoTeamSeesNothing() {
+        StringBuilder sql = new StringBuilder("WHERE g.tenant_id = ?");
+        List<Object> args = new ArrayList<>(List.of(tenant));
+        KpiAccessScope.from(authentication("DEPT_MANAGER", employee)).withTeam(java.util.Set.of()).appendGoalPredicate(sql, args);
+        assertTrue(sql.toString().endsWith(" AND FALSE"));
+        assertEquals(List.of(tenant), args);
+    }
+
+    @Test void teamScopeCoversOnlyTeammatesNeverTheManager() {
+        UUID teammate = UUID.randomUUID();
+        KpiAccessScope scope = KpiAccessScope.from(authentication("DEPT_MANAGER", employee)).withTeam(java.util.Set.of(teammate));
+        assertTrue(scope.covers(teammate));
+        assertFalse(scope.covers(employee));
+        assertFalse(scope.covers(UUID.randomUUID()));
+        assertTrue(KpiAccessScope.from(authentication("ADMIN", null)).covers(UUID.randomUUID()));
     }
 
     @Test void outOfScopeKpiCannotExposeHistoryOrAcceptProgress() throws Exception {
@@ -78,13 +102,13 @@ class KpiAccessScopeTest {
         when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.<ResultSetExtractor<Object>>any(), any(Object[].class)))
                 .thenAnswer(invocation -> ((ResultSetExtractor<?>) invocation.getArgument(1)).extractData(noVisibleRow));
         SecurityContextHolder.getContext().setAuthentication(authentication("MANAGER", employee));
-        KpiService service = new KpiService(jdbc);
+        KpiService service = new KpiService(jdbc, team(UUID.randomUUID()));
         UUID inaccessibleKpi = UUID.randomUUID();
         assertThrows(BusinessRuleException.class, () -> service.progressHistory(tenant, inaccessibleKpi));
         assertThrows(BusinessRuleException.class, () -> service.updateProgress(tenant, inaccessibleKpi,
                 new KpiService.ProgressUpdateRequest(BigDecimal.TEN, "Out of scope"), UUID.randomUUID()));
-        verify(jdbc, times(2)).query(contains("scoped.reporting_manager_id = ?"),
-                org.mockito.ArgumentMatchers.<ResultSetExtractor<Object>>any(), eq(tenant), eq(inaccessibleKpi), eq(employee));
+        verify(jdbc, times(2)).query(contains("g.employee_id IN (?)"),
+                org.mockito.ArgumentMatchers.<ResultSetExtractor<Object>>any(), eq(tenant), eq(inaccessibleKpi), any(UUID.class));
         verify(jdbc, never()).update(anyString(), any(Object[].class));
     }
 }

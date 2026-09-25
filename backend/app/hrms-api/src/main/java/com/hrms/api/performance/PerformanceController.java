@@ -50,17 +50,20 @@ public class PerformanceController {
     private final GoalService goalService;
     private final EmployeeRepository employeeRepository;
     private final ReviewCycleRepository cycleRepository;
+    private final PerformanceTeamScope teamScope;
 
     public PerformanceController(ReviewCycleService cycleService,
                                  PerformanceReviewService reviewService,
                                  GoalService goalService,
                                  EmployeeRepository employeeRepository,
-                                 ReviewCycleRepository cycleRepository) {
+                                 ReviewCycleRepository cycleRepository,
+                                 PerformanceTeamScope teamScope) {
         this.cycleService = cycleService;
         this.reviewService = reviewService;
         this.goalService = goalService;
         this.employeeRepository = employeeRepository;
         this.cycleRepository = cycleRepository;
+        this.teamScope = teamScope;
     }
 
     // ─── Review cycles (admin) ───────────────────────────────────────────────
@@ -108,7 +111,8 @@ public class PerformanceController {
     public ResponseEntity<PageResponse<PerformanceReviewResponse>> listReviews(
             @RequestParam(required = false) UUID cycleId,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(enrichPage(reviewService.listReviews(cycleId, pageable)));
+        // Admin / HR see the company; a department manager sees reviews about their team only.
+        return ResponseEntity.ok(enrichPage(reviewService.listReviews(cycleId, teamScope.visibleEmployeeIds(), pageable)));
     }
 
     @Operation(summary = "Create a performance review for an employee")

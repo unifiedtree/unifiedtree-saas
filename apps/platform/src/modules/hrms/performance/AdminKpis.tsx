@@ -8,7 +8,7 @@ import { useToast } from '@/shared/hooks/useToast'
 import type { EmployeeKpiRow } from '../api/usePerformance'
 import { useAdminKpis, useSaveKpi, useDropKpi, useRecordKpiProgress, useKpiHistory, type KpiDirection, type KpiStatus } from '../api/usePerformanceAdmin'
 import { PerformanceEmployeePicker, PerformanceError } from './PerformanceEmployeePicker'
-import { SubHeading, stamp } from '@/design/module/ModuleKit'
+import { SubHeading, Note, stamp } from '@/design/module/ModuleKit'
 
 const STATUS_TONE: Record<string, PillTone> = { ACTIVE: 'info', AT_RISK: 'warn', COMPLETED: 'ok', DROPPED: 'gray' }
 const statusLabel = (value?: string) => (value || 'ACTIVE').replaceAll('_', ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase())
@@ -17,6 +17,10 @@ const dateLabel = (value?: string) => value ? new Date(value.length === 10 ? `${
 export function AdminKpis() {
   const manage = usePermission('hrms.kpi.manage')
   const write = usePermission('hrms.performance.write')
+  // Department managers record progress for their own team's KPIs (hrms.kpi.progress, V143.9); the API enforces the team.
+  const teamProgress = usePermission('hrms.kpi.progress')
+  const canRecord = write || teamProgress
+  const teamOnly = !write && !manage
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(0)
@@ -27,7 +31,8 @@ export function AdminKpis() {
   const totalPages = Math.ceil((query.data?.total ?? 0) / size)
   useClampedPage(page, totalPages, setPage)
   return <div style={{ display: 'grid', gap: 16 }}>
-    <SubHeading aside={manage ? <HrButton size="sm" onClick={() => setEditing('new')}><Plus size={14} /> Create KPI</HrButton> : undefined}>Company goals & KPIs</SubHeading>
+    <SubHeading aside={manage ? <HrButton size="sm" onClick={() => setEditing('new')}><Plus size={14} /> Create KPI</HrButton> : undefined}>{teamOnly ? 'Your team’s goals & KPIs' : 'Company goals & KPIs'}</SubHeading>
+    {teamOnly && <Note>You see your team: everyone in the departments you head, or your direct reports if you don’t head one. Your own reviews and goals are under My reviews and My goals.</Note>}
     <div className="flex flex-wrap gap-3">
       <label className="min-w-[180px] flex-1 text-xs font-medium text-text-secondary">Search KPI titles<input className="ut-input mt-1" type="search" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} placeholder="Search company goals" /></label>
       <label className="text-xs font-medium text-text-secondary">Status<select aria-label="Status" className="ut-select mt-1" value={status} onChange={e => { setStatus(e.target.value); setPage(0) }}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="AT_RISK">At risk</option><option value="COMPLETED">Completed</option><option value="DROPPED">Dropped</option></select></label>
@@ -39,11 +44,11 @@ export function AdminKpis() {
         { key: 'target', header: 'Current / target', render: row => <span className="whitespace-nowrap tabular-nums">{row.currentValue ?? 0} / {row.targetValue ?? 'Not set'} {row.unit}</span> },
         { key: 'progress', header: 'Progress', render: row => <div className="min-w-[110px]"><span className="text-sm font-semibold">{row.progressPct ?? 0}%</span><div className="mt-1 h-1.5 rounded bg-[#E6F4F1]"><div className="h-full rounded bg-[#0F6E56]" style={{ width: `${Math.max(0, Math.min(100, row.progressPct ?? 0))}%` }} /></div></div> },
         { key: 'status', header: 'Status', render: row => <HrStatusPill tone={STATUS_TONE[row.status ?? 'ACTIVE'] || 'gray'}>{statusLabel(row.status)}</HrStatusPill> },
-        { key: 'actions', header: 'Actions', render: row => <div className="flex gap-1"><HrButton size="sm" variant="ghost" onClick={() => setSelected(row)}>{write && row.status !== 'DROPPED' ? 'Update progress' : 'View history'}</HrButton>{manage && <HrButton size="sm" variant="ghost" onClick={() => setEditing(row)}>Edit</HrButton>}</div> },
+        { key: 'actions', header: 'Actions', render: row => <div className="flex gap-1"><HrButton size="sm" variant="ghost" onClick={() => setSelected(row)}>{canRecord && row.status !== 'DROPPED' ? 'Update progress' : 'View history'}</HrButton>{manage && <HrButton size="sm" variant="ghost" onClick={() => setEditing(row)}>Edit</HrButton>}</div> },
       ]} />
     </TableCard>}
     {editing && <KpiForm existing={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
-    {selected && <KpiDetails initial={selected} canWrite={write} canManage={manage} onClose={() => setSelected(null)} />}
+    {selected && <KpiDetails initial={selected} canWrite={canRecord} canManage={manage} onClose={() => setSelected(null)} />}
   </div>
 }
 

@@ -89,7 +89,8 @@ public class PerformanceEmployeeService {
             UUID departmentId,
             String search,
             int page,
-            int size) {
+            int size,
+            java.util.Set<UUID> visibleEmployeeIds) {
 
         bindTenant(tenantId);
         if (page < 0) page = 0;
@@ -102,6 +103,7 @@ public class PerformanceEmployeeService {
                 WHERE e.is_active = TRUE
                 """);
         List<Object> args = new ArrayList<>();
+        PerformanceTeamScope.appendIn(where, args, "e.id", visibleEmployeeIds);
         if (departmentId != null) {
             where.append(" AND e.department_id = ?");
             args.add(departmentId);

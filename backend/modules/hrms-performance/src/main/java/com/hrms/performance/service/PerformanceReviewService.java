@@ -54,6 +54,20 @@ public class PerformanceReviewService {
                 .map(this::toResponse).toList();
     }
 
+    /**
+     * Reviews about the given employees only (a manager's team). {@code null}
+     * means no restriction; an empty set returns an empty page.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<PerformanceReviewResponse> listReviews(UUID cycleId, java.util.Set<UUID> employeeIds, Pageable pageable) {
+        if (employeeIds == null) return listReviews(cycleId, pageable);
+        if (employeeIds.isEmpty()) return toPage(Page.empty(pageable));
+        Page<PerformanceReview> page = cycleId != null
+                ? reviewRepository.findByCycleIdAndEmployeeIdInOrderByCreatedAtDesc(cycleId, employeeIds, pageable)
+                : reviewRepository.findByEmployeeIdInOrderByCreatedAtDesc(employeeIds, pageable);
+        return toPage(page);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<PerformanceReviewResponse> listReviews(UUID cycleId, Pageable pageable) {
         Page<PerformanceReview> page = cycleId != null

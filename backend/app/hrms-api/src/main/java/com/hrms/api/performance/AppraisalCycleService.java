@@ -222,6 +222,11 @@ public class AppraisalCycleService {
 
     @Transactional
     public CycleProgressDto progress(UUID tenantId, UUID cycleId) {
+        return progress(tenantId, cycleId, null);
+    }
+
+    /** Progress limited to the given reviewees ({@code null} = everyone in the cycle). */
+    public CycleProgressDto progress(UUID tenantId, UUID cycleId, java.util.Set<UUID> revieweeIds) {
         bindTenant(tenantId);
 
         // Load cycle basics
@@ -233,6 +238,9 @@ public class AppraisalCycleService {
         Object[] cycle = cycles.get(0);
 
         // Roll up per-reviewee
+        StringBuilder scope = new StringBuilder();
+        List<Object> scopeArgs = new ArrayList<>(List.of(cycleId));
+        PerformanceTeamScope.appendIn(scope, scopeArgs, "a.reviewee_id", revieweeIds);
         List<ProgressRowDto> reviewees = jdbc.query("""
                 SELECT a.reviewee_id                                            AS reviewee_id,
                        TRIM(e.first_name || ' ' || COALESCE(e.last_name,''))    AS reviewee_name,
@@ -241,7 +249,7 @@ public class AppraisalCycleService {
                        COUNT(*) FILTER (WHERE a.status = 'COMPLETED')           AS completed
                   FROM performance_mgmt.appraisal_reviewer_assignments a
                   LEFT JOIN hrms.employees e ON e.id = a.reviewee_id AND e.tenant_id = a.tenant_id
-                 WHERE a.cycle_id = ?
+                 WHERE a.cycle_id = ?""" + scope + """
                  GROUP BY a.reviewee_id, e.first_name, e.last_name, e.employee_code
                  ORDER BY reviewee_name
                 """, (rs, i) -> {
@@ -266,7 +274,7 @@ public class AppraisalCycleService {
                             : Math.round((done * 1000.0) / total) / 10.0;
                     return new ProgressRowDto(revId, rs.getString("reviewee_name"),
                             rs.getString("reviewee_code"), total, done, pct, perRow);
-                }, cycleId);
+                }, scopeArgs.toArray());
 
         int total = reviewees.stream().mapToInt(ProgressRowDto::totalAssignments).sum();
         int done  = reviewees.stream().mapToInt(ProgressRowDto::completedAssignments).sum();

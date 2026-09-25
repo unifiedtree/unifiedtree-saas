@@ -29,9 +29,11 @@ import java.util.UUID;
 public class AppraisalCycleController {
 
     private final AppraisalCycleService service;
+    private final PerformanceTeamScope teamScope;
 
-    public AppraisalCycleController(AppraisalCycleService service) {
+    public AppraisalCycleController(AppraisalCycleService service, PerformanceTeamScope teamScope) {
         this.service = service;
+        this.teamScope = teamScope;
     }
 
     @PostMapping("/cycles/{id}/initiate")
@@ -46,7 +48,8 @@ public class AppraisalCycleController {
     @GetMapping("/cycles/{id}/progress")
     @PreAuthorize("hasAuthority('hrms.performance.read')")
     public AppraisalCycleService.CycleProgressDto progress(@PathVariable UUID id) {
-        return service.progress(TenantContext.getTenantId(), id);
+        // A department manager sees their team's progress only; admin / HR see everyone.
+        return service.progress(TenantContext.getTenantId(), id, teamScope.visibleEmployeeIds());
     }
 
     @PostMapping("/cycles/{id}/close")

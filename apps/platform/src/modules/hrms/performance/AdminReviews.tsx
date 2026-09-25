@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { usePermission } from '@unifiedtree/sdk'
 import { HrAvatar, HrButton, HrDrawer, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
 import { HrPagination, useClampedPage } from '@/shared/components/HrPagination'
 import { DataTable } from '@/shared/components/DataTable'
@@ -10,6 +11,8 @@ const words = (v: string) => v.replace(/_/g, ' ').toLowerCase().replace(/^\w/, c
 const tone: Record<string, PillTone> = { PENDING: 'warn', IN_PROGRESS: 'info', SUBMITTED: 'ok', ACKNOWLEDGED: 'teal', MISSED: 'red' }
 export function AdminReviews() {
   const cycles = useReviewCycles()
+  // Without performance.write this is a department manager: the API returns their team's reviews only.
+  const teamOnly = !usePermission('hrms.performance.write')
   const [cycleId, setCycleId] = useState('')
   const [page, setPage] = useState(0)
   const reviews = useReviews(cycleId || undefined, page)
@@ -17,7 +20,7 @@ export function AdminReviews() {
   useClampedPage(page, reviews.data?.totalPages, setPage)
   return <div style={{ display: 'grid', gap: 16 }}>
     <SubHeading aside={<select aria-label="Review cycle" className="ut-select ut-select-sm w-auto" value={cycleId} onChange={e => { setCycleId(e.target.value); setPage(0) }}><option value="">All cycles</option>{cycles.data?.map(cycle => <option key={cycle.id} value={cycle.id}>{cycle.name}</option>)}</select>}>Employee reviews</SubHeading>
-    <Note>Read submitted feedback and follow pending reviews. Reviewers are assigned from Review cycles.</Note>
+    <Note>{teamOnly ? 'You see your team: everyone in the departments you head, or your direct reports if you don’t head one. Your own reviews and goals are under My reviews and My goals.' : 'Read submitted feedback and follow pending reviews. Reviewers are assigned from Review cycles.'}</Note>
     {cycles.isError && <PerformanceError error={cycles.error} retry={() => cycles.refetch()} />}
     {reviews.isError ? <PerformanceError error={reviews.error} retry={() => reviews.refetch()} /> : <TableCard footer={<HrPagination page={page} pageSize={20} totalElements={reviews.data?.totalElements ?? 0} totalPages={reviews.data?.totalPages ?? 0} onPageChange={setPage} />}><DataTable<PerformanceReview> data={reviews.data?.content ?? []} keyField="id" loading={reviews.isLoading} emptyMessage="No employee reviews in this selection." columns={[
       { key: 'employee', header: 'Employee', render: review => <HrAvatar name={review.employeeName || 'Employee'} sub={review.employeeCode || undefined} /> },

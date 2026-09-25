@@ -1,8 +1,8 @@
 // Manual attendance entry (/hrms/attendance/manual-entry), on the module kit.
-// HR or a manager punches on behalf of someone (missed check-in, biometric
-// downtime…). POST /v1/attendance/manual-entry needs
-// attendance.regularization.approve; the reason is mandatory so the audit
-// trail always says why the punch was entered by hand.
+// HR or an admin punches on behalf of someone (missed check-in, biometric
+// downtime…). POST /v1/attendance/manual-entry needs attendance.workforce.admin
+// (V143.5 moved it off regularization.approve, so managers can open the form
+// but not save); the reason is mandatory so the audit trail says why.
 //
 // Who can be picked: the employee directory (hrms.employee.read). Roles
 // without it (department managers since V112) get their team roster for the
@@ -41,7 +41,7 @@ export const ManualEntry: React.FC = () => {
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id
   const canReadDirectory = usePermission(P.HRMS_EMPLOYEE_READ)
-  const canSaveEntry = usePermission(P.ATTENDANCE_REGULARIZATION_APPROVE)
+  const canSaveEntry = usePermission('attendance.workforce.admin')
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [employeeId, setEmployeeId] = useState<string>(prefillEmployeeId)
@@ -82,7 +82,7 @@ export const ManualEntry: React.FC = () => {
     <ModulePage crumb="Attendance" title="Manual attendance entry" subtitle="Punch in or out for someone on a given day. Every entry is audit-logged with your name and the reason."
       actions={<HrButton variant="ghost" onClick={backToMuster}>← Muster roll</HrButton>}>
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: 16, maxWidth: 820 }}>
-        {!canSaveEntry && <Note tone="red">Your role can see this form but can’t record manual attendance. It needs the “approve regularization” permission, so ask HR or an admin.</Note>}
+        {!canSaveEntry && <Note tone="red">Your role can see this form but can’t record manual attendance. Manual entries are for HR and admins; managers can approve their team’s regularization requests instead.</Note>}
         <Panel title="Who" sub={useTeam ? `From your team roster for ${date || 'today'}; your role can’t browse the full directory.` : 'Search the employee directory.'}>
           {selected && <Note tone="green"><strong>{selected.name}</strong>{selected.code ? ` · ${selected.code}` : ''}</Note>}
           {useTeam && employees.length === 0 && !teamLoading ? (

@@ -10,7 +10,7 @@ import { HrPagination } from '@/shared/components/HrPagination'
 import { useCreateCycle, useReviewCycles, type ReviewCycle } from '../api/usePerformance'
 import { useCycleProgress, useInitiateReviews, useCloseCycle, type InitiationResult } from '../api/usePerformanceAdmin'
 import { PerformanceError, PerformanceEmployeePicker } from './PerformanceEmployeePicker'
-import { SubHeading, dmy } from '@/design/module/ModuleKit'
+import { SubHeading, Note, dmy } from '@/design/module/ModuleKit'
 
 const words = (v: string) => v.replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase())
 const period = (a?: string, b?: string) => `${a ? dmy(a) : 'Not set'} – ${b ? dmy(b) : 'Not set'}`
@@ -23,6 +23,7 @@ export function AdminCycles() {
   const [selected, setSelected] = useState<ReviewCycle | null>(null)
   return <div style={{ display: 'grid', gap: 16 }}>
     <SubHeading aside={canWrite ? <HrButton size="sm" onClick={() => setCreating(true)}><Plus size={14} /> Create cycle</HrButton> : undefined}>Review cycles</SubHeading>
+    {!canWrite && !canInitiate && <Note>Each cycle’s progress shows your team only: everyone in the departments you head, or your direct reports.</Note>}
     {cycles.isError ? <PerformanceError error={cycles.error} retry={() => cycles.refetch()} /> : <TableCard><DataTable<ReviewCycle> data={cycles.data ?? []} keyField="id" loading={cycles.isLoading} emptyMessage="No review cycles yet. Create a cycle to begin." columns={[
       { key: 'name', header: 'Cycle', render: cycle => <button className="inline-flex items-center gap-2 text-left font-semibold text-[#0F6E56] hover:underline" onClick={() => setSelected(cycle)}><CalendarRange size={16} /> {cycle.name}</button> },
       { key: 'period', header: 'Review period', render: cycle => <span className="whitespace-nowrap">{period(cycle.periodStart, cycle.periodEnd)}</span> },

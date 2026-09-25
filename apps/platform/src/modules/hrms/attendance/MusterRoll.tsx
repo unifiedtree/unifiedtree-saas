@@ -53,8 +53,8 @@ export const MusterRoll: React.FC = () => {
   const [exporting, setExporting] = useState(false)
   // The export route is @perm.check('hrms.report.attendance'); the button follows it.
   const canExport = usePermission(P.HRMS_REPORT_ATTENDANCE)
-  // Manual entry needs attendance.regularization.approve; the row shortcut follows it.
-  const canManual = usePermission('attendance.regularization.approve')
+  // Saving a manual entry needs attendance.workforce.admin (V143.5); the row shortcut follows it.
+  const canManual = usePermission('attendance.workforce.admin')
   const { data: companies = [] } = useCompanies()
   const companyId = companies[0]?.id ?? ''
   const { data: departments = [] } = useDepartments(companyId)

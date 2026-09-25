@@ -774,3 +774,31 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - `live-dead-entrypoints.mjs` now follows the redesigned My workspace wording (29/29).
   - `live-browser.mjs` now checks the designed dashboard instead of the old "Live overview" region. Every `/hrms` route, plus Settings, Users and Roles, renders its heading with no failed calls.
 - **Checked live:** `live-design-last.mjs` 10/10.
+
+### 11.17 Performance access decided with the client (25 Sep): done
+- **ADMIN runs performance like HR** (migration `V143_9`).
+  - It already held `hrms.appraisal.initiate` and `hrms.kpi.manage`, but without `hrms.performance.read` it couldn't list the cycles, reviews or KPIs it was allowed to manage.
+  - It now also has `hrms.performance.read` and `hrms.performance.write`, so it can create cycles, assign and close them, and create KPIs and record their progress.
+- **Department managers see only their team** (`PerformanceTeamScope`). "Team" means the same as on the My team page: everyone in the departments they head, or their direct reports if they head none, and never the manager themselves. This applies to:
+  - the employee reviews list
+  - each cycle's progress
+  - the KPI list, detail and history
+  - the performance directory (`/v1/performance/employees`)
+  - Before, all of these except KPIs were company-wide, and KPIs used direct reports only.
+- **Managers record progress on their team's KPIs.**
+  - New permission `hrms.kpi.progress` goes to DEPT_MANAGER. OWNER and SUPER_ADMIN also get it, because the startup check `OwnerPermissionInvariantCheck` requires OWNER to hold every permission.
+  - The API only allows it on KPIs owned by their team. Managers still can't create or drop KPIs.
+  - In the UI they see "Your team's goals & KPIs" with a note, and an "Update progress" button.
+- **Fixed: overdue KPIs never turned "At risk".** `KpiService.flipOverdueToAtRisk` existed but nothing called it. The new `KpiAtRiskJob` runs nightly at 00:15 IST and at startup, for every tenant.
+- **Fixed (found while checking): Manual entry offered Save to department managers.**
+  - Saving needs `attendance.workforce.admin` since V143.5, so the server refused them.
+  - The page and the Muster roll "Manual entry" button now use that permission.
+- **Checked:**
+  - `live-performance-scope.mjs` 20/20 against the local server. It covers the team-only lists, progress allowed for the team and refused outside it, and ADMIN (granted to a test user and taken back) seeing and recording everything. It seeds a review outside the team so the check is real, and removes everything afterwards.
+  - The startup sweep marked a seeded overdue KPI "At risk" (server log: "1 KPI(s) marked at risk").
+  - `KpiAccessScopeTest` now has 7 tests.
+  - `live-design-performance.mjs` 18/18 and `live-design-attendance-admin.mjs` 18/18.
+- **Static / to build (performance):**
+  - Nothing shows the per-employee performance directory; the endpoint works and is now scoped.
+  - Employees can't see their KPI's progress history, only current against target.
+  - A review doesn't show the reviewee's KPIs while it's being written.

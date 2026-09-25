@@ -20,17 +20,19 @@ import java.util.UUID;
  * (create cycle, submit review, edit goal, etc.).
  *
  * <p>Auth: {@code hrms.performance.read} — anyone who can view performance
- * data can view the roster. Manager-tree scoping (limit to direct reports)
- * is deferred to Wave 4 KPI admin work.
+ * data can view the roster, limited by {@link PerformanceTeamScope}: a
+ * department manager sees their team only (2026-09-25).
  */
 @RestController
 @RequestMapping("/v1/performance/employees")
 public class PerformanceEmployeeController {
 
     private final PerformanceEmployeeService service;
+    private final PerformanceTeamScope teamScope;
 
-    public PerformanceEmployeeController(PerformanceEmployeeService service) {
+    public PerformanceEmployeeController(PerformanceEmployeeService service, PerformanceTeamScope teamScope) {
         this.service = service;
+        this.teamScope = teamScope;
     }
 
     @GetMapping
@@ -40,6 +42,7 @@ public class PerformanceEmployeeController {
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
-        return service.list(TenantContext.getTenantId(), departmentId, search, page, size);
+        // Department managers see their team only (2026-09-25); admin / HR see everyone.
+        return service.list(TenantContext.getTenantId(), departmentId, search, page, size, teamScope.visibleEmployeeIds());
     }
 }

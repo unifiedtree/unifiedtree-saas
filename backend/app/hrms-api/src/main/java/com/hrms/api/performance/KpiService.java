@@ -26,10 +26,10 @@ import java.util.UUID;
  * due_date / category} + created {@code performance_mgmt.kpi_progress_updates}
  * for audit history.
  *
- * <p>Manager scoping: a MANAGER role reads/writes only for their DIRECT
- * REPORTS (recursive one-hop via {@code reporting_manager_id}). Admin roles
- * bypass. Recursive-CTE version reserved for a later wave — one-hop covers
- * the demo and is O(1) per query.
+ * <p>Manager scoping: MANAGER / DEPT_MANAGER read and record progress only for
+ * their team, defined like the My team page (see {@link PerformanceTeamScope}):
+ * everyone in the departments they head, else their direct reports. Admin
+ * roles see the company. (Before 2026-09-25 this was direct reports only.)
  *
  * <p>Progress arithmetic:
  * <ul>
@@ -52,9 +52,11 @@ public class KpiService {
             Set.of("ACTIVE", "COMPLETED", "DROPPED", "AT_RISK");
 
     private final JdbcTemplate jdbc;
+    private final PerformanceTeamScope teamScope;
 
-    public KpiService(JdbcTemplate jdbc) {
+    public KpiService(JdbcTemplate jdbc, PerformanceTeamScope teamScope) {
         this.jdbc = jdbc;
+        this.teamScope = teamScope;
     }
 
     // ── DTOs ──────────────────────────────────────────────────────────────────
@@ -439,22 +441,21 @@ public class KpiService {
         }
     }
 
+    /** The caller's scope; for managers the team is resolved the same way as the My team page. */
     private KpiAccessScope accessScope() {
-        return KpiAccessScope.from(SecurityContextHolder.getContext().getAuthentication());
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        KpiAccessScope scope = KpiAccessScope.from(auth);
+        return scope.kind() == KpiAccessScope.Kind.TEAM
+                ? scope.withTeam(teamScope.teamOf((org.springframework.security.oauth2.jwt.Jwt) auth.getPrincipal()))
+                : scope;
     }
 
     private void requireOwnerAccess(UUID tenantId, UUID ownerId) {
         KpiAccessScope scope = accessScope();
         if (ownerId == null) throw new AccessDeniedException("An employee owner is required");
-        StringBuilder sql = new StringBuilder("SELECT count(*) FROM hrms.employees WHERE tenant_id = ? AND id = ?");
-        List<Object> args = new ArrayList<>(List.of(tenantId, ownerId));
-        if (scope.kind() == KpiAccessScope.Kind.SELF) {
-            if (!ownerId.equals(scope.employeeId())) throw new AccessDeniedException("KPI owner is outside your access scope");
-        } else if (scope.kind() == KpiAccessScope.Kind.DIRECT_REPORTS) {
-            sql.append(" AND reporting_manager_id = ? AND is_active = TRUE");
-            args.add(scope.employeeId());
-        }
-        Integer found = jdbc.queryForObject(sql.toString(), Integer.class, args.toArray());
+        if (!scope.covers(ownerId)) throw new AccessDeniedException("KPI owner is outside your access scope");
+        Integer found = jdbc.queryForObject("SELECT count(*) FROM hrms.employees WHERE tenant_id = ? AND id = ?",
+                Integer.class, tenantId, ownerId);
         if (found == null || found == 0) throw new AccessDeniedException("KPI owner is outside your access scope");
     }
 
