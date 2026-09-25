@@ -87,6 +87,8 @@ public final class HeadcountWorkbook {
         Map<Row, String> status = new LinkedHashMap<>();
         int joinedMonth = 0, leftMonth = 0, joinedFy = 0, leftFy = 0;
         for (Row r : rows) {
+            // A removed record (is_active = false) isn't a joiner, a leaver or headcount.
+            if (!r.active()) continue;
             String s = statusOn(r, asOf, today);
             if (s != null) { employed.add(r); status.put(r, s); }
             LocalDate joined = joinedOn(r);

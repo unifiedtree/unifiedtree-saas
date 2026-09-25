@@ -144,4 +144,15 @@ class HeadcountWorkbookTest {
         assertEquals(1, w.totals().leftThisFiscalYear());
         assertEquals("FY 2026-27", w.fiscalYear().label());
     }
+
+    @Test void aRemovedRecordIsNeitherAJoinerNorALeaver() {
+        Row joined = row("R1", "ACTIVE", LocalDate.of(2026, 9, 3));
+        Row removed = new Row(joined.id(), joined.code(), joined.firstName(), null, joined.lastName(), joined.workEmail(),
+                joined.gender(), joined.employmentType(), "ACTIVE", false, joined.dateOfJoining(), joined.createdOn(),
+                null, null, null, null, null, "Engineering", "Developer", "Pune", null);
+        Workbook w = build(TODAY, List.of(removed), true, false);
+        assertEquals(0, w.totals().total());
+        assertEquals(0, w.totals().joinedThisMonth());
+        assertEquals(0, w.totals().joinedThisFiscalYear());
+    }
 }
