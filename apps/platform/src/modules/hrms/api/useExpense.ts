@@ -18,8 +18,11 @@ export interface ExpenseItem {
   description?: string
   amount: number
   expenseDate: string
-  receiptUrl?: string
+  /** On reads: a short-lived signed link (null when storage isn't set up). On submit: the reference POST /receipts returned. */
+  receiptUrl?: string | null
   merchantName?: string
+  /** A receipt is attached (true even when no link can be signed here). */
+  hasReceipt?: boolean
 }
 
 export interface ExpenseClaim {
@@ -40,6 +43,9 @@ export interface ExpenseClaim {
   notes?: string
   createdAt: string
   items?: ExpenseItem[]
+  /** Line items on the claim and how many carry a receipt (list rows carry no items). */
+  itemCount?: number
+  receiptCount?: number
 }
 
 export interface ExpensePolicy {
@@ -118,6 +124,61 @@ export function useSubmitClaim() {
     mutationFn: (data: SubmitClaimPayload) =>
       apiJson<ExpenseClaim>('/v1/expense/claims', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'expense'] }),
+  })
+}
+
+// ── Receipts (V143.13) ─────────────────────────────────────────────────────
+
+/** Mirrors the server's receipt rules (ExpenseReceipts): PDF, PNG or JPEG, up to 10 MB. */
+export const RECEIPT_FORMATS = ['pdf', 'png', 'jpg', 'jpeg']
+export const RECEIPT_MAX_MB = 10
+
+/** Returns the problem with a receipt file, or '' when it can be uploaded. */
+export function receiptProblem(file: File): string {
+  const ext = file.name.split('.').pop()?.toLowerCase() || ''
+  if (!RECEIPT_FORMATS.includes(ext)) return 'A receipt must be a PDF, PNG or JPEG'
+  if (file.size > RECEIPT_MAX_MB * 1024 * 1024) return `The receipt is too large (max ${RECEIPT_MAX_MB} MB)`
+  return ''
+}
+
+/** "2 of 3 lines" — how many lines of a claim carry a receipt (from the list row's counts). */
+export const receiptSummary = (c: Pick<ExpenseClaim, 'itemCount' | 'receiptCount'>) =>
+  c.itemCount ? `${c.receiptCount ?? 0} of ${c.itemCount} ${c.itemCount === 1 ? 'line' : 'lines'}` : '—'
+
+export interface StoredReceipt { receiptUrl: string; fileName: string; sizeBytes: number; contentType: string }
+
+/** Uploads one receipt for the signed-in person; send receiptUrl back on the claim's line. */
+export function uploadReceipt(file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  return apiJson<StoredReceipt>('/v1/expense/receipts', { method: 'POST', body })
+}
+
+/** Attach or replace the receipt on a line of your own claim while it waits for a decision. */
+export function useAttachReceipt() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ claimId, itemId, file }: { claimId: string; itemId: string; file: File }) => {
+      const body = new FormData()
+      body.append('file', file)
+      return apiJson<ExpenseClaim>(`/v1/expense/claims/${claimId}/items/${itemId}/receipt`, { method: 'POST', body })
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'expense'] }),
+  })
+}
+
+/**
+ * Another person's claims, for the employee workspace's Expenses tab (V143.13).
+ * HR / admin / finance (hrms.expense.employee.read) read anyone, department
+ * managers their team, everyone else only themselves; the server answers 403 otherwise.
+ */
+export function useEmployeeClaims(employeeId: string, page = 0, pageSize = 10, enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'expense', 'employee', employeeId, page, pageSize],
+    queryFn: () => apiJson<Page<ExpenseClaim>>(`/v1/expense/employees/${employeeId}/claims?page=${page}&size=${pageSize}`),
+    enabled: !!employeeId && enabled,
+    staleTime: 30_000,
+    retry: false,
   })
 }
 

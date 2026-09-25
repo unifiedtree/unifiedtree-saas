@@ -18,10 +18,12 @@ import { ReimbursementBatches } from './expense/ReimbursementBatches'
 import { EXPENSE_STATUS_LABEL } from './expense/expenseStatus'
 import {
   useMyClaims, usePendingExpenseApprovals, useExpenseClaim, useSubmitClaim, useExpenseDecision, useReimburseClaim,
-  useExpensePolicies, useCreatePolicy, useUpdatePolicy, useDeletePolicy, useExpenseDashboardStats,
-  inr, EXPENSE_CATEGORIES, EXPENSE_APPROVALS_PAGE_SIZE,
+  useExpensePolicies, useCreatePolicy, useUpdatePolicy, useDeletePolicy, useExpenseDashboardStats, useAttachReceipt,
+  uploadReceipt, receiptProblem, receiptSummary, inr, EXPENSE_CATEGORIES, EXPENSE_APPROVALS_PAGE_SIZE, RECEIPT_FORMATS, RECEIPT_MAX_MB,
   type ExpenseStatus, type ExpenseCategory, type ExpensePolicy, type ExpenseClaim,
 } from './api/useExpense'
+
+const RECEIPT_ACCEPT = RECEIPT_FORMATS.map((f) => `.${f}`).join(',')
 
 const STATUS_TONE: Record<ExpenseStatus, PillTone> = {
   DRAFT: 'gray', SUBMITTED: 'warn', APPROVED: 'ok', APPROVED_FOR_PAY: 'info', REJECTED: 'red', REIMBURSED: 'teal',
@@ -134,7 +136,8 @@ function MyClaimsTab() {
             ) },
             { key: 'amount', header: 'Amount', render: (c: any) => <span className="font-semibold text-text-primary">{inr(c.totalAmount)}</span> },
             { key: 'status', header: 'Status', render: (c: any) => <HrStatusPill tone={STATUS_TONE[c.status as ExpenseStatus] || 'gray'}>{EXPENSE_STATUS_LABEL[c.status as ExpenseStatus] ?? c.status}</HrStatusPill> },
-            { key: 'submitted', header: 'Submitted', render: (c: any) => <span className="text-text-secondary">{c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—'}</span> }
+            { key: 'submitted', header: 'Submitted', render: (c: any) => <span className="text-text-secondary">{c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—'}</span> },
+            { key: 'receipts', header: 'Receipts', render: (c: any) => <span className="text-text-secondary">{receiptSummary(c)}</span> },
           ]}
           data={claims}
           keyField="id"
@@ -143,7 +146,7 @@ function MyClaimsTab() {
           expandedRowIds={expandedMyId ? [expandedMyId] : []}
           renderSubRow={(c: any) => (
             <div className="bg-bg-base/40 p-4">
-              <ClaimDetailPanel claimId={c.id} />
+              <ClaimDetailPanel claimId={c.id} allowAttach />
             </div>
           )}
         />
@@ -160,10 +163,12 @@ interface DraftItem {
   expenseDate: string
   description: string
   merchantName: string
+  /** Optional receipt; uploaded (POST /v1/expense/receipts) when the claim is submitted. */
+  receipt: File | null
 }
 
 const emptyItem = (): DraftItem => ({
-  category: 'TRAVEL', amount: '', expenseDate: todayIso(), description: '', merchantName: '',
+  category: 'TRAVEL', amount: '', expenseDate: todayIso(), description: '', merchantName: '', receipt: null,
 })
 
 /**
@@ -213,6 +218,9 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
   const { data: policies = [] } = useExpensePolicies(claimCompanyId, canPolicyRead)
 
   const capByCategory = useMemo(() => buildCapByCategory(policies), [policies])
+  // Categories whose active policy expects a receipt (advisory: the server doesn't block a claim without one).
+  const receiptExpected = useMemo(() => new Set(policies.filter((p) => p.active && p.requiresReceipt).map((p) => p.category)), [policies])
+  const [uploading, setUploading] = useState(false)
 
   // The cap applies to the claim's per-category SUBTOTAL, not to each line —
   // otherwise one dinner split across twenty rows would slip under it. Sum the
@@ -244,17 +252,33 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
     if (!title.trim()) { toast('Give the claim a title', 'error'); return }
     const valid = items.filter((it) => parseFloat(it.amount) > 0 && it.expenseDate)
     if (valid.length === 0) { toast('Add at least one line item with an amount', 'error'); return }
+    // Receipts go up first, one at a time; the claim is only submitted once every chosen receipt is stored.
+    const receiptUrls: (string | undefined)[] = []
+    setUploading(true)
+    try {
+      for (let i = 0; i < valid.length; i++) {
+        const file = valid[i].receipt
+        if (!file) { receiptUrls.push(undefined); continue }
+        try {
+          receiptUrls.push((await uploadReceipt(file)).receiptUrl)
+        } catch (e) {
+          toast(`Couldn’t upload the receipt for line ${items.indexOf(valid[i]) + 1}: ${(e as Error)?.message || 'please try again'}`, 'error')
+          return
+        }
+      }
+    } finally { setUploading(false) }
     try {
       await submit.mutateAsync({
         companyId: claimCompanyId,
         title: title.trim(),
         notes: notes.trim() || undefined,
-        items: valid.map((it) => ({
+        items: valid.map((it, i) => ({
           category: it.category,
           amount: parseFloat(it.amount),
           expenseDate: it.expenseDate,
           description: it.description.trim() || undefined,
           merchantName: it.merchantName.trim() || undefined,
+          receiptUrl: receiptUrls[i],
         })),
       })
       toast('Expense claim submitted', 'success')
@@ -341,6 +365,21 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
                 <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Description</label>
                 <input value={it.description} onChange={(e) => setItem(i, { description: e.target.value })} placeholder="Optional" className="ut-input" />
               </div>
+              <div className="col-span-2">
+                <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary" htmlFor={`receipt-${i}`}>Receipt</label>
+                <input id={`receipt-${i}`} type="file" accept={RECEIPT_ACCEPT} className="text-[13px]"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null
+                    const problem = file ? receiptProblem(file) : ''
+                    if (problem) { toast(problem, 'error'); e.target.value = ''; setItem(i, { receipt: null }); return }
+                    setItem(i, { receipt: file })
+                  }} />
+                <p className={`mt-1.5 text-xs ${receiptExpected.has(it.category) && !it.receipt ? 'font-semibold text-[#92400e]' : 'text-text-tertiary'}`}>
+                  {receiptExpected.has(it.category) && !it.receipt
+                    ? `Your company’s ${fmtCat(it.category).toLowerCase()} policy expects a receipt. PDF, PNG or JPEG, up to ${RECEIPT_MAX_MB} MB.`
+                    : `Optional. PDF, PNG or JPEG, up to ${RECEIPT_MAX_MB} MB. Your approver can open it from the claim.`}
+                </p>
+              </div>
             </div>
           </div>
         ))}
@@ -353,7 +392,7 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
         <label className="block text-[13px] font-semibold text-text-secondary">Notes for your approver
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional" className={inputCls + ' mt-1.5'} />
         </label>
-        <Note>Receipts can’t be attached yet; keep them in case your approver asks.</Note>
+        <Note>Receipts are uploaded when you submit. You can still add a missing one from My claims until the claim is decided.</Note>
       </Panel>
 
       {capBreaches.length > 0 && (
@@ -387,8 +426,8 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
             multi-company tenant the two can disagree — a hard block would then
             stop a claim the server would have accepted. Warn, submit, and show
             the server's verbatim reason if it does reject. */}
-        <HrButton onClick={handleSubmit} disabled={submit.isPending}>
-          {submit.isPending ? 'Submitting…' : 'Submit Claim'}
+        <HrButton onClick={handleSubmit} disabled={submit.isPending || uploading}>
+          {uploading ? 'Uploading receipts…' : submit.isPending ? 'Submitting…' : 'Submit Claim'}
         </HrButton>
       </div>
     </div>
@@ -463,12 +502,12 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
   const card = (c: ExpenseClaim) => (
     <DecisionCard key={c.id} name={c.employeeName || 'Employee'} sub={c.employeeCode}
       status={[EXPENSE_STATUS_LABEL[c.status] ?? c.status, STATUS_TONE[c.status] || 'gray']}
-      facts={[{ k: 'Claim', v: c.title }, { k: 'Amount', v: inr(c.totalAmount) }, { k: 'Submitted', v: c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—' }]}
+      facts={[{ k: 'Claim', v: c.title }, { k: 'Amount', v: inr(c.totalAmount) }, { k: 'Submitted', v: c.submittedAt ? format(new Date(c.submittedAt), 'd MMM yyyy') : '—' }, { k: 'Receipts', v: receiptSummary(c) }]}
       details={canReadClaim ? (
         <div>
           <button type="button" onClick={() => setExpandedId(expandedId === c.id ? null : c.id)} aria-expanded={expandedId === c.id}
             className="inline-flex items-center gap-1.5 text-left text-[13px] font-semibold text-[#047857] hover:text-[#064E3B]">
-            {expandedId === c.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{expandedId === c.id ? 'Hide line items' : 'Show line items'}
+            {expandedId === c.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{expandedId === c.id ? 'Hide line items' : (c.receiptCount ? 'Show line items and receipts' : 'Show line items')}
           </button>
           {expandedId === c.id && <div className="mt-2 overflow-x-auto rounded-xl border border-border-default"><ClaimDetailPanel claimId={c.id} /></div>}
         </div>
@@ -537,9 +576,24 @@ function ApprovalsTab({ canApprove, canReimburse }: { canApprove: boolean; canRe
  * the detail is pulled on demand instead. react-query caches it, so
  * collapsing and re-expanding the same row does not refetch.
  */
-function ClaimDetailPanel({ claimId }: { claimId: string }) {
+export function ClaimDetailPanel({ claimId, allowAttach }: { claimId: string; allowAttach?: boolean }) {
   const { data: claim, isLoading, isError, refetch } = useExpenseClaim(claimId)
   const items = claim?.items ?? []
+  const { toast } = useToast()
+  const attach = useAttachReceipt()
+  // The claimant can add or replace a receipt until the claim is decided (the server's rule).
+  const canAttach = !!allowAttach && claim?.status === 'SUBMITTED'
+  const onAttach = async (itemId: string, file: File | null) => {
+    if (!file) return
+    const problem = receiptProblem(file)
+    if (problem) { toast(problem, 'error'); return }
+    try {
+      await attach.mutateAsync({ claimId, itemId, file })
+      toast('Receipt attached', 'success')
+    } catch (e) {
+      toast((e as Error)?.message || 'Couldn’t attach the receipt', 'error')
+    }
+  }
 
   if (isLoading) {
     return <div className="p-4"><div className="h-5 w-full animate-pulse rounded bg-bg-base" /></div>
@@ -581,15 +635,25 @@ function ClaimDetailPanel({ claimId }: { claimId: string }) {
               <td className="text-text-secondary">{format(new Date(it.expenseDate + 'T00:00:00'), 'd MMM yyyy')}</td>
               <td className="text-right font-semibold text-text-primary">{inr(it.amount)}</td>
               <td>
-                {/* receiptUrl is NULL on every claim today — there is no upload
-                    control in the product yet — so this renders "—" until that
-                    ships, at which point the link starts working with no change
-                    here. */}
-                {it.receiptUrl ? (
-                  <a href={it.receiptUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-[#047857] hover:text-[#064E3B]">
-                    <ExternalLink size={13} /> View
-                  </a>
-                ) : <span className="text-text-tertiary">—</span>}
+                {/* receiptUrl is a short-lived signed link to the private bucket.
+                    When storage isn't set up the API can't sign one, so an
+                    attached receipt says so instead of offering a dead link. */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {it.receiptUrl ? (
+                    <a href={it.receiptUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-[#047857] hover:text-[#064E3B]">
+                      <ExternalLink size={13} /> View
+                    </a>
+                  ) : it.hasReceipt ? (
+                    <span className="text-xs text-text-tertiary" title="Receipt storage isn’t set up here, so the file can’t be opened">Attached</span>
+                  ) : !canAttach ? <span className="text-text-tertiary">—</span> : null}
+                  {canAttach && it.id && (
+                    <label className={`inline-flex cursor-pointer items-center gap-1 text-sm font-semibold text-[#047857] hover:text-[#064E3B] ${attach.isPending ? 'pointer-events-none opacity-60' : ''}`}>
+                      {it.hasReceipt ? 'Replace' : 'Attach'}
+                      <input type="file" accept={RECEIPT_ACCEPT} className="sr-only" aria-label={`${it.hasReceipt ? 'Replace' : 'Attach'} the receipt for ${it.description || fmtCat(it.category)}`}
+                        onChange={(e) => { const f = e.target.files?.[0] ?? null; e.target.value = ''; void onAttach(it.id!, f) }} />
+                    </label>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
