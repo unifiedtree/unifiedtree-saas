@@ -28,16 +28,20 @@ public class OvertimeController {
  public record ReasonInput(@Size(max=2000) String reason) {}
  /**
   * Details on each overtime row (V143.25): the shift in force that day and when it ended, when the person checked in and
-  * out, and the reason. The reason is the employee's own (given at check-out or later), else the reason on an approved
-  * fix request that set the times, else the reason HR gave for a manual entry. reasonSource says which one it is.
+  * out, and the reason. The reason is the employee's own (given at check-out or later), else, for a manual entry HR
+  * made, the reason HR gave, else the reason on an approved fix request that set the times. The nightly auto-close marker
+  * ("AUTO_CLOSED: ...") is not a reason. reasonSource says which one it is.
   */
  static final String DETAILS_SQL = """
     r.check_in_at AS "checkInAt",r.check_out_at AS "checkOutAt",
     s.name AS "shiftName",to_char(s.start_time,'HH24:MI') AS "shiftStart",to_char(s.end_time,'HH24:MI') AS "shiftEnd",
-    COALESCE(NULLIF(btrim(r.overtime_reason),''),NULLIF(btrim(r.regularization_reason),''),NULLIF(btrim(r.manual_entry_reason),'')) AS reason,
+    CASE WHEN NULLIF(btrim(r.overtime_reason),'') IS NOT NULL THEN btrim(r.overtime_reason)
+         WHEN r.manual_entry THEN COALESCE(NULLIF(btrim(r.manual_entry_reason),''),NULLIF(btrim(r.regularization_reason),''))
+         WHEN NULLIF(btrim(r.regularization_reason),'') IS NOT NULL AND r.regularization_reason NOT LIKE 'AUTO_CLOSED%' THEN btrim(r.regularization_reason)
+    END AS reason,
     CASE WHEN NULLIF(btrim(r.overtime_reason),'') IS NOT NULL THEN 'EMPLOYEE'
-         WHEN NULLIF(btrim(r.regularization_reason),'') IS NOT NULL THEN 'FIX_REQUEST'
-         WHEN NULLIF(btrim(r.manual_entry_reason),'') IS NOT NULL THEN 'MANUAL_ENTRY' END AS "reasonSource"
+         WHEN r.manual_entry AND COALESCE(NULLIF(btrim(r.manual_entry_reason),''),NULLIF(btrim(r.regularization_reason),'')) IS NOT NULL THEN 'MANUAL_ENTRY'
+         WHEN NULLIF(btrim(r.regularization_reason),'') IS NOT NULL AND r.regularization_reason NOT LIKE 'AUTO_CLOSED%' THEN 'FIX_REQUEST' END AS "reasonSource"
    """;
  /** The shift assignment in force on the record's date (the same rule as the team schedule). */
  static final String SHIFT_JOIN = """

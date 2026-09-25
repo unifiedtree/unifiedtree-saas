@@ -68,7 +68,11 @@ public class OvertimeReasons {
         String reason = forCheckout(raw);
         if (reason == null || recordId == null || employeeId == null) return;
         try {
-            jdbc.update("UPDATE attendance.records SET overtime_reason = ? WHERE id = ? AND employee_id = ? AND tenant_id = ?",
+            // Never rewrite the reason an approver already decided on (a second
+            // check-out on a reviewed day would otherwise replace it).
+            jdbc.update("UPDATE attendance.records SET overtime_reason = ? WHERE id = ? AND employee_id = ? AND tenant_id = ?"
+                            + " AND NOT EXISTS (SELECT 1 FROM attendance.overtime_decisions d WHERE d.tenant_id = attendance.records.tenant_id"
+                            + " AND d.record_id = attendance.records.id AND d.reviewed_minutes = attendance.records.overtime_minutes)",
                     reason, recordId, employeeId, TenantContext.requireTenantId());
         } catch (RuntimeException ex) {
             log.warn("Could not store the overtime reason for record {}: {}", recordId, ex.getMessage());

@@ -94,6 +94,14 @@ try {
   check('overtime list: the day carries left-at, shift end and a reason', !!row && ms(row.checkOutAt) === ms(`${D}T19:15:00+05:30`) && (row.shiftEnd || '') === expectedEnd
     && row.reason === 'QA w2f fix reason' && row.reasonSource === 'FIX_REQUEST' && row.minutes === 75,
   row ? `out=${row.checkOutAt} shiftEnd=${row.shiftEnd}/${expectedEnd || 'none'} reason=${row.reason} (${row.reasonSource})` : 'row missing')
+  // A manual entry HR made is labelled as HR's, not as a fix request; the nightly auto-close marker is no reason.
+  sql(`update attendance.records set manual_entry = true, manual_entry_reason = 'QA w2f manual reason' where id='${recId}'`)
+  row = await otRow(hrm)
+  check('overtime list: a manual entry’s reason is labelled as entered by HR', row?.reason === 'QA w2f manual reason' && row?.reasonSource === 'MANUAL_ENTRY', `${row?.reason} (${row?.reasonSource})`)
+  sql(`update attendance.records set manual_entry = false, manual_entry_reason = null, regularization_reason = 'AUTO_CLOSED: no checkout recorded' where id='${recId}'`)
+  row = await otRow(hrm)
+  check('overtime list: the auto-close marker is not shown as a reason', !!row && row.reason == null && row.reasonSource == null, `${row?.reason} (${row?.reasonSource})`)
+  sql(`update attendance.records set regularization_reason = 'QA w2f fix reason' where id='${recId}'`)
   check('overtime list: a manager sees their team member’s overtime', !!(await otRow(mgr)))
   check('overtime list: an employee is refused (403)', (await reader(`/v1/attendance/overtime?from=${D}&to=${D}`)).status === 403)
 

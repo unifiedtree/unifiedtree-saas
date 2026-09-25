@@ -50,6 +50,20 @@ class OvertimeReasonsTest {
         verify(jdbc).update(startsWith("UPDATE attendance.records SET overtime_reason"), eq("Server migration"), eq(record), eq(me), eq(tenant));
     }
 
+    @Test void aCheckOutNeverRewritesAReasonAlreadyDecidedOn() {
+        reasons.recordAtCheckout(record, me, "Late audit");
+        verify(jdbc).update(contains("NOT EXISTS (SELECT 1 FROM attendance.overtime_decisions"), eq("Late audit"), eq(record), eq(me), eq(tenant));
+    }
+
+    @Test void theListLabelsManualEntriesAsHrsAndIgnoresTheAutoCloseMarker() {
+        String sql = OvertimeController.DETAILS_SQL;
+        // The employee's own reason first, then a manual entry's, then a fix request's.
+        assertTrue(sql.indexOf("'EMPLOYEE'") < sql.indexOf("'MANUAL_ENTRY'"));
+        assertTrue(sql.indexOf("'MANUAL_ENTRY'") < sql.indexOf("'FIX_REQUEST'"));
+        assertTrue(sql.contains("WHEN r.manual_entry AND"));
+        assertTrue(sql.contains("NOT LIKE 'AUTO_CLOSED%'"));
+    }
+
     @Test void aBlankReasonAtCheckOutWritesNothing() {
         reasons.recordAtCheckout(record, me, "  ");
         reasons.recordAtCheckout(record, me, null);

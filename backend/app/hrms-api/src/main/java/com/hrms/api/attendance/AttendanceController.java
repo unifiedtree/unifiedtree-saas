@@ -169,7 +169,11 @@ public class AttendanceController {
         // Put the phone / kiosk on the face check that cleared this punch, so
         // the Face tab can say where it happened (V143.25). Best effort.
         if (facePunchDevices != null) {
-            facePunchDevices.link(jwt.getSubject(), request.deviceId(), request.checkInMethod());
+            try {
+                facePunchDevices.link(jwt.getSubject(), request.deviceId(), request.checkInMethod());
+            } catch (RuntimeException ignored) {
+                // The punch is saved; a missing device label must never fail it.
+            }
         }
         return ResponseEntity.ok(dto);
     }
@@ -200,7 +204,11 @@ public class AttendanceController {
                 request != null ? request.capturedAt() : null);
         // Why they stayed late, when the app sends it (V143.25). Best effort.
         if (overtimeReasons != null && request != null && out != null) {
-            overtimeReasons.recordAtCheckout(out.id(), employeeId, request.overtimeReason());
+            try {
+                overtimeReasons.recordAtCheckout(out.id(), employeeId, request.overtimeReason());
+            } catch (RuntimeException ignored) {
+                // The check-out is saved; a missing reason must never fail it.
+            }
         }
         return ResponseEntity.ok(out);
     }
