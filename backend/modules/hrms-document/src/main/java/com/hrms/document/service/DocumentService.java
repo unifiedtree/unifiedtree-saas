@@ -98,6 +98,45 @@ public class DocumentService {
         return toResponse(doc);
     }
 
+    /** A replacement for a document's file: an uploaded object ("r2://…") with its metadata, or a plain link (metadata null). */
+    public record FileChange(String fileUrl, String originalFilename, Long fileSizeBytes, String contentType) {}
+
+    /**
+     * V143.13: edit a stored document (HR). Title, category, type, dates and notes
+     * are replaced as given (null dates / notes clear them). {@code file} null keeps
+     * the stored file. {@code verificationStatus} non-null re-stamps the review
+     * (an HR file replacement lands VERIFIED, like an HR upload).
+     */
+    @Transactional
+    public DocumentResponse updateDocument(UUID documentId, String title, com.hrms.document.enums.DocumentCategory category,
+                                           UUID documentTypeId, java.time.LocalDate issuedDate, java.time.LocalDate expiryDate,
+                                           String notes, FileChange file, String verificationStatus, UUID verifiedBy) {
+        EmployeeDocument doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("EmployeeDocument", documentId));
+        doc.setTitle(title);
+        if (category != null) doc.setCategory(category);
+        doc.setDocumentTypeId(documentTypeId);
+        doc.setIssuedDate(issuedDate);
+        doc.setExpiryDate(expiryDate);
+        doc.setNotes(notes);
+        if (file != null) {
+            doc.setFileUrl(file.fileUrl());
+            doc.setOriginalFilename(file.originalFilename());
+            doc.setFileSizeBytes(file.fileSizeBytes());
+            doc.setContentType(file.contentType());
+        }
+        if (verificationStatus != null) {
+            doc.setVerificationStatus(verificationStatus);
+            doc.setVerifiedBy(verifiedBy);
+            doc.setVerifiedAt(java.time.Instant.now());
+            doc.setRejectionReason(null);
+        }
+        doc = documentRepository.save(doc);
+        log.info("Employee document edited id={} employee={} typeId={} fileReplaced={}",
+                documentId, doc.getEmployeeId(), documentTypeId, file != null);
+        return toResponse(doc);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<DocumentResponse> getEmployeeDocuments(UUID employeeId, Pageable pageable) {
         return toPage(documentRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId, pageable));

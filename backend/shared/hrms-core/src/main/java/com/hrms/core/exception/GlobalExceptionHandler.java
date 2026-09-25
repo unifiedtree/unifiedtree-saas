@@ -155,6 +155,51 @@ public class GlobalExceptionHandler {
                         ex.getMessage() != null ? ex.getMessage() : "HTTP method not supported for this endpoint"));
     }
 
+    /**
+     * An upload over the multipart limit (spring.servlet.multipart.max-file-size,
+     * 10 MB in production) used to fall through to the catch-all 500 "An
+     * unexpected error occurred". It is the client's file, so say what to do.
+     * Per-type caps (document types, receipts) are still checked by each endpoint.
+     */
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handle(org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        long limit = ex.getMaxUploadSize() > 0 ? ex.getMaxUploadSize() : configuredMaxFileSizeBytes();
+        log.warn("Upload refused: over the multipart limit ({} bytes)", limit);
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of(400, "FILE_TOO_LARGE", fileTooLargeMessage(limit)));
+    }
+
+    /** A body that isn't readable multipart (not multipart at all, truncated upload): the client's request, not a 500. */
+    @ExceptionHandler(org.springframework.web.multipart.MultipartException.class)
+    public ResponseEntity<ErrorResponse> handle(org.springframework.web.multipart.MultipartException ex) {
+        log.warn("Multipart request refused: {}", ex.getMessage());
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of(400, "INVALID_UPLOAD",
+                        "The upload couldn't be read. Choose the file again and retry (max "
+                                + megabytes(configuredMaxFileSizeBytes()) + " MB)."));
+    }
+
+    /** Spring Boot's own default is 1MB, so the fallback matches what the servlet enforces when unset. */
+    @org.springframework.beans.factory.annotation.Value("${spring.servlet.multipart.max-file-size:1MB}")
+    private String maxFileSize = "1MB";
+
+    long configuredMaxFileSizeBytes() {
+        try {
+            return org.springframework.util.unit.DataSize.parse(maxFileSize.trim()).toBytes();
+        } catch (RuntimeException unparsable) {
+            return 10L * 1024 * 1024;
+        }
+    }
+
+    static String fileTooLargeMessage(long limitBytes) {
+        return "File is too large (max " + megabytes(limitBytes) + " MB)";
+    }
+
+    static String megabytes(long bytes) {
+        double mb = bytes / (1024.0 * 1024.0);
+        return mb == Math.rint(mb) ? String.valueOf((long) mb) : String.format(java.util.Locale.ROOT, "%.1f", mb);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handle(Exception ex) {
         log.error("Unhandled exception", ex);
