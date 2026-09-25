@@ -36,15 +36,30 @@ public class ReportService {
         // before asOf counts as gone (the status already says they left).
         // department_id lets a click open that department's people. (Gender
         // stays in the diversity report, behind its own permission.)
+        //
+        // The active / notice / probation split is each person's status ON
+        // asOf, read from hrms.employee_status_history (V143_27: fed by a
+        // trigger on every status change, backfilled from the record's own
+        // dates), not today's status. Someone whose exit is still to come
+        // counts as on notice. Without a history row (should not happen after
+        // the backfill) the current status is used, as before.
         String sql = """
+                WITH status_on AS (
+                    SELECT DISTINCT ON (h.employee_id) h.employee_id, h.status
+                      FROM hrms.employee_status_history h
+                     WHERE h.effective_on <= ?
+                     ORDER BY h.employee_id, h.effective_on DESC, h.recorded_at DESC
+                )
                 SELECT
                     d.id                            AS department_id,
                     d.name                          AS department,
                     COUNT(e.id)                     AS total,
-                    SUM(CASE WHEN e.employment_status = 'ACTIVE'        THEN 1 ELSE 0 END) AS active,
-                    SUM(CASE WHEN e.employment_status = 'NOTICE_PERIOD' THEN 1 ELSE 0 END) AS on_notice,
-                    SUM(CASE WHEN e.employment_status = 'PROBATION'     THEN 1 ELSE 0 END) AS probation
+                    SUM(CASE WHEN COALESCE(s.status, e.employment_status) = 'ACTIVE'    THEN 1 ELSE 0 END) AS active,
+                    SUM(CASE WHEN COALESCE(s.status, e.employment_status)
+                                  IN ('NOTICE_PERIOD', 'EXITED', 'TERMINATED', 'RESIGNED') THEN 1 ELSE 0 END) AS on_notice,
+                    SUM(CASE WHEN COALESCE(s.status, e.employment_status) = 'PROBATION' THEN 1 ELSE 0 END) AS probation
                 FROM hrms.employees e
+                LEFT JOIN status_on s ON s.employee_id = e.id
                 LEFT JOIN hrms.departments d ON d.id = e.department_id
                 WHERE e.company_id = ?
                   AND e.date_of_joining <= ?
@@ -55,7 +70,7 @@ public class ReportService {
                 GROUP BY d.id, d.name
                 ORDER BY total DESC
                 """;
-        return jdbc.queryForList(sql, companyId, asOf, asOf);
+        return jdbc.queryForList(sql, asOf, companyId, asOf, asOf);
     }
 
     // ── 2. Attrition Report ───────────────────────────────────────────────────
