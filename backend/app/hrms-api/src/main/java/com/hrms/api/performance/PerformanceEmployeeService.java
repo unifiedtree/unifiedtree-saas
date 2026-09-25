@@ -50,9 +50,11 @@ public class PerformanceEmployeeService {
     private static final int MAX_PAGE_SIZE = 200;
 
     private final JdbcTemplate jdbc;
+    private final KpiService kpiService;
 
-    public PerformanceEmployeeService(JdbcTemplate jdbc) {
+    public PerformanceEmployeeService(JdbcTemplate jdbc, KpiService kpiService) {
         this.jdbc = jdbc;
+        this.kpiService = kpiService;
     }
 
     public record EmployeePerformanceRowDto(
@@ -185,7 +187,149 @@ public class PerformanceEmployeeService {
         return new PageDto<>(rows, page, size, total);
     }
 
+    // ── One employee's performance page (2026-09-25) ─────────────────────────
+
+    public record ProfileEmployeeDto(
+            UUID id, String employeeCode, String name, String department, String designation,
+            String managerName, String employmentStatus, String dateOfJoining, boolean active) {}
+
+    public record ProfileReviewDto(
+            UUID id, UUID cycleId, String cycleName, String periodStart, String periodEnd,
+            UUID reviewerId, String reviewerName, String reviewerType, String status,
+            BigDecimal overallRating, String strengths, String improvements,
+            String submittedAt, String createdAt) {}
+
+    /** Average of the submitted ratings about this person in one cycle. */
+    public record RatingPointDto(
+            UUID cycleId, String cycleName, String periodStart, String periodEnd,
+            BigDecimal averageRating, int reviewCount, String lastSubmittedAt) {}
+
+    public record ProfileSummaryDto(
+            BigDecimal latestRating, BigDecimal averageRating,
+            int activeGoals, int atRiskGoals, int completedGoals,
+            int reviewsSubmitted, int reviewsPending) {}
+
+    public record EmployeeProfileDto(
+            ProfileEmployeeDto employee, ProfileSummaryDto summary,
+            List<RatingPointDto> ratings, List<KpiService.KpiRowDto> goals,
+            List<ProfileReviewDto> reviews) {}
+
+    /** Most goals shown on the page; the Goals & KPIs view pages through the rest. */
+    private static final int PROFILE_GOAL_LIMIT = 200;
+
+    /**
+     * Everything the per-employee performance page shows: the person, their
+     * reviews (with reviewer names), their goals and KPIs, and their rating per
+     * cycle over time.
+     *
+     * @param visibleEmployeeIds the caller's performance scope ({@code null} = whole
+     *        company). A person outside it is refused with 403, the same rule as
+     *        the directory, so a manager can open only their team.
+     */
+    @Transactional
+    public EmployeeProfileDto profile(UUID tenantId, UUID employeeId, java.util.Set<UUID> visibleEmployeeIds) {
+        bindTenant(tenantId);
+        if (!inScope(employeeId, visibleEmployeeIds)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "This person is outside your performance scope");
+        }
+        ProfileEmployeeDto employee = jdbc.query("""
+                SELECT e.id, e.employee_code,
+                       TRIM(COALESCE(e.first_name,'') || ' ' || COALESCE(e.last_name,'')) AS name,
+                       d.name AS department, des.title AS designation,
+                       NULLIF(TRIM(COALESCE(m.first_name,'') || ' ' || COALESCE(m.last_name,'')), '') AS manager_name,
+                       e.employment_status, e.date_of_joining, e.is_active
+                  FROM hrms.employees e
+                  LEFT JOIN hrms.departments d ON d.id = e.department_id AND d.tenant_id = e.tenant_id
+                  LEFT JOIN hrms.designations des ON des.id = e.designation_id AND des.tenant_id = e.tenant_id
+                  LEFT JOIN hrms.employees m ON m.id = e.reporting_manager_id AND m.tenant_id = e.tenant_id
+                 WHERE e.tenant_id = ? AND e.id = ?
+                """, rs -> {
+                    if (!rs.next()) return null;
+                    java.sql.Date doj = rs.getDate("date_of_joining");
+                    return new ProfileEmployeeDto(
+                            rs.getObject("id", UUID.class), rs.getString("employee_code"), rs.getString("name"),
+                            rs.getString("department"), rs.getString("designation"), rs.getString("manager_name"),
+                            rs.getString("employment_status"), doj == null ? null : doj.toString(),
+                            rs.getBoolean("is_active"));
+                }, tenantId, employeeId);
+        if (employee == null) throw new com.hrms.core.exception.ResourceNotFoundException("Employee", employeeId);
+
+        List<ProfileReviewDto> reviews = jdbc.query("""
+                SELECT r.id, r.cycle_id, c.name AS cycle_name, c.period_start, c.period_end,
+                       r.reviewer_id,
+                       NULLIF(TRIM(COALESCE(rv.first_name,'') || ' ' || COALESCE(rv.last_name,'')), '') AS reviewer_name,
+                       r.reviewer_type, r.status, r.overall_rating, r.strengths, r.improvements,
+                       r.submitted_at, r.created_at
+                  FROM performance_mgmt.performance_reviews r
+                  LEFT JOIN performance_mgmt.review_cycles c ON c.id = r.cycle_id AND c.tenant_id = r.tenant_id
+                  LEFT JOIN hrms.employees rv ON rv.id = r.reviewer_id AND rv.tenant_id = r.tenant_id
+                 WHERE r.tenant_id = ? AND r.employee_id = ?
+                 ORDER BY COALESCE(c.period_start, (r.created_at AT TIME ZONE 'Asia/Kolkata')::date) DESC, r.created_at DESC
+                """, (rs, i) -> new ProfileReviewDto(
+                    rs.getObject("id", UUID.class), rs.getObject("cycle_id", UUID.class),
+                    rs.getString("cycle_name"), date(rs.getDate("period_start")), date(rs.getDate("period_end")),
+                    rs.getObject("reviewer_id", UUID.class), rs.getString("reviewer_name"),
+                    rs.getString("reviewer_type"), rs.getString("status"), rs.getBigDecimal("overall_rating"),
+                    rs.getString("strengths"), rs.getString("improvements"),
+                    ts(rs.getTimestamp("submitted_at")), ts(rs.getTimestamp("created_at"))),
+                tenantId, employeeId);
+
+        List<RatingPointDto> ratings = jdbc.query("""
+                SELECT r.cycle_id, c.name AS cycle_name, c.period_start, c.period_end,
+                       ROUND(AVG(r.overall_rating), 2) AS avg_rating, COUNT(*) AS n,
+                       MAX(r.submitted_at) AS last_submitted
+                  FROM performance_mgmt.performance_reviews r
+                  LEFT JOIN performance_mgmt.review_cycles c ON c.id = r.cycle_id AND c.tenant_id = r.tenant_id
+                 WHERE r.tenant_id = ? AND r.employee_id = ?
+                   AND r.overall_rating IS NOT NULL AND r.status IN ('SUBMITTED', 'ACKNOWLEDGED')
+                 GROUP BY r.cycle_id, c.name, c.period_start, c.period_end
+                 ORDER BY COALESCE(c.period_start, MIN((r.submitted_at AT TIME ZONE 'Asia/Kolkata')::date)) ASC
+                """, (rs, i) -> new RatingPointDto(
+                    rs.getObject("cycle_id", UUID.class), rs.getString("cycle_name"),
+                    date(rs.getDate("period_start")), date(rs.getDate("period_end")),
+                    rs.getBigDecimal("avg_rating"), rs.getInt("n"), ts(rs.getTimestamp("last_submitted"))),
+                tenantId, employeeId);
+
+        // Goals through the KPI service, so the caller's KPI scope applies as well.
+        List<KpiService.KpiRowDto> goals = kpiService.list(tenantId, employeeId, null, null, null,
+                false, 0, PROFILE_GOAL_LIMIT).items();
+
+        return new EmployeeProfileDto(employee, summarize(ratings, reviews, goals), ratings, goals, reviews);
+    }
+
+    static boolean inScope(UUID employeeId, java.util.Set<UUID> visibleEmployeeIds) {
+        return visibleEmployeeIds == null || visibleEmployeeIds.contains(employeeId);
+    }
+
+    /** Tiles on the page: latest and overall rating, goal counts, review counts. */
+    static ProfileSummaryDto summarize(List<RatingPointDto> ratings, List<ProfileReviewDto> reviews,
+                                       List<KpiService.KpiRowDto> goals) {
+        BigDecimal latest = ratings.isEmpty() ? null : ratings.get(ratings.size() - 1).averageRating();
+        BigDecimal sum = BigDecimal.ZERO;
+        int rated = 0;
+        for (ProfileReviewDto r : reviews) {
+            if (r.overallRating() != null && ("SUBMITTED".equals(r.status()) || "ACKNOWLEDGED".equals(r.status()))) {
+                sum = sum.add(r.overallRating());
+                rated++;
+            }
+        }
+        BigDecimal average = rated == 0 ? null : sum.divide(BigDecimal.valueOf(rated), 2, RoundingMode.HALF_UP);
+        int active = 0, atRisk = 0, completed = 0;
+        for (KpiService.KpiRowDto g : goals) {
+            if ("ACTIVE".equals(g.status())) active++;
+            else if ("AT_RISK".equals(g.status())) atRisk++;
+            else if ("COMPLETED".equals(g.status())) completed++;
+        }
+        int pending = (int) reviews.stream().filter(r -> "PENDING".equals(r.status()) || "IN_PROGRESS".equals(r.status())).count();
+        return new ProfileSummaryDto(latest, average, active + atRisk, atRisk, completed, rated, pending);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
+
+    private static String date(java.sql.Date d) {
+        return d == null ? null : d.toString();
+    }
 
     private static String ts(java.sql.Timestamp t) {
         return t == null ? null : t.toInstant().toString();

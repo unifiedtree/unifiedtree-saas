@@ -3,6 +3,7 @@ package com.hrms.api.performance;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,5 +45,16 @@ public class PerformanceEmployeeController {
             @RequestParam(defaultValue = "25") int size) {
         // Department managers see their team only (2026-09-25); admin / HR see everyone.
         return service.list(TenantContext.getTenantId(), departmentId, search, page, size, teamScope.visibleEmployeeIds());
+    }
+
+    /**
+     * One person's performance page: reviews, goals and KPIs, and ratings over
+     * time. Same permission and scope as the directory: HR / admin see anyone,
+     * a department manager only their team (403 otherwise).
+     */
+    @GetMapping("/{employeeId}")
+    @PreAuthorize("hasAuthority('hrms.performance.read')")
+    public PerformanceEmployeeService.EmployeeProfileDto profile(@PathVariable UUID employeeId) {
+        return service.profile(TenantContext.getTenantId(), employeeId, teamScope.visibleEmployeeIds());
     }
 }

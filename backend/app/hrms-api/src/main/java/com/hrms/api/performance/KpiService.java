@@ -50,6 +50,8 @@ public class KpiService {
             Set.of("HIGHER_IS_BETTER", "LOWER_IS_BETTER", "TARGET_EXACT");
     private static final Set<String> ALLOWED_STATUSES =
             Set.of("ACTIVE", "COMPLETED", "DROPPED", "AT_RISK");
+    /** Goals still being worked on: what "active goals" means everywhere in the UI. */
+    public static final Set<String> ACTIVE_STATUSES = Set.of("ACTIVE", "AT_RISK");
 
     private final JdbcTemplate jdbc;
     private final PerformanceTeamScope teamScope;
@@ -91,9 +93,15 @@ public class KpiService {
             @jakarta.validation.constraints.NotNull BigDecimal newValue,
             String notes) {}
 
+    /**
+     * One recorded progress update. {@code updatedByName} is the person who
+     * recorded it (their employee name, else their account's display name), so
+     * the history can say who changed the value; null when unknown.
+     */
     public record ProgressUpdateDto(
             UUID id, BigDecimal previousValue, BigDecimal newValue,
-            BigDecimal progressPct, String notes, UUID updatedBy, String updatedAt) {}
+            BigDecimal progressPct, String notes, UUID updatedBy, String updatedAt,
+            String updatedByName) {}
 
     public record PageDto<T>(List<T> items, int page, int size, long total) {}
 
@@ -106,6 +114,18 @@ public class KpiService {
     @Transactional
     public PageDto<KpiRowDto> list(UUID tenantId, UUID ownerId, UUID managerId,
                                    String status, String search, int page, int size) {
+        return list(tenantId, ownerId, managerId, status, search, false, page, size);
+    }
+
+    /**
+     * As {@link #list(UUID, UUID, UUID, String, String, int, int)}; with
+     * {@code activeOnly} only goals still being worked on are returned
+     * ({@link #ACTIVE_STATUSES}: active or at risk), which is what the employee
+     * workspace's Goals tile counts.
+     */
+    @Transactional
+    public PageDto<KpiRowDto> list(UUID tenantId, UUID ownerId, UUID managerId,
+                                   String status, String search, boolean activeOnly, int page, int size) {
         bindTenant(tenantId);
         if (page < 0) page = 0;
         if (size <= 0) size = 25;
@@ -124,6 +144,7 @@ public class KpiService {
             args.add(managerId);
         }
         if (status != null)  { where.append(" AND g.status = ?"); args.add(status); }
+        if (activeOnly)      { where.append(" AND g.status IN ('ACTIVE','AT_RISK')"); }
         if (search != null && !search.isBlank()) {
             where.append(" AND LOWER(g.title) LIKE ?");
             args.add("%" + search.toLowerCase() + "%");
@@ -173,9 +194,25 @@ public class KpiService {
     @Transactional
     public List<ProgressUpdateDto> progressHistory(UUID tenantId, UUID kpiId) {
         get(tenantId, kpiId); // Verify object scope before exposing its history.
+        return historyRows(tenantId, kpiId);
+    }
+
+    /**
+     * The progress history of one goal, newest first, with the name of whoever
+     * recorded each update. Callers must have checked access to the goal.
+     * {@code updated_by} holds the recorder's user id (the JWT subject), so the
+     * name comes from their credentials' employee record, else the account's
+     * display name. Email addresses are deliberately not exposed here.
+     */
+    List<ProgressUpdateDto> historyRows(UUID tenantId, UUID goalId) {
         return jdbc.query("""
-                SELECT * FROM performance_mgmt.kpi_progress_updates
-                 WHERE tenant_id = ? AND goal_id = ? ORDER BY updated_at DESC
+                SELECT u.*,
+                       COALESCE(NULLIF(TRIM(COALESCE(e.first_name,'') || ' ' || COALESCE(e.last_name,'')), ''),
+                                NULLIF(TRIM(uc.display_name), '')) AS updated_by_name
+                  FROM performance_mgmt.kpi_progress_updates u
+                  LEFT JOIN auth.user_credentials uc ON uc.id = u.updated_by AND uc.tenant_id = u.tenant_id
+                  LEFT JOIN hrms.employees e ON e.id = uc.employee_id AND e.tenant_id = u.tenant_id
+                 WHERE u.tenant_id = ? AND u.goal_id = ? ORDER BY u.updated_at DESC
                 """, (rs, i) -> new ProgressUpdateDto(
                     rs.getObject("id", UUID.class),
                     rs.getBigDecimal("previous_value"),
@@ -183,7 +220,8 @@ public class KpiService {
                     rs.getBigDecimal("progress_pct"),
                     rs.getString("notes"),
                     rs.getObject("updated_by", UUID.class),
-                    ts(rs.getTimestamp("updated_at"))), tenantId, kpiId);
+                    ts(rs.getTimestamp("updated_at")),
+                    rs.getString("updated_by_name")), tenantId, goalId);
     }
 
     // ── Writes ────────────────────────────────────────────────────────────────

@@ -40,10 +40,13 @@ public class KpiController {
             @RequestParam(required = false) UUID managerId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
+            // active=true: only goals still being worked on (active or at risk),
+            // e.g. the employee workspace's Goals tile.
+            @RequestParam(defaultValue = "false") boolean active,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
         return service.list(TenantContext.getTenantId(), ownerId, managerId,
-                status, search, page, size);
+                status, search, active, page, size);
     }
 
     @GetMapping("/{id}")

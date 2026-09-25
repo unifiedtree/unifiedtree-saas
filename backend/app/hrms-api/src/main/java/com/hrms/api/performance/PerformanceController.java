@@ -3,7 +3,6 @@ package com.hrms.api.performance;
 import com.hrms.core.dto.PageResponse;
 import com.hrms.employee.entity.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
-import com.hrms.performance.dto.GoalProgressRequest;
 import com.hrms.performance.dto.GoalRequest;
 import com.hrms.performance.dto.GoalResponse;
 import com.hrms.performance.dto.PerformanceReviewRequest;
@@ -51,19 +50,22 @@ public class PerformanceController {
     private final EmployeeRepository employeeRepository;
     private final ReviewCycleRepository cycleRepository;
     private final PerformanceTeamScope teamScope;
+    private final PerformanceInsightService insightService;
 
     public PerformanceController(ReviewCycleService cycleService,
                                  PerformanceReviewService reviewService,
                                  GoalService goalService,
                                  EmployeeRepository employeeRepository,
                                  ReviewCycleRepository cycleRepository,
-                                 PerformanceTeamScope teamScope) {
+                                 PerformanceTeamScope teamScope,
+                                 PerformanceInsightService insightService) {
         this.cycleService = cycleService;
         this.reviewService = reviewService;
         this.goalService = goalService;
         this.employeeRepository = employeeRepository;
         this.cycleRepository = cycleRepository;
         this.teamScope = teamScope;
+        this.insightService = insightService;
     }
 
     // ─── Review cycles (admin) ───────────────────────────────────────────────
@@ -159,9 +161,13 @@ public class PerformanceController {
     @PreAuthorize("hasAuthority('hrms.performance.review.self')")
     public ResponseEntity<GoalResponse> updateGoalProgress(
             @PathVariable UUID id,
-            @Valid @RequestBody GoalProgressRequest request,
+            @Valid @RequestBody PerformanceInsightService.SelfGoalProgressRequest request,
             @AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(goalService.updateProgress(id, extractEmployeeId(jwt), request));
+        // Same rules as before (GoalService), and each change now lands in the
+        // goal's progress history with the optional note (2026-09-25).
+        return ResponseEntity.ok(insightService.updateMyGoalProgress(
+                com.unifiedtree.security.tenant.TenantContext.getTenantId(), id, extractEmployeeId(jwt),
+                request, actorUserId(jwt)));
     }
 
     // ─── Employee identity enrichment ────────────────────────────────────────
@@ -223,6 +229,11 @@ public class PerformanceController {
 
     private String fullName(Employee employee) {
         return employee != null ? (employee.getFirstName() + " " + (employee.getLastName() == null ? "" : employee.getLastName())).trim() : null;
+    }
+
+    private static UUID actorUserId(Jwt jwt) {
+        if (jwt == null) return null;
+        try { return UUID.fromString(jwt.getSubject()); } catch (Exception e) { return null; }
     }
 
     private UUID extractEmployeeId(Jwt jwt) {
