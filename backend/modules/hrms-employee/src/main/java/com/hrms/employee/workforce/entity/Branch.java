@@ -48,6 +48,14 @@ public class Branch extends BaseEntity {
     @Column(name = "is_headquarters", nullable = false)
     private boolean headquarters;
 
+    /**
+     * HEAD_OFFICE, BRANCH, PLANT, WAREHOUSE, OFFICE, STORE or OTHER (V143.22).
+     * {@link #headquarters} stays the source of truth for the head office; see
+     * BranchService#typeOf.
+     */
+    @Column(name = "branch_type", nullable = false, length = 20)
+    private String branchType = "BRANCH";
+
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 }

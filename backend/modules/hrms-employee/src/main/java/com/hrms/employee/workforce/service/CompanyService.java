@@ -52,6 +52,9 @@ public class CompanyService {
         c.setCurrency(req.currency() != null ? req.currency() : "INR");
         c.setFiscalYearStart(req.fiscalYearStart() != null && !req.fiscalYearStart().isBlank()
                 ? fiscalMonth(req.fiscalYearStart()) : "APRIL");
+        c.setTanNumber(tan(req.tanNumber()));
+        c.setIncorporationDate(incorporation(req.incorporationDate()));
+        c.setDescription(ContractorService.blankToNull(req.description()));
         c.setActive(true);
         try {
             return toResponse(repository.save(c));
@@ -90,6 +93,10 @@ public class CompanyService {
         if (req.timezone()           != null) c.setTimezone(req.timezone());
         if (req.currency()           != null) c.setCurrency(req.currency());
         if (req.fiscalYearStart()    != null) c.setFiscalYearStart(fiscalMonth(req.fiscalYearStart()));
+        // V143.22: here a blank value DOES clear the field; the Master form sends all three.
+        if (req.tanNumber()          != null) c.setTanNumber(tan(req.tanNumber()));
+        if (req.incorporationDate()  != null) c.setIncorporationDate(incorporation(req.incorporationDate()));
+        if (req.description()        != null) c.setDescription(ContractorService.blankToNull(req.description()));
         try {
             return toResponse(repository.save(c));
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
@@ -120,6 +127,21 @@ public class CompanyService {
         repository.save(c);
     }
 
+    /** Upper-cased TAN (AAAA99999A, checked on the request); blank = none. */
+    static String tan(String s) {
+        String t = ContractorService.blankToNull(s);
+        return t == null ? null : t.toUpperCase();
+    }
+
+    /** yyyy-MM-dd; blank = none; a date in the future is refused. */
+    static java.time.LocalDate incorporation(String s) {
+        java.time.LocalDate d = ContractorService.parseDate(s, "date of incorporation");
+        if (d != null && d.isAfter(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")))) {
+            throw new BusinessRuleException("The date of incorporation can't be in the future", "INVALID_DATE");
+        }
+        return d;
+    }
+
     private CompanyResponse toResponse(Company c) {
         return toResponse(c, headcount.countFor("company_id", c.getId()));
     }
@@ -130,6 +152,7 @@ public class CompanyService {
                 c.getId(), c.getName(), c.getLegalName(), c.getRegistrationNumber(),
                 c.getPanNumber(), c.getGstin(), c.getIndustry(),
                 c.getCountry(), c.getTimezone(), c.getCurrency(), c.getFiscalYearStart(),
-                c.getLogoUrl(), employees, c.isActive());
+                c.getLogoUrl(), employees, c.isActive(),
+                c.getTanNumber(), c.getIncorporationDate(), c.getDescription());
     }
 }

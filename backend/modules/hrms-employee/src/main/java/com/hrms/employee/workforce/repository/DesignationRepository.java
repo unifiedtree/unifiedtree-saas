@@ -17,4 +17,6 @@ public interface DesignationRepository extends JpaRepository<Designation, UUID> 
     /** Includes ARCHIVED rows on purpose — create() revives a soft-deleted
      *  designation instead of colliding with uq_designation_tenant_title. */
     Optional<Designation> findByCompanyIdAndTitleIgnoreCase(UUID companyId, String title);
+    /** Code uniqueness guard (uq_designation_tenant_code covers archived rows too). */
+    Optional<Designation> findFirstByCompanyIdAndCodeIgnoreCase(UUID companyId, String code);
 }

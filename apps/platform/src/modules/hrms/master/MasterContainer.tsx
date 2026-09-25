@@ -50,7 +50,7 @@ const TWEAKS = { nav: 'Top tabs', density: 'Comfortable', pageSize: '10' }
 const STATUS_PARAM: Record<string, string> = { ACTIVE: 'Active', PROBATION: 'Probation', NOTICE_PERIOD: 'On notice', EXITED: 'Exited', TERMINATED: 'Exited', SUSPENDED: 'Suspended' }
 /** What each page reads — it waits for these before drawing. */
 const NEEDS: Record<string, string[]> = {
-  overview: [], employees: ['employees', 'companies', 'branches', 'depts', 'desigs', 'grades', 'classes', 'shifts', 'leaves'],
+  overview: [], employees: ['employees', 'companies', 'branches', 'depts', 'desigs', 'grades', 'classes', 'shifts', 'leaves', 'agencies'],
   contractors: ['agencies', 'branches'], classes: ['classes', 'employees', 'agencies'], companies: ['companies', 'branches', 'employees'],
   branches: ['branches', 'companies', 'employees'], departments: ['depts', 'employees', 'desigs'], designations: ['desigs', 'depts', 'grades', 'employees'],
   grades: ['grades', 'desigs', 'employees'], shifts: ['shifts', 'employees'], leaves: ['leaves', 'classes'], policies: ['policies', 'employees'],
@@ -117,6 +117,8 @@ export function MasterContainer() {
   const canGradeWrite = usePermission(P.HRMS_GRADE_WRITE), canTypeWrite = usePermission(P.HRMS_EMPLOYMENT_TYPE_WRITE)
   const canShiftAdmin = usePermission('attendance.workforce.admin'), canTeam = usePermission(P.ATTENDANCE_TEAM_READ)
   const canLeaveWrite = usePermission(P.LEAVE_TYPE_WRITE)
+  // Pay bands are salary data (V143.22); linking a contract worker to an agency is part of their record.
+  const canBands = usePermission('hrms.grade.band.read'), canAgencyLink = canContrWrite || canEmpWrite
   const canPolicyRead = usePermission('hrms.policy.read'), canPolicyWrite = usePermission('hrms.policy.write')
   const canCompRead = usePermission(P.PAYROLL_COMPONENTS_READ), canCompWrite = usePermission(P.PAYROLL_COMPONENTS_MANAGE)
   const canSetRead = usePermission(P.PAYROLL_SETTINGS_READ), canSetWrite = usePermission(P.PAYROLL_SETTINGS_UPDATE), canSlabs = usePermission(P.PAYROLL_PT_SLABS_READ)
@@ -144,6 +146,7 @@ export function MasterContainer() {
     p: page, q: params.get('q') || '', status: STATUS_PARAM[params.get('status') || ''] || params.get('status') || '',
     // departmentId=none (the dashboard's and reports' "No department") is the directory's "No department" option.
     co: params.get('co') || '', dept: ((d) => (d === 'none' ? '__none' : d))(params.get('departmentId') || params.get('dept') || ''), branch: params.get('branchId') || params.get('branch') || '',
+    archived: page === 'branches' && params.get('archived') === '1',
   }), [page, params])
   const want = (k: string) => page === 'overview' || NEEDS[page]?.includes(k)
 
@@ -153,7 +156,11 @@ export function MasterContainer() {
   const coIds = useMemo(() => companies.map((c) => c.id), [companies])
   const defaultCo = coIds[0] || ''
   const opt = { staleTime: 300_000 }
-  const branchesQ = useQuery({ queryKey: ['hrms', 'branches', 'all'], queryFn: () => apiJson<Branch[]>('/v1/hrms/branches'), enabled: canCoRead && want('branches'), ...opt })
+  // Deactivated branches only on the Branches page's "Include inactive" filter, so they never reach a picker.
+  const branchesQ = useQuery({
+    queryKey: ['hrms', 'branches', 'all', route.archived ? 'with-archived' : 'active'],
+    queryFn: () => apiJson<Branch[]>(route.archived ? '/v1/hrms/branches?includeArchived=true' : '/v1/hrms/branches'), enabled: canCoRead && want('branches'), ...opt,
+  })
   const empQ = useQuery({ queryKey: ['hrms', 'employees', 'master-all'], queryFn: loadDirectory, enabled: canEmpRead && (want('employees') || want('depts')), staleTime: 120_000 })
   const schedQ = useQuery({ queryKey: ['master', 'schedule', TODAY_ISO], queryFn: () => apiJson<ScheduleRow[]>(`/v1/team/schedule?from=${TODAY_ISO}&to=${TODAY_ISO}`), enabled: canTeam && (want('employees') || want('shifts')), ...opt })
   const perCo = <T,>(key: string[], url: (cid: string) => string, on: boolean) => ({
@@ -164,7 +171,8 @@ export function MasterContainer() {
   const desigs = useQueries({ queries: coIds.map((cid) => ({ queryKey: ['hrms', 'designations', cid, 'all'], queryFn: () => apiJson<Designation[]>(`/v1/hrms/designations?companyId=${cid}`), enabled: canDesRead && (want('desigs') || want('employees')), ...opt })), combine: listOf as (rs: UseQueryResult<Designation[]>[]) => Coll<Designation> })
   const grades = useQueries(perCo<Grade>(['hrms', 'org', 'grades'], (c) => `/v1/hrms/grades?companyId=${c}`, want('grades') || want('employees')))
   const types = useQueries(perCo<EmploymentTypeRecord>(['hrms', 'org', 'employment-types'], (c) => `/v1/hrms/employment-types?companyId=${c}`, want('classes') || want('leaves')))
-  const contractors = useQueries(perCo<Contractor>(['master', 'contractors'], (c) => `/v1/hrms/contractors?companyId=${c}`, canContrRead && want('agencies')))
+  // Ended agencies too: they show as inactive with "Reactivate".
+  const contractors = useQueries(perCo<Contractor>(['master', 'contractors'], (c) => `/v1/hrms/contractors?companyId=${c}&includeArchived=true`, canContrRead && want('agencies')))
   const shiftsL = useQueries(perCo<ShiftPolicy>(['hrms', 'shift-policies'], (c) => `/v1/shifts?companyId=${c}`, want('shifts') || want('employees')))
   const leavesL = useQueries(perCo<LeaveTypeResponse>(['hrms', 'leave', 'types'], (c) => `/v1/leave/types?companyId=${c}`, want('leaves') || want('employees')))
   const hrQs = useQueries({ queries: coIds.map((cid) => ({ queryKey: ['hrms', 'settings', 'hr-config', cid], queryFn: () => apiJson<HrConfigResponse>(`/v1/settings/hr-configuration?companyId=${cid}`), enabled: canEmpRead && (want('classes') || want('employees')), retry: false, staleTime: 60_000 })), combine: hrData })
@@ -198,7 +206,8 @@ export function MasterContainer() {
     const gradeOfDesig = new Map(desigList.map((d) => [d.id, d.grade || '']))
     const shiftByName = new Map(shiftList.map((s) => [s.name, s.id]))
     const shiftOf = new Map((schedQ.data ?? []).filter((r) => r.shiftName && shiftByName.has(r.shiftName)).map((r) => [r.employeeId, shiftByName.get(r.shiftName!)!]))
-    const employees = (empQ.data ?? []).map((e) => employeeRec(e, gradeOfDesig, shiftOf))
+    const agencyOf = new Map(contractors.data.flatMap((a) => (a.workerIds ?? []).map((w): [string, string] => [w, a.id])))
+    const employees = (empQ.data ?? []).map((e): Rec => ({ ...employeeRec(e, gradeOfDesig, shiftOf), agency: agencyOf.get(e.id) || '' }))
     const nameOf = new Map(employees.map((e) => [e.id, e.name as string]))
     const hr = new Map(hrQs.map((h, i) => [coIds[i], h]))
     const many = companies.length > 1, coName = new Map(companies.map((c) => [c.id, c.name]))
@@ -239,6 +248,7 @@ export function MasterContainer() {
   envRef.current = {
     today: TODAY_ISO, defaultCo, coOfDept: (id) => db.depts.find((x) => x.id === id)?.co, branches: db.branches, settings: setQ.data ?? null,
     nextGradeLevel: Math.max(0, ...grades.data.map((g) => g.level || 0)) + 1, canInvite, canAssignShift: canShiftAdmin, warn: (m) => show(m, 'info'),
+    canBands, gradeIdOf: (code, co) => (code ? db.grades.find((g) => g.id === code && g.co === co)?._key : undefined),
   }
   const writableRef = useRef(writable); writableRef.current = writable
   /** Saves started by the handler that is running now; its success toast waits for them. */
@@ -273,6 +283,9 @@ export function MasterContainer() {
   const hrDefault = hrQs[coIds.indexOf(defaultCo)]
   const act = {
     defaultCo, canAssignShift: canShiftAdmin, nextCode: nextCodeQ.data?.preview || '', noticeDays: hrDefault?.defaultNoticePeriodDays,
+    canBands, showAgency: canContrRead, canAgency: canAgencyLink,
+    /** The Branches page's status filter lives in the URL (?archived=1). */
+    showArchivedBranches: (on: boolean, co: string) => navigate(MASTER_ROUTES.branches + '?' + new URLSearchParams(Object.entries({ co, archived: on ? '1' : '' }).filter(([, v]) => v)).toString()),
     importEmployees: () => (canImport ? navigate('/hrms/employees/import') : show('You don’t have access to import employees', 'error')),
     openRecord: (id: string) => navigate(`/hrms/employees/${id}`),
     milestone: { value: milestone, options: MILESTONES, set: setMilestone, ids: milestoneIds },
@@ -287,8 +300,9 @@ export function MasterContainer() {
       show(`Exported ${pl(rows.length, 'employee', 'employees')} to CSV`)
     },
     exportAgencies: (rows: Rec[]) => {
-      const head = ['Agency', 'Registration no.', 'Contact person', 'Phone', 'Email', 'Status']
-      downloadCsv(`agencies-${TODAY_ISO}.csv`, [head.join(','), ...rows.map((x) => [x.name, x.reg, x.contact, x.phone, x.email, x.status].map(csvCell).join(','))])
+      const head = ['Agency', 'Registration no.', 'Service', 'Contact person', 'Phone', 'Email', 'Active workers', 'Deployed at', 'Licence number', 'Licence valid till', 'Status']
+      const site = new Map(db.branches.map((b) => [b.id, b.name as string]))
+      downloadCsv(`agencies-${TODAY_ISO}.csv`, [head.join(','), ...rows.map((x) => [x.name, x.reg, x.service, x.contact, x.phone, x.email, x.workers, (x.sites || []).map((b: string) => site.get(b) || '').filter(Boolean).join('; '), x.licenceNo, x.licence, x.status].map(csvCell).join(','))])
       show(`Exported ${pl(rows.length, 'agency', 'agencies')} to CSV`)
     },
     /** The employment types someone can be given — the ones linked to the employee record's type. */
@@ -317,7 +331,7 @@ export function MasterContainer() {
   const body = !allowed ? <div className="card"><Empty icon="lock" title="You don’t have access to this section" body="Ask an admin if you need it." /></div>
     : failed ? <div className="card"><Empty icon="alert-triangle" title="This page couldn’t load" body={errText(failed)} action={<button className="btn sm" onClick={retry}>Try again</button>} /></div>
       : loading ? <PageSkeleton path={location.pathname} bare />
-        : <Page key={`${route.p}|${route.q}|${route.status}|${route.co}|${route.dept}|${route.branch}`} />
+        : <Page key={`${route.p}|${route.q}|${route.status}|${route.co}|${route.dept}|${route.branch}|${route.archived}`} />
   return (
     <div className="utm" data-master-page={page}>
       <AppCtx.Provider value={ctx}>

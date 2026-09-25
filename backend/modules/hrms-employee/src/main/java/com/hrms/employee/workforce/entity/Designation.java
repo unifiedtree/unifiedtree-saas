@@ -19,8 +19,21 @@ public class Designation extends BaseEntity {
     @Column(name = "title", nullable = false, length = 100)
     private String title;
 
-    @Column(name = "grade", length = 10)
-    private String grade;          // L1..L6 per client spec
+    /**
+     * Free-text grade. Since V143.22 it mirrors the code of the linked grade
+     * ({@link #gradeId}); a designation whose text matched no grade keeps its
+     * text and no id.
+     */
+    @Column(name = "grade", length = 20)
+    private String grade;
+
+    /** The grade this title maps to, by id (V143.22). Null = no grade, or an unmatched legacy text. */
+    @Column(name = "grade_id")
+    private UUID gradeId;
+
+    /** Short code for the title, unique in the company (V143.22). */
+    @Column(name = "code", length = 30)
+    private String code;
 
     @Column(name = "department_id")
     private UUID departmentId;

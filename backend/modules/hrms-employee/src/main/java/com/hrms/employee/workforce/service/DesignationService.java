@@ -6,10 +6,13 @@ import com.hrms.employee.workforce.dto.WorkforceDtos.CreateDesignationRequest;
 import com.hrms.employee.workforce.dto.WorkforceDtos.DesignationResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.UpdateDesignationRequest;
 import com.hrms.employee.workforce.entity.Designation;
+import com.hrms.employee.workforce.entity.Grade;
 import com.hrms.employee.workforce.repository.DesignationRepository;
+import com.hrms.employee.workforce.repository.GradeRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -20,15 +23,19 @@ public class DesignationService {
 
     private final DesignationRepository repository;
     private final LiveHeadcount headcount;
+    private final GradeRepository grades;
 
-    public DesignationService(DesignationRepository repository, LiveHeadcount headcount) {
+    public DesignationService(DesignationRepository repository, LiveHeadcount headcount, GradeRepository grades) {
         this.repository = repository;
         this.headcount = headcount;
+        this.grades = grades;
     }
 
     @Transactional(readOnly = true)
     public List<DesignationResponse> listForCompany(UUID companyId, UUID departmentFilter) {
         Map<UUID, Integer> counts = headcount.byColumn("designation_id");
+        Map<UUID, String> gradeCodes = new HashMap<>();
+        grades.findByCompanyId(companyId).forEach(g -> gradeCodes.put(g.getId(), g.getCode()));
         // Always include company-wide designations (no department set); when a
         // department is selected, ALSO include that department's designations.
         // Filtering strictly on department_id hid null-department ("global")
@@ -40,7 +47,7 @@ public class DesignationService {
                 : rows.stream()
                         .filter(d -> d.getDepartmentId() == null || departmentFilter.equals(d.getDepartmentId()))
                         .toList();
-        return filtered.stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0))).toList();
+        return filtered.stream().map(x -> toResponse(x, counts.getOrDefault(x.getId(), 0), gradeCodes)).toList();
     }
 
     /**
@@ -62,7 +69,8 @@ public class DesignationService {
         Designation d = existing != null ? existing : new Designation();
         d.setCompanyId(req.companyId());
         d.setTitle(req.title());
-        d.setGrade(req.grade());
+        applyGrade(d, req.gradeId(), req.grade());
+        d.setCode(checkedCode(d, req.code()));
         d.setDepartmentId(req.departmentId());
         d.setReportsToDesignationId(req.reportsToDesignationId());
         d.setJobResponsibilities(req.jobResponsibilities());
@@ -78,7 +86,9 @@ public class DesignationService {
             throw new BusinessRuleException("Designation '" + req.title() + "' already exists", "DUPLICATE_DESIGNATION");
         }
         d.setTitle(req.title());
-        d.setGrade(req.grade());
+        applyGrade(d, req.gradeId(), req.grade());
+        // Older callers don't send a code: keep the one it has.
+        if (req.code() != null) d.setCode(checkedCode(d, req.code()));
         d.setDepartmentId(req.departmentId());
         d.setReportsToDesignationId(req.reportsToDesignationId());
         d.setJobResponsibilities(req.jobResponsibilities());
@@ -92,15 +102,61 @@ public class DesignationService {
         repository.save(d);
     }
 
+    /**
+     * Link the designation to a grade. A {@code gradeId} must be a grade of the
+     * same company; the text then mirrors its code. Without one, text that is
+     * exactly a grade's code is linked to that grade; any other text is kept as
+     * it is (it shows as a plain chip) and blank clears the grade.
+     */
+    void applyGrade(Designation d, UUID gradeId, String gradeText) {
+        if (gradeId != null) {
+            Grade g = grades.findById(gradeId)
+                    .orElseThrow(() -> new BusinessRuleException("That grade doesn't exist any more", "GRADE_NOT_FOUND"));
+            if (!g.getCompanyId().equals(d.getCompanyId())) {
+                throw new BusinessRuleException("That grade belongs to another company", "GRADE_OTHER_COMPANY");
+            }
+            if (!g.isActive() && !gradeId.equals(d.getGradeId())) {
+                throw new BusinessRuleException("Grade " + g.getCode() + " is inactive; pick an active grade", "GRADE_INACTIVE");
+            }
+            d.setGradeId(g.getId());
+            d.setGrade(g.getCode());
+            return;
+        }
+        String text = gradeText == null || gradeText.isBlank() ? null : gradeText.trim();
+        Grade match = text == null ? null : grades.findByCompanyIdAndCode(d.getCompanyId(), text)
+                .or(() -> grades.findByCompanyIdAndCode(d.getCompanyId(), text.toUpperCase()))
+                .filter(Grade::isActive)
+                .orElse(null);
+        d.setGradeId(match == null ? null : match.getId());
+        d.setGrade(match == null ? text : match.getCode());
+    }
+
+    /** Upper-case, blank = none, unique within the company (archived titles included). */
+    String checkedCode(Designation d, String code) {
+        String next = code == null || code.isBlank() ? null : code.trim().toUpperCase();
+        if (next == null) return null;
+        repository.findFirstByCompanyIdAndCodeIgnoreCase(d.getCompanyId(), next)
+                .filter(other -> !other.getId().equals(d.getId()))
+                .ifPresent(other -> {
+                    throw new BusinessRuleException("Code " + next + " is already used by " + other.getTitle()
+                            + (other.isActive() ? "" : " (deactivated)"), "DUPLICATE_DESIGNATION_CODE");
+                });
+        return next;
+    }
+
     private DesignationResponse toResponse(Designation d) {
-        return toResponse(d, headcount.countFor("designation_id", d.getId()));
+        Map<UUID, String> gradeCodes = new HashMap<>();
+        if (d.getGradeId() != null) grades.findById(d.getGradeId()).ifPresent(g -> gradeCodes.put(g.getId(), g.getCode()));
+        return toResponse(d, headcount.countFor("designation_id", d.getId()), gradeCodes);
     }
 
     /** {@code employees}: people working there now (see LiveHeadcount), not the never-updated cached column. */
-    private DesignationResponse toResponse(Designation d, int employees) {
+    private DesignationResponse toResponse(Designation d, int employees, Map<UUID, String> gradeCodes) {
+        String grade = d.getGradeId() != null ? gradeCodes.getOrDefault(d.getGradeId(), d.getGrade()) : d.getGrade();
         return new DesignationResponse(
-                d.getId(), d.getCompanyId(), d.getTitle(), d.getGrade(),
+                d.getId(), d.getCompanyId(), d.getTitle(), grade,
                 d.getDepartmentId(), d.getReportsToDesignationId(),
-                d.getJobResponsibilities(), employees, d.isActive());
+                d.getJobResponsibilities(), employees, d.isActive(),
+                d.getGradeId(), d.getCode());
     }
 }

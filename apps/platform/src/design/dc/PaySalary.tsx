@@ -19,6 +19,20 @@ export interface StructureInfo {
 }
 export interface PayCalc { pfOn: boolean; pfEmp: number; pfCeil: number; pfApplyCeil: boolean; esiOn: boolean; esiEmp: number; esiCeil: number; ptFor: (gross: number) => number }
 export interface SalaryRow { id: string; code: string; name: string; dept: string; role: string }
+/** The pay band of someone's designation's grade (annual CTC), from /v1/hrms/pay-bands. */
+export interface PayBand { code: string; name: string; min: number; max: number }
+
+/**
+ * The annual CTC a save will record: an existing structure's CTC scaled to the
+ * new gross, or twelve months of gross for a new one (as the container saves it),
+ * and the warning when it falls outside the band. Warns only; saving still works.
+ */
+export function bandWarning(band: PayBand | null | undefined, monthly: number, cur: { gross: number; ctcAnnual: number } | null | undefined) {
+  if (!band || !(monthly > 0)) return ''
+  const ctc = cur && cur.gross ? Math.round((cur.ctcAnnual * monthly) / cur.gross) : monthly * 12
+  if (ctc >= band.min && ctc <= band.max) return ''
+  return `Annual CTC ${inr(ctc)} is ${ctc < band.min ? 'below' : 'above'} the ${band.code} · ${band.name} pay band (${inr(band.min)} – ${inr(band.max)}). You can still save.`
+}
 
 /** The design's split for a new structure: Basic 50%, HRA 40% of basic, ₹1,600 conveyance from ₹20,000, special allowance the rest. */
 export function designSplit(m: number) {
@@ -96,6 +110,8 @@ export class PaySalary extends DCLogic {
     // Drawer.
     const d = s.drawer ? all.find((e) => e.id === s.drawer) || (p.missing || []).find((k: any) => k.id === s.drawer) : null
     const cur = s.drawer ? S[s.drawer] : undefined, isNew = !cur, m = Number(s.fMonthly) || 0, fBad = m <= 0
+    // Outside the grade's pay band: shown under the amount, never blocks the save.
+    const bandWarn = d ? bandWarning(((p.bands || {}) as Record<string, PayBand>)[d.id], m, cur) : ''
     const split = !isNew && cur ? scaleSplit(cur.earnings, m) : null, ds = designSplit(m)
     const earn = split
       ? split.map((l) => [l.code, l.amount] as [string, number])
@@ -138,8 +154,8 @@ export class PaySalary extends DCLogic {
       hasNotice: !!noticeRow, noticeName: noticeRow ? noticeRow.name : '', dismiss: () => this.setState({ notice: null }),
       openRun: () => (p.runId ? go('runs', { runId: p.runId }) : go('runs')), runLabel: p.runLabel || 'next', runTip: p.runId ? `Opens the ${p.runLabel} payroll run` : 'Opens Processing & Payslips',
       drawerOpen: !!d, dTitle: isNew ? 'Add salary structure' : 'Edit salary structure', dName: d ? d.name : '', dCode: d ? d.code : '', dMeta: d ? [d.dept, (d as any).role].filter(Boolean).join(' · ') : '', dFooter, closeDrawer,
-      fMonthly: s.fMonthly, setMonthly: (e: any) => this.setState({ fMonthly: e.target.value.replace(/[^\d]/g, '') }), fBad, fDate: s.fDate, setDate: (e: any) => this.setState({ fDate: e && e.target ? e.target.value : e }),
-      fDateMin: p.monthStart, minNote: 'Enter the monthly gross pay.',
+      fMonthly: s.fMonthly, setMonthly: (e: any) => this.setState({ fMonthly: e.target.value.replace(/[^\d]/g, '') }), fBad: fBad || !!bandWarn, fDate: s.fDate, setDate: (e: any) => this.setState({ fDate: e && e.target ? e.target.value : e }),
+      fDateMin: p.monthStart, minNote: fBad ? 'Enter the monthly gross pay.' : bandWarn,
       splitNote: isNew ? 'Basic is 50% of gross, HRA is 40% of basic, conveyance is ₹1,600 from ₹20,000, and the rest is special allowance. PF, ESI and PT follow your payroll settings.'
         : 'Each part of the current structure changes in proportion. PF, ESI and PT follow your payroll settings.',
       preview, pNet: inr(Math.max(0, m - pf - esi - pt)),

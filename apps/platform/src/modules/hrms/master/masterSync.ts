@@ -8,7 +8,7 @@ import { apiJson } from '@/core/api/client'
 import { assignEmployeeShift } from '../api/useOrg'
 import { sendInvite } from '../employees/api/useInvitation'
 import type { PayrollSettings } from '../api/usePayroll'
-import { TYPE_CODE, TONE_HEX, LEAVE_CAT_CODE, COMP_CAT_CODE, COMP_METHOD_CODE, pretty, type Rec } from './masterData'
+import { TYPE_CODE, TONE_HEX, LEAVE_CAT_CODE, COMP_CAT_CODE, COMP_METHOD_CODE, BRANCH_KIND_CODE, pretty, type Rec } from './masterData'
 
 export interface Diff { added: Rec[]; changed: [Rec, Rec][]; removed: Rec[] }
 export interface SyncEnv {
@@ -21,6 +21,10 @@ export interface SyncEnv {
   nextGradeLevel: number
   canInvite: boolean
   canAssignShift: boolean
+  /** May see and set grade pay bands (hrms.grade.band.read). */
+  canBands: boolean
+  /** The id of a company's grade with this code (the design keys grades by code). */
+  gradeIdOf: (code: string, co: string) => string | undefined
   /** A side step failed after the main save worked (shift, invitation). */
   warn: (msg: string) => void
 }
@@ -62,6 +66,12 @@ async function saveEmployee(o: Rec, r: Rec, env: SyncEnv) {
   const patch: Record<string, unknown> = {}
   for (const [k, api, f] of map) if ((o[k] ?? '') !== (r[k] ?? '')) patch[api] = f(r[k])
   if (Object.keys(patch).length) await apiJson(`/v1/hrms/employees/${id}`, json('PUT', patch))
+  // The staffing agency of a contract worker (after the type change above, which it depends on).
+  const oldAgency = o.agency || '', newAgency = (r.type === 'Contract' && r.agency) || ''
+  if (oldAgency !== newAgency) {
+    if (oldAgency) await apiJson(`/v1/hrms/contractors/${oldAgency}/workers/${id}`, json('DELETE'))
+    if (newAgency) await apiJson(`/v1/hrms/contractors/${newAgency}/workers/${id}`, json('PUT'))
+  }
   if (r.shift && r.shift !== o.shift) await assignEmployeeShift(id, r.shift)
   if (r.status !== o.status) {
     const base = `/v1/hrms/employees/${id}`
@@ -86,18 +96,28 @@ async function employees({ added, changed }: Diff, env: SyncEnv) {
     if (r.shift && env.canAssignShift) {
       try { await assignEmployeeShift(created.id, r.shift) } catch (e) { env.warn(`${name} was added, but the shift couldn’t be assigned: ${errMsg(e)}`) }
     }
+    if (r.type === 'Contract' && r.agency) {
+      try { await apiJson(`/v1/hrms/contractors/${r.agency}/workers/${created.id}`, json('PUT')) } catch (e) { env.warn(`${name} was added, but couldn’t be linked to the agency: ${errMsg(e)}`) }
+    }
     if (env.canInvite && created.email) {
       try { await sendInvite(created.id) } catch { env.warn(`${name} was added, but the invitation couldn’t be sent — resend it from Users & Access`) }
     }
   }
   await each(changed, ([o, r]) => saveEmployee(o, r, env), 'employees')
-  return [['hrms', 'employees'], ['hrms', 'employee'], ['hrms', 'employee-counts'], ['master', 'schedule'], ['shifts', 'employee']]
+  return [['hrms', 'employees'], ['hrms', 'employee'], ['hrms', 'employee-counts'], ['master', 'schedule'], ['shifts', 'employee'], ['master', 'contractors']]
 }
 
 // ── organisation ─────────────────────────────────────────────────────────────
-const companyBody = (r: Rec) => ({ name: String(r.name).trim(), legalName: r.legal ?? '', registrationNumber: r.ids?.CIN ?? '', panNumber: r.ids?.PAN ?? '', gstin: r.ids?.GSTIN ?? '', industry: r.industry ?? '' })
+const companyBody = (r: Rec) => ({
+  name: String(r.name).trim(), legalName: r.legal ?? '', registrationNumber: r.ids?.CIN ?? '', panNumber: r.ids?.PAN ?? '', gstin: r.ids?.GSTIN ?? '', industry: r.industry ?? '',
+  // A blank value clears these three on the server.
+  tanNumber: r.ids?.TAN ?? '', incorporationDate: r.inc ?? '', description: String(r.desc ?? '').trim(),
+})
 async function companies({ added, changed }: Diff) {
-  for (const r of added) { const b = companyBody(r); await apiJson('/v1/hrms/companies', json('POST', { ...b, legalName: blank(b.legalName), registrationNumber: blank(b.registrationNumber), panNumber: blank(b.panNumber), gstin: blank(b.gstin), industry: blank(b.industry) })) }
+  for (const r of added) {
+    const b = companyBody(r)
+    await apiJson('/v1/hrms/companies', json('POST', { ...b, legalName: blank(b.legalName), registrationNumber: blank(b.registrationNumber), panNumber: blank(b.panNumber), gstin: blank(b.gstin), industry: blank(b.industry), tanNumber: blank(b.tanNumber), incorporationDate: blank(b.incorporationDate), description: blank(b.description) }))
+  }
   await each(changed, ([, r]) => apiJson(`/v1/hrms/companies/${r._key}`, json('PUT', companyBody(r))), 'companies')
   return [['hrms', 'companies']]
 }
@@ -107,11 +127,11 @@ async function companies({ added, changed }: Diff) {
 async function branches({ added, changed }: Diff) {
   for (const r of added) {
     const hq = r.kind === 'Head office'
-    await apiJson<{ id: string }>('/v1/hrms/branches', json('POST', { companyId: r.co, name: String(r.name).trim(), code: blank(r.code), city: blank(r.city), state: blank(r.state), isHeadquarters: hq }))
+    await apiJson<{ id: string }>('/v1/hrms/branches', json('POST', { companyId: r.co, name: String(r.name).trim(), code: blank(r.code), city: blank(r.city), state: blank(r.state), isHeadquarters: hq, branchType: BRANCH_KIND_CODE[r.kind] || 'BRANCH' }))
   }
   await each(changed, async ([o, r]) => {
     const hq = r.kind === 'Head office'
-    if (changedAny(o, r, ['name', 'code', 'city', 'state', 'kind'])) await apiJson(`/v1/hrms/branches/${r._key}`, json('PUT', { name: String(r.name).trim(), code: r.code ?? '', city: r.city ?? '', state: r.state ?? '', isHeadquarters: hq }))
+    if (changedAny(o, r, ['name', 'code', 'city', 'state', 'kind'])) await apiJson(`/v1/hrms/branches/${r._key}`, json('PUT', { name: String(r.name).trim(), code: r.code ?? '', city: r.city ?? '', state: r.state ?? '', isHeadquarters: hq, branchType: BRANCH_KIND_CODE[r.kind] || 'BRANCH' }))
     if (o.status !== r.status) await apiJson(`/v1/hrms/branches/${r._key}`, json('PUT', { isActive: r.status === 'Active' }))
   }, 'branches')
   return [['hrms', 'branches']]
@@ -122,12 +142,14 @@ async function depts({ added, changed }: Diff, env: SyncEnv) {
     await apiJson('/v1/hrms/departments', json('POST', {
       companyId: (r.parent && env.coOfDept(r.parent)) || env.defaultCo, name: String(r.name).trim(), code: blank(r.code),
       parentDepartmentId: r.parent || undefined, colorHex: TONE_HEX[r.t] || undefined, iconKey: r.icon || undefined,
+      branchIds: r.branches?.length ? r.branches : undefined,
     }))
   }
   await each(changed, async ([o, r]) => {
     const base = `/v1/hrms/departments/${r._key}`
     if (r.status !== o.status && r.status !== 'Active') { await apiJson(base, json('DELETE')); return }
-    if ((r.parent || null) !== (o.parent || null)) throw new Error('Moving a department under another isn’t supported yet')
+    if ((r.parent || null) !== (o.parent || null)) await apiJson(`${base}/parent${r.parent ? '?parentId=' + r.parent : ''}`, json('PATCH'))
+    if (JSON.stringify(r.branches || []) !== JSON.stringify(o.branches || [])) await apiJson(`${base}/branches`, json('PUT', { branchIds: r.branches || [] }))
     if (r.name !== o.name) await apiJson(`${base}/name?${q({ name: String(r.name).trim() })}`, json('PATCH'))
     if ((r.code || '') !== (o.code || '')) await apiJson(`${base}/details?code=${encodeURIComponent(r.code || '')}`, json('PATCH'))
     if (r.icon !== o.icon || r.t !== o.t) await apiJson(`${base}/appearance?${q({ colorHex: TONE_HEX[r.t], iconKey: r.icon })}`, json('PATCH'))
@@ -138,40 +160,52 @@ async function depts({ added, changed }: Diff, env: SyncEnv) {
 
 async function desigs({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
-    await apiJson('/v1/hrms/designations', json('POST', { companyId: (r.dept && env.coOfDept(r.dept)) || env.defaultCo, title: String(r.name).trim(), grade: blank(r.grade), departmentId: r.dept || undefined }))
+    await apiJson('/v1/hrms/designations', json('POST', { companyId: (r.dept && env.coOfDept(r.dept)) || env.defaultCo, title: String(r.name).trim(), gradeId: env.gradeIdOf(r.grade, (r.dept && env.coOfDept(r.dept)) || env.defaultCo), grade: blank(r.grade), code: blank(r.code), departmentId: r.dept || undefined }))
   }
   await each(changed, async ([o, r]) => {
     const base = `/v1/hrms/designations/${r._key}`
     if (r.status !== o.status && r.status !== 'Active') { await apiJson(base, json('DELETE')); return }
     if (r.status !== o.status) throw new Error('Deactivated designations can’t be switched back on yet')
     // A full replace: fields this page doesn't show are sent back as they were.
-    await apiJson(base, json('PUT', { title: String(r.name).trim(), grade: blank(r.grade), departmentId: r.dept || null, reportsToDesignationId: r._raw?.reportsToDesignationId ?? null, jobResponsibilities: r._raw?.jobResponsibilities ?? null }))
+    // The grade goes by id; text that matches no grade (a legacy chip) is sent back as it was.
+    await apiJson(base, json('PUT', { title: String(r.name).trim(), gradeId: env.gradeIdOf(r.grade, r.co || env.defaultCo) ?? null, grade: blank(r.grade), code: String(r.code || '').trim(), departmentId: r.dept || null, reportsToDesignationId: r._raw?.reportsToDesignationId ?? null, jobResponsibilities: r._raw?.jobResponsibilities ?? null }))
   }, 'designations')
   return [['hrms', 'designations']]
 }
 
 async function grades({ added, changed }: Diff, env: SyncEnv) {
   let level = env.nextGradeLevel
-  for (const r of added) await apiJson('/v1/hrms/grades', json('POST', { companyId: env.defaultCo, code: String(r.id).trim(), name: String(r.name).trim(), level: level++, active: true }))
+  // The band is only sent by someone who may see it; the server keeps it for anyone else.
+  const band = (r: Rec) => (env.canBands ? { minCtcAnnual: r.min ?? null, maxCtcAnnual: r.max ?? null } : {})
+  for (const r of added) await apiJson('/v1/hrms/grades', json('POST', { companyId: env.defaultCo, code: String(r.id).trim(), name: String(r.name).trim(), level: level++, active: true, ...band(r) }))
   await each(changed, async ([o, r]) => {
     const base = `/v1/hrms/grades/${r._key}`
     if (r.status !== o.status && r.status !== 'Active') { await apiJson(base, json('DELETE')); return }
-    await apiJson(base, json('PUT', { companyId: r._raw?.companyId, code: String(r.id).trim(), name: String(r.name).trim(), level: r._raw?.level ?? 1, description: r._raw?.description ?? null, active: true }))
+    await apiJson(base, json('PUT', { companyId: r._raw?.companyId, code: String(r.id).trim(), name: String(r.name).trim(), level: r._raw?.level ?? 1, description: r._raw?.description ?? null, active: true, ...band(r) }))
   }, 'grades')
-  return [['hrms', 'org', 'grades']]
+  // A grade's code shows on designations; a new grade can also link old free-text titles.
+  return [['hrms', 'org', 'grades'], ['hrms', 'designations'], ['hrms', 'pay-bands']]
 }
 
 // ── workforce setup ──────────────────────────────────────────────────────────
+/** The agency form's fields. Blank clears a field on the server; GSTIN and the address aren't on the form, so they're left alone. */
+const agencyBody = (r: Rec) => ({
+  agencyName: String(r.name).trim(), registrationNumber: r.reg ?? '', contactPersonName: r.contact ?? '', contactPhone: r.phone ?? '', contactEmail: r.email ?? '',
+  serviceType: r.service ?? '', licenceNumber: r.licenceNo ?? '', licenceValidUntil: r.licence ?? '', siteBranchIds: r.sites || [],
+})
 async function agencies({ added, changed }: Diff, env: SyncEnv) {
   for (const r of added) {
+    const b = agencyBody(r)
     await apiJson('/v1/hrms/contractors', json('POST', {
-      companyId: env.defaultCo, agencyName: String(r.name).trim(), registrationNumber: blank(r.reg), contactPersonName: blank(r.contact),
-      contactEmail: blank(r.email), contactPhone: blank(r.phone),
+      ...b, companyId: env.defaultCo, registrationNumber: blank(b.registrationNumber), contactPersonName: blank(b.contactPersonName), contactEmail: blank(b.contactEmail),
+      contactPhone: blank(b.contactPhone), serviceType: blank(b.serviceType), licenceNumber: blank(b.licenceNumber), licenceValidUntil: blank(b.licenceValidUntil),
     }))
   }
   await each(changed, async ([o, r]) => {
-    if (r.status !== o.status && r.status !== 'Active') { await apiJson(`/v1/hrms/contractors/${r._key}`, json('DELETE')); return }
-    throw new Error('Agencies can’t be edited yet')
+    const base = `/v1/hrms/contractors/${r._key}`
+    if (r.status !== o.status && r.status !== 'Active') { await apiJson(base, json('DELETE')); return }
+    if (r.status !== o.status) await apiJson(`${base}/restore`, json('POST'))
+    if (changedAny(o, r, ['name', 'reg', 'contact', 'phone', 'email', 'service', 'licenceNo', 'licence', 'sites'])) await apiJson(base, json('PUT', agencyBody(r)))
   }, 'agencies')
   return [['master', 'contractors']]
 }

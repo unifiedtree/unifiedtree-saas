@@ -18,7 +18,7 @@ import type { RunRow, RunStatus } from '@/design/dc/PayRuns'
 import type { PayDashData } from '@/design/dc/PayDashboard'
 import type { RunPageData } from '@/design/dc/PayrollRunPage'
 import type { Payslip } from '@/design/dc/PayslipDrawer'
-import type { StructureInfo, PayCalc, SalaryRow } from '@/design/dc/PaySalary'
+import type { StructureInfo, PayCalc, SalaryRow, PayBand } from '@/design/dc/PaySalary'
 import { designSplit } from '@/design/dc/PaySalary'
 import type { ApiPayrollSettings } from '@/design/dc/PaySettings'
 import type { PliRow } from '@/design/dc/PayPli'
@@ -158,6 +158,13 @@ export function PayrollContainer() {
   const [visible, setVisible] = useState<string[]>([])
   const salaryIds = section === 'salary' ? visible : []
   const structQs = useQueries({ queries: salaryIds.map((id) => ({ queryKey: ['hrms', 'payroll', 'structure', 'employee', id], queryFn: () => apiJson<EmployeeSalaryStructure | null>(`/v1/payroll/structures/employee/${id}`).catch((e) => { if (String(e?.message || '').includes('404')) return null; throw e }), enabled: canStruct })) })
+  // Grade pay bands of the people on screen (V143.22), for the "outside the band" warning. Pay data: own permission.
+  const canBands = usePermission('hrms.grade.band.read')
+  const bandsQ = useQuery({
+    queryKey: ['hrms', 'pay-bands', salaryIds.join(',')],
+    queryFn: () => apiJson<{ employeeId: string; gradeCode: string; gradeName: string; minCtcAnnual: number | null; maxCtcAnnual: number | null }[]>(`/v1/hrms/pay-bands?employeeIds=${salaryIds.join(',')}`),
+    enabled: canBands && salaryIds.length > 0, staleTime: 60_000,
+  })
   const settingsQ = useQuery({ queryKey: ['hrms', 'payroll', 'settings'], queryFn: () => apiJson<ApiPayrollSettings>('/v1/payroll/settings'), enabled: canSettings && ['salary', 'settings'].includes(section), staleTime: 60_000 })
   const [ptCode, setPtCode] = useState('')
   const slabCode = section === 'settings' ? ptCode : settingsQ.data?.ptEnabled ? settingsQ.data.ptStateCode || '' : ''
@@ -372,8 +379,10 @@ export function PayrollContainer() {
     } : undefined
     const missing = (salarySkippedQ.data ?? []).map((k) => { const w = empById.get(k.employeeId); return { id: k.employeeId, code: k.employeeCode, name: k.employeeName, dept: w?.departmentId ? deptName.get(w.departmentId) || '—' : '—', joined: w?.dateOfJoining ? fmtShort(w.dateOfJoining) : '—' } })
     const compId = new Map((componentsQ.data ?? []).map((c) => [c.code, c.id]))
+    const bands: Record<string, PayBand> = Object.fromEntries((bandsQ.data ?? []).filter((b) => b.minCtcAnnual != null && b.maxCtcAnnual != null)
+      .map((b) => [b.employeeId, { code: b.gradeCode, name: b.gradeName, min: num(b.minCtcAnnual), max: num(b.maxCtcAnnual) }]))
     px.PaySalary = {
-      state: stateOf(directoryQ), employees, structures, calc, missing, newIds, canEdit: canStructManage, focus: params.get('employee') || '',
+      state: stateOf(directoryQ), employees, structures, calc, missing, newIds, canEdit: canStructManage, focus: params.get('employee') || '', bands,
       monthStart, nextMonthStart, runId: salaryRun?.id || '', runLabel: salaryRun ? runLabel(salaryRun) : '',
       onVisible: (ids: string[]) => setVisible((cur) => (cur.join(',') === ids.join(',') ? cur : ids)), onRetry: () => directoryQ.refetch(),
       onSave: async (q: { employeeId: string; name: string; monthly: number; effectiveFrom: string; isNew: boolean; lines: { componentId: string; code: string; amount: number }[] | null; current: (StructureInfo & { raw?: EmployeeSalaryStructure }) | null }) => {
