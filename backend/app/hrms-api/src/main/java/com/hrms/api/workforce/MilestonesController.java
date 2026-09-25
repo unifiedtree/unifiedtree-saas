@@ -1,7 +1,10 @@
 package com.hrms.api.workforce;
 
+import com.hrms.employee.workforce.service.MilestoneWindow;
+import com.hrms.employee.workforce.service.MilestoneWindow.Range;
 import com.unifiedtree.security.tenant.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,6 +38,14 @@ import java.util.UUID;
  * <p><b>Leap-day birthdays</b> (29 Feb) are projected onto 28 Feb in non-leap
  * years rather than silently vanishing, which is what a plain
  * {@code make_date} would do — it errors on an invalid date.
+ *
+ * <p><b>Chosen ranges.</b> Each list can instead cover a date range the
+ * dashboard card picked ({@code birthdayFrom}/{@code birthdayTo},
+ * {@code anniversaryFrom}/{@code anniversaryTo}, {@code retirementFrom}/
+ * {@code retirementTo}; both ends included, at most 12 months). A list without
+ * a range keeps its look-ahead window exactly as before. Range lists use
+ * {@link MilestoneWindow#occurrenceIn} (the year end, 29 February, and no
+ * anniversary in the joining year) and the company's retirement age.
  *
  * <p>Read-only, tenant-scoped, and visible to any authenticated member of the
  * workspace: knowing a colleague's birthday is not privileged information, and
@@ -61,8 +73,18 @@ public class MilestonesController {
     public MilestonesResponse upcoming(
             @RequestParam(value = "birthdayDays",     defaultValue = "7")   int birthdayDays,
             @RequestParam(value = "anniversaryDays",  defaultValue = "31")  int anniversaryDays,
-            @RequestParam(value = "retirementMonths", defaultValue = "6")   int retirementMonths) {
+            @RequestParam(value = "retirementMonths", defaultValue = "6")   int retirementMonths,
+            @RequestParam(value = "birthdayFrom", required = false)    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate birthdayFrom,
+            @RequestParam(value = "birthdayTo", required = false)      @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate birthdayTo,
+            @RequestParam(value = "anniversaryFrom", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate anniversaryFrom,
+            @RequestParam(value = "anniversaryTo", required = false)   @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate anniversaryTo,
+            @RequestParam(value = "retirementFrom", required = false)  @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate retirementFrom,
+            @RequestParam(value = "retirementTo", required = false)    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate retirementTo) {
 
+        // A bad range is refused (422) before anything is read.
+        Range bRange = Range.optional(birthdayFrom, birthdayTo);
+        Range aRange = Range.optional(anniversaryFrom, anniversaryTo);
+        Range rRange = Range.optional(retirementFrom, retirementTo);
         UUID tenantId = TenantContext.getTenantId();
         if (tenantId == null) {
             return new MilestonesResponse(List.of(), List.of(), List.of());
@@ -72,9 +94,9 @@ public class MilestonesController {
         int rMonths = clamp(retirementMonths, 1, 60);
 
         return new MilestonesResponse(
-                birthdays(tenantId, bDays),
-                anniversaries(tenantId, aDays),
-                retirements(tenantId, rMonths));
+                bRange == null ? birthdays(tenantId, bDays) : yearlyIn(tenantId, "e.date_of_birth", bRange, false),
+                aRange == null ? anniversaries(tenantId, aDays) : yearlyIn(tenantId, "e.date_of_joining", aRange, true),
+                rRange == null ? retirements(tenantId, rMonths) : retirementsIn(tenantId, rRange));
     }
 
     /**
@@ -174,6 +196,53 @@ public class MilestonesController {
         LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
         int days = (int) java.time.temporal.ChronoUnit.DAYS.between(today, today.plusMonths(months));
         return retirementService.due(tenantId, today, days, null).stream()
+                .map(r -> new Milestone(r.employeeId().toString(), r.name(), r.initials(), r.department(),
+                        r.retirementDate(), r.retirementAge()))
+                .toList();
+    }
+
+    // -- chosen ranges ------------------------------------------------------------
+
+    /**
+     * Birthdays ({@code anniversary} false) or work anniversaries inside a
+     * chosen range, soonest first. The day each one falls on comes from
+     * {@link MilestoneWindow#occurrenceIn}: a range across the year end looks
+     * at both years, 29 February falls on 28 February in other years, and the
+     * joining year itself is not an anniversary.
+     *
+     * @param col qualified source column, {@code e.date_of_birth} or {@code e.date_of_joining}
+     */
+    private List<Milestone> yearlyIn(UUID tenantId, String col, Range range, boolean anniversary) {
+        List<Milestone> out = new ArrayList<>();
+        jdbc.query("""
+                SELECT e.id, e.first_name, e.last_name, e.employee_code,
+                       d.name AS dept, %s AS src
+                  FROM hrms.employees e
+                  LEFT JOIN hrms.departments d ON d.id = e.department_id
+                 WHERE e.tenant_id = ? AND e.is_active AND %s IS NOT NULL
+                """.formatted(col, col), rs -> {
+            java.sql.Date src = rs.getDate("src");
+            LocalDate on = src == null ? null : MilestoneWindow.occurrenceIn(src.toLocalDate(), range);
+            if (on == null) return;
+            String first = rs.getString("first_name");
+            String last  = rs.getString("last_name");
+            String name  = ((first == null ? "" : first) + " " + (last == null ? "" : last)).trim();
+            out.add(new Milestone(
+                    rs.getString("id"),
+                    name.isBlank() ? rs.getString("employee_code") : name,
+                    initials(first, last),
+                    rs.getString("dept"),
+                    on,
+                    anniversary ? on.getYear() - src.toLocalDate().getYear() : null));
+        }, tenantId);
+        out.sort(Comparator.comparing(Milestone::date).thenComparing(Milestone::name, String.CASE_INSENSITIVE_ORDER));
+        return out;
+    }
+
+    /** Retirements inside a chosen range, at each company's retirement age (RetirementService). */
+    private List<Milestone> retirementsIn(UUID tenantId, Range range) {
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+        return retirementService.between(tenantId, today, range.from(), range.to(), null).stream()
                 .map(r -> new Milestone(r.employeeId().toString(), r.name(), r.initials(), r.department(),
                         r.retirementDate(), r.retirementAge()))
                 .toList();

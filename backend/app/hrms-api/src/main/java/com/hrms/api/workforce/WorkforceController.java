@@ -38,6 +38,7 @@ import com.hrms.employee.workforce.service.ShiftService;
 import com.hrms.employee.workforce.service.WorkforceEmployeeService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -311,11 +312,19 @@ public class WorkforceController {
             // "No department" (people without one) and the dashboard's upcoming
             // milestones: milestone=birthday|anniversary|retirement, within =
             // days (months for retirements; defaults to the dashboard's window).
+            // milestoneFrom/milestoneTo: the card's chosen date range instead of
+            // the window (both ends included, at most 12 months).
             @RequestParam(defaultValue = "false") boolean noDepartment,
             @RequestParam(required = false) String milestone,
-            @RequestParam(required = false) Integer milestoneWithin) {
+            @RequestParam(required = false) Integer milestoneWithin,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneTo) {
         return employees.directory(new WorkforceFilter(companyId, departmentId, branchId, status, search, page, pageSize,
-                noDepartment, milestoneKind(milestone), milestoneWithin));
+                noDepartment, milestoneKind(milestone), milestoneWithin, milestoneRange(milestoneFrom, milestoneTo)));
+    }
+
+    private static com.hrms.employee.workforce.service.MilestoneWindow.Range milestoneRange(LocalDate from, LocalDate to) {
+        return com.hrms.employee.workforce.service.MilestoneWindow.Range.optional(from, to);
     }
 
     private static com.hrms.employee.workforce.service.MilestoneWindow.Kind milestoneKind(String milestone) {
@@ -352,14 +361,17 @@ public class WorkforceController {
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "false") boolean noDepartment,
             @RequestParam(required = false) String milestone,
-            @RequestParam(required = false) Integer milestoneWithin) {
+            @RequestParam(required = false) Integer milestoneWithin,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate milestoneTo) {
         var milestoneKind = milestoneKind(milestone);
+        var range = milestoneRange(milestoneFrom, milestoneTo);
         List<WorkforceEmployeeResponse> rows = new java.util.ArrayList<>();
         long total = 0;
         for (int page = 0; ; page++) {
             PageResponse<WorkforceEmployeeResponse> chunk = employees.directory(
                     new WorkforceFilter(companyId, departmentId, branchId, status, search, page, 500,
-                            noDepartment, milestoneKind, milestoneWithin));
+                            noDepartment, milestoneKind, milestoneWithin, range));
             total = chunk.totalElements();
             rows.addAll(chunk.content());
             if (chunk.last() || chunk.content().isEmpty() || rows.size() >= EXPORT_MAX_ROWS) break;

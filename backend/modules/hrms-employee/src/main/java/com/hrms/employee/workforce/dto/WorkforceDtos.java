@@ -488,7 +488,9 @@ public final class WorkforceDtos {
             /** Only people with an upcoming birthday / work anniversary / retirement (null = no such filter). */
             com.hrms.employee.workforce.service.MilestoneWindow.Kind milestone,
             /** The milestone window: days for birthdays and anniversaries, months for retirements (null = the dashboard's default). */
-            Integer milestoneWithin
+            Integer milestoneWithin,
+            /** A chosen date range for the milestone instead of the window (null = use the window). */
+            com.hrms.employee.workforce.service.MilestoneWindow.Range milestoneRange
     ) {
         public WorkforceFilter {
             if (pageSize <= 0)   pageSize = 50;
@@ -496,10 +498,18 @@ public final class WorkforceDtos {
             if (page < 0)        page = 0;
         }
 
+        /** The filter with a milestone window and no chosen date range. */
+        public WorkforceFilter(UUID companyId, UUID departmentId, UUID branchId,
+                               WorkforceEmployee.EmploymentStatus status, String search, int page, int pageSize,
+                               boolean noDepartment, com.hrms.employee.workforce.service.MilestoneWindow.Kind milestone,
+                               Integer milestoneWithin) {
+            this(companyId, departmentId, branchId, status, search, page, pageSize, noDepartment, milestone, milestoneWithin, null);
+        }
+
         /** The original filter, without the "no department" and milestone options. */
         public WorkforceFilter(UUID companyId, UUID departmentId, UUID branchId,
                                WorkforceEmployee.EmploymentStatus status, String search, int page, int pageSize) {
-            this(companyId, departmentId, branchId, status, search, page, pageSize, false, null, null);
+            this(companyId, departmentId, branchId, status, search, page, pageSize, false, null, null, null);
         }
     }
 

@@ -68,8 +68,10 @@ public class WorkforceEmployeeService {
     @Transactional(readOnly = true)
     public PageResponse<WorkforceEmployeeResponse> directory(WorkforceFilter f) {
         // Milestone filters pick their people with the dashboard card's own SQL
-        // (MilestoneWindow), once, before the paged query.
+        // (MilestoneWindow), once, before the paged query. A chosen date range
+        // (the card's range lists) replaces the window.
         List<UUID> milestoneIds = f.milestone() == null ? null
+                : f.milestoneRange() != null ? MilestoneWindow.idsIn(jdbc, f.milestone(), f.milestoneRange())
                 : jdbc.queryForList(MilestoneWindow.idsSql(f.milestone()), UUID.class, f.milestone().clamp(f.milestoneWithin()));
         var spec = buildSpec(f, milestoneIds);
         Page<WorkforceEmployee> page = repository.findAll(

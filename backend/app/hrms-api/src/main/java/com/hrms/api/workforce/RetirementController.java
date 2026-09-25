@@ -1,7 +1,9 @@
 package com.hrms.api.workforce;
 
+import com.hrms.employee.workforce.service.MilestoneWindow;
 import com.unifiedtree.security.tenant.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,9 +21,10 @@ import java.util.UUID;
  *
  * <ul>
  *   <li>{@code GET /v1/hrms/retirements/due}: people reaching their company's
- *       retirement age within {@code days} (default 90), soonest first. Needs
- *       {@code hrms.employee.read}, the same as reading the employee records
- *       the dates come from.</li>
+ *       retirement age within {@code days} (default 90), soonest first, or
+ *       between {@code from} and {@code to} (both included, at most 12 months:
+ *       the dashboard card's chosen range). Needs {@code hrms.employee.read},
+ *       the same as reading the employee records the dates come from.</li>
  *   <li>{@code POST /v1/hrms/retirements/alerts/run}: send this workspace's due
  *       retirement alerts now instead of waiting for the daily job. Safe to
  *       repeat: each alert goes once per person and date.</li>
@@ -46,10 +49,15 @@ public class RetirementController {
     @PreAuthorize("hasAuthority('hrms.employee.read')")
     public List<RetirementService.RetirementDue> due(
             @RequestParam(defaultValue = "90") int days,
-            @RequestParam(required = false) UUID companyId) {
+            @RequestParam(required = false) UUID companyId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        MilestoneWindow.Range range = MilestoneWindow.Range.optional(from, to);
         UUID tenantId = TenantContext.getTenantId();
         if (tenantId == null) return List.of();
-        return retirements.due(tenantId, LocalDate.now(IST), Math.max(0, Math.min(MAX_DAYS, days)), companyId);
+        LocalDate today = LocalDate.now(IST);
+        if (range != null) return retirements.between(tenantId, today, range.from(), range.to(), companyId);
+        return retirements.due(tenantId, today, Math.max(0, Math.min(MAX_DAYS, days)), companyId);
     }
 
     @Operation(summary = "Send this workspace's due retirement alerts now (idempotent)")
