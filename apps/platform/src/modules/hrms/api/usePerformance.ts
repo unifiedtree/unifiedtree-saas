@@ -174,15 +174,81 @@ export function useCreateGoal() {
   })
 }
 
+/** Employee updates a personal goal's percentage; the note (optional) is kept in the goal's history. */
 export function useUpdateGoalProgress() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, progress }: { id: string; progress: number }) =>
+    mutationFn: ({ id, progress, note }: { id: string; progress: number; note?: string }) =>
       apiJson<Goal>(`/v1/performance/goals/${id}/progress`, {
         method: 'PUT',
-        body: JSON.stringify({ progress }),
+        body: JSON.stringify({ progress, note: note || undefined }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'performance', 'goals'] }),
+  })
+}
+
+/** One recorded progress update (KpiService.ProgressUpdateDto). */
+export interface GoalProgressEntry {
+  id: string
+  previousValue?: number | null
+  newValue: number
+  progressPct: number
+  notes?: string | null
+  updatedBy?: string | null
+  updatedByName?: string | null
+  updatedAt: string
+}
+
+/** GET /v1/performance/goals/my/{id}/history (hrms.performance.review.self): your own goal's history. */
+export function useMyGoalHistory(id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'performance', 'goals', 'history', id],
+    queryFn: () => apiJson<GoalProgressEntry[]>(`/v1/performance/goals/my/${id}/history`),
+    enabled: enabled && !!id,
+    staleTime: 15_000,
+  })
+}
+
+/** Mirrors PerformanceInsightService.GoalSnapshotDto. */
+export interface ReviewGoal {
+  id: string
+  title: string
+  category?: string | null
+  kpi: boolean
+  targetValue?: number | null
+  currentValue?: number | null
+  unit?: string | null
+  direction?: string | null
+  progressPct: number
+  weight: number
+  dueDate?: string | null
+  status: GoalStatus
+  cycleId?: string | null
+}
+
+export interface ReviewGoals {
+  reviewId: string
+  employeeId: string
+  employeeName?: string | null
+  cycleId?: string | null
+  cycleName?: string | null
+  periodStart?: string | null
+  periodEnd?: string | null
+  goals: ReviewGoal[]
+}
+
+/**
+ * GET /v1/performance/reviews/{id}/goals: the reviewee's goals and KPIs for the
+ * review's cycle. Allowed for the assigned reviewer, the reviewee, and anyone
+ * whose performance scope covers the reviewee.
+ */
+export function useReviewGoals(reviewId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'performance', 'review-goals', reviewId],
+    queryFn: () => apiJson<ReviewGoals>(`/v1/performance/reviews/${reviewId}/goals`),
+    enabled: enabled && !!reviewId,
+    staleTime: 30_000,
+    retry: false,
   })
 }
 
@@ -276,15 +342,84 @@ export interface KpiPage {
 
 export function useEmployeeKpis(
   employeeId: string | undefined,
-  opts?: { enabled?: boolean },
+  opts?: { enabled?: boolean; activeOnly?: boolean },
 ) {
+  // activeOnly: only goals still being worked on (active or at risk), e.g. the Goals tile.
+  const active = !!opts?.activeOnly
   return useQuery({
-    queryKey: ['performance', 'kpis', 'owner', employeeId],
+    queryKey: ['performance', 'kpis', 'owner', employeeId, active ? 'active' : 'all'],
     queryFn: () => apiJson<KpiPage>(
-      `/v1/performance/kpis?ownerId=${employeeId}&page=0&size=50`,
+      `/v1/performance/kpis?ownerId=${employeeId}&page=0&size=${active ? 1 : 50}${active ? '&active=true' : ''}`,
     ),
     enabled: (opts?.enabled ?? true) && !!employeeId,
     staleTime: 60_000,
+    retry: false,
+  })
+}
+
+// ── One employee's performance page ─────────────────────────────────────────
+// GET /v1/performance/employees/{id} (hrms.performance.read). HR / admin can open
+// anyone; a department manager only their team (403 otherwise).
+
+export interface ProfileReview {
+  id: string
+  cycleId?: string | null
+  cycleName?: string | null
+  periodStart?: string | null
+  periodEnd?: string | null
+  reviewerId?: string | null
+  reviewerName?: string | null
+  reviewerType?: string | null
+  status: ReviewStatus
+  overallRating?: number | null
+  strengths?: string | null
+  improvements?: string | null
+  submittedAt?: string | null
+  createdAt?: string | null
+}
+
+export interface RatingPoint {
+  cycleId?: string | null
+  cycleName?: string | null
+  periodStart?: string | null
+  periodEnd?: string | null
+  averageRating: number
+  reviewCount: number
+  lastSubmittedAt?: string | null
+}
+
+export interface EmployeePerformanceProfile {
+  employee: {
+    id: string
+    employeeCode?: string | null
+    name: string
+    department?: string | null
+    designation?: string | null
+    managerName?: string | null
+    employmentStatus?: string | null
+    dateOfJoining?: string | null
+    active: boolean
+  }
+  summary: {
+    latestRating?: number | null
+    averageRating?: number | null
+    activeGoals: number
+    atRiskGoals: number
+    completedGoals: number
+    reviewsSubmitted: number
+    reviewsPending: number
+  }
+  ratings: RatingPoint[]
+  goals: EmployeeKpiRow[]
+  reviews: ProfileReview[]
+}
+
+export function useEmployeePerformanceProfile(employeeId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'performance', 'profile', employeeId],
+    queryFn: () => apiJson<EmployeePerformanceProfile>(`/v1/performance/employees/${employeeId}`),
+    enabled: enabled && !!employeeId,
+    staleTime: 15_000,
     retry: false,
   })
 }

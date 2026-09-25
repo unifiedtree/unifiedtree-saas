@@ -35,13 +35,6 @@ All P0 items are done (wave 1).
 **Workspace settings** (§8)
 - Invoices (Razorpay).
 
-**Performance and Learning** (§11.10, §11.17)
-- UI for the per-employee performance directory (the endpoint works and is team-scoped).
-- KPI progress history for the employee.
-- Show the reviewee's KPIs while writing a review.
-- Program detail / edit (title, dates, seats).
-- Skill self-assessment.
-
 ---
 
 ## P2: polish

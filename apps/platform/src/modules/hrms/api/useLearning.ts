@@ -29,6 +29,12 @@ export const ALLOWED_TRANSITIONS: Record<ProgramStatus, ProgramStatus[]> = {
   CANCELLED: [],
 }
 
+/** How a program is delivered (V143.21). Null = not set. */
+export type ProgramMode = 'IN_PERSON' | 'ONLINE' | 'HYBRID' | 'SELF_PACED'
+export const PROGRAM_MODE_LABEL: Record<ProgramMode, string> = {
+  IN_PERSON: 'In person', ONLINE: 'Online', HYBRID: 'Hybrid', SELF_PACED: 'Self-paced',
+}
+
 export interface TrainingProgram {
   id: string
   companyId: string
@@ -42,6 +48,8 @@ export interface TrainingProgram {
   status: ProgramStatus
   enrolledCount: number
   createdAt: string
+  updatedAt?: string
+  mode?: ProgramMode | null
 }
 
 /**
@@ -148,6 +156,35 @@ export interface CreateProgramPayload {
   startDate?: string
   endDate?: string
   capacity?: number | null
+  mode?: ProgramMode
+}
+
+/**
+ * PUT /v1/learning/programs/{id} (hrms.learning.write). Fields left undefined are
+ * not changed; an empty string clears description, category, trainer, mode or a
+ * date. `unlimitedSeats: true` removes the seat limit. The server refuses seats
+ * below the people already enrolled, an end date before the start date, and any
+ * detail change on a completed or cancelled program.
+ */
+export interface UpdateProgramPayload {
+  title?: string
+  description?: string
+  category?: string
+  trainer?: string
+  startDate?: string
+  endDate?: string
+  capacity?: number
+  unlimitedSeats?: boolean
+  mode?: ProgramMode | ''
+}
+
+export function useUpdateProgram() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateProgramPayload & { id: string }) =>
+      apiJson<TrainingProgram>(`/v1/learning/programs/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'learning'] }),
+  })
 }
 
 export function useCreateProgram() {
@@ -305,5 +342,84 @@ export function useUpsertSkill() {
     mutationFn: (data: UpsertSkillPayload) =>
       apiJson<EmployeeSkill>('/v1/learning/skills', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'learning', 'skills'] }),
+  })
+}
+
+// ── Skill self-assessment (V143.21) ─────────────────────────────────────────
+// Employees propose a level for their own skills (hrms.learning.skill.assess.self);
+// their manager (team only) or HR (hrms.learning.write) approves or rejects it
+// (hrms.learning.skill.approve). Approving updates the skill matrix.
+
+export type SkillAssessmentStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'
+
+/** Mirrors SkillAssessmentService.AssessmentDto. */
+export interface SkillAssessment {
+  id: string
+  employeeId: string
+  employeeName?: string | null
+  employeeCode?: string | null
+  department?: string | null
+  skillId?: string | null
+  skillName: string
+  currentProficiency?: number | null
+  proposedProficiency: number
+  employeeNote?: string | null
+  status: SkillAssessmentStatus
+  decidedByName?: string | null
+  decidedAt?: string | null
+  decisionNote?: string | null
+  createdAt: string
+}
+
+export function useMySkillAssessments(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'learning', 'skill-assessments', 'me'],
+    queryFn: () => apiJson<SkillAssessment[]>('/v1/learning/skill-assessments/me'),
+    enabled,
+    staleTime: 15_000,
+  })
+}
+
+export function useProposeSkillLevel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { skillName: string; proposedProficiency: number; note?: string }) =>
+      apiJson<SkillAssessment>('/v1/learning/skill-assessments', { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'learning', 'skill-assessments'] }),
+  })
+}
+
+export function useWithdrawSkillAssessment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiJson<SkillAssessment>(`/v1/learning/skill-assessments/${id}/withdraw`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'learning', 'skill-assessments'] }),
+  })
+}
+
+/** PENDING: waiting for a decision (oldest first). DECIDED: the 50 most recent decisions. */
+export function useSkillAssessmentQueue(view: 'PENDING' | 'DECIDED', enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'learning', 'skill-assessments', 'queue', view],
+    queryFn: () => apiJson<SkillAssessment[]>(`/v1/learning/skill-assessments?view=${view}`),
+    enabled,
+    staleTime: 15_000,
+  })
+}
+
+export function useDecideSkillAssessment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, decision, note }: { id: string; decision: 'APPROVED' | 'REJECTED'; note?: string }) =>
+      apiJson<SkillAssessment>(`/v1/learning/skill-assessments/${id}/decide`, {
+        method: 'POST', body: JSON.stringify({ decision, note: note || undefined }),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['hrms', 'learning', 'skill-assessments'] }),
+        qc.invalidateQueries({ queryKey: ['hrms', 'learning', 'skills'] }),
+      ])
+    },
   })
 }

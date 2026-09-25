@@ -42,6 +42,9 @@ public class LearningService {
             Set.of("PLANNED", "ONGOING", "COMPLETED", "CANCELLED");
     private static final Set<String> ENROLLMENT_STATES =
             Set.of("ENROLLED", "IN_PROGRESS", "COMPLETED", "DROPPED");
+    /** How a program is delivered (V143.21, ck_training_programs_mode). */
+    static final Set<String> PROGRAM_MODES = Set.of("IN_PERSON", "ONLINE", "HYBRID", "SELF_PACED");
+    static final int MAX_TITLE = 200, MAX_CATEGORY = 50, MAX_TRAINER = 150, MAX_SEATS = 100_000;
 
     private final JdbcTemplate jdbc;
 
@@ -55,17 +58,23 @@ public class LearningService {
             UUID id, UUID companyId, String title, String description,
             String category, String trainer, String startDate, String endDate,
             Integer capacity, int enrolledCount, String status,
-            String createdAt, String updatedAt) {}
+            String createdAt, String updatedAt, String mode) {}
 
     public record CreateProgramRequest(
             @jakarta.validation.constraints.NotNull UUID companyId,
             @jakarta.validation.constraints.NotBlank String title,
             String description, String category, String trainer,
-            String startDate, String endDate, Integer capacity) {}
+            String startDate, String endDate, Integer capacity, String mode) {}
 
+    /**
+     * Partial update: a null field is left as it is. For description, category,
+     * trainer, mode and the two dates an empty string clears the value. Seats:
+     * a number sets them, {@code unlimitedSeats = true} removes the limit.
+     */
     public record UpdateProgramRequest(
             String title, String description, String category, String trainer,
-            String startDate, String endDate, Integer capacity, String status) {}
+            String startDate, String endDate, Integer capacity, String status,
+            String mode, Boolean unlimitedSeats) {}
 
     /**
      * {@code programTitle} added 2026-09-09: the "My Training" tab renders one
@@ -151,19 +160,26 @@ public class LearningService {
         if (start != null && end != null && end.isBefore(start)) {
             throw new BusinessRuleException("End date cannot be before start date", "INVALID_DATE_RANGE");
         }
+        String title = requireTitle(req.title());
+        checkLength(req.category(), MAX_CATEGORY, "Category");
+        checkLength(req.trainer(), MAX_TRAINER, "Trainer");
+        String mode = normaliseMode(req.mode());
+        // Blank = unlimited. 0 used to be accepted and made a program nobody could join.
+        Integer capacity = req.capacity();
+        validateSeats(capacity, 0);
         UUID id = jdbc.queryForObject("""
                 INSERT INTO learning_mgmt.training_programs
                     (tenant_id, company_id, title, description, category,
-                     trainer, start_date, end_date, capacity, status,
+                     trainer, start_date, end_date, capacity, status, mode,
                      created_by, updated_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?, ?)
                 RETURNING id
                 """, UUID.class,
-                tenantId, req.companyId(), req.title(), req.description(), req.category(),
-                req.trainer(),
+                tenantId, req.companyId(), title, blankToNull(req.description()), blankToNull(req.category()),
+                blankToNull(req.trainer()),
                 start == null ? null : java.sql.Date.valueOf(start),
                 end   == null ? null : java.sql.Date.valueOf(end),
-                req.capacity(),
+                capacity, mode,
                 actorId == null ? null : actorId.toString(),
                 actorId == null ? null : actorId.toString());
         return getProgram(tenantId, id);
@@ -179,16 +195,19 @@ public class LearningService {
             validateProgramStatus(req.status());
             validateStatusTransition(existing.status(), req.status());
         }
+        validateDetailEdit(existing, req);
 
         StringBuilder sql = new StringBuilder("UPDATE learning_mgmt.training_programs SET updated_at = now()");
         List<Object> args = new ArrayList<>();
-        if (req.title()       != null) { sql.append(", title = ?");       args.add(req.title()); }
-        if (req.description() != null) { sql.append(", description = ?"); args.add(req.description()); }
-        if (req.category()    != null) { sql.append(", category = ?");    args.add(req.category()); }
-        if (req.trainer()     != null) { sql.append(", trainer = ?");     args.add(req.trainer()); }
-        if (req.startDate()   != null) { sql.append(", start_date = ?");  args.add(java.sql.Date.valueOf(req.startDate())); }
-        if (req.endDate()     != null) { sql.append(", end_date = ?");    args.add(java.sql.Date.valueOf(req.endDate())); }
-        if (req.capacity()    != null) { sql.append(", capacity = ?");    args.add(req.capacity()); }
+        if (req.title()       != null) { sql.append(", title = ?");       args.add(req.title().trim()); }
+        if (req.description() != null) { sql.append(", description = ?"); args.add(blankToNull(req.description())); }
+        if (req.category()    != null) { sql.append(", category = ?");    args.add(blankToNull(req.category())); }
+        if (req.trainer()     != null) { sql.append(", trainer = ?");     args.add(blankToNull(req.trainer())); }
+        if (req.mode()        != null) { sql.append(", mode = ?");        args.add(normaliseMode(req.mode())); }
+        if (req.startDate()   != null) { sql.append(", start_date = ?");  args.add(sqlDate(req.startDate())); }
+        if (req.endDate()     != null) { sql.append(", end_date = ?");    args.add(sqlDate(req.endDate())); }
+        if (Boolean.TRUE.equals(req.unlimitedSeats())) { sql.append(", capacity = NULL"); }
+        else if (req.capacity() != null) { sql.append(", capacity = ?");  args.add(req.capacity()); }
         if (req.status()      != null) { sql.append(", status = ?");      args.add(req.status()); }
         if (actorId != null)           { sql.append(", updated_by = ?");  args.add(actorId.toString()); }
         sql.append(", version = version + 1 WHERE id = ?");
@@ -454,6 +473,96 @@ public class LearningService {
         return getEnrollment(enrollmentId);
     }
 
+    // ── Program edit rules (2026-09-25) ─────────────────────────────────────────
+
+    /**
+     * Checks a program edit against the program as it is now:
+     * <ul>
+     *   <li>completed and cancelled programs are kept as a record: only their
+     *       status rules apply, their details can't be changed;</li>
+     *   <li>the title can't be blank, and text fields keep to their column sizes;</li>
+     *   <li>the end date can't fall before the start date, taking whichever of
+     *       the two isn't being changed from the program;</li>
+     *   <li>seats must be at least 1 and never fewer than the people already
+     *       enrolled (dropped enrollments don't hold a seat);</li>
+     *   <li>the mode must be one of {@link #PROGRAM_MODES}.</li>
+     * </ul>
+     */
+    static void validateDetailEdit(ProgramDto existing, UpdateProgramRequest req) {
+        boolean detailsChange = req.title() != null || req.description() != null || req.category() != null
+                || req.trainer() != null || req.startDate() != null || req.endDate() != null
+                || req.capacity() != null || req.mode() != null || Boolean.TRUE.equals(req.unlimitedSeats());
+        if (!detailsChange) return;
+        if ("COMPLETED".equals(existing.status()) || "CANCELLED".equals(existing.status())) {
+            throw new BusinessRuleException(
+                    "This program is " + existing.status().toLowerCase()
+                            + ", so its details are kept as a record and can't be changed",
+                    "PROGRAM_CLOSED");
+        }
+        if (req.title() != null) requireTitle(req.title());
+        checkLength(req.category(), MAX_CATEGORY, "Category");
+        checkLength(req.trainer(), MAX_TRAINER, "Trainer");
+        if (req.mode() != null) normaliseMode(req.mode());
+        LocalDate start = req.startDate() != null ? parseDate(req.startDate()) : parseDate(existing.startDate());
+        LocalDate end   = req.endDate()   != null ? parseDate(req.endDate())   : parseDate(existing.endDate());
+        if (start != null && end != null && end.isBefore(start)) {
+            throw new BusinessRuleException("The end date can't be before the start date", "INVALID_DATE_RANGE");
+        }
+        if (!Boolean.TRUE.equals(req.unlimitedSeats()) && req.capacity() != null) {
+            validateSeats(req.capacity(), existing.enrolledCount());
+        }
+    }
+
+    /** Seats: null = unlimited; otherwise 1..MAX_SEATS and at least the current enrollment. */
+    static void validateSeats(Integer capacity, int enrolled) {
+        if (capacity == null) return;
+        if (capacity < 1) {
+            throw new BusinessRuleException("A program needs at least 1 seat. Leave seats empty for no limit.",
+                    "INVALID_CAPACITY");
+        }
+        if (capacity > MAX_SEATS) {
+            throw new BusinessRuleException("Seats can't be more than " + MAX_SEATS, "INVALID_CAPACITY");
+        }
+        if (capacity < enrolled) {
+            throw new BusinessRuleException("Seats can't be fewer than the " + enrolled
+                    + (enrolled == 1 ? " person" : " people") + " already enrolled", "CAPACITY_BELOW_ENROLLED");
+        }
+    }
+
+    static String requireTitle(String title) {
+        String t = title == null ? "" : title.trim();
+        if (t.isEmpty()) throw new BusinessRuleException("Give the program a title", "TITLE_REQUIRED");
+        if (t.length() > MAX_TITLE) {
+            throw new BusinessRuleException("The title can be at most " + MAX_TITLE + " characters", "TITLE_TOO_LONG");
+        }
+        return t;
+    }
+
+    static void checkLength(String value, int max, String label) {
+        if (value != null && value.trim().length() > max) {
+            throw new BusinessRuleException(label + " can be at most " + max + " characters", "FIELD_TOO_LONG");
+        }
+    }
+
+    /** "" clears the mode; anything else must be a known mode. */
+    static String normaliseMode(String mode) {
+        if (mode == null || mode.isBlank()) return null;
+        String m = mode.trim().toUpperCase();
+        if (!PROGRAM_MODES.contains(m)) {
+            throw new BusinessRuleException("Mode must be in person, online, hybrid or self-paced", "INVALID_MODE");
+        }
+        return m;
+    }
+
+    private static String blankToNull(String v) {
+        return v == null || v.isBlank() ? null : v.trim();
+    }
+
+    private static java.sql.Date sqlDate(String v) {
+        LocalDate d = parseDate(v);
+        return d == null ? null : java.sql.Date.valueOf(d);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private EnrollmentDto getEnrollment(UUID id) {
@@ -510,7 +619,8 @@ public class LearningService {
                 capacity, enrolled,
                 rs.getString("status"),
                 ts(rs.getTimestamp("created_at")),
-                ts(rs.getTimestamp("updated_at")));
+                ts(rs.getTimestamp("updated_at")),
+                rs.getString("mode"));
     }
 
     private EnrollmentDto toEnrollmentDto(java.sql.ResultSet rs) throws java.sql.SQLException {
@@ -533,7 +643,7 @@ public class LearningService {
      * throws a BusinessRuleException that maps to 400 INVALID_DATE with a
      * helpful message. Accepts YYYY-MM-DD only.
      */
-    private static LocalDate parseDate(String s) {
+    static LocalDate parseDate(String s) {
         if (s == null || s.isBlank()) return null;
         try {
             return LocalDate.parse(s);

@@ -24,6 +24,8 @@ export interface KpiProgressEntry {
   progressPct: number
   notes?: string
   updatedBy?: string
+  /** Who recorded it (their name); null when unknown. */
+  updatedByName?: string | null
   updatedAt: string
 }
 export interface CycleProgress {

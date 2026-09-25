@@ -65,6 +65,10 @@ export type AppNotificationType =
   // Payroll: HR / finance raised a salary advance in your name; your salary structure was revised.
   | 'ADVANCE_RAISED_FOR_YOU'
   | 'SALARY_REVISED'
+  // Skill self-assessment (V143.21): approver asked to decide; employee told the outcome.
+  | 'SKILL_ASSESSMENT_SUBMITTED'
+  | 'SKILL_ASSESSMENT_APPROVED'
+  | 'SKILL_ASSESSMENT_REJECTED'
   | 'GENERAL'
 
 /** Raw server DTO (see {@code NotificationDtos.NotificationDto}). */
@@ -238,6 +242,9 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   if (type === 'ADVANCE_RAISED_FOR_YOU') return '/hrms/advances'
   if (type === 'SALARY_REVISED') return '/me/salary'
   if (type.startsWith('INTERVIEW_')) return '/me/interviews'
+  // Skill self-assessment: approvers work the queue, employees see the outcome under My training.
+  if (type === 'SKILL_ASSESSMENT_SUBMITTED') return '/hrms/learning?view=approvals'
+  if (type === 'SKILL_ASSESSMENT_APPROVED' || type === 'SKILL_ASSESSMENT_REJECTED') return '/hrms/learning?view=my'
 
   if (type === 'WELCOME') return '/'
   // Retirement alerts (HR): the retiring person's record.

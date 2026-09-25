@@ -4,14 +4,20 @@
 //   - hrms.learning.skill.read: colleagues' skills and certifications (V116 —
 //     deliberately narrower than learning.read so the whole company's
 //     proficiency scores aren't visible to everyone).
-//   - hrms.learning.write: create programs, change their status, the roster
-//     (enroll others, complete with a score, drop) and editing skills.
+//   - hrms.learning.write: create and edit programs (each has a detail page,
+//     /hrms/learning/programs/:id), change their status, the roster (enroll
+//     others, complete with a score, drop) and editing skills.
+//   - hrms.learning.skill.assess.self: propose a level for your own skills
+//     (My training → My skills). Nothing changes until it's approved.
+//   - hrms.learning.skill.approve: the Skill approvals view. Managers see their
+//     team's proposals, learning.write holders (HR) everyone's.
 import React, { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrStatusPill, TableCard, HrAvatar, HrSelect, type PillTone } from '@/shared/components/hr'
 import { HrPagination } from '@/shared/components/HrPagination'
-import { ModulePage, Views, useView, StatRow, State, Panel, SubHeading, Note, RowList, Row, useDesignToast, dmy, todayIso } from '@/design/module/ModuleKit'
+import { ModulePage, Views, useView, StatRow, State, Panel, SubHeading, Note, RowList, Row, ApprovalList, useDesignToast, dmy, todayIso, stamp } from '@/design/module/ModuleKit'
 import { dashIcon } from '@/design/dc/icons'
 import { PerformanceEmployeePicker as EmployeePicker } from './performance/PerformanceEmployeePicker'
 import { useCompanies } from './api/useOrg'
@@ -21,20 +27,25 @@ import {
   useMyEnrollments, useEmployeeSkills, useUpsertSkill, useMySkills,
   useProgramEnrollments, useCompleteEnrollment, useBulkEnroll,
   useAdminDropEnrollment, useDropEnrollment,
-  ALLOWED_TRANSITIONS,
-  type ProgramStatus, type EnrollmentStatus, type TrainingProgram, type Enrollment,
+  useMySkillAssessments, useProposeSkillLevel, useWithdrawSkillAssessment,
+  useSkillAssessmentQueue, useDecideSkillAssessment,
+  ALLOWED_TRANSITIONS, PROGRAM_MODE_LABEL,
+  type ProgramStatus, type EnrollmentStatus, type TrainingProgram, type Enrollment, type ProgramMode,
+  type SkillAssessment, type SkillAssessmentStatus,
 } from './api/useLearning'
 
 type Toast = (msg: string, err?: boolean, detail?: string) => void
-const PROGRAM_TONE: Record<ProgramStatus, PillTone> = { PLANNED: 'info', ONGOING: 'warn', COMPLETED: 'ok', CANCELLED: 'red' }
+export const PROGRAM_TONE: Record<ProgramStatus, PillTone> = { PLANNED: 'info', ONGOING: 'warn', COMPLETED: 'ok', CANCELLED: 'red' }
 const ENROLLMENT_TONE: Record<EnrollmentStatus, PillTone> = { ENROLLED: 'warn', IN_PROGRESS: 'info', COMPLETED: 'ok', DROPPED: 'gray' }
-const PROGRAM_LABEL: Record<ProgramStatus, string> = { PLANNED: 'Planned', ONGOING: 'Ongoing', COMPLETED: 'Completed', CANCELLED: 'Cancelled' }
+export const PROGRAM_LABEL: Record<ProgramStatus, string> = { PLANNED: 'Planned', ONGOING: 'Ongoing', COMPLETED: 'Completed', CANCELLED: 'Cancelled' }
 const ENROLLMENT_LABEL: Record<EnrollmentStatus, string> = { ENROLLED: 'Enrolled', IN_PROGRESS: 'In progress', COMPLETED: 'Completed', DROPPED: 'Dropped' }
 /** score is NUMERIC(5,2) (V073); anything larger overflows into a 500. */
 const MAX_SCORE = 999.99
 /** COMPLETED and DROPPED are final: complete() answers ENROLLMENT_CLOSED, and admin-drop on a dropped row is a silent no-op. */
 const isOpenEnrollment = (s: EnrollmentStatus) => s === 'ENROLLED' || s === 'IN_PROGRESS'
-const schedule = (p: TrainingProgram) => (p.startDate ? `${dmy(p.startDate)}${p.endDate ? ` – ${dmy(p.endDate)}` : ''}` : 'Dates not set')
+const ASSESSMENT_TONE: Record<SkillAssessmentStatus, PillTone> = { PENDING: 'warn', APPROVED: 'ok', REJECTED: 'red', WITHDRAWN: 'gray' }
+const ASSESSMENT_LABEL: Record<SkillAssessmentStatus, string> = { PENDING: 'Waiting for approval', APPROVED: 'Approved', REJECTED: 'Not approved', WITHDRAWN: 'Withdrawn' }
+export const schedule = (p: TrainingProgram) => (p.startDate ? `${dmy(p.startDate)}${p.endDate ? ` – ${dmy(p.endDate)}` : ''}` : 'Dates not set')
 const label = 'mb-1.5 block text-[13px] font-semibold text-text-secondary'
 
 function Bar({ value, max }: { value: number; max: number }) {
@@ -45,17 +56,21 @@ function Bar({ value, max }: { value: number; max: number }) {
   )
 }
 
-type Tab = 'programs' | 'my' | 'skills' | 'certifications'
+type Tab = 'programs' | 'my' | 'skills' | 'certifications' | 'approvals'
 
 export const Learning: React.FC = () => {
   const canRead = usePermission('hrms.learning.read')
   const canWrite = usePermission('hrms.learning.write')
   const canEnroll = usePermission('hrms.learning.enroll.self')
   const canViewSkills = usePermission('hrms.learning.skill.read')
+  const canAssess = usePermission('hrms.learning.skill.assess.self')
+  const canApprove = usePermission('hrms.learning.skill.approve')
+  const pending = useSkillAssessmentQueue('PENDING', canApprove)
   const views = [
     ...(canRead ? [{ key: 'programs', label: 'Programs', icon: 'briefcase' }] : []),
     ...(canEnroll ? [{ key: 'my', label: 'My training', icon: 'checkCircle' }] : []),
     ...(canViewSkills ? [{ key: 'skills', label: 'Skill matrix', icon: 'chart' }, { key: 'certifications', label: 'Certifications', icon: 'shield' }] : []),
+    ...(canApprove ? [{ key: 'approvals', label: 'Skill approvals', icon: 'userCheck', count: pending.data?.length ?? null, urgent: (pending.data?.length ?? 0) > 0 }] : []),
   ]
   const [tab, setTab] = useView(views.map((v) => v.key)) as [Tab, (k: string) => void]
   return (
@@ -65,9 +80,10 @@ export const Learning: React.FC = () => {
         {views.length > 1 && <Views items={views} active={tab} onChange={setTab} label="Learning views" />}
         {views.length === 0 && <State kind="empty" icon="lock" title="No learning access" description="Ask an admin if you should see training programs." />}
         {tab === 'programs' && canRead && <ProgramsTab canWrite={canWrite} canEnroll={canEnroll} />}
-        {tab === 'my' && canEnroll && <MyTrainingTab />}
+        {tab === 'my' && canEnroll && <MyTrainingTab canAssess={canAssess} />}
         {tab === 'skills' && canViewSkills && <SkillMatrixTab canWrite={canWrite} />}
         {tab === 'certifications' && canViewSkills && <SkillMatrixTab canWrite={canWrite} certificationsOnly />}
+        {tab === 'approvals' && canApprove && <SkillApprovalsTab everyone={canWrite} />}
       </div>
     </ModulePage>
   )
@@ -77,15 +93,16 @@ export const Learning: React.FC = () => {
 function NewProgramPanel({ onDone, toast }: { onDone: () => void; toast: Toast }) {
   const { data: companies = [] } = useCompanies()
   const create = useCreateProgram()
-  const [f, setF] = useState({ companyId: '', title: '', category: '', trainer: '', startDate: '', endDate: '', capacity: '', description: '' })
+  const [f, setF] = useState({ companyId: '', title: '', category: '', trainer: '', startDate: '', endDate: '', capacity: '', description: '', mode: '' })
   const set = (k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }))
   const companyId = f.companyId || (companies.length === 1 ? companies[0].id : '')
   const onCreate = async () => {
     if (!f.title.trim()) { toast('Give the program a title', true); return }
     if (!companyId) { toast('Choose a company', true); return }
     if (f.startDate && f.endDate && f.endDate < f.startDate) { toast('The end date is before the start date', true); return }
+    if (f.capacity && !(Number.isInteger(Number(f.capacity)) && Number(f.capacity) >= 1)) { toast('Seats must be a whole number of at least 1. Leave it empty for no limit.', true); return }
     try {
-      await create.mutateAsync({ companyId, title: f.title.trim(), category: f.category.trim() || undefined, trainer: f.trainer.trim() || undefined, startDate: f.startDate || undefined, endDate: f.endDate || undefined, capacity: f.capacity ? parseInt(f.capacity, 10) : null, description: f.description.trim() || undefined })
+      await create.mutateAsync({ companyId, title: f.title.trim(), category: f.category.trim() || undefined, trainer: f.trainer.trim() || undefined, startDate: f.startDate || undefined, endDate: f.endDate || undefined, capacity: f.capacity ? parseInt(f.capacity, 10) : null, description: f.description.trim() || undefined, mode: (f.mode || undefined) as ProgramMode | undefined })
       toast('Program created'); onDone()
     } catch (e) { toast('Couldn’t create the program', true, (e as Error)?.message) }
   }
@@ -98,7 +115,8 @@ function NewProgramPanel({ onDone, toast }: { onDone: () => void; toast: Toast }
         <div><label className={label} htmlFor="lp-trainer">Trainer</label><input id="lp-trainer" value={f.trainer} onChange={(e) => set('trainer', e.target.value)} placeholder="Optional" className="ut-input" /></div>
         <div><label className={label} htmlFor="lp-start">Starts</label><input id="lp-start" type="date" value={f.startDate} onChange={(e) => set('startDate', e.target.value)} className="ut-input" /></div>
         <div><label className={label} htmlFor="lp-end">Ends</label><input id="lp-end" type="date" min={f.startDate || undefined} value={f.endDate} onChange={(e) => set('endDate', e.target.value)} className="ut-input" /></div>
-        <div><label className={label} htmlFor="lp-cap">Seats</label><input id="lp-cap" type="number" min={0} value={f.capacity} onChange={(e) => set('capacity', e.target.value)} placeholder="Unlimited" className="ut-input" /></div>
+        <div><label className={label} htmlFor="lp-cap">Seats</label><input id="lp-cap" type="number" min={1} step={1} value={f.capacity} onChange={(e) => set('capacity', e.target.value)} placeholder="Unlimited" className="ut-input" /></div>
+        <div><label className={label} htmlFor="lp-mode">Mode</label><select id="lp-mode" value={f.mode} onChange={(e) => set('mode', e.target.value)} className="ut-select"><option value="">Not set</option>{(Object.keys(PROGRAM_MODE_LABEL) as ProgramMode[]).map((m) => <option key={m} value={m}>{PROGRAM_MODE_LABEL[m]}</option>)}</select></div>
         <div className="sm:col-span-2"><label className={label} htmlFor="lp-desc">Description</label><textarea id="lp-desc" value={f.description} onChange={(e) => set('description', e.target.value)} rows={2} placeholder="Optional" className="ut-input resize-y" /></div>
       </div>
       <div className="flex justify-end"><HrButton onClick={onCreate} disabled={create.isPending}>{create.isPending ? 'Creating…' : 'Create program'}</HrButton></div>
@@ -108,6 +126,7 @@ function NewProgramPanel({ onDone, toast }: { onDone: () => void; toast: Toast }
 
 function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: boolean }) {
   const { show, node } = useDesignToast()
+  const navigate = useNavigate()
   const [page, setPage] = useState(0)
   const { data, isLoading, isError, error, refetch } = useTrainingPrograms(page)
   const mine = useMyEnrollments(canEnroll)
@@ -156,8 +175,8 @@ function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: bo
                         <React.Fragment key={p.id}>
                           <tr>
                             <td>
-                              <div className="font-semibold text-text-primary">{p.title}</div>
-                              <div className="text-xs text-text-tertiary">{[p.category, p.description].filter(Boolean).join(' · ') || '—'}</div>
+                              <button type="button" className="text-left font-semibold text-text-primary hover:underline" onClick={() => navigate(`/hrms/learning/programs/${p.id}`)}>{p.title}</button>
+                              <div className="text-xs text-text-tertiary">{[p.mode ? PROGRAM_MODE_LABEL[p.mode] : null, p.category, p.description].filter(Boolean).join(' · ') || '—'}</div>
                             </td>
                             <td className="hidden sm:table-cell text-text-secondary">{p.trainer || '—'}</td>
                             <td className="hidden md:table-cell text-text-secondary whitespace-nowrap">{schedule(p)}</td>
@@ -173,6 +192,7 @@ function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: bo
                               <div className="flex flex-wrap justify-end gap-1.5">
                                 {canEnroll && !closed && (isIn ? <HrStatusPill tone="ok">You’re enrolled</HrStatusPill>
                                   : <HrButton size="sm" onClick={() => onEnroll(p)} disabled={enroll.isPending || full}>{full ? 'Full' : 'Enroll'}</HrButton>)}
+                                <HrButton size="sm" variant="ghost" onClick={() => navigate(`/hrms/learning/programs/${p.id}`)}>{canWrite && !closed ? 'Details & edit' : 'Details'}</HrButton>
                                 {canWrite && <HrButton size="sm" variant="ghost" aria-expanded={open} onClick={() => setExpandedId(open ? null : p.id)}>{open ? 'Hide roster' : 'Roster'}</HrButton>}
                               </div>
                             </td>
@@ -198,7 +218,7 @@ function ProgramsTab({ canWrite, canEnroll }: { canWrite: boolean; canEnroll: bo
  *   POST /v1/learning/enrollments/{id}/complete      hrms.learning.write
  *   POST /v1/learning/enrollments/{id}/admin-drop    hrms.learning.write
  */
-function ProgramRoster({ program, toast }: { program: TrainingProgram; toast: Toast }) {
+export function ProgramRoster({ program, toast }: { program: TrainingProgram; toast: Toast }) {
   const { data: enrollments = [], isLoading, isError, refetch } = useProgramEnrollments(program.id)
   const complete = useCompleteEnrollment()
   const adminDrop = useAdminDropEnrollment()
@@ -306,7 +326,7 @@ function ProgramRoster({ program, toast }: { program: TrainingProgram; toast: To
 }
 
 // ── My training ──────────────────────────────────────────────────────────────
-function MyTrainingTab() {
+function MyTrainingTab({ canAssess }: { canAssess: boolean }) {
   const { show, node } = useDesignToast()
   const { data: enrollments = [], isLoading, isError, error, refetch } = useMyEnrollments()
   // /enrollments/{id}/drop is enroll.self, and the service only lets you leave your own.
@@ -341,17 +361,37 @@ function MyTrainingTab() {
                 ))}
               </RowList>
             )}
-      <MySkillsPanel />
+      <MySkillsPanel canAssess={canAssess} toast={show} />
+      {canAssess && <MySkillProposals toast={show} />}
       {node}
     </div>
   )
 }
 
-/** Your own skills: /skills/me resolves you from the token (enroll.self), read-only (writing is learning.write). */
-function MySkillsPanel() {
+/**
+ * Your own skills: /skills/me resolves you from the token (enroll.self). You
+ * can't edit them directly (that's learning.write); with skill.assess.self you
+ * propose a level, and it changes only once your manager or HR approves it.
+ */
+function MySkillsPanel({ canAssess, toast }: { canAssess: boolean; toast: Toast }) {
   const { data: skills = [], isLoading, isError, refetch } = useMySkills()
+  const propose = useProposeSkillLevel()
+  const [form, setForm] = useState<{ skillName: string; level: string; note: string } | null>(null)
+  const onPropose = async () => {
+    if (!form) return
+    const name = form.skillName.trim()
+    if (!name) { toast('Name the skill', true); return }
+    if (name.length > 120) { toast('A skill name can be at most 120 characters', true); return }
+    if (form.note.trim().length > 1000) { toast('Keep the note under 1,000 characters', true); return }
+    try {
+      await propose.mutateAsync({ skillName: name, proposedProficiency: parseInt(form.level, 10), note: form.note.trim() || undefined })
+      toast(`Sent for approval: ${name} at level ${form.level} of 5`); setForm(null)
+    } catch (e) { toast('Couldn’t send it for approval', true, (e as Error)?.message) }
+  }
   return (
-    <Panel title="My skills" sub="HR keeps this up to date from the skill matrix.">
+    <Panel title="My skills"
+      sub={canAssess ? 'Think a level is out of date, or a skill is missing? Propose it with a note. Your manager or HR approves it before it’s recorded.' : 'HR keeps this up to date from the skill matrix.'}
+      aside={canAssess && !form ? <HrButton size="sm" variant="ghost" onClick={() => setForm({ skillName: '', level: '3', note: '' })}><Plus size={14} /> Propose a skill</HrButton> : undefined}>
       {isLoading ? <State kind="loading" height={80} />
         : isError ? <State kind="error" title="Couldn’t load your skills" onRetry={() => refetch()} />
           : skills.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>No skills recorded for you yet.</p>
@@ -363,12 +403,113 @@ function MySkillsPanel() {
                       <strong style={{ fontSize: 13.5 }}>{s.skillName}</strong>
                       {s.certified && <span style={{ display: 'block', fontSize: 12, color: '#64748b' }}>{`${s.certificationName || 'Certified'}${s.certifiedOn ? ` · ${dmy(s.certifiedOn)}` : ''}`}</span>}
                     </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Bar value={s.proficiency} max={5} /><span style={{ fontSize: 12.5, fontWeight: 700, color: '#475569' }}>{`${s.proficiency}/5`}</span></span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <Bar value={s.proficiency} max={5} /><span style={{ fontSize: 12.5, fontWeight: 700, color: '#475569' }}>{`${s.proficiency}/5`}</span>
+                      {canAssess && <HrButton size="sm" variant="ghost" onClick={() => setForm({ skillName: s.skillName, level: String(Math.min(5, s.proficiency + 1)), note: '' })}>Propose a level</HrButton>}
+                    </span>
                   </li>
                 ))}
               </ul>
             )}
+      {canAssess && form && (
+        <div style={{ display: 'grid', gap: 12, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+            <div><label className={label} htmlFor="sa-skill">Skill</label><input id="sa-skill" maxLength={120} value={form.skillName} onChange={(e) => setForm({ ...form, skillName: e.target.value })} placeholder="e.g. TypeScript" list="sa-my-skills" className="ut-input" />
+              <datalist id="sa-my-skills">{skills.map((s) => <option key={s.id} value={s.skillName} />)}</datalist></div>
+            <div><label className={label} htmlFor="sa-level">Your level (1 = beginner, 5 = expert)</label><select id="sa-level" value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })} className="ut-select">{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></div>
+          </div>
+          <div><label className={label} htmlFor="sa-note">Note for your manager (optional)</label><textarea id="sa-note" rows={2} maxLength={1000} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="e.g. Led the checkout rewrite in TypeScript this quarter" className="ut-input resize-y" /></div>
+          <div className="flex justify-end gap-2">
+            <HrButton variant="ghost" onClick={() => setForm(null)} disabled={propose.isPending}>Cancel</HrButton>
+            <HrButton onClick={onPropose} disabled={propose.isPending}>{propose.isPending ? 'Sending…' : 'Send for approval'}</HrButton>
+          </div>
+        </div>
+      )}
     </Panel>
+  )
+}
+
+/** Your proposals and what happened to them: GET /v1/learning/skill-assessments/me. */
+function MySkillProposals({ toast }: { toast: Toast }) {
+  const { data = [], isLoading, isError, error, refetch } = useMySkillAssessments()
+  const withdraw = useWithdrawSkillAssessment()
+  const onWithdraw = async (a: SkillAssessment) => {
+    if (!window.confirm(`Withdraw your proposal for ${a.skillName}? Nothing on your record changes.`)) return
+    try { await withdraw.mutateAsync(a.id); toast('Proposal withdrawn') } catch (e) { toast('Couldn’t withdraw it', true, (e as Error)?.message) }
+  }
+  if (isLoading) return <State kind="loading" height={80} />
+  if (isError) return <State kind="error" title="Couldn’t load your proposals" description={(error as Error)?.message} onRetry={() => refetch()} />
+  if (!data.length) return null
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      <SubHeading>My skill proposals</SubHeading>
+      <RowList>
+        {data.map((a) => (
+          <Row key={a.id} muted={a.status === 'WITHDRAWN'}
+            title={`${a.skillName}: ${a.currentProficiency == null ? 'new skill' : `${a.currentProficiency}/5`} → ${a.proposedProficiency}/5`}
+            meta={[`Proposed ${stamp(a.createdAt)}`, a.decidedAt ? `${a.status === 'APPROVED' ? 'approved' : 'decided'} ${stamp(a.decidedAt)}${a.decidedByName ? ` by ${a.decidedByName}` : ''}` : null].filter(Boolean).join(' · ')}
+            note={a.decisionNote ? `“${a.decisionNote}”` : a.employeeNote || undefined}
+            trail={<>
+              <HrStatusPill tone={ASSESSMENT_TONE[a.status]}>{ASSESSMENT_LABEL[a.status]}</HrStatusPill>
+              {a.status === 'PENDING' && <HrButton size="sm" variant="ghost" onClick={() => onWithdraw(a)} disabled={withdraw.isPending}>Withdraw</HrButton>}
+            </>} />
+        ))}
+      </RowList>
+    </div>
+  )
+}
+
+// ── Skill approvals ──────────────────────────────────────────────────────────
+/**
+ * Proposed skill levels waiting for a decision (hrms.learning.skill.approve).
+ * Managers see their team (same team as My team); HR (learning.write) everyone.
+ * Approving writes the level to the person's skill matrix straight away.
+ */
+function SkillApprovalsTab({ everyone }: { everyone: boolean }) {
+  const { show, node } = useDesignToast()
+  const pending = useSkillAssessmentQueue('PENDING')
+  const decided = useSkillAssessmentQueue('DECIDED')
+  const decide = useDecideSkillAssessment()
+  const items = pending.data ?? []
+  const onDecide = async (id: string, status: 'APPROVED' | 'REJECTED', note: string) => {
+    const a = items.find((x) => x.id === id)
+    if (status === 'REJECTED' && !note.trim()) { show('Add a note saying why', true, 'The employee sees it, so they know what to work on.'); return }
+    try {
+      await decide.mutateAsync({ id, decision: status, note: note.trim() || undefined })
+      show(status === 'APPROVED' ? `Approved: ${a?.employeeName || 'their'} ${a?.skillName || 'skill'} is now level ${a?.proposedProficiency} of 5` : 'Not approved. They’ve been told why.')
+    } catch (e) { show('Couldn’t save the decision', true, (e as Error)?.message) }
+  }
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <SubHeading>{`Waiting for your decision${items.length ? ` · ${items.length}` : ''}`}</SubHeading>
+      <Note>{everyone
+        ? 'You see everyone’s proposals. Approving updates the person’s skill matrix straight away; a rejection needs a note, which they see.'
+        : 'You see proposals from your team: everyone in the departments you head, or your direct reports if you don’t head one. Approving updates their skill matrix straight away; a rejection needs a note, which they see.'}</Note>
+      {pending.isLoading ? <State kind="loading" height={120} />
+        : pending.isError ? <State kind="error" title="Couldn’t load the proposals" description={(pending.error as Error)?.message} onRetry={() => pending.refetch()} />
+          : items.length === 0 ? <State kind="empty" icon="userCheck" title="Nothing to decide" description="Skill levels your team proposes appear here." />
+            : <ApprovalList items={items.map((a) => ({
+              id: a.id, name: a.employeeName || 'Employee', sub: [a.employeeCode, a.department].filter(Boolean).join(' · ') || undefined,
+              facts: [
+                { k: 'Skill', v: a.skillName },
+                { k: 'Recorded', v: a.currentProficiency == null ? 'New skill' : `${a.currentProficiency} of 5` },
+                { k: 'Proposed', v: `${a.proposedProficiency} of 5` },
+              ],
+              reason: a.employeeNote || undefined, raised: stamp(a.createdAt),
+            }))} onDecide={onDecide} busy={decide.isPending} approveLabel="Approve level" approveTip="Approves it and updates their skill matrix" />}
+      {(decided.data?.length ?? 0) > 0 && <>
+        <SubHeading>Recently decided</SubHeading>
+        <RowList>
+          {(decided.data ?? []).map((a) => (
+            <Row key={a.id} title={`${a.employeeName || 'Employee'} · ${a.skillName} → ${a.proposedProficiency}/5`}
+              meta={[a.decidedAt ? stamp(a.decidedAt) : null, a.decidedByName ? `by ${a.decidedByName}` : null].filter(Boolean).join(' · ')}
+              note={a.decisionNote || undefined}
+              trail={<HrStatusPill tone={ASSESSMENT_TONE[a.status]}>{ASSESSMENT_LABEL[a.status]}</HrStatusPill>} />
+          ))}
+        </RowList>
+      </>}
+      {node}
+    </div>
   )
 }
 

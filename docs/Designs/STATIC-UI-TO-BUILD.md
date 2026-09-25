@@ -277,7 +277,8 @@ Checked live:
 | Needs attention, At a glance | Done | Same rules as before (probation within 30 days, notice, no salary structure, no shift, finished days absent this week). Tiles open their tab. |
 | Onboarding record | Done | Real details, assets, policies and checklists. Rejected documents show a red pill. Only people who can edit employees can read it (the endpoint's rule). |
 | Leave and Expenses tabs | Done (w1d, V143_13) | Leave: the year's balances (IST year) and the person's requests; Expenses: their claims with line items and receipts. `GET /v1/leave/employees/{id}/balances`, `…/requests`, `GET /v1/expense/employees/{id}/claims`: `hrms.leave.employee.read` / `hrms.expense.employee.read` (HR, admin; finance for claims) read anyone, department managers their team (TeamEmployeeScope), everyone else themselves; 403 renders as a no-access state. Live test: `live-w1d.mjs`. |
-| Goals tile | Partial | Counts all goals and KPIs; the API has no "active" filter. |
+| Goals tile | Done | Counts only goals and KPIs still being worked on (active or at risk), from `GET /v1/performance/kpis?active=true` (w2b, 25 Sep). |
+| Performance tab | Done | Goals & KPIs, every review about the person (from `GET /v1/performance/employees/{id}`, team-scoped for managers) and skills. **Open performance page** leads to the full per-employee page. The old "Review history isn't shown here yet" note is gone. |
 | Onboarding "Offer accepted / Hiring manager / Recruiter / Source / Buddy" | Done | Saved on the onboarding (V143_20). When a candidate is converted, their onboarding starts if a checklist template fits (department and designation, else a general template), with the offer accepted date (IST), the requisition's hiring manager, the recruiter (whoever added the candidate) and the source filled in. HR edits them, and sets the buddy, on the checklist page. A converted hire with no onboarding yet shows the same facts read from the hiring record. (w2a, 25 Sep) |
 | Old Overview section | Removed | Replaced by the design's Overview. |
 
@@ -602,6 +603,12 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Dates read like "1 Sep 2026".
   - Raw employee and reviewer UUIDs are no longer shown when a name or code is missing.
 - **Permissions:** each view follows the API. Listing cycles, reviews and KPIs needs `hrms.performance.read`. Creating a cycle needs `hrms.performance.write`, assigning or closing one needs `hrms.appraisal.initiate`, and managing KPIs needs `hrms.kpi.manage`.
+- **Built 25 Sep (w2b):**
+  - **People** view (`hrms.performance.read`): the performance directory (`GET /v1/performance/employees`), team-only for department managers. Each person opens **their performance page** (`/hrms/performance/employees/:id`, `GET /v1/performance/employees/{id}`): rating and goal tiles, ratings over time (average of the submitted reviews per cycle), goals & KPIs with their progress history, and every review. A manager gets 403 outside their team. Also reached from the employee workspace's Performance tab and from names in Employee reviews.
+  - **Writing a review** shows the reviewee's goals and KPIs for that cycle (target, current, status): goals tied to the cycle, plus untied goals live during it (`GET /v1/performance/reviews/{id}/goals`: the reviewer, the reviewee, or someone whose performance scope covers them). The admin review drawer shows them too.
+  - **My goals → History**: each update's value, date, who recorded it and the note (`GET /v1/performance/goals/my/{id}/history`, own goals only). Saving progress on a personal goal takes an optional note and is recorded in the same history.
+  - **Fixed in review:** the KPI drawer no longer records a value on a goal without a target. It used to write 0% over the percentage the owner had set (`PUT /v1/performance/kpis/{id}/progress` now answers 422 `KPI_TARGET_REQUIRED`; the drawer says to add a target).
+  - Live test: `e2e/recovery/live-w2b.mjs` (API only; written, not yet run).
 - **Open questions (your call, not changed):**
   - **ADMIN** holds `appraisal.initiate` and `kpi.manage` but not `performance.read`, so it can't list the cycles and KPIs it's allowed to manage. It needs either `performance.read` or neither of the other two.
   - **DEPT_MANAGER** has `performance.read` (V071, on purpose). The API then returns every review and KPI in the company, not just their team's. If managers should see only their team, the list endpoints need scoping.
@@ -629,9 +636,10 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Enroll, My training and your own skills: `learning.enroll.self`
   - Colleagues' skills: `learning.skill.read`
   - Create programs, change status, roster and edit skills: `learning.write`
-- **Static / to build:**
-  - Programs have no detail page or edit. Title, dates and seats can't be changed after creation; only the status can.
-  - There's no self-assessment of skills. Employees can see their skills but not propose changes.
+- **Built 25 Sep (w2b):**
+  - **Program detail page** (`/hrms/learning/programs/:id`, from the program title or **Details**): facts, description, enroll / leave, status, roster, and for `learning.write` an **Edit details** panel (title, description, category, trainer, mode, dates, seats or "No seat limit"). The server refuses seats below the people enrolled (or under 1), an end date before the start date, and any detail change on a completed or cancelled program. Programs now have a **mode** (in person, online, hybrid, self-paced; migration `V143_21`).
+  - **Skill self-assessment**: under My training → My skills, an employee proposes a level (or a new skill) with a note (`hrms.learning.skill.assess.self`), sees what happened to it and can withdraw a waiting one. Their manager (team only) or HR (`learning.write`) decides in the new **Skill approvals** view (`hrms.learning.skill.approve`); a rejection needs a note. Approving writes the level to the skill matrix. Both sides get a notification. Nobody decides their own proposal.
+  - Live test: `e2e/recovery/live-w2b.mjs` (API only; written, not yet run).
 - **Fixed (tests):** `live-new-admin-browser.mjs` was stale since the Company redesign and never cleaned up.
   - It now uses the Learning views and opens the dashboard's Projects drawer.
   - Its geofence step was dropped, because `live-design-companies.mjs` covers the branch drawer.
@@ -816,10 +824,10 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - The startup sweep marked a seeded overdue KPI "At risk" (server log: "1 KPI(s) marked at risk").
   - `KpiAccessScopeTest` now has 7 tests.
   - `live-design-performance.mjs` 18/18 and `live-design-attendance-admin.mjs` 18/18.
-- **Static / to build (performance):**
-  - Nothing shows the per-employee performance directory; the endpoint works and is now scoped.
-  - Employees can't see their KPI's progress history, only current against target.
-  - A review doesn't show the reviewee's KPIs while it's being written.
+- **Built 25 Sep (w2b)** (see §11.9):
+  - The per-employee performance directory has a UI (Performance → People, and a page per person).
+  - Employees see each KPI's progress history (value, date, who, note) under My goals.
+  - A review shows the reviewee's goals and KPIs for the cycle while it's being written.
 
 ### 11.18 Search palette, "/" navigation, permission-only menus, hidden dashboard sections, Geofencing retired (25 Sep): done
 - **Search palette (⌘K / Ctrl+K, and the top-bar field):** same blurred backdrop; the modal itself is rebuilt on the kit's tokens.
