@@ -69,6 +69,8 @@ public class EmployeeShiftService {
             if (seedMissingDefaults(companyId, policies)) {
                 policies = policyRepo.findByCompanyIdAndActiveTrue(companyId);
             }
+        } else if (addGeneralForLegacyOnly(companyId)) {
+            policies = policyRepo.findByCompanyIdAndActiveTrue(companyId);
         }
         return policies.stream()
                 .sorted((a, b) -> nullsafe(a.getStartTime()).compareTo(nullsafe(b.getStartTime())))
@@ -88,6 +90,7 @@ public class EmployeeShiftService {
         ShiftPolicy p = new ShiftPolicy();
         p.setCompanyId(companyId);
         apply(p, req);
+        applyRules(p, req);
         p.setActive(true);
         return toPolicyResponse(policyRepo.save(p));
     }
@@ -104,6 +107,7 @@ public class EmployeeShiftService {
         ShiftType type  = req.shiftType() != null ? req.shiftType() : p.getShiftType();
         validateShiftWindow(type, start, end);
         apply(p, req);
+        applyRules(p, req);
         return toPolicyResponse(policyRepo.save(p));
     }
 
@@ -282,7 +286,117 @@ public class EmployeeShiftService {
         return added;
     }
 
-    private void create(UUID companyId, String name, ShiftType type, LocalTime start, LocalTime end, int grace) {
+    /**
+     * A company whose only shift was the signup "Standard 9-6" (every shift it
+     * ever had is named that) gets the standard "General" shift once, so the
+     * shift pickers offer it. V143.23 does the same for existing companies;
+     * this covers workspaces created after it. Returns true when added.
+     */
+    boolean addGeneralForLegacyOnly(UUID companyId) {
+        List<ShiftPolicy> all = policyRepo.findByCompanyId(companyId);
+        if (all.isEmpty()) return false;
+        boolean onlyLegacy = all.stream().allMatch(sp -> sp.getName() != null
+                && LEGACY_SIGNUP_SHIFT.equals(sp.getName().trim().toLowerCase(java.util.Locale.ROOT)));
+        if (!onlyLegacy) return false;
+        ShiftPolicy general = create(companyId, "General", ShiftType.FIXED, LocalTime.of(9, 0), LocalTime.of(17, 0), 15);
+        boolean codeFree = all.stream().noneMatch(sp -> sp.isActive() && "GEN".equalsIgnoreCase(sp.getCode()));
+        if (codeFree && general != null) {
+            general.setCode("GEN");
+            policyRepo.save(general);
+        }
+        log.info("Added the General shift for company {} (it only had the signup Standard 9-6 shift)", companyId);
+        return true;
+    }
+
+    static final String LEGACY_SIGNUP_SHIFT = "standard 9-6";
+
+    // ── V143.23: code, core hours, weekly offs ───────────────────────────────
+
+    private static final java.util.regex.Pattern CODE = java.util.regex.Pattern.compile("^[A-Z0-9_-]{1,20}$");
+
+    /**
+     * Code, core hours and weekly offs. Each is optional (null = keep); the
+     * checks run on the values the shift will end up with.
+     */
+    void applyRules(ShiftPolicy p, ShiftPolicyRequest req) {
+        if (req.code() != null) {
+            String code = req.code().trim().toUpperCase(java.util.Locale.ROOT);
+            if (code.isEmpty()) {
+                p.setCode(null);
+            } else {
+                if (!CODE.matcher(code).matches()) {
+                    throw new BusinessRuleException(
+                            "Use up to 20 letters, digits, - or _ for the shift code.", "SHIFT_CODE_INVALID");
+                }
+                boolean taken = p.getCompanyId() != null && policyRepo.findByCompanyIdAndActiveTrue(p.getCompanyId()).stream()
+                        .anyMatch(o -> !java.util.Objects.equals(o.getId(), p.getId()) && code.equalsIgnoreCase(o.getCode()));
+                if (taken) {
+                    throw new HrmsException("Another shift already uses the code " + code + ".",
+                            HttpStatus.CONFLICT, "SHIFT_CODE_DUPLICATE");
+                }
+                p.setCode(code);
+            }
+        }
+        if (req.weeklyOffDays() != null) {
+            p.setWeeklyOffDays(weeklyOffCsv(req.weeklyOffDays()));
+        }
+        if (req.coreStartTime() != null || req.coreEndTime() != null) {
+            if (req.coreStartTime() == null || req.coreEndTime() == null) {
+                throw new BusinessRuleException("Give both the start and the end of the core hours.", "SHIFT_CORE_INCOMPLETE");
+            }
+            p.setCoreStartTime(req.coreStartTime());
+            p.setCoreEndTime(req.coreEndTime());
+        }
+        if (p.getShiftType() != ShiftType.FLEXIBLE) {
+            // Core hours only mean something on a flexible shift.
+            p.setCoreStartTime(null);
+            p.setCoreEndTime(null);
+        } else if (p.getCoreStartTime() != null) {
+            validateCoreHours(p.getStartTime(), p.getEndTime(), p.getCoreStartTime(), p.getCoreEndTime());
+        }
+    }
+
+    /** Core hours run forwards within one day and sit inside a same-day shift window. */
+    static void validateCoreHours(LocalTime start, LocalTime end, LocalTime coreStart, LocalTime coreEnd) {
+        if (!coreEnd.isAfter(coreStart)) {
+            throw new BusinessRuleException("Core hours must end after they start.", "SHIFT_CORE_INVALID");
+        }
+        boolean sameDay = start != null && end != null && end.isAfter(start);
+        if (sameDay && (coreStart.isBefore(start) || coreEnd.isAfter(end))) {
+            throw new BusinessRuleException(
+                    "Core hours must sit inside the shift (%s to %s).".formatted(start, end), "SHIFT_CORE_OUTSIDE");
+        }
+    }
+
+    /** ISO days to "6,7" (sorted, no repeats); an empty list clears them. At least one working day. */
+    static String weeklyOffCsv(List<Integer> days) {
+        java.util.TreeSet<Integer> set = new java.util.TreeSet<>();
+        for (Integer d : days) {
+            if (d == null || d < 1 || d > 7) {
+                throw new BusinessRuleException("Weekly off days are 1 (Monday) to 7 (Sunday).", "SHIFT_WEEKLY_OFF_INVALID");
+            }
+            set.add(d);
+        }
+        if (set.size() == 7) {
+            throw new BusinessRuleException("A shift needs at least one working day.", "SHIFT_WEEKLY_OFF_INVALID");
+        }
+        return set.isEmpty() ? null : set.stream().map(String::valueOf).collect(Collectors.joining(","));
+    }
+
+    /** "6,7" to [6, 7]; null or junk gives null. */
+    static List<Integer> weeklyOffList(String csv) {
+        if (csv == null || csv.isBlank()) return null;
+        List<Integer> out = new java.util.ArrayList<>();
+        for (String tok : csv.split(",")) {
+            try {
+                int d = Integer.parseInt(tok.trim());
+                if (d >= 1 && d <= 7 && !out.contains(d)) out.add(d);
+            } catch (NumberFormatException ignored) { /* skip junk */ }
+        }
+        return out.isEmpty() ? null : out;
+    }
+
+    private ShiftPolicy create(UUID companyId, String name, ShiftType type, LocalTime start, LocalTime end, int grace) {
         ShiftPolicy p = new ShiftPolicy();
         p.setCompanyId(companyId);
         p.setName(name);
@@ -292,7 +406,7 @@ public class EmployeeShiftService {
         p.setGracePeriodMinutes(grace);
         p.setWorkingHoursPerDay(8.0);
         p.setActive(true);
-        policyRepo.save(p);
+        return policyRepo.save(p);
     }
 
     private static void apply(ShiftPolicy p, ShiftPolicyRequest req) {
@@ -311,7 +425,8 @@ public class EmployeeShiftService {
                 p.getId(), p.getName(), p.getShiftType(),
                 p.getStartTime(), p.getEndTime(),
                 p.getGracePeriodMinutes(), p.getWorkingHoursPerDay(),
-                p.isOvertimeApplicable(), p.getOvertimeMultiplier());
+                p.isOvertimeApplicable(), p.getOvertimeMultiplier(),
+                p.getCode(), p.getCoreStartTime(), p.getCoreEndTime(), weeklyOffList(p.getWeeklyOffDays()));
     }
 
     private static EmployeeShiftResponse toEmployeeResponse(UUID employeeId, EmployeeShiftAssignment a, ShiftPolicy p) {

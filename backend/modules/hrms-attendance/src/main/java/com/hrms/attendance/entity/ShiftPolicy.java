@@ -52,4 +52,29 @@ public class ShiftPolicy extends BaseEntity {
 
     @Column(name = "is_active")
     private boolean active = true;
+
+    // ── V143.23 ─────────────────────────────────────────────────────────────
+
+    /** Short code shown on rosters and reports ("GEN"); unique per company among active shifts. */
+    @Column(name = "code", length = 20)
+    private String code;
+
+    /**
+     * Core hours of a FLEXIBLE shift: everyone is expected in between these.
+     * A check-in after core start is Late (the shift's own start + grace is
+     * ignored for flexible shifts that have core hours).
+     */
+    @Column(name = "core_start_time")
+    private LocalTime coreStartTime;
+
+    @Column(name = "core_end_time")
+    private LocalTime coreEndTime;
+
+    /**
+     * Weekly off days for people on this shift, ISO day numbers as CSV
+     * ("6,7" = Sat + Sun). Used by attendance only for employees who have no
+     * weekly offs of their own. Null = not set.
+     */
+    @Column(name = "weekly_off_days", length = 20)
+    private String weeklyOffDays;
 }
