@@ -1,5 +1,6 @@
 package com.hrms.api.workforce;
 
+import com.hrms.api.attendance.TeamEmployeeScope;
 import com.hrms.employee.workforce.dto.WorkforceDtos.ClassificationRuleResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.ContractorResponse;
 import com.hrms.employee.workforce.dto.WorkforceDtos.ContractorWorkerResponse;
@@ -23,7 +24,9 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Master data, organisation setup: the endpoints added on 2026-09-25 (V143.22)
@@ -49,15 +52,18 @@ public class MasterDataController {
     private final DepartmentService departments;
     private final ClassificationRuleService classifications;
     private final GradeService grades;
+    private final TeamEmployeeScope teamScope;
 
     public MasterDataController(ContractorService contractors,
                                 @Qualifier("workforceDepartmentService") DepartmentService departments,
                                 ClassificationRuleService classifications,
-                                GradeService grades) {
+                                GradeService grades,
+                                TeamEmployeeScope teamScope) {
         this.contractors = contractors;
         this.departments = departments;
         this.classifications = classifications;
         this.grades = grades;
+        this.teamScope = teamScope;
     }
 
     /** Whether the signed-in user holds {@code authority} (a permission code). */
@@ -82,10 +88,30 @@ public class MasterDataController {
         return contractors.restore(id);
     }
 
+    /**
+     * The contract workers linked to an agency. People who manage agencies or
+     * employee records see all of them; anyone else with agency read access (a
+     * department manager) sees only the workers in their own team.
+     */
     @GetMapping("/contractors/{id}/workers")
     @PreAuthorize("hasAuthority('hrms.contractor.read')")
-    public List<ContractorWorkerResponse> contractorWorkers(@PathVariable UUID id) {
-        return contractors.workers(id);
+    public List<ContractorWorkerResponse> contractorWorkers(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+        List<ContractorWorkerResponse> all = contractors.workers(id);
+        if (holds("hrms.contractor.write") || holds("hrms.employee.write")) return all;
+        Set<UUID> team = team(jwt);
+        return all.stream().filter(w -> team.contains(w.employeeId())).toList();
+    }
+
+    /** The caller's team (department head: the department; otherwise direct reports). Empty without an employee record. */
+    private Set<UUID> team(Jwt jwt) {
+        if (jwt == null) return Set.of();
+        try {
+            return teamScope.resolve(jwt, null).stream()
+                    .map(com.hrms.employee.entity.Employee::getId)
+                    .collect(Collectors.toSet());
+        } catch (IllegalArgumentException noEmployeeRecord) {
+            return Set.of();
+        }
     }
 
     /**

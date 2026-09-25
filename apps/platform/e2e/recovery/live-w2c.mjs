@@ -41,6 +41,8 @@ const refused = (r) => r.status >= 400 && r.status < 500 && r.status !== 403 && 
 const tag = randomUUID().slice(0, 6).toUpperCase()
 const made = { grades: [], desigs: [], contractors: [], employees: [], depts: [], branches: [], classes: [] }
 let companyBefore = null
+/** The contract worker used below: an existing one (designation put back at the end) or, if none, one created here. */
+let fixture = null
 
 try {
   const owner = await login('owner@unifiedtree.demo')
@@ -89,11 +91,23 @@ try {
   if (mgrDes.json?.id) made.desigs.push(mgrDes.json.id)
   check('designation: a department manager cannot create titles (403)', mgrDes.status === 403, `status=${mgrDes.status}`)
 
+  const mgrDesPut = await mgr(`/v1/hrms/designations/${d1.json?.id}`, 'PUT', { title: `QA mgr edit ${tag}`, gradeId: g2.json?.id })
+  check('designation: a department manager cannot edit titles (403)', mgrDesPut.status === 403 && sql(`select grade_id from hrms.designations where id='${d1.json?.id}'`) === g1.json?.id, `status=${mgrDesPut.status}`)
+
   // ── A contract worker on that designation ───────────────────────────────
-  const emp = await owner('/v1/hrms/employees', 'POST', { companyId: company, firstName: 'QA', lastName: `Contract ${tag}`, email: `qa.w2c.${tag.toLowerCase()}@unifiedtree.demo`, employmentType: 'CONTRACT', designationId: d1.json?.id, roleCode: 'EMPLOYEE' })
-  const empId = emp.json?.id
-  if (empId) made.employees.push(empId)
-  check('fixture: a contract worker on the linked designation', emp.status === 201 && !!empId, `status=${emp.status}`)
+  // Reuses a contract worker who has no agency (no seat used, nothing to delete);
+  // only when there is none is one created.
+  const spare = sql(`select e.id||'|'||coalesce(e.designation_id::text,'') from hrms.employees e where e.tenant_id='${tenant}' and e.company_id='${company}' and e.employment_type='CONTRACT' and e.is_active and not exists (select 1 from hrms.contractor_workers w where w.employee_id=e.id) order by e.created_at limit 1`)
+  if (spare) {
+    const [id, oldDesignation] = spare.split('|')
+    fixture = { id, created: false, oldDesignation: oldDesignation || null }
+    sql(`UPDATE hrms.employees SET designation_id='${d1.json?.id}' WHERE id='${id}'`)
+  } else {
+    const emp = await owner('/v1/hrms/employees', 'POST', { companyId: company, firstName: 'QA', lastName: `Contract ${tag}`, email: `qa.w2c.${tag.toLowerCase()}@unifiedtree.demo`, employmentType: 'CONTRACT', designationId: d1.json?.id, roleCode: 'EMPLOYEE' })
+    if (emp.json?.id) { fixture = { id: emp.json.id, created: true }; made.employees.push(emp.json.id) }
+  }
+  const empId = fixture?.id
+  check('fixture: a contract worker on the linked designation', !!empId && sql(`select designation_id from hrms.employees where id='${empId}'`) === d1.json?.id)
 
   // ── Pay bands per employee (Salary Structure warning) ────────────────────
   const pbFin = await fin(`/v1/hrms/pay-bands?employeeIds=${empId}`)
@@ -134,8 +148,17 @@ try {
     const row = (list.json || []).find((a) => a.id === agId)
     const employed = sql(`select count(*) from hrms.employees where id='${empId}' and is_active and employment_status in ('ACTIVE','PROBATION','NOTICE_PERIOD')`) === '1'
     check('agency: the worker count comes from the links', row && (row.workerIds || []).includes(empId) && row.activeWorkersCount === (employed ? 1 : 0) && (row.siteBranchIds || []).includes(brId), JSON.stringify(row || null).slice(0, 160))
+    const hrmWorkers = await hrm(`/v1/hrms/contractors/${agId}/workers`)
+    check('agency: HR sees every linked worker', hrmWorkers.status === 200 && (hrmWorkers.json || []).some((w) => w.employeeId === empId), `status=${hrmWorkers.status}`)
+    // A department manager may read agencies, but only sees workers in their own team.
+    const mgrEmp = `(select employee_id from auth.user_credentials where email='mgr@unifiedtree.demo' and tenant_id='${tenant}' limit 1)`
+    const inMgrTeam = sql(`select count(*) from hrms.employees e where e.id='${empId}' and (e.reporting_manager_id = ${mgrEmp} or e.department_id in (select d.id from hrms.departments d where d.department_head_employee_id = ${mgrEmp}))`) !== '0'
     const mgrWorkers = await mgr(`/v1/hrms/contractors/${agId}/workers`)
-    check('agency: a manager with agency read access sees the workers', mgrWorkers.status === 200 && (mgrWorkers.json || []).some((w) => w.employeeId === empId), `status=${mgrWorkers.status}`)
+    check('agency: a department manager sees only their own team\'s workers', mgrWorkers.status === 200 && (mgrWorkers.json || []).some((w) => w.employeeId === empId) === inMgrTeam, `status=${mgrWorkers.status} inTeam=${inMgrTeam}`)
+    const readerWorkers = await reader(`/v1/hrms/contractors/${agId}/workers`)
+    check('agency: an employee cannot list agency workers (403)', readerWorkers.status === 403, `status=${readerWorkers.status}`)
+    const finLink = await fin(`/v1/hrms/contractors/${agId}/workers/${empId}`, 'DELETE')
+    check('agency: the finance lead cannot change links (403)', finLink.status === 403, `status=${finLink.status}`)
     const readerLink = await reader(`/v1/hrms/contractors/${agId}/workers/${empId}`, 'DELETE')
     check('agency: an employee cannot change links (403)', readerLink.status === 403 && sql(`select count(*) from hrms.contractor_workers where employee_id='${empId}'`) === '1', `status=${readerLink.status}`)
   }
@@ -160,6 +183,11 @@ try {
   if (empId) {
     const unlink = await owner(`/v1/hrms/contractors/${agId}/workers/${empId}`, 'DELETE')
     check('agency: worker unlinked', unlink.status === 204 && sql(`select count(*) from hrms.contractor_workers where employee_id='${empId}'`) === '0', `status=${unlink.status}`)
+    // HR edits employee records, so it may link a contract worker (without managing agencies).
+    const hrmLink = await hrm(`/v1/hrms/contractors/${agId}/workers/${empId}`, 'PUT')
+    check('agency: HR links a contract worker from their record', hrmLink.status === 200 && sql(`select contractor_id from hrms.contractor_workers where employee_id='${empId}'`) === agId, `status=${hrmLink.status}`)
+    const hrmUnlink = await hrm(`/v1/hrms/contractors/${agId}/workers/${empId}`, 'DELETE')
+    check('agency: HR unlinks it again', hrmUnlink.status === 204 && sql(`select count(*) from hrms.contractor_workers where employee_id='${empId}'`) === '0', `status=${hrmUnlink.status}`)
   }
 
   // ── Departments: parent moves, branches ─────────────────────────────────
@@ -180,6 +208,8 @@ try {
   check('department: branches replaced (cleared)', clr.status === 200 && sql(`select count(*) from hrms.department_branches where department_id='${pa.json?.id}'`) === '0', `status=${clr.status}`)
   const mgrMove = await mgr(`/v1/hrms/departments/${ch.json?.id}/parent?parentId=${pa.json?.id}`, 'PATCH')
   check('department: a department manager cannot move departments (403)', mgrMove.status === 403, `status=${mgrMove.status}`)
+  const mgrBranches = await mgr(`/v1/hrms/departments/${pa.json?.id}/branches`, 'PUT', { branchIds: [brId] })
+  check('department: a department manager cannot set branches (403)', mgrBranches.status === 403 && sql(`select count(*) from hrms.department_branches where department_id='${pa.json?.id}'`) === '0', `status=${mgrBranches.status}`)
 
   // ── Companies: TAN, incorporation, description ──────────────────────────
   companyBefore = sql(`select coalesce(tan_number,'')||'|'||coalesce(incorporation_date::text,'')||'|'||coalesce(description,'') from org.companies where id='${company}'`)
@@ -212,9 +242,14 @@ try {
 } finally {
   const clean = (label, q) => { try { sql(q) } catch (e) { console.log(`cleanup (${label}) failed:`, String(e).split('\n')[0]) } }
   const inList = (ids) => ids.map((x) => `'${x}'`).join(',')
-  if (made.employees.length) clean('worker links', `DELETE FROM hrms.contractor_workers WHERE employee_id IN (${inList(made.employees)})`)
+  if (fixture) clean('worker links', `DELETE FROM hrms.contractor_workers WHERE employee_id='${fixture.id}'`)
+  if (fixture && !fixture.created) clean('fixture designation', `UPDATE hrms.employees SET designation_id=${fixture.oldDesignation ? lit(fixture.oldDesignation) : 'NULL'} WHERE id='${fixture.id}'`)
   if (made.contractors.length) clean('agencies', `DELETE FROM hrms.contractors WHERE id IN (${inList(made.contractors)})`)
-  if (made.employees.length) clean('employees', `DELETE FROM hrms.employees WHERE id IN (${inList(made.employees)}) AND tenant_id='${tenant}'`)
+  if (made.employees.length) {
+    clean('logins', `DELETE FROM auth.user_credentials WHERE employee_id IN (${inList(made.employees)}) AND tenant_id='${tenant}'`)
+    clean('onboarding records', `DELETE FROM hrms.employee_onboarding_records WHERE employee_id IN (${inList(made.employees)})`)
+    clean('employees', `DELETE FROM hrms.employees WHERE id IN (${inList(made.employees)}) AND tenant_id='${tenant}'`)
+  }
   if (made.depts.length) clean('departments', `UPDATE hrms.departments SET parent_department_id = NULL WHERE id IN (${inList(made.depts)}); DELETE FROM hrms.departments WHERE id IN (${inList(made.depts)})`)
   if (made.desigs.length) clean('designations', `DELETE FROM hrms.designations WHERE id IN (${inList(made.desigs)})`)
   if (made.grades.length) clean('grades', `DELETE FROM org.grades WHERE id IN (${inList(made.grades)})`)

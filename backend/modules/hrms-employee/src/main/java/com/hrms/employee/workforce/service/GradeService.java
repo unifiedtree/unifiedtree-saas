@@ -71,10 +71,13 @@ public class GradeService {
             existing.setMaxCtcAnnual(grade.getMaxCtcAnnual());
             existing.setActive(true);
             existing.setTenantId(TenantContext.getTenantId());
-            saved = repo.save(existing);
+            saved = repo.saveAndFlush(existing);
         } else {
             grade.setTenantId(TenantContext.getTenantId());
-            saved = repo.save(grade);
+            // Flushed now: linkLegacyDesignations below writes designations.grade_id
+            // over JDBC, and its foreign key to org.grades needs this row inserted
+            // first (a plain save() defers the INSERT to commit -> FK violation, 500).
+            saved = repo.saveAndFlush(grade);
         }
         linkLegacyDesignations(saved);
         return saved;
@@ -91,6 +94,19 @@ public class GradeService {
         Grade existing = repo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Grade", id));
         String oldCode = existing.getCode();
+        // The code is NOT NULL and unique per company (archived grades included);
+        // say so here instead of letting the flush below fail with a 500.
+        if (update.getCode() == null || update.getCode().isBlank()) {
+            throw new BusinessRuleException("The grade needs a code", "GRADE_CODE_REQUIRED");
+        }
+        if (!update.getCode().equals(oldCode)) {
+            repo.findByCompanyIdAndCode(existing.getCompanyId(), update.getCode())
+                    .filter(other -> !other.getId().equals(existing.getId()))
+                    .ifPresent(other -> {
+                        throw new BusinessRuleException("Grade code already exists for this company: " + update.getCode()
+                                + (other.isActive() ? "" : " (deactivated)"), "DUPLICATE_GRADE_CODE");
+                    });
+        }
         existing.setName(update.getName());
         // 2026-09-09: code was never copied, so the Code field on the grade
         // edit form was accepted by the API and silently discarded — the
@@ -104,7 +120,9 @@ public class GradeService {
             existing.setMinCtcAnnual(update.getMinCtcAnnual());
             existing.setMaxCtcAnnual(update.getMaxCtcAnnual());
         }
-        Grade saved = repo.save(existing);
+        // Flushed before the JDBC writes below, so they see the new code (and a
+        // duplicate code fails here as a constraint error, not after them).
+        Grade saved = repo.saveAndFlush(existing);
         if (saved.getCode() != null && !saved.getCode().equals(oldCode)) {
             // Designations linked by id keep showing the grade's code as text for
             // older readers; keep that text in step with the rename.

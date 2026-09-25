@@ -37,6 +37,7 @@ class GradeServiceTest {
         jdbc = mock(JdbcTemplate.class);
         service = new GradeService(repo, jdbc);
         when(repo.save(any(Grade.class))).thenAnswer(i -> i.getArgument(0));
+        when(repo.saveAndFlush(any(Grade.class))).thenAnswer(i -> i.getArgument(0));
     }
 
     private Grade grade(String code, Long min, Long max) {
@@ -96,6 +97,7 @@ class GradeServiceTest {
         assertThatThrownBy(() -> service.update(stored.getId(), grade("L3", 900_000L, 500_000L), true))
                 .isInstanceOf(BusinessRuleException.class);
         verify(repo, never()).save(any());
+        verify(repo, never()).saveAndFlush(any());
     }
 
     @Test
@@ -120,6 +122,37 @@ class GradeServiceTest {
         assertThat(saved.getMinCtcAnnual()).isNull();
         assertThat(saved.getMaxCtcAnnual()).isNull();
         verify(jdbc).update(anyString(), eq(saved.getId()), eq("L4"), eq(company), eq("L4"));
+    }
+
+    @Test
+    void renamingToACodeAnotherGradeUsesIsRefusedBeforeSaving() {
+        Grade stored = grade("L3", null, null);
+        Grade other = grade("L4", null, null);
+        other.setActive(false);
+        when(repo.findById(stored.getId())).thenReturn(Optional.of(stored));
+        when(repo.findByCompanyIdAndCode(company, "L4")).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> service.update(stored.getId(), grade("L4", null, null), true))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("L4");
+        assertThatThrownBy(() -> service.update(stored.getId(), grade(" ", null, null), true))
+                .isInstanceOf(BusinessRuleException.class);
+        verify(repo, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createInsertsTheGradeBeforeLinkingLegacyTitles() {
+        // designations.grade_id has a foreign key to org.grades: the INSERT must
+        // reach the database before the JDBC update that points titles at it.
+        when(repo.findByCompanyIdAndCode(company, "L5")).thenReturn(Optional.empty());
+        Grade body = grade("L5", null, null);
+
+        service.create(body, true);
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(repo, jdbc);
+        order.verify(repo).saveAndFlush(body);
+        order.verify(jdbc).update(anyString(), eq(body.getId()), eq("L5"), eq(company), eq("L5"));
+        verify(repo, never()).save(any());
     }
 
     @Test
