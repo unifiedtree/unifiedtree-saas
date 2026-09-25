@@ -602,14 +602,14 @@ public class DomainEventListener {
         try {
             String who = firstOrElse(resolveEmployeeName(e.raisedById(), e.tenantId()), "HR");
             int months = e.repaymentMonths() == null ? 1 : e.repaymentMonths();
-            String body = "%s raised a salary advance of %s for you, recovered from your salary over %s. It is waiting for approval."
-                    .formatted(who, money("INR", e.amount()), months == 1 ? "1 month" : months + " months");
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.ADVANCE_RAISED_FOR_YOU.name());
             data.put("advanceRequestId", e.advanceId().toString());
             data.put("route", "/notifications");
-            service.create(e.tenantId(), e.employeeId(), AppNotificationType.ADVANCE_RAISED_FOR_YOU,
-                    "Salary advance raised for you", body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), "advance.raised_for_you", vars(
+                    "raisedBy", who,
+                    "amount", money("INR", e.amount()),
+                    "months", months == 1 ? "1 month" : months + " months"), data);
         } catch (Exception ex) {
             log.warn("Failed to publish ADVANCE_RAISED_FOR_YOU notification for {}: {}", e.advanceId(), ex.getMessage());
         }
@@ -619,14 +619,12 @@ public class DomainEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onSalaryRevised(SalaryStructureRevisedEvent e) {
         try {
-            String body = "Your salary structure has been revised with effect from %s. Open My Salary to see the new breakdown."
-                    .formatted(fmt(e.effectiveFrom()));
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.SALARY_REVISED.name());
             data.put("structureId", e.structureId().toString());
             data.put("route", "/notifications");
-            service.create(e.tenantId(), e.employeeId(), AppNotificationType.SALARY_REVISED,
-                    "Your salary has been revised", body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), "payroll.salary_revised", vars(
+                    "effectiveFrom", fmt(e.effectiveFrom())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish SALARY_REVISED notification for {}: {}", e.employeeId(), ex.getMessage());
         }
@@ -795,11 +793,16 @@ public class DomainEventListener {
     // ─── Leave encashment (V143.23) ────────────────────────────────────────
     private static final String ROUTE_ENCASH = "/hrms/leave?tab=encash";
 
+    /** 2 → "2", 1.5 → "1.5". */
+    static String dayCount(double days) {
+        return days == Math.rint(days) ? String.valueOf((long) days) : String.valueOf(days);
+    }
+
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onLeaveEncashmentSubmitted(LeaveEncashmentSubmittedEvent e) {
         try {
             String type = firstOrElse(e.leaveTypeName(), "leave");
-            String days = e.days() == Math.rint(e.days()) ? String.valueOf((long) e.days()) : String.valueOf(e.days());
+            String days = dayCount(e.days());
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.LEAVE_ENCASHMENT_SUBMITTED.name());
             data.put("encashmentId", e.requestId().toString());
@@ -807,10 +810,8 @@ public class DomainEventListener {
             if (e.raisedByHr()) {
                 // HR raised it for the employee: tell the employee it is on its way.
                 data.put("audience", "requester");
-                service.create(e.tenantId(), e.employeeId(), AppNotificationType.LEAVE_ENCASHMENT_SUBMITTED,
-                        "Leave encashment raised for you",
-                        "HR raised an encashment of %s day(s) of your %s. You'll hear once it's decided.".formatted(days, type),
-                        data);
+                dispatcher.dispatch(e.tenantId(), e.employeeId(), "leave.encashment_raised_for_you",
+                        vars("leaveType", type, "days", days), data);
                 return;
             }
             UUID hr = firstEmployeeWithRole(e.tenantId(), HR_MANAGER);
@@ -818,9 +819,8 @@ public class DomainEventListener {
             if (hr == null || hr.equals(e.employeeId())) return;
             String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
             data.put("audience", "approver");
-            service.create(e.tenantId(), hr, AppNotificationType.LEAVE_ENCASHMENT_SUBMITTED,
-                    "Leave encashment to review",
-                    "%s asked to encash %s day(s) of %s.".formatted(who, days, type), data);
+            dispatcher.dispatch(e.tenantId(), hr, "leave.encashment_submitted",
+                    vars("employeeName", who, "leaveType", type, "days", days), data);
         } catch (Exception ex) {
             log.warn("Failed to publish LEAVE_ENCASHMENT_SUBMITTED notification for {}: {}", e.requestId(), ex.getMessage());
         }
@@ -830,19 +830,18 @@ public class DomainEventListener {
     public void onLeaveEncashmentDecided(LeaveEncashmentDecidedEvent e) {
         try {
             AppNotificationType type = e.approved() ? AppNotificationType.LEAVE_ENCASHMENT_APPROVED : AppNotificationType.LEAVE_ENCASHMENT_REJECTED;
-            String leave = firstOrElse(e.leaveTypeName(), "leave");
-            String days = e.days() == Math.rint(e.days()) ? String.valueOf((long) e.days()) : String.valueOf(e.days());
-            String body = e.approved()
-                    ? "Your encashment of %s day(s) of %s was approved%s. It's paid with your next salary.".formatted(days, leave,
-                            e.amount() != null ? " (" + money("INR", e.amount()) + ")" : "")
-                    : "Your encashment of %s day(s) of %s was rejected, and the days are back in your balance.%s".formatted(days, leave,
-                            e.note() != null && !e.note().isBlank() ? " Reason: " + e.note() : "");
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("encashmentId", e.requestId().toString());
             data.put("route", ROUTE_ENCASH);
-            service.create(e.tenantId(), e.employeeId(), type,
-                    e.approved() ? "Leave encashment approved" : "Leave encashment rejected", body, data);
+            String amount = e.amount() != null ? money("INR", e.amount()) : "";
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), e.approved() ? "leave.encashment_approved" : "leave.encashment_rejected", vars(
+                    "leaveType", firstOrElse(e.leaveTypeName(), "leave"),
+                    "days", dayCount(e.days()),
+                    "amount", amount,
+                    "amountText", amount.isEmpty() ? "" : " (" + amount + ")",
+                    "reason", blankToEmpty(e.note()),
+                    "reasonText", reasonText(e.note())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish LEAVE_ENCASHMENT decision notification for {}: {}", e.requestId(), ex.getMessage());
         }
@@ -855,20 +854,26 @@ public class DomainEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onInterview(InterviewNotificationEvent e) {
         if (e.recipientEmployeeIds() == null || e.recipientEmployeeIds().isEmpty()) return;
-        AppNotificationType type = switch (e.kind() == null ? "" : e.kind()) {
+        String kind = e.kind() == null ? "" : e.kind();
+        AppNotificationType type = switch (kind) {
             case "RESCHEDULED" -> AppNotificationType.INTERVIEW_RESCHEDULED;
             case "CANCELLED", "REMOVED" -> AppNotificationType.INTERVIEW_CANCELLED;
             default -> AppNotificationType.INTERVIEW_SCHEDULED;
         };
-        String title = InterviewNotificationText.title(e.kind());
-        String body = InterviewNotificationText.body(e);
+        String key = switch (kind) {
+            case "RESCHEDULED" -> "hiring.interview_rescheduled";
+            case "CANCELLED" -> "hiring.interview_cancelled";
+            case "REMOVED" -> "hiring.interview_removed";
+            default -> "hiring.interview_scheduled";
+        };
+        Map<String, String> values = InterviewNotificationText.values(e);
         for (UUID recipient : e.recipientEmployeeIds()) {
             try {
                 Map<String, Object> data = new HashMap<>();
                 data.put("type", type.name());
                 data.put("interviewId", e.interviewId().toString());
                 data.put("route", "/me/interviews");
-                service.create(e.tenantId(), recipient, type, title, body, data);
+                dispatcher.dispatch(e.tenantId(), recipient, key, values, data);
             } catch (Exception ex) {
                 log.warn("Failed to publish {} notification for interview {} to {}: {}",
                         type, e.interviewId(), recipient, ex.getMessage());
@@ -893,7 +898,7 @@ public class DomainEventListener {
             }
             String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
             String skill = firstOrElse(e.skillName(), "a skill");
-            String body = e.currentLevel() == null
+            String proposal = e.currentLevel() == null
                     ? "%s added %s at level %d of 5 and asks you to approve it.".formatted(who, skill, e.proposedLevel())
                     : "%s proposes level %d of 5 for %s (recorded: %d of 5). Please approve or reject it."
                         .formatted(who, e.proposedLevel(), skill, e.currentLevel());
@@ -901,8 +906,12 @@ public class DomainEventListener {
             data.put("type", AppNotificationType.SKILL_ASSESSMENT_SUBMITTED.name());
             data.put("skillAssessmentId", e.assessmentId().toString());
             data.put("employeeId", e.employeeId().toString());
-            service.create(e.tenantId(), to, AppNotificationType.SKILL_ASSESSMENT_SUBMITTED,
-                    "Skill level to approve", body, data);
+            dispatcher.dispatch(e.tenantId(), to, "learning.skill_submitted", vars(
+                    "proposal", proposal,
+                    "employeeName", who,
+                    "skillName", skill,
+                    "proposedLevel", String.valueOf(e.proposedLevel()),
+                    "currentLevel", e.currentLevel() == null ? "" : String.valueOf(e.currentLevel())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish SKILL_ASSESSMENT_SUBMITTED notification for {}: {}", e.assessmentId(), ex.getMessage());
         }
@@ -913,17 +922,17 @@ public class DomainEventListener {
         try {
             AppNotificationType type = e.approved()
                     ? AppNotificationType.SKILL_ASSESSMENT_APPROVED : AppNotificationType.SKILL_ASSESSMENT_REJECTED;
-            String skill = firstOrElse(e.skillName(), "your skill");
-            String by = e.deciderName() != null && !e.deciderName().isBlank() ? " by " + e.deciderName() : "";
-            String body = e.approved()
-                    ? "Your level %d of 5 for %s was approved%s. Your skill record is updated.".formatted(e.proposedLevel(), skill, by)
-                    : "Your proposed level %d of 5 for %s wasn't approved%s.%s".formatted(e.proposedLevel(), skill, by,
-                            e.decisionNote() != null && !e.decisionNote().isBlank() ? " Note: " + e.decisionNote() : "");
+            String by = e.deciderName() != null && !e.deciderName().isBlank() ? e.deciderName().trim() : "";
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("skillAssessmentId", e.assessmentId().toString());
-            service.create(e.tenantId(), e.employeeId(), type,
-                    e.approved() ? "Skill level approved" : "Skill level not approved", body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), e.approved() ? "learning.skill_approved" : "learning.skill_rejected", vars(
+                    "skillName", firstOrElse(e.skillName(), "your skill"),
+                    "proposedLevel", String.valueOf(e.proposedLevel()),
+                    "decidedBy", by,
+                    "decidedByText", by.isEmpty() ? "" : " by " + by,
+                    "note", blankToEmpty(e.decisionNote()),
+                    "noteText", e.decisionNote() != null && !e.decisionNote().isBlank() ? " Note: " + e.decisionNote().trim() : ""), data);
         } catch (Exception ex) {
             log.warn("Failed to publish SKILL_ASSESSMENT decision notification for {}: {}", e.assessmentId(), ex.getMessage());
         }

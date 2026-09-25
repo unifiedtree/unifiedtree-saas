@@ -237,7 +237,7 @@ public class WorkspaceExportService {
                                         + ") is ready. Sign in and open Settings, Danger zone to download it.",
                                 "It stays available until " + until + ", then it is deleted. The file contains salaries and "
                                         + "personal details, so keep it somewhere safe."),
-                        "Download the export", link), null, List.of())));
+                        "Download the export", link), null, List.of()).withFromName(workspace)));
     }
 
     private int failStale(UUID tenantId) {

@@ -111,6 +111,15 @@ public final class NotificationEventCatalog {
     private static final Placeholder DEPARTMENT = ph("department", "Their department (empty when they have none)");
     private static final Placeholder DEPARTMENT_TEXT = ph("departmentText", "\", in Sales\" style text, or nothing when they have no department");
 
+    private static final Placeholder INTERVIEW_DETAILS = ph("details", "The interview in one line: candidate, role, round, time (IST), length, mode and place");
+    private static final Placeholder CANDIDATE = ph("candidateName", "The candidate's name");
+    private static final Placeholder ROLE_TITLE = ph("roleTitle", "The role they applied for (empty when unknown)");
+    private static final Placeholder INTERVIEW_TITLE = ph("interviewTitle", "The round, for example Technical round");
+    private static final Placeholder WHEN = ph("when", "Day and time in IST, for example Sat 26 Sep, 10:30 am IST");
+    private static final Placeholder DURATION = ph("durationMinutes", "Length in minutes, for example 45");
+    private static final Placeholder MODE = ph("mode", "In person, Video call or Phone call");
+    private static final Placeholder LOCATION = ph("location", "The place or the video link");
+
     private static final Map<String, EventDef> BY_KEY = new LinkedHashMap<>();
     private static final Map<AppNotificationType, EventDef> BY_TYPE = new EnumMap<>(AppNotificationType.class);
 
@@ -132,6 +141,25 @@ public final class NotificationEventCatalog {
                 "Sent to the approver when someone cancels their leave request.",
                 "Leave request cancelled", "{{employeeName}} cancelled their {{leaveType}} from {{startDate}} to {{endDate}}.",
                 EMPLOYEE_NAME, LEAVE_TYPE, START_DATE, END_DATE));
+
+        // Leave encashment (V143.23)
+        add(inApp("leave.encashment_submitted", AppNotificationType.LEAVE_ENCASHMENT_SUBMITTED, "Leave", "Leave encashment requested", "HR",
+                "Sent to HR when an employee asks to be paid for unused leave days.",
+                "Leave encashment to review", "{{employeeName}} asked to encash {{days}} day(s) of {{leaveType}}.",
+                EMPLOYEE_NAME, LEAVE_TYPE, ph("days", "Days asked for, for example 2 or 1.5")));
+        add(inApp("leave.encashment_raised_for_you", AppNotificationType.LEAVE_ENCASHMENT_SUBMITTED, "Leave", "Leave encashment raised for you", "Employee",
+                "Sent to the employee when HR asks, on their behalf, to pay them for unused leave days.",
+                "Leave encashment raised for you", "HR raised an encashment of {{days}} day(s) of your {{leaveType}}. You'll hear once it's decided.",
+                LEAVE_TYPE, ph("days", "Days asked for, for example 2 or 1.5")));
+        add(inApp("leave.encashment_approved", AppNotificationType.LEAVE_ENCASHMENT_APPROVED, "Leave", "Leave encashment approved", "Employee",
+                "Sent to the employee when their leave encashment is approved. It is paid with their next salary.",
+                "Leave encashment approved", "Your encashment of {{days}} day(s) of {{leaveType}} was approved{{amountText}}. It's paid with your next salary.",
+                LEAVE_TYPE, ph("days", "Days encashed, for example 2 or 1.5"), AMOUNT,
+                ph("amountText", "\" (₹1500)\" style text, or nothing when no amount was worked out")));
+        add(inApp("leave.encashment_rejected", AppNotificationType.LEAVE_ENCASHMENT_REJECTED, "Leave", "Leave encashment rejected", "Employee",
+                "Sent to the employee when their leave encashment is rejected. The days go back to their balance.",
+                "Leave encashment rejected", "Your encashment of {{days}} day(s) of {{leaveType}} was rejected, and the days are back in your balance.{{reasonText}}",
+                LEAVE_TYPE, ph("days", "Days asked for, for example 2 or 1.5"), REASON, REASON_TEXT));
 
         // ── Work from home ───────────────────────────────────────────────────
         add(inApp("wfh.submitted", AppNotificationType.WFH_SUBMITTED, "Work from home", "Work-from-home request submitted", "Approver",
@@ -226,6 +254,18 @@ public final class NotificationEventCatalog {
                 "Advance request rejected", "Your advance request of {{amount}} was rejected.{{reasonText}}",
                 AMOUNT, REASON, REASON_TEXT));
 
+        add(inApp("advance.raised_for_you", AppNotificationType.ADVANCE_RAISED_FOR_YOU, "Expenses and advances", "Salary advance raised for you", "Employee",
+                "Sent to the employee when HR or finance raises a salary advance in their name. It still goes to their usual approver.",
+                "Salary advance raised for you", "{{raisedBy}} raised a salary advance of {{amount}} for you, recovered from your salary over {{months}}. It is waiting for approval.",
+                ph("raisedBy", "Who raised it, for example Priya Rao (HR when unknown)"), AMOUNT,
+                ph("months", "\"1 month\" or \"3 months\"")));
+
+        // ── Payroll ──────────────────────────────────────────────────────────
+        add(inApp("payroll.salary_revised", AppNotificationType.SALARY_REVISED, "Payroll", "Salary revised", "Employee",
+                "Sent to each person when a bulk salary revision gives them a new salary structure. It never includes amounts, because push notifications show on lock screens.",
+                "Your salary has been revised", "Your salary structure has been revised with effect from {{effectiveFrom}}. Open My Salary to see the new breakdown.",
+                ph("effectiveFrom", "The day the new structure starts, for example 1 Oct 2026")));
+
         // ── Documents ────────────────────────────────────────────────────────
         add(inApp("document.uploaded", AppNotificationType.DOCUMENT_UPLOADED, "Documents", "Document uploaded for checking", "HR",
                 "Sent to HR when an employee uploads a document that needs checking.",
@@ -239,6 +279,52 @@ public final class NotificationEventCatalog {
                 "Sent to the employee when HR rejects their document and asks for a new one.",
                 "Document needs re-upload", "Your {{documentType}} was rejected.{{reasonText}} Please re-upload.",
                 DOCUMENT_TYPE, REASON, REASON_TEXT));
+
+        // ── Policies (V143.23) ───────────────────────────────────────────────
+        // In the app and on the phone only: the policy notice queue sends the
+        // email itself when HR chose "Email everyone", so no second email here.
+        add(appOnly("policies.published", AppNotificationType.POLICY_PUBLISHED, "Policies", "New policy published", "Everyone",
+                "Sent to every employee when HR publishes a policy with \"Email everyone when published\" switched on.",
+                "New policy: {{policyTitle}}", "{{companyName}} has published \"{{policyTitle}}\". Please read it{{ackText}}.",
+                ph("policyTitle", "The policy's title"), ph("companyName", "The employee's company"),
+                ph("ackText", "\" and acknowledge it\" when acknowledgement is required, otherwise nothing")));
+        add(appOnly("policies.reminder", AppNotificationType.POLICY_REMINDER, "Policies", "Policy to acknowledge", "Employees who haven't acknowledged",
+                "Reminds people who haven't acknowledged a policy yet (HR's Remind button, or the automatic reminder N days after publishing).",
+                "Policy to acknowledge", "Please read \"{{policyTitle}}\" and acknowledge it.",
+                ph("policyTitle", "The policy's title"), ph("companyName", "The employee's company")));
+
+        // ── Hiring interviews (V143.20) ──────────────────────────────────────
+        add(inApp("hiring.interview_scheduled", AppNotificationType.INTERVIEW_SCHEDULED, "Hiring", "Interview scheduled", "Interviewers",
+                "Sent to each interviewer when they are put on an interview.",
+                "You're interviewing a candidate", "{{details}}", INTERVIEW_DETAILS, CANDIDATE, ROLE_TITLE, INTERVIEW_TITLE, WHEN, DURATION, MODE, LOCATION));
+        add(inApp("hiring.interview_rescheduled", AppNotificationType.INTERVIEW_RESCHEDULED, "Hiring", "Interview changed", "Interviewers",
+                "Sent to each interviewer when the time, place or mode of their interview changes.",
+                "Interview changed", "{{details}}", INTERVIEW_DETAILS, CANDIDATE, ROLE_TITLE, INTERVIEW_TITLE, WHEN, DURATION, MODE, LOCATION));
+        add(inApp("hiring.interview_cancelled", AppNotificationType.INTERVIEW_CANCELLED, "Hiring", "Interview cancelled", "Interviewers",
+                "Sent to each interviewer when HR cancels their interview.",
+                "Interview cancelled", "{{details}}. It has been cancelled.", INTERVIEW_DETAILS, CANDIDATE, ROLE_TITLE, INTERVIEW_TITLE, WHEN, DURATION, MODE));
+        add(inApp("hiring.interview_removed", AppNotificationType.INTERVIEW_CANCELLED, "Hiring", "Taken off an interview", "Interviewers",
+                "Sent to an interviewer when HR takes them off an interview.",
+                "You're no longer on an interview", "{{details}}. You have been taken off this interview.", INTERVIEW_DETAILS, CANDIDATE, ROLE_TITLE, INTERVIEW_TITLE, WHEN, DURATION, MODE));
+
+        // ── Learning: skill self-assessment (V143.21) ────────────────────────
+        add(inApp("learning.skill_submitted", AppNotificationType.SKILL_ASSESSMENT_SUBMITTED, "Learning", "Skill level to approve", "Manager or HR",
+                "Sent to the person who approves it (the employee's manager, else HR) when an employee proposes a skill level.",
+                "Skill level to approve", "{{proposal}}",
+                ph("proposal", "The request as a sentence, for example \"Priya proposes level 4 of 5 for SQL (recorded: 3 of 5). Please approve or reject it.\""),
+                EMPLOYEE_NAME, ph("skillName", "The skill"), ph("proposedLevel", "The level asked for, 1 to 5"),
+                ph("currentLevel", "The level on record (empty for a new skill)")));
+        add(inApp("learning.skill_approved", AppNotificationType.SKILL_ASSESSMENT_APPROVED, "Learning", "Skill level approved", "Employee",
+                "Sent to the employee when their proposed skill level is approved and their skill record is updated.",
+                "Skill level approved", "Your level {{proposedLevel}} of 5 for {{skillName}} was approved{{decidedByText}}. Your skill record is updated.",
+                ph("skillName", "The skill"), ph("proposedLevel", "The level approved, 1 to 5"), ph("decidedBy", "Who approved it"),
+                ph("decidedByText", "\" by Priya Rao\" style text, or nothing")));
+        add(inApp("learning.skill_rejected", AppNotificationType.SKILL_ASSESSMENT_REJECTED, "Learning", "Skill level not approved", "Employee",
+                "Sent to the employee when their proposed skill level isn't approved; the note says why.",
+                "Skill level not approved", "Your proposed level {{proposedLevel}} of 5 for {{skillName}} wasn't approved{{decidedByText}}.{{noteText}}",
+                ph("skillName", "The skill"), ph("proposedLevel", "The level asked for, 1 to 5"), ph("decidedBy", "Who decided"),
+                ph("decidedByText", "\" by Priya Rao\" style text, or nothing"), ph("note", "The note they gave"),
+                ph("noteText", "\" Note: …\" when a note was given, otherwise nothing")));
 
         // ── People ───────────────────────────────────────────────────────────
         add(inApp("people.welcome", AppNotificationType.WELCOME, "People", "Welcome", "Employee",
@@ -407,6 +493,14 @@ public final class NotificationEventCatalog {
                                   String description, String title, String body, Placeholder... placeholders) {
         EnumSet<DeliveryChannel> all = EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH, DeliveryChannel.EMAIL);
         return new EventDef(key, type, group, label, audience, description, all, EnumSet.copyOf(all),
+                false, false, false, List.of(placeholders), title, body, title, body);
+    }
+
+    /** In the app + push only (the sender emails separately, or not at all). */
+    private static EventDef appOnly(String key, AppNotificationType type, String group, String label, String audience,
+                                    String description, String title, String body, Placeholder... placeholders) {
+        EnumSet<DeliveryChannel> ch = EnumSet.of(DeliveryChannel.IN_APP, DeliveryChannel.PUSH);
+        return new EventDef(key, type, group, label, audience, description, ch, EnumSet.copyOf(ch),
                 false, false, false, List.of(placeholders), title, body, title, body);
     }
 

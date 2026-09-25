@@ -47,6 +47,7 @@ class AuditResourceNameTest {
                 AuditEvent.of(tenant, null, "hrms", "UPDATE", "Employee", employee, null),
                 AuditEvent.of(tenant, null, "system", "SWEEP", null, null, "Nightly sweep"));
         when(audit.query(eq(tenant), any(), any(), any(), any(), any(), any(), any())).thenReturn(new PageImpl<>(events));
+        when(names.actor(null)).thenReturn(new AuditRecordNames.ActorFilter(true, null));
         when(names.resolve(anyCollection())).thenReturn(Map.of(
                 AuditRecordNames.key("distribution_job", job), new AuditRecordNames.Named("Diwali bonus letter", "/hrms/letters/distributions"),
                 AuditRecordNames.key("Employee", employee), new AuditRecordNames.Named("Ravi Kumar", "/hrms/employees/" + employee)));

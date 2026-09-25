@@ -284,7 +284,8 @@ public class ReportScheduleService {
             for (Recipient p : g.getValue()) {
                 try {
                     mail.send(new EmailMessage(p.email(), p.name(), subject(kind, pdf.companyName(), period), body(kind, pdf.companyName(), period, p, owner, frequencyWord),
-                            null, List.of(), List.of(new EmailMessage.Attachment(pdf.fileName(), "application/pdf", pdf.bytes()))));
+                            null, List.of(), List.of(new EmailMessage.Attachment(pdf.fileName(), "application/pdf", pdf.bytes())))
+                            .withFromName(pdf.companyName()));
                     ok++;
                 } catch (RuntimeException e) {
                     failed++;

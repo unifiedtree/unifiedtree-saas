@@ -235,7 +235,7 @@ public class WorkspaceLifecycleService {
         String name = mailer.workspaceName(tenantId);
         String html = WorkspaceMailer.html(name, heading, paragraphs, "Open the danger zone", mailer.link(tenantId, "/settings/danger"));
         List<EmailMessage> msgs = new ArrayList<>();
-        for (String to : mailer.ownerAndAdminEmails(tenantId)) msgs.add(new EmailMessage(to, null, subject, html, null, List.of()));
+        for (String to : mailer.ownerAndAdminEmails(tenantId)) msgs.add(new EmailMessage(to, null, subject, html, null, List.of()).withFromName(name));
         mailer.sendAfterCommit(msgs);
     }
 

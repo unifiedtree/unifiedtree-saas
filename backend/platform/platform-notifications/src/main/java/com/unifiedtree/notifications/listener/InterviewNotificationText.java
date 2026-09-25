@@ -42,6 +42,32 @@ public final class InterviewNotificationText {
         return b.toString();
     }
 
+    /**
+     * Placeholder values for the interview events (NotificationEventCatalog
+     * hiring.interview_*). {{details}} is the body without the closing sentence
+     * the cancelled / removed wording adds, so the built-in text reads exactly
+     * as {@link #body} does.
+     */
+    public static java.util.Map<String, String> values(InterviewNotificationEvent e) {
+        java.util.Map<String, String> v = new java.util.HashMap<>();
+        String body = body(e);
+        String kind = e.kind() == null ? "" : e.kind();
+        String details = body;
+        String cancelled = ". It has been cancelled.", removed = ". You have been taken off this interview.";
+        if (kind.equals("CANCELLED") && body.endsWith(cancelled)) details = body.substring(0, body.length() - cancelled.length());
+        if (kind.equals("REMOVED") && body.endsWith(removed)) details = body.substring(0, body.length() - removed.length());
+        v.put("details", details);
+        v.put("candidateName", e.candidateName() == null || e.candidateName().isBlank() ? "A candidate" : e.candidateName().trim());
+        v.put("roleTitle", e.roleTitle() == null ? "" : e.roleTitle().trim());
+        v.put("interviewTitle", e.interviewTitle() == null ? "" : e.interviewTitle().trim());
+        v.put("when", e.scheduledAt() == null ? "" : WHEN.format(e.scheduledAt().atZone(IST)).replace("AM", "am").replace("PM", "pm") + " IST");
+        v.put("durationMinutes", e.durationMinutes() > 0 ? String.valueOf(e.durationMinutes()) : "");
+        String mode = modeLabel(e.mode());
+        v.put("mode", mode == null ? "" : mode);
+        v.put("location", e.location() == null ? "" : e.location().trim());
+        return v;
+    }
+
     static String modeLabel(String mode) {
         if (mode == null) return null;
         return switch (mode) {

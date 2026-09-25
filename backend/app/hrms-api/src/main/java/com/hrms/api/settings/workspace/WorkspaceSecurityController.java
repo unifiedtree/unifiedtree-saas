@@ -142,7 +142,7 @@ public class WorkspaceSecurityController {
                                         + WorkspaceMailer.esc(target.email()) + ") and signed you out everywhere.",
                                 "Sign in with your password, then set two-factor up again on your new phone from Settings, Security.",
                                 "If you didn't ask for this, tell your admin straight away."),
-                        "Sign in", mailer.link(tenantId, "/login")), null, List.of())));
+                        "Sign in", mailer.link(tenantId, "/login")), null, List.of()).withFromName(ws)));
         return Map.of("reset", true, "signedOut", signedOut);
     }
 

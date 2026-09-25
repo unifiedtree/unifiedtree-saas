@@ -5,7 +5,6 @@ import com.hrms.api.mail.MailService;
 import com.hrms.core.exception.BusinessRuleException;
 import com.hrms.core.exception.ResourceNotFoundException;
 import com.unifiedtree.notifications.enums.AppNotificationType;
-import com.unifiedtree.notifications.service.AppNotificationService;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,7 +63,7 @@ public class PolicyNoticeService {
 
     private final JdbcTemplate jdbc;
     private final MailService mail;
-    private final AppNotificationService notifications;
+    private final com.unifiedtree.notifications.service.NotificationDispatcher dispatcher;
     private final TransactionTemplate tx;
     private final ExecutorService executor = new ThreadPoolExecutor(1, 1, 60, TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(100), r -> { Thread t = new Thread(r, "policy-notices"); t.setDaemon(true); return t; },
@@ -73,11 +72,11 @@ public class PolicyNoticeService {
     @Value("${unifiedtree.mail.invite-url-base:${INVITE_URL_BASE:http://localhost:3001}}")
     private String appBaseUrl;
 
-    public PolicyNoticeService(JdbcTemplate jdbc, MailService mail, AppNotificationService notifications,
+    public PolicyNoticeService(JdbcTemplate jdbc, MailService mail, com.unifiedtree.notifications.service.NotificationDispatcher dispatcher,
                                PlatformTransactionManager txManager) {
         this.jdbc = jdbc;
         this.mail = mail;
-        this.notifications = notifications;
+        this.dispatcher = dispatcher;
         this.tx = new TransactionTemplate(txManager);
         this.tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -245,18 +244,17 @@ public class PolicyNoticeService {
         String subject = reminder
                 ? "Reminder: please read and acknowledge \"%s\"".formatted(title)
                 : "%s has published a new policy: %s".formatted(company, title);
-        String inAppBody = reminder
-                ? "Please read \"%s\" and acknowledge it.".formatted(title)
-                : "%s has published \"%s\". Please read it%s.".formatted(company, title, n.ackRequired() ? " and acknowledge it" : "");
         if (n.attempts() == 0) {
             try {
                 Map<String, Object> data = new HashMap<>();
                 data.put("type", reminder ? AppNotificationType.POLICY_REMINDER.name() : AppNotificationType.POLICY_PUBLISHED.name());
                 data.put("policyId", n.policyId().toString());
                 data.put("route", "/hrms/policies");
-                notifications.create(n.tenantId(), n.employeeId(),
-                        reminder ? AppNotificationType.POLICY_REMINDER : AppNotificationType.POLICY_PUBLISHED,
-                        reminder ? "Policy to acknowledge" : "New policy: " + title, inAppBody, data);
+                // Through the dispatcher: the company's templates and the person's
+                // in-app / push choices apply (wave-1 notification templates).
+                dispatcher.dispatch(n.tenantId(), n.employeeId(), reminder ? "policies.reminder" : "policies.published",
+                        Map.of("policyTitle", title, "companyName", company,
+                                "ackText", n.ackRequired() ? " and acknowledge it" : ""), data);
             } catch (Exception e) {
                 log.warn("In-app policy notice {} failed: {}", n.id(), e.getMessage());
             }
@@ -270,7 +268,8 @@ public class PolicyNoticeService {
             return;
         }
         try {
-            mail.send(new EmailMessage(n.email(), null, subject, html(n, reminder, company, title), text(n, reminder, company, title), List.of()));
+            mail.send(new EmailMessage(n.email(), null, subject, html(n, reminder, company, title), text(n, reminder, company, title), List.of())
+                    .withFromName(company));
             jdbc.update("UPDATE policy_mgmt.policy_notices SET status = 'SENT', sent_at = now(), attempts = attempts + 1, error = NULL WHERE id = ?", n.id());
         } catch (Exception e) {
             boolean last = n.attempts() + 1 >= MAX_ATTEMPTS;
