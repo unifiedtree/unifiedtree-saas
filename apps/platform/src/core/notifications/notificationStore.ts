@@ -34,6 +34,10 @@ export type AppNotificationType =
   | 'SHIFT_CHANGE_SUBMITTED'
   | 'SHIFT_CHANGE_APPROVED'
   | 'SHIFT_CHANGE_REJECTED'
+  // Hiring interviews (V143.20), sent to the interviewers; data.route is /me/interviews.
+  | 'INTERVIEW_SCHEDULED'
+  | 'INTERVIEW_RESCHEDULED'
+  | 'INTERVIEW_CANCELLED'
   | 'WELCOME'
   | 'TRIAL_ENDING_SOON'
   | 'TRIAL_EXPIRED'
@@ -211,6 +215,8 @@ function webRouteFor(type: AppNotificationType, data?: Record<string, unknown> |
   // Grandfathered over-cap warning routes to /plan where the amber banner
   // (Plan.tsx) explains the "set up autopay for the extras" action.
   if (type === 'BILLING_OVER_CAP') return '/plan'
+
+  if (type.startsWith('INTERVIEW_')) return '/me/interviews'
 
   if (type === 'WELCOME') return '/'
   // Unknown / not-yet-mapped types: land the user on their own workspace

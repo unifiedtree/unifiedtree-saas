@@ -127,11 +127,6 @@ Priorities:
 - Edit a stored document.
 - Bulk upload.
 
-**Onboarding** (§11.8)
-- Reorder template tasks.
-- Owner role picked from a list.
-- A "my assets" view for employees.
-
 **Performance and Learning** (§11.10, §11.17)
 - UI for the per-employee performance directory (the endpoint works and is team-scoped).
 - KPI progress history for the employee.

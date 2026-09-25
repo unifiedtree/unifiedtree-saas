@@ -51,7 +51,7 @@ export function useUpdateHiringOfferStatus() {
 
 // Mirrors backend com.hrms.hiring.enums
 export type RequisitionStatus = 'OPEN' | 'ON_HOLD' | 'CLOSED'
-export type CandidateStage = 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED'
+export type CandidateStage = 'APPLIED' | 'SCREENING' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED' | 'WITHDRAWN'
 
 export const CANDIDATE_STAGES: CandidateStage[] = [
   'APPLIED',
@@ -60,7 +60,16 @@ export const CANDIDATE_STAGES: CandidateStage[] = [
   'OFFER',
   'HIRED',
   'REJECTED',
+  'WITHDRAWN',
 ]
+
+/** The server's stage rules (HiringService.assertTransitionAllowed): one step forward, or out to Rejected / Withdrawn. */
+export function canMoveStage(from: CandidateStage, to: CandidateStage): boolean {
+  if (from === to || from === 'REJECTED' || from === 'WITHDRAWN') return false
+  if (to === 'REJECTED' || to === 'WITHDRAWN') return true
+  const funnel: CandidateStage[] = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED']
+  return funnel.indexOf(to) === funnel.indexOf(from) + 1 && funnel.indexOf(from) >= 0
+}
 
 export const EMPLOYMENT_TYPES = [
   'FULL_TIME',
@@ -237,10 +246,14 @@ export function useConvertCandidate() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) =>
-      apiJson<{ candidate: Candidate; employee: { id: string; employeeCode: string; firstName: string; lastName?: string } }>(
-        `/v1/hiring/candidates/${id}/convert`, { method: 'POST' }),
+      apiJson<{
+        candidate: Candidate; employee: { id: string; employeeCode: string; firstName: string; lastName?: string }
+        /** Set when a checklist template fitted and their onboarding was started. */
+        onboardingInstanceId?: string | null; onboardingTemplateName?: string | null
+      }>(`/v1/hiring/candidates/${id}/convert`, { method: 'POST' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] })
+      qc.invalidateQueries({ queryKey: ['hrms', 'onboarding'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'employees'] })
       qc.invalidateQueries({ queryKey: ['hrms', 'employee-counts'] })
     },
@@ -282,3 +295,105 @@ export function useEmailHiringOffer() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }),
   })
 }
+
+// ── Interviews and scorecards (V143.20) ──────────────────────────────────────
+
+export type InterviewMode = 'IN_PERSON' | 'VIDEO' | 'PHONE'
+export type Recommendation = 'STRONG_YES' | 'YES' | 'NO' | 'STRONG_NO'
+export const RECOMMENDATIONS: Recommendation[] = ['STRONG_YES', 'YES', 'NO', 'STRONG_NO']
+export const RECOMMENDATION_LABEL: Record<Recommendation, string> = { STRONG_YES: 'Strong yes', YES: 'Yes', NO: 'No', STRONG_NO: 'Strong no' }
+export const MODE_LABEL: Record<InterviewMode, string> = { IN_PERSON: 'In person', VIDEO: 'Video call', PHONE: 'Phone call' }
+export const DEFAULT_CRITERIA = ['Role knowledge', 'Problem solving', 'Communication', 'Culture fit']
+/** Interviews can be booked while the candidate is in one of these stages (the server's rule). */
+export const SCHEDULABLE_STAGES: CandidateStage[] = ['SCREENING', 'INTERVIEW']
+
+export interface ScorecardSummary { count: number; averageRating: number | null; recommendations: Record<Recommendation, number> }
+/** A candidate on the board, with the role they applied for and their interview and scorecard summary. */
+export interface CandidateCard extends Candidate {
+  requisitionTitle: string
+  upcomingInterviews: number
+  nextInterviewAt?: string | null
+  scorecards: ScorecardSummary
+}
+export interface InterviewRating { criterion: string; rating: number }
+export interface InterviewScorecard {
+  id: string; interviewerId: string; interviewerName: string; ratings: InterviewRating[]; overallRating: number
+  strengths?: string | null; concerns?: string | null; recommendation: Recommendation; submittedAt: string; updatedAt: string
+}
+export interface Interview {
+  id: string; candidateId: string; candidateName: string; candidateStage: CandidateStage; requisitionId: string; roleTitle: string
+  title: string; scheduledAt: string; scheduledAtIst: string; durationMinutes: number; mode: InterviewMode; location?: string | null
+  criteria: string[]; notes?: string | null; status: 'SCHEDULED' | 'CANCELLED'; cancelReason?: string | null; cancelledAt?: string | null
+  interviewers: { employeeId: string; name: string; submitted: boolean }[]
+  scorecards: InterviewScorecard[]
+  /** The start time has passed (a scorecard can be submitted). */
+  started: boolean
+}
+export interface SchedulePayload {
+  title?: string
+  /** India time, "2026-09-26T10:30". */
+  scheduledAt: string
+  durationMinutes: number
+  mode: InterviewMode
+  location?: string
+  interviewerIds: string[]
+  criteria?: string[]
+  notes?: string
+}
+export interface ScorecardPayload { ratings: InterviewRating[]; strengths?: string; concerns?: string; recommendation: Recommendation }
+
+/** "Sat 26 Sep, 10:30 am" in India time. */
+export const istWhen = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '')
+
+export function useCandidateBoard(filter: { requisitionId?: string; stage?: string }, enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'hiring', 'board', filter.requisitionId ?? 'all', filter.stage ?? 'all'],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (filter.requisitionId) params.set('requisitionId', filter.requisitionId)
+      if (filter.stage) params.set('stage', filter.stage)
+      return apiJson<CandidateCard[]>(`/v1/hiring/candidates?${params.toString()}`)
+    },
+    enabled,
+    staleTime: 15_000,
+  })
+}
+
+export function useCandidateInterviews(candidateId: string | undefined) {
+  return useQuery({
+    queryKey: ['hrms', 'hiring', 'interviews', 'candidate', candidateId],
+    queryFn: () => apiJson<Interview[]>(`/v1/hiring/candidates/${candidateId}/interviews`),
+    enabled: !!candidateId,
+  })
+}
+
+export function useUpcomingInterviews(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'hiring', 'interviews', 'upcoming'],
+    queryFn: () => apiJson<Interview[]>('/v1/hiring/interviews'),
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+export function useMyInterviews(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'hiring', 'interviews', 'mine'],
+    queryFn: () => apiJson<Interview[]>('/v1/hiring/interviews/mine'),
+    enabled,
+    staleTime: 30_000,
+  })
+}
+
+function useInterviewMutation<V>(fn: (v: V) => Promise<Interview>) {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: fn, onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'hiring'] }) })
+}
+export const useScheduleInterview = () => useInterviewMutation(({ candidateId, ...body }: SchedulePayload & { candidateId: string }) =>
+  apiJson<Interview>(`/v1/hiring/candidates/${candidateId}/interviews`, { method: 'POST', body: JSON.stringify(body) }))
+export const useRescheduleInterview = () => useInterviewMutation(({ id, ...body }: SchedulePayload & { id: string }) =>
+  apiJson<Interview>(`/v1/hiring/interviews/${id}`, { method: 'PUT', body: JSON.stringify(body) }))
+export const useCancelInterview = () => useInterviewMutation(({ id, reason }: { id: string; reason?: string }) =>
+  apiJson<Interview>(`/v1/hiring/interviews/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }))
+export const useSubmitScorecard = () => useInterviewMutation(({ id, ...body }: ScorecardPayload & { id: string }) =>
+  apiJson<Interview>(`/v1/hiring/interviews/${id}/scorecard`, { method: 'PUT', body: JSON.stringify(body) }))

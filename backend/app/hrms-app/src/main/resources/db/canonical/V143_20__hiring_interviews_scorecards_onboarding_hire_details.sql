@@ -2,7 +2,7 @@
 -- "my assets" for employees.
 --
 -- 1. hiring_mgmt.interviews / interview_interviewers / interview_scorecards.
---    HR (or a department manager) schedules an interview for a candidate who
+--    HR schedules an interview for a candidate who
 --    is in Screening or Interview: date and time (stored as an instant, entered
 --    in IST), duration, mode (in person / video / phone), where or the link,
 --    the interviewers (employees) and the criteria they rate. Each assigned
@@ -15,6 +15,9 @@
 --    starts for a converted candidate, and HR can edit them.
 -- 3. Permissions:
 --      hrms.hiring.interview.write  schedule, reschedule and cancel interviews
+--                                   (HR_MANAGER; department managers are
+--                                   interviewers, not schedulers: they cannot
+--                                   browse the directory to pick people)
 --      hrms.hiring.interview.self   see the interviews you are on and submit
 --                                   your scorecard (every employee: anyone
 --                                   can be asked to interview)
@@ -143,7 +146,7 @@ INSERT INTO rbac.role_permissions (role_id, permission_code)
 SELECT r.id, 'hrms.hiring.interview.write'
   FROM rbac.roles r
  WHERE r.tenant_id IS NULL
-   AND r.code IN ('OWNER', 'SUPER_ADMIN', 'HR_MANAGER', 'DEPT_MANAGER')
+   AND r.code IN ('OWNER', 'SUPER_ADMIN', 'HR_MANAGER')
 ON CONFLICT DO NOTHING;
 
 -- Self permissions: every built-in role. EMPLOYEE is the baseline every

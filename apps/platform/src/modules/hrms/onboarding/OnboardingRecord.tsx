@@ -8,6 +8,11 @@ export interface OnboardingRecordData {
   selectedPolicies?: string[]
   joiningChecklist?: Record<string, boolean>
   documentChecklist?: Record<string, { fileName: string; status: string }>
+  /** Read-only, from the GET: offer accepted date, hiring manager, recruiter, source and buddy (V143.20). */
+  hire?: {
+    offerAcceptedOn?: string | null; source?: string | null; fromHiring?: boolean
+    hiringManager?: { id: string; name: string } | null; recruiter?: { id: string; name: string } | null; buddy?: { id: string; name: string } | null
+  }
 }
 export const saveOnboardingRecord = (employeeId: string, data: OnboardingRecordData) =>
   apiJson<OnboardingRecordData>(`/v1/hrms/employees/${employeeId}/onboarding-record`, { method: 'PUT', body: JSON.stringify(data) })

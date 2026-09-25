@@ -1,14 +1,14 @@
 // One checklist template (/hrms/onboarding/templates/:id) on the module kit:
-// its tasks in order, and for template writers edit / add / delete.
-// There is no reorder endpoint (sequenceNo is set when a task is added), so
-// the list shows order without pretending it can be dragged.
+// its tasks in order, and for template writers edit / add / delete / move up
+// and down (PUT /templates/{id}/tasks/order). A task's owner is picked from the
+// workspace's roles (GET /v1/onboarding/owner-roles).
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Pencil, Plus } from 'lucide-react'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrDrawer, HrStatusPill } from '@/shared/components/hr'
-import { ModulePage, State, RowList, Row, SubHeading, Facts, useDesignToast } from '@/design/module/ModuleKit'
-import { useTemplate, useCreateTemplateTask, useDeleteTemplateTask, useUpdateTemplate } from './api/useOnboarding'
+import { ModulePage, State, RowList, Row, SubHeading, Facts, Note, useDesignToast } from '@/design/module/ModuleKit'
+import { useTemplate, useCreateTemplateTask, useDeleteTemplateTask, useUpdateTemplate, useReorderTemplateTasks, useOwnerRoles } from './api/useOnboarding'
 import type { OnboardingTask, OnboardingTemplate } from './api/useOnboarding'
 
 type Toast = (msg: string, err?: boolean, detail?: string) => void
@@ -44,6 +44,7 @@ function EditTemplateDrawer({ template, onClose, toast }: { template: Onboarding
 
 function AddTaskDrawer({ templateId, nextSeq, onClose, toast }: { templateId: string; nextSeq: number; onClose: () => void; toast: Toast }) {
   const create = useCreateTemplateTask(templateId)
+  const roles = useOwnerRoles()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dueOffsetDays, setDueOffsetDays] = useState(1)
@@ -65,15 +66,25 @@ function AddTaskDrawer({ templateId, nextSeq, onClose, toast }: { templateId: st
         <div><label className={label} htmlFor="task-desc">Description</label><textarea id="task-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Optional" className="ut-input resize-none" /></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label className={label} htmlFor="task-due">Due (days after joining)</label><input id="task-due" type="number" min={1} value={dueOffsetDays} onChange={(e) => setDueOffsetDays(Number(e.target.value))} className="ut-input" /></div>
-          <div><label className={label} htmlFor="task-owner">Owner role</label><input id="task-owner" value={ownerRole} onChange={(e) => setOwnerRole(e.target.value)} placeholder="e.g. HR_MANAGER" className="ut-input" /></div>
+          <div><label className={label} htmlFor="task-owner">Owner role</label>
+            <select id="task-owner" value={ownerRole} onChange={(e) => setOwnerRole(e.target.value)} className="ut-select" disabled={roles.isLoading}>
+              <option value="">{roles.isLoading ? 'Loading roles…' : 'No owner role'}</option>
+              {(roles.data ?? []).map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
+            </select>
+          </div>
         </div>
+        {roles.error ? <Note tone="red">{`The workspace’s roles couldn’t be loaded: ${(roles.error as Error).message}`}</Note>
+          : <p className="text-xs text-text-tertiary">The role responsible for this task. It shows on every new hire’s checklist.</p>}
         <label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} className="accent-[#059669]" /> Required: it can’t be skipped</label>
       </form>
     </HrDrawer>
   )
 }
 
-function TaskRow({ task, templateId, canWrite, toast, n }: { task: OnboardingTask; templateId: string; canWrite: boolean; toast: Toast; n: number }) {
+function TaskRow({ task, templateId, canWrite, toast, n, onMove, moving, first, last }: {
+  task: OnboardingTask; templateId: string; canWrite: boolean; toast: Toast; n: number
+  onMove: (dir: -1 | 1) => void; moving: boolean; first: boolean; last: boolean
+}) {
   const del = useDeleteTemplateTask(templateId)
   const remove = async () => {
     if (!window.confirm(`Delete “${task.title}” from this template? Onboarding already started keeps its copy.`)) return
@@ -87,6 +98,8 @@ function TaskRow({ task, templateId, canWrite, toast, n }: { task: OnboardingTas
       trail={<>
         {task.required ? <HrStatusPill tone="warn">Required</HrStatusPill> : <HrStatusPill tone="gray">Optional</HrStatusPill>}
         {task.ownerRole && <HrStatusPill tone="info">{roleLabel(task.ownerRole)}</HrStatusPill>}
+        {canWrite && <HrButton size="sm" variant="ghost" disabled={moving || first} onClick={() => onMove(-1)} aria-label={`Move ${task.title} up`}>Move up</HrButton>}
+        {canWrite && <HrButton size="sm" variant="ghost" disabled={moving || last} onClick={() => onMove(1)} aria-label={`Move ${task.title} down`}>Move down</HrButton>}
         {canWrite && <HrButton size="sm" variant="ghost" disabled={del.isPending} onClick={remove} aria-label={`Delete task ${task.title}`}>Delete</HrButton>}
       </>} />
   )
@@ -102,6 +115,14 @@ export const TemplateDetail: React.FC = () => {
   const { data: template, isLoading, error, refetch } = useTemplate(id!)
   const tasks = [...(template?.tasks ?? [])].sort((a, b) => a.sequenceNo - b.sequenceNo)
   const required = tasks.filter((t) => t.required).length
+  const reorder = useReorderTemplateTasks(id!)
+  const move = async (index: number, dir: -1 | 1) => {
+    const ids = tasks.map((t) => t.id)
+    const to = index + dir
+    if (to < 0 || to >= ids.length) return
+    ;[ids[index], ids[to]] = [ids[to], ids[index]]
+    try { await reorder.mutateAsync(ids); show('Order saved') } catch (e) { show('Couldn’t change the order', true, (e as Error)?.message) }
+  }
   const back = <HrButton variant="ghost" onClick={() => navigate('/hrms/onboarding/instances?view=templates')}>← All templates</HrButton>
   return (
     <ModulePage crumb="Onboarding · Checklist template" title={template?.name || 'Checklist template'} subtitle={template?.description || undefined}
@@ -119,7 +140,9 @@ export const TemplateDetail: React.FC = () => {
               <SubHeading aside={canWrite ? <HrButton size="sm" onClick={() => setAddOpen(true)}><Plus size={14} /> Add task</HrButton> : undefined}>Tasks, in order</SubHeading>
               {tasks.length === 0
                 ? <State kind="empty" icon="list" title="No tasks yet" description={canWrite ? 'Add the first task to build the checklist.' : 'This template has no tasks yet.'} />
-                : <RowList>{tasks.map((t, i) => <TaskRow key={t.id} task={t} n={i + 1} templateId={template.id} canWrite={canWrite} toast={show} />)}</RowList>}
+                : <RowList>{tasks.map((t, i) => <TaskRow key={t.id} task={t} n={i + 1} templateId={template.id} canWrite={canWrite} toast={show}
+                  onMove={(dir) => move(i, dir)} moving={reorder.isPending} first={i === 0} last={i === tasks.length - 1} />)}</RowList>}
+              {canWrite && tasks.length > 1 && <Note>New onboardings follow this order. Onboardings that already started keep the order they began with.</Note>}
             </div>
           ) : <State kind="empty" icon="list" title="Template not found" />}
       {addOpen && template && <AddTaskDrawer templateId={template.id} nextSeq={(tasks.at(-1)?.sequenceNo ?? 0) + 1} onClose={() => setAddOpen(false)} toast={show} />}

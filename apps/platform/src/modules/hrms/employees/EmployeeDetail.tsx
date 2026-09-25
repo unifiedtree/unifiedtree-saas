@@ -164,7 +164,17 @@ export function EmployeeDetail() {
     const onb: WorkspaceData['onboarding'] = {
       show: canWrite, sub: `Captured when ${first} was hired · ${fmt(emp.dateOfJoining)}`,
       note: onboarding.isLoading ? 'Loading…' : onboarding.error ? 'The onboarding record couldn’t be loaded.' : recEmpty ? 'No onboarding record was saved for this hire.' : '',
-      fields: Object.entries(rec?.details ?? {}).filter(([, v]) => v).map(([k, v]) => ({ l: humanize(k), v: String(v) })),
+      // Hire details (V143.20) come first: kept on the onboarding, filled from the candidate and accepted offer.
+      fields: [
+        ...([
+          rec?.hire?.offerAcceptedOn ? { l: 'Offer accepted', v: fmt(rec.hire.offerAcceptedOn) } : null,
+          rec?.hire?.hiringManager ? { l: 'Hiring manager', v: rec.hire.hiringManager.name } : null,
+          rec?.hire?.recruiter ? { l: 'Recruiter', v: rec.hire.recruiter.name } : null,
+          rec?.hire?.source ? { l: 'Source', v: rec.hire.source } : null,
+          rec?.hire?.buddy ? { l: 'Buddy', v: rec.hire.buddy.name } : null,
+        ].filter(Boolean) as { l: string; v: string }[]),
+        ...Object.entries(rec?.details ?? {}).filter(([, v]) => v).map(([k, v]) => ({ l: humanize(k), v: String(v) })),
+      ],
       assets: (rec?.assets ?? []).map((a, i) => ({ id: String(i), type: a.type, model: a.model, serial: a.serial, on: fmt(a.issuedOn) })),
       policies: rec?.selectedPolicies ?? [],
       checklists: [

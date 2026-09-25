@@ -285,3 +285,71 @@ export function useSkipTask(instanceId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['hrms', 'onboarding'] }),
   })
 }
+
+// ── Task order, owner roles, hire details (V143.20) ─────────────────────────────
+
+/** New order for a template's tasks (every task id exactly once). Onboardings already started keep theirs. */
+export function useReorderTemplateTasks(templateId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (taskIds: string[]) =>
+      apiJson<OnboardingTemplate>(`/v1/onboarding/templates/${templateId}/tasks/order`, { method: 'PUT', body: JSON.stringify({ taskIds }) }),
+    onSuccess: (template) => {
+      qc.setQueryData(templateKey(templateId), template)
+      qc.invalidateQueries({ queryKey: templatesKey() })
+    },
+  })
+}
+
+/** The workspace's roles a checklist task can be owned by. */
+export function useOwnerRoles(enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'onboarding', 'owner-roles'],
+    queryFn: () => apiJson<{ code: string; name: string }[]>('/v1/onboarding/owner-roles'),
+    enabled,
+    staleTime: 5 * 60_000,
+  })
+}
+
+export interface HirePerson { id: string; name: string }
+export interface HireDetails {
+  instanceId: string | null
+  employeeId: string
+  candidateId: string | null
+  offerAcceptedOn: string | null
+  hiringManager: HirePerson | null
+  recruiter: HirePerson | null
+  buddy: HirePerson | null
+  source: string | null
+  /** Read from the hiring record because no onboarding holds them yet. */
+  fromHiring: boolean
+}
+export interface HireDetailsInput { offerAcceptedOn?: string | null; hiringManagerId?: string | null; recruiterId?: string | null; buddyId?: string | null; source?: string | null }
+
+export function useHireDetails(instanceId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['hrms', 'onboarding', 'instances', instanceId, 'hire-details'],
+    queryFn: () => apiJson<HireDetails>(`/v1/onboarding/instances/${instanceId}/hire-details`),
+    enabled: !!instanceId && enabled,
+  })
+}
+
+export function useUpdateHireDetails(instanceId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: HireDetailsInput) =>
+      apiJson<HireDetails>(`/v1/onboarding/instances/${instanceId}/hire-details`, { method: 'PUT', body: JSON.stringify(body) }),
+    onSuccess: (data) => {
+      qc.setQueryData(['hrms', 'onboarding', 'instances', instanceId, 'hire-details'], data)
+      qc.invalidateQueries({ queryKey: ['hrms', 'onboarding-record'] })
+    },
+  })
+}
+
+export interface MyAsset {
+  assetId: string; assetTag: string; assetType: string; assetName: string; serialNo?: string | null
+  assignedAt?: string | null; returnedAt?: string | null; returnNotes?: string | null; withMe: boolean
+}
+export function useMyAssets(enabled = true) {
+  return useQuery({ queryKey: ['hrms', 'me', 'assets'], queryFn: () => apiJson<MyAsset[]>('/v1/me/assets'), enabled })
+}

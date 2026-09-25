@@ -11,6 +11,7 @@ import { dashIcon } from '@/design/dc/icons'
 import { ModulePage, StatRow, Panel, State, Row, Facts, Note, days, range, CARD } from '@/design/module/ModuleKit'
 import { useMonthlyStats } from '../api/useAttendance'
 import { useMyBalances, useMyLeaves } from '../api/useLeave'
+import { useMyInterviews } from '../api/useHiring'
 import { AttendanceHistory } from './AttendanceHistory'
 import { TimeEntries } from './TimeEntries'
 
@@ -38,6 +39,12 @@ export function EssDashboard() {
   const canPayslips = usePermission(P.PAYROLL_PAYSLIP_READ_SELF) && payroll
   const canWfh = useAnyPermission(['wfh.request.self', P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF])
   const canShift = useAnyPermission([P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF])
+  const canAssets = usePermission('hrms.onboarding.asset.self')
+  // Interviews show up only for people who have been asked to take one.
+  const canInterviews = useAnyPermission(['hrms.hiring.interview.self', 'hrms.hiring.read'])
+  const interviews = useMyInterviews(canInterviews)
+  const interviewCount = interviews.data?.length ?? 0
+  const scorecardsDue = (interviews.data ?? []).filter((i) => i.started && i.scorecards.length === 0).length
   const stats = useMonthlyStats()
   const bal = useMyBalances()
   const mine = useMyLeaves(0)
@@ -87,6 +94,8 @@ export function EssDashboard() {
             {canPayslips && <Shortcut icon="receipt" title="Payslips" sub="Download your monthly payslips" cta="Open" onClick={() => navigate('/me/payslips')} />}
             {canSalary && <Shortcut icon="rupee" title="Salary" sub="Your salary structure and components" cta="View" onClick={() => navigate('/me/salary')} />}
             {canOnboarding && <Shortcut icon="clipboard" title="Onboarding tasks" sub="Your onboarding checklist" cta="Open" onClick={() => navigate('/hrms/onboarding/instances')} />}
+            {canAssets && <Shortcut icon="briefcase" title="My assets" sub="Company equipment handed to you" cta="View" onClick={() => navigate('/me/assets')} />}
+            {canInterviews && interviewCount > 0 && <Shortcut icon="calendarClock" title="Interviews" sub={scorecardsDue ? `${scorecardsDue} ${scorecardsDue === 1 ? 'scorecard is' : 'scorecards are'} waiting for you` : `${interviewCount} ${interviewCount === 1 ? 'interview' : 'interviews'} you’re taking`} cta="Open" onClick={() => navigate('/me/interviews')} />}
             <Shortcut icon="userCheck" title="Profile" sub="Your photo, contact details and documents" cta="Open" onClick={() => navigate('/profile')} />
         </div>
       </div>

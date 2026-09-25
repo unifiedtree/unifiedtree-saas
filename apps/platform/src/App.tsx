@@ -103,6 +103,8 @@ const LateMarksReport = lazyPage(() => import('@/modules/hrms/reports/LateMarksR
 const DiversityReport = lazyPage(() => import('@/modules/hrms/reports/DiversityReport').then(m => ({ default: m.DiversityReport })))
 const EmployeeImport = lazyPage(() => import('@/modules/hrms/employees/EmployeeImport').then(m => ({ default: m.EmployeeImport })))
 const ApplyWfh = lazyPage(() => import('@/modules/hrms/wfh/ApplyWfh').then(m => ({ default: m.ApplyWfh })))
+const MyAssets = lazyPage(() => import('@/modules/hrms/onboarding/MyAssets').then(m => ({ default: m.MyAssets })))
+const MyInterviews = lazyPage(() => import('@/modules/hrms/hiring/Interviews').then(m => ({ default: m.MyInterviews })))
 const ModuleWorkspace = lazyPage(() => import('@/pages/ModuleWorkspace').then(m => ({ default: m.ModuleWorkspace })))
 const ROLE_PRIORITY = ['SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_LEAD', 'DEPT_MANAGER', 'EMPLOYEE'] as const
 
@@ -248,6 +250,24 @@ const ROUTE_TREE = (
           element={
             <RouteGuard anyOf={['wfh.request.self', P.HRMS_ESS_READ, P.ATTENDANCE_CHECKIN_SELF]}>
               <ModuleGate moduleKey="hrms"><ApplyWfh /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        {/* My assets and My interviews (V143.20): the caller's own equipment, and
+            the interviews they were asked to take (with their scorecard). */}
+        <Route
+          path="/me/assets"
+          element={
+            <RouteGuard anyOf={['hrms.onboarding.asset.self']}>
+              <ModuleGate moduleKey="hrms"><MyAssets /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/me/interviews"
+          element={
+            <RouteGuard anyOf={['hrms.hiring.interview.self', 'hrms.hiring.read']}>
+              <ModuleGate moduleKey="hrms"><MyInterviews /></ModuleGate>
             </RouteGuard>
           }
         />

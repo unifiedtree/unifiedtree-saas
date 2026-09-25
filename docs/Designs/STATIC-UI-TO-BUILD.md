@@ -40,7 +40,7 @@ Checked live: `e2e/recovery/live-design-dashboard.mjs`, 12/12 (calendar, past-da
 | Dept Distribution: click a bar to filter the directory | Needs backend | `/v1/reports/headcount` rows have the department name but no id, so the click opens the unfiltered directory. |
 | Milestones "View all →" (birthdays, anniversaries, retirements) | Needs backend | Opens `/hrms/employees?filter=birthday` etc., but the directory has no such filters yet. |
 | Payroll chart: click a month | Needs backend | Opens `/hrms/payroll/runs?month=YYYY-MM`. The runs page doesn't filter by month yet. |
-| Hiring stage rows → `/hrms/hiring?tab=candidates&stage=…` | To verify | Check the Hiring page applies the `stage` filter. |
+| Hiring stage rows → `/hrms/hiring?tab=candidates&stage=…` | Done | The link opens the Pipeline board on **All roles** with only that stage's column, which matches the tile's company-wide count. The board has a Stage filter (All stages or one), kept in `?stage=`. (w2a, 25 Sep) |
 | Company notices | Partial | Shows the latest 5, as in the design ("5 per page"). There's no pager, so older notices aren't reachable from the dashboard. |
 | Date calendar colours | Partial | The trend API caps at 31 days, so only the last month is coloured. Early departures for past days show 0 (the trend API doesn't return them). Today's figures are exact. |
 | Today's Absence / Not Marked, donut, "exceptions" | Changed | Same one-bucket-per-person numbers as Attendance & Time (`attendance/attendanceBuckets.ts`). Today, someone with no punch and no leave is **Not Marked**, and Absence stays 0 until the day is over. The donut and the exceptions count no longer count them twice (the API's "not marked" also contains the absent and people on leave). |
@@ -280,7 +280,7 @@ Checked live:
 | Onboarding record | Done | Real details, assets, policies and checklists. Rejected documents show a red pill. Only people who can edit employees can read it (the endpoint's rule). |
 | Leave and Expenses tabs | Needs backend | Shown, as in the design, with a note and a link to the Leave or Expense centre. The API only returns leave and claims for the signed-in person. It needs `GET /v1/leave/employees/{id}/balances` / `…/requests` and `GET /v1/expense/employees/{id}/claims`. |
 | Goals tile | Partial | Counts all goals and KPIs; the API has no "active" filter. |
-| Onboarding "Offer accepted / Hiring manager / Recruiter / Source / Buddy" | Needs backend | The saved record doesn't hold these; the real saved details are shown instead. |
+| Onboarding "Offer accepted / Hiring manager / Recruiter / Source / Buddy" | Done | Saved on the onboarding (V143_20). When a candidate is converted, their onboarding starts if a checklist template fits (department and designation, else a general template), with the offer accepted date (IST), the requisition's hiring manager, the recruiter (whoever added the candidate) and the source filled in. HR edits them, and sets the buddy, on the checklist page. A converted hire with no onboarding yet shows the same facts read from the hiring record. (w2a, 25 Sep) |
 | Old Overview section | Removed | Replaced by the design's Overview. |
 
 **Bugs found on this page:**
@@ -545,10 +545,15 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - **Requisitions** has stat tiles at the top. Each row links to its pipeline (`?tab=pipeline&role=<id>`), so a role can be shared as a link.
   - **Offers:** statuses read as words (Sent, Accepted, Withdrawn), and dates use the Indian format.
 - **Permissions:** Pipeline and Requisitions need `hrms.hiring.read`. Offers need `hrms.hiring.offer.read`, because offers carry salary. Someone with neither sees "No hiring access".
-- **Static / to build:**
-  - Dragging cards between stages. For now, the stage is changed with the select on each card.
-  - Interview scheduling and scorecards. The stage list has interview stages, but there's no calendar or feedback record behind them.
-- **Checked live:** `live-candidate-conversion` 13/13 and `live-offers-browser`, which passed.
+- **Built 25 Sep (w2a, V143_20):**
+  - **Drag between stages:** candidate cards drag onto another column (HTML5 drag and drop). A column only accepts a drop the server allows (one step forward, or Rejected / Withdrawn) and its border turns green while you hover it. The "Move to" select stays as the keyboard-accessible way. Both call the same stage API.
+  - **Board filters:** Role has **All roles**, and a **Stage** filter shows one column. Withdrawn candidates now have their own column (they were hidden before).
+  - **Interviews:** "Interviews & scorecards" on each card opens the candidate: their facts, scorecard summary and interviews. HR (`hrms.hiring.interview.write`: Owner, Super admin, HR manager) schedules an interview while the candidate is in Screening or Interview: date and time in IST, duration, in person / video call / phone, the place or link, 1–10 interviewers (employees), and the criteria they rate (the standard four by default). Reschedule and cancel while no feedback is in. Interviewers are notified in-app and by push when they are added, when the time, place or mode changes, when it's cancelled, and when they are taken off.
+  - **Scorecards:** once the interview has started, each assigned interviewer rates every criterion 1–5, adds strengths and concerns, and recommends strong yes / yes / no / strong no. Hiring roles (`hrms.hiring.read`) see every scorecard; an interviewer sees only their own. The card shows "N scorecards · average / 5 · recommendations" and the next interview.
+  - **Interviews view** (`?tab=interviews`): tiles, "Your interviews" (submit your scorecard) and the upcoming interviews with Reschedule / Cancel.
+  - **My interviews** (`/me/interviews`, `hrms.hiring.interview.self`, every employee): the interviews you were asked to take, with your scorecard. The notification opens it, and My workspace shows an "Interviews" shortcut when you have any.
+  - Department managers see the board and scorecards and can be interviewers, but don't schedule (they can't browse the directory to pick interviewers).
+- **Checked live:** `live-candidate-conversion` 13/13 and `live-offers-browser`, which passed. API test for this batch: `e2e/recovery/live-w2a.mjs`.
 
 ### 11.8 Onboarding & assets (`/hrms/onboarding/instances`, `…/instances/:id`, `…/instances/new`, `/hrms/onboarding`, `/hrms/onboarding/templates/:id`): done
 - **Layout:** on the module kit.
@@ -575,10 +580,11 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
   - Deleting a task now also checks that it belongs to the template in the URL. A task from another template returns 404.
 - **Fixed (tests):** `live-onboarding.mjs` left its QA hire behind on every run, and later payroll and letter tests picked those hires up. It now deletes the hire at the end.
   - The older leftovers stay in local data. They are in payroll lines and letters from earlier runs, so removing them would mean editing past payroll.
-- **Static / to build:**
-  - Reordering template tasks. The API has no reorder endpoint; order is fixed when a task is added.
-  - Picking the owner role from a list. It is typed in for now.
-  - A "my assets" view for employees. The asset API is company-wide and only for asset readers, so employees don't see what they hold.
+- **Built 25 Sep (w2a, V143_20):**
+  - **Reorder template tasks:** Move up / Move down on each task (`PUT /v1/onboarding/templates/{id}/tasks/order`, every task exactly once). New onboardings follow the new order; ones already started keep theirs, and the page says so.
+  - **Owner role from a list:** the Add task drawer picks from the workspace's roles (`GET /v1/onboarding/owner-roles`, built-in and custom). The server refuses a role the workspace doesn't have.
+  - **Hire details** on the checklist page: offer accepted, hiring manager, recruiter, source and buddy, filled from the hiring record and editable by HR (see §7). The new hire sees theirs.
+  - **My assets** (`/me/assets`, `hrms.onboarding.asset.self`, every employee): what they hold now and what they returned (dates and the return note), from `GET /v1/me/assets`. In the Employee Self Service menu and on My workspace.
 - **Checked live:** `live-design-onboarding.mjs` 34/34 (owner, employee and department manager, with cleanup) and `live-onboarding.mjs` (passes and cleans up).
 
 ### 11.9 Performance (`/hrms/performance`): done
