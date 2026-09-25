@@ -132,10 +132,22 @@ public class RbacService {
             permissionRepo.findById(code).orElseThrow(() ->
                 new ResourceNotFoundException("Permission " + code + " not in catalog"));
         }
+        // Apply the difference. Deleting every row in a batch and saving the full
+        // list again lost the permissions the role already had: the batch delete
+        // bypasses the persistence context, so save() (a merge, the id is
+        // assigned) found the still-managed old row and inserted nothing. Only
+        // newly added codes survived a save from the role editor.
+        java.util.Set<String> wanted = new java.util.LinkedHashSet<>(permissionCodes);
         List<RolePermission> existing = rolePermissionRepo.findAllByRoleId(roleId);
-        rolePermissionRepo.deleteAllInBatch(existing);
-        for (String code : permissionCodes) {
-            rolePermissionRepo.save(new RolePermission(roleId, code));
+        java.util.Set<String> have = new java.util.HashSet<>();
+        List<RolePermission> removed = new java.util.ArrayList<>();
+        for (RolePermission rp : existing) {
+            if (wanted.contains(rp.getPermissionCode())) have.add(rp.getPermissionCode());
+            else removed.add(rp);
+        }
+        if (!removed.isEmpty()) rolePermissionRepo.deleteAll(removed);
+        for (String code : wanted) {
+            if (!have.contains(code)) rolePermissionRepo.save(new RolePermission(roleId, code));
         }
         // Evict cache for every user holding this role
         UUID tenantId = TenantContext.getTenantId();
