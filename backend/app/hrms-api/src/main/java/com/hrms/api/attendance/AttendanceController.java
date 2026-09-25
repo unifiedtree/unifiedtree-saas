@@ -634,25 +634,27 @@ public class AttendanceController {
     static DailyAttendanceCounts effectiveCounts(LocalDate date, List<UUID> roster, int weeklyOff,
                                                  Map<UUID, Map<LocalDate, com.hrms.attendance.policy.EffectiveDay>> effective,
                                                  List<AttendanceRecord> dayRecords) {
-        long present = 0, late = 0, halfDay = 0, wfh = 0, onLeave = 0, absent = 0;
+        long present = 0, late = 0, halfDay = 0, wfhOnTime = 0, wfhAll = 0, onLeave = 0, absent = 0;
         for (UUID id : roster) {
             com.hrms.attendance.policy.EffectiveDay d = effective.getOrDefault(id, Map.of()).get(date);
             if (d == null) continue;
+            boolean home = "WFH".equals(d.attendanceType());
             switch (d.status()) {
-                case com.hrms.attendance.policy.EffectiveDay.PRESENT -> { if ("WFH".equals(d.attendanceType())) wfh++; else present++; }
-                case com.hrms.attendance.policy.EffectiveDay.LATE -> late++;
-                case com.hrms.attendance.policy.EffectiveDay.HALF_DAY -> halfDay++;
+                case com.hrms.attendance.policy.EffectiveDay.PRESENT -> { if (home) { wfhOnTime++; wfhAll++; } else present++; }
+                case com.hrms.attendance.policy.EffectiveDay.LATE -> { late++; if (home) wfhAll++; }
+                case com.hrms.attendance.policy.EffectiveDay.HALF_DAY -> { halfDay++; if (home) wfhAll++; }
                 case com.hrms.attendance.policy.EffectiveDay.ON_LEAVE -> onLeave++;
                 case com.hrms.attendance.policy.EffectiveDay.ABSENT, com.hrms.attendance.policy.EffectiveDay.NOT_MARKED -> absent++;
                 default -> { /* holiday, weekly off, not tracked: not counted */ }
             }
         }
         long overtime = dayRecords.stream().filter(r -> r.getOvertimeMinutes() != null).mapToLong(AttendanceRecord::getOvertimeMinutes).sum();
-        // Each person is in one bucket, so the ones who came in are counted once
-        // and work from home here is already "on time" (late WFH is late). V143.25 fields.
-        long checkedIn = present + late + halfDay + wfh;
-        return new DailyAttendanceCounts(date, present, onLeave, late, halfDay, wfh, absent + onLeave, absent, overtime,
-                checkedIn, wfh, roster.size(), weeklyOff, roster.isEmpty() && weeklyOff > 0);
+        // Each person is in one bucket: present + late + half day + on-time WFH = the
+        // ones who came in (checkedIn). workFromHome is everyone who worked from home
+        // (late and half-day ones too), as w2f's V143.25 fields define it.
+        long checkedIn = present + late + halfDay + wfhOnTime;
+        return new DailyAttendanceCounts(date, present, onLeave, late, halfDay, wfhAll, absent + onLeave, absent, overtime,
+                checkedIn, wfhOnTime, roster.size(), weeklyOff, roster.isEmpty() && weeklyOff > 0);
     }
 
     /** One point on the attendance trend chart. */

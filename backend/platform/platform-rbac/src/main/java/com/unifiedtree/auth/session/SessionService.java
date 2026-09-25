@@ -89,7 +89,9 @@ public class SessionService {
     public int revoke(UUID tenantId, UUID userId, UUID sessionId) {
         int n = jdbc.update("DELETE FROM auth.refresh_tokens WHERE user_id = ? AND COALESCE(session_id, id) = ?",
                 userId, sessionId);
-        markRevoked(tenantId, sessionId);
+        // Only a session that was this person's: marking any id revoked would let
+        // anyone sign someone else out (for the cache's lifetime) by guessing the id.
+        if (n > 0) markRevoked(tenantId, sessionId);
         return n;
     }
 

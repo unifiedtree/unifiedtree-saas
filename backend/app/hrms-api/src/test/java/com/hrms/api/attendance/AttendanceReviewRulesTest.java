@@ -120,7 +120,7 @@ class AttendanceReviewRulesTest {
                 b, Map.of(YESTERDAY, day("LATE", IN, null, 30, false, false, false, false, "WFH")),
                 c, Map.of(YESTERDAY, day("ON_LEAVE", null, null, null, false, false, false, false, null)));
         var counts = AttendanceController.effectiveCounts(YESTERDAY, List.of(a, b, c), 0, eff, List.of());
-        assertEquals(1, counts.workFromHome());
+        assertEquals(2, counts.workFromHome(), "everyone who worked from home, the late one too");
         assertEquals(1, counts.late());
         assertEquals(0, counts.present());
         assertEquals(1, counts.onLeave());

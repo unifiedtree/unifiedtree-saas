@@ -228,7 +228,7 @@ public class ShiftChangeRequestService {
                  WHERE scr.tenant_id = ? AND scr.status IN ('APPROVED', 'REJECTED')
                    AND scr.decided_at >= now() - make_interval(days => ?)
                  ORDER BY scr.decided_at DESC, scr.created_at DESC
-                 LIMIT """ + MAX_DECIDED_ROWS, MAPPER, tenantId, window);
+                 LIMIT\s""" + MAX_DECIDED_ROWS  /* \s: a text block drops the trailing space, which made "LIMIT200" */, MAPPER, tenantId, window);
     }
 
     /**

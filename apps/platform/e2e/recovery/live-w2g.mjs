@@ -88,7 +88,7 @@ const mfaUsers = ['reader@unifiedtree.demo', 'fin@unifiedtree.demo']
 
 try {
   policyBefore = sql(`select mfa_policy from platform.tenants where id='${tenant}'`)
-  const owner = await login('owner@unifiedtree.demo')
+  let owner = await login('owner@unifiedtree.demo')
   const admin = await login('admin@unifiedtree.demo')
   const hrm = await login('hrm@unifiedtree.demo')
   const mgr = await login('mgr@unifiedtree.demo')
@@ -123,7 +123,7 @@ try {
   const b = await login('owner@unifiedtree.demo')
   check('access tokens carry a session id (sid)', !!a.sid && !!b.sid && a.sid !== b.sid)
   const dbSess = sql(`select concat_ws('|', user_agent is not null, ip_address is not null, session_started_at is not null) from auth.refresh_tokens where session_id='${b.sid}'`)
-  check('a session row records device and IP', dbSess === 'true|true|true', dbSess)
+  check('a session row records device and IP', dbSess === 't|t|t', dbSess)
   const list = await a.call('/v1/me/security/sessions')
   const mine = (list.json || []).find((s) => s.id === a.sid), other = (list.json || []).find((s) => s.id === b.sid)
   check('sessions list shows this one as current, with a device label', list.status === 200 && mine?.current === true && other && other.current === false && /Chrome on Windows/.test(other.device), `${list.json?.length} sessions`)
@@ -144,6 +144,8 @@ try {
   check('"sign out all others" ends the others and keeps this one', others.status === 200 && others.json?.signedOut >= 1 && cAfter.status === 401 && aAfter.status === 200, `others=${JSON.stringify(others.json)} c=${cAfter.status} a=${aAfter.status}`)
   const foreign = await reader.call(`/v1/me/security/sessions/${a2.sid}`, 'DELETE')
   check("someone else's session can't be signed out (404, still alive)", foreign.status === 404 && (await a2.call('/v1/me/security')).status === 200, `status=${foreign.status}`)
+  // "Sign out all others" above also ended the owner session this test uses below: sign in again.
+  owner = await login('owner@unifiedtree.demo')
 
   // ── two-factor for an employee (reader) ──────────────────────────────────
   const setup = await reader.call('/v1/me/security/totp/setup', 'POST')
@@ -159,7 +161,7 @@ try {
   const codes = conf.json?.recoveryCodes || []
   check('confirming turns it on and returns 10 recovery codes', conf.status === 200 && codes.length === 10, `status=${conf.status}`)
   const readerId = userId('reader@unifiedtree.demo')
-  check('DB: is_mfa_enabled, secret encrypted, 10 hashed recovery codes', sql(`select concat_ws('|', is_mfa_enabled, mfa_secret_enc <> ${lit(secret)}, mfa_pending_secret_enc is null, (select count(*) from auth.mfa_recovery_codes r where r.user_id=c.id and r.used_at is null), (select count(*) from auth.mfa_recovery_codes r where r.user_id=c.id and r.code_hash = ${lit(codes[0])})) from auth.user_credentials c where id='${readerId}'`) === 'true|true|true|10|0')
+  check('DB: is_mfa_enabled, secret encrypted, 10 hashed recovery codes', sql(`select concat_ws('|', is_mfa_enabled, mfa_secret_enc <> ${lit(secret)}, mfa_pending_secret_enc is null, (select count(*) from auth.mfa_recovery_codes r where r.user_id=c.id and r.used_at is null), (select count(*) from auth.mfa_recovery_codes r where r.user_id=c.id and r.code_hash = ${lit(codes[0])})) from auth.user_credentials c where id='${readerId}'`) === 't|t|t|10|0')
   const st = await reader.call('/v1/me/security')
   check('status says on, 10 codes left', st.json?.enabled === true && st.json?.recoveryCodesLeft === 10)
   const mobile = await loginRaw('reader@unifiedtree.demo')
@@ -183,7 +185,7 @@ try {
   const oldCode = await reader.call('/v1/me/security/totp/disable', 'POST', { code: codes[2] })
   check('an old recovery code no longer works', oldCode.status === 422, `status=${oldCode.status}`)
   const off = await reader.call('/v1/me/security/totp/disable', 'POST', { code: newCodes[0] })
-  check('turning it off with a code clears it', off.status === 200 && sql(`select concat_ws('|', is_mfa_enabled, mfa_secret_enc is null, (select count(*) from auth.mfa_recovery_codes where user_id='${readerId}')) from auth.user_credentials where id='${readerId}'`) === 'false|true|0', `status=${off.status}`)
+  check('turning it off with a code clears it', off.status === 200 && sql(`select concat_ws('|', is_mfa_enabled, mfa_secret_enc is null, (select count(*) from auth.mfa_recovery_codes where user_id='${readerId}')) from auth.user_credentials where id='${readerId}'`) === 'f|t|0', `status=${off.status}`)
   check('two-factor changes are audited', sql(`select count(distinct action) from audit.events where tenant_id='${tenant}' and action in ('MFA_ENABLED','MFA_DISABLED','MFA_RECOVERY_CODES_REPLACED') and occurred_at >= '${start}'`) === '3')
 
   // ── workspace rule ─────────────────────────────────────────────────────────

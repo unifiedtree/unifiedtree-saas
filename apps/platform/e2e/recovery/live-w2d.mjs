@@ -63,12 +63,12 @@ try {
   const lt = await hrm.call(`/v1/leave/types?companyId=${company}`, 'POST', typeBody)
   made.leaveType = lt.json?.id
   check('leave type: created with monthly accrual and encashment', lt.status === 201 && lt.json?.accrualFrequency === 'MONTHLY' && lt.json?.isEncashable === true && lt.json?.maxEncashDays === 3, `status=${lt.status}`)
-  check('leave type: stored in the database', sql(`select accrual_frequency || '|' || is_encashable || '|' || max_encash_days from leave_mgmt.leave_types where id = '${made.leaveType}'`) === 'MONTHLY|t|3')
+  check('leave type: stored in the database', sql(`select accrual_frequency || '|' || is_encashable || '|' || max_encash_days from leave_mgmt.leave_types where id = '${made.leaveType}'`) === 'MONTHLY|true|3')
   const deny = await reader.call(`/v1/leave/types?companyId=${company}`, 'POST', { ...typeBody, code: `QX${String(stamp).slice(-6)}` })
   check('leave type: an employee cannot create one (403)', deny.status === 403, `status=${deny.status}`)
   const { accrualFrequency, isEncashable, maxEncashDays, ...oldShape } = typeBody
   const kept = await hrm.call(`/v1/leave/types/${made.leaveType}`, 'PUT', { ...oldShape, name: `QA w2d Monthly ${stamp} v2` })
-  check('leave type: an old-shape PUT keeps accrual and encashment', kept.status === 200 && sql(`select accrual_frequency || '|' || is_encashable || '|' || max_encash_days from leave_mgmt.leave_types where id = '${made.leaveType}'`) === 'MONTHLY|t|3', `status=${kept.status}`)
+  check('leave type: an old-shape PUT keeps accrual and encashment', kept.status === 200 && sql(`select accrual_frequency || '|' || is_encashable || '|' || max_encash_days from leave_mgmt.leave_types where id = '${made.leaveType}'`) === 'MONTHLY|true|3', `status=${kept.status}`)
 
   // ── accrual ──────────────────────────────────────────────────────────────
   const run1 = await hrm.call(`/v1/leave/accrual/run?leaveTypeId=${made.leaveType}`, 'POST')
@@ -184,7 +184,7 @@ try {
   const live = num(`select count(*) from hrms.employees where tenant_id = '${tenant}' and is_active and employment_status in ('ACTIVE','PROBATION','NOTICE_PERIOD')`)
   const draft = await hrm.call(`/v1/policy/policies?companyId=${company}`, 'POST', { title: `QA w2d draft ${stamp}`, category: 'Workplace', content: 'QA', version: 'v1', status: 'DRAFT', acknowledgementRequired: true, notifyOnPublish: true, autoRemindAfterDays: 7 })
   if (draft.json?.id) made.policies.push(draft.json.id)
-  check('policy: a draft stores acknowledgement, email and reminder settings', draft.status === 201 && sql(`select acknowledgement_required || '|' || notify_on_publish || '|' || auto_remind_after_days from policy_mgmt.hr_policies where id = '${draft.json?.id}'`) === 't|t|7', `status=${draft.status}`)
+  check('policy: a draft stores acknowledgement, email and reminder settings', draft.status === 201 && sql(`select acknowledgement_required || '|' || notify_on_publish || '|' || auto_remind_after_days from policy_mgmt.hr_policies where id = '${draft.json?.id}'`) === 'true|true|7', `status=${draft.status}`)
   const delDeny = await reader.call(`/v1/policy/policies/${draft.json?.id}`, 'DELETE')
   check('policy: an employee cannot delete (403)', delDeny.status === 403, `status=${delDeny.status}`)
   const del = await hrm.call(`/v1/policy/policies/${draft.json?.id}`, 'DELETE')
@@ -208,7 +208,7 @@ try {
   const remDeny = await reader.call(`/v1/policy/policies/${p2.json?.id}/remind`, 'POST')
   check('policy: an employee cannot send reminders (403)', remDeny.status === 403, `status=${remDeny.status}`)
   const kept2 = await hrm.call(`/v1/policy/policies/${p2.json?.id}`, 'PUT', { title: `QA w2d publish ${stamp}`, category: 'Workplace', content: 'QA 2', version: 'v1' })
-  check('policy: an old-shape PUT keeps the settings', kept2.status === 200 && sql(`select notify_on_publish || '|' || acknowledgement_required from policy_mgmt.hr_policies where id = '${p2.json?.id}'`) === 't|t', `status=${kept2.status}`)
+  check('policy: an old-shape PUT keeps the settings', kept2.status === 200 && sql(`select notify_on_publish || '|' || acknowledgement_required from policy_mgmt.hr_policies where id = '${p2.json?.id}'`) === 'true|true', `status=${kept2.status}`)
   const arch = await hrm.call(`/v1/policy/policies/${p2.json?.id}`, 'DELETE')
   check('policy: deleting a published policy archives it instead', arch.status === 200 && arch.json?.outcome === 'ARCHIVED' && sql(`select status from policy_mgmt.hr_policies where id = '${p2.json?.id}'`) === 'ARCHIVED', `status=${arch.status}`)
 

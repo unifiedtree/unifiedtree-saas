@@ -77,7 +77,7 @@ try {
       const open = await reader.call(`/v1/letters/generated/${gen.json.id}`)
       check('letters: the employee opens their own letter', open.status === 200, `status=${open.status}`)
       const del = await owner.call(`/v1/letters/generated/${gen.json.id}`, 'DELETE')
-      check('letters: owner deletes the test letter', del.status === 204 && sql(`select count(*) from letters.generated where id='${gen.json.id}'`) === '0', `status=${del.status}`)
+      check('letters: owner deletes the test letter', del.status === 204 && sql(`select count(*) from letters.generated where id='${gen.json.id}' and deleted_at is null`) === '0' /* soft delete: deleted_at is set */, `status=${del.status}`)
     }
     const delTpl = await owner.call(`/v1/letters/templates/${tpl.json.id}`, 'DELETE')
     check('letters: owner deletes the test template', delTpl.status === 204 || delTpl.status === 200, `status=${delTpl.status}`)
@@ -104,7 +104,9 @@ try {
   if (companyOff) {
     sql(`update hrms.employees set weekly_off_days=null where id='${READER}'`)
     sql(`update settings.hr_configuration set weekend_days='{5,6}'::int[] where company_id='${company}' and tenant_id='${tenant}'`)
-    const monday = addDays(today, -(isoDow(today) - 1) - 14)
+    // Last week, not two weeks back: days before the company's first attendance record are
+    // 'not tracked' (w1a effective status), and the local data starts mid-September.
+    const monday = addDays(today, -(isoDow(today) - 1) - 7)
     const past = await reader.call(`/v1/attendance/weekly-summary?weekStart=${monday}`)
     const byDow = Object.fromEntries((past.json?.days || []).map((d) => [isoDow(d.date), d.status]))
     check('attendance: with no own weekly offs, the company\'s Fri+Sat are the weekend', past.status === 200 && byDow[5] === 'WEEKEND' && byDow[6] === 'WEEKEND' && byDow[7] !== 'WEEKEND', JSON.stringify(byDow))
@@ -114,7 +116,7 @@ try {
     cleanup.pop()()
     const back = await reader.call(`/v1/attendance/weekly-summary?weekStart=${monday}`)
     const backDow = Object.fromEntries((back.json?.days || []).map((d) => [isoDow(d.date), d.status]))
-    check('attendance: settings put back (own weekly offs apply again)', ownOff === '<null>' || (ownOff.split(',').map(Number).every((d) => backDow[d] === 'WEEKEND')), JSON.stringify(backDow))
+    check('attendance: settings put back (own weekly offs apply again)', ownOff === '<null>' || (ownOff.split(',').map(Number).every((d) => backDow[d] === 'WEEKEND' || ['ON_TIME', 'PRESENT', 'LATE', 'HALF_DAY'].includes(backDow[d]))) /* a punch on an off day shows as worked */, JSON.stringify(backDow))
   } else {
     check('attendance: company HR configuration row exists for the fallback check', false, 'no settings.hr_configuration row for the demo company')
   }

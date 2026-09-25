@@ -122,7 +122,7 @@ try {
   const br = await owner('/v1/hrms/branches', 'POST', { companyId: company, name: `QA Warehouse ${tag}`, code: `QW${tag}`, city: 'Chennai', state: 'Tamil Nadu', branchType: 'WAREHOUSE' })
   const brId = br.json?.id
   if (brId) made.branches.push(brId)
-  check('branch: created as a warehouse', br.status === 201 && br.json?.branchType === 'WAREHOUSE' && sql(`select branch_type||'|'||is_headquarters from org.branches where id='${brId}'`) === 'WAREHOUSE|f', `status=${br.status}`)
+  check('branch: created as a warehouse', br.status === 201 && br.json?.branchType === 'WAREHOUSE' && sql(`select branch_type||'|'||is_headquarters from org.branches where id='${brId}'`) === 'WAREHOUSE|false', `status=${br.status}`)
   const brPut = await owner(`/v1/hrms/branches/${brId}`, 'PUT', { branchType: 'PLANT' })
   check('branch: type changed to plant', brPut.status === 200 && sql(`select branch_type from org.branches where id='${brId}'`) === 'PLANT', `status=${brPut.status}`)
   const brBad = await owner(`/v1/hrms/branches/${brId}`, 'PUT', { branchType: 'CASTLE' })
