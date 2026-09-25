@@ -45,11 +45,16 @@ import java.util.UUID;
 @SecurityRequirement(name = "bearerAuth")
 public class EmployeeController {
 
-    private static final EnumSet<Role> ADMIN_ROLES = EnumSet.of(
-            Role.HR_MANAGER,
-            Role.COMPANY_ADMIN,
-            Role.SUPER_ADMIN
-    );
+    // Permissions, not role names, decide who may do what here (V143.17). The
+    // built-in roles that used to pass by name hold exactly these:
+    //   hrms.employee.write       HR_MANAGER, ADMIN, OWNER, SUPER_ADMIN
+    //   hrms.employee.read        the same, plus FINANCE_LEAD (who already reads
+    //                             every record through /v1/hrms/employees)
+    //   hrms.employee.team.manage DEPT_MANAGER (+ OWNER, SUPER_ADMIN): their own
+    //                             team only, enforced by the object checks below
+    static final String EMPLOYEE_WRITE = "hrms.employee.write";
+    static final String EMPLOYEE_READ = "hrms.employee.read";
+    static final String TEAM_MANAGE = "hrms.employee.team.manage";
 
     private static final EnumSet<Role> STAFF_ONBOARDING_ROLES = EnumSet.of(
             Role.EMPLOYEE,
@@ -75,7 +80,7 @@ public class EmployeeController {
 
     @Operation(summary = "Create a new employee")
     @PostMapping
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('hrms.employee.write')")
     public ResponseEntity<EmployeeResponse> create(@Valid @RequestBody CreateEmployeeRequest request,
                                                    @AuthenticationPrincipal Jwt jwt) {
         // Per-seat pricing is only real if somebody checks it. The seat-quota
@@ -90,14 +95,15 @@ public class EmployeeController {
 
     @Operation(summary = "Create staff member with login role and temporary password")
     @PostMapping("/staff")
-    @PreAuthorize("hasAnyRole('DEPT_MANAGER','HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('hrms.employee.write','hrms.employee.team.manage')")
     public ResponseEntity<EmployeeResponse> createStaff(
             @Valid @RequestBody StaffOnboardingRequest request,
             @AuthenticationPrincipal Jwt jwt) {
         // Seat-quota enforcement is inside EmployeeService.createEmployee, so
         // both /employees and /employees/staff share one gate.
-        List<Role> currentRoles = currentRoles(jwt);
-        boolean adminRequest = hasAnyRole(currentRoles, ADMIN_ROLES);
+        // Company-wide create for HR / admins; a department manager adds staff
+        // only to their own department (scopeToManager below).
+        boolean adminRequest = hasPermission(EMPLOYEE_WRITE);
 
         CreateEmployeeRequest employeeRequest = request.employee();
 
@@ -149,56 +155,53 @@ public class EmployeeController {
 
     @Operation(summary = "Get employee by ID")
     @GetMapping("/{employeeId}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','DEPT_MANAGER') or " +
-                  "(hasRole('EMPLOYEE') and #employeeId == @securityHelper.currentEmployeeId())")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<EmployeeResponse> get(@PathVariable UUID employeeId,
                                                 @AuthenticationPrincipal Jwt jwt) {
-        // B2 FIX (audit 2026-08-15): object-scope IDOR guard. Role check alone
-        // allowed any DEPT_MANAGER in the tenant to read any employee row —
-        // narrow to (a) self, (b) direct-manager of target, or (c) HR/Admin.
-        assertCanAccessEmployee(jwt, employeeId);
+        // B2 FIX (audit 2026-08-15): object-scope IDOR guard: (a) self,
+        // (b) a department manager (hrms.employee.team.manage) for their direct
+        // report, or (c) whoever holds hrms.employee.read.
+        assertCanAccessEmployee(jwt, employeeId, EMPLOYEE_READ, ManagerAccess.WITH_TEAM_PERMISSION);
         return ResponseEntity.ok(employeeService.getEmployee(employeeId));
     }
 
     // ---- B2 IDOR helper ------------------------------------------------------
 
+    /** When a direct manager may act on their report's record. */
+    enum ManagerAccess {
+        /** Never (only self or the company-wide permission). */
+        NONE,
+        /** Any direct manager (the endpoint is open to every signed-in user). */
+        ANY,
+        /** A direct manager who holds hrms.employee.team.manage. */
+        WITH_TEAM_PERMISSION
+    }
+
     /**
      * Object-scope IDOR guard. Caller passes access iff any of:
      *  <ul>
      *   <li>SELF — jwt.employee_id equals {@code targetEmployeeId}</li>
+     *   <li>COMPANY-WIDE — caller holds {@code companyWidePermission}</li>
      *   <li>DIRECT MANAGER — target employee's reporting_manager_id equals
-     *       jwt.employee_id</li>
-     *   <li>HR / Admin — caller has {@code hrms.employees.read.all}
-     *       authority or a role of HR_MANAGER/COMPANY_ADMIN/SUPER_ADMIN</li>
+     *       jwt.employee_id, as {@code managerAccess} allows</li>
      *  </ul>
-     * Otherwise throws AccessDeniedException — 403 back to caller.
+     * Otherwise throws AccessDeniedException — 403 back to caller. Permission
+     * based (V143.17): it used to let HR_MANAGER / OWNER / ADMIN / SUPER_ADMIN
+     * through by role name, which Roles &amp; permissions could never close.
      */
-    private void assertCanAccessEmployee(Jwt jwt, UUID targetEmployeeId) {
+    private void assertCanAccessEmployee(Jwt jwt, UUID targetEmployeeId,
+                                         String companyWidePermission, ManagerAccess managerAccess) {
         if (jwt == null || targetEmployeeId == null) {
             throw new org.springframework.security.access.AccessDeniedException("forbidden");
         }
         UUID caller = extractEmployeeId(jwt);
         if (targetEmployeeId.equals(caller)) return;
+        if (hasPermission(companyWidePermission)) return;
 
-        // HR / Admin permission or role
-        var auth = org.springframework.security.core.context.SecurityContextHolder
-                .getContext().getAuthentication();
-        if (auth != null) {
-            for (var ga : auth.getAuthorities()) {
-                String a = ga.getAuthority();
-                if ("hrms.employees.read.all".equals(a)
-                        || "ROLE_HR_MANAGER".equals(a)
-                        || "ROLE_COMPANY_ADMIN".equals(a)
-                        || "ROLE_OWNER".equals(a)
-                        || "ROLE_ADMIN".equals(a)
-                        || "ROLE_SUPER_ADMIN".equals(a)) {
-                    return;
-                }
-            }
-        }
-
+        boolean managerAllowed = managerAccess == ManagerAccess.ANY
+                || (managerAccess == ManagerAccess.WITH_TEAM_PERMISSION && hasPermission(TEAM_MANAGE));
         // Direct-manager: target.reporting_manager_id == caller
-        if (jdbcTemplate != null) {
+        if (managerAllowed && jdbcTemplate != null) {
             try {
                 UUID mgr = jdbcTemplate.queryForObject(
                         "SELECT reporting_manager_id FROM hrms.employees WHERE id = ?",
@@ -217,7 +220,7 @@ public class EmployeeController {
 
     @Operation(summary = "List employees by company (paginated)")
     @GetMapping("/company/{companyId}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('hrms.employee.read')")
     public ResponseEntity<PageResponse<EmployeeSummaryResponse>> listByCompany(
             @PathVariable UUID companyId,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -226,21 +229,16 @@ public class EmployeeController {
 
     @Operation(summary = "List employees by department")
     @GetMapping("/department/{departmentId}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    @PreAuthorize("hasAnyAuthority('hrms.employee.read','hrms.employee.team.manage')")
     public ResponseEntity<PageResponse<EmployeeSummaryResponse>> listByDepartment(
             @PathVariable UUID departmentId,
             @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal Jwt jwt) {
-        // A DEPT_MANAGER may only list a department they lead or belong to.
+        // A department manager may only list a department they lead or belong to.
         // Without this the endpoint returned every department's roster
         // (names, emails, probation status) to any manager. Uses a raw JDBC
         // check to avoid dragging the workforce repo into this module.
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        boolean isAdminLike = auth != null && auth.getAuthorities().stream().anyMatch(ga -> {
-            String a = ga.getAuthority();
-            return "ROLE_HR_MANAGER".equals(a) || "ROLE_COMPANY_ADMIN".equals(a)
-                    || "ROLE_OWNER".equals(a) || "ROLE_ADMIN".equals(a) || "ROLE_SUPER_ADMIN".equals(a);
-        });
+        boolean isAdminLike = hasPermission(EMPLOYEE_READ);
         if (!isAdminLike && jdbcTemplate != null) {
             UUID actor = extractEmployeeId(jwt);
             try {
@@ -267,7 +265,7 @@ public class EmployeeController {
 
     @Operation(summary = "Update employee details")
     @PutMapping("/{employeeId}")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('hrms.employee.write')")
     public ResponseEntity<EmployeeResponse> update(
             @PathVariable UUID employeeId,
             @Valid @RequestBody UpdateEmployeeRequest request) {
@@ -276,25 +274,25 @@ public class EmployeeController {
 
     @Operation(summary = "Assign or clear the geofence zone an employee must punch in at")
     @PutMapping("/{employeeId}/punch-zone")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    @PreAuthorize("hasAnyAuthority('hrms.employee.write','hrms.employee.team.manage')")
     public ResponseEntity<EmployeeResponse> assignPunchZone(
             @PathVariable UUID employeeId,
             @RequestParam(required = false) UUID zoneId,
             @AuthenticationPrincipal Jwt jwt) {
         // zoneId present -> assign that zone; omitted -> clear (company-wide / branch fallback).
-        assertCanAccessEmployee(jwt, employeeId);
+        assertCanAccessEmployee(jwt, employeeId, EMPLOYEE_WRITE, ManagerAccess.WITH_TEAM_PERMISSION);
         return ResponseEntity.ok(employeeService.assignPunchZone(employeeId, zoneId));
     }
 
     @Operation(summary = "Set an employee's weekly off days (CSV of ISO day numbers 1=Mon..7=Sun)")
     @PutMapping("/{employeeId}/weekly-offs")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','DEPT_MANAGER')")
+    @PreAuthorize("hasAnyAuthority('hrms.employee.write','hrms.employee.team.manage')")
     public ResponseEntity<EmployeeResponse> setWeeklyOffs(
             @PathVariable UUID employeeId,
             @RequestParam(required = false) String days,
             @AuthenticationPrincipal Jwt jwt) {
         // e.g. days=6,7 for Sat+Sun. Blank/omitted falls back to the Sat+Sun default.
-        assertCanAccessEmployee(jwt, employeeId);
+        assertCanAccessEmployee(jwt, employeeId, EMPLOYEE_WRITE, ManagerAccess.WITH_TEAM_PERMISSION);
         return ResponseEntity.ok(employeeService.setWeeklyOffDays(employeeId, days));
     }
 
@@ -303,7 +301,7 @@ public class EmployeeController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> getAccess(@PathVariable UUID employeeId,
                                                         @AuthenticationPrincipal Jwt jwt) {
-        assertCanAccessEmployee(jwt, employeeId);
+        assertCanAccessEmployee(jwt, employeeId, EMPLOYEE_READ, ManagerAccess.ANY);
         // Reads the highest-tier role on the employee's credential. Used by the
         // mobile Staff Profile to show "Role: Department Manager" alongside the
         // existing Account-Activated panel.
@@ -408,7 +406,7 @@ public class EmployeeController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> invitationStatus(@PathVariable UUID employeeId,
                                                                 @AuthenticationPrincipal Jwt jwt) {
-        assertCanAccessEmployee(jwt, employeeId);
+        assertCanAccessEmployee(jwt, employeeId, EMPLOYEE_READ, ManagerAccess.ANY);
         // Source of truth: auth.user_credentials.password_hash + last_login_at.
         // employmentStatus is NOT a reliable signal (a freshly invited employee
         // is PROBATION/ACTIVE — neither "INVITED" nor "DRAFT" exists in the
@@ -444,7 +442,7 @@ public class EmployeeController {
 
     @Operation(summary = "Terminate or accept resignation of an employee")
     @PostMapping("/{employeeId}/terminate")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('hrms.employee.write')")
     public ResponseEntity<Void> terminate(
             @PathVariable UUID employeeId,
             @Valid @RequestBody TerminationRequest request) {
@@ -454,24 +452,25 @@ public class EmployeeController {
 
     @Operation(summary = "Add emergency contact for an employee")
     @PostMapping("/{employeeId}/emergency-contacts")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN','EMPLOYEE')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<EmergencyContactResponse> addEmergencyContact(
             @PathVariable UUID employeeId,
             @Valid @RequestBody EmergencyContactRequest request,
             @AuthenticationPrincipal Jwt jwt) {
-        assertCanAccessEmployee(jwt, employeeId);
+        // Self, a direct manager (as before), or whoever holds hrms.employee.write.
+        assertCanAccessEmployee(jwt, employeeId, EMPLOYEE_WRITE, ManagerAccess.ANY);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(employeeService.addEmergencyContact(employeeId, request));
     }
 
     @Operation(summary = "Get emergency contacts for an employee")
     @GetMapping("/{employeeId}/emergency-contacts")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','OWNER','ADMIN','SUPER_ADMIN') or " +
-                  "(hasRole('EMPLOYEE') and #employeeId == @securityHelper.currentEmployeeId())")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<EmergencyContactResponse>> getEmergencyContacts(
             @PathVariable UUID employeeId,
             @AuthenticationPrincipal Jwt jwt) {
-        assertCanAccessEmployee(jwt, employeeId);
+        // Self, or whoever holds hrms.employee.read (managers never could).
+        assertCanAccessEmployee(jwt, employeeId, EMPLOYEE_READ, ManagerAccess.NONE);
         return ResponseEntity.ok(employeeService.getEmergencyContacts(employeeId));
     }
 
@@ -480,29 +479,14 @@ public class EmployeeController {
         return employeeId != null ? UUID.fromString(employeeId) : UUID.fromString(jwt.getSubject());
     }
 
-    private List<Role> currentRoles(Jwt jwt) {
-        List<String> roles = jwt.getClaimAsStringList("roles");
-        if (roles == null || roles.isEmpty()) {
-            return List.of();
+    /** Whether the signed-in principal holds this permission (JWT authorities). */
+    static boolean hasPermission(String permission) {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || permission == null) return false;
+        for (var ga : auth.getAuthorities()) {
+            if (permission.equals(ga.getAuthority())) return true;
         }
-        // The canonical-prod JWT may carry workspace roles like "OWNER" that are
-        // not present in the legacy hrms Role enum. Silently skip unknowns so a
-        // single unrecognised role string does not crash the whole handler.
-        return roles.stream()
-                .map(name -> {
-                    if ("OWNER".equals(name) || "ADMIN".equals(name)) return Role.COMPANY_ADMIN;
-                    try {
-                        return Role.valueOf(name);
-                    } catch (IllegalArgumentException ex) {
-                        return null;
-                    }
-                })
-                .filter(java.util.Objects::nonNull)
-                .toList();
-    }
-
-    private boolean hasAnyRole(List<Role> roles, EnumSet<Role> candidates) {
-        return roles.stream().anyMatch(candidates::contains);
+        return false;
     }
 
     private List<Role> normalizeAdminStaffRoles(List<Role> requestedRoles) {

@@ -17,24 +17,28 @@ import java.util.UUID;
  */
 record KpiAccessScope(Kind kind, UUID employeeId, Set<UUID> teamIds) {
     enum Kind { ADMIN, TEAM, SELF }
-    static final Set<String> ADMIN_ROLES = Set.of("OWNER", "ADMIN", "COMPANY_ADMIN", "HR_MANAGER", "SUPER_ADMIN");
+    /**
+     * Company-wide performance: running review cycles or managing KPIs. Held by
+     * exactly the roles that used to pass by name (OWNER, ADMIN, HR_MANAGER,
+     * SUPER_ADMIN), and now also by anyone given one of them individually.
+     */
+    static final Set<String> ADMIN_PERMISSIONS = Set.of("hrms.performance.write", "hrms.kpi.manage");
+    /** A team: the My team page permission (DEPT_MANAGER, MANAGER and the admins). */
+    static final String TEAM_PERMISSION = "attendance.team.read";
 
     static KpiAccessScope from(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof Jwt jwt)) {
             throw new AccessDeniedException("Authenticated employee context is required");
         }
-        List<String> roles = new ArrayList<>();
-        List<String> claims = jwt.getClaimAsStringList("roles");
-        if (claims != null) roles.addAll(claims);
-        authentication.getAuthorities().stream().map(a -> a.getAuthority())
-                .filter(a -> a.startsWith("ROLE_")).forEach(roles::add);
-        roles = roles.stream().map(role -> role.startsWith("ROLE_") ? role.substring(5) : role).toList();
-        if (roles.stream().anyMatch(ADMIN_ROLES::contains)) return new KpiAccessScope(Kind.ADMIN, null, null);
+        // Permissions, not role names (V143.17): the Roles & permissions screen
+        // and per-person overrides now decide who sees the whole company.
+        List<String> held = new ArrayList<>();
+        authentication.getAuthorities().forEach(a -> held.add(a.getAuthority()));
+        if (held.stream().anyMatch(ADMIN_PERMISSIONS::contains)) return new KpiAccessScope(Kind.ADMIN, null, null);
         UUID employeeId;
         try { employeeId = UUID.fromString(jwt.getClaimAsString("employee_id")); }
         catch (RuntimeException error) { throw new AccessDeniedException("Employee context is required"); }
-        return new KpiAccessScope(roles.stream().anyMatch(role -> role.equals("MANAGER") || role.equals("DEPT_MANAGER"))
-                ? Kind.TEAM : Kind.SELF, employeeId, null);
+        return new KpiAccessScope(held.contains(TEAM_PERMISSION) ? Kind.TEAM : Kind.SELF, employeeId, null);
     }
 
     KpiAccessScope withTeam(Set<UUID> ids) {

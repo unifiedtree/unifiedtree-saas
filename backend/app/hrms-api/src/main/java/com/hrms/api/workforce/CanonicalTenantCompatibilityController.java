@@ -93,7 +93,7 @@ public class CanonicalTenantCompatibilityController {
 
     @PostMapping("/departments")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('hrms.department.write') or hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('hrms.department.write')")
     public MobileDepartmentResponse createDepartment(@Valid @RequestBody MobileDepartmentRequest request) {
         WorkforceDtos.DepartmentResponse created = departments.create(new WorkforceDtos.CreateDepartmentRequest(
                 request.companyId(),
@@ -109,7 +109,7 @@ public class CanonicalTenantCompatibilityController {
     }
 
     @PostMapping("/departments/{departmentId}/head")
-    @PreAuthorize("hasAuthority('hrms.department.write') or hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('hrms.department.write')")
     public ResponseEntity<Void> assignDepartmentHead(
             @PathVariable UUID departmentId,
             @RequestParam UUID employeeId) {
@@ -130,7 +130,7 @@ public class CanonicalTenantCompatibilityController {
 
     @PostMapping("/branches")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('org.company.write') or hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('org.company.write')")
     public MobileBranchResponse createBranch(@Valid @RequestBody MobileBranchRequest request) {
         WorkforceDtos.BranchResponse created = branches.create(new WorkforceDtos.CreateBranchRequest(
                 request.companyId(),

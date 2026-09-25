@@ -427,9 +427,12 @@ public class WorkspacePlanController {
         // mandate that will charge the workspace's account. Only the
         // workspace owner + platform-declared admin roles can do that.
         // (Client clarification, 2026-08-07.)
-        boolean isAdmin = claims.roles().stream()
-                .anyMatch(r -> "SUPER_ADMIN".equals(r) || "OWNER".equals(r)
-                        || "COMPANY_ADMIN".equals(r));
+        //
+        // Permission-based since V143.17: tenant.settings.write ("Owner-level
+        // workspace changes") is held by exactly OWNER and SUPER_ADMIN, the
+        // roles that used to pass by name. It is CRITICAL, so only an owner can
+        // give it to anyone else.
+        boolean isAdmin = claims.permissions().contains("tenant.settings.write");
         if (!isAdmin) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only workspace admins can manage the plan");
@@ -456,8 +459,7 @@ public class WorkspacePlanController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Your account isn't linked to this workspace — please sign out and back in.");
         }
-        List<String> roles = rolesClaim(jwt);
-        return new JwtClaims(tenantId, accountId, roles);
+        return new JwtClaims(tenantId, accountId, listClaim(jwt, "permissions"));
     }
 
     /**
@@ -504,8 +506,8 @@ public class WorkspacePlanController {
     }
 
     @SuppressWarnings("unchecked")
-    private static List<String> rolesClaim(Jwt jwt) {
-        Object v = jwt.getClaim("roles");
+    private static List<String> listClaim(Jwt jwt, String name) {
+        Object v = jwt.getClaim(name);
         if (v instanceof List<?> l) return (List<String>) l;
         if (v instanceof String s && !s.isBlank()) return List.of(s.split(","));
         return List.of();
@@ -660,6 +662,6 @@ public class WorkspacePlanController {
             boolean autoRenew
     ) {}
 
-    private record JwtClaims(UUID tenantId, UUID accountId, List<String> roles) {}
+    private record JwtClaims(UUID tenantId, UUID accountId, List<String> permissions) {}
     private record TenantMeta(String subdomain, String email) {}
 }

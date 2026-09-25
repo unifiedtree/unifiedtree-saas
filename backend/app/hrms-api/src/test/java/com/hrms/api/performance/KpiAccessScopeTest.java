@@ -31,21 +31,49 @@ class KpiAccessScopeTest {
         com.unifiedtree.security.tenant.TenantContext.clear();
     }
 
+    /** What each built-in role's token carries for these checks (V143.17: permissions, not role names). */
+    private static final java.util.Map<String, List<String>> PERMS = java.util.Map.of(
+            "OWNER", List.of("hrms.performance.write", "hrms.kpi.manage", "attendance.team.read"),
+            "SUPER_ADMIN", List.of("hrms.performance.write", "hrms.kpi.manage", "attendance.team.read"),
+            "HR_MANAGER", List.of("hrms.performance.write", "hrms.kpi.manage", "attendance.team.read"),
+            "ADMIN", List.of("hrms.performance.write", "hrms.kpi.manage", "attendance.team.read"),
+            "DEPT_MANAGER", List.of("hrms.performance.read", "hrms.kpi.progress", "attendance.team.read"),
+            "MANAGER", List.of("attendance.team.read"),
+            "EMPLOYEE", List.of("hrms.performance.review.self"),
+            "CUSTOM_REVIEWER", List.of("hrms.performance.read"));
+
     private JwtAuthenticationToken authentication(String role, UUID employeeId) {
-        var builder = Jwt.withTokenValue("local-test").header("alg", "none")
-                .subject(UUID.randomUUID().toString()).claim("roles", List.of(role));
-        if (employeeId != null) builder.claim("employee_id", employeeId.toString());
-        return new JwtAuthenticationToken(builder.build(), List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+        return authentication(role, employeeId, PERMS.getOrDefault(role, List.of()));
     }
 
-    @Test void onlyAdministrativeRolesHaveUnrestrictedOwnerScope() {
-        for (String role : List.of("OWNER", "ADMIN", "COMPANY_ADMIN", "HR_MANAGER", "SUPER_ADMIN")) {
+    private JwtAuthenticationToken authentication(String role, UUID employeeId, List<String> permissions) {
+        var builder = Jwt.withTokenValue("local-test").header("alg", "none")
+                .subject(UUID.randomUUID().toString()).claim("roles", List.of(role)).claim("permissions", permissions);
+        if (employeeId != null) builder.claim("employee_id", employeeId.toString());
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+        permissions.forEach(p -> authorities.add(new SimpleGrantedAuthority(p)));
+        return new JwtAuthenticationToken(builder.build(), authorities);
+    }
+
+    @Test void onlyAdministrativePermissionsHaveUnrestrictedOwnerScope() {
+        for (String role : List.of("OWNER", "ADMIN", "HR_MANAGER", "SUPER_ADMIN")) {
             assertEquals(KpiAccessScope.Kind.ADMIN, KpiAccessScope.from(authentication(role, null)).kind(), role);
         }
         assertEquals(KpiAccessScope.Kind.TEAM, KpiAccessScope.from(authentication("MANAGER", employee)).kind());
         assertEquals(KpiAccessScope.Kind.TEAM, KpiAccessScope.from(authentication("DEPT_MANAGER", employee)).kind());
         assertEquals(KpiAccessScope.Kind.SELF, KpiAccessScope.from(authentication("EMPLOYEE", employee)).kind());
         assertEquals(KpiAccessScope.Kind.SELF, KpiAccessScope.from(authentication("CUSTOM_REVIEWER", employee)).kind());
+    }
+
+    @Test void roleNamesAloneNoLongerGrantCompanyWideScope() {
+        // A token that says OWNER but carries none of the permissions is SELF.
+        assertEquals(KpiAccessScope.Kind.SELF,
+                KpiAccessScope.from(authentication("OWNER", employee, List.of())).kind());
+        // A manager given hrms.kpi.manage individually sees the whole company.
+        assertEquals(KpiAccessScope.Kind.ADMIN,
+                KpiAccessScope.from(authentication("DEPT_MANAGER", employee,
+                        List.of("attendance.team.read", "hrms.kpi.manage"))).kind());
     }
 
     @Test void missingEmployeeClaimDoesNotFallBackToCredentialSubject() {

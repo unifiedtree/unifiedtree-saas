@@ -29,8 +29,12 @@ public class SettingsController {
     }
 
     // -- HR configuration ----------------------------------------------------
+    // Permission-based since V143.17 (was: role names HR_MANAGER / SUPER_ADMIN
+    // or settings.read). HR managers and super admins hold hrms.employee.write,
+    // and the employee form reads this config, so anyone who can create
+    // employees or change the config may read it.
     @GetMapping("/hr-configuration")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN') or hasAuthority('settings.read')")
+    @PreAuthorize("hasAnyAuthority('settings.read','settings.hrconfig.write','hrms.employee.write')")
     public HrConfigResponse getHrConfig(@RequestParam UUID companyId) {
         return hrConfig.getOrDefault(companyId);
     }
@@ -75,7 +79,7 @@ public class SettingsController {
      * WorkforceEmployeeService.create() so aborted forms never leave gaps.
      */
     @GetMapping("/employee-code/preview")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN') or hasAuthority('settings.read') or hasAuthority('employees.write')")
+    @PreAuthorize("hasAnyAuthority('settings.read','hrms.employee.write')")
     public NextEmployeeCodeResponse previewNextEmployeeCode(@RequestParam UUID companyId) {
         return hrConfig.previewNextEmployeeCode(companyId);
     }
