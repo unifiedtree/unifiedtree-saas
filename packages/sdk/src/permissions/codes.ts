@@ -131,6 +131,10 @@ export const P = {
   ATTENDANCE_FACE_VERIFY_SELF:     'attendance.face.verify.self',
   ATTENDANCE_FACE_ADMIN_READ:      'attendance.face.admin.read',
   ATTENDANCE_FACE_ADMIN_RESET:     'attendance.face.admin.reset',
+  /** Mobile "Punch for team member" (V143.40): punch their own team in/out with a face scan. */
+  ATTENDANCE_ASSISTED_PUNCH_TEAM:  'attendance.assisted_punch.team',
+  /** Mobile "Punch for team member" (V143.40): punch anyone in the company in/out with a face scan. */
+  ATTENDANCE_ASSISTED_PUNCH_ANY:   'attendance.assisted_punch.any',
   /**
    * Manager/Admin manual attendance entry. Backend AttendanceController's
    * /manual-entry endpoint currently piggy-backs on

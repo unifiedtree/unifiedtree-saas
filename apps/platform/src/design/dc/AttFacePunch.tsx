@@ -33,14 +33,15 @@ export class AttFacePunch extends DCLogic {
         createElement('span', { style: { fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: ok ? '#047857' : '#b45309' } }, r.band))
     }
     const columns = [
-      { key: 'name', header: 'Employee', render: (r: any) => createElement(HrAvatar, { name: r.name, sub: r.code } as any) },
+      // "Punched by …" when a manager or HR scanned this person's face on their own phone (assisted punch).
+      { key: 'name', header: 'Employee', render: (r: any) => createElement(HrAvatar, { name: r.name, sub: r.punchedBy ? `${r.code} · Punched by ${r.punchedBy}` : r.code } as any) },
       { key: 'device', header: 'Kiosk', render: (r: any) => createElement('span', { style: { fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 12.5 } }, r.device) },
       { key: 'time', header: 'Time', render: (r: any) => createElement('span', { style: { fontVariantNumeric: 'tabular-nums' } }, r.time + ' IST') },
       { key: 'conf', header: 'How sure the camera was', render: bar },
       { key: 'st', header: 'Status', render: (r: any) => createElement(HrStatusPill, { tone: (ST[r.status] || ST.OK)[0] } as any, (ST[r.status] || ST.OK)[1]) },
     ]
     const review = toReview.map((r) => ({
-      ...r, first: r.name.split(' ')[0], sub: `${r.code} · ${r.device} · ${r.time}`, w: r.conf + '%',
+      ...r, first: r.name.split(' ')[0], sub: `${r.code} · ${r.device} · ${r.time}${r.punchedBy ? ` · Punched by ${r.punchedBy}` : ''}`, w: r.conf + '%',
       bandSure: r.band === 'Low' ? 'partly sure' : `${r.band.toLowerCase()} confidence`, bandMatch: `${r.band} match`,
       rule: 'Medium- and low-confidence punches need a person to check.', needLabel: 'High needed',
       yes: () => p.onReview && p.onReview(r.id, true), no: () => p.onReview && p.onReview(r.id, false),

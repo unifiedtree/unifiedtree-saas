@@ -100,6 +100,8 @@ export interface FaceReviewEvent {
   decidedAt?: string | null
   /** The phone or kiosk the check was made on (V143.25); null when none was recorded. */
   device?: string | null
+  /** Who punched this person in or out on their own phone (assisted face punch, V143.40); null for a self punch. */
+  punchedBy?: string | null
 }
 
 export function useAttendancePolicy(companyId: string | undefined) {

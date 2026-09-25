@@ -242,6 +242,8 @@ export function AttendanceContainer() {
           id: e.id, empId: e.employeeId, code: e.employeeCode || '—', name: e.employeeName || 'Unknown person', dept: e.departmentName || '—', date: e.date, today: isToday,
           // The phone or kiosk the check was made on; older events recorded none.
           device: e.device || 'Not recorded', time: isToday ? clock(e.createdAt) : `${fmtShort(e.date)}, ${clock(e.createdAt)}`, conf: b[0], band: b[1],
+          // A manager or HR punched them in/out on their own phone (assisted face punch).
+          punchedBy: e.punchedBy || null,
           status: e.status, raw: e,
         }
       })
