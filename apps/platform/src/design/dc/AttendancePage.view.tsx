@@ -187,6 +187,11 @@ export function AttendancePageView({ v }: { v: any }) {
             <AttRegularization state={v.state} requests={v.corr} onDecide={v.decideCorr} canApprove={v.isHr} openNewKey={v.newKey} prefillDate={v.prefillDate} onToast={v.toast} {...(v.px?.AttRegularization || {})} />
           </>
         ) : null}
+        {v.tReview ? (
+          <>
+            {txt(v.reviewBlock)}
+          </>
+        ) : null}
         {v.tMine ? (
           <>
             <AttMine state={v.state} onToast={v.toast} {...(v.px?.AttMine || {})} />

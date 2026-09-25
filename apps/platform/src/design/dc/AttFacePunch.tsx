@@ -1,7 +1,9 @@
 // Face Punch — ported from the design component AttFacePunch.dc.html.
-// Events come from GET /v1/attendance/face/admin/events. The API reports a
-// confidence band (high / medium / low), not a percentage, so the bar shows the
-// band instead of a made-up number.
+// Events come from GET /v1/attendance/review/face-events (names and HR
+// decisions included, V143.10). The API reports a confidence band (high /
+// medium / low), not a percentage, so the bar shows the band instead of a
+// made-up number. Medium and low matches need a person to check: "Yes, it's …"
+// records the check, "Not them" rejects the punch (the container asks why).
 import { createElement } from 'react'
 import { DCLogic, dc } from './dc-runtime'
 import { AttFacePunchView } from './AttFacePunch.view'
@@ -40,18 +42,18 @@ export class AttFacePunch extends DCLogic {
     const review = toReview.map((r) => ({
       ...r, first: r.name.split(' ')[0], sub: `${r.code} · ${r.device} · ${r.time}`, w: r.conf + '%',
       bandSure: r.band === 'Low' ? 'partly sure' : `${r.band.toLowerCase()} confidence`, bandMatch: `${r.band} match`,
-      rule: 'Low-confidence punches need a person to check.', needLabel: 'Medium needed',
+      rule: 'Medium- and low-confidence punches need a person to check.', needLabel: 'High needed',
       yes: () => p.onReview && p.onReview(r.id, true), no: () => p.onReview && p.onReview(r.id, false),
     }))
     const views = [
       { key: 'review', label: 'Needs a look', count: isLoading ? '…' : toReview.length, urgent: toReview.length > 0 },
       { key: 'all', label: 'All punches', count: isLoading ? '…' : list.length },
-    ].map((v) => ({ ...v, active: v.key === view, tip: v.key === 'review' ? 'Punches the camera wasn’t sure about' : 'Every face punch today', onClick: () => this.setState({ view: v.key }) }))
+    ].map((v) => ({ ...v, active: v.key === view, tip: v.key === 'review' ? 'Punches the camera wasn’t sure about (last 7 days)' : 'Every face punch today', onClick: () => this.setState({ view: v.key }) }))
     return {
       views, isLoading, isError, isEmpty,
       showAll: view === 'all' && !isError && !isEmpty, showReview: view === 'review' && !isError && !isEmpty,
       hasReview: review.length > 0, noReview: review.length === 0, review, rows, columns,
-      summary: isLoading ? 'Loading face check-ins…' : `${list.length} face check-ins today, newest first`,
+      summary: isLoading ? 'Loading face check-ins…' : `${list.filter((e) => e.today !== false).length} face check-ins today, newest first${list.some((e) => e.today === false) ? ' · older ones still to check are listed too' : ''}`,
       search: { value: this.state.q, onChange: (v: string) => this.setState({ q: v }), placeholder: 'Find a person, code or kiosk…' },
       open: (r: any) => r.empId && p.onNavigate && p.onNavigate('/hrms/employees/' + r.empId),
       retry: { label: 'Try again', onClick: () => p.onRetry && p.onRetry() },

@@ -36,6 +36,9 @@ export interface DayRecordResponse {
   checkInTime?: string
   checkOutTime?: string
   workHours?: number
+  /** Why the day has this status (attendance policy or a reviewer); V143.10. */
+  note?: string | null
+  manual?: boolean
 }
 
 export interface StaffStatusResponse {
@@ -85,6 +88,23 @@ export interface StaffStatusResponse {
   graceMinutes?: number | null
   /** Minutes after the scheduled start — set only for LATE records. */
   lateByMinutes?: number | null
+  /**
+   * V143.10: the day's effective status — the company attendance policy (grace,
+   * half-day rules, late allowance) plus any reviewer's change. PRESENT · LATE ·
+   * HALF_DAY · ABSENT · NOT_MARKED · ON_LEAVE · HOLIDAY · WEEKLY_OFF · NOT_TRACKED.
+   * `status` keeps the older words the mobile app reads.
+   */
+  effectiveStatus?: string | null
+  /** Why the day has this status, in plain English. */
+  statusNote?: string | null
+  /** A reviewer set or excused the day by hand. */
+  statusManual?: boolean
+  lossOfPay?: boolean
+  withinAllowance?: boolean
+  outsideGeofence?: boolean
+  punchRejected?: boolean
+  earlyByMinutes?: number | null
+  workedMinutes?: number | null
 }
 
 export interface AttendanceSummaryCounts {
@@ -157,6 +177,8 @@ export interface WeeklyDayResponse {
   checkInTime?: string
   checkOutTime?: string
   lateByMinutes?: number
+  note?: string | null
+  manual?: boolean
 }
 
 /**

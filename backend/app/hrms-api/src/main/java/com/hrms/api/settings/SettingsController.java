@@ -30,7 +30,9 @@ public class SettingsController {
 
     // -- HR configuration ----------------------------------------------------
     @GetMapping("/hr-configuration")
-    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN') or hasAuthority('settings.read')")
+    // attendance.policy.manage (V143.10): people who edit the attendance policy
+    // on HR Configuration can read the page's other settings (view only).
+    @PreAuthorize("hasAnyRole('HR_MANAGER','COMPANY_ADMIN','SUPER_ADMIN') or hasAuthority('settings.read') or hasAuthority('attendance.policy.manage')")
     public HrConfigResponse getHrConfig(@RequestParam UUID companyId) {
         return hrConfig.getOrDefault(companyId);
     }

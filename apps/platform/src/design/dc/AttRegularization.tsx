@@ -1,6 +1,8 @@
 // Regularization — ported from the design component AttRegularization.dc.html.
 // Team requests: GET /v1/attendance/corrections/approvals; mine: /corrections/my;
 // decisions and new requests go through the container's API callbacks.
+// Proof (V143.10): the file uploads as soon as it's chosen (onUploadProof) and
+// its attachmentUrl goes with the request; approvers open it via onOpenProof.
 import { createElement } from 'react'
 import { DCLogic, dc } from './dc-runtime'
 import { AttRegularizationView } from './AttRegularization.view'
@@ -11,7 +13,7 @@ import { istToday, addDays } from './dates'
 const LBL: Record<string, [string, string]> = { PENDING: ['warn', 'Waiting'], APPROVED: ['ok', 'Approved'], REJECTED: ['red', 'Rejected'] }
 
 export class AttRegularization extends DCLogic {
-  state: any = { view: null, newOpen: false, busy: false, f: { date: addDays(istToday(), -1), in: '09:00', out: '18:00', reason: '' } }
+  state: any = { view: null, newOpen: false, busy: false, proof: null, f: { date: addDays(istToday(), -1), in: '09:00', out: '18:00', reason: '' } }
   componentDidMount() { if (this.props.openNewKey) this.openFromLogs() }
   componentDidUpdate(pp: any) { if (this.props.openNewKey && this.props.openNewKey !== pp.openNewKey) this.openFromLogs() }
   openFromLogs() { this.setState({ view: 'mine', newOpen: true, f: { ...this.state.f, date: this.props.prefillDate || this.state.f.date } }) }
@@ -28,13 +30,14 @@ export class AttRegularization extends DCLogic {
       { key: 'mine', label: 'My requests', count: isEmpty ? 0 : mine.length, tip: 'Fixes you asked for' },
     ].filter((v) => canApprove || v.key === 'mine').map((v) => ({ ...v, active: v.key === view, onClick: () => this.setState({ view: v.key }) }))
     const f = this.state.f, t2m = (t: string) => { const [h, m] = (t || '0:0').split(':').map(Number); return h * 60 + m }
-    const valid = !!(f.date && f.in && f.out && t2m(f.out) > t2m(f.in) && f.reason.trim()) && !this.state.busy
+    const proof = this.state.proof // { name, url?, busy?, error? }
+    const valid = !!(f.date && f.in && f.out && t2m(f.out) > t2m(f.in) && f.reason.trim()) && !this.state.busy && !(proof && proof.busy)
     const submit = async () => {
       if (!valid || !p.onNew) return
       this.setState({ busy: true })
       try {
-        const ok = await p.onNew({ date: f.date, in: f.in, out: f.out, reason: f.reason.trim() })
-        if (ok !== false) this.setState({ newOpen: false, view: 'mine', f: { ...f, reason: '' } })
+        const ok = await p.onNew({ date: f.date, in: f.in, out: f.out, reason: f.reason.trim(), attachmentUrl: proof && proof.url ? proof.url : undefined })
+        if (ok !== false) this.setState({ newOpen: false, view: 'mine', proof: null, f: { ...f, reason: '' } })
       } finally { this.setState({ busy: false }) }
     }
     const newFooter = createElement('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
@@ -44,13 +47,28 @@ export class AttRegularization extends DCLogic {
       canApprove, views, viewTeam: view === 'team', viewMine: view === 'mine', isLoading, isError,
       list, hasList: list.length > 0, caughtUp: !isLoading && !isError && list.length === 0, decided, hasDecided: decided.length > 0,
       decide: (id: string, decision: string, note: string) => p.onDecide && p.onDecide(id, decision, note),
-      attach: (r: any) => { if (r.attachmentUrl) window.open(r.attachmentUrl, '_blank', 'noopener') },
+      attach: (r: any) => { if (p.onOpenProof) p.onOpenProof(r); else if (r.attachmentUrl) window.open(r.attachmentUrl, '_blank', 'noopener') },
       mine: (isEmpty ? [] : mine).map((m) => ({ ...m, tone: (LBL[m.status] || LBL.PENDING)[0], label: (LBL[m.status] || LBL.PENDING)[1] })),
       mineEmpty: isEmpty || mine.length === 0,
-      newOpen: this.state.newOpen, openNew: () => this.setState({ newOpen: true }), closeNew: () => this.setState({ newOpen: false }), newFooter,
+      newOpen: this.state.newOpen, openNew: () => this.setState({ newOpen: true, proof: null }), closeNew: () => this.setState({ newOpen: false, proof: null }), newFooter,
       f, timeError: f.in && f.out && t2m(f.out) <= t2m(f.in), todayMax: istToday(),
-      // Attaching proof needs an upload API the backend doesn't have yet.
-      proofOff: true, proofTip: 'Coming soon', proofHelp: 'A gate log, an email or a photo. PDF or image, up to 5 MB. Coming soon.',
+      proofOff: !p.onUploadProof || this.state.busy, proofTip: 'A PDF, JPG or PNG up to 5 MB',
+      proofHelp: !proof ? 'A gate log, an email or a photo. PDF or image, up to 5 MB.'
+        : proof.busy ? `Attaching ${proof.name}…` : proof.error ? `${proof.name}: ${proof.error}` : `Attached: ${proof.name}. HR sees it with your request.`,
+      onProof: async (e: any) => {
+        const file: File | undefined = e && e.target && e.target.files ? e.target.files[0] : undefined
+        if (!file) { this.setState({ proof: null }); return }
+        const okType = /\.(pdf|jpe?g|png)$/i.test(file.name) || /^(application\/pdf|image\/(jpeg|png))$/.test(file.type)
+        if (!okType) { this.setState({ proof: { name: file.name, error: 'Choose a PDF, JPG or PNG file.' } }); return }
+        if (file.size > 5 * 1024 * 1024) { this.setState({ proof: { name: file.name, error: 'This file is over 5 MB. Choose a smaller one.' } }); return }
+        this.setState({ proof: { name: file.name, busy: true } })
+        try {
+          const up = await p.onUploadProof(file)
+          this.setState({ proof: { name: up.fileName || file.name, url: up.attachmentUrl } })
+        } catch (err: any) {
+          this.setState({ proof: { name: file.name, error: (err && err.message) || 'Couldn’t attach it. Try again, or send the request without it.' } })
+        }
+      },
       setDate: (e: any) => this.setState({ f: { ...f, date: e.target.value } }),
       setIn: (e: any) => this.setState({ f: { ...f, in: e.target.value } }),
       setOut: (e: any) => this.setState({ f: { ...f, out: e.target.value } }),

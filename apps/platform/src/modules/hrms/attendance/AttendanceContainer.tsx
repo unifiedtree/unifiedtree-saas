@@ -3,7 +3,7 @@
 // /hrms/shifts. Every tab gets its own loading / error state. Where the API has
 // no value for something the design shows, the design gets a dash instead of a
 // made-up number (see docs/Designs/STATIC-UI-TO-BUILD.md §4).
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -20,12 +20,16 @@ import {
   type StaffStatusResponse, type CorrectionRequestResponse,
 } from '../api/useAttendance'
 import { dayBuckets, trendBuckets, type DayBuckets } from './attendanceBuckets'
-import { useFaceEvents, useFaceEnrollments } from './face/useFacePunchLogs'
+import {
+  useReviewExceptions, useFaceReviewEvents, useChangeDayStatus, useDecideFacePunch, uploadCorrectionProof, correctionProofLink,
+  statusLabel, type ReviewException, type FaceReviewEvent,
+} from '../api/useAttendanceReview'
+import { ReviewList } from './ReviewList'
+import { StatusChangeDrawer, type StatusTarget } from './StatusChangeDrawer'
 import { useShiftPolicies, useCreateShiftPolicy, useUpdateShiftPolicy, useDeleteShiftPolicy, type ShiftPolicy } from '../api/useShiftPolicies'
 import { usePendingShiftRequests, useDecideShiftRequest, type ShiftRequest } from '../api/useShiftRequests'
 import { useHolidays } from '../api/useSettings'
 import { useAttendanceSummaryReport, useLateMarksReport } from '../api/useReports'
-import type { PageResponse, WorkforceEmployee } from '../api/useWorkforce'
 
 type St = 'live' | 'loading' | 'empty' | 'error'
 interface Q { isLoading: boolean; isError: boolean }
@@ -48,8 +52,10 @@ const SOURCE: Record<string, [string, string]> = {
   MANUAL: ['Added by HR', 'pencil'], OVERRIDE: ['Manager override', 'shield'], MANAGER_OVERRIDE: ['Manager override', 'shield'],
 }
 const sourceOf = (m: string): [string, string] => SOURCE[m] || [m.charAt(0) + m.slice(1).toLowerCase().replace(/_/g, ' '), 'clock']
-/** The face API gives a match band, never a score — bar length per band (Medium and up clear the design's 85% marker). */
-const BAND: Record<string, [number, string]> = { HIGH: [96, 'High'], MEDIUM: [88, 'Medium'], LOW: [70, 'Low'], REJECTED: [30, 'Rejected'], UNKNOWN: [0, 'Unknown'] }
+/** The face API gives a match band, never a score — bar length per band. Only High clears the 85% marker: Medium and Low need a person to check (V143.10). */
+const BAND: Record<string, [number, string]> = { HIGH: [96, 'High'], MEDIUM: [80, 'Medium'], LOW: [70, 'Low'], REJECTED: [30, 'Rejected'], UNKNOWN: [0, 'Unknown'] }
+/** Last path segment of a proof link ("r2://…/gate-log.pdf" or a web link). */
+const proofName = (url: string) => { try { return decodeURIComponent(url.replace(/[?#].*$/, '').split('/').pop() || '') || 'Proof' } catch { return 'Proof' } }
 
 interface MeResponse { id: string }
 interface CurrentShift { shiftPolicyId?: string | null; effectiveFrom?: string | null }
@@ -66,17 +72,6 @@ async function loadOvertime(from: string, to: string) {
   }
   return all
 }
-/** The directory, to put names on face events (they carry only a login id → email). */
-async function loadDirectory() {
-  const all: WorkforceEmployee[] = []
-  for (let page = 0; page < 10; page++) {
-    const r = await apiJson<PageResponse<WorkforceEmployee>>(`/v1/hrms/employees?page=${page}&pageSize=200`)
-    all.push(...r.content)
-    if (page + 1 >= r.totalPages) break
-  }
-  return all
-}
-
 export function AttendanceContainer() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -99,9 +94,12 @@ export function AttendanceContainer() {
   const canShiftAdmin = usePermission('attendance.workforce.admin') // shift policies + assigning shifts
   const canReport = usePermission(P.HRMS_REPORT_ATTENDANCE)
   const canSelf = usePermission(P.ATTENDANCE_CHECKIN_SELF)
-  const canEmpRead = usePermission(P.HRMS_EMPLOYEE_READ)
+  const canReview = usePermission('attendance.status.review') // the review list (V143.10)
+  const canOverride = usePermission('attendance.status.override') // change a day, decide face punches
   const isHr = canTeam
-  const onFace = section === 'daily' && tab === 'face'
+  const canFaceList = canFace || canReview
+  const weekAgo = addDays(today, -6)
+  const [target, setTarget] = useState<StatusTarget | null>(null)
 
   // ── data ──
   const { data: companies = [] } = useCompanies()
@@ -113,9 +111,9 @@ export function AttendanceContainer() {
   const holidays = useHolidays(companyId, y)
   const summary = useAttendanceSummaryReport(canReport ? companyId || null : null, monthStart, today, { enabled: section === 'analytics' })
   const lateMarks = useLateMarksReport(canReport && section === 'analytics' ? companyId || null : null, monthStart, today)
-  const face = useFaceEvents(undefined, canFace)
-  const enrollments = useFaceEnrollments(canFace && onFace)
-  const directory = useQuery({ queryKey: ['hrms', 'employees', 'face-lookup'], queryFn: loadDirectory, enabled: canFace && canEmpRead && onFace, staleTime: 300_000 })
+  // Face punches with names and HR decisions: today's, plus older ones still to check.
+  const face = useFaceReviewEvents(weekAgo, today, canFaceList && section === 'daily')
+  const review = useReviewExceptions(weekAgo, today, canReview && section === 'daily')
   const approvals = useCorrectionApprovals('PENDING', { enabled: canApprove, size: 100 })
   const approved = useCorrectionApprovals('APPROVED', { enabled: canApprove && section === 'daily', size: 5 })
   const rejected = useCorrectionApprovals('REJECTED', { enabled: canApprove && section === 'daily', size: 5 })
@@ -145,6 +143,8 @@ export function AttendanceContainer() {
   const updatePolicy = useUpdateShiftPolicy()
   const deletePolicy = useDeleteShiftPolicy()
   const decideSreq = useDecideShiftRequest()
+  const changeStatus = useChangeDayStatus()
+  const decideFace = useDecideFacePunch()
   const assign = useMutation({
     mutationFn: ({ emp, sid, from }: { emp: string; sid: string; from: string }) =>
       apiJson(`/v1/shifts/employee/${emp}`, { method: 'POST', body: JSON.stringify({ shiftPolicyId: sid, effectiveFrom: from }) }),
@@ -180,12 +180,17 @@ export function AttendanceContainer() {
       return sp ? `${s.shiftName} · ${fmtTime(hhmm(sp.startTime))}–${fmtTime(hhmm(sp.endTime))}` : `${s.shiftName}${s.expectedCheckInAt ? ' · ' + clock(s.expectedCheckInAt) : ''}`
     }
     const rowOf = (s: StaffStatusResponse) => {
-      const status = !s.checkInAt ? (s.onLeave ? 'ON_LEAVE' : 'NOT_MARKED') : s.status === 'HALF_DAY' ? 'HALF_DAY' : s.status === 'LATE' ? 'LATE' : s.attendanceType === 'WFH' ? 'WFH' : 'PRESENT'
+      // The effective status (company attendance policy + reviewers' changes) when the server sends it.
+      const eff = s.effectiveStatus
+      const status = eff
+        ? (eff === 'PRESENT' && s.attendanceType === 'WFH' ? 'WFH' : eff)
+        : !s.checkInAt ? (s.onLeave ? 'ON_LEAVE' : 'NOT_MARKED') : s.status === 'HALF_DAY' ? 'HALF_DAY' : s.status === 'LATE' ? 'LATE' : s.attendanceType === 'WFH' ? 'WFH' : 'PRESENT'
       return {
+        effective: eff || null, note: s.statusNote || null, manual: !!s.statusManual,
         id: s.employeeId, code: s.employeeCode, name: s.fullName, dept: s.departmentName || '—',
         shift: shiftLabel(s), status,
         in: clock(s.checkInAt), exp: clock(s.expectedCheckInAt), late: s.lateByMinutes || 0, out: clock(s.checkOutAt), worked: worked(s.checkInAt, s.checkOutAt), earlyOut: !!s.earlyCheckout,
-        src: s.checkInAt ? s.locationName || 'Checked in' : s.onLeave ? 'On approved leave' : 'No punch yet',
+        src: s.punchRejected ? 'Face punch rejected by HR' : s.checkInAt ? (s.locationName || 'Checked in') + (s.outsideGeofence ? ' · outside the zone' : '') : s.onLeave ? 'On approved leave' : 'No punch yet',
       }
     }
     const staff = team.data?.staffStatuses ?? []
@@ -217,18 +222,15 @@ export function AttendanceContainer() {
       })),
     }
 
-    // Face punches today. Events carry the login id; the enrolment list gives
-    // its email and the directory turns that into a person.
-    const emailByUser = new Map((enrollments.data ?? []).map((e) => [e.employeeId, (e.email || '').toLowerCase()]))
-    const empByEmail = new Map((directory.data ?? []).map((e) => [(e.email || '').toLowerCase(), e]))
+    // Face punches: today's, and older ones still waiting for a check. Names come with the events.
     const faceRows = (face.data ?? [])
-      .filter((e) => (e.purpose === 'PUNCH_IN' || e.purpose === 'PUNCH_OUT') && istToday(new Date(e.createdAt)) === today)
-      .map((e) => {
-        const b = BAND[e.scoreBucket || 'UNKNOWN'] || BAND.UNKNOWN, email = emailByUser.get(e.employeeId) || '', emp = email ? empByEmail.get(email) : undefined
+      .filter((e) => e.date === today || e.status === 'REVIEW')
+      .map((e: FaceReviewEvent) => {
+        const b = BAND[e.scoreBucket || 'UNKNOWN'] || BAND.UNKNOWN, isToday = e.date === today
         return {
-          id: e.id, empId: emp?.id || '', code: emp?.employeeCode || '—', name: emp ? [emp.firstName, emp.lastName].filter(Boolean).join(' ') : email || 'Unknown person',
-          device: e.purpose === 'PUNCH_OUT' ? 'Punch out' : 'Punch in', time: clock(e.createdAt), conf: b[0], band: b[1],
-          status: e.result !== 'PASS' ? 'FAILED' : e.scoreBucket === 'LOW' ? 'REVIEW' : 'OK',
+          id: e.id, empId: e.employeeId, code: e.employeeCode || '—', name: e.employeeName || 'Unknown person', dept: e.departmentName || '—', date: e.date, today: isToday,
+          device: e.purpose === 'PUNCH_OUT' ? 'Punch out' : 'Punch in', time: isToday ? clock(e.createdAt) : `${fmtShort(e.date)}, ${clock(e.createdAt)}`, conf: b[0], band: b[1],
+          status: e.status, raw: e,
         }
       })
 
@@ -238,7 +240,7 @@ export function AttendanceContainer() {
       return {
         id: r.id, empId: r.employeeId, name: r.employeeName || p.name, emp: r.employeeCode || p.code, dept: r.departmentName || p.dept,
         date: fmtShort(r.requestedDate), in: clock(r.requestedCheckInAt), out: clock(r.requestedCheckOutAt), reason: r.reason,
-        attachment: r.attachmentUrl && /^https?:\/\//i.test(r.attachmentUrl) ? fileName(r.attachmentUrl) : null, attachmentUrl: r.attachmentUrl,
+        attachment: r.attachmentUrl && /^https?:\/\//i.test(r.attachmentUrl) ? fileName(r.attachmentUrl) : r.attachmentUrl && r.attachmentUrl.startsWith('r2://') ? proofName(r.attachmentUrl) : null, attachmentUrl: r.attachmentUrl,
         status: r.status, raised: `${fmtShort(istToday(new Date(r.createdAt)))}, ${clock(r.createdAt)}`, note: r.approverComment,
       }
     }
@@ -306,19 +308,25 @@ export function AttendanceContainer() {
       reason: r.reason || '', status: r.status, note: r.decisionNote || '',
     }))
 
+    // Review list (V143.10): day exceptions; face punches to check come from the face list.
+    const reviewItems: ReviewException[] = review.data ?? []
+    const reviewFaces: FaceReviewEvent[] = (face.data ?? []).filter((e) => e.status === 'REVIEW')
+
     return {
+      reviewItems, reviewFaces, reviewCount: reviewItems.length,
       today, todayLabel: fmtWd(today), counts: todayCounts, logs, ov, face: faceRows, corr, mineCorr, month, reportLink,
       shifts: shiftList, roster, ot: otRows, otSummary: [...otBy.values()], otRange: `1–${Number(today.slice(8, 10))} ${MON[m - 1]}`,
       sreq: sreqRows, myReq: myReqRows, myShift: myShift.data?.shiftPolicyId || null, mySince: myShift.data?.effectiveFrom ? fmtShort(myShift.data.effectiveFrom) : '',
     }
-  }, [team.data, teamToday.data, trend.data, sources.data, holidays.data, summary.data, lateMarks.data, face.data, enrollments.data, directory.data,
+  }, [team.data, teamToday.data, trend.data, sources.data, holidays.data, summary.data, lateMarks.data, face.data, review.data,
     approvals.data, approved.data, rejected.data, myCorr.data, monthStats.data, history.data, policies.data, schedule.data, myShift.data,
     overtime.data, sreq.data, myReq.data, companyId, monthStart, today, date, y, m])
 
   const states: Record<string, St> = {
     logs: stateOf(team, canTeam),
     ov: stateOf(teamToday, canTeam),
-    face: stateOf(face, canFace, !data.face.length),
+    face: stateOf(face, canFaceList, !data.face.length),
+    review: stateOf(review, canReview),
     corr: stateOf(canApprove ? approvals : myCorr, true),
     month: stateOf(monthStats, canSelf),
     shifts: stateOf(policies, !!companyId, !data.shifts.length),
@@ -351,12 +359,35 @@ export function AttendanceContainer() {
     decideCorr: (id: string, d: string, note: string) =>
       decideCorr.mutateAsync({ id, status: d === 'APPROVED' ? 'APPROVED' : 'REJECTED', comment: note?.trim() || undefined })
         .then(() => done(d === 'APPROVED' ? 'Fix approved — attendance updated' : 'Fix rejected — attendance stays as it was'), failed('Could not record the decision', approvals.refetch)),
-    newCorr: (q: { date: string; in: string; out: string; reason: string }) =>
+    newCorr: (q: { date: string; in: string; out: string; reason: string; attachmentUrl?: string }) =>
       // Times are IST, as the page labels them, whatever the browser's timezone.
-      createCorr.mutateAsync({ requestedDate: q.date, requestedCheckInAt: new Date(`${q.date}T${q.in}:00+05:30`).toISOString(), requestedCheckOutAt: new Date(`${q.date}T${q.out}:00+05:30`).toISOString(), reason: q.reason })
-        .then(() => done('Fix request sent'), failed('Could not send the request')),
-    // No API records an HR check on a face punch yet — say so instead of pretending.
-    reviewFace: () => { toast.message('Checking face punches isn’t available yet', { description: 'The punch stays as the camera recorded it.' }) },
+      createCorr.mutateAsync({ requestedDate: q.date, requestedCheckInAt: new Date(`${q.date}T${q.in}:00+05:30`).toISOString(), requestedCheckOutAt: new Date(`${q.date}T${q.out}:00+05:30`).toISOString(), reason: q.reason, ...(q.attachmentUrl ? { attachmentUrl: q.attachmentUrl } : {}) })
+        .then(() => done(q.attachmentUrl ? 'Fix request sent with your proof' : 'Fix request sent'), failed('Could not send the request')),
+    uploadProof: (file: File) => uploadCorrectionProof(file),
+    // The window opens on the click (so it isn't blocked), then goes to the short-lived signed link.
+    openProof: (r: { id: string; attachmentUrl?: string | null }) => {
+      const w = window.open('', '_blank')
+      if (w) w.opener = null
+      correctionProofLink(r.id).then((l) => { if (w) w.location.href = l.url; else window.open(l.url, '_blank', 'noopener') })
+        .catch((e) => { w?.close(); toast.error('Couldn’t open the proof', { description: errText(e) }) })
+    },
+    // "Yes, it's …" records the check; "Not them" asks why, then rejects the punch.
+    reviewFace: (id: string, yes: boolean) => {
+      const e = (face.data ?? []).find((x) => x.id === id)
+      if (!e) return
+      if (!canOverride) { toast.error('You can’t check face punches', { description: 'Ask an admin for the “Change a day’s attendance status” permission.' }); return }
+      if (yes) {
+        decideFace.mutateAsync({ id, decision: 'CONFIRMED' })
+          .then(() => done(`Checked — the punch stays as ${e.employeeName.split(' ')[0]}’s`), failed('Could not record the check', face.refetch))
+        return
+      }
+      setTarget({ kind: 'face-reject', employeeId: e.employeeId, name: e.employeeName, sub: `${e.employeeCode}${e.departmentName ? ' · ' + e.departmentName : ''}`, date: e.date, faceEventId: e.id,
+        facts: [{ k: 'Time', v: `${clock(e.createdAt)} IST` }, { k: 'Match', v: (BAND[e.scoreBucket || 'UNKNOWN'] || BAND.UNKNOWN)[1] }] })
+    },
+    // Daily Logs drawer → "Change status".
+    openStatus: (row: { id: string; name: string; code: string; dept: string; status: string; effective?: string | null; note?: string | null; manual?: boolean; in: string; out: string }, iso: string) =>
+      setTarget({ kind: 'status', employeeId: row.id, name: row.name, sub: `${row.code} · ${row.dept}`, date: iso || today, status: row.effective || (row.status === 'WFH' ? 'PRESENT' : row.status),
+        note: row.note, manual: row.manual, facts: [{ k: 'Came in', v: row.in }, { k: 'Left', v: row.out }] }),
     saveShift: (s: { id: string | null; name: string; start: string; end: string; grace: number; breakMin: number; tone: string }) => {
       if (!companyId) return false
       const prev = s.id ? data.shifts.find((x) => x.id === s.id) : undefined
@@ -394,6 +425,30 @@ export function AttendanceContainer() {
       newSreq.mutateAsync({ requestedShiftPolicyId: q.to, effectiveDate: q.date, reason: q.reason }).then(() => done('Request sent to HR'), failed('Could not send the request')),
   }
 
+  // Saves the drawer: a day's new status, or a face punch rejection.
+  const submitTarget = (t: StatusTarget, status: string, reason: string) => {
+    if (t.kind === 'face-reject' && t.faceEventId) {
+      return decideFace.mutateAsync({ id: t.faceEventId, decision: 'REJECTED', note: reason })
+        .then((r) => done(`Punch rejected — ${t.name.split(' ')[0]}’s ${fmtShort(t.date)} now counts as ${statusLabel(r.day?.status).toLowerCase()}`), failed('Could not reject the punch', face.refetch))
+    }
+    return changeStatus.mutateAsync({ employeeId: t.employeeId, date: t.date, status, reason })
+      .then((d) => done(status === 'EXCUSE' ? `Excused — ${t.name.split(' ')[0]}’s ${fmtShort(t.date)} counts as present` : `${t.name.split(' ')[0]}’s ${fmtShort(t.date)} is now ${statusLabel(d.status).toLowerCase()}`),
+        failed('Could not change the status', review.refetch))
+  }
+  const reviewBlock = (
+    <ReviewList
+      state={review.isLoading || face.isLoading ? 'loading' : review.isError ? 'error' : 'live'}
+      errorText={review.isError ? errText(review.error) : undefined}
+      items={data.reviewItems} faces={data.reviewFaces} canOverride={canOverride}
+      onRetry={() => { review.refetch(); face.refetch() }}
+      onFace={(f, yes) => actions.reviewFace(f.id, yes)}
+      onExcuse={(i) => setTarget({ kind: 'status', employeeId: i.employeeId, name: i.employeeName, sub: `${i.employeeCode}${i.departmentName ? ' · ' + i.departmentName : ''}`, date: i.date, status: i.status, note: i.note, preset: 'EXCUSE',
+        facts: [{ k: 'Came in', v: clock(i.checkIn) }, { k: 'Left', v: clock(i.checkOut) }] })}
+      onChange={(i) => setTarget({ kind: 'status', employeeId: i.employeeId, name: i.employeeName, sub: `${i.employeeCode}${i.departmentName ? ' · ' + i.departmentName : ''}`, date: i.date, status: i.status, note: i.note,
+        facts: [{ k: 'Came in', v: clock(i.checkIn) }, { k: 'Left', v: clock(i.checkOut) }] })}
+    />
+  )
+
   return (
     <DesignFrame>
       {/* The design pulls the page up so its section bar sits right under the header. */}
@@ -405,7 +460,7 @@ export function AttendanceContainer() {
           date={date}
           viewAs={isHr ? 'admin' : 'employee'}
           mobile={mobile}
-          data={data}
+          data={{ ...data, reviewBlock }}
           states={states}
           actions={actions}
           canApproveCorr={canApprove}
@@ -414,10 +469,13 @@ export function AttendanceContainer() {
           canEditShifts={canShiftAdmin}
           canAssign={canShiftAdmin}
           canDecideOt={canOt}
+          canReview={canReview}
+          canOverride={canOverride}
           onNavigate={(path: string) => navigate(path)}
           onTab={(route: string, next: string) => navigate(`${route}?tab=${next}`, { replace: route === location.pathname })}
         />
       </div>
+      {target && <StatusChangeDrawer target={target} onClose={() => setTarget(null)} onSubmit={submitTarget} />}
     </DesignFrame>
   )
 }

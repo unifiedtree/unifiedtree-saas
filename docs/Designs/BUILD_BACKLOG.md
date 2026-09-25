@@ -32,8 +32,6 @@ Priorities:
 
 **P0-2 Apply the HR configuration settings that are only saved** (§8)
 - Default probation length: set `probation_end_date = date_of_joining + N months` on employee create when none is given.
-- Late arrival (company grace, automatic deduction): wire it into the late-mark and LOP logic, or remove the fields.
-- Attendance rules (geofence on mobile, WFH allowed): read them per company in `AttendanceController.checkIn` and `WfhController`.
 - Retirement age: a "retirement due" list or alert.
 - *Done when:* each switch changes behaviour, and the page's "saved, not applied" notes are gone.
 
@@ -50,7 +48,6 @@ Priorities:
 
 **P0-5 File uploads that are placeholders**
 - Expense receipts (§11.3): upload on expense items (same R2 storage as documents); show and download from the claim.
-- Regularization proof (§4): upload and store its URL as `attachmentUrl`; show it on the approval card.
 - *Done when:* the "Coming soon" and "can't attach" notes are gone and the files open for the approver.
 
 **P0-6 Payslip breakdown for the employee** (§11.2)
@@ -68,9 +65,6 @@ Priorities:
 **P0-9 Enforce one headquarters per company on the server** (§3)
 - *Now:* the UI switches off the old HQ in a second call.
 - *Build:* a unique rule or transactional swap in the branch service.
-
-**P0-10 Face punch review** (§4)
-- *Build:* an API for HR to confirm or reject a low-confidence face punch ("Yes, it's …" / "Not them"), recorded on the event.
 
 ---
 
@@ -105,7 +99,6 @@ Priorities:
 - Change-shift note.
 - `/v1/team/schedule` with `shiftPolicyId` and `since`.
 - Face events with the kiosk / device.
-- Per-day checked-in totals for past days (removes the WFH + late double count).
 
 **Reports** (§9)
 - Server-side PDF export (direct download, scheduled emails).

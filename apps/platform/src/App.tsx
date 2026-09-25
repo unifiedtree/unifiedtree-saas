@@ -458,7 +458,7 @@ const ROUTE_TREE = (
         <Route
           path="/hrms/settings/work-time"
           element={
-            <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_READ, P.HRMS_PROBATION_CONFIG_READ]}>
+            <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_READ, P.HRMS_PROBATION_CONFIG_READ, 'attendance.policy.manage']}>
               <ModuleGate moduleKey="hrms"><HrConfigurationPage /></ModuleGate>
             </RouteGuard>
           }
@@ -628,7 +628,7 @@ const ROUTE_TREE = (
         <Route
           path="/hrms/settings"
           element={
-            <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_READ, P.HRMS_PROBATION_CONFIG_READ]}>
+            <RouteGuard anyOf={[P.SETTINGS_HRCONFIG_WRITE, P.SETTINGS_READ, P.HRMS_PROBATION_CONFIG_READ, 'attendance.policy.manage']}>
               <ModuleGate moduleKey="hrms"><HrConfigurationPage /></ModuleGate>
             </RouteGuard>
           }
