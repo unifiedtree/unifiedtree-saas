@@ -11,6 +11,8 @@ import com.unifiedtree.rbac.entity.UserRole;
 import com.unifiedtree.rbac.repository.RoleRepository;
 import com.unifiedtree.rbac.repository.UserRoleRepository;
 import com.unifiedtree.notifications.events.EmployeeWelcomeEvent;
+import com.unifiedtree.notifications.template.NotificationEmailComposer;
+import com.unifiedtree.notifications.template.TemplateRenderer;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +48,8 @@ public class InvitationService {
     private final InvitationEmailSender emailSender;
     private final JdbcTemplate jdbc;
     private final ApplicationEventPublisher eventPublisher;
+    /** Uses the company's "account.invitation" / "account.password_reset" email template when one is active. */
+    private final NotificationEmailComposer emailComposer;
 
     @Value("${unifiedtree.mail.invite-url-base:${unifiedtree.invitation.platform-base-url:http://localhost:3001}}")
     private String platformBaseUrl;
@@ -58,7 +62,8 @@ public class InvitationService {
                              AuthService canonicalAuthService,
                              InvitationEmailSender emailSender,
                              JdbcTemplate jdbc,
-                             ApplicationEventPublisher eventPublisher) {
+                             ApplicationEventPublisher eventPublisher,
+                             NotificationEmailComposer emailComposer) {
         this.credRepo            = credRepo;
         this.userRoleRepo        = userRoleRepo;
         this.roleRepo            = roleRepo;
@@ -68,6 +73,7 @@ public class InvitationService {
         this.emailSender         = emailSender;
         this.jdbc                = jdbc;
         this.eventPublisher      = eventPublisher;
+        this.emailComposer       = emailComposer;
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -182,8 +188,11 @@ public class InvitationService {
 
         // Queue the invite email (async, best-effort) once this tx commits — a slow or
         // unreachable SMTP server must never block the request or roll back the token.
-        queueInviteEmail(token.getId(), tenantId, email, "Welcome to " + tenantName,
+        // Always sent (it's how they set a password), in the company's wording if it has a template.
+        var invite = emailComposer.compose(tenantId, (UUID) emp.get("company_id"), "account.invitation",
+            inviteValues(firstName, tenantName, inviteUrl), "Welcome to " + tenantName,
             inviteHtml(firstName, tenantName, inviteUrl));
+        queueInviteEmail(token.getId(), tenantId, email, invite.subject(), invite.html());
 
         log.info("Invitation queued for {} (employee {})", email, employeeId);
         return new InvitationResult(true, expiresAt);
@@ -231,8 +240,10 @@ public class InvitationService {
         tokenRepo.save(token);
 
         String inviteUrl = buildUrl(tenantSlug, "/accept-invite?token=" + rawToken);
-        queueInviteEmail(token.getId(), tenantId, creds.getEmail(), "Welcome to " + tenantName,
+        var invite = emailComposer.compose(tenantId, loadCompanyId(creds.getEmployeeId(), tenantId), "account.invitation",
+            inviteValues(firstName, tenantName, inviteUrl), "Welcome to " + tenantName,
             inviteHtml(firstName, tenantName, inviteUrl));
+        queueInviteEmail(token.getId(), tenantId, creds.getEmail(), invite.subject(), invite.html());
 
         log.info("Workspace invite queued for {} (no employee record)", creds.getEmail());
         return new InvitationResult(true, expiresAt);
@@ -374,8 +385,13 @@ public class InvitationService {
             String tenantSlug = loadTenantSlug(resolvedTenant);
             String resetUrl   = buildUrl(tenantSlug, "/reset-password?token=" + rawToken);
 
-            queueInviteEmail(token.getId(), resolvedTenant, email,
-                "Reset your UnifiedTree password", resetHtml(resetUrl));
+            // Always sent (it's how people get back in), in the company's wording if it has a template.
+            String workspace = loadTenantName(resolvedTenant);
+            var reset = emailComposer.compose(resolvedTenant, loadCompanyId(creds.getEmployeeId(), resolvedTenant),
+                "account.password_reset",
+                Map.of("workspaceName", workspace, "resetLink", resetUrl, "expiresIn", "24 hours"),
+                "Reset your " + workspace + " password", resetHtml(workspace, resetUrl));
+            queueInviteEmail(token.getId(), resolvedTenant, email, reset.subject(), reset.html());
             log.info("Password reset email queued for {}", email);
         });
     }
@@ -494,7 +510,7 @@ public class InvitationService {
     private Map<String, Object> loadEmployee(UUID employeeId, UUID tenantId) {
         setDbTenantContext(tenantId);
         List<Map<String, Object>> rows = jdbc.queryForList(
-            "SELECT email, first_name FROM hrms.employees WHERE id = ? AND tenant_id = ?",
+            "SELECT email, first_name, company_id FROM hrms.employees WHERE id = ? AND tenant_id = ?",
             employeeId, tenantId);
         if (rows.isEmpty()) throw new BusinessRuleException("Employee not found", "EMPLOYEE_NOT_FOUND");
         return rows.get(0);
@@ -502,9 +518,29 @@ public class InvitationService {
 
     private String loadTenantName(UUID tenantId) {
         try {
-            return jdbc.queryForObject(
+            String name = jdbc.queryForObject(
                 "SELECT display_name FROM platform.tenants WHERE id = ?", String.class, tenantId);
-        } catch (Exception e) { return "UnifiedTree"; }
+            return name == null || name.isBlank() ? "your workspace" : name;
+        } catch (Exception e) { return "your workspace"; }
+    }
+
+    /** The company of an employee, for picking that company's email template; null when unknown. */
+    private UUID loadCompanyId(UUID employeeId, UUID tenantId) {
+        if (employeeId == null) return null;
+        try {
+            List<UUID> rows = jdbc.queryForList(
+                "SELECT company_id FROM hrms.employees WHERE id = ? AND tenant_id = ?", UUID.class, employeeId, tenantId);
+            return rows.isEmpty() ? null : rows.get(0);
+        } catch (Exception e) { return null; }
+    }
+
+    private static Map<String, String> inviteValues(String firstName, String tenantName, String inviteUrl) {
+        Map<String, String> v = new java.util.HashMap<>();
+        v.put("firstName", firstName == null ? "" : firstName);
+        v.put("workspaceName", tenantName);
+        v.put("inviteLink", inviteUrl);
+        v.put("expiresIn", "72 hours");
+        return v;
     }
 
     private String loadTenantSlug(UUID tenantId) {
@@ -569,11 +605,12 @@ public class InvitationService {
     // ──────────────────────────────────────────────────────────────────────────
 
     private static String inviteHtml(String firstName, String tenantName, String inviteUrl) {
+        String esc = TemplateRenderer.escapeHtml(tenantName);
         return """
             <!DOCTYPE html><html><body style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px;color:#1e293b">
             <p style="font-size:24px;font-weight:700;color:#0f6e56">Welcome to %s</p>
             <p>Hi %s,</p>
-            <p>You've been added to <strong>%s</strong> on UnifiedTree HRMS.
+            <p>You've been added to <strong>%s</strong>.
             Click the button below to set your password and log in.</p>
             <p style="margin:32px 0">
               <a href="%s" style="background:#0f6e56;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">
@@ -583,14 +620,14 @@ public class InvitationService {
             <p style="color:#64748b;font-size:13px">This link expires in 72 hours.<br>
             If you weren't expecting this, you can safely ignore this email.</p>
             </body></html>
-            """.formatted(tenantName, firstName, tenantName, inviteUrl);
+            """.formatted(esc, TemplateRenderer.escapeHtml(firstName), esc, TemplateRenderer.escapeHtml(inviteUrl));
     }
 
-    private static String resetHtml(String resetUrl) {
+    private static String resetHtml(String workspace, String resetUrl) {
         return """
             <!DOCTYPE html><html><body style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px;color:#1e293b">
             <p style="font-size:22px;font-weight:700;color:#0f6e56">Reset your password</p>
-            <p>Someone requested a password reset for your UnifiedTree account.
+            <p>Someone requested a password reset for your %s account.
             Click the button below to set a new password.</p>
             <p style="margin:32px 0">
               <a href="%s" style="background:#0f6e56;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">
@@ -600,7 +637,7 @@ public class InvitationService {
             <p style="color:#64748b;font-size:13px">This link expires in 24 hours.<br>
             If you didn't request this, you can safely ignore this email.</p>
             </body></html>
-            """.formatted(resetUrl);
+            """.formatted(TemplateRenderer.escapeHtml(workspace), TemplateRenderer.escapeHtml(resetUrl));
     }
 
     // ──────────────────────────────────────────────────────────────────────────

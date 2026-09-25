@@ -20,6 +20,7 @@ import {
 } from '@/shared/hooks/useCurrentUser'
 import { DelegationCard } from './DelegationCard'
 import { MyDocumentsCard } from './MyDocumentsCard'
+import { NotificationChoiceSections, useNotificationChoices } from './NotificationChoices'
 
 /**
  * Personal profile page.
@@ -142,9 +143,11 @@ export const Profile: React.FC = () => {
   const [draft, setDraft] = useState<{
     displayName: string
     phone: string
-    emailEnabled: boolean
-    pushEnabled: boolean
   } | null>(null)
+  // Notification choices (email / push master switches and per-event choices)
+  // have their own draft from /v1/me/notification-preferences; the unsaved
+  // bar below saves both.
+  const notif = useNotificationChoices(!!user)
 
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -155,8 +158,6 @@ export const Profile: React.FC = () => {
     setDraft({
       displayName: user.displayName ?? [user.firstName, user.lastName].filter(Boolean).join(' '),
       phone: user.phone ?? '',
-      emailEnabled: user.notificationPreferences?.emailEnabled ?? true,
-      pushEnabled: user.notificationPreferences?.pushEnabled ?? true,
     })
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -185,7 +186,7 @@ export const Profile: React.FC = () => {
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  const onSave = () => {
+  const onSave = async () => {
     if (!user || !draft) return
     const patch: Partial<CurrentUser> = {}
     const originalDisplay = user.displayName ?? [user.firstName, user.lastName].filter(Boolean).join(' ')
@@ -195,23 +196,19 @@ export const Profile: React.FC = () => {
     if ((draft.phone || '').trim() !== (user.phone ?? '').trim()) {
       patch.phone = draft.phone.trim() || null as unknown as string
     }
-    const prevEmail = user.notificationPreferences?.emailEnabled ?? true
-    const prevPush = user.notificationPreferences?.pushEnabled ?? true
-    if (draft.emailEnabled !== prevEmail || draft.pushEnabled !== prevPush) {
-      patch.notificationPreferences = {
-        ...user.notificationPreferences,
-        emailEnabled: draft.emailEnabled,
-        pushEnabled: draft.pushEnabled,
-      }
-    }
-    if (Object.keys(patch).length === 0) {
+    if (Object.keys(patch).length === 0 && !notif.dirty) {
       toast.info('Nothing to save', { description: 'No changes were made.' })
       return
     }
-    update.mutate(patch, {
-      onSuccess: () => toast.success('Profile updated'),
-      onError: (err) => toast.error('Could not save changes', { description: (err as Error).message }),
-    })
+    try {
+      await Promise.all([
+        Object.keys(patch).length > 0 ? update.mutateAsync(patch) : Promise.resolve(),
+        notif.dirty ? notif.save() : Promise.resolve(),
+      ])
+      toast.success('Profile updated')
+    } catch (err) {
+      toast.error('Could not save changes', { description: (err as Error).message })
+    }
   }
 
   const dirty = (() => {
@@ -220,25 +217,24 @@ export const Profile: React.FC = () => {
     return (
       draft.displayName.trim() !== originalDisplay.trim() ||
       (draft.phone || '').trim() !== (user.phone ?? '').trim() ||
-      draft.emailEnabled !== (user.notificationPreferences?.emailEnabled ?? true) ||
-      draft.pushEnabled !== (user.notificationPreferences?.pushEnabled ?? true)
+      notif.dirty
     )
   })()
   const changeCount = !user || !draft ? 0 : [
     draft.displayName.trim() !== (user.displayName ?? [user.firstName, user.lastName].filter(Boolean).join(' ')).trim(),
     (draft.phone || '').trim() !== (user.phone ?? '').trim(),
-    draft.emailEnabled !== (user.notificationPreferences?.emailEnabled ?? true),
-    draft.pushEnabled !== (user.notificationPreferences?.pushEnabled ?? true),
-  ].filter(Boolean).length
+  ].filter(Boolean).length + notif.changeCount
   const nameError = draft && !draft.displayName.trim() ? 'Enter the name to show' : undefined
   const phoneError = draft && draft.phone.trim() && !/^\+?[\d\s()-]{7,20}$/.test(draft.phone.trim()) ? 'Enter a phone number (digits, spaces, + and - only)' : undefined
   const errorCount = (nameError ? 1 : 0) + (phoneError ? 1 : 0)
-  const discard = () => user && setDraft({
-    displayName: user.displayName ?? [user.firstName, user.lastName].filter(Boolean).join(' '),
-    phone: user.phone ?? '',
-    emailEnabled: user.notificationPreferences?.emailEnabled ?? true,
-    pushEnabled: user.notificationPreferences?.pushEnabled ?? true,
-  })
+  const discard = () => {
+    if (!user) return
+    setDraft({
+      displayName: user.displayName ?? [user.firstName, user.lastName].filter(Boolean).join(' '),
+      phone: user.phone ?? '',
+    })
+    notif.discard()
+  }
 
   const nav: SettingsNavItem[] = [
     { key: 'me', label: 'Photo & contact', state: 'none' },
@@ -246,7 +242,12 @@ export const Profile: React.FC = () => {
     { key: 'details', label: 'Personal details', state: 'none', errors: errorCount },
     { key: 'delegation', label: 'Approval delegation', state: 'none' },
     { key: 'documents', label: 'My documents', state: 'none' },
-    { key: 'notifications', label: 'Notifications', state: draft?.emailEnabled || draft?.pushEnabled ? 'on' : 'off' },
+    { key: 'notifications', label: 'Notifications', state: notif.draft ? (notif.draft.emailEnabled || notif.draft.pushEnabled ? 'on' : 'off') : 'none' },
+    ...(notif.draft ? [
+      { key: 'email', label: 'Email choices', state: notif.draft.emailEnabled ? 'on' as const : 'off' as const },
+      { key: 'inapp', label: 'In-app choices', state: 'on' as const },
+      { key: 'push', label: 'Phone push choices', state: notif.draft.pushEnabled ? 'on' as const : 'off' as const },
+    ] : []),
   ]
   const joined = emp?.dateOfJoining ? format(new Date(`${emp.dateOfJoining}T00:00:00`), 'd MMM yyyy') : undefined
 
@@ -257,7 +258,7 @@ export const Profile: React.FC = () => {
         nav={nav} access="edit" status={isLoading && !user ? 'loading' : isError || !user ? 'error' : 'live'} onRetry={() => { void refetch() }} entity="your profile"
         dirty={dirty} changeCount={changeCount} errorCount={errorCount}
         onGoToError={() => document.getElementById('st-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-        saving={update.isPending} onSave={() => { if (!errorCount) onSave() }} onDiscard={discard} toast={note} onDismissToast={dismiss}>
+        saving={update.isPending || notif.saving} onSave={() => { if (!errorCount) void onSave() }} onDiscard={discard} toast={note} onDismissToast={dismiss}>
         {user && (
           <>
             {/* Hidden file input drives the "Change photo" button. */}
@@ -321,11 +322,15 @@ export const Profile: React.FC = () => {
               <MyDocumentsCard bare />
             </SettingsSection>
 
-            <SettingsSection id="notifications" icon="bell" title="Notifications" summary={`Email ${draft?.emailEnabled ? 'on' : 'off'} · push ${draft?.pushEnabled ? 'on' : 'off'}`}>
-              <SettingsToggleRow label="Email notifications" detail="Approvals, payroll receipts, security alerts." on={draft?.emailEnabled ?? true} onToggle={() => setDraft((d) => d && ({ ...d, emailEnabled: !d.emailEnabled }))} />
-              <SettingsToggleRow label="Push notifications" detail="In-app and mobile push for real-time events." on={draft?.pushEnabled ?? true} onToggle={() => setDraft((d) => d && ({ ...d, pushEnabled: !d.pushEnabled }))} />
-              <SettingsNote tone="amber">Your choice is saved to your account, but emails and alerts don’t check it yet. Approvals and account emails still reach you.</SettingsNote>
+            <SettingsSection id="notifications" icon="bell" title="Notifications" summary={notif.draft ? `Email ${notif.draft.emailEnabled ? 'on' : 'off'} · push ${notif.draft.pushEnabled ? 'on' : 'off'}` : 'Loading your choices…'}>
+              {notif.status === 'error' ? <SettingsNote tone="amber">Your notification choices couldn’t be loaded. <button type="button" onClick={notif.refetch} style={{ border: 0, padding: 0, background: 'none', color: '#047857', fontWeight: 600, cursor: 'pointer' }}>Try again</button></SettingsNote>
+                : notif.draft && <>
+                  <SettingsToggleRow label="Email notifications" detail="Reminder emails, and any event you switch on under Email choices. Turn off to stop them all." on={notif.draft.emailEnabled} onToggle={() => notif.setMaster('emailEnabled', !notif.draft!.emailEnabled)} />
+                  <SettingsToggleRow label="Push notifications" detail="Alerts on your phone from the mobile app. The bell in the app still lists them." on={notif.draft.pushEnabled} onToggle={() => notif.setMaster('pushEnabled', !notif.draft!.pushEnabled)} />
+                  <SettingsNote>Password reset and invitation emails, billing alerts for admins and letters HR sends you always reach you, whatever you choose. Choose event by event below.</SettingsNote>
+                </>}
             </SettingsSection>
+            {notif.status === 'live' && <NotificationChoiceSections c={notif} email={user.email} masters={false} />}
           </>
         )}
       </SettingsPage>

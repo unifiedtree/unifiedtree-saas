@@ -13,6 +13,7 @@ import com.hrms.letters.repository.LetterTemplateRepository;
 import com.hrms.letters.service.LetterEmailService;
 import com.hrms.letters.service.LetterGenerationService;
 import com.unifiedtree.audit.AuditService;
+import com.unifiedtree.notifications.template.NotificationEmailComposer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -44,6 +45,8 @@ public class LetterDistributionProcessor {
     private final DistributionJobRepository jobRepo;
     private final DistributionRecipientRepository recipientRepo;
     private final AuditService auditService;
+    /** The company's "letters.distribution" email template, when one is active. */
+    private final NotificationEmailComposer emailComposer;
 
     public LetterDistributionProcessor(LetterGenerationService generationService,
                                        LetterEmailService emailService,
@@ -51,7 +54,8 @@ public class LetterDistributionProcessor {
                                        WorkforceEmployeeRepository employeeRepo,
                                        DistributionJobRepository jobRepo,
                                        DistributionRecipientRepository recipientRepo,
-                                       AuditService auditService) {
+                                       AuditService auditService,
+                                       NotificationEmailComposer emailComposer) {
         this.generationService = generationService;
         this.emailService = emailService;
         this.templateRepo = templateRepo;
@@ -59,6 +63,7 @@ public class LetterDistributionProcessor {
         this.jobRepo = jobRepo;
         this.recipientRepo = recipientRepo;
         this.auditService = auditService;
+        this.emailComposer = emailComposer;
     }
 
     @Async("letterDistributionExecutor")
@@ -123,8 +128,18 @@ public class LetterDistributionProcessor {
                     new GenerateLetterRequest(job.getTemplateId(), r.getEmployeeId(), null, false, null),
                     job.getCreatedBy());
             byte[] pdf = generationService.getPdf(gen.id());
-            emailService.send(r.getEmail(), null,
-                    buildSubject(job, emp), buildEmailHtml(job, emp), pdf, buildFilename(templateName, emp));
+            // Always sent (HR chose to send it). A subject typed on the distribution wins;
+            // otherwise the company's "letters.distribution" template, then the built-in text.
+            java.util.Map<String, String> values = new java.util.HashMap<>();
+            values.put("firstName", safeFirst(emp));
+            values.put("employeeName", (nz(emp.getFirstName()) + " " + nz(emp.getLastName())).trim());
+            values.put("documentTitle", nz(job.getTitle()));
+            values.put("message", sanitizedMessage(job));
+            var email = emailComposer.compose(job.getTenantId(), emp.getCompanyId(), "letters.distribution", values,
+                    safeFirst(emp) + ", you have a new document", buildEmailHtml(job, emp));
+            String subject = job.getSubjectOverride() != null && !job.getSubjectOverride().isBlank()
+                    ? job.getSubjectOverride() : email.subject();
+            emailService.send(r.getEmail(), null, subject, email.html(), pdf, buildFilename(templateName, emp));
             r.setGeneratedLetterId(gen.id());
             r.setSendStatus("SENT");
             r.setSentAt(Instant.now());
@@ -152,14 +167,20 @@ public class LetterDistributionProcessor {
         }
     }
 
-    private String buildSubject(DistributionJob job, WorkforceEmployee emp) {
-        if (job.getSubjectOverride() != null && !job.getSubjectOverride().isBlank()) {
-            return job.getSubjectOverride();
-        }
-        return safeFirst(emp) + ", you have a new document";
+    private String buildEmailHtml(DistributionJob job, WorkforceEmployee emp) {
+        String message = sanitizedMessage(job);
+        return ("""
+                <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0f172a;line-height:1.5">
+                  <p>Hi %s,</p>
+                  <div>%s</div>
+                  <p>Please find your document attached.</p>
+                  <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0"/>
+                  <p style="font-size:12px;color:#64748b">This is an automated message.</p>
+                </div>
+                """).formatted(escapeHtml(safeFirst(emp)), message);
     }
 
-    private String buildEmailHtml(DistributionJob job, WorkforceEmployee emp) {
+    private static String sanitizedMessage(DistributionJob job) {
         // B7 FIX (audit 2026-08-15): sanitize customMessage with jsoup
         // Safelist.basic() + img and links. Previously the value was
         // pass-through HTML, so an HR admin (or anyone who compromised an
@@ -172,16 +193,7 @@ public class LetterDistributionProcessor {
                 .addAttributes("a",   "href", "target", "rel")
                 .addProtocols("img", "src",  "http", "https", "cid", "data")
                 .addProtocols("a",   "href", "http", "https", "mailto");
-        String message = org.jsoup.Jsoup.clean(raw, safe);
-        return ("""
-                <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0f172a;line-height:1.5">
-                  <p>Hi %s,</p>
-                  <div>%s</div>
-                  <p>Please find your document attached.</p>
-                  <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0"/>
-                  <p style="font-size:12px;color:#64748b">This is an automated message.</p>
-                </div>
-                """).formatted(escapeHtml(safeFirst(emp)), message);
+        return org.jsoup.Jsoup.clean(raw, safe);
     }
 
     private String buildFilename(String templateName, WorkforceEmployee emp) {

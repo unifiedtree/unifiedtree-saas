@@ -23,6 +23,7 @@ import com.unifiedtree.notifications.events.WfhCancelledEvent;
 import com.unifiedtree.notifications.events.WfhDecidedEvent;
 import com.unifiedtree.notifications.events.WfhRequestSubmittedEvent;
 import com.unifiedtree.notifications.service.AppNotificationService;
+import com.unifiedtree.notifications.service.NotificationDispatcher;
 import com.unifiedtree.notifications.service.NotificationLookupService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,10 +83,18 @@ public class DomainEventListener {
      * {@link NotificationLookupService} for the full story.
      */
     private final NotificationLookupService lookup;
+    /**
+     * Renders each notification from the company's template (or the built-in
+     * wording in NotificationEventCatalog) and honours the recipient's
+     * notification choices before storing / pushing / emailing it.
+     */
+    private final NotificationDispatcher dispatcher;
 
-    public DomainEventListener(AppNotificationService service, NotificationLookupService lookup) {
+    public DomainEventListener(AppNotificationService service, NotificationLookupService lookup,
+                               NotificationDispatcher dispatcher) {
         this.service = service;
         this.lookup = lookup;
+        this.dispatcher = dispatcher;
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -109,20 +118,15 @@ public class DomainEventListener {
             }
             String employeeName = resolveEmployeeName(e.employeeId(), e.tenantId());
             String leaveTypeName = e.leaveTypeName() != null ? e.leaveTypeName() : "leave";
-            String body = "%s requested %s from %s to %s".formatted(
-                    employeeName != null ? employeeName : "An employee",
-                    leaveTypeName,
-                    fmt(e.startDate()),
-                    fmt(e.endDate()));
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.LEAVE_SUBMITTED.name());
             data.put("leaveRequestId", e.leaveRequestId().toString());
             data.put("route", ROUTE_APPROVALS);
-            service.create(e.tenantId(), e.approverId(),
-                    AppNotificationType.LEAVE_SUBMITTED,
-                    "New leave request",
-                    body,
-                    data);
+            dispatcher.dispatch(e.tenantId(), e.approverId(), "leave.submitted", vars(
+                    "employeeName", firstOrElse(employeeName, "An employee"),
+                    "leaveType", leaveTypeName,
+                    "startDate", fmt(e.startDate()),
+                    "endDate", fmt(e.endDate())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish LEAVE_SUBMITTED notification for {}: {}",
                     e.leaveRequestId(), ex.getMessage());
@@ -140,20 +144,17 @@ public class DomainEventListener {
             AppNotificationType type = e.approved()
                     ? AppNotificationType.LEAVE_APPROVED
                     : AppNotificationType.LEAVE_REJECTED;
-            String title = e.approved() ? "Leave approved" : "Leave rejected";
             String leaveTypeName = e.leaveTypeName() != null ? e.leaveTypeName() : "leave";
-            String body = e.approved()
-                    ? "Your %s from %s to %s has been approved.".formatted(
-                            leaveTypeName, fmt(e.startDate()), fmt(e.endDate()))
-                    : "Your %s from %s to %s has been rejected.%s".formatted(
-                            leaveTypeName, fmt(e.startDate()), fmt(e.endDate()),
-                            e.comment() != null && !e.comment().isBlank()
-                                    ? " Reason: " + e.comment() : "");
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("leaveRequestId", e.leaveRequestId().toString());
             data.put("route", ROUTE_LEAVE_HISTORY);
-            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), e.approved() ? "leave.approved" : "leave.rejected", vars(
+                    "leaveType", leaveTypeName,
+                    "startDate", fmt(e.startDate()),
+                    "endDate", fmt(e.endDate()),
+                    "reason", blankToEmpty(e.comment()),
+                    "reasonText", reasonText(e.comment())), data);
             markSubmissionReadSafely(e.leaveRequestId());
         } catch (Exception ex) {
             log.warn("Failed to publish LEAVE decision notification for {}: {}",
@@ -176,16 +177,15 @@ public class DomainEventListener {
             }
             String employeeName = resolveEmployeeName(e.employeeId(), e.tenantId());
             String leaveTypeName = e.leaveTypeName() != null ? e.leaveTypeName() : "leave";
-            String body = "%s cancelled their %s from %s to %s.".formatted(
-                    employeeName != null ? employeeName : "An employee",
-                    leaveTypeName, fmt(e.startDate()), fmt(e.endDate()));
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.LEAVE_CANCELLED.name());
             data.put("leaveRequestId", e.leaveRequestId().toString());
             data.put("route", ROUTE_APPROVALS);
-            service.create(e.tenantId(), e.approverId(),
-                    AppNotificationType.LEAVE_CANCELLED,
-                    "Leave request cancelled", body, data);
+            dispatcher.dispatch(e.tenantId(), e.approverId(), "leave.cancelled", vars(
+                    "employeeName", firstOrElse(employeeName, "An employee"),
+                    "leaveType", leaveTypeName,
+                    "startDate", fmt(e.startDate()),
+                    "endDate", fmt(e.endDate())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish LEAVE_CANCELLED notification for {}: {}",
                     e.leaveRequestId(), ex.getMessage());
@@ -210,16 +210,13 @@ public class DomainEventListener {
                 return;
             }
             String employeeName = resolveEmployeeName(e.employeeId(), e.tenantId());
-            String body = "%s requested to work from home %s.".formatted(
-                    employeeName != null ? employeeName : "An employee",
-                    range(e.fromDate(), e.toDate()));
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.WFH_SUBMITTED.name());
             data.put("wfhRequestId", e.wfhRequestId().toString());
             data.put("route", ROUTE_APPROVALS);
-            service.create(e.tenantId(), e.approverId(),
-                    AppNotificationType.WFH_SUBMITTED,
-                    "New WFH request", body, data);
+            dispatcher.dispatch(e.tenantId(), e.approverId(), "wfh.submitted", vars(
+                    "employeeName", firstOrElse(employeeName, "An employee"),
+                    "dates", range(e.fromDate(), e.toDate())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish WFH_SUBMITTED notification for {}: {}",
                     e.wfhRequestId(), ex.getMessage());
@@ -237,17 +234,14 @@ public class DomainEventListener {
             AppNotificationType type = e.approved()
                     ? AppNotificationType.WFH_APPROVED
                     : AppNotificationType.WFH_REJECTED;
-            String title = e.approved() ? "WFH approved" : "WFH rejected";
-            String body = e.approved()
-                    ? "Your work-from-home request for %s has been approved.".formatted(range(e.fromDate(), e.toDate()))
-                    : "Your work-from-home request for %s has been rejected.%s".formatted(
-                            range(e.fromDate(), e.toDate()),
-                            e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("wfhRequestId", e.wfhRequestId().toString());
             data.put("route", ROUTE_MY_WFH);
-            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), e.approved() ? "wfh.approved" : "wfh.rejected", vars(
+                    "dates", range(e.fromDate(), e.toDate()),
+                    "reason", blankToEmpty(e.comment()),
+                    "reasonText", reasonText(e.comment())), data);
             markSubmissionReadSafely(e.wfhRequestId());
         } catch (Exception ex) {
             log.warn("Failed to publish WFH decision notification for {}: {}",
@@ -265,16 +259,13 @@ public class DomainEventListener {
         try {
             if (e.approverId() == null) return;
             String employeeName = resolveEmployeeName(e.employeeId(), e.tenantId());
-            String body = "%s cancelled their work-from-home request for %s.".formatted(
-                    employeeName != null ? employeeName : "An employee",
-                    range(e.fromDate(), e.toDate()));
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.WFH_CANCELLED.name());
             data.put("wfhRequestId", e.wfhRequestId().toString());
             data.put("route", ROUTE_APPROVALS);
-            service.create(e.tenantId(), e.approverId(),
-                    AppNotificationType.WFH_CANCELLED,
-                    "WFH request cancelled", body, data);
+            dispatcher.dispatch(e.tenantId(), e.approverId(), "wfh.cancelled", vars(
+                    "employeeName", firstOrElse(employeeName, "An employee"),
+                    "dates", range(e.fromDate(), e.toDate())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish WFH_CANCELLED notification for {}: {}",
                     e.wfhRequestId(), ex.getMessage());
@@ -300,16 +291,13 @@ public class DomainEventListener {
                 return;
             }
             String employeeName = resolveEmployeeName(e.employeeId(), e.tenantId());
-            String body = "%s requested an attendance correction for %s.".formatted(
-                    employeeName != null ? employeeName : "An employee",
-                    fmt(e.requestedDate()));
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.CORRECTION_SUBMITTED.name());
             data.put("correctionId", e.correctionId().toString());
             data.put("route", ROUTE_APPROVALS);
-            service.create(e.tenantId(), approverId,
-                    AppNotificationType.CORRECTION_SUBMITTED,
-                    "New correction request", body, data);
+            dispatcher.dispatch(e.tenantId(), approverId, "attendance.correction_submitted", vars(
+                    "employeeName", firstOrElse(employeeName, "An employee"),
+                    "date", fmt(e.requestedDate())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish CORRECTION_SUBMITTED notification for {}: {}",
                     e.correctionId(), ex.getMessage());
@@ -327,17 +315,15 @@ public class DomainEventListener {
             AppNotificationType type = e.approved()
                     ? AppNotificationType.CORRECTION_APPROVED
                     : AppNotificationType.CORRECTION_REJECTED;
-            String title = e.approved() ? "Correction approved" : "Correction rejected";
-            String body = e.approved()
-                    ? "Your attendance correction for %s has been approved.".formatted(fmt(e.requestedDate()))
-                    : "Your attendance correction for %s has been rejected.%s".formatted(
-                            fmt(e.requestedDate()),
-                            e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("correctionId", e.correctionId().toString());
             data.put("route", ROUTE_MY_CORRECTIONS);
-            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(),
+                    e.approved() ? "attendance.correction_approved" : "attendance.correction_rejected", vars(
+                    "date", fmt(e.requestedDate()),
+                    "reason", blankToEmpty(e.comment()),
+                    "reasonText", reasonText(e.comment())), data);
             markSubmissionReadSafely(e.correctionId());
         } catch (Exception ex) {
             log.warn("Failed to publish CORRECTION decision notification for {}: {}",
@@ -365,17 +351,15 @@ public class DomainEventListener {
             }
             String employeeName = resolveEmployeeName(e.employeeId(), e.tenantId());
             String shift = e.requestedShiftName() != null ? e.requestedShiftName() : "a different shift";
-            String who = employeeName != null ? employeeName : "An employee";
-            String body = e.effectiveDate() != null
-                    ? "%s requested to move to the %s shift from %s.".formatted(who, shift, fmt(e.effectiveDate()))
-                    : "%s requested to move to the %s shift.".formatted(who, shift);
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.SHIFT_CHANGE_SUBMITTED.name());
             data.put("shiftChangeRequestId", e.requestId().toString());
             data.put("route", ROUTE_APPROVALS);
-            service.create(e.tenantId(), approverId,
-                    AppNotificationType.SHIFT_CHANGE_SUBMITTED,
-                    "New shift change request", body, data);
+            dispatcher.dispatch(e.tenantId(), approverId, "shift.change_submitted", vars(
+                    "employeeName", firstOrElse(employeeName, "An employee"),
+                    "shiftName", shift,
+                    "fromDate", fmt(e.effectiveDate()),
+                    "fromDateText", e.effectiveDate() != null ? " from " + fmt(e.effectiveDate()) : ""), data);
         } catch (Exception ex) {
             log.warn("Failed to publish SHIFT_CHANGE_SUBMITTED notification for {}: {}",
                     e.requestId(), ex.getMessage());
@@ -393,22 +377,18 @@ public class DomainEventListener {
             AppNotificationType type = e.approved()
                     ? AppNotificationType.SHIFT_CHANGE_APPROVED
                     : AppNotificationType.SHIFT_CHANGE_REJECTED;
-            String title = e.approved() ? "Shift change approved" : "Shift change rejected";
             String shift = e.requestedShiftName() != null ? e.requestedShiftName() : "the requested shift";
-            String body;
-            if (!e.approved()) {
-                body = "Your request to move to %s was rejected.%s".formatted(shift,
-                        e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
-            } else if (e.effectiveDate() == null) {
-                body = "Your shift has been changed to %s.".formatted(shift);
-            } else {
-                body = "Your shift changes to %s from %s.".formatted(shift, fmt(e.effectiveDate()));
-            }
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("shiftChangeRequestId", e.requestId().toString());
             data.put("route", "/shift-change");
-            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(),
+                    e.approved() ? "shift.change_approved" : "shift.change_rejected", vars(
+                    "shiftName", shift,
+                    "fromDate", fmt(e.effectiveDate()),
+                    "fromDateText", e.effectiveDate() != null ? " from " + fmt(e.effectiveDate()) : "",
+                    "reason", blankToEmpty(e.comment()),
+                    "reasonText", reasonText(e.comment())), data);
             markSubmissionReadSafely(e.requestId());
         } catch (Exception ex) {
             log.warn("Failed to publish SHIFT_CHANGE decision notification for {}: {}",
@@ -433,11 +413,7 @@ public class DomainEventListener {
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.WELCOME.name());
             data.put("route", "/(tabs)");
-            service.create(e.tenantId(), e.employeeId(),
-                    AppNotificationType.WELCOME,
-                    "Welcome to " + org,
-                    "Your account is active. Punch in, apply for leave, and track attendance right here.",
-                    data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), "people.welcome", vars("workspaceName", org), data);
         } catch (Exception ex) {
             log.warn("Failed to publish WELCOME notification for {}: {}",
                     e.employeeId(), ex.getMessage());
@@ -459,16 +435,12 @@ public class DomainEventListener {
             AppNotificationType type = e.success()
                     ? AppNotificationType.FACE_ENROLLMENT_COMPLETE
                     : AppNotificationType.FACE_ENROLLMENT_FAILED;
-            String title = e.success() ? "Face enrolment complete" : "Face enrolment failed";
-            String body = e.success()
-                    ? "You can now punch in with your face."
-                    : (e.reason() != null && !e.reason().isBlank()
-                            ? e.reason()
-                            : "Please ask your manager to reset your face enrolment.");
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("route", "/face-enroll");
-            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(),
+                    e.success() ? "attendance.face_enrolled" : "attendance.face_enrolment_failed", vars(
+                    "reason", firstOrElse(e.reason(), "Please ask your manager to reset your face enrolment.")), data);
         } catch (Exception ex) {
             log.warn("Failed to publish FACE notification for {}: {}",
                     e.employeeId(), ex.getMessage());
@@ -546,15 +518,14 @@ public class DomainEventListener {
         if (e.approverId() == null) return;
         try {
             String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
-            String body = "%s submitted an expense claim%s: %s.".formatted(who,
-                    e.amount() != null ? " for " + money(e.currency(), e.amount()) : "",
-                    e.title() != null ? e.title() : "claim");
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.EXPENSE_SUBMITTED.name());
             data.put("expenseClaimId", e.claimId().toString());
             data.put("route", ROUTE_APPROVALS);
-            service.create(e.tenantId(), e.approverId(), AppNotificationType.EXPENSE_SUBMITTED,
-                    "New expense claim to review", body, data);
+            dispatcher.dispatch(e.tenantId(), e.approverId(), "expense.submitted", vars(
+                    "employeeName", who,
+                    "amount", money(e.currency(), e.amount()),
+                    "claimTitle", e.title() != null ? e.title() : "claim"), data);
         } catch (Exception ex) {
             log.warn("Failed to publish EXPENSE_SUBMITTED notification for {}: {}", e.claimId(), ex.getMessage());
         }
@@ -564,18 +535,16 @@ public class DomainEventListener {
     public void onExpenseDecided(ExpenseClaimDecidedEvent e) {
         try {
             AppNotificationType type = e.approved() ? AppNotificationType.EXPENSE_APPROVED : AppNotificationType.EXPENSE_REJECTED;
-            String title = e.approved() ? "Expense claim approved" : "Expense claim rejected";
             String what = e.title() != null ? e.title() : "your expense claim";
-            String amt = e.amount() != null ? " (" + money(e.currency(), e.amount()) + ")" : "";
-            String body = e.approved()
-                    ? "Your claim %s%s was approved.".formatted(what, amt)
-                    : "Your claim %s%s was rejected.%s".formatted(what, amt,
-                            e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("expenseClaimId", e.claimId().toString());
             data.put("route", "/my-claims");
-            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), e.approved() ? "expense.approved" : "expense.rejected", vars(
+                    "claimTitle", what,
+                    "amount", money(e.currency(), e.amount()),
+                    "reason", blankToEmpty(e.comment()),
+                    "reasonText", reasonText(e.comment())), data);
             markSubmissionReadSafely(e.claimId());
         } catch (Exception ex) {
             log.warn("Failed to publish EXPENSE decision notification for {}: {}", e.claimId(), ex.getMessage());
@@ -587,13 +556,13 @@ public class DomainEventListener {
         if (e.approverId() == null) return;
         try {
             String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
-            String body = "%s requested a salary advance of %s.".formatted(who, money("INR", e.amount()));
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.ADVANCE_SUBMITTED.name());
             data.put("advanceRequestId", e.advanceId().toString());
             data.put("route", ROUTE_APPROVALS);
-            service.create(e.tenantId(), e.approverId(), AppNotificationType.ADVANCE_SUBMITTED,
-                    "New advance request to review", body, data);
+            dispatcher.dispatch(e.tenantId(), e.approverId(), "advance.submitted", vars(
+                    "employeeName", who,
+                    "amount", money("INR", e.amount())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish ADVANCE_SUBMITTED notification for {}: {}", e.advanceId(), ex.getMessage());
         }
@@ -603,16 +572,14 @@ public class DomainEventListener {
     public void onAdvanceDecided(AdvanceRequestDecidedEvent e) {
         try {
             AppNotificationType type = e.approved() ? AppNotificationType.ADVANCE_APPROVED : AppNotificationType.ADVANCE_REJECTED;
-            String title = e.approved() ? "Advance request approved" : "Advance request rejected";
-            String body = e.approved()
-                    ? "Your advance request of %s was approved.".formatted(money("INR", e.amount()))
-                    : "Your advance request of %s was rejected.%s".formatted(money("INR", e.amount()),
-                            e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("advanceRequestId", e.advanceId().toString());
             data.put("route", "/my-advances");
-            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), e.approved() ? "advance.approved" : "advance.rejected", vars(
+                    "amount", money("INR", e.amount()),
+                    "reason", blankToEmpty(e.comment()),
+                    "reasonText", reasonText(e.comment())), data);
             markSubmissionReadSafely(e.advanceId());
         } catch (Exception ex) {
             log.warn("Failed to publish ADVANCE decision notification for {}: {}", e.advanceId(), ex.getMessage());
@@ -623,17 +590,17 @@ public class DomainEventListener {
     public void onOvertimeDecided(OvertimeDecidedEvent e) {
         try {
             AppNotificationType type = e.approved() ? AppNotificationType.OVERTIME_APPROVED : AppNotificationType.OVERTIME_REJECTED;
-            String title = e.approved() ? "Overtime approved" : "Overtime rejected";
             String hours = "%.1fh".formatted(e.minutes() / 60.0);
-            String body = e.approved()
-                    ? "Your overtime of %s on %s was approved. Recorded, not paid.".formatted(hours, fmt(e.onDate()))
-                    : "Your overtime of %s on %s was rejected.%s".formatted(hours, fmt(e.onDate()),
-                            e.comment() != null && !e.comment().isBlank() ? " Reason: " + e.comment() : "");
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("overtimeId", e.overtimeId().toString());
             data.put("route", "/attendance");
-            service.create(e.tenantId(), e.employeeId(), type, title, body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(),
+                    e.approved() ? "attendance.overtime_approved" : "attendance.overtime_rejected", vars(
+                    "hours", hours,
+                    "date", fmt(e.onDate()),
+                    "reason", blankToEmpty(e.comment()),
+                    "reasonText", reasonText(e.comment())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish OVERTIME decision notification for {}: {}", e.overtimeId(), ex.getMessage());
         }
@@ -693,15 +660,14 @@ public class DomainEventListener {
             if (hr == null) hr = firstEmployeeWithRole(e.tenantId(), SUPER_ADMIN);
             if (hr == null) return;
             String who = firstOrElse(resolveEmployeeName(e.employeeId(), e.tenantId()), "An employee");
-            String body = "%s uploaded their %s. Please review.".formatted(who,
-                    firstOrElse(e.documentTypeName(), "document"));
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.DOCUMENT_UPLOADED.name());
             data.put("documentId", e.documentId().toString());
             data.put("employeeId", e.employeeId().toString());
             data.put("route", "/documents/pending");
-            service.create(e.tenantId(), hr, AppNotificationType.DOCUMENT_UPLOADED,
-                    "New document to verify", body, data);
+            dispatcher.dispatch(e.tenantId(), hr, "document.uploaded", vars(
+                    "employeeName", who,
+                    "documentType", firstOrElse(e.documentTypeName(), "document")), data);
         } catch (Exception ex) {
             log.warn("Failed to publish DOCUMENT_UPLOADED notification for {}: {}", e.documentId(), ex.getMessage());
         }
@@ -710,13 +676,12 @@ public class DomainEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onDocumentVerified(DocumentVerifiedEvent e) {
         try {
-            String body = "Your %s has been verified by HR.".formatted(firstOrElse(e.documentTypeName(), "document"));
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.DOCUMENT_VERIFIED.name());
             data.put("documentId", e.documentId().toString());
             data.put("route", "/profile");
-            service.create(e.tenantId(), e.employeeId(), AppNotificationType.DOCUMENT_VERIFIED,
-                    "Document verified", body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), "document.verified", vars(
+                    "documentType", firstOrElse(e.documentTypeName(), "document")), data);
         } catch (Exception ex) {
             log.warn("Failed to publish DOCUMENT_VERIFIED notification for {}: {}", e.documentId(), ex.getMessage());
         }
@@ -725,15 +690,14 @@ public class DomainEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onDocumentRejected(DocumentRejectedEvent e) {
         try {
-            String body = "Your %s was rejected.%s Please re-upload.".formatted(
-                    firstOrElse(e.documentTypeName(), "document"),
-                    e.reason() != null && !e.reason().isBlank() ? " Reason: " + e.reason() : "");
             Map<String, Object> data = new HashMap<>();
             data.put("type", AppNotificationType.DOCUMENT_REJECTED.name());
             data.put("documentId", e.documentId().toString());
             data.put("route", "/profile");
-            service.create(e.tenantId(), e.employeeId(), AppNotificationType.DOCUMENT_REJECTED,
-                    "Document needs re-upload", body, data);
+            dispatcher.dispatch(e.tenantId(), e.employeeId(), "document.rejected", vars(
+                    "documentType", firstOrElse(e.documentTypeName(), "document"),
+                    "reason", blankToEmpty(e.reason()),
+                    "reasonText", reasonText(e.reason())), data);
         } catch (Exception ex) {
             log.warn("Failed to publish DOCUMENT_REJECTED notification for {}: {}", e.documentId(), ex.getMessage());
         }
@@ -747,5 +711,23 @@ public class DomainEventListener {
 
     private static String firstOrElse(String v, String fallback) {
         return v != null && !v.isBlank() ? v : fallback;
+    }
+
+    /** Placeholder values for a template, from alternating name/value pairs (null values → empty). */
+    static Map<String, String> vars(String... nameValuePairs) {
+        Map<String, String> m = new HashMap<>();
+        for (int i = 0; i + 1 < nameValuePairs.length; i += 2) {
+            m.put(nameValuePairs[i], nameValuePairs[i + 1] == null ? "" : nameValuePairs[i + 1]);
+        }
+        return m;
+    }
+
+    /** " Reason: …" when a reason was given, otherwise nothing (the {{reasonText}} placeholder). */
+    static String reasonText(String reason) {
+        return reason != null && !reason.isBlank() ? " Reason: " + reason.trim() : "";
+    }
+
+    private static String blankToEmpty(String v) {
+        return v == null || v.isBlank() ? "" : v.trim();
     }
 }

@@ -3,6 +3,9 @@ package com.hrms.api.probation;
 import com.hrms.api.mail.EmailMessage;
 import com.hrms.api.mail.MailService;
 import com.hrms.core.exception.BusinessRuleException;
+import com.unifiedtree.notifications.prefs.NotificationPreferenceService;
+import com.unifiedtree.notifications.template.NotificationEmailComposer;
+import com.unifiedtree.notifications.template.TemplateRenderer;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,9 +32,17 @@ import java.util.*;
 public class ProbationService {
 
     private static final Logger log = LoggerFactory.getLogger(ProbationService.class);
+    /** NotificationEventCatalog key for these reminders (template + preference gate). */
+    private static final String EVENT_KEY = "people.probation_reminder";
+    /** Business dates are India dates: "days left" must not flip at 00:00 UTC (05:30 IST). */
+    private static final java.time.ZoneId IST = java.time.ZoneId.of("Asia/Kolkata");
 
     private final MailService mailService;
     private final JdbcTemplate jdbc;
+    /** The company's "people.probation_reminder" email template, when one is active. */
+    private final NotificationEmailComposer emailComposer;
+    /** Skips people who switched these reminder emails off (Profile / Workspace Settings → Notifications). */
+    private final NotificationPreferenceService preferences;
 
     @Value("${hrms.probation.reminder-days-before:7}")
     private int defaultReminderDaysBefore;
@@ -39,9 +50,12 @@ public class ProbationService {
     @Value("${unifiedtree.mail.invite-url-base:${INVITE_URL_BASE:http://localhost:3001}}")
     private String platformBaseUrl;
 
-    public ProbationService(MailService mailService, JdbcTemplate jdbc) {
+    public ProbationService(MailService mailService, JdbcTemplate jdbc,
+                            NotificationEmailComposer emailComposer, NotificationPreferenceService preferences) {
         this.mailService = mailService;
         this.jdbc = jdbc;
+        this.emailComposer = emailComposer;
+        this.preferences = preferences;
     }
 
     // ── DTOs ────────────────────────────────────────────────────────────────
@@ -99,7 +113,7 @@ public class ProbationService {
     @Transactional
     public List<UpcomingProbationDto> listUpcoming(UUID tenantId, int daysAhead) {
         bindTenant(tenantId);
-        LocalDate windowEnd = LocalDate.now().plusDays(daysAhead);
+        LocalDate windowEnd = LocalDate.now(IST).plusDays(daysAhead);
         List<Map<String, Object>> rows = jdbc.queryForList("""
             SELECT e.id, e.employee_code, e.first_name, e.last_name, e.probation_end_date,
                    d.title AS job_title, m.first_name AS mgr_first, m.last_name AS mgr_last
@@ -115,7 +129,7 @@ public class ProbationService {
         List<UpcomingProbationDto> out = new ArrayList<>();
         for (Map<String, Object> r : rows) {
             LocalDate end = ((java.sql.Date) r.get("probation_end_date")).toLocalDate();
-            long days = ChronoUnit.DAYS.between(LocalDate.now(), end);
+            long days = ChronoUnit.DAYS.between(LocalDate.now(IST), end);
             out.add(new UpcomingProbationDto(
                 (UUID) r.get("id"), (String) r.get("employee_code"),
                 name(r.get("first_name"), r.get("last_name")),
@@ -175,12 +189,12 @@ public class ProbationService {
     public int scanForTenant(UUID tenantId) {
         bindTenant(tenantId);
         ProbationConfigDto config = getConfigInline(tenantId);
-        LocalDate windowEnd = LocalDate.now().plusDays(config.reminderDaysBefore());
+        LocalDate windowEnd = LocalDate.now(IST).plusDays(config.reminderDaysBefore());
         String tenantName = loadTenantName(tenantId);
 
         List<Map<String, Object>> rows = jdbc.queryForList("""
             SELECT e.id, e.employee_code, e.first_name, e.last_name, e.email,
-                   e.probation_end_date, e.reporting_manager_id
+                   e.probation_end_date, e.reporting_manager_id, e.company_id
               FROM hrms.employees e
              WHERE e.is_active = TRUE
                AND e.employment_status = 'PROBATION'
@@ -201,18 +215,32 @@ public class ProbationService {
             if (existing != null && existing > 0) continue;
 
             String empName = name(r.get("first_name"), r.get("last_name"));
-            long daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(), end);
+            long daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(IST), end);
 
-            Set<UUID> recipientIds = new LinkedHashSet<>();
-            List<String> recipientEmails = new ArrayList<>();
-            collectRecipients(tenantId, (UUID) r.get("reporting_manager_id"), recipientIds, recipientEmails);
+            Map<UUID, String> candidates = new LinkedHashMap<>();
+            collectRecipients(tenantId, (UUID) r.get("reporting_manager_id"), candidates);
 
             String deepLink = platformBaseUrl + "/hrms/employees/" + empId;
-            String subject = String.format("Probation ending: %s (%d days)", empName, daysRemaining);
-            String body = buildEmailHtml(empName, end.toString(), daysRemaining, deepLink);
-            for (String to : recipientEmails) {
+            Map<String, String> values = new HashMap<>();
+            values.put("employeeName", empName);
+            values.put("endDate", end.toString());
+            values.put("daysRemaining", String.valueOf(daysRemaining));
+            values.put("recordLink", deepLink);
+            values.put("workspaceName", tenantName);
+            var email = emailComposer.compose(tenantId, (UUID) r.get("company_id"), EVENT_KEY, values,
+                    String.format("Probation ending: %s (%d days)", empName, daysRemaining),
+                    buildEmailHtml(empName, end.toString(), daysRemaining, deepLink));
+            // Only people who haven't switched these reminders off are emailed (and logged as notified).
+            Set<UUID> recipientIds = new LinkedHashSet<>();
+            for (Map.Entry<UUID, String> c : candidates.entrySet()) {
+                String to = c.getValue();
+                if (!preferences.emailAllowed(tenantId, to, EVENT_KEY)) {
+                    log.info("Probation reminder not emailed to user {}: switched off in their notification settings", c.getKey());
+                    continue;
+                }
+                recipientIds.add(c.getKey());
                 try {
-                    mailService.send(EmailMessage.simple(to, subject, body));
+                    mailService.send(EmailMessage.simple(to, email.subject(), email.html()));
                 } catch (Exception e) {
                     log.warn("Probation email to {} failed: {}", to, e.getMessage());
                 }
@@ -264,16 +292,13 @@ public class ProbationService {
             ((Number) r.get("auto_extend_days")).intValue());
     }
 
-    private void collectRecipients(UUID tenantId, UUID managerEmployeeId,
-                                   Set<UUID> ids, List<String> emails) {
+    private void collectRecipients(UUID tenantId, UUID managerEmployeeId, Map<UUID, String> recipients) {
         if (managerEmployeeId != null) {
             jdbc.queryForList("""
                 SELECT uc.id, uc.email FROM auth.user_credentials uc
                  WHERE uc.employee_id = ? AND uc.is_active = TRUE AND uc.email IS NOT NULL
-                """, managerEmployeeId).forEach(m -> {
-                ids.add((UUID) m.get("id"));
-                emails.add((String) m.get("email"));
-            });
+                """, managerEmployeeId).forEach(m ->
+                recipients.putIfAbsent((UUID) m.get("id"), (String) m.get("email")));
         }
         jdbc.queryForList("""
             SELECT DISTINCT uc.id, uc.email
@@ -284,10 +309,8 @@ public class ProbationService {
                AND r.code = 'HR_MANAGER'
                AND uc.is_active = TRUE
                AND uc.email IS NOT NULL
-            """, tenantId).forEach(m -> {
-            UUID id = (UUID) m.get("id");
-            if (ids.add(id)) emails.add((String) m.get("email"));
-        });
+            """, tenantId).forEach(m ->
+            recipients.putIfAbsent((UUID) m.get("id"), (String) m.get("email")));
     }
 
     private void bindTenant(UUID tenantId) {
@@ -299,7 +322,7 @@ public class ProbationService {
     private String loadTenantName(UUID tenantId) {
         try {
             return jdbc.queryForObject("SELECT display_name FROM platform.tenants WHERE id = ?", String.class, tenantId);
-        } catch (Exception e) { return "UnifiedTree"; }
+        } catch (Exception e) { return "your workspace"; }
     }
 
     private static String name(Object first, Object last) {
@@ -330,6 +353,7 @@ public class ProbationService {
               </p>
               <p style="color:#666;font-size:14px">Or copy this link:<br><code>%s</code></p>
             </body></html>
-            """.formatted(empName, endDate, days, deepLink, deepLink);
+            """.formatted(TemplateRenderer.escapeHtml(empName), endDate, days,
+                TemplateRenderer.escapeHtml(deepLink), TemplateRenderer.escapeHtml(deepLink));
     }
 }

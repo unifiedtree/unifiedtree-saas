@@ -1,7 +1,6 @@
 package com.hrms.api.workforce;
 
-import com.unifiedtree.notifications.enums.AppNotificationType;
-import com.unifiedtree.notifications.service.AppNotificationService;
+import com.unifiedtree.notifications.service.NotificationDispatcher;
 import com.unifiedtree.security.tenant.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,9 +62,14 @@ public class MilestoneReminderService {
     private static final int MAX_OBSERVERS = 12;
 
     private final JdbcTemplate jdbc;
-    private final AppNotificationService notifications;
+    /**
+     * Sends through the notification catalog (people.birthday, people.work_anniversary
+     * and their *_heads_up events), so the company's templates and each person's
+     * notification choices apply.
+     */
+    private final NotificationDispatcher notifications;
 
-    public MilestoneReminderService(JdbcTemplate jdbc, AppNotificationService notifications) {
+    public MilestoneReminderService(JdbcTemplate jdbc, NotificationDispatcher notifications) {
         this.jdbc = jdbc;
         this.notifications = notifications;
     }
@@ -84,9 +88,10 @@ public class MilestoneReminderService {
         // and the job would report a cheerful "0 reminders" forever.
         bindTenant(tenantId);
 
+        String workspace = workspaceName(tenantId);
         int sent = 0;
-        sent += announce(tenantId, today, KIND_BIRTHDAY, findBirthdays(today));
-        sent += announce(tenantId, today, KIND_ANNIVERSARY, findAnniversaries(today));
+        sent += announce(tenantId, today, KIND_BIRTHDAY, withWorkspace(findBirthdays(today), workspace));
+        sent += announce(tenantId, today, KIND_ANNIVERSARY, withWorkspace(findAnniversaries(today), workspace));
         return sent;
     }
 
@@ -118,41 +123,49 @@ public class MilestoneReminderService {
         return sent;
     }
 
-    /** Greeting to the person themselves. */
+    /** Greeting to the person themselves (wording: NotificationEventCatalog or the company's template). */
     private void greet(UUID tenantId, Person p, String kind) {
-        String title;
-        String body;
-        if (KIND_BIRTHDAY.equals(kind)) {
-            title = "Happy birthday, " + firstName(p.name()) + "!";
-            body = "Everyone at " + p.orgLabel() + " wishes you a great day.";
-        } else {
-            title = "Happy work anniversary!";
-            body = p.years() == 1
-                    ? "One year with us today. Thank you for everything."
-                    : p.years() + " years with us today. Thank you for everything.";
-        }
-        notifications.create(tenantId, p.id(), AppNotificationType.GENERAL, title, body,
-                payload(kind, p, true));
+        notifications.dispatch(tenantId, p.id(),
+                KIND_BIRTHDAY.equals(kind) ? "people.birthday" : "people.work_anniversary",
+                values(p), payload(kind, p, true));
     }
 
     /** Heads-up to a manager / HR / admin. */
     private void inform(UUID tenantId, UUID recipient, Person p, String kind) {
-        String title;
-        String body;
-        if (KIND_BIRTHDAY.equals(kind)) {
-            title = "It's " + p.name() + "'s birthday";
-            // Plain ASCII on purpose: this string travels through the Expo push
-            // payload and out to OEM notification shades, and a stray em-dash
-            // is the classic thing that arrives as a replacement glyph.
-            body = p.department() == null ? "Today." : "Today, in " + p.department() + ".";
-        } else {
-            title = p.name() + " completes " + p.years() + (p.years() == 1 ? " year" : " years");
-            body = p.department() == null
-                    ? "Work anniversary today."
-                    : "Work anniversary today, in " + p.department() + ".";
+        // Built-in wording is plain ASCII on purpose: it travels through the Expo
+        // push payload to OEM notification shades, where a stray em-dash is the
+        // classic thing that arrives as a replacement glyph.
+        notifications.dispatch(tenantId, recipient,
+                KIND_BIRTHDAY.equals(kind) ? "people.birthday_heads_up" : "people.work_anniversary_heads_up",
+                values(p), payload(kind, p, false));
+    }
+
+    /** Placeholder values for the people.* events. */
+    private static Map<String, String> values(Person p) {
+        Map<String, String> v = new HashMap<>();
+        v.put("employeeName", p.name());
+        v.put("firstName", firstName(p.name()));
+        v.put("teamName", p.orgLabel());
+        v.put("department", p.department() == null ? "" : p.department());
+        v.put("departmentText", p.department() == null || p.department().isBlank() ? "" : ", in " + p.department());
+        v.put("years", String.valueOf(p.years()));
+        v.put("yearsText", p.years() + (p.years() == 1 ? " year" : " years"));
+        v.put("yearsWithUs", p.years() == 1 ? "One year" : p.years() + " years");
+        return v;
+    }
+
+    private String workspaceName(UUID tenantId) {
+        try {
+            List<String> rows = jdbc.queryForList(
+                    "SELECT display_name FROM platform.tenants WHERE id = ?", String.class, tenantId);
+            return rows.isEmpty() || rows.get(0) == null || rows.get(0).isBlank() ? null : rows.get(0);
+        } catch (Exception ex) {
+            return null;
         }
-        notifications.create(tenantId, recipient, AppNotificationType.GENERAL, title, body,
-                payload(kind, p, false));
+    }
+
+    private static List<Person> withWorkspace(List<Person> people, String workspace) {
+        return people.stream().map(p -> new Person(p.id(), p.name(), p.department(), p.managerId(), p.years(), workspace)).toList();
     }
 
     private Map<String, Object> payload(String kind, Person p, boolean self) {
@@ -219,7 +232,8 @@ public class MilestoneReminderService {
                 (name == null || name.isBlank()) ? "A colleague" : name,
                 rs.getString("dept"),
                 rs.getObject("reporting_manager_id", UUID.class),
-                rs.getInt("years"));
+                rs.getInt("years"),
+                null);
     }
 
     /** Reporting manager first, then HR managers, then admins — deduped, capped. */
@@ -263,9 +277,11 @@ public class MilestoneReminderService {
     }
 
     /** One person having a milestone today. */
-    private record Person(UUID id, String name, String department, UUID managerId, int years) {
+    private record Person(UUID id, String name, String department, UUID managerId, int years, String workspace) {
+        /** "Everyone at …": their department, else the workspace's own name (never a product name). */
         String orgLabel() {
-            return department == null || department.isBlank() ? "UnifiedTree" : department;
+            if (department != null && !department.isBlank()) return department;
+            return workspace != null && !workspace.isBlank() ? workspace : "work";
         }
     }
 }
