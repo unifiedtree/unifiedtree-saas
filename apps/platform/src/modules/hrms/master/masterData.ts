@@ -56,6 +56,10 @@ export const COMP_CAT_CODE: Record<string, string> = Object.fromEntries(Object.e
 const COMP_METHOD: Record<string, string> = { FIXED: 'fixed', PERCENT_OF_BASIC: 'pct_basic', PERCENT_OF_GROSS: 'pct_gross', FORMULA: 'formula', STATUTORY: 'statutory' }
 export const COMP_METHOD_CODE: Record<string, string> = Object.fromEntries(Object.entries(COMP_METHOD).map(([k, v]) => [v, k]))
 
+/** The design's weekly-off chips, in ISO order (1 = Mon … 7 = Sun). */
+export const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const ACCRUAL: Record<string, string> = { YEARLY: 'Upfront', MONTHLY: 'Monthly', QUARTERLY: 'Quarterly' }
+export const ACCRUAL_CODE: Record<string, string> = { Upfront: 'YEARLY', Monthly: 'MONTHLY', Quarterly: 'QUARTERLY' }
 const hmToMin = (t?: string | null) => { const [h, m] = String(t || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0) }
 export const rateLabel = (x?: number | null) => (x == null ? null : `${+Number(x).toFixed(2)}×`)
 const inr = (n?: number | null) => (n == null ? '—' : '₹' + Math.round(Number(n)).toLocaleString('en-IN'))
@@ -137,16 +141,18 @@ export function shiftRec(s: ShiftPolicy): Rec {
   const kind = s.shiftType === 'FLEXIBLE' ? 'Flexible' : s.shiftType === 'ROTATIONAL' ? 'Rotational' : 'Fixed'
   const [icon, t] = kind === 'Flexible' ? ['timer', 'teal'] : start >= 1260 || start < 300 ? ['moon', 'indigo'] : start < 540 ? ['sunrise', 'orange'] : start < 720 ? ['sun', 'amber'] : ['sunset', 'rose']
   return {
-    _key: s.id, _raw: s, id: s.id, code: '', name: s.name, kind, start, end, core: null, grace: s.gracePeriodMinutes ?? null, hours: s.workingHoursPerDay ?? 8,
-    ot: !!s.overtimeApplicable, rate: s.overtimeApplicable ? rateLabel(s.overtimeMultiplier ?? null) : null, icon, t, offs: null, status: 'Active',
+    _key: s.id, _raw: s, id: s.id, code: s.code || '', name: s.name, kind, start, end,
+    core: s.coreStartTime && s.coreEndTime ? [hmToMin(s.coreStartTime), hmToMin(s.coreEndTime)] : null, grace: s.gracePeriodMinutes ?? null, hours: s.workingHoursPerDay ?? 8,
+    ot: !!s.overtimeApplicable, rate: s.overtimeApplicable ? rateLabel(s.overtimeMultiplier ?? null) : null, icon, t,
+    offs: s.weeklyOffDays?.length ? s.weeklyOffDays.map((d) => WEEK[d - 1]).filter(Boolean) : null, status: 'Active',
   }
 }
 
 export function leaveRec(l: LeaveTypeResponse): Rec {
   const [cat, t, icon] = LEAVE_LOOK[l.category] || [pretty(l.category), 'teal', 'calendar']
   return {
-    _key: l.id, _raw: l, id: l.id, code: l.code, name: l.name, cat, quota: l.annualEntitlement, accrual: 'Upfront',
-    carry: l.isCarryForwardAllowed ? l.maxCarryForwardDays || 0 : 0, encash: null, paid: !!l.isPaidLeave, icon, t, applies: null,
+    _key: l.id, _raw: l, id: l.id, code: l.code, name: l.name, cat, quota: l.annualEntitlement, accrual: ACCRUAL[l.accrualFrequency || 'YEARLY'] || 'Upfront',
+    carry: l.isCarryForwardAllowed ? l.maxCarryForwardDays || 0 : 0, encash: !!l.isEncashable, encashMax: l.maxEncashDays ?? null, paid: !!l.isPaidLeave, icon, t, applies: null,
     gender: l.applicableGender || null, status: l.isActive === false ? 'Inactive' : 'Active',
   }
 }
@@ -155,7 +161,8 @@ const POLICY_STATUS: Record<string, string> = { ACTIVE: 'Active', DRAFT: 'Draft'
 export function policyRec(p: Policy): Rec {
   return {
     _key: p.id, _raw: p, id: p.id, title: p.title, cat: pretty(p.category), ver: (p.version || '').replace(/^v/i, '') || '1.0', eff: p.effectiveDate || '',
-    ack: p.acknowledgementCount || 0, status: POLICY_STATUS[p.status] || pretty(p.status), ackReq: true, content: p.content || '',
+    ack: p.acknowledgementCount || 0, status: POLICY_STATUS[p.status] || pretty(p.status), ackReq: p.acknowledgementRequired !== false, content: p.content || '',
+    notify: !!p.notifyOnPublish, remindAfter: p.autoRemindAfterDays ?? '',
   }
 }
 

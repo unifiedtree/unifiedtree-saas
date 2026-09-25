@@ -46,6 +46,13 @@ export type AppNotificationType =
   // TODO(billing-ceiling): drop when the Razorpay ceiling flow retires the
   // grandfather.
   | 'BILLING_OVER_CAP'
+  // V143.23: leave encashment and policy notices. Both carry a web data.route
+  // (/hrms/leave?tab=encash, /hrms/policies), which webRouteFor prefers.
+  | 'LEAVE_ENCASHMENT_SUBMITTED'
+  | 'LEAVE_ENCASHMENT_APPROVED'
+  | 'LEAVE_ENCASHMENT_REJECTED'
+  | 'POLICY_PUBLISHED'
+  | 'POLICY_REMINDER'
   | 'GENERAL'
 
 /** Raw server DTO (see {@code NotificationDtos.NotificationDto}). */
