@@ -79,6 +79,10 @@ try {
   // ── 1. KPI history for the employee ──
   const prog = await owner.call(`/v1/performance/kpis/${kpiA}/progress`, 'PUT', { newValue: 40, notes: `${TAG} owner update` })
   check('history: owner records KPI progress', prog.status === 200 && Number(prog.json?.currentValue) === 40, `status=${prog.status}`)
+  const adminHist = await owner.call(`/v1/performance/kpis/${kpiA}/history`)
+  check('history: the KPI history (admin drawer) names who recorded each update', adminHist.status === 200 && Number(adminHist.json?.[0]?.newValue) === 40 && !!adminHist.json?.[0]?.updatedByName, `status=${adminHist.status} by=${adminHist.json?.[0]?.updatedByName}`)
+  const readerAdminHist = await reader.call(`/v1/performance/kpis/${kpiA}/history`)
+  check('history: the admin history route stays closed to employees (403)', readerAdminHist.status === 403, `status=${readerAdminHist.status}`)
   const hist = await reader.call(`/v1/performance/goals/my/${kpiA}/history`)
   const latest = hist.json?.[0]
   check('history: employee reads their own KPI history (value, date, who, note)', hist.status === 200 && hist.json.length >= 2 && Number(latest?.newValue) === 40 && latest?.notes === `${TAG} owner update` && !!latest?.updatedAt && !!latest?.updatedByName, `status=${hist.status} n=${hist.json?.length} by=${latest?.updatedByName}`)
@@ -91,6 +95,8 @@ try {
   const pp = await reader.call(`/v1/performance/goals/${personal.json?.id}/progress`, 'PUT', { progress: 30, note: `${TAG} note` })
   const ppRow = sql(`select new_value::int || '|' || coalesce(notes,'') from performance_mgmt.kpi_progress_updates where goal_id='${personal.json?.id}' order by updated_at desc limit 1`)
   check('history: personal goal progress with a note is recorded', pp.status === 200 && pp.json?.progress === 30 && ppRow === `30|${TAG} note`, `status=${pp.status} row=${ppRow}`)
+  const finPP = await fin.call(`/v1/performance/goals/${personal.json?.id}/progress`, 'PUT', { progress: 90, note: 'not mine' })
+  check('history: nobody else can update the personal goal', finPP.status === 422 && sql(`select progress from performance_mgmt.goals where id='${personal.json?.id}'`) === '30', `status=${finPP.status}`)
   const ph = await reader.call(`/v1/performance/goals/my/${personal.json?.id}/history`)
   check('history: the personal goal’s history shows the update', ph.status === 200 && ph.json?.[0]?.notes === `${TAG} note`)
 
@@ -191,6 +197,8 @@ try {
   const rj = await hrm.call(`/v1/learning/skill-assessments/${p2.json?.id}/decide`, 'POST', { decision: 'REJECTED', note: `${TAG} not yet` })
   check('skill: HR rejects with a note; the matrix is unchanged', rj.status === 200 && rj.json?.status === 'REJECTED' && sql(`select proficiency from learning_mgmt.employee_skills where tenant_id='${tenant}' and employee_id='${READER}' and skill_name='${skill}'`) === '3', `status=${rj.status}`)
   check('skill: the employee was told it wasn’t approved', sql(`select count(*) from notif.notifications where user_id='${READER}' and type='SKILL_ASSESSMENT_REJECTED' and data->>'skillAssessmentId'='${p2.json?.id}'`) === '1')
+  const decidedQ = await hrm.call('/v1/learning/skill-assessments?view=DECIDED')
+  check('skill: recent decisions list both decisions', decidedQ.status === 200 && [p1, p2].every((p) => (decidedQ.json || []).some((a) => a.id === p.json?.id)), `status=${decidedQ.status}`)
   const again = await hrm.call(`/v1/learning/skill-assessments/${p2.json?.id}/decide`, 'POST', { decision: 'APPROVED' })
   check('skill: a decided proposal can’t be decided again', again.status === 422, `status=${again.status}`)
   const p3 = await reader.call('/v1/learning/skill-assessments', 'POST', { skillName: skill, proposedProficiency: 4 })
@@ -201,6 +209,8 @@ try {
   check('skill: the employee lists their proposals', mine.status === 200 && [p1, p2, p3].every((p) => (mine.json || []).some((a) => a.id === p.json?.id)))
   const own = await mgr.call('/v1/learning/skill-assessments', 'POST', { skillName: `${TAG} Mgr Skill`, proposedProficiency: 2 })
   if (own.json?.id) made.assessments.push(own.json.id)
+  const wdOther = await reader.call(`/v1/learning/skill-assessments/${own.json?.id}/withdraw`, 'POST')
+  check('skill: nobody withdraws someone else’s proposal (403)', wdOther.status === 403 && sql(`select status from learning_mgmt.skill_assessments where id='${own.json?.id}'`) === 'PENDING', `status=${wdOther.status}`)
   const ownQ = await mgr.call('/v1/learning/skill-assessments')
   const ownD = await mgr.call(`/v1/learning/skill-assessments/${own.json?.id}/decide`, 'POST', { decision: 'APPROVED' })
   check('skill: nobody decides their own proposal', !(ownQ.json || []).some((a) => a.id === own.json?.id) && ownD.status === 403, `decide=${ownD.status}`)

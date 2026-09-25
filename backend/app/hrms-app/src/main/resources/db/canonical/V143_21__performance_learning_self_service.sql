@@ -94,11 +94,16 @@ END $$;
 
 -- ── 3. Permissions ──────────────────────────────────────────────────────────
 INSERT INTO rbac.permissions (code, display_name, module, description) VALUES
-    ('hrms.learning.skill.assess.self', 'Propose my skill levels', 'hrms',
+    ('hrms.learning.skill.assess.self', 'Propose my skill levels', 'learning',
      'Propose a proficiency level (1 to 5) for your own skills, with a note. Nothing changes on your record until your manager or HR approves it.'),
-    ('hrms.learning.skill.approve', 'Approve skill self-assessments', 'hrms',
-     'Approve or reject the skill levels employees propose for themselves. Approving updates the employee''s skill matrix. Managers see only their own team; people who can manage learning (hrms.learning.write) see everyone.')
-ON CONFLICT (code) DO NOTHING;
+    ('hrms.learning.skill.approve', 'Approve skill self-assessments', 'learning',
+     'Approve or reject the skill levels employees propose for themselves. Approving updates the employee''s skill matrix. Managers see only their own team; people who can manage learning programs and skills (HR) see every proposal.')
+-- module 'learning' groups them with the other hrms.learning.* permissions on the
+-- Roles & Permissions screen; re-running the file corrects an earlier copy.
+ON CONFLICT (code) DO UPDATE
+   SET display_name = EXCLUDED.display_name,
+       module       = EXCLUDED.module,
+       description  = EXCLUDED.description;
 
 INSERT INTO rbac.role_permissions (role_id, permission_code)
 SELECT r.id, 'hrms.learning.skill.assess.self'

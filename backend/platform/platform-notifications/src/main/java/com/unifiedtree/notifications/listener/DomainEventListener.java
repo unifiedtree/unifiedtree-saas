@@ -696,8 +696,9 @@ public class DomainEventListener {
 
     // ─── Skill self-assessment (V143.21) ──────────────────────────────────
     // Employee proposes a level → the manager whose team includes them (else HR)
-    // is asked to approve; the decision goes back to the employee. Routes are the
-    // web Learning views; the mobile app has no Learning screen.
+    // is asked to approve; the decision goes back to the employee. No data.route:
+    // the mobile app has no Learning screen (a route would open an "unmatched
+    // route" page there), and the web bell maps these types to the Learning views.
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onSkillAssessmentSubmitted(SkillAssessmentSubmittedEvent e) {
         try {
@@ -718,7 +719,6 @@ public class DomainEventListener {
             data.put("type", AppNotificationType.SKILL_ASSESSMENT_SUBMITTED.name());
             data.put("skillAssessmentId", e.assessmentId().toString());
             data.put("employeeId", e.employeeId().toString());
-            data.put("route", "/hrms/learning?view=approvals");
             service.create(e.tenantId(), to, AppNotificationType.SKILL_ASSESSMENT_SUBMITTED,
                     "Skill level to approve", body, data);
         } catch (Exception ex) {
@@ -740,7 +740,6 @@ public class DomainEventListener {
             Map<String, Object> data = new HashMap<>();
             data.put("type", type.name());
             data.put("skillAssessmentId", e.assessmentId().toString());
-            data.put("route", "/hrms/learning?view=my");
             service.create(e.tenantId(), e.employeeId(), type,
                     e.approved() ? "Skill level approved" : "Skill level not approved", body, data);
         } catch (Exception ex) {
