@@ -68,7 +68,8 @@ public class SalaryBulkRevisionService {
 
     public record PreviewDto(List<RowDto> rows, List<SkippedDto> skipped, int employees,
                              BigDecimal totalOldCtc, BigDecimal totalNewCtc, BigDecimal totalDifference,
-                             String effectiveFrom, String change, List<String> blockers, String previewKey) {}
+                             String effectiveFrom, String change, List<String> blockers, List<String> warnings,
+                             String previewKey) {}
 
     public record AppliedDto(UUID employeeId, String employeeCode, String name, UUID structureId,
                              BigDecimal oldCtc, BigDecimal newCtc) {}
@@ -206,7 +207,8 @@ public class SalaryBulkRevisionService {
 
     // ── internals ───────────────────────────────────────────────────────────
 
-    private record Prepared(Mode mode, BigDecimal value, LocalDate effectiveFrom, Plan plan, List<String> blockers) {}
+    private record Prepared(Mode mode, BigDecimal value, LocalDate effectiveFrom, Plan plan, List<String> blockers,
+                            List<String> warnings) {}
 
     private Prepared prepare(UUID tenantId, BulkReviseRequest req, boolean applying) {
         Mode mode = SalaryRevisionPlanner.mode(req.mode());
@@ -218,10 +220,16 @@ public class SalaryBulkRevisionService {
             throw new BusinessRuleException("No active employees match this selection.", "REVISION_NOBODY");
         }
         Plan plan = SalaryRevisionPlanner.plan(candidates, mode, req.value(), eff);
-        Set<UUID> companies = plan.rows().stream().map(r -> r.candidate().companyId()).filter(Objects::nonNull)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        List<String> blockers = SalaryRevisionPlanner.runBlockers(loadRuns(companies), eff);
-        return new Prepared(mode, req.value(), eff, plan, blockers);
+        Map<UUID, String> companies = new LinkedHashMap<>();
+        plan.rows().stream().map(PlannedRow::candidate).filter(c -> c.companyId() != null)
+                .forEach(c -> companies.putIfAbsent(c.companyId(), c.companyName()));
+        List<RunInfo> runs = loadRuns(companies.keySet());
+        // Runs pay from each person's latest structure: open earlier runs, locked
+        // later runs and months not yet locked before the date all matter.
+        List<String> blockers = new ArrayList<>(SalaryRevisionPlanner.runBlockers(runs, eff));
+        SalaryRevisionPlanner.MonthChecks months = SalaryRevisionPlanner.unlockedMonthChecks(runs, companies, eff, LocalDate.now(IST));
+        blockers.addAll(months.blockers());
+        return new Prepared(mode, req.value(), eff, plan, List.copyOf(blockers), months.warnings());
     }
 
     private PreviewDto toPreview(Prepared p) {
@@ -235,7 +243,7 @@ public class SalaryBulkRevisionService {
                 .map(s -> new SkippedDto(s.employeeId(), s.employeeCode(), s.name(), s.reason(), s.detail())).toList();
         return new PreviewDto(rows, skipped, rows.size(), p.plan.totalOldCtc(), p.plan.totalNewCtc(), p.plan.totalDifference(),
                 p.effectiveFrom.toString(), SalaryRevisionPlanner.describe(p.mode, p.value),
-                p.blockers, p.plan.previewKey());
+                p.blockers, p.warnings, p.plan.previewKey());
     }
 
     /** Active employees matching the selection, with their current structure (if any) and its configured lines. */

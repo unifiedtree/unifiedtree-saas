@@ -153,6 +153,34 @@ class SalaryRevisionPlannerTest {
         assertTrue(SalaryRevisionPlanner.runBlockers(List.of(julPaid, octDraft), OCT).isEmpty());
     }
 
+    @Test void monthsNotYetLockedBeforeTheDateBlockOrWarn() {
+        UUID co = UUID.randomUUID(), fresh = UUID.randomUUID();
+        LocalDate today = LocalDate.of(2026, 9, 25);
+        RunInfo augLocked = new RunInfo(co, "Acme", 2026, 8, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), "LOCKED");
+        RunInfo sepLocked = new RunInfo(co, "Acme", 2026, 9, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), "PAID");
+        // August locked, September not run yet: from 1 Oct, the September run would pay October's pay.
+        var oct = SalaryRevisionPlanner.unlockedMonthChecks(List.of(augLocked), java.util.Map.of(co, "Acme"), OCT, today);
+        assertEquals(1, oct.blockers().size());
+        assertTrue(oct.blockers().get(0).contains("Sep 2026") && oct.blockers().get(0).contains("1 Sep 2026"), oct.blockers().get(0));
+        // From 1 Sep it is fine, and so is 1 Oct once September is locked.
+        assertTrue(SalaryRevisionPlanner.unlockedMonthChecks(List.of(augLocked), java.util.Map.of(co, "Acme"), LocalDate.of(2026, 9, 1), today).blockers().isEmpty());
+        assertTrue(SalaryRevisionPlanner.unlockedMonthChecks(List.of(augLocked, sepLocked), java.util.Map.of(co, "Acme"), OCT, today).blockers().isEmpty());
+        // A gap in the past can't be fixed by picking an earlier date: only "lock it first".
+        var late = SalaryRevisionPlanner.unlockedMonthChecks(List.of(augLocked), java.util.Map.of(co, "Acme"), OCT, LocalDate.of(2026, 10, 3));
+        assertEquals(1, late.blockers().size());
+        assertFalse(late.blockers().get(0).contains("or choose"), late.blockers().get(0));
+        // A company that has never locked payroll: allowed, with a warning for a later month only.
+        var never = SalaryRevisionPlanner.unlockedMonthChecks(List.of(), java.util.Map.of(fresh, "NewCo"), OCT, today);
+        assertTrue(never.blockers().isEmpty());
+        assertEquals(1, never.warnings().size());
+        assertTrue(never.warnings().get(0).contains("NewCo") && never.warnings().get(0).contains("1 Sep 2026"), never.warnings().get(0));
+        assertTrue(SalaryRevisionPlanner.unlockedMonthChecks(List.of(), java.util.Map.of(fresh, "NewCo"), LocalDate.of(2026, 9, 1), today).warnings().isEmpty());
+        // An open earlier run is reported by runBlockers, not twice.
+        RunInfo sepDraft = new RunInfo(co, "Acme", 2026, 9, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), "DRAFT");
+        var open = SalaryRevisionPlanner.unlockedMonthChecks(List.of(augLocked, sepDraft), java.util.Map.of(co, "Acme"), OCT, today);
+        assertTrue(open.blockers().isEmpty() && open.warnings().isEmpty());
+    }
+
     @Test void moneyAndChangeReadTheIndianWay() {
         assertEquals("₹6,30,000", SalaryRevisionPlanner.rupees(bd("630000.00")));
         assertEquals("₹1,00,00,000", SalaryRevisionPlanner.rupees(bd("10000000")));

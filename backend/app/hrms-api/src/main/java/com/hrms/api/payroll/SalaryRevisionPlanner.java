@@ -276,6 +276,54 @@ public final class SalaryRevisionPlanner {
         return out;
     }
 
+    /** What the months without a run mean for the revision: hard stops and warnings. */
+    public record MonthChecks(List<String> blockers, List<String> warnings) {}
+
+    /**
+     * Months that have no locked run yet. Because payroll pays each run from
+     * each person's LATEST structure, a revision saved now is also paid by any
+     * run made later for a month before its effective date. So, per company:
+     * <ul>
+     *   <li>it has locked payroll before: every month between the last locked
+     *       run and the effective date must be locked first, or the pay would
+     *       go out early (a blocker);</li>
+     *   <li>it has never locked a run: a date after this month is allowed, with
+     *       a warning to run and lock the months before it first.</li>
+     * </ul>
+     * Companies with an open earlier run are already stopped by
+     * {@link #runBlockers} and are not repeated here.
+     */
+    public static MonthChecks unlockedMonthChecks(List<RunInfo> runs, java.util.Map<UUID, String> companies,
+                                                  LocalDate effectiveFrom, LocalDate today) {
+        List<String> blockers = new ArrayList<>(), warnings = new ArrayList<>();
+        LocalDate monthStart = today.withDayOfMonth(1);
+        for (java.util.Map.Entry<UUID, String> co : companies.entrySet()) {
+            List<RunInfo> own = runs.stream().filter(r -> co.getKey().equals(r.companyId())).toList();
+            boolean openBefore = own.stream().anyMatch(r -> ("DRAFT".equals(r.status()) || "PROCESSING".equals(r.status()))
+                    && r.periodEnd().isBefore(effectiveFrom));
+            if (openBefore) continue;
+            String name = co.getValue() == null || co.getValue().isBlank() ? "" : " for " + co.getValue();
+            LocalDate lastLocked = own.stream().filter(r -> "LOCKED".equals(r.status()) || "PAID".equals(r.status()))
+                    .map(RunInfo::periodEnd).max(Comparator.naturalOrder()).orElse(null);
+            if (lastLocked != null) {
+                LocalDate firstOpen = lastLocked.plusDays(1).withDayOfMonth(1);
+                if (lastLocked.plusDays(1).isBefore(effectiveFrom)) {
+                    String label = monthLabel(firstOpen);
+                    blockers.add("The " + label + " payroll" + name + " isn't locked yet. Payroll pays each month from each person's "
+                            + "latest salary structure, so " + label + " would already pay the new amounts. Lock the " + label
+                            + " payroll first" + (firstOpen.isBefore(monthStart) ? "" : ", or choose " + day(firstOpen)) + ".");
+                }
+            } else if (effectiveFrom.isAfter(monthStart)) {
+                warnings.add("No payroll" + name + " has been locked yet. Payroll pays each month from each person's latest salary "
+                        + "structure, so a run for a month before " + day(effectiveFrom) + " made after you apply this would already pay "
+                        + "the new amounts. Run and lock those months first, or choose " + day(monthStart) + ".");
+            }
+        }
+        return new MonthChecks(blockers, warnings);
+    }
+
+    static String monthLabel(LocalDate d) { return MON[d.getMonthValue() - 1] + " " + d.getYear(); }
+
     /** "+5%" or "+₹30,000 a year". */
     public static String describe(Mode mode, BigDecimal value) {
         return mode == Mode.PERCENT

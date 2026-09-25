@@ -79,6 +79,8 @@ class SalaryBulkRevisionServiceTest {
         assertEquals(1, p.skipped().size());
         assertEquals("NO_STRUCTURE", p.skipped().get(0).reason());
         assertTrue(p.blockers().isEmpty());
+        // Neither company has locked payroll yet, so a date after this month comes with a warning each.
+        assertEquals(2, p.warnings().size());
         assertNotNull(p.previewKey());
         verify(jdbc, never()).update(anyString(), any(Object[].class));
     }

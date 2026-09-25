@@ -86,6 +86,7 @@ try {
       && money(preview.totalDifference) === money(preview.totalNewCtc - preview.totalOldCtc) && preview.change === '+10%', `${preview.totalOldCtc} → ${preview.totalNewCtc}`)
     check('preview: monthly gross of a split structure scales by the same ratio',
       finGross === 0 || money(byId[FIN]?.newMonthlyGross) === Math.round(finGross * (Math.round(oldRows[FIN].ctc * 1.1) / oldRows[FIN].ctc)), `${finGross} → ${byId[FIN]?.newMonthlyGross}`)
+    check('preview: payroll warnings come as a list (months not yet locked before the date)', Array.isArray(preview.warnings) && Array.isArray(preview.blockers), JSON.stringify(preview.warnings))
     check('preview: writes nothing', sql(`select count(*) from payroll.employee_salary_structures where tenant_id='${tenant}'`) === structuresBefore)
     const amt = await fin.call('/v1/payroll/structures/bulk-revise/preview', 'POST', { ...base, mode: 'AMOUNT', value: 12000, effectiveFrom: eff })
     check('preview: a fixed yearly amount adds it to each CTC', amt.status === 200 && amt.json.rows.every((r) => money(r.newCtc) === money(Number(r.oldCtc) + 12000)), `status=${amt.status}`)

@@ -38,7 +38,7 @@ export interface BulkPreview {
   rows: { employeeId: string; employeeCode: string; name: string; department: string | null; oldCtc: number; newCtc: number; difference: number; oldMonthlyGross: number; newMonthlyGross: number }[]
   skipped: { employeeId: string; employeeCode: string; name: string; reason: string; detail: string }[]
   employees: number; totalOldCtc: number; totalNewCtc: number; totalDifference: number; effectiveFrom: string; change: string
-  blockers: string[]; previewKey: string
+  blockers: string[]; warnings?: string[]; previewKey: string
 }
 export interface BulkBody {
   mode: 'PERCENT' | 'AMOUNT'; value: number; effectiveFrom: string
@@ -216,6 +216,7 @@ export class PaySalary extends DCLogic {
     if (prev) {
       const parts: any[] = []
       prev.blockers.forEach((t, i) => parts.push(createElement(Note, { key: `b${i}`, tone: 'red' }, t)))
+      if (!prev.blockers.length) (prev.warnings || []).forEach((t, i) => parts.push(createElement(Note, { key: `w${i}`, tone: 'amber' }, t)))
       if (prev.rows.length) {
         parts.push(createElement(Facts, { key: 'facts', min: 150, items: [
           { k: 'People', v: String(prev.employees) }, { k: 'Change', v: prev.change },
