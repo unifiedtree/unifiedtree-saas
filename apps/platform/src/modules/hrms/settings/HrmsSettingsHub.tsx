@@ -1,21 +1,21 @@
 // HRMS settings (/hrms/settings): the one settings place in HRMS. Every HR
 // setting is listed here, grouped by what it's about, and shown only to people
 // allowed to open it (shared/navigation/hrmsSettings.ts holds the list and the
-// rules). Pages that are only settings open inside this hub, under its section
-// tabs; the rest open on the page where they live (for example Shift Rules in
-// Master data). Workspace settings (branding, billing, users) are not here:
-// they open from the Apps page.
-import { useNavigate } from 'react-router-dom'
+// rules). The settings pages open inside this hub, under its section tabs;
+// only Holidays and punch zones open where they live (the Leave page's holiday
+// list, each branch). Workspace settings (branding, billing, users) are not
+// here: they open from the Apps page.
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { HrButton } from '@/shared/components/hr'
 import { ModulePage, State, Note, CARD, HEAD_FONT } from '@/design/module/ModuleKit'
 import { dashIcon } from '@/design/dc/icons'
 import { useAccessContext } from '@/shared/navigation/useAccess'
-import { hrmsSettingsFor, type HrmsSettingsItem } from '@/shared/navigation/hrmsSettings'
+import { hrmsSettingsFor, HUB_PAGES, type HrmsSettingsItem } from '@/shared/navigation/hrmsSettings'
 import { workspaceSettingsFor } from '@/shared/navigation/workspaceSettings'
 
 const TONE: Record<string, [string, string, string]> = {
   company: ['#ecfdf5', '#d1fae5', '#0f6e56'], attendance: ['#eff6ff', '#dbeafe', '#2563eb'], leave: ['#f0fdfa', '#99f6e4', '#0f766e'],
-  payroll: ['#f5f3ff', '#ddd6fe', '#7c3aed'], documents: ['#fff7ed', '#fed7aa', '#c2410c'], notifications: ['#fffbeb', '#fde68a', '#b45309'], access: ['#fff1f2', '#fecdd3', '#e11d48'],
+  payroll: ['#f5f3ff', '#ddd6fe', '#7c3aed'], expenses: ['#fdf4ff', '#f5d0fe', '#a21caf'], documents: ['#fff7ed', '#fed7aa', '#c2410c'], notifications: ['#fffbeb', '#fde68a', '#b45309'], access: ['#fff1f2', '#fecdd3', '#e11d48'],
 }
 
 function SettingCard({ item, tone, go }: { item: HrmsSettingsItem; tone: [string, string, string]; go: (to: string) => void }) {
@@ -38,9 +38,13 @@ function SettingCard({ item, tone, go }: { item: HrmsSettingsItem; tone: [string
 
 export function HrmsSettingsHub() {
   const navigate = useNavigate()
+  const { hash } = useLocation()
   const ctx = useAccessContext()
   const groups = hrmsSettingsFor(ctx)
   const workspace = workspaceSettingsFor(ctx).length > 0
+
+  // HR configuration used to live at this address: its old section links (#st-late, #st-fiscal…) open it there.
+  if (hash.startsWith('#st-')) return <Navigate to={{ pathname: HUB_PAGES.hrConfig, hash }} replace />
 
   return (
     <ModulePage crumb="HRMS" title="HRMS settings" subtitle="Every HR setting in one place. Each opens only for the people allowed to change it.">

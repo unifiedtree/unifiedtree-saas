@@ -4,6 +4,7 @@ import {
   ChevronDown, ChevronRight, AlertTriangle, ExternalLink, Pencil, RotateCcw,
 } from 'lucide-react'
 import { format } from 'date-fns'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
 import { useToast } from '@/shared/hooks/useToast'
 import {
@@ -33,16 +34,20 @@ const fmtCat = (c: string) => c.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g
 
 type Tab = 'my' | 'submit' | 'approvals' | 'policies' | 'batches'
 
+/** Expense policies are settings: they open in HRMS settings, the one settings place in HRMS. */
+const POLICIES_IN_SETTINGS = '/hrms/settings/expense-policies'
+
 // Expenses (/hrms/expenses) in the design language of the redesigned modules
 // (design/module/ModuleKit). Views by permission: My claims + Submit
 // (hrms.expense.claim.self), Approvals (claim.approve or reimbursement: approve
 // submitted claims, mark approved ones paid), Reimbursement batches
-// (reimb_batch.read), Policies (policy.read; editing needs policy.write).
+// (reimb_batch.read), Policies (policy.read; editing needs policy.write) —
+// the Policies tab (and ?tab=policies) opens them in HRMS settings.
 export const Expense: React.FC = () => {
+  const navigate = useNavigate()
   const canApprove = usePermission('hrms.expense.claim.approve')
   const canReimburse = usePermission('hrms.expense.reimbursement')
   const canPolicyRead = usePermission('hrms.expense.policy.read')
-  const canPolicyWrite = usePermission('hrms.expense.policy.write')
   const canSelf = usePermission('hrms.expense.claim.self')
   const canBatches = usePermission('hrms.reimb_batch.read')
   const approver = canApprove || canReimburse
@@ -55,19 +60,29 @@ export const Expense: React.FC = () => {
     ...(canPolicyRead ? [{ key: 'policies', label: 'Policies', icon: 'shield' }] : []),
   ]
   const [tab, setTab] = useView(views.map((v) => v.key), 'tab') as [Tab, (k: string) => void]
+  if (tab === 'policies') return <Navigate to={POLICIES_IN_SETTINGS} replace />
   return (
     <ModulePage crumb="Expense Management" title="Expenses" subtitle={approver ? 'Approve and reimburse claims, and set the limits they’re checked against.' : 'Claim back what you spent for work, and track each claim.'}
       actions={canSelf && tab !== 'submit' ? <HrButton onClick={() => setTab('submit')}><Plus size={15} /> New claim</HrButton> : undefined}>
       <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-        {views.length > 0 && <Views items={views} active={tab} onChange={setTab} label="Expense views" />}
+        {views.length > 0 && <Views items={views} active={tab} onChange={(k) => (k === 'policies' ? navigate(POLICIES_IN_SETTINGS) : setTab(k))} label="Expense views" />}
         {views.length === 0 && <State kind="empty" icon="lock" title="No expense access" description="Your role can’t submit or review expense claims." />}
         {tab === 'approvals' && approver && <><ExpenseDashboardCards stats={stats} /><ApprovalsTab canApprove={canApprove} canReimburse={canReimburse} /></>}
         {tab === 'my' && canSelf && <MyClaimsTab />}
         {/* canPolicyRead gates the cap hint in the form (GET /v1/expense/policies needs it). */}
         {tab === 'submit' && canSelf && <SubmitTab canPolicyRead={canPolicyRead} onSubmitted={() => setTab('my')} />}
         {tab === 'batches' && canBatches && <ReimbursementBatches />}
-        {tab === 'policies' && canPolicyRead && <PoliciesTab canWrite={canPolicyWrite} />}
       </div>
+    </ModulePage>
+  )
+}
+
+/** Expense policies in HRMS settings (/hrms/settings/expense-policies): the same table and form the Expenses page's Policies tab had. */
+export const ExpensePolicies: React.FC = () => {
+  const canPolicyWrite = usePermission('hrms.expense.policy.write')
+  return (
+    <ModulePage crumb="HRMS settings" title="Expense policies" subtitle="The most one claim may be in each category.">
+      <PoliciesTab canWrite={canPolicyWrite} />
     </ModulePage>
   )
 }

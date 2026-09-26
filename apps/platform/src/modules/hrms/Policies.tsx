@@ -95,11 +95,11 @@ export const Policies: React.FC = () => {
   const [activeTab, setTab] = useView(order.map((t) => t.key)) as [Tab, (k: string) => void]
   const onlyPolicies = order.length === 1 && order[0].key === 'documents'
   return (
-    <ModulePage crumb="HR setup" title={onlyPolicies ? 'Policies' : 'Rules & policies'}
+    <ModulePage crumb={onlyPolicies ? 'My workspace' : 'HRMS settings'} title={onlyPolicies ? 'Policies' : 'Rules & policies'}
       subtitle={onlyPolicies ? 'The company policies you’re asked to read and acknowledge.' : 'Shift and leave rules, and the policy documents employees acknowledge.'}>
       <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
         {order.length > 1 && <Views items={order.map((t) => ({ key: t.key, label: t.label, icon: ICON[t.key as Tab] }))} active={activeTab} onChange={setTab} label="Policy views" />}
-        {order.length === 0 && <State kind="empty" icon="lock" title="No policies access" description="Ask an admin to grant a Policies permission from Settings → Roles & permissions." />}
+        {order.length === 0 && <State kind="empty" icon="lock" title="No policies access" description="Ask an admin to grant a Policies permission from HRMS settings → Roles & permissions." />}
         {activeTab === 'shifts' && <ShiftRulesTab />}
         {activeTab === 'leaves' && <LeaveRulesTab />}
         {activeTab === 'documents' && (canRead || canAcknowledge) && <PoliciesTab canAcknowledge={canAcknowledge} />}

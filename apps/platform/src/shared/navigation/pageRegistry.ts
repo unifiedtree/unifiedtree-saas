@@ -136,11 +136,12 @@ page('m-designations', 'Designations', '/hrms/master/designations', 'Master data
 page('m-grades', 'Grades', '/hrms/master/grades', 'Master data', 'master/grades', [{ anyOf: ORG_SETUP, module: HR }], { keywords: ['band', 'level'] })
 page('m-contractors', 'Contractor Master', '/hrms/master/contractors', 'Master data', 'master/contractors', [{ ...any('hrms.contractor.read'), module: HR }], { keywords: ['agency', 'vendor', 'contract workers'] })
 page('m-classifications', 'Employee classifications', '/hrms/master/classifications', 'Master data', 'master/classifications', [{ ...any('hrms.employee.read'), module: HR }], { keywords: ['employment type', 'permanent', 'contract', 'intern'] })
-page('m-shift-rules', 'Shift Rules', '/hrms/master/shift-rules', 'Master data', 'master/shift-rules', [{ ...any('attendance.workforce.admin', 'hrms.policy.write'), module: HR }], { aliases: ['master/rules'], keywords: ['shift policy', 'timings', 'grace'] })
-page('m-leave-rules', 'Leave Rules', '/hrms/master/leave-rules', 'Master data', 'master/leave-rules', [{ ...any('leave.type.write', 'hrms.policy.write'), module: HR }], { keywords: ['leave policy', 'leave types', 'quota', 'carry forward'] })
+// Master data's rules and payroll configuration open inside HRMS settings (Master's tabs lead there).
+page('m-shift-rules', 'Shift Rules', HUB_PAGES.shiftRules, 'HRMS settings', 'hr-setup/shift-rules', HUB_ACCESS.shiftRules, { aliases: ['master/shift-rules', 'master/rules'], keywords: ['shift policy', 'timings', 'grace'] })
+page('m-leave-rules', 'Leave Rules', HUB_PAGES.leaveRules, 'HRMS settings', 'hr-setup/leave-rules', HUB_ACCESS.leaveRules, { aliases: ['master/leave-rules'], keywords: ['leave policy', 'leave types', 'quota', 'carry forward'] })
 page('policies', 'Policies', '/hrms/policies', 'Master data', 'master/policies', [{ ...any('hrms.policy.read', 'hrms.policy.write', 'hrms.policy.acknowledge.self'), module: HR }], { aliases: ['policies', 'me/policies'], keywords: ['policy', 'handbook', 'acknowledge', 'code of conduct'] })
-page('components', 'Salary components', '/hrms/payroll/components', 'Master data', 'master/salary-components', [{ ...any('payroll.components.read'), module: PAY }], { aliases: ['master/payroll-configuration', 'payroll/components'], keywords: ['earnings', 'deductions', 'basic', 'hra', 'allowance'] })
-page('m-statutory', 'Statutory settings', '/hrms/master/statutory', 'Master data', 'master/statutory', [{ ...any('payroll.settings.read'), module: HR }], { keywords: ['pf', 'esi', 'pt', 'professional tax', 'lwf'] })
+page('components', 'Salary components', HUB_PAGES.components, 'HRMS settings', 'hr-setup/salary-components', HUB_ACCESS.components, { aliases: ['master/salary-components', 'master/payroll-configuration', 'payroll/components'], keywords: ['earnings', 'deductions', 'basic', 'hra', 'allowance'] })
+page('m-statutory', 'Statutory settings', HUB_PAGES.statutory, 'HRMS settings', 'hr-setup/statutory', HUB_ACCESS.statutory, { aliases: ['master/statutory'], keywords: ['pf', 'esi', 'pt', 'professional tax', 'lwf'] })
 
 // ── Attendance & Time ──────────────────────────────────────────────────────
 page('att-analytics', 'Attendance Analytics', '/hrms/att-analytics', 'Attendance & Time', 'attendance/analytics', [{ ...any('attendance.team.read'), module: HR }], { keywords: ['attendance report', 'trend', 'charts'] })
@@ -209,7 +210,8 @@ tab('expenses', 'approvals', 'Expense approvals', 'tab=approvals', 'expenses/app
 tab('expenses', 'submit', 'Submit an expense claim', 'tab=submit', 'expenses/submit', [any('hrms.expense.claim.self')], { aliases: ['expenses/new'], keywords: ['new claim', 'receipt'] })
 tab('expenses', 'my', 'My claims', 'tab=my', 'expenses/my-claims', [any('hrms.expense.claim.self')], { aliases: ['expenses/my'] })
 tab('expenses', 'batches', 'Reimbursement batches', 'tab=batches', 'expenses/batches', [any('hrms.reimb_batch.read')], { keywords: ['payout', 'batch'] })
-tab('expenses', 'policies', 'Expense policies', 'tab=policies', 'expenses/policies', [any('hrms.expense.policy.read')], { keywords: ['limits', 'rules'] })
+// Expense policies open inside HRMS settings (the Expenses page's Policies tab leads there).
+page('expense-policies', 'Expense policies', HUB_PAGES.expensePolicies, 'HRMS settings', 'hr-setup/expense-policies', HUB_ACCESS.expensePolicies, { aliases: ['expenses/policies'], keywords: ['limits', 'rules', 'claim limit'] })
 
 // ── Performance & learning ─────────────────────────────────────────────────
 page('performance', 'Performance', '/hrms/performance', 'Performance & Learning', 'performance', [{ ...any('hrms.performance.read', 'hrms.performance.write', 'hrms.performance.review.self'), module: HR }], { keywords: ['appraisal', 'review', 'kpi', 'goals'] })
@@ -259,6 +261,7 @@ page('s-documents', 'Document types', HUB_PAGES.documentTypes, 'HRMS settings', 
 page('roles', 'Roles & Permissions', HUB_PAGES.roles, 'HRMS settings', 'hr-setup/roles', HUB_ACCESS.roles, { aliases: ['roles', 'permissions', 'settings/roles'], keywords: ['role', 'permission', 'rbac', 'access'] })
 tab('roles', 'assignments', 'HRMS access', 'view=assignments', 'hr-setup/hrms-access', [], { aliases: ['settings/role-assignments', 'hr-setup/role-assignments'], keywords: ['who has which role', 'role assignments', 'who can use hrms', 'grant role'] })
 tab('roles', 'catalogue', 'Permission catalogue', 'view=catalogue', 'hr-setup/permissions', [], { aliases: ['settings/permissions'], keywords: ['all permissions'] })
+page('m-policies', 'Policy documents', HUB_PAGES.policies, 'HRMS settings', 'hr-setup/policy-documents', HUB_ACCESS.policies, { aliases: ['master/policy-documents'], keywords: ['policy', 'handbook', 'publish policy', 'acknowledgements'] })
 
 // ── Workspace settings ─────────────────────────────────────────────────────
 // The same rule as the /settings/:tab route.

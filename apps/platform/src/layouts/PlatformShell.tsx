@@ -110,8 +110,7 @@ const MODULE_ITEMS: NavItemDef[] = [
       { label: 'Overview', path: '/hrms/master', icon: <Database size={15} />, visibleForRoles: R_HR },
       { label: 'Workforce Directory', path: '/hrms/employees', icon: <UserCheck size={15} />, visibleForRoles: R_HR },
       { label: 'Organization Setup', path: '/hrms/organization', icon: <Building2 size={15} />, visibleForRoles: R_HR },
-      { label: 'Rules & Policies', path: '/hrms/master/shift-rules', icon: <ClipboardList size={15} />, visibleForRoles: R_HR, also: ['/hrms/policies'] },
-      { label: 'Payroll Configuration', path: '/hrms/payroll/components', icon: <Receipt size={15} />, visibleForRoles: R_FIN_META },
+      // Rules & Policies and Payroll Configuration are settings: they are in HRMS settings now.
     ],
   },
   {
@@ -224,14 +223,21 @@ const MODULE_ITEMS: NavItemDef[] = [
   {
     // HRMS settings: the one settings place in HRMS (shared/navigation/hrmsSettings.ts).
     // The overview lists every HR setting; these pages open inside it as its tabs.
-    // Each shows only to people who may open it (the page registry's rules).
+    // Each shows only to people who may open it (the page registry's rules). The
+    // labels are short so all twelve fit one row at desktop width (1320px).
     key: 'hrsettings', label: 'HRMS settings', icon: <Settings size={18} />, module: 'hrms',
     children: [
       { label: 'Overview', path: HUB_PAGES.overview, icon: <Settings size={15} /> },
       { label: 'HR configuration', path: HUB_PAGES.hrConfig, icon: <Settings size={15} /> },
-      { label: 'Payroll settings', path: HUB_PAGES.payroll, icon: <CreditCard size={15} /> },
-      { label: 'Document types', path: HUB_PAGES.documentTypes, icon: <FileText size={15} /> },
-      { label: 'Notification templates', path: HUB_PAGES.notifications, icon: <Bell size={15} /> },
+      { label: 'Shifts', path: HUB_PAGES.shiftRules, icon: <Clock size={15} /> },
+      { label: 'Leave', path: HUB_PAGES.leaveRules, icon: <Calendar size={15} /> },
+      { label: 'Payroll', path: HUB_PAGES.payroll, icon: <CreditCard size={15} /> },
+      { label: 'Components', path: HUB_PAGES.components, icon: <Receipt size={15} /> },
+      { label: 'Statutory', path: HUB_PAGES.statutory, icon: <Shield size={15} /> },
+      { label: 'Expenses', path: HUB_PAGES.expensePolicies, icon: <Wallet size={15} /> },
+      { label: 'Documents', path: HUB_PAGES.documentTypes, icon: <FileText size={15} /> },
+      { label: 'Policies', path: HUB_PAGES.policies, icon: <ClipboardList size={15} /> },
+      { label: 'Notifications', path: HUB_PAGES.notifications, icon: <Bell size={15} /> },
       { label: 'Roles & permissions', path: HUB_PAGES.roles, icon: <ShieldAlert size={15} /> },
     ],
   },
@@ -670,9 +676,11 @@ export function PlatformShell() {
     if (kids.length < 2) return null
     // Longest matching path wins, so /hrms/documents/pending does not also light up /hrms/documents.
     const best = kids.filter(c => matchPath(location.pathname, c.path)).sort((a, b) => b.path.length - a.path.length)[0]
+    // A page with unsaved changes (Payroll settings) may ask first, as Payroll's own section bar does.
+    const go = (to: string) => { if (typeof window.__utLeaveGuard === 'function' && window.__utLeaveGuard(() => navigate(to))) return; navigate(to) }
     return {
       label: `${active.fullLabel} sections`,
-      items: kids.map(c => ({ label: c.label, path: c.path, active: c === best, onClick: () => navigate(c.path) })),
+      items: kids.map(c => ({ label: c.label, path: c.path, active: c === best, onClick: () => go(c.path) })),
     }
   })()
 

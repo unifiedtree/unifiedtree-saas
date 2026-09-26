@@ -66,6 +66,7 @@ const ReportsIndex = lazyPage(() => import('@/modules/hrms/reports/ReportsIndex'
 const HrConfigurationPage = lazyPage(() => import('@/modules/hrms/settings/HrConfigurationPage').then(m => ({ default: m.HrConfigurationPage })))
 const HrmsSettingsHub = lazyPage(() => import('@/modules/hrms/settings/HrmsSettingsHub').then(m => ({ default: m.HrmsSettingsHub })))
 const Expense = lazyPage(() => import('@/modules/hrms/Expense').then(m => ({ default: m.Expense })))
+const ExpensePolicies = lazyPage(() => import('@/modules/hrms/Expense').then(m => ({ default: m.ExpensePolicies })))
 const FullAndFinal = lazyPage(() => import('@/modules/hrms/FullAndFinal').then(m => ({ default: m.FullAndFinal })))
 const ExitCenter = lazyPage(() => import('@/modules/hrms/exit/ExitCenter').then(m => ({ default: m.ExitCenter })))
 const Hiring = lazyPage(() => import('@/modules/hrms/Hiring').then(m => ({ default: m.Hiring })))
@@ -83,10 +84,10 @@ const Learning = lazyPage(() => import('@/modules/hrms/Learning').then(m => ({ d
 const LearningProgramDetail = lazyPage(() => import('@/modules/hrms/learning/ProgramDetail').then(m => ({ default: m.ProgramDetail })))
 const Compliance = lazyPage(() => import('@/modules/hrms/Compliance').then(m => ({ default: m.Compliance })))
 const Policies = lazyPage(() => import('@/modules/hrms/Policies').then(m => ({ default: m.Policies })))
-/** Policy admins get the Master "Policy Documents" page; everyone else keeps the page where they read and acknowledge policies. */
+/** Policy admins manage policy documents in HRMS settings; everyone else keeps the page where they read and acknowledge policies. */
 function PoliciesRoute() {
   const admin = useSdkStore(s => s.permissions.has('hrms.policy.write') && s.permissions.has('hrms.policy.read'))
-  return admin ? <MasterModule /> : <Policies />
+  return admin ? <MovedTo to="/hrms/settings/policies" /> : <Policies />
 }
 const Integrations = lazyPage(() => import('@/modules/hrms/Integrations').then(m => ({ default: m.Integrations })))
 const NotificationTemplates = lazyPage(() => import('@/modules/hrms/NotificationTemplates').then(m => ({ default: m.NotificationTemplates })))
@@ -370,6 +371,10 @@ const ROUTE_TREE = (
             </RouteGuard>
           }
         />
+        {/* Master data's rules and statutory settings moved to HRMS settings (static paths win over /hrms/master/*). */}
+        <Route path="/hrms/master/shift-rules" element={<MovedTo to="/hrms/settings/shift-rules" />} />
+        <Route path="/hrms/master/leave-rules" element={<MovedTo to="/hrms/settings/leave-rules" />} />
+        <Route path="/hrms/master/statutory" element={<MovedTo to="/hrms/settings/statutory" />} />
         <Route
           path="/hrms/organization"
           element={
@@ -716,6 +721,58 @@ const ROUTE_TREE = (
         <Route path="/hrms/settings/roles" element={<RouteGuard anyOf={[P.RBAC_ROLE_WRITE, P.PLATFORM_ADMIN]}><Roles /></RouteGuard>} />
         {/* HRMS access: who can use HRMS, with which role (the Roles page's assignments view). */}
         <Route path="/hrms/settings/access" element={<MovedTo to="/hrms/settings/roles?view=assignments" />} />
+        {/* Master data's rules and payroll configuration, and the policy documents admin view:
+            the same Master data sections (MasterContainer picks the section from the path and
+            checks its own permissions), shown under the hub's tabs. */}
+        <Route
+          path="/hrms/settings/shift-rules"
+          element={
+            <RouteGuard anyOf={['attendance.workforce.admin', 'hrms.policy.write']}>
+              <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/settings/leave-rules"
+          element={
+            <RouteGuard anyOf={[P.LEAVE_TYPE_WRITE, 'hrms.policy.write']}>
+              <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/settings/salary-components"
+          element={
+            <RouteGuard anyOf={[P.PAYROLL_COMPONENTS_READ]}>
+              <ModuleGate moduleKey="payroll"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/settings/statutory"
+          element={
+            <RouteGuard anyOf={[P.PAYROLL_SETTINGS_READ]}>
+              <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        <Route
+          path="/hrms/settings/policies"
+          element={
+            <RouteGuard anyOf={['hrms.policy.write']}>
+              <ModuleGate moduleKey="hrms"><MasterModule /></ModuleGate>
+            </RouteGuard>
+          }
+        />
+        {/* Expense policies (the Expenses page's Policies tab leads here). */}
+        <Route
+          path="/hrms/settings/expense-policies"
+          element={
+            <RouteGuard anyOf={['hrms.expense.policy.read']}>
+              <ModuleGate moduleKey="hrms"><ExpensePolicies /></ModuleGate>
+            </RouteGuard>
+          }
+        />
         {/* Placeholder for client HR screens still being built — keeps the full
             client nav navigable (no 404s). Auth + HRMS module gated. The key
             allow-list is enforced inside ModuleComingSoon so unknown slugs
@@ -731,14 +788,8 @@ const ROUTE_TREE = (
         />
         {/* Payroll settings moved to HRMS settings. */}
         <Route path="/hrms/payroll/settings" element={<MovedTo to="/hrms/settings/payroll" />} />
-        <Route
-          path="/hrms/payroll/components"
-          element={
-            <RouteGuard anyOf={[P.PAYROLL_COMPONENTS_READ]}>
-              <ModuleGate moduleKey="payroll"><MasterModule /></ModuleGate>
-            </RouteGuard>
-          }
-        />
+        {/* Salary components moved to HRMS settings. */}
+        <Route path="/hrms/payroll/components" element={<MovedTo to="/hrms/settings/salary-components" />} />
         <Route
           path="/me/salary"
           element={

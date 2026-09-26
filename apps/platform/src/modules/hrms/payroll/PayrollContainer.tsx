@@ -430,7 +430,7 @@ export function PayrollContainer() {
         else {
           const sp = designSplit(q.monthly)
           const missingCodes = Object.entries(sp).filter(([code, v]) => v > 0 && !compId.get(code)).map(([code]) => code)
-          if (missingCodes.length) { toast.error('Salary components are missing', { description: `Add ${missingCodes.join(', ')} under Payroll Configuration first.` }); return false }
+          if (missingCodes.length) { toast.error('Salary components are missing', { description: `Add ${missingCodes.join(', ')} in HRMS settings → Salary components first.` }); return false }
           components = Object.entries(sp).filter(([, v]) => v > 0).map(([code, v]) => ({ componentId: compId.get(code)!, monthlyAmount: v }))
         }
         const ctcAnnual = cur && q.current && q.current.gross ? Math.round((num(cur.ctcAnnual) * q.monthly) / q.current.gross) : q.monthly * 12
