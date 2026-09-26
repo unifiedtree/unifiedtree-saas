@@ -37,6 +37,7 @@ import type { OnboardingRecordData } from '../onboarding/OnboardingRecord'
 import { sendInvite, resendInvite } from './api/useInvitation'
 import { resetFaceEnrollment } from './api/useFaceAdmin'
 import { EmployeeFaceEnrollButton, employeeFaceLine, useEmployeeFaceStatus } from '../attendance/face/FaceEnrollment'
+import { faceErrorText } from '../attendance/face/faceEnroll'
 import { EmployeeForm } from './EmployeeForm'
 import { EmployeePersonal } from './workspace/EmployeePersonal'
 import { EmployeeJob } from './workspace/EmployeeJob'
@@ -324,7 +325,13 @@ export function EmployeeDetail() {
       mgr: mgr ? { name: [mgr.firstName, mgr.lastName].filter(Boolean).join(' '), sub: mgrDesig?.title || mgr.employeeCode, seed: seedOf(mgr.id), onOpen: () => navigate(`/hrms/employees/${mgr.id}`) } : null,
       account, face: {
         sub: employeeFaceLine(faceQ, emp.faceEnrolled ? 'Enrolled' : 'Not enrolled'),
-        onReset: async () => { await resetFaceEnrollment(emp.id); await empQ.refetch(); void faceQ.refetch(); return 'Face enrollment reset — the employee can enroll again from the mobile app' },
+        // faceErrorText turns the server's `CODE:sentence` into plain English —
+        // without it a person with no login yet gets the raw FACE_NO_LOGIN: line.
+        onReset: async () => {
+          try { await resetFaceEnrollment(emp.id) } catch (err) { throw new Error(faceErrorText(err, false)) }
+          await empQ.refetch(); void faceQ.refetch()
+          return `Face enrollment cleared — ${first} must enroll again before face punch-in works.`
+        },
         enroll: canFace && faceQ.data ? <EmployeeFaceEnrollButton employeeId={emp.id} name={name} status={faceQ.data} onEnrolled={() => void faceQ.refetch()} /> : null,
       },
       attention, glance, onboarding: onb,

@@ -1,5 +1,6 @@
 package com.unifiedtree.attendance.face.service;
 
+import com.unifiedtree.attendance.face.controller.FaceController;
 import com.unifiedtree.attendance.face.crypto.EmbeddingCipher;
 import com.unifiedtree.attendance.face.dto.FaceDtos.EnrollmentCompleteResponse;
 import com.unifiedtree.attendance.face.dto.FaceDtos.EnrollmentStartRequest;
@@ -14,6 +15,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.ResultSet;
@@ -261,5 +263,38 @@ class FaceAdminEnrollmentTest {
         when(writer2.upsertPendingEnrollment(TENANT, LOGIN, 3)).thenReturn(ENROLLMENT);
         doThrow(new RuntimeException("write failed")).when(writer2).markReplacing(TENANT, LOGIN);
         assertThat(face2.startEnrollment(TENANT, LOGIN, new EnrollmentStartRequest(null)).enrollmentId()).isEqualTo(ENROLLMENT);
+    }
+
+    // ── HR clearing a face from the employee record ──────────────────────────
+    // The web only ever has the employee record id. Face rows key on the login,
+    // and the UPDATEs carry no FK, so the wrong id wipes nothing and still
+    // answers 204: the toast said "reset" while the templates stayed live for
+    // every invited employee (login id != employee id). Hence these two.
+
+    private static Jwt hrJwt() {
+        return Jwt.withTokenValue("t").header("alg", "none")
+                .subject(HR.toString()).claim("tenant_id", TENANT.toString()).build();
+    }
+
+    @Test
+    void resetByEmployeeIdWipesTheLoginsFaceNotTheEmployeeId() {
+        logins(LOGIN);
+        assertThat(new FaceController(face).adminResetByEmployee(EMPLOYEE, "changed appearance", hrJwt())
+                .getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        verify(writer).adminReset(TENANT, LOGIN, HR, "changed appearance");
+        verify(writer, never()).adminReset(eq(TENANT), eq(EMPLOYEE), any(), any());
+    }
+
+    @Test
+    void resetOnSomeoneWithNoLoginFailsInsteadOfReportingSuccess() {
+        logins();
+        assertThatThrownBy(() -> new FaceController(face).adminResetByEmployee(EMPLOYEE, null, hrJwt()))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(e -> {
+                    ResponseStatusException rse = (ResponseStatusException) e;
+                    assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(rse.getReason()).startsWith("FACE_NO_LOGIN:");
+                });
+        verify(writer, never()).adminReset(any(), any(), any(), any());
     }
 }

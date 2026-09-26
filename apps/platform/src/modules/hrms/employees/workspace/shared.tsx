@@ -14,6 +14,7 @@ import type { LucideIcon } from 'lucide-react'
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, FileText, Send } from 'lucide-react'
 import { HrDrawer, HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
 import { format } from 'date-fns'
+import { faceErrorText } from '../../attendance/face/faceEnroll'
 import { resetFaceEnrollment } from '../api/useFaceAdmin'
 import { sendInvite, resendInvite } from '../api/useInvitation'
 import { toast } from 'sonner'
@@ -296,10 +297,10 @@ export function FaceResetRow({ employeeId, employeeName }: { employeeId: string;
     setBusy(true)
     try {
       await resetFaceEnrollment(employeeId)
-      toast.success('Face enrollment reset — the employee can enroll again from the mobile app.')
+      toast.success('Face enrollment cleared — they must enroll again before face punch-in works.')
       setConfirming(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to reset face enrollment.')
+      toast.error(faceErrorText(err, false))
     } finally {
       setBusy(false)
     }
@@ -307,7 +308,7 @@ export function FaceResetRow({ employeeId, employeeName }: { employeeId: string;
   return (
     <div className="mt-3 pt-3 border-t border-border space-y-2">
       <p className="text-xs text-text-secondary">
-        Reset Face Enrollment — clears stored face templates and unlocks any verification lockout for {employeeName}. They&rsquo;ll need to enroll again on the mobile app.
+        Reset Face Enrollment — deletes the stored face templates and clears any verification lockout for {employeeName}. Face punch-in stops working for them until they enroll again.
       </p>
       {confirming ? (
         <div className="flex gap-2">

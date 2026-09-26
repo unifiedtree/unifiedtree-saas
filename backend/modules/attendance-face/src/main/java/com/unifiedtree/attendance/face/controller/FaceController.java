@@ -43,12 +43,13 @@ import java.util.UUID;
  *
  *   GET  /v1/attendance/face/admin/employees       (manager)
  *   GET  /v1/attendance/face/admin/events          (manager)
- *   POST /v1/attendance/face/admin/{employeeId}/reset
+ *   POST /v1/attendance/face/admin/{loginId}/reset          (legacy, login-keyed)
  *
  *   GET  /v1/attendance/face/admin/employees/{employeeId}/enrollment-status
  *   POST /v1/attendance/face/admin/employees/{employeeId}/enroll/start
  *   POST /v1/attendance/face/admin/employees/{employeeId}/enroll/sample
  *   POST /v1/attendance/face/admin/employees/{employeeId}/enroll/complete
+ *   POST /v1/attendance/face/admin/employees/{employeeId}/reset
  * </pre>
  *
  * Tenant + employee identity ALWAYS come from the JWT. The body's
@@ -122,12 +123,19 @@ public class FaceController {
         return face.adminEvents(tenantId(jwt), employeeId, limit);
     }
 
-    @PostMapping("/v1/attendance/face/admin/{employeeId}/reset")
+    /**
+     * Legacy reset, keyed by the LOGIN id (what face rows are keyed on), not by
+     * the HR employee record id. Handed an employee record id it matches no row
+     * and resets nothing while still answering 204, which is why the web now
+     * calls {@link #adminResetByEmployee} instead. Kept for any caller still on
+     * this path; do not point new callers at it.
+     */
+    @PostMapping("/v1/attendance/face/admin/{loginId}/reset")
     @PreAuthorize("hasAuthority('attendance.face.admin.reset')")
-    public ResponseEntity<Void> adminReset(@PathVariable UUID employeeId,
+    public ResponseEntity<Void> adminReset(@PathVariable UUID loginId,
                                            @RequestParam(required = false) String reason,
                                            @AuthenticationPrincipal Jwt jwt) {
-        face.adminReset(tenantId(jwt), employeeId, userId(jwt), reason);
+        face.adminReset(tenantId(jwt), loginId, userId(jwt), reason);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
@@ -166,6 +174,28 @@ public class FaceController {
                                                           @AuthenticationPrincipal Jwt jwt) {
         UUID tenant = tenantId(jwt);
         return face.completeEnrollment(tenant, face.requireLoginFor(tenant, employeeId), userId(jwt));
+    }
+
+    /**
+     * HR clearing someone else's face from the employee record: revokes the
+     * enrollment, deactivates the templates and drops any lockout, so the person
+     * has to enroll again before they can face-punch.
+     *
+     * <p>The {employeeId} is the HR employee record id — the id every employee
+     * screen has — mapped here to the login the face rows are actually keyed on.
+     * An employee with no login yet (invited but never activated, or never
+     * invited) gets 409 {@code FACE_NO_LOGIN:…} from
+     * {@link FaceService#requireLoginFor}: nothing was reset and the web says so,
+     * which is the whole point of this route existing next to the legacy one.
+     */
+    @PostMapping("/v1/attendance/face/admin/employees/{employeeId}/reset")
+    @PreAuthorize("hasAuthority('attendance.face.admin.reset')")
+    public ResponseEntity<Void> adminResetByEmployee(@PathVariable UUID employeeId,
+                                                     @RequestParam(required = false) String reason,
+                                                     @AuthenticationPrincipal Jwt jwt) {
+        UUID tenant = tenantId(jwt);
+        face.adminReset(tenant, face.requireLoginFor(tenant, employeeId), userId(jwt), reason);
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
     private static UUID tenantId(Jwt jwt) {

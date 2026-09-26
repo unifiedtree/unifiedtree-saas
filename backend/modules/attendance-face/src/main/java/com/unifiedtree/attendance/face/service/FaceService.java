@@ -669,8 +669,15 @@ public class FaceService {
         return rows;
     }
 
-    public void adminReset(UUID tenantId, UUID employeeId, UUID actingAdminId, String reason) {
-        writer.adminReset(tenantId, employeeId,
+    /**
+     * Clears a face enrollment. {@code loginId} is the LOGIN id — face rows key
+     * on the login, not on the HR employee record (see {@link #loginFor}). Pass
+     * an employee record id here and the UPDATEs match no row, report no error
+     * and reset nothing; callers holding an employee id must go through
+     * {@link #requireLoginFor} first.
+     */
+    public void adminReset(UUID tenantId, UUID loginId, UUID actingAdminId, String reason) {
+        writer.adminReset(tenantId, loginId,
                 actingAdminId,
                 reason == null ? "manual admin reset" : reason);
     }

@@ -273,7 +273,7 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
                           {v.resetAsk ? (
                             <>
                               <div style={{marginTop: "8px", padding: "10px 11px", borderRadius: "10px", background: "#fff7ed", border: "1px solid #fed7aa", fontSize: "12.5px", color: "#9a3412", lineHeight: "1.45"}}>
-                                {"This clears stored face templates and unlocks any verification lockout."}
+                                {"This deletes the stored face templates and clears any verification lockout. Face punch-in stops working for this employee until they enrol again — from the mobile app, or with Enroll face here."}
                                 <div style={{display: "flex", gap: "6px", marginTop: "8px"}}>
                                   <HrButton size="sm" variant="danger" onClick={v.doReset}>
                                     {"Yes, reset"}
