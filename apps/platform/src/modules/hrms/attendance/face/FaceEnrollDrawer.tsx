@@ -19,7 +19,7 @@ import { format } from 'date-fns'
 import { HrButton, HrDrawer } from '@/shared/components/hr'
 import { dashIcon } from '@/design/dc/icons'
 import {
-  ANGLE, DEFAULT_SEQUENCE, LIGHT_TEXT, captureFrame, cameraErrorText, faceEnrollApi, faceErrorCode, faceErrorText,
+  ANGLE, DEFAULT_SEQUENCE, LIGHT_TEXT, WORKER_DOWN_TEXT, captureFrame, cameraErrorText, faceEnrollApi, faceErrorCode, faceErrorText,
   faceStatusKey, lightProblem, openCamera, sampleRejectText, type CaptureAngle, type FaceTarget,
 } from './faceEnroll'
 
@@ -128,6 +128,8 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
         for (const [a, sh] of Object.entries(shotsRef.current) as [CaptureAngle, Shot][]) fresh[a] = { ...sh, state: 'new', error: undefined }
         setShots(fresh)
         if (s.captureSequence?.length) { seq = s.captureSequence; setAngles(seq) }
+        // The server couldn't reach its face check: don't send photos only to be refused. Send again later.
+        if (s.workerHint === 'worker-offline') { setError(WORKER_DOWN_TEXT); return }
       }
       const missing = firstMissing(seq, shotsRef.current)
       if (missing) { openCameraStep(missing, true); setHint('One more photo is needed.'); return }
@@ -173,6 +175,10 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
   const idx = angles.indexOf(current)
   const a = ANGLE[current]
   const refusedShots = angles.filter((x) => shots[x]?.state === 'rejected')
+  // Once Save has started a re-enroll, the earlier face no longer works: say so next to anything that stops it.
+  const offLine = reenroll && started
+    ? `Face punch-in stays off for ${self ? 'you' : first} until the new photos are accepted, because the earlier face has been replaced.`
+    : null
 
   let body: ReactNode, footer: ReactNode
   if (confirmLeave) {
@@ -298,9 +304,10 @@ export function FaceEnrollDrawer({ target, reenroll, enrolledAt, onClose, onEnro
         {refusedShots.length > 0 && (
           <div role="alert" style={{ ...note('red'), display: 'grid', gap: 6 }}>
             {refusedShots.map((x) => <span key={x}><strong>Photo {angles.indexOf(x) + 1} ({ANGLE[x].label}):</strong> {shots[x]?.error}</span>)}
+            {offLine && !error && <span>{offLine}</span>}
           </div>
         )}
-        {error && <p role="alert" style={note('red')}>{error}</p>}
+        {error && <p role="alert" style={{ ...note('red'), display: 'grid', gap: 6 }}><span>{error}</span>{offLine && <span>{offLine}</span>}</p>}
         <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 14px', border: `1px solid ${consent ? '#a7f3d0' : LINE}`, borderRadius: 12, background: consent ? '#f0fdf4' : '#f8fafc', cursor: 'pointer', fontSize: 14, lineHeight: 1.45, color: INK }}>
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} disabled={busy}
             style={{ flex: '0 0 auto', width: 18, height: 18, marginTop: 1, accentColor: GREEN, cursor: 'pointer' }} />

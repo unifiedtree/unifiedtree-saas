@@ -24,9 +24,12 @@ export interface FaceStatus {
   remainingAngles: CaptureAngle[]
   lockedRequiresManagerReset: boolean
   enrolledAt?: string | null
+  /** LOCKED only: when the lock clears by itself (null: only HR can clear it; missing: an older server). */
+  unlocksAt?: string | null
 }
 
-interface StartResponse { enrollmentId: string; samplesRequired: number; captureSequence: CaptureAngle[] }
+/** `workerHint`: whether the server could reach its face check service when the enrollment started. */
+interface StartResponse { enrollmentId: string; samplesRequired: number; captureSequence: CaptureAngle[]; workerHint?: string }
 export interface SampleResponse {
   accepted: boolean
   capturedAngle: CaptureAngle
@@ -166,16 +169,18 @@ export function faceErrorCode(err: unknown): string | null {
   return m ? m[1] : null
 }
 
+export const WORKER_DOWN_TEXT = 'The face check service isn’t available right now. Your photos are kept here. Try again in a few minutes.'
+
 /** A failed request, in plain English. `self`: the person is enrolling their own face. */
 export function faceErrorText(err: unknown, self: boolean): string {
   const code = faceErrorCode(err)
   switch (code) {
     case 'FACE_LOCKED': return self
-      ? 'Face check is locked after several failed tries. It unlocks by itself after a while, or HR can reset it.'
+      ? 'Face check is still locked after several failed tries, so your face can’t be re-enrolled yet. Try again later, or ask HR to unlock it.'
       : 'Face check is locked for this person after several failed tries. Try again in a moment.'
     case 'FACE_DISABLED': return 'Face punch-in is turned off for this workspace.'
     case 'FACE_WORKER_UNAVAILABLE': case 'FACE_WORKER_BAD_RESPONSE': case 'FACE_WORKER_BAD_EMBEDDING':
-      return 'The face check service isn’t available right now. Your photos are kept here. Try again in a few minutes.'
+      return WORKER_DOWN_TEXT
     case 'FACE_NO_LOGIN': return 'This person can’t sign in yet, so there is no face to enroll. Invite them first.'
     case 'FACE_ENROLLMENT_NOT_FOUND': return 'This enrollment timed out. Send the photos again.'
     case 'FACE_SAMPLES_INCOMPLETE': return 'Some photos haven’t been accepted yet. Retake them and send again.'
@@ -186,7 +191,7 @@ export function faceErrorText(err: unknown, self: boolean): string {
   if (status === 404) return 'Face enrollment isn’t available on this server yet.'
   if (status === 413) return 'That photo was too large. Take it again.'
   if (status === 429) return 'Too many tries. Wait a minute, then try again.'
-  if (status && status >= 500) return 'The face check service isn’t available right now. Your photos are kept here. Try again in a few minutes.'
+  if (status && status >= 500) return WORKER_DOWN_TEXT
   if (status === undefined && err instanceof TypeError) return 'Can’t reach the server. Check your connection and try again.'
   // Any other sentence the server sent, without its code; else a plain fallback.
   const msg = err instanceof Error ? (code ? err.message.slice(code.length + 1) : err.message).trim() : ''
@@ -197,15 +202,29 @@ export function faceErrorText(err: unknown, self: boolean): string {
 
 export interface FaceSummary { tone: PillTone; label: string; detail: string; enrolled: boolean; locked: boolean; canEnroll: boolean }
 
-/** How a status reads on a profile. `self`: the person is looking at their own. */
-export function describeFace(s: FaceStatus, self: boolean): FaceSummary {
+/**
+ * How a status reads on a profile. `self`: the person is looking at their own.
+ * A locked face check can be re-enrolled by its owner once the lock's time is
+ * up (the server clears the lock when the new enrollment starts, as on the
+ * phone); before that, or when only HR can clear it, it can't. HR's re-enroll
+ * unlocks it any time.
+ */
+export function describeFace(s: FaceStatus, self: boolean, now = Date.now()): FaceSummary {
   const on = s.enrolledAt ? format(new Date(s.enrolledAt), 'd MMM yyyy') : null
   if (s.hasLogin === false) return { tone: 'gray', label: 'No sign-in yet', detail: 'They can’t sign in yet, so there is no face to enroll. Invite them first.', enrolled: false, locked: false, canEnroll: false }
   switch (s.status) {
     case 'ACTIVE': return { tone: 'ok', label: 'Enrolled', detail: on ? `Enrolled on ${on}` : 'Enrolled', enrolled: true, locked: false, canEnroll: true }
-    case 'LOCKED': return {
-      tone: 'red', label: 'Locked', enrolled: true, locked: true, canEnroll: !self,
-      detail: self ? 'Locked after several failed face checks. It unlocks by itself after a while, or HR can reset it.' : 'Locked after several failed face checks. Re-enrolling unlocks it.',
+    case 'LOCKED': {
+      if (!self) return { tone: 'red', label: 'Locked', detail: 'Locked after several failed face checks. Re-enrolling unlocks it.', enrolled: true, locked: true, canEnroll: true }
+      const until = s.unlocksAt ? new Date(s.unlocksAt) : null
+      if (until && until.getTime() <= now) {
+        return { tone: 'warn', label: 'Locked', detail: 'Face check was locked after several failed tries. Re-enroll your face to use face punch-in again.', enrolled: true, locked: true, canEnroll: true }
+      }
+      const when = until ? format(until, new Date(now).toDateString() === until.toDateString() ? 'h:mm a' : 'd MMM, h:mm a') : null
+      return {
+        tone: 'red', label: 'Locked', enrolled: true, locked: true, canEnroll: false,
+        detail: when ? `Locked after several failed face checks. You can re-enroll from ${when}, or ask HR to unlock it sooner.` : 'Locked after several failed face checks. Ask HR to unlock it.',
+      }
     }
     case 'NEEDS_REENROLLMENT': return { tone: 'warn', label: 'Needs re-enrolling', detail: 'The face on record has to be enrolled again.', enrolled: true, locked: false, canEnroll: true }
     case 'REVOKED': return { tone: 'gray', label: 'Not enrolled', detail: 'The earlier face was reset. Enroll again to use face punch-in.', enrolled: false, locked: false, canEnroll: true }

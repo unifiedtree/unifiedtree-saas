@@ -5,7 +5,7 @@
 //     the existing Reset, for HR / admin (attendance.face.admin.reset, the
 //     permission described as "Reset / re-enroll an employee face").
 // Each loads its own status, so a failure shows in that section only.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
 import { SettingsNote, SettingsSection } from '@/design/settings/SettingsKit'
@@ -28,9 +28,18 @@ export function MyFaceEnrollmentSection({ employeeLinked }: { employeeLinked: bo
   const q = useFaceStatus(target, employeeLinked)
   // What was on record when the drawer opened (the status refetches once it's done).
   const [open, setOpen] = useState<{ reenroll: boolean; enrolledAt?: string | null } | null>(null)
+  // A lock with a time: show Re-enroll once that time comes, without a reload.
+  const [, setTick] = useState(0)
+  const unlocksAt = q.data?.status === 'LOCKED' ? q.data.unlocksAt ?? null : null
+  useEffect(() => {
+    const ms = unlocksAt ? new Date(unlocksAt).getTime() - Date.now() : NaN
+    if (!(ms > 0)) return
+    const t = window.setTimeout(() => setTick((n) => n + 1), Math.min(ms + 1000, 2_000_000_000))
+    return () => window.clearTimeout(t)
+  }, [unlocksAt])
   const d = q.data ? describeFace(q.data, true) : null
   const summary = !employeeLinked ? 'Needs an employee record'
-    : q.isLoading ? 'Checking…' : d?.enrolled && !d.locked ? d.detail : 'Punch in with your face. Enroll it here with your camera.'
+    : q.isLoading ? 'Checking…' : d?.locked ? d.label : d?.enrolled ? d.detail : 'Punch in with your face. Enroll it here with your camera.'
 
   return (
     <SettingsSection id="face" icon="scanFace" title="Face enrollment" summary={summary}>
@@ -57,7 +66,7 @@ export function MyFaceEnrollmentSection({ employeeLinked }: { employeeLinked: bo
               </HrButton>
             )}
           </div>
-          <SettingsNote>Used only to check it’s really you when you punch in with your face. You can re-enroll any time, for example after a new look. Your photos aren’t stored.</SettingsNote>
+          <SettingsNote>Used only to check it’s really you when you punch in with your face.{d.canEnroll ? ' You can re-enroll any time, for example after a new look.' : ''} Your photos aren’t stored.</SettingsNote>
         </>
       )}
       {open && (

@@ -217,19 +217,49 @@ public class FaceWriter {
     }
 
     /**
+     * Whether a face is on record before a new enrollment starts: one that
+     * works, is locked or is due for re-enrollment, or one an earlier start
+     * or an HR reset already took out of use (revoked_at, see
+     * {@link #markReplacing}). A first enrollment, even after an abandoned
+     * try, has none.
+     */
+    public boolean hadEnrolledFace(UUID tenantId, UUID employeeId) {
+        return Boolean.TRUE.equals(jdbc.query("""
+            SELECT status IN ('ACTIVE', 'NEEDS_REENROLLMENT', 'LOCKED') OR revoked_at IS NOT NULL
+              FROM attendance.face_enrollments
+             WHERE tenant_id = ? AND employee_id = ?
+            """, rs -> rs.next() && rs.getBoolean(1), tenantId, employeeId));
+    }
+
+    /**
+     * Notes on a just-started enrollment that it replaces an earlier face (the
+     * start has already taken that face out of use), so the audit entry at the
+     * end can say so. Nothing else reads the revoked_* columns.
+     */
+    @Transactional
+    public void markReplacing(UUID tenantId, UUID employeeId) {
+        jdbc.update("""
+            UPDATE attendance.face_enrollments
+               SET revoked_at = now(),
+                   revoked_reason = 'Replaced by a new enrollment'
+             WHERE tenant_id = ? AND employee_id = ? AND status = 'PENDING'
+            """, tenantId, employeeId);
+    }
+
+    /**
      * One audit.events row for a finished face enrollment, written the way the
      * access audit writes its rows: who did it, whose face, and whether it
-     * replaced an earlier one (the templates of any earlier enrollment are kept
-     * inactive, so their presence says so). The entry points at the person's
-     * employee record when the login has one, so the Audit logs page names and
-     * links them.
+     * replaced an earlier one (noted on the row when it started, see
+     * {@link #markReplacing}). The entry points at the person's employee
+     * record when the login has one, so the Audit logs page names and links
+     * them.
      */
     @Transactional
     public void recordEnrollmentAudit(UUID tenantId, UUID loginId, UUID actorId) {
-        boolean replaced = Boolean.TRUE.equals(jdbc.queryForObject("""
-            SELECT EXISTS (SELECT 1 FROM attendance.face_embedding_templates
-                            WHERE tenant_id = ? AND employee_id = ? AND is_active = FALSE)
-            """, Boolean.class, tenantId, loginId));
+        boolean replaced = Boolean.TRUE.equals(jdbc.query("""
+            SELECT revoked_at IS NOT NULL FROM attendance.face_enrollments
+             WHERE tenant_id = ? AND employee_id = ?
+            """, rs -> rs.next() && rs.getBoolean(1), tenantId, loginId));
         Map<String, Object> who = jdbc.queryForMap("""
             SELECT uc.employee_id,
                    COALESCE(NULLIF(btrim(concat_ws(' ', e.first_name, e.last_name)), ''),

@@ -139,7 +139,7 @@ public class FaceController {
     @PreAuthorize("hasAuthority('attendance.face.admin.read') or hasAuthority('attendance.face.admin.reset')")
     public PersonEnrollmentStatusResponse personStatus(@PathVariable UUID employeeId,
                                                        @AuthenticationPrincipal Jwt jwt) {
-        return face.personStatus(tenantId(jwt), employeeId);
+        return face.personStatus(tenantId(jwt), employeeId, userId(jwt));
     }
 
     @PostMapping("/v1/attendance/face/admin/employees/{employeeId}/enroll/start")

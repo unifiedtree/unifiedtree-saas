@@ -134,11 +134,19 @@ public class FaceService {
     // ---------------------------------------------------------------------
 
     public EnrollmentStatusResponse getStatus(UUID tenantId, UUID employeeId) {
+        return getStatus(tenantId, employeeId, employeeId);
+    }
+
+    /**
+     * {@code actingUserId}: who is asking (the person themselves, or HR on
+     * the web). A self-healed enrollment is recorded as finished by them.
+     */
+    private EnrollmentStatusResponse getStatus(UUID tenantId, UUID employeeId, UUID actingUserId) {
         EnrollmentRow row = loadEnrollment(tenantId, employeeId);
         if (row == null) {
             return new EnrollmentStatusResponse(
                     EnrollmentStatus.PENDING, SAMPLES_REQUIRED, 0,
-                    CAPTURE_SEQUENCE, 0, false, null);
+                    CAPTURE_SEQUENCE, 0, false, null, null);
         }
         // Self-heal: if all samples were captured but the explicit
         // completeEnrollment call was missed/failed (leaving the row PENDING),
@@ -147,10 +155,15 @@ public class FaceService {
         EnrollmentStatus effectiveStatus = row.status;
         if (row.status == EnrollmentStatus.PENDING && row.samplesCaptured >= SAMPLES_REQUIRED) {
             try {
-                writer.markEnrollmentActive(row.id, employeeId);
+                writer.markEnrollmentActive(row.id, actingUserId);
                 effectiveStatus = EnrollmentStatus.ACTIVE;
             } catch (Exception ignored) {
                 // Non-fatal: fall back to the persisted status.
+            }
+            // It is finished now, so its audit entry is written here: a later
+            // complete call finds it ACTIVE and doesn't write another.
+            if (effectiveStatus == EnrollmentStatus.ACTIVE) {
+                auditEnrollmentSafely(tenantId, employeeId, actingUserId);
             }
         }
         List<CaptureAngle> captured = capturedAngles(tenantId, employeeId);
@@ -160,7 +173,18 @@ public class FaceService {
                 effectiveStatus, SAMPLES_REQUIRED, row.samplesCaptured,
                 remaining, row.consecutiveFailures,
                 effectiveStatus == EnrollmentStatus.LOCKED,
-                row.enrolledAt);
+                row.enrolledAt,
+                effectiveStatus == EnrollmentStatus.LOCKED ? unlocksAt(row) : null);
+    }
+
+    /**
+     * When a lock clears by itself: {@code lockoutCooldownMinutes} after it
+     * locked (see {@link #stillLocked}), or null when auto-unlock is off.
+     * Reported only: the row stays LOCKED until the next start or face check.
+     */
+    private Instant unlocksAt(EnrollmentRow row) {
+        if (lockoutCooldownMinutes <= 0 || row.lockedAt() == null) return null;
+        return row.lockedAt().plus(java.time.Duration.ofMinutes(lockoutCooldownMinutes));
     }
 
     // ---------------------------------------------------------------------
@@ -193,15 +217,17 @@ public class FaceService {
         return login;
     }
 
-    public PersonEnrollmentStatusResponse personStatus(UUID tenantId, UUID employeeId) {
+    /** {@code actingUserId}: the HR person asking (see {@link #getStatus(UUID, UUID, UUID)}). */
+    public PersonEnrollmentStatusResponse personStatus(UUID tenantId, UUID employeeId, UUID actingUserId) {
         UUID login = loginFor(tenantId, employeeId);
         if (login == null) {
             return new PersonEnrollmentStatusResponse(false, EnrollmentStatus.PENDING,
-                    SAMPLES_REQUIRED, 0, CAPTURE_SEQUENCE, false, null);
+                    SAMPLES_REQUIRED, 0, CAPTURE_SEQUENCE, false, null, null);
         }
-        EnrollmentStatusResponse s = getStatus(tenantId, login);
+        EnrollmentStatusResponse s = getStatus(tenantId, login, actingUserId);
         return new PersonEnrollmentStatusResponse(true, s.status(), s.samplesRequired(),
-                s.samplesCaptured(), s.remainingAngles(), s.lockedRequiresManagerReset(), s.enrolledAt());
+                s.samplesCaptured(), s.remainingAngles(), s.lockedRequiresManagerReset(), s.enrolledAt(),
+                s.unlocksAt());
     }
 
     /**
@@ -235,7 +261,13 @@ public class FaceService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "FACE_LOCKED:" + friendlyRejectionCopy("FACE_LOCKED"));
         }
+        // Whether this replaces a face that was on record: noted on the row
+        // (read before the start resets it) so the audit entry at the end says so.
+        boolean replacing = hadEnrolledFaceSafely(tenantId, employeeId);
         UUID id = writer.upsertPendingEnrollment(tenantId, employeeId, SAMPLES_REQUIRED);
+        if (replacing) {
+            markReplacingSafely(tenantId, employeeId);
+        }
         List<Challenge> challenges = randomChallenges();
         return new EnrollmentStartResponse(id, SAMPLES_REQUIRED, CAPTURE_SEQUENCE,
                 challenges, worker.isHealthy() ? "worker-online" : "worker-offline");
@@ -362,6 +394,24 @@ public class FaceService {
             writer.recordEnrollmentAudit(tenantId, loginId, actingUserId);
         } catch (Exception ex) {
             log.warn("Face enrollment audit entry failed for employee={}: {}", loginId, ex.getMessage());
+        }
+    }
+
+    /** Only feeds the audit entry's wording, so it never stops an enrollment. */
+    private boolean hadEnrolledFaceSafely(UUID tenantId, UUID loginId) {
+        try {
+            return writer.hadEnrolledFace(tenantId, loginId);
+        } catch (Exception ex) {
+            log.warn("Face enrollment: couldn't read the earlier face for employee={}: {}", loginId, ex.getMessage());
+            return false;
+        }
+    }
+
+    private void markReplacingSafely(UUID tenantId, UUID loginId) {
+        try {
+            writer.markReplacing(tenantId, loginId);
+        } catch (Exception ex) {
+            log.warn("Face enrollment: couldn't note the replaced face for employee={}: {}", loginId, ex.getMessage());
         }
     }
 

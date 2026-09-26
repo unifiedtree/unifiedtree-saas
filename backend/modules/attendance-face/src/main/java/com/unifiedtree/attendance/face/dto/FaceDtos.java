@@ -26,7 +26,12 @@ public final class FaceDtos {
 
     public enum EnrollmentStatus { PENDING, ACTIVE, NEEDS_REENROLLMENT, LOCKED, REVOKED }
 
-    /** GET /v1/attendance/face/enrollment-status response. */
+    /**
+     * GET /v1/attendance/face/enrollment-status response. {@code unlocksAt}:
+     * for a LOCKED enrollment, when the lock stops applying (the next start or
+     * face check after that time clears it); null when not locked, or when
+     * only a manager can clear locks.
+     */
     public record EnrollmentStatusResponse(
             EnrollmentStatus status,
             int samplesRequired,
@@ -34,7 +39,8 @@ public final class FaceDtos {
             List<CaptureAngle> remainingAngles,
             int consecutiveFailures,
             boolean lockedRequiresManagerReset,
-            Instant enrolledAt
+            Instant enrolledAt,
+            Instant unlocksAt
     ) {}
 
     /**
@@ -51,7 +57,8 @@ public final class FaceDtos {
             int samplesCaptured,
             List<CaptureAngle> remainingAngles,
             boolean lockedRequiresManagerReset,
-            Instant enrolledAt
+            Instant enrolledAt,
+            Instant unlocksAt
     ) {}
 
     /** POST /v1/attendance/face/enroll/start request body. */
