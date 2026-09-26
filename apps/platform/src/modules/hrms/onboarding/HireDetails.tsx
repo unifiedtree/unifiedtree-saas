@@ -5,6 +5,7 @@
 // own (who their buddy and hiring manager are).
 import { useState, type FormEvent } from 'react'
 import { HrButton, HrDrawer, HrStatusPill } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { Panel, Facts, State, Note, dmy, todayIso } from '@/design/module/ModuleKit'
 import { PerformanceEmployeePicker as EmployeePicker } from '../performance/PerformanceEmployeePicker'
 import { useHireDetails, useUpdateHireDetails, type HireDetails, type HirePerson } from './api/useOnboarding'
@@ -69,7 +70,7 @@ function HireDetailsDrawer({ instanceId, details, onClose, toast }: { instanceId
       <form id="hire-form" onSubmit={submit} className="space-y-4">
         {details.candidateId && <Note>This hire came through the hiring pipeline, so these were filled from the candidate and the accepted offer.</Note>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div><label className={label} htmlFor="hire-accepted">Offer accepted on</label><input id="hire-accepted" type="date" max={todayIso()} value={accepted} onChange={(e) => setAccepted(e.target.value)} className="ut-input" /></div>
+          <div><label className={label} htmlFor="hire-accepted">Offer accepted on</label><DateField id="hire-accepted" max={todayIso()} value={accepted} onChange={(e) => setAccepted(e.target.value)} className="ut-input" clearable /></div>
           <div><label className={label} htmlFor="hire-source">Source</label><input id="hire-source" value={source} maxLength={80} onChange={(e) => setSource(e.target.value)} placeholder="e.g. Referral, LinkedIn" className="ut-input" /></div>
         </div>
         <PersonField id="hire-manager" title="Hiring manager" person={manager} onChange={setManager} />

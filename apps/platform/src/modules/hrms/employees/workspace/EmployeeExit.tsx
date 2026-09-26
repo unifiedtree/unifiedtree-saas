@@ -23,6 +23,7 @@ import { format } from 'date-fns'
 import { CalendarCheck, LogOut } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrDrawer, HrStatusPill } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { useToast } from '@/shared/hooks/useToast'
 import { useUpdateWorkforceEmployee, EXIT_TYPES, exitTypeLabel, type ExitType, type useWorkforceEmployee } from '../../api/useWorkforce'
 import { STATUS_STYLE, PILL_TONE, SubSection } from './shared'
@@ -172,8 +173,8 @@ function SeparationEditor({ emp, onClose }: { emp: Emp; onClose: () => void }) {
         {!exitType && <option value="">Not recorded</option>}
         {EXIT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
       </select><span className="mt-1 block text-xs font-normal text-text-secondary">The attrition report counts this exit as resigned, terminated or other from it.</span></label>
-      <label className="block text-sm font-medium">Notice start date<input type="date" className="ut-input mt-2" value={noticeStart} onChange={e => setNoticeStart(e.target.value)} required={requiresNoticeStart} max={lastDay || undefined} /></label>
-      <label className="block text-sm font-medium">Last working day<input type="date" className="ut-input mt-2" value={lastDay} onChange={e => setLastDay(e.target.value)} required min={noticeStart || undefined} /></label>
+      <label className="block text-sm font-medium">Notice start date<DateField aria-label="Notice start date" className="ut-input mt-2" value={noticeStart} onChange={e => setNoticeStart(e.target.value)} required={requiresNoticeStart} max={lastDay || undefined} clearable={!requiresNoticeStart} /></label>
+      <label className="block text-sm font-medium">Last working day<DateField aria-label="Last working day" className="ut-input mt-2" value={lastDay} onChange={e => setLastDay(e.target.value)} required min={noticeStart || undefined} /></label>
       <div><label htmlFor="separation-reason" className="block text-sm font-medium">Separation reason</label><textarea id="separation-reason" className="ut-input mt-2" value={reason} maxLength={100} rows={3} onChange={e => setReason(e.target.value)} /></div>
       {invalidOrder && <p role="alert" className="text-sm text-danger">Last working day must be on or after the notice start date.</p>}
       {update.isError && <p role="alert" className="text-sm text-danger">{update.error instanceof Error ? update.error.message : 'Unable to update separation details.'}</p>}

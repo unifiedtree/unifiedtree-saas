@@ -7,6 +7,7 @@
 // apply the documented PATCHES (prototype-only literals and wiring the real app
 // needs) → convert with scripts/dc-to-tsx.mjs. Logic files (X.tsx) are written
 // by hand and are never touched by this script.
+/* global Buffer, process, console */
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -380,7 +381,26 @@ const PATCH = {
 }
 
 // Post-conversion edits on the generated TSX, when a markup patch can't express it.
-const POST = {}
+const POST = {
+  // The app's shared calendar (day / month / year views) in place of the native date inputs:
+  // the shift drawer's "Effective from" and every date field of the edit drawer and the
+  // lifecycle dialogs. Same value ('yyyy-MM-dd'), min, disabled and onChange(e.target.value).
+  EmployeeWorkspace(tsx) {
+    const swaps = [
+      ["import { Input, Label, Modal } from '@unifiedtree/ui-kit'", "import { Input, Label, Modal } from '@unifiedtree/ui-kit'\nimport { DateField } from '@/shared/components/calendar'"],
+      ['<Input type="date" value={v.eff} min={v.effMin} onChange={v.setEff} />', '<DateField value={v.eff} min={v.effMin} onChange={v.setEff} />'],
+      ['<Input type={f?.type} value={f?.v} placeholder={f?.ph} disabled={f?.off} onChange={f?.on} />',
+        "{f?.type === 'date' ? <DateField value={f?.v} disabled={f?.off} onChange={f?.on} /> : <Input type={f?.type} value={f?.v} placeholder={f?.ph} disabled={f?.off} onChange={f?.on} />}"],
+      ['<Input type={f?.type} value={f?.v} maxLength={f?.max} placeholder={f?.ph} onChange={f?.on} />',
+        "{f?.type === 'date' ? <DateField value={f?.v} onChange={f?.on} /> : <Input type={f?.type} value={f?.v} maxLength={f?.max} placeholder={f?.ph} onChange={f?.on} />}"],
+    ]
+    for (const [from, to] of swaps) {
+      if (tsx.split(from).length !== 2) throw new Error('EmployeeWorkspace: expected exactly one ' + from)
+      tsx = tsx.split(from).join(to)
+    }
+    return tsx
+  },
+}
 
 // ── build ────────────────────────────────────────────────────────────────────
 const wanted = process.argv.slice(2)

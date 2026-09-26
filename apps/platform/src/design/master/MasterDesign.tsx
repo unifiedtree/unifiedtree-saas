@@ -5,6 +5,7 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 import { portalHost, TODAY, TODAY_ISO, NEXT_MONTH, NONE, orNone, pl } from './masterRuntime'
+import { DateField } from '@/shared/components/calendar'
 const ICONS={
 search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
 settings:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
@@ -167,6 +168,7 @@ else if(f.type==='seg')c=<Seg full disabled={f.disabled} value={val} options={op
 else if(f.type==='multi'){const arr=val||[];c=<div className="seg full">{opts.map(o=>{const x=typeof o==='string'?{v:o,l:o}:o;const on=arr.includes(x.v);return <button type="button" key={x.v} disabled={f.disabled} className={on?'on':''} aria-pressed={on} onClick={()=>set(f.k,on?arr.filter(y=>y!==x.v):arr.concat([x.v]))}>{on&&<Icon name="check" size={14} stroke={2.6}/>}{x.l}</button>})}</div>}
 else if(f.type==='radio')c=<div className="rgrid">{opts.map(o=><button type="button" key={o.v} disabled={f.disabled} className={'rc'+(val===o.v?' on':'')} style={tone(o.t)} onClick={()=>set(f.k,o.v)}><i></i>{o.l}</button>)}</div>;
 else if(f.type==='textarea')c=<textarea className="input" disabled={f.disabled} rows={f.rows||5} value={val||''} placeholder={ph} onChange={e=>set(f.k,e.target.value)}></textarea>;
+else if(f.type==='date')c=<DateField className="input" aria-label={f.label} disabled={f.disabled} value={val==null?'':val} placeholder={ph} min={f.min} max={f.max} clearable={!f.req} onChange={e=>set(f.k,e.target.value)}/>;
 else{const inp=<input className="input" disabled={f.disabled} type={f.type||'text'} value={val==null?'':val} placeholder={ph} min={f.min} max={f.max} step={f.step} style={f.suffix?{paddingRight:76}:undefined} onChange={e=>{let x=e.target.value;if(f.type==='number')x=x===''?'':Number(x);else if(f.upper)x=x.toUpperCase().replace(/\s+/g,'_');set(f.k,x)}}/>;c=(f.suffix||f.prefix)?<div className={'iw'+(f.prefix?' has-pre':'')}>{f.prefix&&<span className="pre">{f.prefix}</span>}{inp}{f.suffix&&<span className="suf">{f.suffix}</span>}</div>:inp}
 return <Field label={f.label} req={f.req} hint={f.hint} err={err} span2={f.span2}>{c}</Field>
 }
@@ -273,7 +275,7 @@ return <>
 <button className="btn" onClick={()=>{ax.exportEmployees(E.filter(e=>sel.includes(e.id)));setSel([])}}><Icon name="download" size={16}/>Export</button><span className="vr"></span><button className="btn" onClick={()=>setSel([])} aria-label="Clear selection"><Icon name="x" size={16}/></button></div>}
 {viewing&&!form&&!exit&&<EmpProfile e={viewing} onClose={()=>setView(null)} onEdit={()=>setForm({emp:viewing})} onExit={()=>setExit(viewing)}/>}
 {form&&<EmpForm emp={form.emp} onClose={()=>setForm(null)}/>}
-{exit&&<Modal title={'Start exit for '+exit.name+'?'} body="They move to notice period until their last working day, then to Exited. Full and final settlement runs on that date." icon="log-out" t="orange" cta="Start exit" onClose={()=>setExit(null)} onOk={doExit}><Field label="Last working day" hint={'Notice period for '+exit.type.toLowerCase()+' employees is '+((db.classes.find(c=>c.type===exit.type)||{}).notice||ftNotice)+' days'}><input className="input" type="date" value={lwd} onChange={e=>setLwd(e.target.value)}/></Field></Modal>}
+{exit&&<Modal title={'Start exit for '+exit.name+'?'} body="They move to notice period until their last working day, then to Exited. Full and final settlement runs on that date." icon="log-out" t="orange" cta="Start exit" onClose={()=>setExit(null)} onOk={doExit}><Field label="Last working day" hint={'Notice period for '+exit.type.toLowerCase()+' employees is '+((db.classes.find(c=>c.type===exit.type)||{}).notice||ftNotice)+' days'}><DateField className="input" aria-label="Last working day" value={lwd} onChange={e=>setLwd(e.target.value)}/></Field></Modal>}
 </>
 }
 function EmpProfile({e,onClose,onEdit,onExit}){

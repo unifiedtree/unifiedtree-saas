@@ -32,6 +32,7 @@ import { DataTable } from '@/shared/components/DataTable'
 import { EmptyState } from '@/shared/components/EmptyState'
 import { FileText, Plus, Trash2, XCircle } from 'lucide-react'
 import { HrDrawer, HrStatusPill, HrButton, TableCard, type PillTone } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { useEmployeeStructure, useStructureHistory, useUpsertStructure, useSalaryComponents } from '../../api/usePayroll'
@@ -236,7 +237,7 @@ function SalaryTab({ employeeId, companyId }: { employeeId: string; companyId?: 
         <HrDrawer onClose={() => setOpen(false)} title="Salary structure">
           <div className="space-y-4">
             <Field label="Annual CTC (₹)" required><Input type="number" value={ctc} onChange={(e) => setCtc(e.target.value)} /></Field>
-            <Field label="Effective from"><Input type="date" value={effFrom} onChange={(e) => setEffFrom(e.target.value)} /></Field>
+            <Field label="Effective from"><DateField value={effFrom} onChange={(e) => setEffFrom(e.target.value)} /></Field>
             <Field label="Tax regime">
               <select value={taxRegime} onChange={(e) => setTaxRegime(e.target.value as 'OLD' | 'NEW')} className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm">
                 <option value="NEW">New regime</option><option value="OLD">Old regime</option>

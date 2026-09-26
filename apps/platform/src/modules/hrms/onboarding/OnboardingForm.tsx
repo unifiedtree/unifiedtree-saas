@@ -8,6 +8,7 @@ import { addMonths, format, parseISO } from 'date-fns'
 import { usePermission } from '@unifiedtree/sdk'
 import { EmptyState } from '@unifiedtree/ui-kit'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { DesignFrame } from '@/design/dc/DesignFrame'
 import { ModulePage } from '@/design/module/ModuleKit'
 import { useToast } from '@/shared/hooks/useToast'
@@ -1024,7 +1025,7 @@ export const OnboardingForm: React.FC = () => {
                 </div>
                 <div id="field-dateOfBirth">
                   <Field label="Date of Birth" required error={errors.dateOfBirth}>
-                    <Input type="date" max={todayLocal()} value={form.dateOfBirth} error={!!errors.dateOfBirth}
+                    <DateField className="ut-input" aria-label="Date of birth" max={todayLocal()} value={form.dateOfBirth} invalid={!!errors.dateOfBirth}
                       onChange={(e) => set('dateOfBirth', e.target.value)} />
                   </Field>
                 </div>
@@ -1185,7 +1186,7 @@ export const OnboardingForm: React.FC = () => {
             )}
             <div id="field-dateOfJoining">
               <Field label="Joining Date" required error={errors.dateOfJoining}>
-                <Input type="date" value={form.dateOfJoining} error={!!errors.dateOfJoining}
+                <DateField className="ut-input" aria-label="Joining date" value={form.dateOfJoining} invalid={!!errors.dateOfJoining}
                   onChange={(e) => set('dateOfJoining', e.target.value)} />
               </Field>
             </div>
@@ -1667,8 +1668,8 @@ export const OnboardingForm: React.FC = () => {
                         onChange={(e) => updateAsset(row.id, { serial: e.target.value })} />
                     </Field>
                     <Field label="Issue Date">
-                      <Input type="date" value={row.issuedOn}
-                        onChange={(e) => updateAsset(row.id, { issuedOn: e.target.value })} />
+                      <DateField className="ut-input" aria-label="Issue date" format="short" value={row.issuedOn}
+                        onChange={(e) => updateAsset(row.id, { issuedOn: e.target.value })} clearable />
                     </Field>
                   </div>
                 </div>
@@ -1707,7 +1708,7 @@ export const OnboardingForm: React.FC = () => {
                 </Field>
               )}
               <Field label="Joining Date" hint="Set on the Employment step.">
-                <Input type="date" value={form.dateOfJoining}
+                <DateField className="ut-input" aria-label="Joining date" value={form.dateOfJoining}
                   onChange={(e) => set('dateOfJoining', e.target.value)} />
               </Field>
               <Field label="Work Location" hint="Set on the Employment step.">

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrStatusPill, TableCard } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies } from '../api/useOrg'
@@ -232,11 +233,12 @@ export function OffersTab() {
           </label>
           <label className="text-sm">
             Joining date
-            <input
-              type="date"
+            <DateField
+              aria-label="Joining date"
               className="ut-input mt-1"
               value={form.joiningDate}
               onChange={(e) => setForm({ ...form, joiningDate: e.target.value })}
+              clearable
             />
           </label>
           <label className="text-sm">
