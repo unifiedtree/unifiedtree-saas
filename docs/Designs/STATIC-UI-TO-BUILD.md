@@ -866,8 +866,8 @@ All five are on the module kit, as tabs under the employee's one "Me" rail item.
 - **Checked:** `e2e/recovery/live-w2i.mjs` (API-level, no browser; written, not run here). It calls every endpoint above as owner, HR, finance, manager and employee, checks the database, the refusals (403) and the day rules, and removes or restores what it touches. Unit tests: `AttendanceCalendarTest`, `CanonicalAttendanceRulesTest`, `AuditResourceNameTest`, `HiringAllCandidatesTest`, and `lettersView.test.ts` (vitest).
 - **Still open from the leftovers:** the trend API's 31-day cap on the dashboard calendar (§2), real integrations (§11.14), deactivated geofence zones (retired with the Geofencing page, D3).
 
-### 11.20 Wave 3 (26 Sep): calendar, dashboard by date, search, settings hub, access step, face features: done
-Deploy notes, the mobile phone test and the choices made are in `docs/production/DEPLOY_2026-09-26_WAVE3.md`. One migration: `V143_40` (assisted face punch).
+### 11.20 Wave 3 (26 Sep): calendar, dashboard by date, search, access step, face features: done (settings hub undone)
+Deploy with `docs/production/DEPLOY_2026-09-26.md` (the one checklist). What wave 3 changed, the mobile phone test and the choices made are in `docs/production/DEPLOY_2026-09-26_WAVE3.md`. One migration: `V143_40` (assisted face punch).
 - **One shared calendar** (`src/shared/components/calendar`: `DateField`, `MonthField`, `DateRangeField`; usage block at the top of `index.ts`).
   - Views: day, month and year, plus the "September ▾ 2026 ▾" jump chips.
   - Also: presets, keyboard support, a bottom sheet on phones, and it works inside drawers and modals.
@@ -894,11 +894,11 @@ Deploy notes, the mobile phone test and the choices made are in `docs/production
     - a search box on the leave, documents and expenses lists (those results open the person's workspace tab)
     - an offer deep link
     - advances, assets, onboarding, training and departments as record types
-- **HRMS settings hub** (`/hrms/settings`, rail gear "Settings"): every HR setting as tabs.
-  - The card list and permission rules are in `src/shared/navigation/hrmsSettings.ts`.
-  - Workspace settings open from the Apps page and the profile menu (`workspaceSettings.ts`).
-  - Old URLs redirect (list in the deploy notes).
-  - Holidays and punch zones stay on their pages.
+- **HRMS settings hub: undone on 26 Sep, at the client's request.** Every setting is back where §6, §8, §11.3, §11.14 and §11.15 describe it, exactly as before 26 Sep:
+  - HR Setup in the rail (HR Configuration, Notification Templates, Integrations); Master → Rules & Policies and Payroll Configuration; Payroll → Payroll Settings; Expenses → Policies; `/roles`; `/settings/documents`; the header gear and the profile menu's Settings.
+  - Removed: the hub page, `hrmsSettings.ts`, `workspaceSettings.ts`, the Apps page's Workspace settings button and the HRMS tile's Settings link.
+  - The hub's addresses redirect to the original pages (`MovedTo` in `App.tsx`), keeping the query and `#section`. List: `DEPLOY_2026-09-26.md` §9.
+- **Left menu fix** (26 Sep, after wave 3; `src/layouts/railLit.ts`): the rail item you click stays lit. A manager's Leave no longer lights Me; Me → Leave keeps Me lit with Me's tabs. The click counts only on the page it opened; a refresh keeps it and signing out clears it. Test: `live-rail-highlight.mjs`.
 - **Access step when adding a person** (Employee Master drawer; onboarding wizard step "Access"): roles plus single permissions.
   - Saved through the existing user-role and override APIs after the invite creates the login.
   - Onboarding applies it only with "Send their login invite" on (off by default).

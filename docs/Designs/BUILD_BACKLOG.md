@@ -18,7 +18,7 @@ No open decisions from waves 1–2 (D1-D4 were settled on 25 Sep and built in wa
 
 From wave 3 (26 Sep), for the client:
 - **My workspace (`/me`) for admins:** it still shows an owner/admin their own month of attendance. Only "My Attendance" was asked to be hidden, so it was left. Hide it too?
-- **Leave types in two places:** HR can edit them on Leave → Leave types and in HRMS settings → Leave rules. Keep both (employees read the Leave tab) or make the Leave tab read-only?
+- **Leave types in two places:** HR can edit them on Leave → Leave types and in Master → Rules & Policies → Leave Rules. Keep both (employees read the Leave tab) or make the Leave tab read-only?
 
 ---
 
