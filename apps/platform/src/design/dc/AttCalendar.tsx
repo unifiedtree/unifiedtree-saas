@@ -64,7 +64,7 @@ export class AttCalendar extends DCLogic {
       : []
     const chip = sel === today ? 'Today' : k === 'holiday' ? hol[sel] : k === 'off' ? 'Weekly off' : k === 'future' ? 'Coming up' : ''
     const d = {
-      title: `${WDL[sd.getDay()]}, ${sd.getDate()} ${MONTHS[sd.getMonth()]}`, chip, hasChip: !!chip,
+      title: `${WDL[sd.getDay()]}, ${sd.getDate()} ${MONTHS[sd.getMonth()]}${sel.slice(0, 4) === today.slice(0, 4) ? '' : ' ' + sd.getFullYear()}`, chip, hasChip: !!chip,
       isWork: k === 'work', isOff: k === 'off' || k === 'holiday', isFuture: k === 'future', isNone: k === 'none',
       present: r.present || 0, expected: (r.present || 0) + (r.absent || 0) + (r.notMarked || 0), rate: rt + '%', rateLabel: tone[2],
       isGreat: rt >= 95, isGood: rt >= 90 && rt < 95, isLow: rt < 90, rows,

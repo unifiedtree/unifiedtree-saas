@@ -119,7 +119,7 @@ export class AttOverview extends DCLogic {
       dayTitle: past ? 'Month in total' : 'Today', monthTitle: past ? 'Day by day' : 'This month', tilesAria: past ? `${monthName} in numbers` : 'Today’s numbers',
       mixTitle: past ? 'Who was where' : 'Who’s where today', totalUnit: past ? 'days' : 'people',
       mixSub: past ? `Each person counted once for each working day (${total} in all), grouped by what they were doing.` : `All ${total} people, grouped by what they’re doing. Tap a row to see who.`,
-      srcLine: O.sourcesLoading ? 'Loading…' : O.sourcesMissing ? 'Couldn’t load how people checked in this month.' : `${srcN} ${srcN === 1 ? 'check-in' : 'check-ins'} ${past ? 'in ' + MONTHS[mo] : 'today'}, by the way they punched`,
+      srcLine: O.sourcesLoading ? 'Loading…' : O.sourcesMissing ? `Couldn’t load how people checked in ${past ? 'in ' + MONTHS[mo] : 'this month'}.` : `${srcN} ${srcN === 1 ? 'check-in' : 'check-ins'} ${past ? 'in ' + MONTHS[mo] : 'today'}, by the way they punched`,
       everyoneSub: `Days present, late marks, hours and overtime for ${monthName}`,
       todayLabel: past ? monthName : `${WDL[td.getDay()]}, ${td.getDate()} ${MON[td.getMonth()]}`, monthChip: `1–${N} ${mon} · ${wdays} working days`,
       legend: [{ label: 'On time', color: '#10b981' }, { label: 'Late', color: '#f59e0b' }, { label: 'Absent', color: '#f43f5e' }, { label: 'Day off', color: '#e2e8f0' }],
