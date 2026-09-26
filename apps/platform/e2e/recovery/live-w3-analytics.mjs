@@ -133,6 +133,8 @@ try {
   // 1. This month by default
   await page.goto(base + '/hrms/att-analytics')
   await monthField.waitFor({ timeout: 30_000 })
+  // Today's section appears once the live roster has loaded.
+  await page.getByRole('heading', { name: 'Today', exact: true }).waitFor({ timeout: 20_000 }).catch(() => {})
   check('opens on this month', (await monthField.innerText()).includes(thisName) && (await page.getByRole('heading', { name: 'Today', exact: true }).count()) === 1, await monthField.innerText())
   await page.waitForLoadState('networkidle')
   const todayTiles = await page.getByRole('group', { name: 'Today’s numbers' }).innerText()
@@ -180,7 +182,7 @@ try {
   const drawn = (loc) => loc.evaluateAll((els) => els.filter((e) => e.getBBox().width > 0).map((e) => (e.textContent || '').trim()).filter(Boolean))
   const dayLabels = await drawn(page.locator('section[aria-labelledby=ov-month] svg[role=img] g text'))
   check('trend draws every day of the month, labelled', dayLabels.length === 31 && dayLabels[30] === '31', `${dayLabels.length} labels`)
-  await page.locator('#ov-month').scrollIntoViewIfNeeded()
+  await page.locator('section[aria-labelledby=ov-month] svg[role=img]').scrollIntoViewIfNeeded()
   await page.screenshot({ path: `${SHOTS}/analytics-1440-past-month-trend.png` })
 
   // Download report → the report page for that month
