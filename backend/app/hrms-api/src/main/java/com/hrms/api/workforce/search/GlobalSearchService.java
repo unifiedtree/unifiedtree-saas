@@ -83,10 +83,18 @@ public class GlobalSearchService {
     }
 
     /** What the caller is: their permissions, their employee record (may be null) and their tenant. */
+    /** The frontend's ADMIN_ROLES (useRoles). */
+    static final Set<String> ADMIN_ROLES = Set.of("OWNER", "SUPER_ADMIN", "COMPANY_ADMIN", "ADMIN");
+
     record Caller(Set<String> perms, UUID employeeId, UUID tenantId, Jwt jwt) {
         boolean has(String code) { return perms.contains(code); }
         /** The employee workspace route opens for directory readers and managers (App.tsx /hrms/employees/:id). */
         boolean opensWorkspace() { return has("hrms.employee.read") || has("attendance.team.read"); }
+        /** Owners and admins have no "My leave" tab (Leave.tsx hides it for the admin roles). */
+        boolean adminRole() {
+            List<String> roles = jwt == null ? null : jwt.getClaimAsStringList("roles");
+            return roles != null && roles.stream().anyMatch(ADMIN_ROLES::contains);
+        }
     }
 
     public GlobalSearchResponse search(String rawQuery, int requestedLimit, Jwt jwt, Authentication auth, UUID tenantId) {
@@ -206,7 +214,7 @@ public class GlobalSearchService {
         boolean mine = r.employeeId().equals(c.employeeId());
         String type = r.typeName() == null || r.typeName().isBlank() ? "Leave" : r.typeName();
         String when = joinNonBlank(" · ", range(r.start(), r.end()), days(r.days()));
-        String url = mine ? "/hrms/leave?tab=my" : workspaceOr(c, r.employeeId(), "leave", "/hrms/leave?tab=history");
+        String url = mine && !c.adminRole() ? "/hrms/leave?tab=my" : workspaceOr(c, r.employeeId(), "leave", "/hrms/leave?tab=history");
         return new SearchHit(SearchType.LEAVE.key, r.id().toString(),
                 mine ? type : r.employeeName() + " · " + type,
                 mine ? when : joinNonBlank(" · ", when, r.employeeCode()),

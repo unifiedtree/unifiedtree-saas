@@ -125,7 +125,7 @@ public class GlobalSearchQueries {
         if (scope.nobody()) return List.of();
         MapSqlParameterSource p = params(tenant, words, limit);
         String sql = """
-            SELECT c.id, c.employee_id, c.title, c.status, CAST(coalesce(c.submitted_at, c.created_at) AS date) AS on_date,
+            SELECT c.id, c.employee_id, c.title, c.status, (coalesce(c.submitted_at, c.created_at) AT TIME ZONE 'Asia/Kolkata')::date AS on_date,
                    e.first_name, e.last_name, e.employee_code
               FROM expense_mgmt.expense_claims c
               JOIN hrms.employees e ON e.id = c.employee_id
@@ -189,7 +189,7 @@ public class GlobalSearchQueries {
         if (scope.nobody()) return List.of();
         MapSqlParameterSource p = params(tenant, words, limit);
         String sql = """
-            SELECT g.id, g.employee_id, g.subject, g.type, g.status, CAST(g.created_at AS date) AS on_date,
+            SELECT g.id, g.employee_id, g.subject, g.type, g.status, (g.created_at AT TIME ZONE 'Asia/Kolkata')::date AS on_date,
                    e.first_name, e.last_name, e.employee_code
               FROM letters.generated g
               LEFT JOIN hrms.employees e ON e.id = g.employee_id
