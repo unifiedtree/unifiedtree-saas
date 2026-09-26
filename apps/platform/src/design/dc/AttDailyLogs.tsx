@@ -57,7 +57,9 @@ export class AttDailyLogs extends DCLogic {
     const rows = base
       .filter((r) => (!status || inStatus(r, status)) && (!dept || r.dept === dept) && (!q || `${r.name} ${r.code}`.toLowerCase().includes(q)))
       .map((r) => ({
-        ...r, statusLabel: LBL[r.status] ? (LBL[r.status][0] === 'From home' ? 'Work from home' : LBL[r.status][0]) : r.status,
+        // Under the name in the table and the phone cards: "EMP-003 · Punched by <manager>" (assisted face punch).
+        ...r, code: r.punchedBy ? `${r.code} · Punched by ${r.punchedBy}` : r.code,
+        statusLabel: LBL[r.status] ? (LBL[r.status][0] === 'From home' ? 'Work from home' : LBL[r.status][0]) : r.status,
         tone: LBL[r.status] ? LBL[r.status][1] : 'gray', lateShort: r.late ? `${r.late} min late` : '', onOpen: () => this.setState({ open: r.id }),
       }))
     const cnt = isEmpty ? 0 : status ? base.filter((r) => inStatus(r, status)).length : total
@@ -82,6 +84,8 @@ export class AttDailyLogs extends DCLogic {
         facts: [
           { k: 'Date', v: dateLabel }, { k: 'Shift', v: d0.shift }, { k: 'Check in', v: d0.in }, { k: 'Shift starts', v: d0.exp },
           { k: 'Check out', v: d0.out }, { k: 'Hours worked', v: d0.worked }, { k: 'How they punched', v: d0.src }, { k: 'Late by', v: d0.late ? `${d0.late} min` : '—' },
+          // A manager or HR scanned their face on their own phone (assisted face punch).
+          ...(d0.punchedByDetail ? [{ k: 'Punched by', v: d0.punchedByDetail }] : []),
           // Why the day has this status (attendance policy or a reviewer's change).
           ...(d0.note ? [{ k: d0.manual ? 'Changed by a reviewer' : 'Why this status', v: d0.note }] : []),
         ],

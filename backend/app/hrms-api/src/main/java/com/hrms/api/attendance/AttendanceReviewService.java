@@ -66,6 +66,9 @@ public class AttendanceReviewService {
     private final ApplicationEventPublisher events;
     @Autowired(required = false)
     private AuditService audit;
+    /** "Punched by" for assisted face punches (V143.40). */
+    @Autowired(required = false)
+    private AssistedPunchRecorder assistedPunches;
 
     public AttendanceReviewService(JdbcTemplate jdbc, EffectiveDayStatusService days, TeamEmployeeScope teamScope,
                                    EmployeeRepository employees, WorkforceDepartmentRepository departments,
@@ -94,7 +97,9 @@ public class AttendanceReviewService {
                             String purpose, String result, String scoreBucket, Instant createdAt, LocalDate date,
                             String status, String decision, String decisionNote, String decidedBy, Instant decidedAt,
                             /** The phone or kiosk the check was made on (V143.25), or null when none was recorded. */
-                            String device) {}
+                            String device,
+                            /** Who punched this person in or out on their own phone (assisted punch, V143.40); null for a self punch. */
+                            String punchedBy) {}
 
     /**
      * The phone / kiosk of a face check: what the client sent with it, else (a
@@ -285,10 +290,12 @@ public class AttendanceReviewService {
                 rs.getObject("employee_id"), rs.getString("device")}), params.toArray());
         List<Object[]> scoped = rows.stream().filter(o -> o[5] != null && ids.contains((UUID) o[5])).toList();
         Map<UUID, Object[]> decisions = latestDecisions(scoped.stream().map(o -> (UUID) o[0]).toList());
+        Map<UUID, String> punchedBy = punchedBy(scoped.stream().map(o -> (UUID) o[0]).toList());
         List<FaceEvent> out = new ArrayList<>();
         for (Object[] o : scoped) {
             Employee emp = byId.get((UUID) o[5]);
-            out.add(faceEvent(o, emp, emp.getDepartmentId() != null ? depts.get(emp.getDepartmentId()) : null, decisions.get((UUID) o[0])));
+            out.add(faceEvent(o, emp, emp.getDepartmentId() != null ? depts.get(emp.getDepartmentId()) : null, decisions.get((UUID) o[0]),
+                    punchedBy.get((UUID) o[0])));
         }
         return out;
     }
@@ -348,7 +355,7 @@ public class AttendanceReviewService {
                 "REJECTED".equals(decision) ? "rejected" : "confirmed", who.name(), note.isEmpty() ? "" : ". Note: " + note));
         Map<UUID, Object[]> dec = latestDecisions(List.of(eventId));
         String dept = emp.getDepartmentId() != null ? departmentNames(List.of(emp)).get(emp.getDepartmentId()) : null;
-        return new FaceDecisionResult(faceEvent(ev, emp, dept, dec.get(eventId)), after);
+        return new FaceDecisionResult(faceEvent(ev, emp, dept, dec.get(eventId), punchedBy(List.of(eventId)).get(eventId)), after);
     }
 
     // ── helpers ────────────────────────────────────────────────────────────
@@ -391,7 +398,12 @@ public class AttendanceReviewService {
         return out;
     }
 
-    private FaceEvent faceEvent(Object[] o, Employee emp, String dept, Object[] decision) {
+    /** Who made each assisted punch among these face checks; empty when none (or V143.40 isn't applied). */
+    private Map<UUID, String> punchedBy(List<UUID> eventIds) {
+        return assistedPunches == null ? Map.of() : assistedPunches.punchedByForFaceEvents(eventIds);
+    }
+
+    private FaceEvent faceEvent(Object[] o, Employee emp, String dept, Object[] decision, String punchedBy) {
         String result = (String) o[2], bucket = (String) o[3];
         Instant at = (Instant) o[4];
         String status = faceStatus(result, bucket, decision != null ? (String) decision[0] : null);
@@ -399,7 +411,7 @@ public class AttendanceReviewService {
                 at, at.atZone(AttendancePolicyEvaluator.IST).toLocalDate(), status,
                 decision != null ? (String) decision[0] : null, decision != null ? (String) decision[1] : null,
                 decision != null ? (String) decision[2] : null, decision != null ? (Instant) decision[3] : null,
-                o.length > 6 ? (String) o[6] : null);
+                o.length > 6 ? (String) o[6] : null, punchedBy);
     }
 
     /** OK / REVIEW (medium or low match, nobody checked) / CONFIRMED / FLAGGED / FAILED. Package-visible for tests. */

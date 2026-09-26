@@ -32,25 +32,7 @@ public class TeamEmployeeScope {
             // Admin + HR: organisation-wide, every active employee.
             employees = withFormer(employeeRepository.findActiveByCompany(current.getCompanyId()), formerStaff, current.getCompanyId());
         } else {
-            // DEPT_MANAGER: everyone in the department(s) they head — not just
-            // direct reports whose reporting_manager_id points at them. A
-            // department head "owns" the whole department, so their dashboard
-            // shows every teammate in it. Fall back to legacy direct-report
-            // scope for managers who haven't been set as any dept's head yet.
-            List<UUID> ledDepartmentIds = departmentRepository
-                    .findByDepartmentHeadEmployeeId(currentEmployeeId).stream()
-                    .map(d -> d.getId())
-                    .toList();
-            if (!ledDepartmentIds.isEmpty()) {
-                List<Employee> companyEmployees =
-                        withFormer(employeeRepository.findActiveByCompany(current.getCompanyId()), formerStaff, current.getCompanyId());
-                employees = companyEmployees.stream()
-                        .filter(e -> e.getDepartmentId() != null
-                                && ledDepartmentIds.contains(e.getDepartmentId()))
-                        .toList();
-            } else {
-                employees = employeeRepository.findByManagerId(currentEmployeeId);
-            }
+            employees = teamOf(current, formerStaff);
         }
 
         // Exclude the caller from the team list — admins and managers don't
@@ -77,6 +59,45 @@ public class TeamEmployeeScope {
         current.forEach(e -> seen.add(e.getId()));
         former.stream().filter(e -> companyId.equals(e.getCompanyId()) && seen.add(e.getId())).forEach(all::add);
         return all;
+    }
+
+    /**
+     * The My team rule on its own, whatever permissions the manager holds:
+     * the department(s) they head, else their direct reports; never the
+     * manager themself. {@link #resolve} uses it for callers without the
+     * company-wide permission; assisted face punch (V143.40) uses it for
+     * "punch for their team".
+     */
+    public List<Employee> teamOf(Employee manager) {
+        return teamOf(manager, null);
+    }
+
+    /** {@link #teamOf(Employee)}, with the people who have since left (see {@link #resolve(Jwt, UUID, java.util.function.Function)}). */
+    List<Employee> teamOf(Employee manager, java.util.function.Function<UUID, List<Employee>> formerStaff) {
+        UUID managerId = manager.getId();
+        // DEPT_MANAGER: everyone in the department(s) they head — not just
+        // direct reports whose reporting_manager_id points at them. A
+        // department head "owns" the whole department, so their dashboard
+        // shows every teammate in it. Fall back to legacy direct-report
+        // scope for managers who haven't been set as any dept's head yet.
+        List<UUID> ledDepartmentIds = departmentRepository
+                .findByDepartmentHeadEmployeeId(managerId).stream()
+                .map(d -> d.getId())
+                .toList();
+        List<Employee> employees;
+        if (!ledDepartmentIds.isEmpty()) {
+            List<Employee> companyEmployees =
+                    withFormer(employeeRepository.findActiveByCompany(manager.getCompanyId()), formerStaff, manager.getCompanyId());
+            employees = companyEmployees.stream()
+                    .filter(e -> e.getDepartmentId() != null
+                            && ledDepartmentIds.contains(e.getDepartmentId()))
+                    .toList();
+        } else {
+            employees = employeeRepository.findByManagerId(managerId);
+        }
+        return employees.stream()
+                .filter(employee -> !employee.getId().equals(managerId))
+                .toList();
     }
 
 }

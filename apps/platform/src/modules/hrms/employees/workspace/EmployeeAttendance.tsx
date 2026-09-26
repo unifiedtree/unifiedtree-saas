@@ -18,7 +18,7 @@
  * rather than "no attendance".
  */
 
-import { istToday } from '@/design/dc/dates'
+import { istToday, addDays } from '@/design/dc/dates'
 import React, { useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Clock, CalendarDays, TrendingUp, LogIn } from 'lucide-react'
@@ -32,6 +32,7 @@ import {
 } from '../../api/useAttendance'
 import { useEmployeeShift, useEmployeeShiftHistory } from '../../api/useShiftPolicies'
 import { useStatusHistory, statusLabel } from '../../api/useAttendanceReview'
+import { useAssistedPunches, punchedByMap } from '../../api/useAssistedPunches'
 import { SectionState, SubSection } from './shared'
 
 /** Server-side day classifications from WeeklyDayResponse.status. */
@@ -135,6 +136,13 @@ export function EmployeeAttendance({ employeeId }: { employeeId: string }) {
   const changes = useStatusHistory(employeeId, canRead)
   // Every assignment with who made it and why (the Change-shift note).
   const shiftHistory = useEmployeeShiftHistory(employeeId, { enabled: canRead })
+  // "Punched by" on the days a manager or HR punched them with their face on their own phone
+  // (assisted face punch): this page's days, at most the last 92 (the endpoint's limit).
+  const recDays = (records.data?.content ?? []).map((r) => r.attendanceDate).filter(Boolean).sort()
+  const lastDay = recDays[recDays.length - 1]
+  const firstDay = lastDay ? [recDays[0], addDays(lastDay, -91)].sort()[1] : undefined
+  const assisted = useAssistedPunches(firstDay, lastDay, employeeId, canRead)
+  const assistedBy = punchedByMap(assisted.data, (p) => p.attendanceRecordId)
 
   const total = records.data?.totalElements ?? 0
   const totalPages = records.data?.totalPages ?? 0
@@ -307,6 +315,7 @@ export function EmployeeAttendance({ employeeId }: { employeeId: string }) {
                     <td>{r.overtimeMinutes ? `${r.overtimeMinutes}m` : '—'}</td>
                     <td className="text-text-tertiary">
                       {r.regularized ? 'Regularised' : r.manualEntry ? 'Manual' : (r.checkInMethod?.replace(/_/g, ' ') ?? '—')}
+                      {assistedBy.get(r.id) ? <span className="block text-[11px]">Punched by {assistedBy.get(r.id)?.detail}</span> : null}
                     </td>
                   </tr>
                 ))}
