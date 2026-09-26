@@ -124,7 +124,9 @@ try {
 
     await page.goto(base + '/hrms/settings/hr-configuration')
     await page.getByRole('heading', { name: 'Work week', exact: true }).waitFor({ timeout: 30_000 })
-    check('/hrms/settings/hr-configuration shows the Work week section to the owner', (await page.getByRole('heading', { name: 'Work week', exact: true }).count()) === 1)
+    await page.waitForLoadState('networkidle').catch(() => {})
+    const weekHeadings = await page.getByRole('heading', { name: 'Work week', exact: true }).count()
+    check('/hrms/settings/hr-configuration shows the Work week section to the owner', weekHeadings === 1, `${weekHeadings} found`)
     assertClean('/hrms/settings/hr-configuration')
     await page.goto(base + '/hrms/settings/work-time')
     await page.getByRole('heading', { name: 'HR Configuration' }).waitFor({ timeout: 30_000 })
