@@ -311,6 +311,9 @@ try {
   if (tempId) {
     try {
       const mine = sql(`select count(*) from org.companies where id='${tempId}' and name=${lit(tempName)} and tenant_id='${tenant}'`) === '1'
+      // A new company gets the default shifts (General, Morning, Afternoon, Night) the first time its
+      // shift list is read. They belong to the temporary company, so they go with it when nobody uses them.
+      if (mine) sql(`delete from attendance.shift_policies p where p.company_id='${tempId}' and not exists (select 1 from attendance.employee_shift_assignments a where a.shift_policy_id=p.id)`)
       const tables = sql("select c.table_schema||'.'||c.table_name from information_schema.columns c join information_schema.tables t on t.table_schema=c.table_schema and t.table_name=c.table_name where c.column_name='company_id' and t.table_type='BASE TABLE' and c.table_schema not in ('pg_catalog','information_schema')").split('\n').filter(Boolean)
       const refs = sql(tables.map((t) => `select '${t}' where exists (select 1 from ${t} where company_id='${tempId}')`).join(' union all ')).split('\n').filter(Boolean)
       if (mine && !refs.length) {
