@@ -5,6 +5,8 @@
 // Each check opens the picker, picks a day (a previous year through the year
 // list where it makes sense) and reads the value back from the field or the
 // URL. Nothing is saved: every form is cancelled, so the test leaves no data.
+// The save path (a picked date reaching the backend) is covered by
+// performance-admin-live.mjs (review cycle period) and expense-batches-live.mjs (batch cutoff).
 //
 //   node e2e/recovery/live-w3-r4.mjs
 /* global process, console, URL */
@@ -303,6 +305,7 @@ try {
     await drawer.getByRole('button', { name: 'Cancel' }).click()
   })
   check('phone: no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
+  check('phone: no failed API calls', failed.length === 0, failed.slice(0, 4).join(' | '))
 } catch (e) {
   check('script completed', false, String(e.message || e).slice(0, 200))
 } finally {
