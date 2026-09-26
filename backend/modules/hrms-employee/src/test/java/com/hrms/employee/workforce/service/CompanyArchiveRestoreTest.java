@@ -16,6 +16,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -104,8 +105,8 @@ class CompanyArchiveRestoreTest {
 
     @Test
     void archiveHidesACompanyNobodyWorksAt() {
-        Company spare = company("Spare Co", true);
-        when(repo.existsByActiveTrueAndIdNot(spare.getId())).thenReturn(true);
+        Company spare = company("Spare Co", true), acme = company("Acme", true);
+        when(repo.findAllByActiveTrue()).thenReturn(List.of(acme, spare));
         when(headcount.countFor("company_id", spare.getId())).thenReturn(0);
 
         CompanyService.StatusChange r = service.archive(spare.getId());
@@ -118,7 +119,7 @@ class CompanyArchiveRestoreTest {
     @Test
     void theLastActiveCompanyCannotBeArchived() {
         Company only = company("Acme", true);
-        when(repo.existsByActiveTrueAndIdNot(only.getId())).thenReturn(false);
+        when(repo.findAllByActiveTrue()).thenReturn(List.of(only));
 
         assertThatThrownBy(() -> service.archive(only.getId()))
                 .isInstanceOf(BusinessRuleException.class)
@@ -130,8 +131,8 @@ class CompanyArchiveRestoreTest {
 
     @Test
     void aCompanyPeopleStillWorkAtCannotBeArchived() {
-        Company acme = company("Acme", true);
-        when(repo.existsByActiveTrueAndIdNot(acme.getId())).thenReturn(true);
+        Company acme = company("Acme", true), beta = company("Beta", true);
+        when(repo.findAllByActiveTrue()).thenReturn(List.of(acme, beta));
         when(headcount.countFor("company_id", acme.getId())).thenReturn(12);
 
         assertThatThrownBy(() -> service.archive(acme.getId()))
@@ -154,6 +155,18 @@ class CompanyArchiveRestoreTest {
         assertThat(r.changed()).isFalse();
         assertThat(r.company().active()).isFalse();
         verify(repo, never()).save(any(Company.class));
-        verify(repo, never()).existsByActiveTrueAndIdNot(any());
+    }
+
+    @Test
+    void archiveLocksTheActiveCompaniesBeforeItChecks() {
+        Company spare = company("Spare Co", true), acme = company("Acme", true);
+        when(repo.findAllByActiveTrue()).thenReturn(List.of(acme, spare));
+
+        service.archive(spare.getId());
+        // The lock comes first, so a second archive at the same moment waits and then sees this one.
+        var order = inOrder(repo);
+        order.verify(repo).findAllByActiveTrue();
+        order.verify(repo).findById(spare.getId());
+        order.verify(repo).save(spare);
     }
 }

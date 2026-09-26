@@ -140,10 +140,13 @@ public class CompanyService {
      * nothing.
      */
     public StatusChange archive(UUID id) {
+        // Lock the active companies first: a second archive at the same moment waits
+        // here, then sees this one's result, so the workspace always keeps one.
+        List<Company> active = repository.findAllByActiveTrue();
         Company c = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Company " + id + " not found"));
         if (!c.isActive()) return new StatusChange(toResponse(c), false);
-        if (!repository.existsByActiveTrueAndIdNot(id)) {
+        if (active.stream().noneMatch(other -> !other.getId().equals(id))) {
             throw new BusinessRuleException(
                     "This is the only active company. Add or restore another company before archiving this one.",
                     "LAST_ACTIVE_COMPANY");
