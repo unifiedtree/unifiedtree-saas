@@ -4,6 +4,7 @@ import { differenceInCalendarDays, format } from 'date-fns'
 import { LogOut, UserMinus, Wallet } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { HrAvatar, HrButton, HrDrawer, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { ModulePage, Views, StatRow, State } from '@/design/module/ModuleKit'
 import { DataTable, type Column } from '@/shared/components/DataTable'
 import { EmptyState } from '@/shared/components/EmptyState'
@@ -224,8 +225,8 @@ function StartNoticeDrawer({ onClose, onDone }: { onClose: () => void; onDone: (
         </div>
       )}
       <ExitTypeField value={exitType} onChange={setExitType} />
-      <label className="block text-sm font-medium">Notice start date<input type="date" className="ut-input mt-2" value={noticeStart} onChange={e => setNoticeStart(e.target.value)} required max={lastDay || undefined} /></label>
-      <label className="block text-sm font-medium">Last working day<input type="date" className="ut-input mt-2" value={lastDay} onChange={e => setLastDay(e.target.value)} required min={noticeStart || undefined} /></label>
+      <label className="block text-sm font-medium">Notice start date<DateField className="ut-input mt-2" value={noticeStart} onChange={e => setNoticeStart(e.target.value)} required max={lastDay || undefined} /></label>
+      <label className="block text-sm font-medium">Last working day<DateField className="ut-input mt-2" value={lastDay} onChange={e => setLastDay(e.target.value)} required min={noticeStart || undefined} /></label>
       <div><label htmlFor="notice-reason" className="block text-sm font-medium">Reason <span className="font-normal text-text-secondary">(optional)</span></label><textarea id="notice-reason" className="ut-input mt-2" value={reason} maxLength={100} rows={3} onChange={e => setReason(e.target.value)} /></div>
       {invalidOrder && <p role="alert" className="text-sm text-danger">Last working day must be on or after the notice start date.</p>}
       {start.isError && <p role="alert" className="text-sm text-danger">{start.error instanceof Error ? start.error.message : 'Unable to start the notice period.'}</p>}
@@ -253,8 +254,8 @@ function SeparationDrawer({ emp, onClose }: { emp: WorkforceEmployee; onClose: (
     footer={<div className="flex justify-end gap-3"><HrButton variant="ghost" disabled={update.isPending} onClick={onClose}>Cancel</HrButton><HrButton disabled={!lastDay || !noticeStart || invalidOrder || update.isPending} onClick={save}>{update.isPending ? 'Saving…' : 'Save'}</HrButton></div>}>
     <div className="space-y-5">
       <ExitTypeField value={exitType} onChange={setExitType} />
-      <label className="block text-sm font-medium">Notice start date<input type="date" className="ut-input mt-2" value={noticeStart} onChange={e => setNoticeStart(e.target.value)} required max={lastDay || undefined} /></label>
-      <label className="block text-sm font-medium">Last working day<input type="date" className="ut-input mt-2" value={lastDay} onChange={e => setLastDay(e.target.value)} required min={noticeStart || undefined} /></label>
+      <label className="block text-sm font-medium">Notice start date<DateField className="ut-input mt-2" value={noticeStart} onChange={e => setNoticeStart(e.target.value)} required max={lastDay || undefined} /></label>
+      <label className="block text-sm font-medium">Last working day<DateField className="ut-input mt-2" value={lastDay} onChange={e => setLastDay(e.target.value)} required min={noticeStart || undefined} /></label>
       <div><label htmlFor="separation-reason" className="block text-sm font-medium">Reason</label><textarea id="separation-reason" className="ut-input mt-2" value={reason} maxLength={100} rows={3} onChange={e => setReason(e.target.value)} /></div>
       {invalidOrder && <p role="alert" className="text-sm text-danger">Last working day must be on or after the notice start date.</p>}
       {update.isError && <p role="alert" className="text-sm text-danger">{update.error instanceof Error ? update.error.message : 'Unable to update separation details.'}</p>}

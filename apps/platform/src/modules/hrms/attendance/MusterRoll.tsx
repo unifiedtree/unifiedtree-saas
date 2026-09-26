@@ -11,6 +11,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { usePermission, P } from '@unifiedtree/sdk'
 import { HrStatusPill, TableCard, HrButton, HrAvatar, type PillTone } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { DataTable } from '@/shared/components/DataTable'
 import { apiBlob } from '@/core/api/client'
 import { saveServerFile } from '@/shared/export/fileExport'
@@ -133,7 +134,7 @@ export const MusterRoll: React.FC = () => {
         <Panel pad={14}>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
             <HrButton size="sm" variant="ghost" aria-label="Previous day" onClick={() => shiftDay(-1)}>←</HrButton>
-            <input type="date" aria-label="Date" value={date} max={today} onChange={(e) => e.target.value && setDate(e.target.value)} className="ut-input h-9 w-44" />
+            <DateField aria-label="Date" value={date} max={today} onChange={(e) => e.target.value && setDate(e.target.value)} className="ut-input h-9 w-44" format="short" />
             <HrButton size="sm" variant="ghost" aria-label="Next day" onClick={() => shiftDay(1)} disabled={isToday}>→</HrButton>
             {!isToday && <HrButton size="sm" variant="ghost" onClick={() => setDate(today)}>Today</HrButton>}
             <strong style={{ fontSize: 14, marginLeft: 6 }}>{format(parseISO(date), 'EEEE, d MMMM yyyy')}</strong>

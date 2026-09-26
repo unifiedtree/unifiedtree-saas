@@ -6,6 +6,7 @@ import { usePermission } from '@unifiedtree/sdk'
 import { Field, Input } from '@unifiedtree/ui-kit'
 import { apiJson } from '@/core/api/client'
 import { HrButton } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { Panel, State, Note, RowList, Row, useDesignToast, todayIso } from '@/design/module/ModuleKit'
 
 interface Entry { id: string; workDate: string; description: string; minutes: number }
@@ -32,8 +33,8 @@ export function TimeEntries() {
   return (
     <Panel title="Daily time entries" sub="What you worked on. These don’t change your attendance or pay." aside={
       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 600, color: '#64748b' }}>Day
-        <input aria-label="Time entry date" type="date" max={todayIso()} value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setEditing(''); setDeleting(''); setDescription('') } }}
-          style={{ height: 34, padding: '0 10px', border: '1px solid #e2e8f0', borderRadius: 10, font: 'inherit', fontSize: 13, color: '#0f172a' }} />
+        <DateField aria-label="Time entry date" max={todayIso()} value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setEditing(''); setDeleting(''); setDescription('') } }}
+          size="sm" format="short" style={{ width: 150 }} />
       </label>}>
       {entries.isLoading ? <State kind="loading" height={60} />
         : entries.isError ? <State kind="error" title="Couldn’t load your time entries" description={(entries.error as Error)?.message} onRetry={() => entries.refetch()} />

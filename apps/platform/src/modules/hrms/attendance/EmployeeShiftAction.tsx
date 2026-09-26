@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import { usePermission, P } from '@unifiedtree/sdk'
 import { apiJson } from '@/core/api/client'
 import { HrButton, HrDrawer } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { useToast } from '@/shared/hooks/useToast'
 import { useEmployeeShift, useShiftPolicies } from '../api/useShiftPolicies'
 
@@ -67,7 +68,7 @@ function AssignmentDrawer({ employeeId, companyId, name, onClose }: { employeeId
           {current.data?.upcomingShiftName && current.data.upcomingEffectiveFrom && <p className="mt-2 text-xs font-semibold text-accent-fg">Scheduled: {current.data.upcomingShiftName} from {day(current.data.upcomingEffectiveFrom)}</p>}</div>
           <label className="block text-sm font-medium">New shift<select className="ut-input mt-2" value={selected} onChange={e => setSelected(e.target.value)}><option value="">Select a shift</option>
             {(policies.data ?? []).map(policy => <option key={policy.id} value={policy.id}>{policy.name} · {policy.startTime?.slice(0, 5)} – {policy.endTime?.slice(0, 5)}</option>)}</select></label>
-          <label className="block text-sm font-medium">Effective from<input type="date" className="ut-input mt-2" value={effectiveFrom} min={minDate} required onChange={e => setEffectiveFrom(e.target.value)} />
+          <label className="block text-sm font-medium">Effective from<DateField className="ut-input mt-2" value={effectiveFrom} min={minDate} required onChange={e => setEffectiveFrom(e.target.value)} />
             <span className="mt-1 block text-xs font-normal text-text-secondary">{scheduled ? `The change is scheduled for ${day(effectiveFrom)}; the current shift applies until then.` : 'Applies from today.'}</span></label>
           {tooEarly && minDate && <p role="alert" className="text-sm text-danger">The date cannot be before the current assignment started ({day(minDate)}).</p>}
           {sameAsCurrent && <p className="text-sm text-text-secondary">{name} is already on this shift.</p>}

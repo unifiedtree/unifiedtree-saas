@@ -6,6 +6,7 @@ import { usePermission, P } from '@unifiedtree/sdk'
 import { TableSkeleton } from '@unifiedtree/ui-kit'
 import { HrPageHeader, HrStatusPill, HrButton, type PillTone } from '@/shared/components/hr'
 import { SubHeading } from '@/design/module/ModuleKit'
+import { DateField } from '@/shared/components/calendar'
 import { useHolidays, useCreateHoliday, useDeleteHoliday, type HolidayType } from '../api/useSettings'
 import { useCompanies } from '../api/useOrg'
 
@@ -77,8 +78,7 @@ function AddHolidayDrawer({ companyId, year, onClose }: AddHolidayDrawerProps) {
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
             <label className="block text-[13px] font-semibold text-text-secondary mb-1.5">Date *</label>
-            <input
-              type="date"
+            <DateField
               value={form.holidayDate}
               min={`${year}-01-01`}
               max={`${year}-12-31`}

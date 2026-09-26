@@ -11,6 +11,7 @@ import React, { useMemo, useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePermission, P } from '@unifiedtree/sdk'
 import { HrButton } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { ModulePage, Panel, Note, useDesignToast, todayIso } from '@/design/module/ModuleKit'
 import { useCompanies } from '../api/useOrg'
 import { useEmployeeDirectory, type WorkforceEmployee } from '../api/useWorkforce'
@@ -105,7 +106,7 @@ export const ManualEntry: React.FC = () => {
         </Panel>
         <Panel title="When">
           <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-3">
-            <div><label className={label} htmlFor="me-date">Date</label><input id="me-date" type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} className="ut-input" /></div>
+            <div><label className={label} htmlFor="me-date">Date</label><DateField id="me-date" value={date} max={today} onChange={(e) => setDate(e.target.value)} className="ut-input" /></div>
             <div><label className={label} htmlFor="me-in">Check-in</label><input id="me-in" type="time" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} className="ut-input" /></div>
             <div><label className={label} htmlFor="me-out">Check-out</label><input id="me-out" type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} className="ut-input" /></div>
           </div>

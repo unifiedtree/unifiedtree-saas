@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { addYears, format, parseISO } from 'date-fns'
 import { apiJson } from '@/core/api/client'
-import { Field, Input } from '@unifiedtree/ui-kit'
+import { Field } from '@unifiedtree/ui-kit'
+import { DateField } from '@/shared/components/calendar'
 import { HrButton, HrSelect, HrStatusPill, type PillTone } from '@/shared/components/hr'
 import { ModulePage, Panel, Facts, Note, SubHeading, State, RowList, Row } from '@/design/module/ModuleKit'
 
@@ -220,7 +221,7 @@ export const ShiftChangeRequest: React.FC = () => {
                   options={availableShifts.map((s) => ({ value: s.id, label: `${s.name}${s.startTime ? ` · ${formatShiftRange(s.startTime, s.endTime)}` : ''}` }))} />
                 {availableShifts.length === 0 && shifts.isSuccess && <span style={{ fontSize: 12.5, color: '#64748b' }}>There are no other shifts to move to.</span>}
               </div>
-              <div style={{ maxWidth: 220 }}><Field label="Starting from *"><Input type="date" min={minDate} max={maxDate} value={effectiveDate} disabled={disableForm} onChange={(e: any) => setPickedDate(e.target.value)} /></Field></div>
+              <div style={{ maxWidth: 220 }}><Field label="Starting from *"><DateField min={minDate} max={maxDate} value={effectiveDate} disabled={disableForm} onChange={(e) => setPickedDate(e.target.value)} /></Field></div>
               <Note>If HR hasn’t approved it by that date, the request expires and you can send a new one.</Note>
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: '#334155' }}>Reason *<span style={{ fontWeight: 500, color: '#94a3b8' }}>{reason.trim().length}/{REASON_MAX}</span></span>
