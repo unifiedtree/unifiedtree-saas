@@ -2,8 +2,7 @@
 //
 //   node e2e/recovery/live-design-master.mjs
 //
-// Owner: every section renders under the Master tabs with no page errors (the
-// rules and payroll configuration open in HRMS settings, under its tabs); the
+// Owner: every section renders under the Master tabs with no page errors; the
 // employee list filters, opens a profile, exports a CSV and saves an edit; a
 // test department, designation, grade, leave type, shift, policy draft, salary
 // component, agency and employment type are created and edited through the
@@ -72,26 +71,14 @@ try {
   // ── every section renders under the Master tabs ──
   const ROUTES = [['/hrms/master', 'Master data'], ['/hrms/employees', 'Employee Master'], ['/hrms/master/contractors', 'Contractor Master'], ['/hrms/master/classifications', 'Classification Rules'],
     ['/hrms/master/companies', 'Companies'], ['/hrms/master/branches', 'Branches'], ['/hrms/master/departments', 'Departments'], ['/hrms/master/designations', 'Designations'],
-    ['/hrms/master/grades', 'Grades & Bands'], ['/hrms/organization', 'Companies']]
+    ['/hrms/master/grades', 'Grades & Bands'], ['/hrms/master/shift-rules', 'Shift Rules'], ['/hrms/master/leave-rules', 'Leave Rules'], ['/hrms/policies', 'Policy Documents'],
+    ['/hrms/payroll/components', 'Salary Components'], ['/hrms/master/statutory', 'Statutory Settings'], ['/hrms/organization', 'Companies']]
   for (const [route, heading] of ROUTES) {
     hr.errors.length = 0
     await page.goto(base + route); await settle()
     await page.getByRole('heading', { name: heading, exact: true }).first().waitFor({ timeout: 20000 }).catch(() => {})
     const ok = (await page.getByRole('navigation', { name: 'Master sections' }).count()) === 1 && (await page.getByRole('heading', { name: heading, exact: true }).count()) > 0
     check(`${route} renders "${heading}" under the Master tabs`, ok && !hr.errors.length, hr.errors[0] || '')
-  }
-
-  // ── the rules and payroll configuration are settings: their old addresses open them in HRMS settings ──
-  const MOVED = [['/hrms/master/shift-rules', '/hrms/settings/shift-rules', 'Shift Rules'], ['/hrms/master/leave-rules', '/hrms/settings/leave-rules', 'Leave Rules'],
-    ['/hrms/policies', '/hrms/settings/policies', 'Policy Documents'], ['/hrms/payroll/components', '/hrms/settings/salary-components', 'Salary Components'],
-    ['/hrms/master/statutory', '/hrms/settings/statutory', 'Statutory Settings']]
-  for (const [route, to, heading] of MOVED) {
-    hr.errors.length = 0
-    await page.goto(base + route); await settle()
-    await page.getByRole('heading', { name: heading, exact: true }).first().waitFor({ timeout: 20000 }).catch(() => {})
-    const ok = new URL(page.url()).pathname === to && (await page.getByRole('navigation', { name: 'HRMS settings sections' }).count()) === 1
-      && (await page.getByRole('navigation', { name: 'Master sections' }).count()) === 0 && (await page.getByRole('heading', { name: heading, exact: true }).count()) > 0
-    check(`${route} opens "${heading}" in HRMS settings (${to})`, ok && !hr.errors.length, hr.errors[0] || new URL(page.url()).pathname)
   }
 
   // ── Employee Master ──

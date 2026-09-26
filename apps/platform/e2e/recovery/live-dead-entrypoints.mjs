@@ -1,7 +1,7 @@
 // Wired-but-unreachable screens — browser acceptance against the local recovery
 // runtime. Checks the new entry points added for pages that had no link:
 //   - My Salary (/me/salary) from My Workspace (/me) and My Payslips (/me/payslips)
-//   - HR Configuration (/hrms/settings/hr-configuration, in HRMS settings) and its old Work time link (/hrms/settings/work-time)
+//   - HR Configuration (/hrms/settings) and its old Work time link (/hrms/settings/work-time)
 //   - the employee workspace Overview "Expenses" link (was /hrms/expense, a dead route)
 //   - "Apply leave" on /me opening the Apply tab an employee can actually use
 // Read-only: no fixtures are written.
@@ -122,15 +122,13 @@ try {
   {
     const { ctx, page } = await session('owner@unifiedtree.demo')
 
-    await page.goto(base + '/hrms/settings/hr-configuration')
+    await page.goto(base + '/hrms/settings')
     await page.getByRole('heading', { name: 'Work week', exact: true }).waitFor({ timeout: 30_000 })
-    await page.waitForLoadState('networkidle').catch(() => {})
-    const weekHeadings = await page.getByRole('heading', { name: 'Work week', exact: true }).count()
-    check('/hrms/settings/hr-configuration shows the Work week section to the owner', weekHeadings === 1, `${weekHeadings} found`)
-    assertClean('/hrms/settings/hr-configuration')
+    check('/hrms/settings shows the Work week section to the owner', (await page.getByRole('heading', { name: 'Work week', exact: true }).count()) === 1)
+    assertClean('/hrms/settings')
     await page.goto(base + '/hrms/settings/work-time')
     await page.getByRole('heading', { name: 'HR Configuration' }).waitFor({ timeout: 30_000 })
-    check('/hrms/settings/work-time still opens (HR Configuration, at its new address)', path(page) === '/hrms/settings/hr-configuration')
+    check('/hrms/settings/work-time still opens (HR Configuration)', path(page) === '/hrms/settings/work-time')
     await page.waitForTimeout(1500)
     check('HR Configuration loaded real settings (no load error)', !(await page.getByText(/Failed to load|Couldn.t load/i).count()))
     assertClean('/hrms/settings/work-time')

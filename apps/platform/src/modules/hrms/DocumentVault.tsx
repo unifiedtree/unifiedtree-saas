@@ -411,7 +411,7 @@ function BulkUploadDrawer({ onClose, toast }: { onClose: () => void; toast: Toas
         <div><label className={label} htmlFor="bulk-files">Files</label>
           <input id="bulk-files" ref={input} type="file" multiple accept=".pdf,.png,.jpg,.jpeg" className="text-[13px]" disabled={running || rows.length >= MAX_BULK} onChange={(e) => addFiles(e.target.files)} />
           <p className="mt-1 text-xs text-text-tertiary">{`PDF, PNG or JPEG. Up to ${MAX_BULK} files at a time; each type sets its own formats and size limit.`}</p></div>
-        {active.length === 0 && !types.isLoading && <Note tone="amber">No document types are switched on. Add or switch one on in HRMS settings → Document types before uploading.</Note>}
+        {active.length === 0 && !types.isLoading && <Note tone="amber">No document types are switched on. Add or switch one on under HR setup before uploading.</Note>}
         {rows.map((r, i) => {
           const t = typeOf(r.typeId), problem = r.state !== 'done' ? problemOf(r) : ''
           const locked = running || r.state === 'done'

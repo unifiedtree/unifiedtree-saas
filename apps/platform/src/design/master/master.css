@@ -380,5 +380,3 @@
 .utm .toast .ti.err{background:#ef4444}
 /* Real names can be long: the person column truncates (as .who intends) instead of widening the table. */
 .utm .t td .who{max-width:320px}
-/* Inside HRMS settings (/hrms/settings/…) the shell's settings tabs replace Master's crumbs and section tabs. */
-.utm[data-in-hub] .crumbs,.utm[data-in-hub] .hero-tabs{display:none}

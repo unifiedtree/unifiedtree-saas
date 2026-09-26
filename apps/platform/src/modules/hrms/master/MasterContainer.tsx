@@ -39,16 +39,12 @@ const AppCtx = Design.AppCtx as unknown as Context<any>
 const PAGES = Design.PAGES as unknown as Record<string, ComponentType>
 const Empty = Design.Empty as unknown as ComponentType<{ icon?: string; title: string; body?: string; action?: React.ReactNode }>
 
-/**
- * Where each Master page lives. The rules and payroll configuration pages are
- * settings, so they open inside HRMS settings (the one settings place in HRMS):
- * Master's own tabs and links lead there, and their old addresses redirect.
- */
+/** Where each Master page lives. The first four groups keep the routes the old pages had. */
 export const MASTER_ROUTES: Record<string, string> = {
   overview: '/hrms/master', employees: '/hrms/employees', contractors: '/hrms/master/contractors', classes: '/hrms/master/classifications',
   companies: '/hrms/master/companies', branches: '/hrms/master/branches', departments: '/hrms/master/departments', designations: '/hrms/master/designations',
-  grades: '/hrms/master/grades', shifts: '/hrms/settings/shift-rules', leaves: '/hrms/settings/leave-rules', policies: '/hrms/settings/policies',
-  components: '/hrms/settings/salary-components', statutory: '/hrms/settings/statutory',
+  grades: '/hrms/master/grades', shifts: '/hrms/master/shift-rules', leaves: '/hrms/master/leave-rules', policies: '/hrms/policies',
+  components: '/hrms/payroll/components', statutory: '/hrms/master/statutory',
 }
 const PAGE_AT: Record<string, string> = Object.fromEntries(Object.entries(MASTER_ROUTES).map(([k, v]) => [v, k]))
 /** The design's tweak defaults (its "Top tabs" layout). */
@@ -364,12 +360,10 @@ export function MasterContainer() {
     : failed ? <div className="card"><Empty icon="alert-triangle" title="This page couldn’t load" body={errText(failed)} action={<button className="btn sm" onClick={retry}>Try again</button>} /></div>
       : loading ? <PageSkeleton path={location.pathname} bare />
         : <Page key={`${route.p}|${route.q}|${route.status}|${route.co}|${route.dept}|${route.branch}|${route.archived}`} />
-  // Inside HRMS settings (/hrms/settings/…) the shell's settings tabs replace Master's own tabs and crumbs (master.css).
-  const inHub = path.startsWith('/hrms/settings/')
   return (
-    <div className="utm" data-master-page={page} data-in-hub={inHub || undefined}>
+    <div className="utm" data-master-page={page}>
       <AppCtx.Provider value={ctx}>
-        {!inHub && <TopTabs />}
+        <TopTabs />
         <div className="page" data-screen-label={group ? `${group.l} / ${group.items.find((i: any) => i.id === page)?.l}` : 'Master overview'}>{body}</div>
         <Toasts items={toasts} />
       </AppCtx.Provider>

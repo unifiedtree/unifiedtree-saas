@@ -164,19 +164,10 @@ export interface SubNavEntry { label: string; path: string; active: boolean; onC
 
 /** Section tabs under the top bar (the prototype's sibling-page nav). */
 export function DesignSubNav({ label, items }: { label: string; items: SubNavEntry[] }) {
-  // A long row scrolls sideways (a phone, HRMS settings): keep the lit tab in view.
-  const rowRef = useRef<HTMLDivElement>(null)
-  const litPath = items.find((s) => s.active)?.path
-  useEffect(() => {
-    const row = rowRef.current, lit = row?.querySelector<HTMLElement>('[aria-current="page"]')
-    if (!row || !lit) return
-    const left = lit.offsetLeft, right = left + lit.offsetWidth
-    if (left < row.scrollLeft || right > row.scrollLeft + row.clientWidth) row.scrollLeft = Math.max(0, left - 24)
-  }, [litPath])
   return (
     <nav aria-label={label} style={{ position: 'relative', flexShrink: 0, background: '#fff', fontFamily: CHROME_FONT, zIndex: 1 }}>
       <span aria-hidden="true" style={{ position: 'absolute', left: '0', right: '0', bottom: '0', height: '1px', background: '#e2e8f0' }} />
-      <div ref={rowRef} className="ds-subnav-scroll" style={{ position: 'relative', maxWidth: '1320px', margin: '0 auto', padding: '0 clamp(16px,2.5vw,28px)', boxSizing: 'border-box', display: 'flex', alignItems: 'stretch', gap: '24px', overflowX: 'auto' }}>
+      <div className="ds-subnav-scroll" style={{ position: 'relative', maxWidth: '1320px', margin: '0 auto', padding: '0 clamp(16px,2.5vw,28px)', boxSizing: 'border-box', display: 'flex', alignItems: 'stretch', gap: '24px', overflowX: 'auto' }}>
         {items.map((s) => s.active ? (
           <a key={s.path} href={s.path} aria-current="page" onClick={(e) => e.preventDefault()}
             style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', height: '56px', padding: '0 4px', border: '0', background: 'none', font: 'inherit', fontSize: '14px', fontWeight: 700, color: '#0f6e56', whiteSpace: 'nowrap', cursor: 'default', boxShadow: 'inset 0 -3px 0 #0f6e56', textDecoration: 'none' }}>

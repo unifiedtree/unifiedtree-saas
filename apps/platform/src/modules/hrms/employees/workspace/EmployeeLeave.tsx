@@ -47,7 +47,7 @@ export function EmployeeLeave({ employeeId, firstName }: { employeeId: string; f
           isLoading={balances.isLoading} error={balances.error} onRetry={() => balances.refetch()}
           isEmpty={!balances.isLoading && !balances.error && bal.length === 0}
           emptyIcon={CalendarDays} emptyTitle="No leave allocated"
-          emptyHint="No active leave types apply to this employee's company yet. Leave types are set up in HRMS settings → Leave rules."
+          emptyHint="No active leave types apply to this employee's company yet. Leave types are set up under Master data."
           forbiddenTitle="You can't see this person's leave"
           forbiddenHint="Managers see their own team's leave; HR and admins see everyone's."
         >

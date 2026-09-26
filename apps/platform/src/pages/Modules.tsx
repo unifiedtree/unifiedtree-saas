@@ -5,15 +5,12 @@ import { useAuthStore as useSdkStore } from '@unifiedtree/sdk'
 import { useAuthStore as useLocalAuthStore } from '@/core/auth/authStore'
 import { clsx } from 'clsx'
 import {
-  ArrowRight, Lock, Search, Sparkles, Users, Settings as SettingsIcon,
+  ArrowRight, Lock, Search, Sparkles, Users,
   type LucideIcon,
 } from 'lucide-react'
 import { APPS } from '@/layouts/appConfig'
 import { useModulePlans, iconMap, type ModulePlan } from '@/core/api/modulePlans'
 import { useDisplayName } from '@/shared/hooks/useDisplayName'
-import { useAccessContext } from '@/shared/navigation/useAccess'
-import { canOpenHrmsSettings, HUB_PAGES } from '@/shared/navigation/hrmsSettings'
-import { workspaceSettingsFor } from '@/shared/navigation/workspaceSettings'
 
 type Status = 'active' | 'coming-soon' | 'locked'
 
@@ -29,7 +26,6 @@ interface Tile {
   status: Status
   home: string                         // route when opened (active tiles only)
   sortOrder: number                    // preserved from module_plans.sort_order
-  settings?: string                    // the app's own settings (HRMS only today)
 }
 
 /**
@@ -67,7 +63,6 @@ function planToTile(plan: ModulePlan, activeModules: string[]): Tile {
     status,
     home: primaryApp?.home ?? '/dashboard',
     sortOrder: plan.sortOrder ?? 999,
-    settings: plan.includedModules.includes('hrms') ? HUB_PAGES.overview : undefined,
   }
 }
 
@@ -126,11 +121,6 @@ export const Modules: React.FC = () => {
   const { data: plans = [], isLoading: plansLoading, isError: plansError, isFetching: plansFetching, refetch: reloadPlans } = useModulePlans()
 
   const [query, setQuery] = useState('')
-  // Workspace settings (branding, billing, users, security…) open from here, not
-  // from inside a module; each module's own settings open from its tile.
-  const access = useAccessContext()
-  const canWorkspaceSettings = workspaceSettingsFor(access).length > 0
-  const canHrmsSettings = canOpenHrmsSettings(access)
 
   /** Open the IN-WORKSPACE plan configurator. Client-decision 2026-08-07:
    *  Manage Plan must stay inside the workspace — the old external redirect
@@ -151,7 +141,7 @@ export const Modules: React.FC = () => {
     const list: Tile[] = catalog.length > 0 ? catalog : APPS
       .filter(app => app.built && activeModules.includes(app.key))
       .map((app, index) => ({ key: app.key, label: app.label, description: app.description,
-        icon: app.icon, status: 'active', home: app.home, sortOrder: index, settings: app.key === 'hrms' ? HUB_PAGES.overview : undefined }))
+        icon: app.icon, status: 'active', home: app.home, sortOrder: index }))
     // Coming-soon and locked apps are for admins only (client rule, 25 Sep):
     // they keep the request-module flow; everyone else sees just the apps
     // their workspace has and they can open.
@@ -227,15 +217,6 @@ export const Modules: React.FC = () => {
               </button>
             )}
           </div>
-          {canWorkspaceSettings && (
-            <button
-              type="button"
-              onClick={() => navigate('/settings')}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/25 bg-[#04503A]/50 px-4 text-[13px] font-semibold text-white shadow-xs backdrop-blur-sm transition-colors hover:bg-[#04503A]/70 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#A7F3D0]/30"
-            >
-              <SettingsIcon size={15} /> Workspace settings
-            </button>
-          )}
         </div>
 
         {plansError && <div role="alert" className="mx-auto mb-8 max-w-xl rounded-xl border border-white/25 bg-black/15 p-4 text-center text-sm text-white">
@@ -268,8 +249,8 @@ export const Modules: React.FC = () => {
               const Icon = tile.icon
               const color = tileColor(tile.key, i)
               return (
-                <div key={tile.key} className="flex flex-col items-center gap-2">
                 <motion.button
+                  key={tile.key}
                   onClick={() => enter(tile)}
                   disabled={soon || (locked && !isAdmin)}
                   initial={{ opacity: 0, y: 14 }}
@@ -321,18 +302,6 @@ export const Modules: React.FC = () => {
                     {tile.label}
                   </span>
                 </motion.button>
-                {/* The app's own settings (one place per app; HRMS only today). */}
-                {status === 'active' && tile.settings && canHrmsSettings && (
-                  <button
-                    type="button"
-                    onClick={() => navigate(tile.settings!)}
-                    aria-label={`${tile.label} settings`}
-                    className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-[#04503A]/50 px-2.5 py-1 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#04503A]/70 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#A7F3D0]/30"
-                  >
-                    <SettingsIcon size={12} /> Settings
-                  </button>
-                )}
-                </div>
               )
             })}
           </div>

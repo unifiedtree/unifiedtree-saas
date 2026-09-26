@@ -1,4 +1,4 @@
-// HR Configuration (/hrms/settings/hr-configuration, in HRMS settings) in the settings
+// HR Configuration (/hrms/settings, /hrms/settings/work-time) in the settings
 // pattern of the Payroll Settings design (design/settings/SettingsKit).
 // One page for a company's HR rules: employee ID format, probation (length and
 // reminders), notice and retirement, the work week, late arrival, attendance
@@ -184,7 +184,7 @@ export function HrConfigurationPage() {
   return (
     <DesignFrame>
       <SettingsPage
-        crumb="HRMS settings" title="HR Configuration" subtitle="Employee IDs, probation, notice, the work week and attendance rules for each company."
+        crumb="HR Setup" title="HR Configuration" subtitle="Employee IDs, probation, notice, the work week and attendance rules for each company."
         nav={nav} access={access} status={status} onRetry={() => { void hrQ.refetch(); void probQ.refetch() }} entity="HR settings"
         viewOnlyText="You can view these settings. Ask an HR admin to change them."
         dirty={dirty} changeCount={changed.length} errorCount={tried ? errKeys.length : errKeys.filter((k) => shown(k)).length}

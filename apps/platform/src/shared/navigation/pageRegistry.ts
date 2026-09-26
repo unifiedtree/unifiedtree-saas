@@ -1,5 +1,4 @@
 import { accessState, type Access, type AccessContext, type AccessState } from './access'
-import { HUB_ACCESS, HUB_PAGES, canOpenHrmsSettings } from './hrmsSettings'
 
 /**
  * Every page and sub-tab of the workspace, with who may open it.
@@ -70,7 +69,7 @@ export const SLASH_MODULES: SlashModule[] = [
   { key: 'compliance', label: 'Compliance', icon: 'shield', aliases: ['statutory'] },
   { key: 'reports', label: 'Reports & Analytics', icon: 'chart', aliases: ['report', 'analytics'] },
   { key: 'exit', label: 'Employee exit', icon: 'logOut', aliases: ['offboarding'] },
-  { key: 'hr-setup', label: 'HRMS settings', icon: 'settings', aliases: ['hrsetup', 'hrconfig', 'configuration', 'hrms-settings', 'hr-settings'] },
+  { key: 'hr-setup', label: 'HR setup', icon: 'settings', aliases: ['hrsetup', 'hrconfig', 'configuration'] },
   { key: 'settings', label: 'Workspace settings', icon: 'settings', aliases: ['admin', 'workspace'] },
   { key: 'apps', label: 'Apps', icon: 'grid', aliases: ['modules', 'launcher'] },
 ]
@@ -136,12 +135,11 @@ page('m-designations', 'Designations', '/hrms/master/designations', 'Master data
 page('m-grades', 'Grades', '/hrms/master/grades', 'Master data', 'master/grades', [{ anyOf: ORG_SETUP, module: HR }], { keywords: ['band', 'level'] })
 page('m-contractors', 'Contractor Master', '/hrms/master/contractors', 'Master data', 'master/contractors', [{ ...any('hrms.contractor.read'), module: HR }], { keywords: ['agency', 'vendor', 'contract workers'] })
 page('m-classifications', 'Employee classifications', '/hrms/master/classifications', 'Master data', 'master/classifications', [{ ...any('hrms.employee.read'), module: HR }], { keywords: ['employment type', 'permanent', 'contract', 'intern'] })
-// Master data's rules and payroll configuration open inside HRMS settings (Master's tabs lead there).
-page('m-shift-rules', 'Shift Rules', HUB_PAGES.shiftRules, 'HRMS settings', 'hr-setup/shift-rules', HUB_ACCESS.shiftRules, { aliases: ['master/shift-rules', 'master/rules'], keywords: ['shift policy', 'timings', 'grace'] })
-page('m-leave-rules', 'Leave Rules', HUB_PAGES.leaveRules, 'HRMS settings', 'hr-setup/leave-rules', HUB_ACCESS.leaveRules, { aliases: ['master/leave-rules'], keywords: ['leave policy', 'leave types', 'quota', 'carry forward'] })
+page('m-shift-rules', 'Shift Rules', '/hrms/master/shift-rules', 'Master data', 'master/shift-rules', [{ ...any('attendance.workforce.admin', 'hrms.policy.write'), module: HR }], { aliases: ['master/rules'], keywords: ['shift policy', 'timings', 'grace'] })
+page('m-leave-rules', 'Leave Rules', '/hrms/master/leave-rules', 'Master data', 'master/leave-rules', [{ ...any('leave.type.write', 'hrms.policy.write'), module: HR }], { keywords: ['leave policy', 'leave types', 'quota', 'carry forward'] })
 page('policies', 'Policies', '/hrms/policies', 'Master data', 'master/policies', [{ ...any('hrms.policy.read', 'hrms.policy.write', 'hrms.policy.acknowledge.self'), module: HR }], { aliases: ['policies', 'me/policies'], keywords: ['policy', 'handbook', 'acknowledge', 'code of conduct'] })
-page('components', 'Salary components', HUB_PAGES.components, 'HRMS settings', 'hr-setup/salary-components', HUB_ACCESS.components, { aliases: ['master/salary-components', 'master/payroll-configuration', 'payroll/components'], keywords: ['earnings', 'deductions', 'basic', 'hra', 'allowance'] })
-page('m-statutory', 'Statutory settings', HUB_PAGES.statutory, 'HRMS settings', 'hr-setup/statutory', HUB_ACCESS.statutory, { aliases: ['master/statutory'], keywords: ['pf', 'esi', 'pt', 'professional tax', 'lwf'] })
+page('components', 'Salary components', '/hrms/payroll/components', 'Master data', 'master/salary-components', [{ ...any('payroll.components.read'), module: PAY }], { aliases: ['master/payroll-configuration', 'payroll/components'], keywords: ['earnings', 'deductions', 'basic', 'hra', 'allowance'] })
+page('m-statutory', 'Statutory settings', '/hrms/master/statutory', 'Master data', 'master/statutory', [{ ...any('payroll.settings.read'), module: HR }], { keywords: ['pf', 'esi', 'pt', 'professional tax', 'lwf'] })
 
 // ── Attendance & Time ──────────────────────────────────────────────────────
 page('att-analytics', 'Attendance Analytics', '/hrms/att-analytics', 'Attendance & Time', 'attendance/analytics', [{ ...any('attendance.team.read'), module: HR }], { keywords: ['attendance report', 'trend', 'charts'] })
@@ -197,8 +195,7 @@ page('letters-distributions', 'Letter distributions', '/hrms/letters/distributio
 page('pay-dashboard', 'Payroll dashboard', '/hrms/payroll-dashboard', 'Payroll', 'payroll/dashboard', [{ ...any('payroll.runs.read'), module: PAY }], { keywords: ['payroll cost', 'this month', 'dues'] })
 page('pay-salary', 'Salary structure', '/hrms/salary-structure', 'Payroll', 'payroll/salary-structure', [{ ...any('payroll.runs.read'), module: PAY }], { aliases: ['payroll/salary', 'payroll/ctc', 'payroll/structures'], keywords: ['ctc', 'revision', 'salary'] })
 page('pay-runs', 'Processing & Payslips', '/hrms/payroll/runs', 'Payroll', 'payroll/runs', [{ ...any('payroll.runs.read'), module: PAY }], { aliases: ['payroll/processing', 'payroll/payslips', 'payroll/run'], keywords: ['payroll run', 'process', 'payslips', 'lock'] })
-// Payroll settings open inside HRMS settings (the Payroll section bar's tab leads there).
-page('pay-settings', 'Payroll settings', HUB_PAGES.payroll, 'HRMS settings', 'payroll/settings', HUB_ACCESS.payroll, { aliases: ['hr-setup/payroll'], keywords: ['pf', 'esi', 'pt', 'cycle'] })
+page('pay-settings', 'Payroll settings', '/hrms/payroll/settings', 'Payroll', 'payroll/settings', [{ ...any('payroll.settings.read'), module: PAY }], { keywords: ['pf', 'esi', 'pt', 'cycle'] })
 page('pay-pli', 'Production-Linked Incentive', '/hrms/pli', 'Payroll', 'payroll/pli', [{ ...any('hrms.pli.read', 'hrms.pli.target.read'), module: PAY }], { aliases: ['payroll/incentives', 'pli'], keywords: ['pli', 'bonus', 'targets', 'incentive'] })
 page('pay-advances', 'Advances & Loans', '/hrms/advances', 'Payroll', 'payroll/advances', [{ ...any('hrms.advance.request.self', 'hrms.advance.read', 'hrms.advance.approve', 'hrms.advance.disburse'), module: HR }], { aliases: ['payroll/loans', 'advances', 'loans'], keywords: ['advance', 'loan', 'emi', 'recovery'] })
 page('pay-bank', 'Bank disbursement', '/hrms/bank-disbursement', 'Payroll', 'payroll/bank', [{ ...any('payroll.runs.read'), module: PAY }], { aliases: ['payroll/bank-disbursement', 'payroll/disbursement'], keywords: ['bank file', 'neft', 'transfer', 'utr'] })
@@ -210,8 +207,7 @@ tab('expenses', 'approvals', 'Expense approvals', 'tab=approvals', 'expenses/app
 tab('expenses', 'submit', 'Submit an expense claim', 'tab=submit', 'expenses/submit', [any('hrms.expense.claim.self')], { aliases: ['expenses/new'], keywords: ['new claim', 'receipt'] })
 tab('expenses', 'my', 'My claims', 'tab=my', 'expenses/my-claims', [any('hrms.expense.claim.self')], { aliases: ['expenses/my'] })
 tab('expenses', 'batches', 'Reimbursement batches', 'tab=batches', 'expenses/batches', [any('hrms.reimb_batch.read')], { keywords: ['payout', 'batch'] })
-// Expense policies open inside HRMS settings (the Expenses page's Policies tab leads there).
-page('expense-policies', 'Expense policies', HUB_PAGES.expensePolicies, 'HRMS settings', 'hr-setup/expense-policies', HUB_ACCESS.expensePolicies, { aliases: ['expenses/policies'], keywords: ['limits', 'rules', 'claim limit'] })
+tab('expenses', 'policies', 'Expense policies', 'tab=policies', 'expenses/policies', [any('hrms.expense.policy.read')], { keywords: ['limits', 'rules'] })
 
 // ── Performance & learning ─────────────────────────────────────────────────
 page('performance', 'Performance', '/hrms/performance', 'Performance & Learning', 'performance', [{ ...any('hrms.performance.read', 'hrms.performance.write', 'hrms.performance.review.self'), module: HR }], { keywords: ['appraisal', 'review', 'kpi', 'goals'] })
@@ -253,27 +249,23 @@ tab('fnf', 'pending-payment', 'Settlements pending payment', 'tab=pending-paymen
 tab('fnf', 'settled', 'Settled settlements', 'tab=settled', 'exit/fnf-settled', [any('hrms.fnf.read')])
 tab('fnf', 'create', 'Create a settlement', 'tab=create', 'exit/fnf-create', [any('hrms.fnf.process')], { keywords: ['new settlement'] })
 
-// ── HRMS settings (one hub: shared/navigation/hrmsSettings.ts) ─────────────
-page('hrms-settings', 'HRMS settings', HUB_PAGES.overview, 'HRMS settings', 'hr-setup', [{ module: HR, when: canOpenHrmsSettings }], { aliases: ['hrms-settings', 'hr-settings'], keywords: ['settings', 'hr settings', 'configuration', 'setup', 'hr setup'] })
-page('hr-config', 'HR Configuration', HUB_PAGES.hrConfig, 'HRMS settings', 'hr-setup/configuration', HUB_ACCESS.hrConfig, { aliases: ['hr-setup/hr-configuration', 'hr-config', 'hr-setup/work-time'], keywords: ['probation', 'notice period', 'work week', 'employee id format', 'fiscal year', 'late arrival', 'grace'] })
-page('notif-templates', 'Notification templates', HUB_PAGES.notifications, 'HRMS settings', 'hr-setup/notification-templates', HUB_ACCESS.notifications, { aliases: ['hr-setup/templates', 'hr-setup/notifications'], keywords: ['email template', 'message', 'hr notifications'] })
-page('s-documents', 'Document types', HUB_PAGES.documentTypes, 'HRMS settings', 'hr-setup/document-types', HUB_ACCESS.documentTypes, { aliases: ['settings/documents', 'settings/document-types'], keywords: ['aadhaar', 'pan', 'required documents'] })
-page('roles', 'Roles & Permissions', HUB_PAGES.roles, 'HRMS settings', 'hr-setup/roles', HUB_ACCESS.roles, { aliases: ['roles', 'permissions', 'settings/roles'], keywords: ['role', 'permission', 'rbac', 'access'] })
-tab('roles', 'assignments', 'HRMS access', 'view=assignments', 'hr-setup/hrms-access', [], { aliases: ['settings/role-assignments', 'hr-setup/role-assignments'], keywords: ['who has which role', 'role assignments', 'who can use hrms', 'grant role'] })
-tab('roles', 'catalogue', 'Permission catalogue', 'view=catalogue', 'hr-setup/permissions', [], { aliases: ['settings/permissions'], keywords: ['all permissions'] })
-page('m-policies', 'Policy documents', HUB_PAGES.policies, 'HRMS settings', 'hr-setup/policy-documents', HUB_ACCESS.policies, { aliases: ['master/policy-documents'], keywords: ['policy', 'handbook', 'publish policy', 'acknowledgements'] })
+// ── HR setup ───────────────────────────────────────────────────────────────
+page('hr-config', 'HR Configuration', '/hrms/settings', 'HR Setup', 'hr-setup/configuration', [{ anyOf: ['settings.hrconfig.write', 'settings.read', 'hrms.probation.config.read', 'attendance.policy.manage'], module: HR }], { aliases: ['hr-setup/hr-configuration', 'hr-config'], keywords: ['probation', 'notice period', 'work week', 'employee id format', 'fiscal year'] })
+page('notif-templates', 'Notification templates', '/hrms/notification-templates', 'HR Setup', 'hr-setup/notification-templates', [{ ...any('hrms.notiftemplate.read', 'hrms.notiftemplate.write'), module: HR }], { aliases: ['hr-setup/templates'], keywords: ['email template', 'message'] })
+page('hr-integrations', 'HR integrations', '/hrms/integrations', 'HR Setup', 'hr-setup/integrations', [{ ...any('hrms.integration.read', 'hrms.integration.write'), module: HR }], { keywords: ['biometric', 'connect'] })
 
 // ── Workspace settings ─────────────────────────────────────────────────────
-// The same rule as the /settings/:tab route.
-page('s-profile', 'Workspace profile', '/settings/profile', 'Workspace settings', 'settings/workspace-profile', [{ anyOf: [...SETTINGS, 'settings.branding.write', 'workspace.profile.update', 'workspace.security.manage'] }], { keywords: ['company name', 'organisation', 'gstin', 'pan', 'address', 'contact'] })
 page('s-branding', 'Branding', '/settings/branding', 'Workspace settings', 'settings/branding', [any('settings.branding.write')], { keywords: ['logo', 'brand'] })
 page('s-security', 'Security', '/settings/security', 'Workspace settings', 'settings/security', [], { keywords: ['password reset', 'two-factor', 'sessions', '2fa', 'authenticator', 'sign out'] })
 page('s-notifications', 'Notification settings', '/settings/notifications', 'Workspace settings', 'settings/notifications', [{ anyOf: SETTINGS }], { keywords: ['email', 'alerts'] })
 page('s-billing', 'Billing & Plan', '/settings/billing', 'Workspace settings', 'settings/billing', [{ allOf: ['workspace.billing.manage'], when: planAdminOnly }], { aliases: ['billing'], keywords: ['invoice', 'plan', 'seats', 'subscription'] })
 page('s-integrations', 'Integrations', '/settings/integrations', 'Workspace settings', 'settings/integrations', [{ anyOf: SETTINGS }])
-page('hr-integrations', 'Integration register', '/settings/integrations/register', 'Workspace settings', 'settings/integration-register', [{ ...any('hrms.integration.read', 'hrms.integration.write'), module: HR }], { aliases: ['hr-setup/integrations'], keywords: ['biometric', 'connect', 'hr integrations'] })
+page('s-documents', 'Document types', '/settings/documents', 'Workspace settings', 'settings/document-types', [{ anyOf: SETTINGS }, any('hrms.document.type.read', 'hrms.document.type.write')], { aliases: ['settings/documents'], keywords: ['aadhaar', 'pan', 'required documents'] })
 page('s-danger', 'Danger zone', '/settings/danger', 'Workspace settings', 'settings/danger-zone', [any('workspace.data.export', 'workspace.lifecycle.manage')], { aliases: ['settings/danger'], keywords: ['delete workspace', 'export all data', 'reset'] })
 page('users', 'Users & Access', '/users', 'Workspace settings', 'settings/users', [any('workspace.users.read')], { aliases: ['users'], keywords: ['invite', 'user', 'login', 'access'] })
+page('roles', 'Roles & Permissions', '/roles', 'Workspace settings', 'settings/roles', [any('rbac.role.write', 'platform.admin')], { aliases: ['roles', 'permissions'], keywords: ['role', 'permission', 'rbac', 'access'] })
+tab('roles', 'assignments', 'Role assignments', 'view=assignments', 'settings/role-assignments', [], { keywords: ['who has which role'] })
+tab('roles', 'catalogue', 'Permission catalogue', 'view=catalogue', 'settings/permissions', [], { keywords: ['all permissions'] })
 page('audit', 'Audit logs', '/audit-logs', 'Workspace settings', 'settings/audit-logs', [any('audit.read')], { aliases: ['audit', 'audit-logs'], keywords: ['history', 'who did what', 'trail', 'security'] })
 
 // ── Apps that aren't built yet: plan admins only (they keep the request-module flow) ──
