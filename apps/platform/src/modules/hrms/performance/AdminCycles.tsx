@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { P, usePermission } from '@unifiedtree/sdk'
 import { Plus, CalendarRange } from 'lucide-react'
 import { HrButton, HrDrawer, HrStatusPill, TableCard, HrAvatar } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { DataTable } from '@/shared/components/DataTable'
 import { useToast } from '@/shared/hooks/useToast'
 import { useCompanies } from '../api/useOrg'
@@ -55,7 +56,7 @@ function CreateCycleDrawer({ onClose }: { onClose: () => void }) {
     <div className="space-y-5"><p className="text-sm text-text-secondary">The cycle starts as a draft. Choose employees and assign their reviewers after creating it.</p>
       {companies.isError ? <PerformanceError error={companies.error} retry={() => companies.refetch()} /> : <label className="block text-sm font-medium">Company<select className="ut-select mt-1" value={selectedCompany} onChange={e => setCompanyId(e.target.value)}><option value="">{companies.isLoading ? 'Loading companies...' : 'Choose company'}</option>{companies.data?.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label>}
       <label className="block text-sm font-medium">Cycle name<input maxLength={200} className="ut-input mt-1" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. September 2026 performance review" /></label>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-sm font-medium">Period start<input type="date" className="ut-input mt-1" value={periodStart} onChange={e => setStart(e.target.value)} /></label><label className="text-sm font-medium">Period end<input type="date" min={periodStart || undefined} className="ut-input mt-1" value={periodEnd} onChange={e => setEnd(e.target.value)} /></label></div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-sm font-medium">Period start<DateField className="ut-input mt-1" value={periodStart} onChange={e => setStart(e.target.value)} /></label><label className="text-sm font-medium">Period end<DateField min={periodStart || undefined} className="ut-input mt-1" value={periodEnd} onChange={e => setEnd(e.target.value)} /></label></div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}{create.isError && <PerformanceError error={create.error} />}
     </div>
   </HrDrawer>

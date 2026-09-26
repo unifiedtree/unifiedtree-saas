@@ -4,6 +4,7 @@ import { usePermission } from '@unifiedtree/sdk'
 import { ModulePage, Views, useView, StatRow, State, Note, dmy } from '@/design/module/ModuleKit'
 import { useToast } from '@/shared/hooks/useToast'
 import { HrButton, HrStatusPill, TableCard, HrAvatar, type PillTone } from '@/shared/components/hr'
+import { MonthField } from '@/shared/components/calendar'
 import { hrPaginationFooter } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
 import { useEmployeeDirectory } from './api/useWorkforce'
@@ -333,7 +334,7 @@ function PliTargetsTab({ canWrite }: { canWrite: boolean }) {
       <div className="ut-card p-4 text-sm text-text-secondary flex items-center gap-2"><span className="text-text-tertiary">?</span>PLI targets below are stored in the backend and can be used while calculating incentive awards.</div>
       {canWrite && <div className="ut-card flex flex-wrap items-end gap-2 p-4">
         <div className="min-w-[180px] flex-1"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Team / target name</label><input value={title} onChange={(e) => setTitle(e.target.value)} className="ut-input ut-input-sm" placeholder="Assembly Line A" /></div>
-        <div className="w-36"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Period</label><input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="ut-input ut-input-sm" /></div>
+        <div className="w-36"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Period</label><MonthField value={period} onChange={(e) => setPeriod(e.target.value)} className="ut-input ut-input-sm" format="short" aria-label="Period" /></div>
         <div className="w-40"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Metric</label><input value={metric} onChange={(e) => setMetric(e.target.value)} className="ut-input ut-input-sm" /></div>
         <div className="w-32"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Target</label><input type="number" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} className="ut-input ut-input-sm" /></div>
         <div className="w-32"><label className="mb-1 block text-[13px] font-semibold text-text-secondary">Actual</label><input type="number" value={actualValue} onChange={(e) => setActualValue(e.target.value)} className="ut-input ut-input-sm" /></div>

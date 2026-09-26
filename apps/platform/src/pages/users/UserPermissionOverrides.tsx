@@ -12,6 +12,7 @@
 import React, { useMemo, useState } from 'react'
 import { Modal, Field, Input } from '@unifiedtree/ui-kit'
 import { HrButton, HrStatusPill, HrSelect } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { SubHeading, Note, RowList, Row, dmy, todayIso } from '@/design/module/ModuleKit'
 import { usePermissionsCatalogue, RISK_LABEL, RISK_TONE, isRisky, type RbacPermission, type RiskLevel } from '@/modules/rbac/api/useRbac'
 import {
@@ -172,7 +173,7 @@ export function UserPermissionOverrides({ view, userName, onDone }: Props) {
                   placeholder={effect === 'GRANT' ? 'e.g. Covers payroll while the finance lead is on leave' : 'e.g. Should not approve advances for their own team'} aria-label="Reason" />
               </Field>
               <Field label="End date (optional)" hint="Leave empty to keep it until someone removes it.">
-                <Input type="date" min={todayIso()} value={until} onChange={(e) => setUntil(e.target.value)} aria-label="End date" />
+                <DateField min={todayIso()} value={until} onChange={(e) => setUntil(e.target.value)} aria-label="End date" clearable />
               </Field>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <HrButton variant="ghost" onClick={() => { setPicked(null); setReason(''); setUntil('') }}>Cancel</HrButton>

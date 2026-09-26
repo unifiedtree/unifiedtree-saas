@@ -8,6 +8,7 @@
 import { createElement as h, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrPageHeader, HrSelect, HrStatCard, TableCard } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { DataTable, type Column } from '@/shared/components/DataTable'
 import { EmptyState } from '@/shared/components/EmptyState'
 import { SkeletonBlock, SkeletonRow } from '@/shared/components/SkeletonCard'
@@ -108,8 +109,8 @@ export function DateFilter({ label, value, onChange, min, max }: { label: string
   return (
     <label style={{ flex: '0 1 170px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 10px', border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', boxSizing: 'border-box' }}>
       <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>{label}</span>
-      <input type="date" value={value} min={min} max={max} onChange={(e) => e.target.value && onChange(e.target.value)} aria-label={label}
-        style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', font: `600 13px ${FONT}`, color: '#0f172a' }} />
+      <DateField value={value} min={min} max={max} onChange={(e) => e.target.value && onChange(e.target.value)} aria-label={label} size="sm" format="short" icon={false}
+        style={{ flex: 1, minWidth: 0, width: 'auto', height: '100%', padding: 0, border: 0, borderRadius: 0, boxShadow: 'none', background: 'transparent', font: `600 13px ${FONT}`, color: '#0f172a' }} />
     </label>
   )
 }

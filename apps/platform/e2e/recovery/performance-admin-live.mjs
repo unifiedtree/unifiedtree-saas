@@ -1,7 +1,11 @@
+/* global process, console, document, innerWidth */
+/* eslint-disable no-useless-escape -- the view-name regexes are kept as written */
 import { chromium, expect } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+// RECOVERY_DB points the check and cleanup at another local database (e.g. a test copy); default unchanged.
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 // Uses the isolated recovery API and real browser mutations, not route fixtures.
 const base = process.env.RECOVERY_UI_URL || 'http://demo.localhost:3002'
@@ -19,6 +23,17 @@ page.on('response', response => {
   else apiFailures.push(entry)
 })
 mkdirSync('test-results/recovery', { recursive: true })
+// Date fields use the shared calendar: open it, then pick year, month and day.
+async function pickDate(field, iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  await field.click()
+  const calendar = page.getByRole('dialog', { name: 'Choose date' })
+  await calendar.getByRole('button', { name: 'Choose year', exact: true }).click()
+  await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click()
+  await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m - 1]} ${y}"]`).click()
+  await calendar.locator(`[role=gridcell][aria-label*=", ${d} ${MONTHS[m - 1]} ${y}"]`).click()
+  await expect(calendar).toBeHidden()
+}
 try {
   await page.goto(base + '/login')
   await page.locator('input[type=email]').fill('owner@unifiedtree.demo')
@@ -77,10 +92,15 @@ try {
   await page.getByRole('button', { name: 'Create cycle', exact: true }).click()
   drawer = page.getByRole('dialog')
   await drawer.getByLabel('Cycle name').fill(`Browser review cycle ${stamp}`)
-  await drawer.getByLabel('Period start').fill('2026-09-01')
-  await drawer.getByLabel('Period end').fill('2026-09-30')
+  const periodStart = drawer.locator('label', { hasText: 'Period start' }).getByRole('combobox')
+  const periodEnd = drawer.locator('label', { hasText: 'Period end' }).getByRole('combobox')
+  await pickDate(periodStart, '2026-09-01')
+  await pickDate(periodEnd, '2026-09-30')
+  await expect(periodStart).toContainText('1 Sep 2026')
+  await expect(periodEnd).toContainText('30 Sep 2026')
   await drawer.getByRole('button', { name: 'Create cycle', exact: true }).click()
   await expect(drawer).toBeHidden()
+  expect(sql(`select period_start || '|' || period_end from performance_mgmt.review_cycles where name='Browser review cycle ${stamp}'`)).toBe('2026-09-01|2026-09-30')
   await page.getByRole('button', { name: `Browser review cycle ${stamp}`, exact: true }).click()
   drawer = page.getByRole('dialog')
   await drawer.getByLabel('Find employee').fill('Reader')

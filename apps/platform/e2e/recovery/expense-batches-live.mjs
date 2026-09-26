@@ -1,3 +1,4 @@
+/* global process, console, fetch, document, innerWidth */
 import { chromium, expect } from '@playwright/test'
 import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
@@ -39,7 +40,18 @@ mkdirSync('test-results/recovery', { recursive: true })
 async function buildBatch() {
   await page.getByRole('button', { name: 'Build batch', exact: true }).click()
   const form = page.getByRole('dialog')
-  await form.getByLabel('Approval cutoff date').fill(cutoff)
+  // The cutoff uses the shared calendar: move it off today, then back with the Today quick pick.
+  const cutoffField = form.locator('label', { hasText: 'Approval cutoff date' }).getByRole('combobox')
+  const calendar = page.getByRole('dialog', { name: 'Choose date' })
+  const shown = `${Number(cutoff.slice(8))} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(cutoff.slice(5, 7)) - 1]} ${cutoff.slice(0, 4)}`
+  await cutoffField.click()
+  await calendar.getByRole('button', { name: 'Yesterday', exact: true }).click()
+  await expect(calendar).toBeHidden()
+  await expect(cutoffField).not.toContainText(shown)
+  await cutoffField.click()
+  await calendar.getByRole('button', { name: 'Today', exact: true }).click()
+  await expect(calendar).toBeHidden()
+  await expect(cutoffField).toContainText(shown)
   await form.getByLabel('Batch notes').fill(`Local browser run ${stamp}`)
   await form.getByRole('button', { name: 'Build draft batch', exact: true }).click()
   const detail = page.getByRole('dialog')
@@ -51,7 +63,7 @@ async function postBatch(drawer) {
   await drawer.getByRole('button', { name: 'Post batch', exact: true }).click()
   await drawer.getByRole('button', { name: 'Confirm post batch', exact: true }).click()
   await expect(drawer.getByRole('button', { name: 'Confirm post batch', exact: true })).toBeHidden()
-  await expect(drawer.getByText('posted', { exact: true })).toBeVisible()
+  await expect(drawer.getByText(/^posted$/i)).toBeVisible()
 }
 try {
   await page.goto(base + '/login')
@@ -60,7 +72,7 @@ try {
   await page.locator('button[type=submit]').click()
   await page.waitForURL(url => !url.pathname.includes('login'), { timeout: 30000 })
   await page.goto(base + '/hrms/expenses')
-  await page.getByRole('tab', { name: 'Reimbursement batches', exact: true }).click()
+  await page.locator('[aria-label="Expense views"]').getByRole('button', { name: /^Reimbursement batches/ }).click()
   let drawer = await buildBatch()
   const claimCard = drawer.getByText(title, { exact: true }).locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
   await claimCard.getByRole('button', { name: 'View expense items', exact: true }).click()
@@ -70,7 +82,7 @@ try {
   await drawer.getByRole('button', { name: 'Cancel batch', exact: true }).click()
   await drawer.getByRole('button', { name: 'Confirm cancel batch', exact: true }).click()
   await expect(drawer.getByRole('button', { name: 'Confirm cancel batch', exact: true })).toBeHidden()
-  await expect(drawer.getByText('cancelled', { exact: true })).toBeVisible()
+  await expect(drawer.getByText(/^cancelled$/i)).toBeVisible()
   assert.equal((await request(owner, `/v1/expense/claims/${claim.id}`)).status, 'APPROVED')
   await drawer.getByRole('button', { name: 'Close panel', exact: true }).click()
   await expect(drawer).toBeHidden()
@@ -83,14 +95,14 @@ try {
   await drawer.getByLabel('Payment notes').fill('Recorded locally after test payment confirmation')
   await drawer.getByRole('button', { name: 'Confirm payment recorded', exact: true }).click()
   await expect(drawer.getByRole('button', { name: 'Confirm payment recorded', exact: true })).toBeHidden()
-  await expect(drawer.getByText('paid', { exact: true })).toBeVisible()
+  await expect(drawer.getByText(/^paid$/i)).toBeVisible()
   await expect(drawer.getByText(`LOCAL-UTR-${stamp}`, { exact: false })).toBeVisible()
   assert.equal((await request(owner, `/v1/expense/claims/${claim.id}`)).status, 'REIMBURSED')
   await page.screenshot({ path: 'test-results/recovery/expense-batch-paid-live.png', fullPage: true })
   await drawer.getByRole('button', { name: 'Close panel', exact: true }).click()
   await expect(drawer).toBeHidden()
   await page.reload()
-  await page.getByRole('tab', { name: 'Reimbursement batches', exact: true }).click()
+  await page.locator('[aria-label="Expense views"]').getByRole('button', { name: /^Reimbursement batches/ }).click()
   await expect(page.getByText(`LOCAL-UTR-${stamp}`, { exact: true })).toBeVisible()
   console.log('PASS: rebuild,post,record completed payment with UTR; claim reimbursed and payment visible after reload')
   await page.setViewportSize({ width: 390, height: 844 })

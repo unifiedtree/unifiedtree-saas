@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { Search, X } from 'lucide-react'
 import { apiJson } from '@/core/api/client'
 import { HrButton } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import {
   useEmployeeSearch,
   EMPLOYEE_SEARCH_MIN_CHARS,
@@ -230,20 +231,20 @@ const DelegationForm: React.FC<{ onDone: () => void; onCancel: () => void }> = (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-[13px] font-semibold text-text-tertiary">From</label>
-          <input
-            type="date"
+          <DateField
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
+            aria-label="From"
             className="w-full rounded-xl border border-border-default bg-white px-3 py-2 text-sm outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/12"
           />
         </div>
         <div>
           <label className="mb-1.5 block text-[13px] font-semibold text-text-tertiary">To</label>
-          <input
-            type="date"
+          <DateField
             value={toDate}
             min={fromDate}
             onChange={(e) => setToDate(e.target.value)}
+            aria-label="To"
             className="w-full rounded-xl border border-border-default bg-white px-3 py-2 text-sm outline-none focus:border-[#059669] focus:ring-4 focus:ring-[#059669]/12"
           />
         </div>

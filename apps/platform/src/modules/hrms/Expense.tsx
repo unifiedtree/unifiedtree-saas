@@ -10,6 +10,7 @@ import { useToast } from '@/shared/hooks/useToast'
 import {
   HrButton, HrStatusPill, TableCard, HrDrawer, HrSelect, type PillTone,
 } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { ModulePage, Views, useView, StatRow, SubHeading, State, DecisionCard, Panel, Note, todayIso } from '@/design/module/ModuleKit'
 import { useConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { DataTable } from '@/shared/components/DataTable'
@@ -370,7 +371,7 @@ function SubmitTab({ canPolicyRead, onSubmitted }: { canPolicyRead: boolean; onS
               </div>
               <div>
                 <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Date</label>
-                <input type="date" value={it.expenseDate} onChange={(e) => setItem(i, { expenseDate: e.target.value })} className="ut-input" />
+                <DateField value={it.expenseDate} onChange={(e) => setItem(i, { expenseDate: e.target.value })} className="ut-input" format="short" icon={false} aria-label="Date" />
               </div>
               <div>
                 <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Merchant</label>

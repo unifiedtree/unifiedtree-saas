@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { usePermission } from '@unifiedtree/sdk'
 import { Plus, Target } from 'lucide-react'
 import { HrAvatar, HrButton, HrDrawer, HrStatusPill, TableCard, type PillTone } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { HrPagination, useClampedPage } from '@/shared/components/HrPagination'
 import { DataTable } from '@/shared/components/DataTable'
 import { useToast } from '@/shared/hooks/useToast'
@@ -89,7 +90,7 @@ function KpiForm({ existing, onClose }: { existing?: EmployeeKpiRow; onClose: ()
         <label className="text-sm font-medium">Unit<input className="ut-input mt-1" maxLength={24} value={unit} placeholder="%, tasks, hours" onChange={e => setUnit(e.target.value)} /></label>
         <label className="text-sm font-medium">Weight<input className="ut-input mt-1" type="number" min={0} max={100} step={1} value={weight} onChange={e => setWeight(e.target.value)} /></label>
         <label className="text-sm font-medium">Category<input className="ut-input mt-1" maxLength={40} value={category} onChange={e => setCategory(e.target.value)} /></label>
-        <label className="text-sm font-medium">Due date<input className="ut-input mt-1" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></label>
+        <label className="text-sm font-medium">Due date<DateField className="ut-input mt-1" value={dueDate} onChange={e => setDueDate(e.target.value)} format="short" icon={false} clearable /></label>
       </div>
       <label className="block text-sm font-medium">Success measure<select className="ut-select mt-1" value={direction} onChange={e => setDirection(e.target.value as KpiDirection)}><option value="HIGHER_IS_BETTER">Higher is better</option><option value="LOWER_IS_BETTER">Lower is better</option><option value="TARGET_EXACT">Match the target</option></select></label>
       {existing && <label className="block text-sm font-medium">Status<select aria-label="Status" className="ut-select mt-1" value={status} onChange={e => setStatus(e.target.value as KpiStatus)}><option value="ACTIVE">Active</option><option value="AT_RISK">At risk</option><option value="COMPLETED">Completed</option><option value="DROPPED">Dropped</option></select></label>}
