@@ -24,6 +24,7 @@ import {
   useReviewExceptions, useFaceReviewEvents, useChangeDayStatus, useDecideFacePunch, uploadCorrectionProof, correctionProofLink,
   statusLabel, type ReviewException, type FaceReviewEvent,
 } from '../api/useAttendanceReview'
+import { useAssistedPunches, punchedByMap } from '../api/useAssistedPunches'
 import { ReviewList } from './ReviewList'
 import { StatusChangeDrawer, type StatusTarget } from './StatusChangeDrawer'
 import { useShiftPolicies, useCreateShiftPolicy, useUpdateShiftPolicy, useDeleteShiftPolicy, type ShiftPolicy } from '../api/useShiftPolicies'
@@ -120,6 +121,8 @@ export function AttendanceContainer() {
   const lateMarks = useLateMarksReport(canReport && section === 'analytics' ? companyId || null : null, monthStart, today)
   // Face punches with names and HR decisions: today's, plus older ones still to check.
   const face = useFaceReviewEvents(weekAgo, today, canFaceList && section === 'daily')
+  // Daily Logs "Punched by": punches a manager or HR made with the person's face on their own phone.
+  const assisted = useAssistedPunches(date, date, undefined, canTeam && section === 'daily')
   const review = useReviewExceptions(weekAgo, today, canReview && section === 'daily')
   const approvals = useCorrectionApprovals('PENDING', { enabled: canApprove, size: 100 })
   const approved = useCorrectionApprovals('APPROVED', { enabled: canApprove && section === 'daily', size: 5 })
@@ -187,6 +190,7 @@ export function AttendanceContainer() {
       const sp = policyByName.get(s.shiftName)
       return sp ? `${s.shiftName} · ${fmtTime(hhmm(sp.startTime))}–${fmtTime(hhmm(sp.endTime))}` : `${s.shiftName}${s.expectedCheckInAt ? ' · ' + clock(s.expectedCheckInAt) : ''}`
     }
+    const assistedBy = punchedByMap(assisted.data, (p) => (p.attendanceDate === date ? p.employeeId : null))
     const rowOf = (s: StaffStatusResponse) => {
       // The effective status (company attendance policy + reviewers' changes) when the server sends it.
       const eff = s.effectiveStatus
@@ -199,6 +203,8 @@ export function AttendanceContainer() {
         shift: shiftLabel(s), status,
         in: clock(s.checkInAt), exp: clock(s.expectedCheckInAt), late: s.lateByMinutes || 0, out: clock(s.checkOutAt), worked: worked(s.checkInAt, s.checkOutAt), earlyOut: !!s.earlyCheckout,
         src: s.punchRejected ? 'Face punch rejected by HR' : s.checkInAt ? (s.locationName || 'Checked in') + (s.outsideGeofence ? ' · outside the zone' : '') : s.onLeave ? 'On approved leave' : 'No punch yet',
+        // A manager or HR punched them in/out with their face on their own phone (assisted face punch).
+        punchedBy: assistedBy.get(s.employeeId)?.short || null, punchedByDetail: assistedBy.get(s.employeeId)?.detail || null,
       }
     }
     const staff = team.data?.staffStatuses ?? []
@@ -346,7 +352,7 @@ export function AttendanceContainer() {
       shifts: shiftList, roster, ot: otRows, otSummary: [...otBy.values()], otRange: `1–${Number(today.slice(8, 10))} ${MON[m - 1]}`,
       sreq: sreqRows, myReq: myReqRows, myShift: myShift.data?.shiftPolicyId || null, mySince: myShift.data?.effectiveFrom ? fmtShort(myShift.data.effectiveFrom) : '',
     }
-  }, [team.data, teamToday.data, trend.data, sources.data, holidays.data, summary.data, lateMarks.data, face.data, review.data,
+  }, [team.data, teamToday.data, trend.data, sources.data, holidays.data, summary.data, lateMarks.data, face.data, assisted.data, review.data,
     approvals.data, approved.data, rejected.data, myCorr.data, monthStats.data, history.data, policies.data, schedule.data, myShift.data,
     overtime.data, sreq.data, sreqDone.data, myReq.data, companyId, monthStart, today, date, y, m])
 

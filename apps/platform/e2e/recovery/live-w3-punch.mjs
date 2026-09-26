@@ -13,9 +13,16 @@
 //  - a phone outside the employee's work area is refused (OUTSIDE_GEOFENCE),
 //    before the face is checked
 //  - a face that doesn't match is refused and nothing is punched
+//  - night shift: someone punched in yesterday evening is listed as in, and a
+//    punch out after midnight closes yesterday's shift (no new day); a shift
+//    left open over 20 hours is refused before the face is scanned
 //  - success: the punch lands on the EMPLOYEE's attendance (FACE_RECOGNITION),
-//    "punched by" is stored, the audit log has it, the web Face Punch tab says
-//    "Punched by Dept Manager"; a second punch in is refused; owner@ punches out
+//    "punched by" is stored, the audit log has it; a second punch in is
+//    refused; owner@ and hrm@ punching out at the same moment: one wins, the
+//    other gets ALREADY_CHECKED_OUT and only one "punched by" is recorded
+//  - the web shows "Punched by": the Face Punch tab, Daily Logs (row and the
+//    day drawer) and the employee's attendance records (GET /punched-by, which
+//    reader@ without team attendance can't read)
 //
 // The face worker (Python, SFace) doesn't run locally, so the success path uses
 // a tiny stand-in worker on :8091 that the backend's FaceWorkerClient talks to:
@@ -113,9 +120,21 @@ const today = sql(`select (now() at time zone 'Asia/Kolkata')::date`)
 const hadEnrollment = sql(`select count(*) from attendance.face_enrollments where tenant_id='${tenant}' and employee_id='${READER}'`) !== '0'
 const readerHadRecord = sql(`select count(*) from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) !== '0'
 const finEnrolled = sql(`select count(*) from attendance.face_enrollments where tenant_id='${tenant}' and employee_id='${FIN}' and status='ACTIVE'`) !== '0'
+const yesterday = sql(`select (now() at time zone 'Asia/Kolkata')::date - 1`)
+const readerHadYesterday = sql(`select count(*) from attendance.records where employee_id='${READER}' and attendance_date='${yesterday}'`) !== '0'
 let createdEnrollment = false
+let nightRecord = null // yesterday's shift the night-shift check seeds
+
+function removeNight() {
+  if (!nightRecord) return
+  sql(`delete from attendance.event_logs where record_id::text = '${nightRecord}'`)
+  try { sql(`delete from attendance.assisted_punches where attendance_record_id = '${nightRecord}'`) } catch { /* table missing */ }
+  sql(`delete from attendance.records where id = '${nightRecord}' and attendance_date = '${yesterday}'`)
+  nightRecord = null
+}
 
 function cleanup() {
+  removeNight()
   const ids = sql(`select coalesce(string_agg(quote_literal(id::text), ','), '') from attendance.records where employee_id='${READER}' and attendance_date='${today}' and created_at >= '${start}'`)
   if (ids) {
     sql(`delete from attendance.event_logs where record_id::text in (${ids})`)
@@ -211,6 +230,38 @@ try {
     check('…and the face was not even checked', workerCalls.filter((u) => u === '/face/verify').length === before)
   } else skip('outside-geofence rejection', 'reader@ has no active face enrolment and the stand-in worker could not start')
 
+  // ── night shift: punched in yesterday evening, punched out after midnight ──
+  if (enrolled && workerUp && !readerHadYesterday && !readerHadRecord) {
+    nightRecord = sql(`insert into attendance.records (id, tenant_id, employee_id, company_id, attendance_date, check_in_at, attendance_type, attendance_status, check_in_method)
+        values (gen_random_uuid(), '${tenant}', '${READER}', '${company}', '${yesterday}', now() - interval '4 hours', 'OFFICE', 'PRESENT', 'FACE_RECOGNITION') returning id`).split('\n')[0]
+    const nl = (await mgr.call('GET', '/v1/attendance/assisted-punch/eligible')).json?.employees?.find((e) => e.employeeId === READER)
+    check('night shift: reader@, punched in yesterday evening, is listed as in (next punch: out)', nl?.todayStatus === 'PUNCHED_IN' && nl?.sinceYesterday === true, `${nl?.todayStatus} ${nl?.sinceYesterday}`)
+    const nOut = await punch(mgr, READER, 'CHECK_OUT')
+    const closed = sql(`select (check_out_at is not null) from attendance.records where id='${nightRecord}' and attendance_date='${yesterday}'`)
+    check('night shift: mgr@ punches reader@ out after midnight; it closes yesterday\'s shift and starts no new day',
+      nOut.status === 200 && closed === 't' && sql(`select count(*) from attendance.records where employee_id='${READER}' and attendance_date='${today}'`) === '0',
+      `${nOut.status} ${nOut.json?.message ?? ''} closed=${closed}`)
+    check('night shift: "punched by" is filed on yesterday\'s day',
+      sql(`select count(*) from attendance.assisted_punches where attendance_record_id='${nightRecord}' and attendance_date='${yesterday}' and punch_type='CHECK_OUT'`) === '1')
+    const pb = await mgr.call('GET', `/v1/attendance/assisted-punch/punched-by?from=${yesterday}&to=${yesterday}`)
+    check('night shift: the web "Punched by" API has it on yesterday', pb.status === 200
+      && pb.json.some((p) => p.employeeId === READER && p.punchType === 'CHECK_OUT' && p.punchedByName === 'Dept Manager' && p.attendanceDate === yesterday),
+      `${pb.status} ${JSON.stringify(pb.json)?.slice(0, 200)}`)
+    // Left open longer than the 20 hours AttendanceService.checkOut allows.
+    sql(`update attendance.records set check_out_at = null, check_in_at = now() - interval '21 hours' where id='${nightRecord}' and attendance_date='${yesterday}'`)
+    const stale = (await mgr.call('GET', '/v1/attendance/assisted-punch/eligible')).json?.employees?.find((e) => e.employeeId === READER)
+    check('a shift left open over 20 hours is not listed as in', stale?.todayStatus === 'NOT_PUNCHED' && stale?.sinceYesterday === false, `${stale?.todayStatus} ${stale?.sinceYesterday}`)
+    const before = workerCalls.filter((u) => u === '/face/verify').length
+    const sOut = await punch(mgr, READER, 'CHECK_OUT')
+    check('…and punching it out is refused (409 NOT_CHECKED_IN) before the face is scanned',
+      sOut.status === 409 && sOut.json?.errorCode === 'NOT_CHECKED_IN' && workerCalls.filter((u) => u === '/face/verify').length === before,
+      `${sOut.status} ${sOut.json?.errorCode}`)
+    removeNight()
+  } else {
+    skip('night shift', !enrolled || !workerUp ? 'reader@ is not enrolled / the stand-in worker could not start'
+      : 'reader@ already has attendance yesterday or today in this database')
+  }
+
   // ── success path ──
   if (enrolled && workerUp && !readerHadRecord) {
     const bad = await punch(mgr, READER, 'CHECK_IN', STRANGER_PHOTO)
@@ -222,19 +273,41 @@ try {
       `${ok.status} ${JSON.stringify(ok.json)?.slice(0, 200)}`)
     const rec = sql(`select check_in_method || '|' || (check_in_at is not null) from attendance.records where employee_id='${READER}' and attendance_date='${today}'`)
     check('the punch is on reader@\'s own attendance as a face punch', rec === 'FACE_RECOGNITION|true', rec)
-    const by = sql(`select punched_by_employee_id || '|' || punch_type || '|' || (face_event_id is not null) || '|' || within_fence from attendance.assisted_punches where employee_id='${READER}' and created_at >= '${start}'`)
+    const by = sql(`select punched_by_employee_id || '|' || punch_type || '|' || (face_event_id is not null) || '|' || within_fence from attendance.assisted_punches where employee_id='${READER}' and punch_type='CHECK_IN' and created_at >= '${start}'`)
     check('"punched by" is stored (manager, check-in, the face check, inside the area)', by === `${MGR}|CHECK_IN|true|true`, by)
     check('the audit log has it', sql(`select count(*) from audit.events where tenant_id='${tenant}' and action='ASSISTED_PUNCH_IN' and entity_id='${READER}' and occurred_at >= '${start}'`) === '1')
     const again = await punch(mgr, READER)
     check('a second punch in the same day is refused (409 ALREADY_CHECKED_IN)', again.status === 409 && again.json?.errorCode === 'ALREADY_CHECKED_IN', `${again.status} ${again.json?.message}`)
     const listed = (await mgr.call('GET', '/v1/attendance/assisted-punch/eligible')).json.employees.find((e) => e.employeeId === READER)
-    check('the list now shows reader@ enrolled and punched in', listed?.faceStatus === 'ENROLLED' && listed?.todayStatus === 'PUNCHED_IN', `${listed?.faceStatus} ${listed?.todayStatus}`)
+    check('the list now shows reader@ enrolled and punched in', listed?.faceStatus === 'ENROLLED' && listed?.todayStatus === 'PUNCHED_IN' && listed?.sinceYesterday === false, `${listed?.faceStatus} ${listed?.todayStatus}`)
 
     const fe = await mgr.call('GET', `/v1/attendance/review/face-events?from=${today}&to=${today}`)
     const ev = (fe.json || []).find((e) => e.employeeId === READER && e.result === 'PASS' && e.purpose === 'PUNCH_IN')
     check('the web face-events API says who punched (punchedBy)', fe.status === 200 && ev?.punchedBy === 'Dept Manager' && ev?.device === 'live-w3-punch', `${fe.status} ${ev?.punchedBy} ${ev?.device}`)
 
-    // The web Face Punch tab (desktop and phone), owner's view.
+    // "Punched by" for Daily Logs / the employee's records: who may read it.
+    const pbPath = `/v1/attendance/assisted-punch/punched-by?from=${today}&to=${today}`
+    const [pbOwner, pbMgr, pbReader, pbOne] = await Promise.all([owner.call('GET', pbPath), mgr.call('GET', pbPath), reader.call('GET', pbPath),
+      owner.call('GET', `${pbPath}&employeeId=${READER}`)])
+    const hasIn = (r) => r.status === 200 && r.json.some((p) => p.employeeId === READER && p.punchType === 'CHECK_IN' && p.punchedByName === 'Dept Manager' && p.attendanceDate === today)
+    check('the web "Punched by" API: owner@ and mgr@ (their report) see it, also asked for one employee', hasIn(pbOwner) && hasIn(pbMgr) && hasIn(pbOne), `${pbOwner.status} ${pbMgr.status} ${pbOne.status}`)
+    check('…reader@ (no team attendance) gets 403', pbReader.status === 403, String(pbReader.status))
+    const pbLong = await owner.call('GET', '/v1/attendance/assisted-punch/punched-by?from=2026-01-01&to=2026-12-31')
+    check('…a range over 92 days is refused (422)', pbLong.status === 422 && pbLong.json?.errorCode === 'DATE_RANGE_TOO_LONG', `${pbLong.status} ${pbLong.json?.errorCode}`)
+
+    // Two people punch reader@ out at the same moment: one wins, the other is told it's done.
+    const [o1, o2] = await Promise.all([punch(owner, READER, 'CHECK_OUT'), punch(hrm, READER, 'CHECK_OUT')])
+    const won = [o1, o2].filter((r) => r.status === 200 && r.json?.type === 'CHECK_OUT' && r.json?.attendance?.checkOutTime)
+    const lost = [o1, o2].filter((r) => r.status === 409 && r.json?.errorCode === 'ALREADY_CHECKED_OUT')
+    check('owner@ and hrm@ punch reader@ out at the same moment: one 200, one 409 ALREADY_CHECKED_OUT', won.length === 1 && lost.length === 1,
+      `${o1.status} ${o1.json?.errorCode ?? ''} / ${o2.status} ${o2.json?.errorCode ?? ''}`)
+    const outBy = sql(`select count(*) || '|' || coalesce(max(punched_by_name), '') from attendance.assisted_punches where employee_id='${READER}' and attendance_date='${today}' and punch_type='CHECK_OUT'`)
+    check('…and only one "punched out by" is recorded, the winner\'s', outBy === `1|${won[0]?.json?.punchedByName}`, outBy)
+    const outAgain = await punch(owner, READER, 'CHECK_OUT')
+    check('a later punch out is refused (409 ALREADY_CHECKED_OUT)', outAgain.status === 409 && outAgain.json?.errorCode === 'ALREADY_CHECKED_OUT', `${outAgain.status}`)
+    const outName = won[0]?.json?.punchedByName || ''
+
+    // The web, owner's view (desktop and phone): Face Punch tab, Daily Logs (row + day drawer), the employee's records.
     const browser = await chromium.launch({ headless: true })
     try {
       for (const [label, viewport] of [['desktop', { width: 1440, height: 1000 }], ['phone', { width: 390, height: 844 }]]) {
@@ -247,24 +320,37 @@ try {
         await page.locator('input[type=password]').fill(password)
         await page.locator('button[type=submit]').click()
         await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 })
+        mkdirSync(shots, { recursive: true })
+        const sees = async (text) => { try { await page.getByText(text).first().waitFor({ timeout: 30_000 }); return true } catch { return false } }
+
         await page.goto(base + '/hrms/attendance?tab=face')
         const all = page.getByRole('button', { name: /All punches/ })
         if (await all.count()) await all.first().click().catch(() => {})
-        let seen = false
-        try { await page.getByText('Punched by Dept Manager').first().waitFor({ timeout: 30_000 }); seen = true } catch { /* reported below */ }
-        mkdirSync(shots, { recursive: true })
+        const seenFace = await sees('Punched by Dept Manager')
         await page.screenshot({ path: `${shots}/punch-face-tab-${label}.png`, fullPage: false })
-        check(`web Face Punch tab (${label}) shows "Punched by Dept Manager"`, seen)
-        check(`web Face Punch tab (${label}): no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '))
+        check(`web Face Punch tab (${label}) shows "Punched by Dept Manager"`, seenFace)
+
+        await page.goto(base + '/hrms/attendance?tab=team')
+        const seenRow = await sees(/Punched by Dept Manager/)
+        await page.getByText('Reader User').first().scrollIntoViewIfNeeded().catch(() => {})
+        await page.screenshot({ path: `${shots}/punch-daily-logs-${label}.png`, fullPage: false })
+        check(`web Daily Logs (${label}): reader@'s row says "Punched by Dept Manager"`, seenRow)
+        await page.getByText('Reader User').first().click()
+        const detail = `Dept Manager (in), ${outName} (out)`
+        const seenDrawer = await sees(detail)
+        await page.screenshot({ path: `${shots}/punch-daily-drawer-${label}.png`, fullPage: false })
+        check(`web Daily Logs day drawer (${label}): "Punched by ${detail}"`, seenDrawer)
+
+        await page.goto(base + `/hrms/employees/${READER}?tab=attendance`)
+        const seenRecords = await sees(`Punched by ${detail}`)
+        await page.getByText(`Punched by ${detail}`).first().scrollIntoViewIfNeeded().catch(() => {})
+        await page.screenshot({ path: `${shots}/punch-employee-records-${label}.png`, fullPage: false })
+        check(`web employee attendance records (${label}): "Punched by ${detail}"`, seenRecords)
+
+        check(`web (${label}): no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '))
         await ctx.close()
       }
     } finally { await browser.close() }
-
-    const out = await punch(owner, READER, 'CHECK_OUT')
-    check('owner@ ("anyone") punches reader@ out: 200', out.status === 200 && out.json?.type === 'CHECK_OUT' && out.json?.attendance?.checkOutTime, `${out.status} ${out.json?.message ?? ''}`)
-    check('…recorded as punched out by the owner', sql(`select count(*) from attendance.assisted_punches where employee_id='${READER}' and punch_type='CHECK_OUT' and created_at >= '${start}'`) === '1')
-    const outAgain = await punch(owner, READER, 'CHECK_OUT')
-    check('a second punch out is refused (409 ALREADY_CHECKED_OUT)', outAgain.status === 409 && outAgain.json?.errorCode === 'ALREADY_CHECKED_OUT', `${outAgain.status}`)
   } else {
     skip('success path (match, punch, punched by, web, punch out)',
       !workerUp ? 'port 8091 is in use (a real face worker?), so the stand-in worker could not start'
@@ -279,8 +365,14 @@ try {
 } finally {
   try { cleanup() } catch (e) { check('cleanup', false, String(e)) }
   worker.close()
-  const leftovers = sql(`select (select count(*) from attendance.records where employee_id='${READER}' and attendance_date='${today}' and created_at >= '${start}')
-      + (select count(*) from attendance.face_verification_events where tenant_id='${tenant}' and employee_id in ('${READER}','${FIN}') and created_at >= '${start}')`)
+  let leftovers = 'unknown'
+  try {
+    const punchedBy = sql(`select to_regclass('attendance.assisted_punches') is not null`) === 't'
+      ? `+ (select count(*) from attendance.assisted_punches where tenant_id='${tenant}' and created_at >= '${start}')` : ''
+    leftovers = sql(`select (select count(*) from attendance.records where employee_id='${READER}' and attendance_date in ('${today}','${yesterday}') and created_at >= '${start}')
+      + (select count(*) from attendance.face_verification_events where tenant_id='${tenant}' and employee_id in ('${READER}','${FIN}') and created_at >= '${start}')
+      ${punchedBy}`)
+  } catch (e) { leftovers = String(e).split('\n')[0] }
   check('cleanup: nothing left behind', leftovers === '0', leftovers)
 }
 

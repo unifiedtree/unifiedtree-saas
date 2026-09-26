@@ -73,6 +73,14 @@ public class AssistedPunchService {
     static final int LIST_LIMIT = 200;
     /** FaceService captures three angles; a PENDING enrolment with all of them counts as enrolled (its self-heal rule). */
     static final int FACE_SAMPLES = 3;
+    /**
+     * A punch in from yesterday with no punch out is still open (a night shift)
+     * for this many hours: the window AttendanceService.checkOut uses to close
+     * yesterday's record instead of today's.
+     */
+    static final int OVERNIGHT_HOURS = 20;
+    /** The longest range GET /punched-by answers for in one call. */
+    static final int PUNCHED_BY_MAX_DAYS = 92;
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final java.util.regex.Pattern BASE64 = java.util.regex.Pattern.compile("^[A-Za-z0-9+/=]+$");
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH).withZone(IST);
@@ -112,13 +120,21 @@ public class AssistedPunchService {
             UUID employeeId, String employeeName, String type, String punchedAt, String attendanceStatus,
             String locationName, String punchedByName, AttendanceDto attendance) {}
 
-    /** One person the caller may punch for. faceStatus: ENROLLED · NOT_ENROLLED · LOCKED · NO_LOGIN. */
+    /**
+     * One person the caller may punch for. faceStatus: ENROLLED · NOT_ENROLLED · LOCKED · NO_LOGIN.
+     * sinceYesterday: PUNCHED_IN on a shift that started yesterday (a night shift), so the next punch is a punch out.
+     */
     public record EligibleEmployee(
             UUID employeeId, String employeeCode, String fullName, String jobTitle, String departmentName,
-            String profilePhotoUrl, String faceStatus, String todayStatus, String checkInTime, String checkOutTime) {}
+            String profilePhotoUrl, String faceStatus, String todayStatus, String checkInTime, String checkOutTime,
+            boolean sinceYesterday) {}
 
     /** scope: TEAM or ANY. truncated: more people matched than were returned (search to narrow). */
     public record EligibleList(String scope, List<EligibleEmployee> employees, boolean truncated) {}
+
+    /** One assisted punch, for "Punched by" on the web (Daily Logs, an employee's records). punchType: CHECK_IN · CHECK_OUT. */
+    public record PunchedByRow(UUID attendanceRecordId, UUID employeeId, String attendanceDate, String punchType,
+                               String punchedByName, String punchedAt) {}
 
     private final EmployeeRepository employees;
     private final WorkforceDepartmentRepository departments;
@@ -200,6 +216,16 @@ public class AssistedPunchService {
     }
 
     /**
+     * Yesterday's record is a shift still open overnight: punched in, not out,
+     * and within {@link #OVERNIGHT_HOURS} of {@code now}. Exactly the record
+     * AttendanceService.checkOut closes when today has no punch in.
+     */
+    static boolean openOvernight(AttendanceRecord yesterday, Instant now) {
+        return yesterday != null && yesterday.getCheckInAt() != null && yesterday.getCheckOutAt() == null
+                && java.time.Duration.between(yesterday.getCheckInAt(), now).toHours() <= OVERNIGHT_HOURS;
+    }
+
+    /**
      * The face module's refusal ("CODE:sentence", written for the person on the
      * camera) reworded for the one holding the phone. Same HTTP status, the code
      * as the error code.
@@ -254,18 +280,30 @@ public class AssistedPunchService {
         UUID tenantId = tenantOf(jwt);
         Map<UUID, String> faces = faceStatuses(tenantId, ids);
         Map<UUID, AttendanceRecord> today = new HashMap<>();
-        attendanceService.getRecordsForEmployeesOnDate(ids, LocalDate.now(IST))
+        LocalDate todayDate = LocalDate.now(IST);
+        attendanceService.getRecordsForEmployeesOnDate(ids, todayDate)
                 .forEach(r -> today.putIfAbsent(r.getEmployeeId(), r));
+        // Night shifts: someone punched in yesterday evening and not out yet is still
+        // in (the next punch is their punch out), as AttendanceService.checkOut sees it.
+        List<UUID> notInToday = ids.stream()
+                .filter(id -> today.get(id) == null || today.get(id).getCheckInAt() == null).toList();
+        Map<UUID, AttendanceRecord> overnight = new HashMap<>();
+        Instant now = Instant.now();
+        attendanceService.getRecordsForEmployeesOnDate(notInToday, todayDate.minusDays(1)).stream()
+                .filter(r -> openOvernight(r, now))
+                .forEach(r -> overnight.putIfAbsent(r.getEmployeeId(), r));
         Map<UUID, String> deptNames = departmentNames(page);
         List<EligibleEmployee> out = new ArrayList<>(page.size());
         for (Employee e : page) {
-            AttendanceRecord r = today.get(e.getId());
+            AttendanceRecord open = overnight.get(e.getId());
+            AttendanceRecord r = open != null ? open : today.get(e.getId());
             String state = r == null || r.getCheckInAt() == null ? "NOT_PUNCHED" : r.getCheckOutAt() == null ? "PUNCHED_IN" : "PUNCHED_OUT";
             out.add(new EligibleEmployee(e.getId(), e.getEmployeeCode(), name(e), e.getJobTitle(),
                     e.getDepartmentId() != null ? deptNames.get(e.getDepartmentId()) : null, e.getProfilePhotoUrl(),
                     faces.getOrDefault(e.getId(), "NO_LOGIN"), state,
                     r != null && r.getCheckInAt() != null ? r.getCheckInAt().toString() : null,
-                    r != null && r.getCheckOutAt() != null ? r.getCheckOutAt().toString() : null));
+                    r != null && r.getCheckOutAt() != null ? r.getCheckOutAt().toString() : null,
+                    open != null));
         }
         return new EligibleList(scope.name(), out, truncated);
     }
@@ -305,6 +343,48 @@ public class AssistedPunchService {
 
     private static int rank(String faceStatus) {
         return switch (faceStatus) { case "ENROLLED" -> 0; case "LOCKED" -> 1; case "NOT_ENROLLED" -> 2; default -> 3; };
+    }
+
+    // ── GET /punched-by ──────────────────────────────────────────────────────
+
+    /**
+     * Who made the assisted punches on these days (default: today), for the
+     * people the caller sees in Daily Logs: their team, or everyone with
+     * company-wide attendance, plus a direct report asked for by
+     * {@code employeeId} (the employee records rule). Empty when there are
+     * none, or when V143.40 isn't applied yet.
+     */
+    public List<PunchedByRow> punchedBy(Jwt jwt, LocalDate from, LocalDate to, UUID employeeId) {
+        LocalDate start = from != null ? from : LocalDate.now(IST);
+        LocalDate end = to != null ? to : start;
+        if (end.isBefore(start))
+            throw new BusinessRuleException("The end date is before the start date.", "DATE_RANGE_INVALID");
+        if (java.time.temporal.ChronoUnit.DAYS.between(start, end) >= PUNCHED_BY_MAX_DAYS)
+            throw new BusinessRuleException("Choose " + PUNCHED_BY_MAX_DAYS + " days or fewer.", "DATE_RANGE_TOO_LONG");
+        Set<UUID> visible = visibleTo(jwt, employeeId);
+        if (visible != null && visible.isEmpty()) return List.of();
+        return recorder.punchesBetween(tenantOf(jwt), start, end, employeeId).stream()
+                .filter(p -> visible == null || visible.contains(p.employeeId()))
+                .toList();
+    }
+
+    /**
+     * The people whose punches the caller may see: the Daily Logs scope
+     * ({@link TeamEmployeeScope#resolve}), or null for the whole workspace when a
+     * company-wide attendance login has no employee record (row-level security
+     * keeps it to the tenant).
+     */
+    private Set<UUID> visibleTo(Jwt jwt, UUID employeeId) {
+        UUID callerId = AttendanceReviewService.callerEmployeeId(jwt);
+        Employee caller = employees.findById(callerId).orElse(null);
+        if (caller == null) return AttendanceController.isAdmin(jwt) ? null : Set.of();
+        Set<UUID> ids = teamScope.resolve(jwt, null).stream().map(Employee::getId)
+                .collect(Collectors.toCollection(java.util.HashSet::new));
+        // Like GET /employee/{id}/records: a direct manager may read a report outside the departments they head.
+        if (employeeId != null && !ids.contains(employeeId)
+                && employees.findById(employeeId).map(Employee::getManagerId).filter(callerId::equals).isPresent())
+            ids.add(employeeId);
+        return ids;
     }
 
     // ── POST ─────────────────────────────────────────────────────────────────
@@ -389,6 +469,9 @@ public class AssistedPunchService {
                     : recorder.checkOut(tenantId, t, by);
         } catch (ResourceNotFoundException noOpenDay) {
             throw new HrmsException(name + " hasn't punched in today, so there is nothing to punch out.", HttpStatus.CONFLICT, "NOT_CHECKED_IN");
+        } catch (AssistedPunchRecorder.AlreadyPunchedOut done) {
+            // Someone else punched them out while this face was being checked.
+            throw new HrmsException(name + " already punched out today at " + clock(done.checkOutTime()) + ".", HttpStatus.CONFLICT, "ALREADY_CHECKED_OUT");
         }
 
         // Same follow-up as a self check-in accepted outside the zone: it goes on the review list.
@@ -407,10 +490,15 @@ public class AssistedPunchService {
         return new PunchResponse(target.getId(), name, type.name(), at, dto.attendanceStatus(), dto.locationName(), who.name(), dto);
     }
 
-    /** An overnight shift still open from yesterday, which a punch out today closes (as AttendanceService.checkOut does). */
+    /**
+     * An overnight shift still open from yesterday, which a punch out today closes
+     * (as AttendanceService.checkOut does, with the same 20-hour window, so a
+     * refusal comes before the face scan rather than after it).
+     */
     private boolean openSinceYesterday(UUID employeeId) {
+        Instant now = Instant.now();
         return attendanceService.getRecordsForEmployeesOnDate(List.of(employeeId), LocalDate.now(IST).minusDays(1)).stream()
-                .anyMatch(r -> r.getCheckInAt() != null && r.getCheckOutAt() == null);
+                .anyMatch(r -> openOvernight(r, now));
     }
 
     /** The target's app login whose face enrolment to check: an active enrolment first. Null when they have no login. */

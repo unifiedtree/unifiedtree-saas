@@ -56,6 +56,7 @@ public class AssistedPunchRecorder {
      */
     @Transactional
     public AttendanceDto checkIn(UUID tenantId, Target t, String faceImageBase64, boolean wfhDay, PunchedBy by) {
+        lockEmployee(tenantId, t.employeeId());
         AttendanceDto dto = attendanceService.checkInJson(
                 t.employeeId(), t.companyId(), t.branchId(), t.departmentId(),
                 by.latitude(), by.longitude(), faceImageBase64, "FACE_RECOGNITION", tenantId,
@@ -64,14 +65,44 @@ public class AssistedPunchRecorder {
         return dto;
     }
 
-    /** Punch out: {@link AttendanceService#checkOut} with the self face punch's arguments, plus "punched by". */
+    /**
+     * Punch out: {@link AttendanceService#checkOut} with the self face punch's
+     * arguments, plus "punched by". Refused with {@link AlreadyPunchedOut} when
+     * today is already punched out: checkOut would hand back that earlier punch
+     * out, and it must not be recorded as this caller's.
+     */
     @Transactional
     public AttendanceDto checkOut(UUID tenantId, Target t, PunchedBy by) {
+        lockEmployee(tenantId, t.employeeId());
+        attendanceService.getTodayRecord(t.employeeId())
+                .filter(r -> r.checkInTime() != null && r.checkOutTime() != null)
+                .ifPresent(r -> { throw new AlreadyPunchedOut(r.checkOutTime()); });
         AttendanceDto dto = attendanceService.checkOut(
                 t.employeeId(), by.latitude(), by.longitude(), "FACE_RECOGNITION",
                 t.locationName(), null, by.deviceId(), false, null);
         insert(tenantId, dto, t.employeeId(), "CHECK_OUT", dto.checkOutTime(), by);
         return dto;
+    }
+
+    /** Today was already punched out (by someone else, while the face was being checked). */
+    public static class AlreadyPunchedOut extends RuntimeException {
+        private final String checkOutTime;
+        AlreadyPunchedOut(String checkOutTime) {
+            super("Already punched out at " + checkOutTime);
+            this.checkOutTime = checkOutTime;
+        }
+        public String checkOutTime() { return checkOutTime; }
+    }
+
+    /**
+     * One assisted punch at a time per employee, until this transaction ends: two
+     * managers punching the same person at once are taken in turn, so the second
+     * sees the first's punch (one punch in and one punch out a day).
+     */
+    private void lockEmployee(UUID tenantId, UUID employeeId) {
+        jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?,0))",
+                (org.springframework.jdbc.core.ResultSetExtractor<Void>) rs -> null,
+                "assisted-punch:" + tenantId + ":" + employeeId);
     }
 
     private void insert(UUID tenantId, AttendanceDto dto, UUID employeeId, String type, String punchTime, PunchedBy by) {
@@ -111,6 +142,41 @@ public class AssistedPunchRecorder {
             log.warn("Could not find the face check for an assisted punch: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * The assisted punches filed on these days (the punch's attendance date), in
+     * order, whose attendance record still exists; one employee's when
+     * {@code employeeId} is set. Empty when V143.40 isn't applied yet (the table
+     * is looked up first) or the read fails: "Punched by" is a label, never a
+     * reason for a page to fail.
+     */
+    public List<AssistedPunchService.PunchedByRow> punchesBetween(UUID tenantId, LocalDate from, LocalDate to, UUID employeeId) {
+        List<AssistedPunchService.PunchedByRow> out = new java.util.ArrayList<>();
+        try {
+            Boolean present = jdbc.queryForObject(
+                    "SELECT to_regclass('attendance.assisted_punches') IS NOT NULL", Boolean.class);
+            if (!Boolean.TRUE.equals(present)) return out;
+            List<Object> params = new java.util.ArrayList<>(List.of(tenantId, from, to));
+            if (employeeId != null) params.add(employeeId);
+            jdbc.query("""
+                    SELECT ap.attendance_record_id, ap.employee_id, ap.attendance_date, ap.punch_type,
+                           ap.punched_by_name, ap.punched_at
+                      FROM attendance.assisted_punches ap
+                      JOIN attendance.records r ON r.id = ap.attendance_record_id AND r.attendance_date = ap.attendance_date
+                                               AND r.employee_id = ap.employee_id
+                     WHERE ap.tenant_id = ? AND ap.attendance_date BETWEEN ? AND ?
+                    """ + (employeeId != null ? "   AND ap.employee_id = ?\n" : "") + " ORDER BY ap.punched_at",
+                    (RowCallbackHandler) rs -> out.add(new AssistedPunchService.PunchedByRow(
+                            (UUID) rs.getObject("attendance_record_id"), (UUID) rs.getObject("employee_id"),
+                            rs.getObject("attendance_date", LocalDate.class).toString(), rs.getString("punch_type"),
+                            rs.getString("punched_by_name"), rs.getTimestamp("punched_at").toInstant().toString())),
+                    params.toArray());
+        } catch (RuntimeException e) {
+            log.warn("Could not read who made assisted punches: {}", e.getMessage());
+            out.clear();
+        }
+        return out;
     }
 
     /**

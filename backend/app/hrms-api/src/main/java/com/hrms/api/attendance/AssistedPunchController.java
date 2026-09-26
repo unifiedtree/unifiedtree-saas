@@ -14,6 +14,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+
 /**
  * Assisted face punch (V143.40), used by the mobile app's "Punch for team
  * member": a manager or HR scans the employee's face on their own phone.
@@ -21,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <pre>
  *   GET  /v1/attendance/assisted-punch/eligible?q=   people the caller may punch for
  *   POST /v1/attendance/assisted-punch               punch one of them in or out
+ *   GET  /v1/attendance/assisted-punch/punched-by    who made the assisted punches on some days (web "Punched by")
  * </pre>
  *
  * The scope (team or anyone), the face match, the work area and the one-punch-
@@ -57,5 +62,20 @@ public class AssistedPunchController {
             @RequestBody AssistedPunchService.PunchRequest request,
             @AuthenticationPrincipal Jwt jwt) {
         return ResponseEntity.ok(service.punch(jwt, request));
+    }
+
+    /**
+     * "Punched by" for the web: Daily Logs asks for one day, an employee's
+     * records for their days. Readers see the people they see in Daily Logs.
+     */
+    @Operation(summary = "Who made the assisted face punches on these days")
+    @GetMapping("/punched-by")
+    @PreAuthorize("hasAuthority('attendance.team.read')")
+    public ResponseEntity<List<AssistedPunchService.PunchedByRow>> punchedBy(
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to,
+            @RequestParam(required = false) UUID employeeId,
+            @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(service.punchedBy(jwt, from, to, employeeId));
     }
 }
