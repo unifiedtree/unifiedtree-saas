@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrStatusPill } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { ModulePage, State, Panel, Facts, Note, SubHeading, useDesignToast, dmy } from '@/design/module/ModuleKit'
 import { useCompanies } from '../api/useOrg'
 import {
@@ -159,8 +160,8 @@ function EditProgramPanel({ program, onDone, toast }: { program: TrainingProgram
           <input id="pe-seats" type="number" min={Math.max(1, enrolled)} step={1} value={f.unlimited ? '' : f.capacity} disabled={f.unlimited} onChange={(e) => set('capacity', e.target.value)} placeholder={f.unlimited ? 'No limit' : undefined} className="ut-input" />
           <label className="mt-2 flex items-center gap-2 text-sm text-text-secondary"><input type="checkbox" checked={f.unlimited} onChange={(e) => set('unlimited', e.target.checked)} className="h-4 w-4 accent-[#059669]" /> No seat limit</label>
         </div>
-        <div><label className={label} htmlFor="pe-start">Starts</label><input id="pe-start" type="date" value={f.startDate} onChange={(e) => set('startDate', e.target.value)} className="ut-input" /></div>
-        <div><label className={label} htmlFor="pe-end">Ends</label><input id="pe-end" type="date" min={f.startDate || undefined} value={f.endDate} onChange={(e) => set('endDate', e.target.value)} className="ut-input" /></div>
+        <div><label className={label} htmlFor="pe-start">Starts</label><DateField id="pe-start" value={f.startDate} onChange={(e) => set('startDate', e.target.value)} className="ut-input" clearable /></div>
+        <div><label className={label} htmlFor="pe-end">Ends</label><DateField id="pe-end" min={f.startDate || undefined} value={f.endDate} onChange={(e) => set('endDate', e.target.value)} className="ut-input" clearable /></div>
         <div className="sm:col-span-2"><label className={label} htmlFor="pe-desc">Description</label><textarea id="pe-desc" rows={3} value={f.description} onChange={(e) => set('description', e.target.value)} placeholder="What people learn, who it’s for" className="ut-input resize-y" /></div>
       </div>
       {enrolled > 0 && <Note>{`${enrolled} ${enrolled === 1 ? 'person is' : 'people are'} enrolled, so seats can’t go below ${enrolled}.`}</Note>}

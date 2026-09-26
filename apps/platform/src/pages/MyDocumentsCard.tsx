@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { CheckCircle2, Upload, XCircle, Clock, FileText, Trash2 } from 'lucide-react'
 import { HrButton } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import {
   useDocumentTypes,
   useMyDocuments,
@@ -212,20 +213,29 @@ const TypeCard: React.FC<{ type: DocumentType; documents: EmployeeDocumentV2[] }
         <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-border-subtle bg-bg-base p-2">
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase text-text-tertiary">Issued</label>
-            <input
-              type="date"
+            <DateField
+              aria-label="Issued"
               value={issuedDate}
               onChange={(e) => setIssuedDate(e.target.value)}
               className="w-full rounded border border-border-default bg-white px-2 py-1 text-xs"
+              size="sm"
+              format="short"
+              icon={false}
+              clearable
             />
           </div>
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase text-text-tertiary">Expires</label>
-            <input
-              type="date"
+            <DateField
+              aria-label="Expires"
               value={expiryDate}
               onChange={(e) => setExpiryDate(e.target.value)}
               className="w-full rounded border border-border-default bg-white px-2 py-1 text-xs"
+              size="sm"
+              format="short"
+              icon={false}
+              clearable
+              toYear={new Date().getFullYear() + 50}
             />
           </div>
           <button

@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrStatusPill, TableCard, HrAvatar, HrSelect, type PillTone } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { HrPagination } from '@/shared/components/HrPagination'
 import { ModulePage, Views, useView, StatRow, State, Panel, SubHeading, Note, RowList, Row, ApprovalList, useDesignToast, dmy, todayIso, stamp } from '@/design/module/ModuleKit'
 import { dashIcon } from '@/design/dc/icons'
@@ -113,8 +114,8 @@ function NewProgramPanel({ onDone, toast }: { onDone: () => void; toast: Toast }
         <div className="sm:col-span-2"><label className={label} htmlFor="lp-title">Title</label><input id="lp-title" value={f.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Advanced React workshop" className="ut-input" /></div>
         <div><label className={label} htmlFor="lp-cat">Category</label><input id="lp-cat" value={f.category} onChange={(e) => set('category', e.target.value)} placeholder="e.g. Technical" className="ut-input" /></div>
         <div><label className={label} htmlFor="lp-trainer">Trainer</label><input id="lp-trainer" value={f.trainer} onChange={(e) => set('trainer', e.target.value)} placeholder="Optional" className="ut-input" /></div>
-        <div><label className={label} htmlFor="lp-start">Starts</label><input id="lp-start" type="date" value={f.startDate} onChange={(e) => set('startDate', e.target.value)} className="ut-input" /></div>
-        <div><label className={label} htmlFor="lp-end">Ends</label><input id="lp-end" type="date" min={f.startDate || undefined} value={f.endDate} onChange={(e) => set('endDate', e.target.value)} className="ut-input" /></div>
+        <div><label className={label} htmlFor="lp-start">Starts</label><DateField id="lp-start" value={f.startDate} onChange={(e) => set('startDate', e.target.value)} className="ut-input" clearable /></div>
+        <div><label className={label} htmlFor="lp-end">Ends</label><DateField id="lp-end" min={f.startDate || undefined} value={f.endDate} onChange={(e) => set('endDate', e.target.value)} className="ut-input" clearable /></div>
         <div><label className={label} htmlFor="lp-cap">Seats</label><input id="lp-cap" type="number" min={1} step={1} value={f.capacity} onChange={(e) => set('capacity', e.target.value)} placeholder="Unlimited" className="ut-input" /></div>
         <div><label className={label} htmlFor="lp-mode">Mode</label><select id="lp-mode" value={f.mode} onChange={(e) => set('mode', e.target.value)} className="ut-select"><option value="">Not set</option>{(Object.keys(PROGRAM_MODE_LABEL) as ProgramMode[]).map((m) => <option key={m} value={m}>{PROGRAM_MODE_LABEL[m]}</option>)}</select></div>
         <div className="sm:col-span-2"><label className={label} htmlFor="lp-desc">Description</label><textarea id="lp-desc" value={f.description} onChange={(e) => set('description', e.target.value)} rows={2} placeholder="Optional" className="ut-input resize-y" /></div>
@@ -584,8 +585,8 @@ function SkillMatrixTab({ canWrite, certificationsOnly = false }: { canWrite: bo
           {(certified || certificationsOnly) && (
             <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-3">
               <div><label className={label} htmlFor="sk-cert">Certification</label><input id="sk-cert" aria-label="Certification name" maxLength={200} value={certificationName} onChange={(e) => setCertificationName(e.target.value)} placeholder="e.g. AWS Solutions Architect" className="ut-input" /></div>
-              <div><label className={label} htmlFor="sk-on">Certified on</label><input id="sk-on" aria-label="Certified on" type="date" max={today} value={certifiedOn} onChange={(e) => setCertifiedOn(e.target.value)} className="ut-input" /></div>
-              <div><label className={label} htmlFor="sk-exp">Expires on</label><input id="sk-exp" aria-label="Certification expiry" type="date" min={certifiedOn || undefined} value={expiresOn} onChange={(e) => setExpiresOn(e.target.value)} className="ut-input" /></div>
+              <div><label className={label} htmlFor="sk-on">Certified on</label><DateField id="sk-on" aria-label="Certified on" max={today} value={certifiedOn} onChange={(e) => setCertifiedOn(e.target.value)} className="ut-input" format="short" clearable /></div>
+              <div><label className={label} htmlFor="sk-exp">Expires on</label><DateField id="sk-exp" aria-label="Certification expiry" min={certifiedOn || undefined} toYear={new Date().getFullYear() + 50} value={expiresOn} onChange={(e) => setExpiresOn(e.target.value)} className="ut-input" format="short" clearable /></div>
             </div>
           )}
           <div className="flex justify-end gap-2">

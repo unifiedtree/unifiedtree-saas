@@ -13,6 +13,7 @@ import { TableSkeleton } from '@unifiedtree/ui-kit'
 import {
   HrButton, HrStatusPill, TableCard, HrAvatar, type PillTone,
 } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { useCompanies } from './api/useOrg'
 import {
   usePolicies, useMyAcknowledgements, useAcknowledgePolicy, usePolicyAcknowledgements,
@@ -785,7 +786,7 @@ function ManageTab({ canWrite }: { canWrite: boolean }) {
           </div>
           <div>
             <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Effective date</label>
-            <input type="date" value={draft.effectiveDate} onChange={(e) => setDraft({ ...draft, effectiveDate: e.target.value })} className={inputCls} />
+            <DateField aria-label="Effective date" value={draft.effectiveDate} onChange={(e) => setDraft({ ...draft, effectiveDate: e.target.value })} className={inputCls} clearable />
           </div>
           <div className="col-span-2">
             <label className="mb-1.5 block text-[13px] font-semibold text-text-secondary">Content</label>

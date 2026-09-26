@@ -12,6 +12,7 @@ import React, { useMemo, useRef, useState } from 'react'
 import { Plus, Upload, Trash2 } from 'lucide-react'
 import { usePermission } from '@unifiedtree/sdk'
 import { HrButton, HrStatusPill, TableCard, HrAvatar, HrDrawer, type PillTone } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { hrPaginationFooter, useClampedPage } from '@/shared/components/HrPagination'
 import { ModulePage, Views, useView, StatRow, State, Panel, Note, useDesignToast, dmy, todayIso } from '@/design/module/ModuleKit'
 import { LetterTemplates } from './letters/LetterTemplates'
@@ -30,6 +31,8 @@ const CATEGORY_TONE: Record<DocumentCategory, PillTone> = { CONTRACT: 'purple', 
 const VERIFY: Record<string, [string, PillTone]> = { VERIFIED: ['Verified', 'ok'], PENDING: ['Waiting for review', 'warn'], REJECTED: ['Rejected', 'red'] }
 const fmtCat = (c: string) => c.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (m) => m.toUpperCase())
 const label = 'mb-1.5 block text-[13px] font-semibold text-text-secondary'
+/** Expiry pickers reach decades ahead (IDs and licences can run 20+ years). */
+const EXPIRY_TO_YEAR = new Date().getFullYear() + 50
 
 /** Expired, or expiring within 30 days; nothing otherwise. */
 function expiryBadge(expiryDate?: string): { tone: PillTone; label: string } | null {
@@ -237,8 +240,8 @@ function EditDocumentDrawer({ doc, onClose, toast }: { doc: EmployeeDocumentV2; 
         <div><label className={label} htmlFor="edit-doc-title">Title</label><input id="edit-doc-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300} className="ut-input" /></div>
         <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-3">
           <div><label className={label} htmlFor="edit-doc-cat">Category</label><select id="edit-doc-cat" value={category} onChange={(e) => setCategory(e.target.value as DocumentCategory)} className="ut-select">{DOCUMENT_CATEGORIES.map((c) => <option key={c} value={c}>{fmtCat(c)}</option>)}</select></div>
-          <div><label className={label} htmlFor="edit-doc-issued">Issued</label><input id="edit-doc-issued" type="date" value={issuedDate} onChange={(e) => setIssuedDate(e.target.value)} className="ut-input" /></div>
-          <div><label className={label} htmlFor="edit-doc-exp">Expires</label><input id="edit-doc-exp" type="date" min={issuedDate || undefined} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="ut-input" /></div>
+          <div><label className={label} htmlFor="edit-doc-issued">Issued</label><DateField id="edit-doc-issued" value={issuedDate} onChange={(e) => setIssuedDate(e.target.value)} className="ut-input" format="short" clearable /></div>
+          <div><label className={label} htmlFor="edit-doc-exp">Expires</label><DateField id="edit-doc-exp" min={issuedDate || undefined} toYear={EXPIRY_TO_YEAR} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="ut-input" format="short" clearable /></div>
         </div>
         <div><label className={label} htmlFor="edit-doc-notes">Notes</label><textarea id="edit-doc-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={2000} placeholder="Optional" className="ut-input resize-y" /></div>
         {!storedFile && !file && <div><label className={label} htmlFor="edit-doc-url">Link</label><input id="edit-doc-url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" className="ut-input" /></div>}
@@ -306,8 +309,8 @@ function AddDocumentDrawer({ onClose, toast }: { onClose: () => void; toast: Toa
         {!file && <div><label className={label} htmlFor="doc-url">Or a link to an existing document</label><input id="doc-url" value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="https://…" className="ut-input" /></div>}
         <div className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-3">
           <div><label className={label} htmlFor="doc-cat">Category</label><select id="doc-cat" value={category} onChange={(e) => setCategory(e.target.value as DocumentCategory)} className="ut-select">{DOCUMENT_CATEGORIES.map((c) => <option key={c} value={c}>{fmtCat(c)}</option>)}</select></div>
-          <div><label className={label} htmlFor="doc-issued">Issued</label><input id="doc-issued" type="date" value={issuedDate} onChange={(e) => setIssuedDate(e.target.value)} className="ut-input" /></div>
-          <div><label className={label} htmlFor="doc-exp">Expires</label><input id="doc-exp" type="date" min={issuedDate || undefined} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="ut-input" /></div>
+          <div><label className={label} htmlFor="doc-issued">Issued</label><DateField id="doc-issued" value={issuedDate} onChange={(e) => setIssuedDate(e.target.value)} className="ut-input" format="short" clearable /></div>
+          <div><label className={label} htmlFor="doc-exp">Expires</label><DateField id="doc-exp" min={issuedDate || undefined} toYear={EXPIRY_TO_YEAR} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="ut-input" format="short" clearable /></div>
         </div>
         <div><label className={label} htmlFor="doc-notes">Notes</label><textarea id="doc-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional" className="ut-input resize-y" /></div>
         <Note>Documents HR adds are marked verified straight away. Documents employees upload themselves wait under Docs to review.</Note>

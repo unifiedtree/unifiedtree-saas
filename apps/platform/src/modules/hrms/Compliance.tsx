@@ -6,6 +6,7 @@ import { usePermission } from '@unifiedtree/sdk'
 import { Modal } from '@unifiedtree/ui-kit'
 import { useToast } from '@/shared/hooks/useToast'
 import { HrButton, HrStatusPill, TableCard, HrDrawer, type PillTone } from '@/shared/components/hr'
+import { DateField } from '@/shared/components/calendar'
 import { ModulePage, Views, useView, StatRow, State, Note, dmy, todayIso } from '@/design/module/ModuleKit'
 import { hrPaginationFooter } from '@/shared/components/HrPagination'
 import { useCompanies } from './api/useOrg'
@@ -318,7 +319,7 @@ function AddObligationDrawer({ companyId, onClose }: { companyId: string; onClos
         </FormField>
         <div className="grid grid-cols-2 gap-4">
           <FormField label="Due date" required error={dueError}>
-            {(id) => <input id={id} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="ut-input" />}
+            {(id) => <DateField id={id} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="ut-input" format="short" icon={false} clearable />}
           </FormField>
           <FormField label="Frequency">
             {(id) => <input id={id} value={frequency} onChange={(e) => setFrequency(e.target.value)} placeholder="e.g. Monthly" maxLength={30} className="ut-input" />}
@@ -495,7 +496,7 @@ function AddFilingDrawer({ companyId, onClose }: { companyId: string; onClose: (
             )}
           </FormField>
           <FormField label="Due date" required error={dueError}>
-            {(id) => <input id={id} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="ut-input" />}
+            {(id) => <DateField id={id} value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="ut-input" format="short" icon={false} clearable />}
           </FormField>
         </div>
         <FormField label="Period" hint="Up to 20 characters, e.g. 2026-05">
@@ -729,7 +730,7 @@ function RegisterComplaintDrawer({ companyId, onClose }: { companyId: string; on
         <PoshNotice />
         <div className="grid grid-cols-2 gap-4">
           <FormField label="Filed date" required error={filedError}>
-            {(id) => <input id={id} type="date" value={filedDate} onChange={(e) => setFiledDate(e.target.value)} className="ut-input" />}
+            {(id) => <DateField id={id} value={filedDate} onChange={(e) => setFiledDate(e.target.value)} className="ut-input" format="short" icon={false} clearable />}
           </FormField>
           <FormField label="Severity">
             {(id) => (
