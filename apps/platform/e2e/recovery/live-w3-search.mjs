@@ -46,6 +46,7 @@ async function login(email) {
     return { status: res.status, json }
   }
 }
+const visible = (locator, timeout = 20_000) => locator.waitFor({ timeout }).then(() => true, () => false)
 const search = (call, q) => call(`/v1/search/global?q=${encodeURIComponent(q)}`)
 const group = (res, type) => (res.json?.groups || []).find((g) => g.type === type)?.items || []
 const allItems = (res) => (res.json?.groups || []).flatMap((g) => g.items.map((i) => ({ ...i, group: g.type })))
@@ -140,7 +141,7 @@ try {
   await box.click()
   await box.fill('reader')
   await page.locator('[data-result-group="employee"]').waitFor({ timeout: 20_000 })
-  check('ui: typing a name shows People', await page.locator('[data-result-group="employee"]').getByText('Reader User').first().isVisible())
+  check('ui: typing a name shows People', await visible(page.locator('[data-result-group="employee"]').getByText('Reader User').first()))
   check('ui: the same search shows their leave and payslips', (await page.locator('[data-result-group="leave"]').count()) === 1 && (await page.locator('[data-result-group="payslip"]').count()) === 1)
   await page.screenshot({ path: `${SHOTS}/search-dropdown-1440.png` })
   // Keyboard: the first row is highlighted; ↓ moves; Esc closes.
@@ -162,7 +163,7 @@ try {
   const dirBox = page.locator('input[placeholder="Search name, code, email or role…"]')
   await dirBox.waitFor({ timeout: 30_000 })
   check('ui: the person opens the directory with the search prefilled', (await dirBox.inputValue()) === 'reader user', await dirBox.inputValue())
-  check('ui: the directory is filtered to them', await page.getByText('EMP002').first().isVisible().catch(() => false))
+  check('ui: the directory is filtered to them', await visible(page.getByText('EMP002').first()))
 
   // A page by name.
   await box.click()
@@ -191,7 +192,8 @@ try {
   await page.locator('[data-result-group="document"] [role=option]').first().waitFor({ timeout: 20_000 })
   await page.locator('[data-result-group="document"] [role=option]').filter({ hasText: `${token} reader certificate` }).click()
   await page.waitForURL((u) => u.pathname === `/hrms/employees/${READER}`, { timeout: 20_000 })
-  check('ui: a document opens on the person\'s Documents tab', new URL(page.url()).searchParams.get('tab') === 'documents' && await page.getByText(`${token} reader certificate`).first().isVisible({ timeout: 20_000 }).catch(() => false))
+  const docShown = await visible(page.getByText(`${token} reader certificate`).first())
+  check('ui: a document opens on the person\'s Documents tab', docShown && page.url().includes('tab=documents'), page.url())
 
   // Advanced search: from the link (text carried over) and from the shortcut.
   await box.click()
@@ -204,7 +206,7 @@ try {
   await page.keyboard.press('Escape')
   await adv.waitFor({ state: 'detached', timeout: 10_000 })
   await page.keyboard.press('Control+k')
-  check('ui: Ctrl K still opens Advanced search', await page.getByRole('dialog', { name: 'Advanced search' }).isVisible({ timeout: 10_000 }).catch(() => false))
+  check('ui: Ctrl K still opens Advanced search', await visible(page.getByRole('dialog', { name: 'Advanced search' }), 10_000))
   await page.keyboard.press('Escape')
 
   // Nothing found.
@@ -221,6 +223,8 @@ try {
   const rpage = await rctx.newPage()
   const rw = watch(rpage, 'reader'); watched.push(rw)
   await signIn(rpage, 'reader@unifiedtree.demo')
+  // Sign-in shows a welcome screen and lands on the app launcher (no top bar there); open their workspace.
+  await rpage.goto(base + '/me')
   const rbox = rpage.getByTestId('top-search-input')
   await rbox.waitFor({ timeout: 30_000 })
   await rbox.click()
@@ -245,16 +249,17 @@ try {
   await signIn(mpage, 'owner@unifiedtree.demo')
   await mpage.goto(base + '/dashboard')
   await mpage.getByRole('button', { name: 'Search', exact: true }).first().click()
-  const mbox = mpage.getByTestId('top-search-input')
+  // The desktop box stays in the page (hidden below 768 px); the phone search is its own panel.
+  const sheet = mpage.getByRole('dialog', { name: 'Search' })
+  const mbox = sheet.getByTestId('top-search-input')
   await mbox.waitFor({ timeout: 10_000 })
   await mbox.fill('reader')
-  await mpage.locator('[data-result-group="employee"]').waitFor({ timeout: 20_000 })
-  check('ui (phone): the search icon opens the search with results', await mpage.locator('[data-result-group="employee"]').isVisible())
+  check('ui (phone): the search icon opens the search with results', await visible(sheet.locator('[data-result-group="employee"]')))
   const overflow = await mpage.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   check('ui (phone): no sideways scroll', overflow <= 0, `overflow=${overflow}`)
   await mpage.screenshot({ path: `${SHOTS}/search-sheet-390.png` })
   await mpage.getByRole('button', { name: 'Cancel' }).click()
-  check('ui (phone): Cancel closes the search', (await mpage.getByTestId('top-search-input').count()) === 0)
+  check('ui (phone): Cancel closes the search', (await sheet.count()) === 0)
   await mctx.close()
 
   const errors = watched.flatMap((x) => x.errors)
@@ -266,7 +271,7 @@ try {
   check('ui: no server errors (5xx) on the pages visited', serverErrors.length === 0, serverErrors.slice(0, 3).join('; '))
   if (failed.length) console.log('info: other API 4xx seen (pages\' own permission probes):', [...new Set(failed)].slice(0, 8).join('; '))
 } catch (e) {
-  check('run finished', false, String(e.message || e).slice(0, 300))
+  check('run finished', false, String(e.message || e).slice(0, 1500))
 } finally {
   await browser.close()
   for (const id of created) {
