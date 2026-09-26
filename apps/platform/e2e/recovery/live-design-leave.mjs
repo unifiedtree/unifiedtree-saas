@@ -24,6 +24,18 @@ const before = new Set(sql(`select coalesce(string_agg(id::text, ','),'') from l
 const fri = new Date(Date.now() + 5.5 * 3600e3 + 10 * 864e5); while (fri.getUTCDay() !== 5) fri.setUTCDate(fri.getUTCDate() + 1)
 const mon = new Date(fri.getTime() + 3 * 864e5)
 const iso = (d) => d.toISOString().slice(0, 10)
+// From / To use the shared calendar: open it, then pick year, month and day.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+async function pickDate(page, trigger, isoDay) {
+  const [y, m, d] = isoDay.split('-').map(Number)
+  await trigger.click()
+  const calendar = page.getByRole('dialog', { name: 'Choose date' })
+  await calendar.getByRole('button', { name: 'Choose year' }).click()
+  await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click()
+  await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m - 1]} ${y}"]`).click()
+  await calendar.getByRole('gridcell', { name: new RegExp(`, ${d} ${MONTHS[m - 1]} ${y}`) }).click()
+  await calendar.waitFor({ state: 'hidden' })
+}
 
 const browser = await chromium.launch()
 const session = async (email) => {
@@ -55,8 +67,8 @@ try {
   await r.page.getByRole('button', { name: /Apply for leave/ }).first().click(); await settle(r.page)
   await r.page.getByRole('button', { name: 'Choose a leave type' }).click()
   await r.page.getByRole('option').first().click()
-  await r.page.getByLabel('From *').fill(iso(fri))
-  await r.page.getByLabel('To *').fill(iso(mon))
+  await pickDate(r.page, r.page.getByLabel('From *'), iso(fri))
+  await pickDate(r.page, r.page.getByLabel('To *'), iso(mon))
   await r.page.getByPlaceholder('At least 10 characters').fill('Local QA: redesigned leave page check')
   check('employee: Fri–Mon previews 2 days (Sat and Sun are off)', (await r.page.getByText(/^2 days of leave/).count()) === 1)
   if (shots) await r.page.screenshot({ path: `${shots}/leave-apply-filled.png` })

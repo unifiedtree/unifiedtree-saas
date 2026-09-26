@@ -24,6 +24,19 @@ const check = (name, ok, detail) => { checks.push({ name, ok: Boolean(ok), detai
 const iso = (d) => d.toISOString().slice(0, 10)
 const today = iso(new Date(Date.now() + 5.5 * 3600_000))
 const lastDay = iso(new Date(Date.now() + 5.5 * 3600_000 + 30 * 86_400_000))
+// Date fields use the shared calendar: the label points at a trigger button, so
+// a date is picked year → month → day in the "Choose date" popover.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+async function pickDate(page, trigger, isoDay) {
+  const [y, m, d] = isoDay.split('-').map(Number)
+  await trigger.click()
+  const calendar = page.getByRole('dialog', { name: 'Choose date' })
+  await calendar.getByRole('button', { name: 'Choose year' }).click()
+  await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click()
+  await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m - 1]} ${y}"]`).click()
+  await calendar.getByRole('gridcell', { name: new RegExp(`, ${d} ${MONTHS[m - 1]} ${y}`) }).click()
+  await calendar.waitFor({ state: 'hidden' })
+}
 
 async function login(email) {
   const r = await fetch(`${api}/v1/canonical-auth/login`, { method: 'POST', headers, body: JSON.stringify({ tenantId: tenant, email, password }) })
@@ -68,7 +81,7 @@ try {
   const drawer = page.getByRole('dialog')
   await drawer.getByLabel('Employee').fill(fixtureName)
   await drawer.getByRole('option').filter({ hasText: fixtureName }).first().click({ timeout: 15_000 })
-  await drawer.getByLabel('Last working day').fill(lastDay)
+  await pickDate(page, drawer.getByLabel('Last working day'), lastDay)
   await drawer.locator('#notice-reason').fill('QA automation — exit page acceptance')
   await drawer.getByRole('button', { name: 'Start notice' }).click()
   await page.getByText('is now serving notice').waitFor({ timeout: 15_000 })

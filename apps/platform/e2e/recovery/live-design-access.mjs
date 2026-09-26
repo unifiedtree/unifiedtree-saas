@@ -19,6 +19,18 @@ const password = process.env.RECOVERY_PASSWORD || 'Hrms@12345'
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`) }
 const localIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+// The From / To filters use the shared calendar: open it, then pick year, month and day.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+async function pickDate(page, trigger, iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  await trigger.click()
+  const calendar = page.getByRole('dialog', { name: 'Choose date' })
+  await calendar.getByRole('button', { name: 'Choose year' }).click()
+  await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click()
+  await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m - 1]} ${y}"]`).click()
+  await calendar.getByRole('gridcell', { name: new RegExp(`, ${d} ${MONTHS[m - 1]} ${y}`) }).click()
+  await calendar.waitFor({ state: 'hidden' })
+}
 const login = await fetch(`${api}/v1/canonical-auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant }, body: JSON.stringify({ tenantId: tenant, email: 'owner@unifiedtree.demo', password }) })
 const token = (await login.json()).accessToken
 const request = async (path, method = 'GET', body) => { const r = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenant, Authorization: `Bearer ${token}` }, body: body ? JSON.stringify(body) : undefined }); const t = await r.text(); return t ? JSON.parse(t) : null }
@@ -78,8 +90,8 @@ try {
   const latest = all?.data?.[0]?.occurredAt
   const today = latest ? localIso(new Date(latest)) : localIso(new Date())
   await page.goto(base + '/audit-logs'); await settle()
-  await page.getByLabel('From').fill(today)
-  await page.getByLabel('To').fill(today)
+  await pickDate(page, page.getByLabel('From'), today)
+  await pickDate(page, page.getByLabel('To'), today)
   await settle()
   const note = await page.getByText(/events? match these filters|event match these filters/).first().innerText().catch(() => '')
   const n = Number((note.match(/^([\d,]+)/)?.[1] || '0').replace(/,/g, ''))
