@@ -21,6 +21,7 @@ import {
 import { DelegationCard } from './DelegationCard'
 import { MyDocumentsCard } from './MyDocumentsCard'
 import { NotificationChoiceSections, useNotificationChoices } from './NotificationChoices'
+import { MyFaceEnrollmentSection, useCanSelfEnrollFace } from '@/modules/hrms/attendance/face/FaceEnrollment'
 
 /**
  * Personal profile page.
@@ -148,6 +149,8 @@ export const Profile: React.FC = () => {
   // have their own draft from /v1/me/notification-preferences; the unsaved
   // bar below saves both.
   const notif = useNotificationChoices(!!user)
+  // Face enrollment with the web camera (enroll or re-enroll your own face, any time).
+  const canFace = useCanSelfEnrollFace()
 
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -238,6 +241,7 @@ export const Profile: React.FC = () => {
 
   const nav: SettingsNavItem[] = [
     { key: 'me', label: 'Photo & contact', state: 'none' },
+    ...(canFace ? [{ key: 'face', label: 'Face enrollment', state: 'none' as const }] : []),
     { key: 'employment', label: 'Employment', state: 'none' },
     { key: 'details', label: 'Personal details', state: 'none', errors: errorCount },
     { key: 'delegation', label: 'Approval delegation', state: 'none' },
@@ -286,6 +290,8 @@ export const Profile: React.FC = () => {
               </div>
               <SettingsNote>JPG, PNG, WebP, HEIC or GIF, up to 5 MB. Your photo changes as soon as it uploads.</SettingsNote>
             </SettingsSection>
+
+            {canFace && <MyFaceEnrollmentSection employeeLinked={employeeLinked} />}
 
             <SettingsSection id="employment" icon="briefcase" title="Employment" summary={!employeeLinked ? 'No employee record linked to this login' : emp ? [emp.employeeCode, joined && `joined ${joined}`].filter(Boolean).join(' · ') : 'From your employee record'}>
               {!employeeLinked ? (

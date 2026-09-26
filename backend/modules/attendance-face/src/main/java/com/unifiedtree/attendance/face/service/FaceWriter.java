@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -213,5 +214,80 @@ public class FaceWriter {
                    version = version + 1
              WHERE tenant_id = ? AND employee_id = ?
             """, actingAdminId, reason, tenantId, employeeId);
+    }
+
+    /**
+     * Whether a face is on record before a new enrollment starts: one that
+     * works, is locked or is due for re-enrollment, or one an earlier start
+     * or an HR reset already took out of use (revoked_at, see
+     * {@link #markReplacing}). A first enrollment, even after an abandoned
+     * try, has none.
+     */
+    public boolean hadEnrolledFace(UUID tenantId, UUID employeeId) {
+        return Boolean.TRUE.equals(jdbc.query("""
+            SELECT status IN ('ACTIVE', 'NEEDS_REENROLLMENT', 'LOCKED') OR revoked_at IS NOT NULL
+              FROM attendance.face_enrollments
+             WHERE tenant_id = ? AND employee_id = ?
+            """, rs -> rs.next() && rs.getBoolean(1), tenantId, employeeId));
+    }
+
+    /**
+     * Notes on a just-started enrollment that it replaces an earlier face (the
+     * start has already taken that face out of use), so the audit entry at the
+     * end can say so. Nothing else reads the revoked_* columns.
+     */
+    @Transactional
+    public void markReplacing(UUID tenantId, UUID employeeId) {
+        jdbc.update("""
+            UPDATE attendance.face_enrollments
+               SET revoked_at = now(),
+                   revoked_reason = 'Replaced by a new enrollment'
+             WHERE tenant_id = ? AND employee_id = ? AND status = 'PENDING'
+            """, tenantId, employeeId);
+    }
+
+    /**
+     * One audit.events row for a finished face enrollment, written the way the
+     * access audit writes its rows: who did it, whose face, and whether it
+     * replaced an earlier one (noted on the row when it started, see
+     * {@link #markReplacing}). The entry points at the person's employee
+     * record when the login has one, so the Audit logs page names and links
+     * them.
+     */
+    @Transactional
+    public void recordEnrollmentAudit(UUID tenantId, UUID loginId, UUID actorId) {
+        boolean replaced = Boolean.TRUE.equals(jdbc.query("""
+            SELECT revoked_at IS NOT NULL FROM attendance.face_enrollments
+             WHERE tenant_id = ? AND employee_id = ?
+            """, rs -> rs.next() && rs.getBoolean(1), tenantId, loginId));
+        Map<String, Object> who = jdbc.queryForMap("""
+            SELECT uc.employee_id,
+                   COALESCE(NULLIF(btrim(concat_ws(' ', e.first_name, e.last_name)), ''),
+                            NULLIF(btrim(uc.display_name), ''), uc.email) AS name
+              FROM auth.user_credentials uc
+              LEFT JOIN hrms.employees e ON e.id = uc.employee_id
+             WHERE uc.id = ? AND uc.tenant_id = ?
+            """, loginId, tenantId);
+        UUID employeeId = who.get("employee_id") == null ? null : UUID.fromString(who.get("employee_id").toString());
+        String name = String.valueOf(who.get("name"));
+        boolean self = loginId.equals(actorId);
+        String summary = self
+                ? (replaced ? "Re-enrolled their own face. The earlier face record was replaced."
+                            : "Enrolled their own face for face punch-in.")
+                : (replaced ? "Re-enrolled " + name + "'s face. The earlier face record was replaced."
+                            : "Enrolled " + name + "'s face for face punch-in.");
+        jdbc.update("""
+                INSERT INTO audit.events
+                    (id, tenant_id, occurred_at, occurred_date, actor_user_id, actor_email,
+                     module, action, entity_type, entity_id, summary)
+                VALUES (gen_random_uuid(), ?, now(), (now() AT TIME ZONE 'Asia/Kolkata')::date, ?,
+                        (SELECT email FROM auth.user_credentials WHERE id = ?),
+                        'attendance', ?, ?, ?, ?)
+                """,
+                tenantId, actorId, actorId,
+                replaced ? "FACE_REENROLLED" : "FACE_ENROLLED",
+                employeeId != null ? "employee" : "user",
+                employeeId != null ? employeeId : loginId,
+                summary);
     }
 }

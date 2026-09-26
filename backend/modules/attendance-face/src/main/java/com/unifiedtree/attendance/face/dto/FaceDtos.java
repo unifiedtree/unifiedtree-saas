@@ -26,7 +26,12 @@ public final class FaceDtos {
 
     public enum EnrollmentStatus { PENDING, ACTIVE, NEEDS_REENROLLMENT, LOCKED, REVOKED }
 
-    /** GET /v1/attendance/face/enrollment-status response. */
+    /**
+     * GET /v1/attendance/face/enrollment-status response. {@code unlocksAt}:
+     * for a LOCKED enrollment, when the lock stops applying (the next start or
+     * face check after that time clears it); null when not locked, or when
+     * only a manager can clear locks.
+     */
     public record EnrollmentStatusResponse(
             EnrollmentStatus status,
             int samplesRequired,
@@ -34,7 +39,26 @@ public final class FaceDtos {
             List<CaptureAngle> remainingAngles,
             int consecutiveFailures,
             boolean lockedRequiresManagerReset,
-            Instant enrolledAt
+            Instant enrolledAt,
+            Instant unlocksAt
+    ) {}
+
+    /**
+     * GET /v1/attendance/face/admin/employees/{employeeId}/enrollment-status:
+     * another person's enrollment, asked for by their HR employee record (the
+     * id the web profile has). {@code hasLogin} is false when the record has no
+     * active sign-in: face data belongs to a login, so there is nothing to
+     * enroll yet and the other fields are the "not enrolled" defaults.
+     */
+    public record PersonEnrollmentStatusResponse(
+            boolean hasLogin,
+            EnrollmentStatus status,
+            int samplesRequired,
+            int samplesCaptured,
+            List<CaptureAngle> remainingAngles,
+            boolean lockedRequiresManagerReset,
+            Instant enrolledAt,
+            Instant unlocksAt
     ) {}
 
     /** POST /v1/attendance/face/enroll/start request body. */

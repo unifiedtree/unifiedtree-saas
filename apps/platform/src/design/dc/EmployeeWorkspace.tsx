@@ -23,7 +23,8 @@ export interface WorkspaceData {
   jobTitle: string; jobSub: string; facts: { l: string; v: string }[]
   mgr: { name: string; sub: string; seed: number; onOpen: () => void } | null
   account: { active: boolean; activeSub: string; title: string; sub: string; cta: string; primary: boolean; onInvite: () => Promise<string> }
-  face: { sub: string; onReset: () => Promise<string> }
+  /** `enroll`: HR's Enroll / Re-enroll button for the person's face (web camera), or nothing. */
+  face: { sub: string; onReset: () => Promise<string>; enroll?: ReactNode }
   attention: { tone: 'red' | 'amber' | 'orange'; title: string; cta: string; onClick: () => void }[]
   glance: { l: string; v: string; s: string; onClick: () => void }[]
   onboarding: {
@@ -183,7 +184,7 @@ export class EmployeeWorkspace extends DCLogic<{ data: WorkspaceData }> {
       hasMgr: !!D.mgr, noMgr: !D.mgr, mgrName: D.mgr?.name || '', mgrSub: D.mgr?.sub || '', mgrSeed: D.mgr?.seed || 1, openMgr: () => D.mgr?.onOpen(),
       accActive: D.account.active, accNone: !D.account.active, accActiveSub: D.account.activeSub, accTitle: D.account.title, accSub: D.account.sub,
       accCta: D.account.cta, accVariant: D.account.primary ? 'primary' : 'ghost', invite: () => this.run(D.account.onInvite),
-      faceSub: D.face.sub, resetAsk: S.resetAsk, noAsk: !S.resetAsk, askReset: set({ resetAsk: true }), noReset: set({ resetAsk: false }),
+      faceSub: D.face.sub, faceEnroll: D.face.enroll ?? null, resetAsk: S.resetAsk, noAsk: !S.resetAsk, askReset: set({ resetAsk: true }), noReset: set({ resetAsk: false }),
       doReset: () => this.run(D.face.onReset, () => this.setState({ resetAsk: false })),
       att, attCount: att.length, noAtt: !att.length, glance: D.glance.map((g) => ({ ...g, on: g.onClick })),
       showOnb: O.show, onbSub: O.sub, onbNote: !!O.note, onbNoteText: O.note, hasOnb: O.fields.length > 0, onb: O.fields,

@@ -256,6 +256,7 @@ export function EmployeeWorkspaceView({ v }: { v: any }) {
                                 {txt(v.faceSub)}
                               </div>
                             </div>
+                            {txt(v.faceEnroll)}
                             {v.noAsk ? (
                               <>
                                 {v.canFace ? (
