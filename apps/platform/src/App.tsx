@@ -150,6 +150,20 @@ function ComingSoonForAdmins({ module }: { module: string }) {
   return isAdmin ? <ComingSoon module={module} /> : <Navigate to="/dashboard" replace />
 }
 
+/**
+ * An address the "HRMS settings" hub used for a few hours on 26 Sep 2026: opens
+ * the page at its own address again, keeping the old query and #section (the
+ * target's own ?keys win). The page there keeps its own permission gate.
+ */
+function MovedTo({ to }: { to: string }) {
+  const { search, hash } = useLocation()
+  const u = new URL(to, 'http://x')
+  const q = new URLSearchParams(search)
+  u.searchParams.forEach((v, k) => q.set(k, v))
+  const s = q.toString()
+  return <Navigate to={{ pathname: u.pathname, search: s ? `?${s}` : '', hash: u.hash || hash }} replace />
+}
+
 const InspectorView = lazyPage(() => import('@/modules/hrms/compliance/InspectorView'))
 
 /** Every route. Kept outside App so the table can also be registered for preloading (lazyPage.ts). */
@@ -675,6 +689,21 @@ const ROUTE_TREE = (
             </RouteGuard>
           }
         />
+        {/* Addresses of the short-lived HRMS settings hub (26 Sep 2026): bookmarks and
+            remembered search items open each page at its own address again. */}
+        <Route path="/hrms/settings/hr-configuration" element={<MovedTo to="/hrms/settings" />} />
+        <Route path="/hrms/settings/shift-rules" element={<MovedTo to="/hrms/master/shift-rules" />} />
+        <Route path="/hrms/settings/leave-rules" element={<MovedTo to="/hrms/master/leave-rules" />} />
+        <Route path="/hrms/settings/payroll" element={<MovedTo to="/hrms/payroll/settings" />} />
+        <Route path="/hrms/settings/salary-components" element={<MovedTo to="/hrms/payroll/components" />} />
+        <Route path="/hrms/settings/statutory" element={<MovedTo to="/hrms/master/statutory" />} />
+        <Route path="/hrms/settings/expense-policies" element={<MovedTo to="/hrms/expenses?tab=policies" />} />
+        <Route path="/hrms/settings/document-types" element={<MovedTo to="/settings/documents" />} />
+        <Route path="/hrms/settings/policies" element={<MovedTo to="/hrms/policies" />} />
+        <Route path="/hrms/settings/notifications" element={<MovedTo to="/hrms/notification-templates" />} />
+        <Route path="/hrms/settings/roles" element={<MovedTo to="/roles" />} />
+        <Route path="/hrms/settings/access" element={<MovedTo to="/roles?view=assignments" />} />
+        <Route path="/settings/integrations/register" element={<MovedTo to="/hrms/integrations" />} />
         {/* Placeholder for client HR screens still being built — keeps the full
             client nav navigable (no 404s). Auth + HRMS module gated. The key
             allow-list is enforced inside ModuleComingSoon so unknown slugs
