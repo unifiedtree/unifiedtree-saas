@@ -1,7 +1,9 @@
 // Live check (wave 3): the Company Admin Dashboard follows the selected date end
 // to end. A past day (here in the previous year) asks every card for that day,
 // the numbers match that day's reality in the database, seats say "As of today",
-// the headcount export carries the date, and today's view is unchanged.
+// the headcount export carries the date, and today's view is unchanged. A past
+// working day with punches, and one in the previous year, match the attendance
+// records; the reports, the projects drawer and the Attendance page follow suit.
 //
 // Creates nothing: the export's log entry is answered locally (route) so no row
 // is written. Reads the database (read-only) to check the numbers.
@@ -19,6 +21,8 @@ const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', company = 'cccccccc-cccc-
 const shots = process.env.RECOVERY_SHOTS || 'C:/REACT/ut-wt/_results/shots'
 const PAST = '2025-03-14', PAST_LABEL = '14 Mar 2025'
 const MID = '2026-06-30' // a day when people who have left since were still employed
+const WORKDAY = '2026-09-22', WORKDAY_LABEL = '22 Sep 2026' // a past working day with punches (and leavers' last day)
+const YEAR_AGO = '2025-03-12' // a working day in the previous year
 
 const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', db, '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const results = []
@@ -125,6 +129,39 @@ try {
     }
     check(`${email}: past-date requests answer like today's (no new errors)`, diffs.length === 0, diffs.join(', '))
   }
+  // Notices on a past date include ones archived since, so only the company view (org.company.read) gets them.
+  const reader = await token('reader@unifiedtree.demo')
+  const readerCompany = (await get(reader, `/v1/admin/dashboard/stats?companyId=${company}`)).status === 200
+  const rNow = await get(reader, `/v1/admin/dashboard/notices?companyId=${company}&page=0`)
+  const rPast = await get(reader, `/v1/admin/dashboard/notices?companyId=${company}&page=0&date=${PAST}`)
+  check('notices: a past date is for the company view only (others get today\'s list)', rPast.status === 200 && JSON.stringify(rPast.body) === JSON.stringify(readerCompany ? noticesPast.body : rNow.body),
+    `reader ${readerCompany ? 'can' : 'cannot'} read the company; past ${rPast.body?.totalElements}, today ${rNow.body?.totalElements}`)
+
+  // Past working days: the day's roster, punches, late arrivals and leave match the attendance records.
+  const me = await get(owner, '/v1/employees/me')
+  const self = me.status === 200 && me.body?.id ? me.body.id : null
+  const notSelf = self ? `AND e.id <> '${self}'` : ''
+  const rosterOn = (day) => Number(sql(`SELECT count(*) FROM hrms.employees e WHERE e.tenant_id='${tenant}' AND e.company_id='${company}' ${notSelf}
+      AND (e.employment_status NOT IN ('EXITED','TERMINATED','RESIGNED','RETIRED')
+           OR (COALESCE(e.last_working_day, e.date_of_termination) >= DATE '${day}' AND COALESCE(e.date_of_joining, (e.created_at AT TIME ZONE 'Asia/Kolkata')::date) <= DATE '${day}'))
+      AND (e.date_of_joining IS NULL OR e.date_of_joining <= DATE '${day}')
+      AND NOT (',' || COALESCE(e.weekly_off_days, '6,7') || ',') LIKE '%,' || extract(isodow FROM DATE '${day}')::int || ',%'`))
+  const recordsOn = (day) => sql(`SELECT count(*) FILTER (WHERE r.check_in_at IS NOT NULL) || '|' || count(*) FILTER (WHERE r.attendance_status = 'LATE')
+      FROM attendance.records r JOIN hrms.employees e ON e.id = r.employee_id WHERE r.tenant_id='${tenant}' AND e.company_id='${company}' AND r.attendance_date = DATE '${day}' ${notSelf}`).split('|').map(Number)
+  const leaveOn = (day) => Number(sql(`SELECT count(DISTINCT l.employee_id) FROM leave_mgmt.leave_requests l JOIN hrms.employees e ON e.id = l.employee_id
+      WHERE l.tenant_id='${tenant}' AND e.company_id='${company}' AND l.status = 'APPROVED' AND DATE '${day}' BETWEEN l.start_date AND l.end_date ${notSelf}`))
+  const dayWant = {}
+  for (const day of [WORKDAY, YEAR_AGO]) {
+    const r = await get(owner, `/v1/attendance/dashboard?date=${day}&includeLeavers=true`)
+    const s = r.body?.staffStatuses || []
+    const [present, late] = recordsOn(day)
+    const api = { total: s.length, present: s.filter((x) => x.checkInAt).length, late: s.filter((x) => x.status === 'LATE').length, onLeave: s.filter((x) => x.onLeave).length }
+    dayWant[day] = { total: rosterOn(day), present, late, onLeave: leaveOn(day) }
+    check(`${day}: the day's roster, punches, late arrivals and leave match the attendance records`, r.status === 200 && JSON.stringify(api) === JSON.stringify(dayWant[day]),
+      `api ${JSON.stringify(api)}, sql ${JSON.stringify(dayWant[day])}`)
+  }
+  check(`${WORKDAY}: a day with real punches (not an empty day)`, dayWant[WORKDAY].present > 0, `punches ${dayWant[WORKDAY].present}`)
+
   const hiringPast = await get(owner, `/v1/admin/dashboard/hiring?companyId=${company}&date=${PAST}`)
   const candidatesSql = Number(sql(`SELECT count(*) FROM hiring_mgmt.candidates c JOIN hiring_mgmt.job_requisitions r ON r.id = c.requisition_id WHERE c.tenant_id='${tenant}' AND r.company_id='${company}' AND c.created_at < (DATE '${PAST}' + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'`))
   check(`${PAST}: candidates = those who had applied by then`, hiringPast.body.stages.reduce((n, s) => n + Number(s.count), 0) === candidatesSql, `sql ${candidatesSql}`)
@@ -162,6 +199,14 @@ try {
   const dated = calls.filter((c) => c.includes('includeLeavers') || (/^\/v1\/(admin\/dashboard|hrms\/projects|probation\/upcoming|audit\/events|reports\/headcount)/.test(c) && /[?&](date|asOf|to)=/.test(c)))
   check('today: the same requests as before (no date, no includeLeavers)', dated.length === 0, dated.join(' | ').slice(0, 200))
   check('today: weekly trend says Last 7 days', (await page.getByText('Last 7 days · IST').count()) > 0)
+  // Today's payroll chart: the last six finalized months, whatever they are (as before the date work).
+  const finalMonths = sql(`SELECT DISTINCT period_year || '-' || lpad(period_month::text, 2, '0') FROM payroll.runs WHERE tenant_id='${tenant}' AND company_id='${company}' AND status IN ('LOCKED','PAID') ORDER BY 1`).split('\n').map((x) => x.trim()).filter(Boolean).slice(-6)
+  if (finalMonths.length && (await page.getByText('Finalized payroll', { exact: false }).count()) > 0) {
+    const MONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], title = (m) => `${MONS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`
+    const first = finalMonths[0], last = finalMonths[finalMonths.length - 1]
+    const range = `${first.slice(0, 4) === last.slice(0, 4) ? MONS[Number(first.slice(5, 7)) - 1] : title(first)} – ${title(last)}`
+    check('today: payroll chart shows the last six finalized months', (await page.getByText(range, { exact: true }).count()) > 0, range)
+  }
   await screens(page, 'dashboard-today-1440')
 
   // A day in the previous year, straight from the URL.
@@ -186,6 +231,7 @@ try {
   check(`${PAST}: activity is up to the day`, (await page.getByText(`Activity up to ${PAST_LABEL}`).count()) > 0)
   check(`${PAST}: notices are those up that day`, (await page.getByText(noticesSql ? `up on ${PAST_LABEL}` : `No company notices were up on ${PAST_LABEL}.`).count()) > 0)
   check(`${PAST}: notices can't be edited in the past`, (await page.getByRole('button', { name: /Add notice/ }).count()) === 0)
+  check(`${PAST}: the banner says Upcoming milestones counts from today`, (await page.getByText('except Upcoming milestones, which counts from today', { exact: false }).count()) > 0)
   const want = ['/v1/admin/dashboard/stats', '/v1/admin/dashboard/alerts', '/v1/admin/dashboard/notices', '/v1/admin/dashboard/performers', '/v1/admin/dashboard/onboarding', '/v1/admin/dashboard/hiring', '/v1/hrms/projects', '/v1/probation/upcoming', '/v1/reports/headcount']
   const missing = want.filter((p) => !calls.some((c) => c.startsWith(p) && (c.includes(`date=${PAST}`) || c.includes(`asOf=${PAST}`))))
   check(`${PAST}: every card asks for that day`, missing.length === 0, missing.join(', '))
@@ -219,6 +265,64 @@ try {
   const said = await page.getByText('not a date after today', { exact: false }).first().waitFor({ timeout: 10000 }).then(() => true, () => false)
   await page.waitForLoadState('networkidle')
   check('a date after today shows today, and says so', said && !page.url().includes('date=') && (await page.getByRole('status').filter({ hasText: 'Viewing' }).count()) === 0, page.url().replace(base, ''))
+
+  // A past working day with punches, and a working day in the previous year: the tiles show the records.
+  const norm = (t) => (t || '').replace(/\s+/g, '')
+  const tileText = async (label) => norm(await page.getByRole('button', { name: new RegExp('^\\s*' + label) }).first().textContent({ timeout: 20000 }).catch(() => ''))
+  for (const day of [WORKDAY, YEAR_AGO]) {
+    const w = dayWant[day]
+    const active = (await get(owner, `/v1/admin/dashboard/stats?companyId=${company}&date=${day}`)).body?.activeEmployees
+    await page.goto(`${base}/dashboard?date=${day}`)
+    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(1500)
+    const t = { total: await tileText('Total Employees'), present: await tileText('Present'), onLeave: await tileText('On Leave'), late: await tileText('Late Arrivals') }
+    const ok = t.total.startsWith(norm(`Total Employees${w.total}${active} active`)) && t.present.startsWith(norm(`Present${w.present}Checked in`))
+      && t.onLeave.startsWith(norm(`On Leave${w.onLeave}Approved leave`)) && new RegExp(`^LateArrivals${w.late}(Noonelate|Needsattention)`).test(t.late)
+    check(`${day}: the Live Overview tiles show that day's records`, ok, `${t.total.slice(0, 40)} | ${t.present.slice(0, 30)} | ${t.onLeave.slice(0, 30)} | ${t.late.slice(0, 30)}`)
+    if (day === WORKDAY) {
+      check(`${day}: the tiles name the day`, (await page.getByText(`Attendance · ${WORKDAY_LABEL.slice(0, 6)}`, { exact: false }).count()) > 0 || (await page.getByText('Checked in on 22 Sep', { exact: false }).count()) > 0)
+      await screens(page, 'dashboard-workday-1440')
+    }
+  }
+
+  // The projects drawer is today's list: on a past date it says so.
+  await page.goto(`${base}/dashboard?date=${PAST}`)
+  await page.waitForLoadState('networkidle')
+  const manage = page.getByRole('button', { name: /Manage projects/ }).first()
+  if (await manage.count()) {
+    await manage.click()
+    const note = await page.getByRole('note').filter({ hasText: 'As of today.' }).first().waitFor({ timeout: 10000 }).then(() => true, () => false)
+    check(`${PAST}: the projects drawer says it shows today's projects`, note)
+    await page.waitForTimeout(800) // the drawer slides in
+    await page.screenshot({ path: `${shots}/dashboard-past-projects-1440.png` })
+    await page.keyboard.press('Escape')
+  } else check(`${PAST}: the projects drawer says it shows today's projects`, false, 'no Manage projects button')
+
+  // View reports carries the date; the dated reports open on it.
+  await page.goto(`${base}/dashboard?date=${PAST}`)
+  await page.waitForLoadState('networkidle')
+  await page.getByRole('button', { name: 'View reports' }).first().click()
+  await page.waitForURL((u) => u.pathname === '/hrms/reports', { timeout: 20000 }).catch(() => {})
+  await page.getByText(`reports open on ${PAST_LABEL}`, { exact: false }).first().waitFor({ timeout: 10000 }).catch(() => {})
+  check(`${PAST}: View reports opens the reports on that date`, page.url().includes(`asOf=${PAST}`) && (await page.getByText(`reports open on ${PAST_LABEL}`, { exact: false }).count()) > 0, page.url().replace(base, ''))
+  await page.getByText(`reports open on ${PAST_LABEL}`, { exact: false }).first().scrollIntoViewIfNeeded().catch(() => {})
+  await page.screenshot({ path: `${shots}/dashboard-past-reports-1440.png` })
+  await page.getByRole('button', { name: /^Headcount/ }).first().click()
+  await page.waitForURL((u) => u.pathname === '/hrms/reports/headcount', { timeout: 20000 }).catch(() => {})
+  check(`${PAST}: the headcount report opens as of that date`, page.url().includes(`asOf=${PAST}`), page.url().replace(base, ''))
+  await page.goto(`${base}/hrms/reports`)
+  await page.waitForLoadState('networkidle')
+  check('Reports Center without a date is unchanged (no date note)', (await page.getByText('the date picked on the dashboard', { exact: false }).count()) === 0)
+
+  // The Attendance page behind the tiles: a past day lists the team as it was; today is unchanged.
+  calls.length = 0
+  await page.goto(`${base}/hrms/attendance?tab=team&date=${MID}`)
+  await page.waitForLoadState('networkidle')
+  check(`${MID}: the Attendance page lists the team as it was (like the tiles)`, calls.some((c) => c.startsWith(`/v1/attendance/dashboard?date=${MID}&includeLeavers=true`)), calls.filter((c) => c.startsWith('/v1/attendance/dashboard?')).join(' | '))
+  calls.length = 0
+  await page.goto(`${base}/hrms/attendance?tab=team`)
+  await page.waitForLoadState('networkidle')
+  check('today: the Attendance page asks as before (no includeLeavers)', calls.some((c) => c.startsWith('/v1/attendance/dashboard?')) && !calls.some((c) => c.includes('includeLeavers')), calls.filter((c) => c.startsWith('/v1/attendance/dashboard?')).join(' | '))
 
   check('no page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '))
   check('no failed API calls', failed.length === 0, failed.slice(0, 4).join(' | '))

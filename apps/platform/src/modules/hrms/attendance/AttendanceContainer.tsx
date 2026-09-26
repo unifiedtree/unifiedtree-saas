@@ -111,7 +111,9 @@ export function AttendanceContainer() {
   // ── data ──
   const { data: companies = [] } = useCompanies()
   const companyId: string = companies[0]?.id ?? ''
-  const team = useTeamDashboard(date, undefined, canTeam)
+  // A past day's logs list the team as it was then (people who have left since
+  // still show on the days they worked), matching the admin dashboard's counts.
+  const team = useTeamDashboard(date, undefined, canTeam, date < today)
   const teamToday = useTeamDashboard(today, undefined, canTeam)
   const trend = useAttendanceTrend(monthStart, today, undefined, canTeam && section === 'analytics')
   const sources = useAttendanceSources(today, undefined, canTeam && section === 'analytics')

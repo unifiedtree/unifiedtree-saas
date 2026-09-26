@@ -279,7 +279,8 @@ export class AdminDashboard extends DCLogic {
       isPastDate: !isToday && !sec.live.isError,
       selLong: fmtWd(sel),
       // A past date: each card's wording follows the day (see design-build's AdminDashboard patches).
-      pastNote: 'Every card shows that day as it was. Anything marked “As of today” keeps no history, so it shows today.',
+      // Upcoming milestones still counts from today (its card and data belong to the milestones work), so the note names it.
+      pastNote: 'Every card shows that day as it was, except Upcoming milestones, which counts from today. Anything marked “As of today” keeps no history, so it shows today.',
       trendChip: isToday ? 'Last 7 days · IST' : `7 days to ${fmtShort(sel)} · IST`,
       alertsTitle: isToday ? 'Needs your action' : `Waiting on ${fmtShort(sel)}`,
       caughtUpText: isToday ? 'Nothing is waiting on you.' : 'Nothing was waiting that day.',

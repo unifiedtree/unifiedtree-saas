@@ -224,8 +224,10 @@ export function AdminDashboardContainer() {
       payrollMonths.set(m, (payrollMonths.get(m) || 0) + Number(run.totalGross || 0))
       if (!monthRun.has(m)) monthRun.set(m, run.id)
     }
-    // A month's bar opens that month's run (the runs list has no month filter). The six months end at the selected date's month.
-    const payroll = payrollWindow([...payrollMonths].sort(([a], [b]) => a.localeCompare(b)).map(([month, gross]) => ({ month, gross })), sel.slice(0, 7)).map(({ month, gross }) => ({
+    // A month's bar opens that month's run (the runs list has no month filter). Today: the last six finalized
+    // months, as before; a past date: the six up to that date's month.
+    const finalized = [...payrollMonths].sort(([a], [b]) => a.localeCompare(b)).map(([month, gross]) => ({ month, gross }))
+    const payroll = (isPast ? payrollWindow(finalized, sel.slice(0, 7)) : finalized.slice(-6)).map(({ month, gross }) => ({
       month, gross, label: MON[Number(month.slice(5, 7)) - 1], title: `${MON[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`,
       path: monthRun.has(month) ? `/hrms/payroll/runs/${monthRun.get(month)}` : `/hrms/payroll/runs?month=${month}`,
     }))
@@ -327,7 +329,8 @@ export function AdminDashboardContainer() {
     canShiftAdmin && canReadTeam && { label: 'Change shifts', icon: 'swap', path: '/hrms/shifts?tab=roster' },
     canRequestLeave && { label: 'Add time-off', icon: 'calendarPlus', path: '/hrms/leave?tab=apply' },
     hasPayroll && { label: 'Run payroll', icon: 'rupee', path: '/hrms/payroll-dashboard' },
-    canViewReports && { label: 'View reports', icon: 'fileText', path: '/hrms/reports' },
+    // A past date: the reports open on that date (Reports Center passes it on to the dated reports).
+    canViewReports && { label: 'View reports', icon: 'fileText', path: isPast ? `/hrms/reports?asOf=${sel}` : '/hrms/reports' },
     canManageOrg && { label: 'Org setup', icon: 'building', path: '/hrms/organization' },
   ].filter(Boolean)
 
@@ -389,6 +392,12 @@ export function AdminDashboardContainer() {
       />
       {projectsOpen && companyId && (
         <HrDrawer title="Projects & Productivity" onClose={() => setProjectsOpen(false)} width="max-w-2xl">
+          {/* The card shows the chosen day; this list is where projects are managed, so it is always today's. */}
+          {isPast && (
+            <p role="note" className="mb-4 rounded-lg border border-border-default bg-bg-base px-3 py-2 text-xs text-text-secondary">
+              <strong className="text-text-primary">As of today.</strong> The dashboard card shows {fmtShort(sel)}; the projects and tasks here are today’s, and changes apply today.
+            </p>
+          )}
           <ProjectProductivity companyId={companyId} />
         </HrDrawer>
       )}

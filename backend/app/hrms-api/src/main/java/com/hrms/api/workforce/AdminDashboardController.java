@@ -24,7 +24,8 @@ import java.util.UUID;
 public class AdminDashboardController {
     private final JdbcTemplate jdbc;
     private final TeamEmployeeScope teamScope;
-    public AdminDashboardController(JdbcTemplate jdbc, TeamEmployeeScope teamScope) { this.jdbc = jdbc; this.teamScope = teamScope; }
+    private final DashboardHistory history;
+    public AdminDashboardController(JdbcTemplate jdbc, TeamEmployeeScope teamScope, DashboardHistory history) { this.jdbc = jdbc; this.teamScope = teamScope; this.history = history; }
 
     /**
      * Top-rated people. Company-wide ratings are HR's view (performance.write);
@@ -47,7 +48,9 @@ public class AdminDashboardController {
             args.add(Timestamp.from(DashboardAsOf.endOf(past)));
         }
         if (!hasAuthority(auth, "hrms.performance.write")) {
-            List<UUID> team = team(jwt);
+            // On a past day, the team as it was then (people who have left since
+            // still count), as the dashboard's attendance and alerts take it.
+            List<UUID> team = past != null ? teamOn(jwt, past) : team(jwt);
             if (team.isEmpty()) return List.of();
             teamFilter += " AND e.id IN (" + String.join(",", Collections.nCopies(team.size(), "?")) + ")";
             args.addAll(team);
@@ -136,6 +139,16 @@ public class AdminDashboardController {
     private List<UUID> team(Jwt jwt) {
         try {
             return teamScope.resolve(jwt, null).stream().map(Employee::getId).toList();
+        } catch (IllegalArgumentException noEmployeeRecord) {
+            return List.of();
+        }
+    }
+
+    /** The caller's team on a past day: today's team plus people who have left since but were still employed then. */
+    private List<UUID> teamOn(Jwt jwt, LocalDate day) {
+        UUID tenant = TenantContext.requireTenantId();
+        try {
+            return teamScope.resolve(jwt, null, companyId -> history.formerStaff(tenant, companyId, day)).stream().map(Employee::getId).toList();
         } catch (IllegalArgumentException noEmployeeRecord) {
             return List.of();
         }
