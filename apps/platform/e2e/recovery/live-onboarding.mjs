@@ -1,8 +1,9 @@
+/* global process, console, fetch */
 import assert from 'node:assert/strict'
 import { chromium, expect } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
-const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
+const sql = (q) => execFileSync('C:/Program Files/PostgreSQL/18/bin/psql.exe', ['-h', '127.0.0.1', '-p', '55432', '-U', 'postgres', '-d', process.env.RECOVERY_DB || 'unifiedtree_recovery', '-v', 'ON_ERROR_STOP=1', '-Atc', q], { env: { ...process.env, PGPASSWORD: 'postgres' } }).toString().trim()
 const ui = process.env.RECOVERY_UI_URL || 'http://demo.localhost:3002'
 const api = process.env.RECOVERY_API_URL || 'http://127.0.0.1:8080/api'
 const tenant = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -32,6 +33,18 @@ const errors=[]
 page.on('pageerror',error=>errors.push(error.message))
 mkdirSync('test-results/recovery',{recursive:true})
 const stamp=Date.now()
+// Date fields use the shared calendar: open it, then year → month → day.
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December']
+async function pickDate(trigger, iso) {
+  const [y,m,d]=iso.split('-').map(Number)
+  await trigger.click()
+  const calendar=page.getByRole('dialog',{name:'Choose date'})
+  await calendar.getByRole('button',{name:'Choose year'}).click()
+  await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click()
+  await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m-1]} ${y}"]`).click()
+  await calendar.getByRole('gridcell',{name:new RegExp(`, ${d} ${MONTHS[m-1]} ${y}`)}).click()
+  await calendar.waitFor({state:'hidden'})
+}
 let createdId=''
 try {
   await page.goto(ui+'/login')
@@ -43,7 +56,7 @@ try {
   await page.locator('#field-fullName input').fill('Local Onboarding QA')
   await page.locator('#field-email input').fill(`onboarding-${stamp}@example.invalid`)
   await page.locator('#field-phone input').fill('9000000000')
-  await page.locator('#field-dateOfBirth input').fill('1995-01-15')
+  await pickDate(page.locator('#field-dateOfBirth .utc-trigger'),'1995-01-15')
   const next=()=>page.getByRole('button',{name:'Next',exact:true}).click()
   await next()
   async function choose(id) {
@@ -58,7 +71,7 @@ try {
   await page.locator('#field-designationText input, #field-designationId select').waitFor({ state: 'visible' })
   if(await page.locator('#field-designationText input').count()) await page.locator('#field-designationText input').fill('QA Specialist')
   else await choose('designationId')
-  await page.locator('#field-dateOfJoining input').fill('2026-09-22')
+  await pickDate(page.locator('#field-dateOfJoining .utc-trigger'),'2026-09-22')
   await page.getByRole('textbox', { name: 'Search reporting managers' }).fill('Reader')
   await expect(page.locator('#field-reportingManagerId option[value="22222222-2222-2222-2222-222222222222"]')).toHaveCount(1)
   await page.locator('#field-reportingManagerId select').selectOption('22222222-2222-2222-2222-222222222222')

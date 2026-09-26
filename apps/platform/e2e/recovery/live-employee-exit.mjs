@@ -1,3 +1,4 @@
+/* global process, console, fetch, URLSearchParams */
 import assert from 'node:assert/strict'
 import { chromium, expect } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -64,6 +65,21 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
 const errors = []
 page.on('pageerror', error => errors.push(error.message))
 mkdirSync('test-results/recovery', { recursive: true })
+// Date fields use the shared calendar: the visible field is a combobox, its value
+// ('yyyy-MM-dd') sits on the hidden input beside it. Picking goes year → month → day.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const dateField = (name) => page.getByRole('combobox', { name, exact: true })
+const dateValue = (name) => page.locator('.utc-field', { has: dateField(name) }).locator('.utc-native')
+async function pickDate(trigger, iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  await trigger.click()
+  const calendar = page.getByRole('dialog', { name: 'Choose date' })
+  await calendar.getByRole('button', { name: 'Choose year' }).click()
+  await calendar.locator(`[role=gridcell][aria-label="${y}"]`).click()
+  await calendar.locator(`[role=gridcell][aria-label="${MONTHS[m - 1]} ${y}"]`).click()
+  await calendar.getByRole('gridcell', { name: new RegExp(`, ${d} ${MONTHS[m - 1]} ${y}`) }).click()
+  await expect(calendar).toBeHidden()
+}
 try {
   await page.goto(ui + '/login')
   await page.locator('input[type=email]').fill('owner@unifiedtree.demo')
@@ -74,9 +90,11 @@ try {
   await expect(page.getByText(reason, { exact: true })).toBeVisible()
   const corrected = `Local notice corrected in UI ${stamp}`
   await page.getByRole('button', { name: 'Edit separation details', exact: true }).click()
-  await expect(page.getByLabel('Notice start date', { exact: true })).toHaveValue(day(-30))
-  await page.getByLabel('Notice start date', { exact: true }).fill(day(-20))
-  await page.getByLabel('Last working day', { exact: true }).fill(today)
+  await expect(dateValue('Notice start date')).toHaveValue(day(-30))
+  await pickDate(dateField('Notice start date'), day(-20))
+  await expect(dateValue('Notice start date')).toHaveValue(day(-20))
+  await pickDate(dateField('Last working day'), today)
+  await expect(dateValue('Last working day')).toHaveValue(today)
   await page.getByLabel('Separation reason', { exact: true }).fill(corrected)
   let response = page.waitForResponse(res => res.url().endsWith(path) && res.request().method() === 'PUT')
   await page.getByRole('button', { name: 'Save separation details', exact: true }).click()
@@ -92,7 +110,7 @@ try {
   await page.getByRole('button', { name: /^Actions/ }).click()
   await page.getByRole('menuitem', { name: 'Mark exited', exact: true }).click()
   const exitModal = page.getByRole('dialog').filter({ has: page.getByText('Mark Employee as Exited', { exact: true }) })
-  await expect(exitModal.locator('input[type=date]')).toHaveValue(today)
+  await expect(exitModal.locator('.utc-native')).toHaveValue(today)
   await expect(exitModal.getByPlaceholder('Optional', { exact: true })).toHaveValue(corrected)
   response = page.waitForResponse(res => res.url().includes(path + '/exit?') && res.request().method() === 'POST')
   await exitModal.getByRole('button', { name: 'Mark exited', exact: true }).click()
